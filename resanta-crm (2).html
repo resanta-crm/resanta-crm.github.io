@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ресанта CRM</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--a:#185FA5;--ab:#E6F1FB;--at:#0C447C;--g:#27500A;--gb:#EAF3DE;--am:#854F0B;--amb:#FAEEDA;--r:#A32D2D;--rb:#FCEBEB;--border:#E5E7EB;--bg:#F9FAFB;--card:#fff;--text:#111827;--sub:#6B7280}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0C447C 0%,#185FA5 100%)}
+.login-box{background:#fff;border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.login-logo{text-align:center;margin-bottom:24px}
+.login-logo h1{font-size:24px;font-weight:700;color:var(--a)}
+.login-logo p{font-size:13px;color:var(--sub);margin-top:4px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.field input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;color:var(--text);background:#fff;transition:border-color .15s}
+.field input:focus{outline:none;border-color:var(--a)}
+.btn-login{width:100%;padding:13px;background:var(--a);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px}
+.btn-login:hover{background:#0C447C}
+.login-error{background:var(--rb);color:var(--r);padding:10px 14px;border-radius:8px;font-size:13px;margin-top:12px;display:none}
+.demo-logins{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.demo-logins p{font-size:11px;color:var(--sub);margin-bottom:8px;text-align:center}
+.demo-btn{width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--sub);cursor:pointer;margin-bottom:4px;text-align:left}
+.demo-btn:hover{background:var(--bg)}
+/* APP */
+.app{display:none;min-height:100vh;flex-direction:column}
+/* TOPBAR */
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.topbar-logo{font-size:16px;font-weight:700;color:var(--a);margin-right:8px}
+.topbar-title{font-size:14px;font-weight:500;flex:1}
+.user-badge{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:99px;background:var(--ab);cursor:pointer}
+.user-badge span{font-size:12px;font-weight:500;color:var(--at)}
+.logout-btn{background:none;border:none;cursor:pointer;color:var(--sub);font-size:12px;padding:4px 8px;border-radius:6px}
+.logout-btn:hover{background:var(--bg)}
+/* LAYOUT */
+.layout{display:flex;flex:1}
+.sidebar{width:220px;min-width:220px;background:#fff;border-right:1px solid var(--border);padding:12px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+.nav-section{font-size:10px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;padding:12px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--sub);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .12s;border-radius:0}
+.nav-item:hover{background:var(--bg);color:var(--text)}
+.nav-item.active{background:var(--ab);color:var(--at);font-weight:500}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.alert-dot{width:6px;height:6px;border-radius:50%;background:#E53935;margin-left:auto}
+/* CONTENT */
+.main{flex:1;padding:20px;overflow-y:auto;max-width:1200px}
+.page{display:none}
+.page.active{display:block}
+/* COMPONENTS */
+.page-title{font-size:20px;font-weight:600;color:var(--text);margin-bottom:16px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+.kpi-label{font-size:12px;color:var(--sub);margin-bottom:6px}
+.kpi-value{font-size:26px;font-weight:600;color:var(--text)}
+.kpi-sub{font-size:12px;margin-top:4px}
+.ok{color:var(--g)}.warn{color:var(--am)}.bad{color:var(--r)}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.card-title{font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:11px;color:var(--sub);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--bg)}
+.tbl td{font-size:13px;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#FAFAFA}
+.tbl-tap{cursor:pointer}
+/* TAGS */
+.tag{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500}
+.tag-v{background:var(--ab);color:var(--at)}
+.tag-m{background:var(--gb);color:var(--g)}
+.tag-g{background:var(--amb);color:var(--am)}
+.tag-r{background:var(--rb);color:var(--r)}
+.tag-gray{background:#F3F4F6;color:var(--sub)}
+/* ALERTS */
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;margin-bottom:8px}
+.alert-item.red{background:var(--rb);border:1px solid #FECACA}
+.alert-item.amber{background:var(--amb);border:1px solid #FDE68A}
+.alert-item.green{background:var(--gb);border:1px solid #BBF7D0}
+.ai-body{flex:1}
+.ai-title{font-size:13px;font-weight:600;color:var(--text)}
+.ai-sub{font-size:12px;color:var(--sub);margin-top:3px;line-height:1.4}
+/* CLIENT CARDS */
+.client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.client-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.client-card:hover{border-color:var(--a);box-shadow:0 2px 12px rgba(24,95,165,.1)}
+.cc-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+.cc-meta{font-size:12px;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cc-stat{background:var(--bg);border-radius:8px;padding:8px 10px}
+.cc-stat-label{font-size:10px;color:var(--sub)}
+.cc-stat-value{font-size:14px;font-weight:600;color:var(--text)}
+/* VISIT CARDS */
+.visit-card{background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border-left:3px solid var(--border)}
+.visit-card.has-task{border-left-color:var(--a)}
+.visit-date{font-size:11px;color:var(--sub);margin-bottom:4px}
+.visit-text{font-size:13px;color:var(--text);line-height:1.5}
+.visit-result{font-size:12px;color:var(--g);margin-top:6px}
+.visit-task{font-size:12px;color:var(--at);margin-top:4px}
+/* FORMS */
+.form-field{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:500;color:var(--sub);margin-bottom:5px}
+.form-input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;color:var(--text);background:#fff}
+.form-input:focus{outline:none;border-color:var(--a)}
+textarea.form-input{resize:vertical;min-height:80px}
+.btn-primary{padding:11px 20px;background:var(--a);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer}
+.btn-secondary{padding:10px 20px;background:none;color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer}
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.modal-title{font-size:18px;font-weight:600}
+.modal-close{background:none;border:none;cursor:pointer;font-size:22px;color:var(--sub);line-height:1}
+/* BAR */
+.bar-row{margin-bottom:10px}
+.bar-head{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-bottom:4px}
+.bar-bg{height:8px;border-radius:4px;background:var(--bg)}
+.bar-fill{height:100%;border-radius:4px;background:var(--a)}
+/* CHIPS */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.chip{padding:5px 14px;border-radius:99px;font-size:12px;border:1px solid var(--border);cursor:pointer;background:none;color:var(--sub)}
+.chip.active{background:var(--ab);border-color:var(--at);color:var(--at);font-weight:500}
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:14px}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--sub);font-size:15px}
+.search-input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);background:#fff}
+.search-input:focus{outline:none;border-color:var(--a)}
+/* MOBILE */
+.bottom-nav{display:none;background:#fff;border-top:1px solid var(--border);position:fixed;bottom:0;left:0;right:0;z-index:100}
+.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border:none;background:none;cursor:pointer;color:var(--sub);font-size:10px}
+.bn-item.active{color:var(--a)}
+.loading{text-align:center;padding:40px;color:var(--sub);font-size:14px}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .bottom-nav{display:flex}
+  .main{padding:12px;padding-bottom:70px}
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .grid2{grid-template-columns:1fr}
+  .client-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <h1>⚡ Ресанта CRM</h1>
+      <p>Система управления клиентами · Витебский филиал</p>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="manager@resanta.by">
+    </div>
+    <div class="field">
+      <label>Пароль</label>
+      <input type="password" id="login-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" onclick="doLogin()">Войти</button>
+    <div class="login-error" id="login-error">Неверный email или пароль</div>
+    <div class="demo-logins">
+      <p>Быстрый вход (демо)</p>
+      <button class="demo-btn" onclick="quickLogin('boss@resanta.by','resanta2026')">👔 Руководитель — boss@resanta.by</button>
+      <button class="demo-btn" onclick="quickLogin('manager1@resanta.by','resanta2026')">👤 Менеджер — manager1@resanta.by</button>
+      <button class="demo-btn" onclick="quickLogin('manager2@resanta.by','resanta2026')">👤 Менеджер — manager2@resanta.by</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <div class="topbar">
+    <span class="topbar-logo">⚡ Ресанта</span>
+    <span class="topbar-title" id="topbar-title">CRM</span>
+    <div class="user-badge" id="user-badge">
+      <span id="user-name">...</span>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Выйти</button>
+  </div>
+
+  <div class="layout">
+    <div class="sidebar" id="sidebar">
+      <div class="nav-section">Главное</div>
+      <button class="nav-item active" id="nav-dashboard" onclick="goPage('dashboard','Дашборд')">
+        <span class="icon">📊</span> Дашборд
+      </button>
+      <button class="nav-item" id="nav-alerts" onclick="goPage('alerts','Сигналы')">
+        <span class="icon">🔔</span> Сигналы <span class="alert-dot" id="alert-dot" style="display:none"></span>
+      </button>
+      <div class="nav-section">Работа</div>
+      <button class="nav-item" id="nav-clients" onclick="goPage('clients','Клиенты')">
+        <span class="icon">🏢</span> Клиенты
+      </button>
+      <button class="nav-item" id="nav-tasks" onclick="goPage('tasks','Задачи')">
+        <span class="icon">✅</span> Задачи
+      </button>
+      <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')">
+        <span class="icon">📝</span> Визиты
+      </button>
+      <div class="nav-section" id="nav-section-boss" style="display:none">Руководитель</div>
+      <button class="nav-item" id="nav-managers" onclick="goPage('managers','Менеджеры · KPI')" style="display:none">
+        <span class="icon">👥</span> Менеджеры
+      </button>
+      <button class="nav-item" id="nav-sales" onclick="goPage('sales','Продажи · Аналитика')" style="display:none">
+        <span class="icon">📈</span> Продажи
+      </button>
+    </div>
+
+    <div class="main" id="main-content">
+
+      <!-- DASHBOARD -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-title" id="dash-title">Добро пожаловать</div>
+        <div class="kpi-row" id="dash-kpi"></div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-title">Мои задачи на сегодня</div>
+            <div id="dash-tasks"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Последние визиты</div>
+            <div id="dash-visits"></div>
+          </div>
+        </div>
+        <div class="card" id="boss-no-visit-card" style="display:none">
+          <div class="card-title">⚠️ Клиенты без визита 30+ дней</div>
+          <div id="dash-no-visit"></div>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="page" id="page-alerts">
+        <div class="page-title">Сигналы и уведомления</div>
+        <div id="alerts-content"></div>
+      </div>
+
+      <!-- CLIENTS -->
+      <div class="page" id="page-clients">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">Клиенты</div>
+          <button class="btn-primary" onclick="openAddClient()" id="add-client-btn">+ Добавить</button>
+        </div>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search-input" id="client-search" placeholder="Поиск по названию, коду, региону..." oninput="renderClients()">
+        </div>
+        <div class="chips" id="region-chips">
+          <button class="chip active" onclick="setRegionFilter('all',this)">Все регионы</button>
+          <button class="chip" onclick="setRegionFilter('Витебск',this)">Витебск</button>
+          <button class="chip" onclick="setRegionFilter('Могилёв',this)">Могилёв</button>
+          <button class="chip" onclick="setRegionFilter('Гомель',this)">Гомель</button>
+        </div>
+        <div id="clients-count" style="font-size:12px;color:var(--sub);margin-bottom:10px"></div>
+        <div class="client-grid" id="clients-grid"></div>
+      </div>
+
+      <!-- TASKS -->
+      <div class="page" id="page-tasks">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">Задачи</div>
+          <button class="btn-primary" onclick="openAddTask()">+ Задача</button>
+        </div>
+        <div class="chips">
+          <button class="chip active" onclick="setTaskFilter('all',this)">Все</button>
+          <button class="chip" onclick="setTaskFilter('overdue',this)">🔴 Просроченные</button>
+          <button class="chip" onclick="setTaskFilter('today',this)">🟡 Сегодня</button>
+          <button class="chip" onclick="setTaskFilter('upcoming',this)">🟢 Предстоящие</button>
+          <button class="chip" onclick="setTaskFilter('done',this)">✅ Выполненные</button>
+        </div>
+        <div id="tasks-list"></div>
+      </div>
+
+      <!-- VISITS -->
+      <div class="page" id="page-visits">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">История визитов</div>
+          <button class="btn-primary" onclick="openAddVisit(null)">+ Записать визит</button>
+        </div>
+        <div id="visits-list"></div>
+      </div>
+
+      <!-- MANAGERS (boss only) -->
+      <div class="page" id="page-managers">
+        <div class="page-title">Менеджеры · KPI</div>
+        <div class="card">
+          <table class="tbl">
+            <thead><tr><th>Менеджер</th><th>Регион</th><th>Визитов</th><th>Задач открыто</th><th>Просрочено</th><th>Клиентов</th></tr></thead>
+            <tbody id="managers-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SALES (boss only) -->
+      <div class="page" id="page-sales">
+        <div class="page-title">Продажи · Аналитика</div>
+        <div class="kpi-row">
+          <div class="kpi"><div class="kpi-label">Клиентов в АКБ</div><div class="kpi-value" id="s-total">—</div></div>
+          <div class="kpi"><div class="kpi-label">Общий оборот</div><div class="kpi-value" id="s-rev">—</div><div class="kpi-sub" style="color:var(--sub)">BYN</div></div>
+          <div class="kpi"><div class="kpi-label">Активных</div><div class="kpi-value" id="s-active">—</div><div class="kpi-sub ok">с продажами</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">По регионам</div>
+          <div id="sales-regions"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Топ-15 клиентов по обороту</div>
+          <table class="tbl">
+            <thead><tr><th>#</th><th>Клиент</th><th>Регион</th><th>Оборот BYN</th></tr></thead>
+            <tbody id="sales-top"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MOBILE NAV -->
+  <div class="bottom-nav">
+    <button class="bn-item active" id="bn-dashboard" onclick="goPage('dashboard','Дашборд')">📊<span>Главная</span></button>
+    <button class="bn-item" id="bn-clients" onclick="goPage('clients','Клиенты')">🏢<span>Клиенты</span></button>
+    <button class="bn-item" id="bn-tasks" onclick="goPage('tasks','Задачи')">✅<span>Задачи</span></button>
+    <button class="bn-item" id="bn-visits" onclick="goPage('visits','Визиты')">📝<span>Визиты</span></button>
+    <button class="bn-item" id="bn-alerts" onclick="goPage('alerts','Сигналы')">🔔<span>Сигналы</span></button>
+  </div>
+</div>
+
+<!-- MODAL: CLIENT DETAIL -->
+<div class="modal-bg" id="modal-client">
+  <div class="modal" id="modal-client-content"></div>
+</div>
+
+<!-- MODAL: ADD VISIT -->
+<div class="modal-bg" id="modal-visit">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="visit-modal-title">Записать визит</div>
+      <button class="modal-close" onclick="closeModal('modal-visit')">×</button>
+    </div>
+    <div id="visit-client-select"></div>
+    <div class="form-field">
+      <label class="form-label">Что обсуждали / что сделали</label>
+      <textarea class="form-input" id="v-text" placeholder="Встретился с директором. Предложил предсезонный прайс по Ресанта..."></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Результат</label>
+      <input class="form-input" type="text" id="v-result" placeholder="Отгрузка 15 000 BYN, ввели 3 скю...">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Следующая задача (автоматически создастся)</label>
+      <textarea class="form-input" id="v-task" rows="2" placeholder="Проверить движение по новым позициям..."></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Дата следующего визита</label>
+      <input class="form-input" type="date" id="v-nextdate">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn-secondary" onclick="closeModal('modal-visit')">Отмена</button>
+      <button class="btn-primary" onclick="saveVisit()">Сохранить визит</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD CLIENT -->
+<div class="modal-bg" id="modal-add-client">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Новый клиент</div>
+      <button class="modal-close" onclick="closeModal('modal-add-client')">×</button>
+    </div>
+    <div class="form-field"><label class="form-label">Название</label><input class="form-input" type="text" id="nc-name" placeholder="ООО Строймастер"></div>
+    <div class="form-field"><label class="form-label">Регион</label>
+      <select class="form-input" id="nc-region"><option>Витебск</option><option>Могилёв</option><option>Гомель</option></select>
+    </div>
+    <div class="form-field"><label class="form-label">Контакт (ФИО)</label><input class="form-input" type="text" id="nc-contact" placeholder="Иван Иванов"></div>
+    <div class="form-field"><label class="form-label">Телефон</label><input class="form-input" type="text" id="nc-phone" placeholder="+375 29 ..."></div>
+    <div class="form-field"><label class="form-label">Код 1С</label><input class="form-input" type="text" id="nc-code" placeholder="00-00000001"></div>
+    <div class="form-field"><label class="form-label">Оборот BYN</label><input class="form-input" type="number" id="nc-rev" placeholder="0"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn-secondary" onclick="closeModal('modal-add-client')">Отмена</button>
+      <button class="btn-primary" onclick="saveNewClient()">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD TASK -->
+<div class="modal-bg" id="modal-add-task">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Новая задача</div>
+      <button class="modal-close" onclick="closeModal('modal-add-task')">×</button>
+    </div>
+    <div class="form-field"><label class="form-label">Клиент</label>
+      <select class="form-input" id="nt-client" style="max-width:100%"></select>
+    </div>
+    <div class="form-field"><label class="form-label">Задача</label><textarea class="form-input" id="nt-text" placeholder="Что нужно сделать..."></textarea></div>
+    <div class="form-field"><label class="form-label">Срок</label><input class="form-input" type="date" id="nt-date"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn-secondary" onclick="closeModal('modal-add-task')">Отмена</button>
+      <button class="btn-primary" onclick="saveNewTask()">Создать задачу</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://baqchjtvtmcfzwjjluhs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const DEMO_USERS = {
+  'boss@resanta.by':     {password:'resanta2026', name:'Руководитель', role:'boss', region:'Витебск'},
+  'manager1@resanta.by': {password:'resanta2026', name:'Алексей Руднев', role:'manager', region:'Витебск'},
+  'manager2@resanta.by': {password:'resanta2026', name:'Катя Иванова', role:'manager', region:'Могилёв'},
+  'manager3@resanta.by': {password:'resanta2026', name:'Сергей Петров', role:'manager', region:'Гомель'},
+};
+
+let currentUser = null;
+let allClients = [];
+let allTasks = [];
+let allVisits = [];
+let allUsers = [];
+let regionFilter = 'all';
+let taskFilter = 'all';
+let visitClientId = null;
+
+const TODAY = new Date().toISOString().split('T')[0];
+const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : Math.round(n||0).toString();
+const daysDiff = d => Math.round((new Date(d) - new Date()) / 86400000);
+
+// AUTH
+function quickLogin(email, pass) {
+  document.getElementById('login-email').value = email;
+  document.getElementById('login-pass').value = pass;
+  doLogin();
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  err.style.display = 'none';
+  const u = DEMO_USERS[email];
+  if (!u || u.password !== pass) { err.style.display = 'block'; return; }
+  currentUser = { email, ...u };
+  localStorage.setItem('crm_user', JSON.stringify(currentUser));
+  startApp();
+}
+
+function doLogout() {
+  localStorage.removeItem('crm_user');
+  currentUser = null;
+  document.getElementById('login-wrap').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+async function startApp() {
+  document.getElementById('login-wrap').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('user-name').textContent = currentUser.name;
+  document.getElementById('topbar-title').textContent = 'CRM · ' + currentUser.region;
+  // Show boss menu
+  if (currentUser.role === 'boss') {
+    document.getElementById('nav-section-boss').style.display = 'block';
+    document.getElementById('nav-managers').style.display = 'flex';
+    document.getElementById('nav-sales').style.display = 'flex';
+    document.getElementById('alert-dot').style.display = 'block';
+  }
+  // Set default date
+  const nextWeek = new Date(Date.now() + 7*86400000).toISOString().split('T')[0];
+  document.getElementById('v-nextdate').value = nextWeek;
+  document.getElementById('nt-date').value = nextWeek;
+  await loadData();
+  buildDashboard();
+}
+
+async function loadData() {
+  // Load clients
+  const { data: clients } = await db.from('clients').select('*').order('revenue_total', {ascending: false}).limit(1000);
+  allClients = clients || [];
+
+  // Load tasks
+  const { data: tasks } = await db.from('tasks').select('*').order('due_date', {ascending: true});
+  allTasks = tasks || [];
+
+  // Load visits
+  const { data: visits } = await db.from('visits').select('*').order('created_at', {ascending: false});
+  allVisits = visits || [];
+
+  // Load users
+  const { data: users } = await db.from('users').select('*');
+  allUsers = users || [];
+
+  // Populate task client select
+  const sel = document.getElementById('nt-client');
+  sel.innerHTML = allClients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+// NAVIGATION
+function goPage(p, title) {
+  document.querySelectorAll('.page').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.bn-item').forEach(e => e.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  const ni = document.getElementById('nav-' + p);
+  const bi = document.getElementById('bn-' + p);
+  if (ni) ni.classList.add('active');
+  if (bi) bi.classList.add('active');
+  document.getElementById('topbar-title').textContent = title;
+  if (p === 'dashboard') buildDashboard();
+  if (p === 'clients') renderClients();
+  if (p === 'tasks') renderTasks();
+  if (p === 'visits') renderVisits();
+  if (p === 'alerts') renderAlerts();
+  if (p === 'managers') renderManagers();
+  if (p === 'sales') renderSales();
+}
+
+// DASHBOARD
+function buildDashboard() {
+  const isBoss = currentUser.role === 'boss';
+  document.getElementById('dash-title').textContent = 'Добро пожаловать, ' + currentUser.name + '!';
+
+  const myTasks = allTasks.filter(t => !t.done);
+  const overdue = myTasks.filter(t => t.due_date < TODAY);
+  const todayT = myTasks.filter(t => t.due_date === TODAY);
+  const myVisits = allVisits.slice(0, 5);
+  const myClients = allClients;
+
+  document.getElementById('dash-kpi').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Клиентов в базе</div><div class="kpi-value">${myClients.length}</div></div>
+    <div class="kpi"><div class="kpi-label">Открытых задач</div><div class="kpi-value ${overdue.length > 0 ? 'bad' : ''}">${myTasks.length}</div>${overdue.length ? `<div class="kpi-sub bad">⚠️ ${overdue.length} просрочено</div>` : '<div class="kpi-sub ok">Всё в срок</div>'}</div>
+    <div class="kpi"><div class="kpi-label">Задач сегодня</div><div class="kpi-value ${todayT.length > 0 ? 'warn' : ''}">${todayT.length}</div></div>
+    <div class="kpi"><div class="kpi-label">Визитов записано</div><div class="kpi-value">${allVisits.length}</div></div>
+  `;
+
+  // Today tasks
+  const taskHtml = myTasks.slice(0, 5).map(t => {
+    const c = allClients.find(x => x.id === t.client_id);
+    const d = daysDiff(t.due_date);
+    const cls = d < 0 ? 'bad' : d === 0 ? 'warn' : 'ok';
+    const label = d < 0 ? `Просрочено ${Math.abs(d)}д` : d === 0 ? 'Сегодня' : `Через ${d}д`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span class="${cls}" style="font-size:11px;width:80px;flex-shrink:0">${label}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c?.name || '—'}</div>
+        <div style="font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.text}</div>
+      </div>
+      <button onclick="doneTask('${t.id}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;flex-shrink:0">✓</button>
+    </div>`;
+  }).join('') || '<div style="color:var(--sub);font-size:13px;padding:12px 0">Задач нет 🎉</div>';
+  document.getElementById('dash-tasks').innerHTML = taskHtml;
+
+  // Recent visits
+  const visitHtml = myVisits.map(v => {
+    const c = allClients.find(x => x.id === v.client_id);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:500">${c?.name || '—'}</span>
+        <span style="font-size:11px;color:var(--sub)">${v.date || v.created_at?.split('T')[0]}</span>
+      </div>
+      <div style="font-size:12px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.text || ''}</div>
+    </div>`;
+  }).join('') || '<div style="color:var(--sub);font-size:13px;padding:12px 0">Визитов ещё нет</div>';
+  document.getElementById('dash-visits').innerHTML = visitHtml;
+
+  // Boss: no visit clients
+  if (isBoss) {
+    document.getElementById('boss-no-visit-card').style.display = 'block';
+    const visitedIds = new Set(allVisits.map(v => v.client_id));
+    const noVisit = allClients.filter(c => !visitedIds.has(c.id)).slice(0, 8);
+    document.getElementById('dash-no-visit').innerHTML = noVisit.length ?
+      `<table class="tbl"><thead><tr><th>Клиент</th><th>Регион</th><th>Оборот</th></tr></thead><tbody>${noVisit.map(c=>`<tr class="tbl-tap" onclick="openClient('${c.id}')"><td>${c.name}</td><td>${regionTag(c.region)}</td><td>${fmt(c.revenue_total)} BYN</td></tr>`).join('')}</tbody></table>` :
+      '<div style="color:var(--sub);font-size:13px">Все клиенты посещены 🎉</div>';
+  }
+}
+
+// CLIENTS
+function regionTag(r) {
+  if (r === 'Витебск') return '<span class="tag tag-v">ВТБ</span>';
+  if (r === 'Могилёв') return '<span class="tag tag-m">МГЛ</span>';
+  if (r === 'Гомель') return '<span class="tag tag-g">ГМЛ</span>';
+  return `<span class="tag tag-gray">${r||'—'}</span>`;
+}
+
+function setRegionFilter(r, btn) {
+  regionFilter = r;
+  document.querySelectorAll('#region-chips .chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderClients();
+}
+
+function renderClients() {
+  const q = (document.getElementById('client-search').value || '').toLowerCase();
+  const list = allClients.filter(c => {
+    const rm = regionFilter === 'all' || c.region === regionFilter;
+    const sm = !q || c.name.toLowerCase().includes(q) || (c.code||'').toLowerCase().includes(q) || (c.contact||'').toLowerCase().includes(q);
+    return rm && sm;
+  });
+  document.getElementById('clients-count').textContent = `Найдено: ${list.length} клиентов`;
+  document.getElementById('clients-grid').innerHTML = list.map(c => {
+    const cVisits = allVisits.filter(v => v.client_id === c.id);
+    const cTasks = allTasks.filter(t => t.client_id === c.id && !t.done);
+    const lastVisit = cVisits[0];
+    const daysSince = lastVisit ? Math.abs(daysDiff(lastVisit.date || lastVisit.created_at?.split('T')[0])) : null;
+    const visitBadge = daysSince === null ? '<span class="tag tag-r">Нет визитов</span>' :
+      daysSince > 30 ? `<span class="tag tag-r">⚠️ ${daysSince}д без визита</span>` :
+      daysSince > 14 ? `<span class="tag" style="background:var(--amb);color:var(--am)">${daysSince}д назад</span>` :
+      `<span class="tag tag-m">${daysSince}д назад</span>`;
+    return `<div class="client-card" onclick="openClient('${c.id}')">
+      <div class="cc-name">${c.name}</div>
+      <div class="cc-meta">${regionTag(c.region)}${c.code?`<span class="tag tag-gray">#${c.code}</span>`:''}${cTasks.length?`<span class="tag tag-v">${cTasks.length} задач</span>`:''}</div>
+      <div class="cc-stats">
+        <div class="cc-stat"><div class="cc-stat-label">Оборот</div><div class="cc-stat-value">${fmt(c.revenue_total)}</div></div>
+        <div class="cc-stat"><div class="cc-stat-label">Визиты</div><div class="cc-stat-value">${visitBadge}</div></div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--sub);font-size:14px;padding:20px">Клиенты не найдены</div>';
+}
+
+async function openClient(id) {
+  const c = allClients.find(x => x.id === id);
+  if (!c) return;
+  const cVisits = allVisits.filter(v => v.client_id === id);
+  const cTasks = allTasks.filter(t => t.client_id === id && !t.done);
+  const visitsHtml = cVisits.length ? cVisits.map(v => `
+    <div class="visit-card${v.text?' has-task':''}">
+      <div class="visit-date">${v.date || v.created_at?.split('T')[0]} · Визит</div>
+      <div class="visit-text">${v.text||''}</div>
+      ${v.result ? `<div class="visit-result">✓ ${v.result}</div>` : ''}
+    </div>`).join('') : '<div style="color:var(--sub);font-size:13px">Визитов пока нет</div>';
+  const tasksHtml = cTasks.length ? cTasks.map(t => {
+    const d = daysDiff(t.due_date);
+    const cls = d < 0 ? 'bad' : d === 0 ? 'warn' : 'ok';
+    const label = d < 0 ? `Просрочено ${Math.abs(d)}д` : d === 0 ? 'Сегодня' : `Через ${d}д`;
+    return `<div class="visit-card has-task">
+      <div class="visit-date">до ${t.due_date}</div>
+      <div class="visit-text">${t.text}</div>
+      <div class="${cls}" style="font-size:11px;margin-top:4px">${label}</div>
+      <button onclick="doneTask('${t.id}')" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer">Выполнено ✓</button>
+    </div>`;
+  }).join('') : '';
+  document.getElementById('modal-client-content').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">${c.name}</div>
+        <div style="margin-top:4px">${regionTag(c.region)}${c.code?` <span class="tag tag-gray">#${c.code}</span>`:''}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-client')">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <div class="cc-stat"><div class="cc-stat-label">Контакт</div><div style="font-size:13px;font-weight:500">${c.contact||'—'}</div></div>
+      <div class="cc-stat"><div class="cc-stat-label">Телефон</div><div style="font-size:13px;font-weight:500">${c.phone||'—'}</div></div>
+      <div class="cc-stat"><div class="cc-stat-label">Оборот BYN</div><div style="font-size:16px;font-weight:600">${fmt(c.revenue_total)}</div></div>
+      <div class="cc-stat"><div class="cc-stat-label">Визитов</div><div style="font-size:16px;font-weight:600">${cVisits.length}</div></div>
+    </div>
+    ${tasksHtml ? `<div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin-bottom:8px">ЗАДАЧИ</div>${tasksHtml}` : ''}
+    <div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin:12px 0 8px">ИСТОРИЯ ВИЗИТОВ</div>
+    ${visitsHtml}
+    <button class="btn-primary" style="width:100%;margin-top:16px" onclick="closeModal('modal-client');openAddVisit('${id}')">+ Записать визит</button>
+  `;
+  document.getElementById('modal-client').classList.add('open');
+}
+
+// TASKS
+function setTaskFilter(f, btn) {
+  taskFilter = f;
+  document.querySelectorAll('#page-tasks .chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTasks();
+}
+
+function renderTasks() {
+  let list = allTasks;
+  if (taskFilter === 'overdue') list = list.filter(t => !t.done && t.due_date < TODAY);
+  else if (taskFilter === 'today') list = list.filter(t => !t.done && t.due_date === TODAY);
+  else if (taskFilter === 'upcoming') list = list.filter(t => !t.done && t.due_date > TODAY);
+  else if (taskFilter === 'done') list = list.filter(t => t.done);
+  else list = list.filter(t => !t.done);
+  if (!list.length) { document.getElementById('tasks-list').innerHTML = '<div style="color:var(--sub);font-size:14px;padding:20px 0">Нет задач в этой категории</div>'; return; }
+  document.getElementById('tasks-list').innerHTML = list.map(t => {
+    const c = allClients.find(x => x.id === t.client_id);
+    const d = daysDiff(t.due_date);
+    const cls = t.done ? 'ok' : d < 0 ? 'bad' : d === 0 ? 'warn' : 'ok';
+    const label = t.done ? '✅ Выполнено' : d < 0 ? `🔴 Просрочено ${Math.abs(d)}д` : d === 0 ? '🟡 Сегодня' : `🟢 Через ${d}д`;
+    return `<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openClient('${c?.id}')">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">${c?.name || '—'}</div>
+          <div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:8px">${t.text}</div>
+          <span class="${cls}" style="font-size:12px">${label} · до ${t.due_date}</span>
+        </div>
+        ${!t.done ? `<button onclick="event.stopPropagation();doneTask('${t.id}')" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:none;cursor:pointer;font-size:12px;white-space:nowrap">✓ Готово</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function doneTask(id) {
+  await db.from('tasks').update({done: true}).eq('id', id);
+  allTasks = allTasks.map(t => t.id === id ? {...t, done: true} : t);
+  renderTasks();
+  buildDashboard();
+}
+
+// VISITS
+function renderVisits() {
+  if (!allVisits.length) { document.getElementById('visits-list').innerHTML = '<div style="color:var(--sub);font-size:14px;padding:20px 0">Визитов ещё нет. Нажмите "+ Записать визит"</div>'; return; }
+  document.getElementById('visits-list').innerHTML = allVisits.map(v => {
+    const c = allClients.find(x => x.id === v.client_id);
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:600;cursor:pointer" onclick="openClient('${c?.id}')">${c?.name || '—'}</span>
+        <span style="font-size:12px;color:var(--sub)">${v.date || v.created_at?.split('T')[0]}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">${v.text||''}</div>
+      ${v.result ? `<div style="font-size:12px;color:var(--g)">✓ ${v.result}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function openAddVisit(clientId) {
+  visitClientId = clientId;
+  const title = clientId ? `Визит — ${allClients.find(x=>x.id===clientId)?.name}` : 'Записать визит';
+  document.getElementById('visit-modal-title').textContent = title;
+  if (!clientId) {
+    document.getElementById('visit-client-select').innerHTML = `<div class="form-field"><label class="form-label">Клиент</label><select class="form-input" id="v-client"><option value="">Выберите клиента...</option>${allClients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>`;
+  } else {
+    document.getElementById('visit-client-select').innerHTML = '';
+  }
+  document.getElementById('v-text').value = '';
+  document.getElementById('v-result').value = '';
+  document.getElementById('v-task').value = '';
+  document.getElementById('modal-visit').classList.add('open');
+}
+
+async function saveVisit() {
+  const cid = visitClientId || document.getElementById('v-client')?.value;
+  const text = document.getElementById('v-text').value.trim();
+  if (!cid || !text) { alert('Выберите клиента и заполните описание визита'); return; }
+  const result = document.getElementById('v-result').value.trim();
+  const taskText = document.getElementById('v-task').value.trim();
+  const nextDate = document.getElementById('v-nextdate').value;
+  // Save visit
+  const { data: visit } = await db.from('visits').insert({
+    client_id: cid, date: TODAY, text, result,
+    manager_id: null
+  }).select().single();
+  if (visit) allVisits.unshift(visit);
+  // Save task if exists
+  if (taskText && nextDate) {
+    const { data: task } = await db.from('tasks').insert({
+      client_id: cid, text: taskText, due_date: nextDate,
+      done: false, visit_id: visit?.id
+    }).select().single();
+    if (task) allTasks.unshift(task);
+  }
+  closeModal('modal-visit');
+  renderVisits();
+  renderTasks();
+  buildDashboard();
+}
+
+// ADD CLIENT
+function openAddClient() {
+  document.getElementById('modal-add-client').classList.add('open');
+}
+async function saveNewClient() {
+  const name = document.getElementById('nc-name').value.trim();
+  if (!name) { alert('Введите название клиента'); return; }
+  const { data: client } = await db.from('clients').insert({
+    name,
+    region: document.getElementById('nc-region').value,
+    contact: document.getElementById('nc-contact').value,
+    phone: document.getElementById('nc-phone').value,
+    code: document.getElementById('nc-code').value,
+    revenue_total: parseFloat(document.getElementById('nc-rev').value) || 0
+  }).select().single();
+  if (client) allClients.unshift(client);
+  closeModal('modal-add-client');
+  renderClients();
+  document.getElementById('nt-client').innerHTML = allClients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+// ADD TASK
+function openAddTask() {
+  document.getElementById('modal-add-task').classList.add('open');
+}
+async function saveNewTask() {
+  const cid = document.getElementById('nt-client').value;
+  const text = document.getElementById('nt-text').value.trim();
+  const date = document.getElementById('nt-date').value;
+  if (!cid || !text || !date) { alert('Заполните все поля'); return; }
+  const { data: task } = await db.from('tasks').insert({ client_id: cid, text, due_date: date, done: false }).select().single();
+  if (task) allTasks.unshift(task);
+  closeModal('modal-add-task');
+  renderTasks();
+}
+
+// ALERTS
+function renderAlerts() {
+  const overdue = allTasks.filter(t => !t.done && t.due_date < TODAY);
+  const visitedIds = new Set(allVisits.map(v => v.client_id));
+  const noVisit = allClients.filter(c => !visitedIds.has(c.id) && c.revenue_total > 10000);
+  let html = '';
+  if (overdue.length) {
+    html += `<div style="font-size:13px;font-weight:600;color:var(--r);margin-bottom:8px;margin-top:4px">🔴 Критично</div>`;
+    overdue.forEach(t => {
+      const c = allClients.find(x => x.id === t.client_id);
+      const d = Math.abs(daysDiff(t.due_date));
+      html += `<div class="alert-item red"><div class="ai-body"><div class="ai-title">Просроченная задача — ${c?.name||'—'}</div><div class="ai-sub">${t.text} · просрочено на ${d} дн</div></div><span class="tag tag-r">${d}д</span></div>`;
+    });
+  }
+  if (noVisit.length) {
+    html += `<div style="font-size:13px;font-weight:600;color:var(--am);margin-bottom:8px;margin-top:16px">🟡 Внимание</div>`;
+    noVisit.slice(0, 5).forEach(c => {
+      html += `<div class="alert-item amber"><div class="ai-body"><div class="ai-title">Клиент без визита — ${c.name}</div><div class="ai-sub">${c.region} · Оборот ${fmt(c.revenue_total)} BYN · Визитов не записано</div></div></div>`;
+    });
+  }
+  if (!html) html = '<div class="alert-item green"><div class="ai-body"><div class="ai-title">Всё в порядке!</div><div class="ai-sub">Просроченных задач нет, все ключевые клиенты посещены</div></div></div>';
+  document.getElementById('alerts-content').innerHTML = html;
+}
+
+// MANAGERS
+function renderManagers() {
+  const rows = allUsers.filter(u => u.role === 'manager').map(u => {
+    const uVisits = allVisits.filter(v => v.manager_id === u.id);
+    const uTasks = allTasks.filter(t => t.manager_id === u.id && !t.done);
+    const uOverdue = uTasks.filter(t => t.due_date < TODAY);
+    const uClients = allClients.filter(c => c.manager_id === u.id);
+    return `<tr>
+      <td><strong>${u.name}</strong></td>
+      <td>${u.region}</td>
+      <td>${uVisits.length}</td>
+      <td>${uTasks.length}</td>
+      <td>${uOverdue.length ? `<span class="tag tag-r">${uOverdue.length}</span>` : '<span class="tag tag-m">0</span>'}</td>
+      <td>${uClients.length}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('managers-table').innerHTML = rows || '<tr><td colspan="6" style="color:var(--sub);text-align:center">Нет данных</td></tr>';
+}
+
+// SALES
+function renderSales() {
+  const total = allClients.length;
+  const rev = allClients.reduce((s, c) => s + (c.revenue_total || 0), 0);
+  const active = allClients.filter(c => c.revenue_total > 0).length;
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-rev').textContent = fmt(rev);
+  document.getElementById('s-active').textContent = active;
+  const regions = ['Витебск', 'Могилёв', 'Гомель'];
+  const maxRev = Math.max(...regions.map(r => allClients.filter(c => c.region === r).reduce((s, c) => s + (c.revenue_total || 0), 0)));
+  document.getElementById('sales-regions').innerHTML = regions.map(r => {
+    const rClients = allClients.filter(c => c.region === r);
+    const rRev = rClients.reduce((s, c) => s + (c.revenue_total || 0), 0);
+    return `<div class="bar-row"><div class="bar-head"><span>${regionTag(r)} ${r} · ${rClients.length} клиентов</span><span style="font-weight:600">${fmt(rRev)} BYN</span></div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(rRev/maxRev*100)}%"></div></div></div>`;
+  }).join('');
+  const top = allClients.slice(0, 15);
+  document.getElementById('sales-top').innerHTML = top.map((c, i) => `<tr class="tbl-tap" onclick="openClient('${c.id}')"><td>${i+1}</td><td>${c.name}</td><td>${regionTag(c.region)}</td><td style="font-weight:600">${fmt(c.revenue_total)}</td></tr>`).join('');
+}
+
+// MODAL
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+
+// AUTO LOGIN
+const saved = localStorage.getItem('crm_user');
+if (saved) { currentUser = JSON.parse(saved); startApp(); }
+</script>
+</body>
+</html>
