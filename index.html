@@ -624,7 +624,19 @@ function renderSales(){
 }
 
 // MODAL
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');} function filterVisitClients(){
+  const q=document.getElementById('v-client-search').value.toLowerCase();
+  const list=document.getElementById('v-client-list');
+  if(!q){list.style.display='none';return;}
+  const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
+  list.style.display=filtered.length?'block':'none';
+  list.innerHTML=filtered.map(c=>`<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectVisitClient('${c.id}','${c.name.replace(/'/g,"\\'")}')">${c.name}</div>`).join('');
+}
+function selectVisitClient(id,name){
+  document.getElementById('v-client').value=id;
+  document.getElementById('v-client-search').value=name;
+  document.getElementById('v-client-list').style.display='none';
+}{document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
 
 // AUTO LOGIN via Supabase session
