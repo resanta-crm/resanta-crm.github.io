@@ -557,7 +557,7 @@ function renderVisits(){
 function openAddVisit(clientId){
   visitClientId=clientId;
   document.getElementById('visit-modal-title').textContent=clientId?`Визит — ${allClients.find(x=>x.id===clientId)?.name}`:'Записать визит';
-  if(!clientId){document.getElementById('visit-client-select').innerHTML=`<div class="form-field"><label class="form-label">Клиент</label><select class="form-input" id="v-client"><option value="">Выберите клиента...</option>${allClients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>`;}
+  if(!clientId){document.getElementById('visit-client-select').innerHTML=`<div class="form-field"><label class="form-label">Клиент</label><input type="text" class="form-input" id="v-client-search" placeholder="Поиск клиента..." oninput="filterVisitClients()" autocomplete="off"><div id="v-client-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;background:#fff;position:relative;z-index:10"></div><input type="hidden" id="v-client"></div>`;}
   else{document.getElementById('visit-client-select').innerHTML='';}
   document.getElementById('v-text').value=''; document.getElementById('v-result').value=''; document.getElementById('v-task').value='';
   document.getElementById('modal-visit').classList.add('open');
