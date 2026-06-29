@@ -407,7 +407,7 @@ async function doLogout() {
 }
 
 async function loadProfileAndStart() {
-  const {data:profile} = await db.from('users').select('*').eq('auth_id',currentUser.id).single();
+  const {data:profile} = await db.from('users').select('*').eq('id',currentUser.id).single();
   if (profile) { currentProfile=profile; }
   else {
     const {data:p2} = await db.from('users').select('*').eq('email',currentUser.email).single();
