@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ресанта CRM</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--a:#185FA5;--ab:#E6F1FB;--at:#0C447C;--g:#27500A;--gb:#EAF3DE;--am:#854F0B;--amb:#FAEEDA;--r:#A32D2D;--rb:#FCEBEB;--border:#E5E7EB;--bg:#F9FAFB;--card:#fff;--text:#111827;--sub:#6B7280}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0C447C 0%,#185FA5 100%)}
+.login-box{background:#fff;border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.login-logo{text-align:center;margin-bottom:24px}
+.login-logo h1{font-size:24px;font-weight:700;color:var(--a)}
+.login-logo p{font-size:13px;color:var(--sub);margin-top:4px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.field input{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;color:var(--text);background:#fff;transition:border-color .15s}
+.field input:focus{outline:none;border-color:var(--a)}
+.btn-login{width:100%;padding:13px;background:var(--a);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px}
+.btn-login:hover{background:#0C447C}
+.btn-login:disabled{opacity:0.6;cursor:not-allowed}
+.login-error{background:var(--rb);color:var(--r);padding:10px 14px;border-radius:8px;font-size:13px;margin-top:12px;display:none}
+.login-info{background:var(--ab);color:var(--at);padding:10px 14px;border-radius:8px;font-size:13px;margin-top:12px;display:none}
+.reset-link{text-align:center;margin-top:14px}
+.reset-link a{font-size:12px;color:var(--a);cursor:pointer;text-decoration:none}
+.reset-link a:hover{text-decoration:underline}
+.app{display:none;min-height:100vh;flex-direction:column}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.topbar-logo{font-size:16px;font-weight:700;color:var(--a);margin-right:8px}
+.topbar-title{font-size:14px;font-weight:500;flex:1}
+.user-badge{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:99px;background:var(--ab)}
+.user-badge span{font-size:12px;font-weight:500;color:var(--at)}
+.logout-btn{background:none;border:none;cursor:pointer;color:var(--sub);font-size:12px;padding:4px 8px;border-radius:6px}
+.logout-btn:hover{background:var(--bg)}
+.layout{display:flex;flex:1}
+.sidebar{width:220px;min-width:220px;background:#fff;border-right:1px solid var(--border);padding:12px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+.nav-section{font-size:10px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;padding:12px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--sub);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .12s}
+.nav-item:hover{background:var(--bg);color:var(--text)}
+.nav-item.active{background:var(--ab);color:var(--at);font-weight:500}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.alert-dot{width:6px;height:6px;border-radius:50%;background:#E53935;margin-left:auto}
+.main{flex:1;padding:20px;overflow-y:auto;max-width:1200px}
+.page{display:none}
+.page.active{display:block}
+.page-title{font-size:20px;font-weight:600;color:var(--text);margin-bottom:16px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+.kpi-label{font-size:12px;color:var(--sub);margin-bottom:6px}
+.kpi-value{font-size:26px;font-weight:600;color:var(--text)}
+.kpi-sub{font-size:12px;margin-top:4px}
+.ok{color:var(--g)}.warn{color:var(--am)}.bad{color:var(--r)}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.card-title{font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:11px;color:var(--sub);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--bg)}
+.tbl td{font-size:13px;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#FAFAFA}
+.tbl-tap{cursor:pointer}
+.tag{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500}
+.tag-v{background:var(--ab);color:var(--at)}
+.tag-m{background:var(--gb);color:var(--g)}
+.tag-g{background:var(--amb);color:var(--am)}
+.tag-r{background:var(--rb);color:var(--r)}
+.tag-gray{background:#F3F4F6;color:var(--sub)}
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;margin-bottom:8px}
+.alert-item.red{background:var(--rb);border:1px solid #FECACA}
+.alert-item.amber{background:var(--amb);border:1px solid #FDE68A}
+.alert-item.green{background:var(--gb);border:1px solid #BBF7D0}
+.ai-body{flex:1}
+.ai-title{font-size:13px;font-weight:600;color:var(--text)}
+.ai-sub{font-size:12px;color:var(--sub);margin-top:3px;line-height:1.4}
+.client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.client-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.client-card:hover{border-color:var(--a);box-shadow:0 2px 12px rgba(24,95,165,.1)}
+.cc-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+.cc-meta{font-size:12px;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cc-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cc-stat{background:var(--bg);border-radius:8px;padding:8px 10px}
+.cc-stat-label{font-size:10px;color:var(--sub)}
+.cc-stat-value{font-size:14px;font-weight:600;color:var(--text)}
+.visit-card{background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border-left:3px solid var(--border)}
+.visit-card.has-task{border-left-color:var(--a)}
+.visit-date{font-size:11px;color:var(--sub);margin-bottom:4px}
+.visit-text{font-size:13px;color:var(--text);line-height:1.5}
+.visit-result{font-size:12px;color:var(--g);margin-top:6px}
+.form-field{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:500;color:var(--sub);margin-bottom:5px}
+.form-input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;color:var(--text);background:#fff}
+.form-input:focus{outline:none;border-color:var(--a)}
+textarea.form-input{resize:vertical;min-height:80px}
+.btn-primary{padding:11px 20px;background:var(--a);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer}
+.btn-secondary{padding:10px 20px;background:none;color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.modal-title{font-size:18px;font-weight:600}
+.modal-close{background:none;border:none;cursor:pointer;font-size:22px;color:var(--sub);line-height:1}
+.bar-row{margin-bottom:10px}
+.bar-head{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-bottom:4px}
+.bar-bg{height:8px;border-radius:4px;background:var(--bg)}
+.bar-fill{height:100%;border-radius:4px;background:var(--a)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.chip{padding:5px 14px;border-radius:99px;font-size:12px;border:1px solid var(--border);cursor:pointer;background:none;color:var(--sub)}
+.chip.active{background:var(--ab);border-color:var(--at);color:var(--at);font-weight:500}
+.search-wrap{position:relative;margin-bottom:14px}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--sub);font-size:15px}
+.search-input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);background:#fff}
+.search-input:focus{outline:none;border-color:var(--a)}
+.btn-yandex{background:#FFCC00;color:#000}
+.btn-yandex:hover{background:#f0c000}
+.btn-google{background:#4285F4;color:#fff}
+.btn-google:hover{background:#3367d6}
+.btn-route{background:var(--g);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:none}
+.route-client{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fff}
+.route-num{width:24px;height:24px;border-radius:50%;background:var(--a);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.route-info{flex:1;min-width:0}
+.route-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.route-addr{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.bottom-nav{display:none;background:#fff;border-top:1px solid var(--border);position:fixed;bottom:0;left:0;right:0;z-index:100}
+.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border:none;background:none;cursor:pointer;color:var(--sub);font-size:10px}
+.bn-item.active{color:var(--a)}
+.user-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.user-row:last-child{border-bottom:none}
+.user-info{flex:1}
+.user-email-text{font-size:14px;font-weight:500;color:var(--text)}
+.user-meta{font-size:12px;color:var(--sub);margin-top:2px}
+.user-role-badge{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500;margin-left:8px}
+.role-boss{background:#FEF3C7;color:#92400E}
+.role-manager{background:var(--ab);color:var(--at)}
+.btn-map{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;text-decoration:none}
+.btn-yandex{background:#FFCC00;color:#1a1a1a}
+.btn-yandex:hover{background:#f0c000}
+.btn-google{background:#4285F4;color:#fff}
+.btn-google:hover{background:#3367d6}
+.route-client{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fff;cursor:grab}
+.route-num{width:26px;height:26px;border-radius:50%;background:var(--a);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.route-info{flex:1;min-width:0}
+.route-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.route-addr{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.4}
+.route-del{background:none;border:none;cursor:pointer;color:var(--sub);font-size:18px;padding:0 4px}
+.route-del:hover{color:var(--r)}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .bottom-nav{display:flex}
+  .main{padding:12px;padding-bottom:70px}
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .grid2{grid-template-columns:1fr}
+  .client-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <h1>⚡ Ресанта CRM</h1>
+      <p>Система управления клиентами · Витебский филиал</p>
+    </div>
+    <div id="login-form">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="manager@resanta.by">
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input type="password" id="login-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn-login" id="login-btn" onclick="doLogin()">Войти</button>
+      <div class="reset-link"><a onclick="showResetForm()">Забыли пароль?</a></div>
+      <div class="login-error" id="login-error"></div>
+      <div class="login-info" id="login-info"></div>
+    </div>
+    <div id="reset-form" style="display:none">
+      <div class="field">
+        <label>Email для сброса пароля</label>
+        <input type="email" id="reset-email" placeholder="manager@resanta.by">
+      </div>
+      <button class="btn-login" onclick="doReset()">Отправить письмо со ссылкой</button>
+      <div class="reset-link"><a onclick="showLoginForm()">← Вернуться ко входу</a></div>
+      <div class="login-error" id="reset-error"></div>
+      <div class="login-info" id="reset-info"></div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <div class="topbar">
+    <span class="topbar-logo">⚡ Ресанта</span>
+    <span class="topbar-title" id="topbar-title">CRM</span>
+    <div class="user-badge"><span id="user-name">...</span></div>
+    <button class="logout-btn" onclick="doLogout()">Выйти</button>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="nav-section">Главное</div>
+      <button class="nav-item active" id="nav-dashboard" onclick="goPage('dashboard','Дашборд')"><span class="icon">📊</span> Дашборд</button>
+      <button class="nav-item" id="nav-alerts" onclick="goPage('alerts','Сигналы')"><span class="icon">🔔</span> Сигналы <span class="alert-dot" id="alert-dot" style="display:none"></span></button>
+      <div class="nav-section">Работа</div>
+      <button class="nav-item" id="nav-clients" onclick="goPage('clients','Клиенты')"><span class="icon">🏢</span> Клиенты</button>
+      <button class="nav-item" id="nav-tasks" onclick="goPage('tasks','Задачи')"><span class="icon">✅</span> Задачи</button>
+      <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')"><span class="icon">📝</span> Визиты</button>
+      <button class="nav-item" id="nav-route" onclick="goPage('route','Маршрут дня')"><span class="icon">🗺️</span> Маршрут дня</button>
+      <div class="nav-section" id="nav-section-boss" style="display:none">Руководитель</div>
+      <button class="nav-item" id="nav-managers" onclick="goPage('managers','Менеджеры · KPI')" style="display:none"><span class="icon">👥</span> Менеджеры</button>
+      <button class="nav-item" id="nav-sales" onclick="goPage('sales','Продажи · Аналитика')" style="display:none"><span class="icon">📈</span> Продажи</button>
+      <button class="nav-item" id="nav-users" onclick="goPage('users','Пользователи')" style="display:none"><span class="icon">🔐</span> Пользователи</button>
+    </div>
+    <div class="main" id="main-content">
+      <div class="page active" id="page-dashboard">
+        <div class="page-title" id="dash-title">Добро пожаловать</div>
+        <div class="kpi-row" id="dash-kpi"></div>
+        <div class="grid2">
+          <div class="card"><div class="card-title">Мои задачи на сегодня</div><div id="dash-tasks"></div></div>
+          <div class="card"><div class="card-title">Последние визиты</div><div id="dash-visits"></div></div>
+        </div>
+        <div class="card" id="boss-no-visit-card" style="display:none">
+          <div class="card-title">⚠️ Клиенты без визита 30+ дней</div>
+          <div id="dash-no-visit"></div>
+        </div>
+      </div>
+      <div class="page" id="page-alerts">
+        <div class="page-title">Сигналы и уведомления</div>
+        <div id="alerts-content"></div>
+      </div>
+      <div class="page" id="page-clients">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">Клиенты</div>
+          <button class="btn-primary" onclick="openAddClient()">+ Добавить</button>
+        </div>
+        <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" class="search-input" id="client-search" placeholder="Поиск по названию, коду, региону..." oninput="renderClients()"></div>
+        <div class="chips" id="region-chips">
+          <button class="chip active" onclick="setRegionFilter('all',this)">Все регионы</button>
+          <button class="chip" onclick="setRegionFilter('Витебск',this)">Витебск</button>
+          <button class="chip" onclick="setRegionFilter('Могилёв',this)">Могилёв</button>
+          <button class="chip" onclick="setRegionFilter('Гомель',this)">Гомель</button>
+        </div>
+        <div class="chips" id="manager-chips">
+          <button class="chip active" onclick="setManagerFilter('all',this)">Все менеджеры</button>
+          <button class="chip" onclick="setManagerFilter('unassigned',this)">⚠️ Не разобрано</button>
+          <button class="chip" onclick="setManagerFilter('mine',this)">👤 Мои клиенты</button>
+        </div>
+        <div id="clients-count" style="font-size:12px;color:var(--sub);margin-bottom:10px"></div>
+        <div class="client-grid" id="clients-grid"></div>
+      </div>
+      <div class="page" id="page-tasks">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">Задачи</div>
+          <button class="btn-primary" onclick="openAddTask()">+ Задача</button>
+        </div>
+        <div class="chips">
+          <button class="chip active" onclick="setTaskFilter('all',this)">Все</button>
+          <button class="chip" onclick="setTaskFilter('overdue',this)">🔴 Просроченные</button>
+          <button class="chip" onclick="setTaskFilter('today',this)">🟡 Сегодня</button>
+          <button class="chip" onclick="setTaskFilter('upcoming',this)">🟢 Предстоящие</button>
+          <button class="chip" onclick="setTaskFilter('done',this)">✅ Выполненные</button>
+        </div>
+        <div id="tasks-list"></div>
+      </div>
+      <div class="page" id="page-visits">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">История визитов</div>
+          <button class="btn-primary" onclick="openAddVisit(null)">+ Записать визит</button>
+        </div>
+        <div id="visits-list"></div>
+      </div>
+      <div class="page" id="page-managers">
+        <div class="page-title">Менеджеры · KPI</div>
+        <div class="card">
+          <table class="tbl"><thead><tr><th>Менеджер</th><th>Регион</th><th>Визитов</th><th>Задач открыто</th><th>Просрочено</th><th>Клиентов</th></tr></thead><tbody id="managers-table"></tbody></table>
+        </div>
+      </div>
+      <div class="page" id="page-sales">
+        <div class="page-title">Продажи · Аналитика</div>
+        <div class="kpi-row">
+          <div class="kpi"><div class="kpi-label">Клиентов в АКБ</div><div class="kpi-value" id="s-total">—</div></div>
+          <div class="kpi"><div class="kpi-label">Общий оборот</div><div class="kpi-value" id="s-rev">—</div><div class="kpi-sub" style="color:var(--sub)">BYN</div></div>
+          <div class="kpi"><div class="kpi-label">Активных</div><div class="kpi-value" id="s-active">—</div><div class="kpi-sub ok">с продажами</div></div>
+        </div>
+        <div class="card"><div class="card-title">По регионам</div><div id="sales-regions"></div></div>
+        <div class="card"><div class="card-title">Топ-15 клиентов по обороту</div><table class="tbl"><thead><tr><th>#</th><th>Клиент</th><th>Регион</th><th>Оборот BYN</th></tr></thead><tbody id="sales-top"></tbody></table></div>
+      </div>
+      <div class="page" id="page-route">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">🗺️ Маршрут дня</div>
+          <span style="font-size:12px;color:var(--sub)" id="route-date-label"></span>
+        </div>
+
+        <!-- Автомаршрут -->
+        <div class="card" style="margin-bottom:12px;background:var(--ab);border-color:var(--a)">
+          <div style="font-size:13px;font-weight:600;color:var(--at);margin-bottom:10px">⚡ Автоподбор по регламенту</div>
+          <div style="font-size:12px;color:var(--at);margin-bottom:10px">ААА/А — 4 визита/месяц &nbsp;·&nbsp; B — 2/месяц &nbsp;·&nbsp; C — 1/месяц</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button onclick="autoRoute('my')" class="btn-primary" style="font-size:13px;padding:9px 16px">🤖 Мои клиенты (по регламенту)</button>
+            <button onclick="autoRoute('overdue')" style="padding:9px 16px;background:var(--rb);color:var(--r);border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">🔴 Просроченные визиты</button>
+          </div>
+        </div>
+
+        <!-- Ручной поиск -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">Добавить вручную</div>
+          <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" class="search-input" id="route-search" placeholder="Поиск клиента по названию..." oninput="filterRouteClients()" autocomplete="off"></div>
+          <div id="route-search-results" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;background:#fff"></div>
+        </div>
+
+        <!-- Список маршрута -->
+        <div id="route-list-wrap" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:600">Остановки (<span id="route-count">0</span>)</div>
+            <button onclick="clearRoute()" style="font-size:12px;color:var(--r);background:none;border:none;cursor:pointer">✕ Очистить</button>
+          </div>
+          <div id="route-list"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;margin-bottom:8px">
+            <a id="btn-yandex-route" href="#" target="_blank" class="btn-map btn-yandex">🗺 Яндекс Навигатор</a>
+            <a id="btn-google-route" href="#" target="_blank" class="btn-map btn-google">🌐 Google Maps</a>
+          </div>
+        </div>
+        <div id="route-empty" style="color:var(--sub);font-size:14px;padding:20px 0">Нажмите "Мои клиенты" — маршрут составится автоматически по регламенту</div>
+      </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="page-title" style="margin-bottom:0">Пользователи</div>
+          <button class="btn-primary" onclick="openInviteUser()">+ Пригласить менеджера</button>
+        </div>
+        <div class="card" style="margin-bottom:12px;background:var(--ab);border-color:var(--at)">
+          <div style="font-size:13px;color:var(--at);line-height:1.7">
+            <strong>Как добавить менеджера:</strong><br>
+            1. Нажмите «+ Пригласить менеджера» — заполните имя, email, регион<br>
+            2. Затем зайдите в <strong>Supabase → Authentication → Users → Add user → Send invitation</strong><br>
+            3. Введите email менеджера → менеджеру придёт письмо со ссылкой для установки пароля
+          </div>
+        </div>
+        <div class="card"><div id="users-list"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-nav">
+    <button class="bn-item active" id="bn-dashboard" onclick="goPage('dashboard','Дашборд')">📊<span>Главная</span></button>
+    <button class="bn-item" id="bn-clients" onclick="goPage('clients','Клиенты')">🏢<span>Клиенты</span></button>
+    <button class="bn-item" id="bn-route" onclick="goPage('route','Маршрут дня')">🗺️<span>Маршрут</span></button>
+    <button class="bn-item" id="bn-tasks" onclick="goPage('tasks','Задачи')">✅<span>Задачи</span></button>
+    <button class="bn-item" id="bn-visits" onclick="goPage('visits','Визиты')">📝<span>Визиты</span></button>
+  </div>
+</div>
+
+<!-- MODALS -->
+<!-- БЫСТРЫЙ ВИЗИТ ИЗ МАРШРУТА -->
+<div class="modal-bg" id="modal-quick-visit">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="qv-title">Визит</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:3px" id="qv-addr"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-quick-visit')">×</button>
+    </div>
+    <!-- Результат одной кнопкой -->
+    <div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin-bottom:8px">Результат визита</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+      <button onclick="setQVResult('✅ Заказ')" id="qvr-order" class="qv-result-btn" style="padding:10px 6px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:13px;text-align:center">✅<br><span style="font-size:11px">Заказ</span></button>
+      <button onclick="setQVResult('🤝 Переговоры')" id="qvr-talk" class="qv-result-btn" style="padding:10px 6px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:13px;text-align:center">🤝<br><span style="font-size:11px">Переговоры</span></button>
+      <button onclick="setQVResult('❌ Не застал')" id="qvr-miss" class="qv-result-btn" style="padding:10px 6px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:13px;text-align:center">❌<br><span style="font-size:11px">Не застал</span></button>
+      <button onclick="setQVResult('📦 Мерчендайзинг')" id="qvr-merch" class="qv-result-btn" style="padding:10px 6px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:13px;text-align:center">📦<br><span style="font-size:11px">Мерч.</span></button>
+      <button onclick="setQVResult('📚 Обучение')" id="qvr-edu" class="qv-result-btn" style="padding:10px 6px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:13px;text-align:center">📚<br><span style="font-size:11px">Обучение</span></button>
+      <button onclick="setQVResult('💬 Работа с ЛПР')" id="qvr-lpr" class="qv-result-btn" style="padding:10px 6px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:13px;text-align:center">💬<br><span style="font-size:11px">ЛПР</span></button>
+    </div>
+    <input type="hidden" id="qv-result-val">
+    <!-- Заметка -->
+    <div class="form-field">
+      <label class="form-label">Заметка (необязательно)</label>
+      <textarea class="form-input" id="qv-text" rows="2" placeholder="Что обсуждали, договорились..."></textarea>
+    </div>
+    <!-- Следующий визит — автоподсказка по категории -->
+    <div class="form-field">
+      <label class="form-label">Следующий визит <span id="qv-cat-hint" style="color:var(--a);font-weight:400"></span></label>
+      <input class="form-input" type="date" id="qv-nextdate">
+    </div>
+    <input type="hidden" id="qv-client-id">
+    <button class="btn-primary" style="width:100%;font-size:15px;padding:13px" onclick="saveQuickVisit()">✓ Сохранить и перейти к следующей точке</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-client"><div class="modal" id="modal-client-content"></div></div>
+
+<div class="modal-bg" id="modal-visit">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="visit-modal-title">Записать визит</div><button class="modal-close" onclick="closeModal('modal-visit')">×</button></div>
+    <div id="visit-client-select"></div>
+    <div class="form-field"><label class="form-label">Что обсуждали / что сделали</label><textarea class="form-input" id="v-text" placeholder="Встретился с директором..."></textarea></div>
+    <div class="form-field"><label class="form-label">Результат</label><input class="form-input" type="text" id="v-result" placeholder="Отгрузка 15 000 BYN..."></div>
+    <div class="form-field"><label class="form-label">Следующая задача</label><textarea class="form-input" id="v-task" rows="2" placeholder="Проверить движение..."></textarea></div>
+    <div class="form-field"><label class="form-label">Дата следующего визита</label><input class="form-input" type="date" id="v-nextdate"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-visit')">Отмена</button><button class="btn-primary" onclick="saveVisit()">Сохранить визит</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-add-client">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Новый клиент</div><button class="modal-close" onclick="closeModal('modal-add-client')">×</button></div>
+    <div class="form-field"><label class="form-label">Название</label><input class="form-input" type="text" id="nc-name" placeholder="ООО Строймастер"></div>
+    <div class="form-field"><label class="form-label">Регион</label><select class="form-input" id="nc-region"><option>Витебск</option><option>Могилёв</option><option>Гомель</option></select></div>
+    <div class="form-field"><label class="form-label">Контакт (ФИО)</label><input class="form-input" type="text" id="nc-contact" placeholder="Иван Иванов"></div>
+    <div class="form-field"><label class="form-label">Телефон</label><input class="form-input" type="text" id="nc-phone" placeholder="+375 29 ..."></div>
+    <div class="form-field"><label class="form-label">Код 1С</label><input class="form-input" type="text" id="nc-code" placeholder="00-00000001"></div>
+    <div class="form-field"><label class="form-label">Оборот BYN</label><input class="form-input" type="number" id="nc-rev" placeholder="0"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-add-client')">Отмена</button><button class="btn-primary" onclick="saveNewClient()">Добавить</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-add-task">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Новая задача</div><button class="modal-close" onclick="closeModal('modal-add-task')">×</button></div>
+    <div class="form-field"><label class="form-label">Клиент</label><input type="text" class="form-input" id="nt-client-search" placeholder="Поиск клиента..." oninput="filterTaskClients()" autocomplete="off"><div id="nt-client-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;background:#fff;position:relative;z-index:10"></div><input type="hidden" id="nt-client"></div>
+    <div class="form-field"><label class="form-label">Задача</label><textarea class="form-input" id="nt-text" placeholder="Что нужно сделать..."></textarea></div>
+    <div class="form-field"><label class="form-label">Срок</label><input class="form-input" type="date" id="nt-date"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-add-task')">Отмена</button><button class="btn-primary" onclick="saveNewTask()">Создать задачу</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modal-invite">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Пригласить менеджера</div><button class="modal-close" onclick="closeModal('modal-invite')">×</button></div>
+    <div style="background:var(--ab);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--at);line-height:1.6">
+      📧 Менеджер будет добавлен в список. После этого зайдите в Supabase и отправьте ему приглашение на email.
+    </div>
+    <div class="form-field"><label class="form-label">Имя менеджера</label><input class="form-input" type="text" id="invite-name" placeholder="Алексей Руднев"></div>
+    <div class="form-field"><label class="form-label">Email менеджера</label><input class="form-input" type="email" id="invite-email" placeholder="manager@resanta.by"></div>
+    <div class="form-field"><label class="form-label">Регион</label><select class="form-input" id="invite-region"><option>Витебск</option><option>Могилёв</option><option>Гомель</option></select></div>
+    <div id="invite-error" style="background:var(--rb);color:var(--r);padding:10px;border-radius:8px;font-size:13px;display:none;margin-bottom:12px"></div>
+    <div id="invite-success" style="background:var(--gb);color:var(--g);padding:10px;border-radius:8px;font-size:13px;display:none;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-invite')">Отмена</button><button class="btn-primary" id="invite-btn" onclick="saveInvite()">Добавить менеджера</button></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://baqchjtvtmcfzwjjluhs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null, currentProfile = null;
+let allClients = [], allTasks = [], allVisits = [], allUsers = [];
+let regionFilter = 'all', taskFilter = 'all', visitClientId = null, managerFilter = 'all';
+const TODAY = new Date().toISOString().split('T')[0];
+const fmt = n => n >= 1000000 ? (n/1000000).toFixed(2)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : Math.round(n||0).toString();
+const daysDiff = d => Math.round((new Date(d) - new Date()) / 86400000);
+
+function showResetForm() { document.getElementById('login-form').style.display='none'; document.getElementById('reset-form').style.display='block'; }
+function showLoginForm() { document.getElementById('reset-form').style.display='none'; document.getElementById('login-form').style.display='block'; }
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  err.style.display='none';
+  if (!email||!pass){err.textContent='Введите email и пароль';err.style.display='block';return;}
+  btn.disabled=true; btn.textContent='Входим...';
+  const {data,error} = await db.auth.signInWithPassword({email,password:pass});
+  btn.disabled=false; btn.textContent='Войти';
+  if (error){err.textContent='Неверный email или пароль';err.style.display='block';return;}
+  currentUser = data.user;
+  await loadProfileAndStart();
+}
+
+async function doReset() {
+  const email = document.getElementById('reset-email').value.trim().toLowerCase();
+  const err = document.getElementById('reset-error');
+  const info = document.getElementById('reset-info');
+  err.style.display='none'; info.style.display='none';
+  if (!email){err.textContent='Введите email';err.style.display='block';return;}
+  const {error} = await db.auth.resetPasswordForEmail(email,{redirectTo:'https://resanta-crm.by'});
+  if (error){err.textContent=error.message;err.style.display='block';return;}
+  info.textContent='✅ Письмо отправлено! Проверьте почту.'; info.style.display='block';
+}
+
+async function doLogout() {
+  await db.auth.signOut();
+  currentUser=null; currentProfile=null;
+  document.getElementById('login-wrap').style.display='flex';
+  document.getElementById('app').style.display='none';
+}
+
+async function loadProfileAndStart() {
+  try {
+    const {data:profile} = await db.from('users').select('*').eq('email',currentUser.email).single();
+    currentProfile = profile || {name:currentUser.email,role:'manager',region:'Витебск',email:currentUser.email};
+  } catch(e) {
+    currentProfile = {name:currentUser.email,role:'manager',region:'Витебск',email:currentUser.email};
+  }
+  startApp();
+}
+
+async function startApp() {
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('user-name').textContent = currentProfile?.name||currentUser?.email||'...';
+  document.getElementById('topbar-title').textContent = 'CRM · '+(currentProfile?.region||'');
+  if (currentProfile?.role==='boss') {
+    document.getElementById('nav-section-boss').style.display='block';
+    document.getElementById('nav-managers').style.display='flex';
+    document.getElementById('nav-sales').style.display='flex';
+    document.getElementById('nav-users').style.display='flex';
+    document.getElementById('alert-dot').style.display='block';
+  }
+  const nw = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  document.getElementById('v-nextdate').value=nw;
+  document.getElementById('nt-date').value=nw;
+  await loadData();
+  buildDashboard();
+}
+
+function openInviteUser() {
+  document.getElementById('invite-error').style.display='none';
+  document.getElementById('invite-success').style.display='none';
+  document.getElementById('invite-email').value='';
+  document.getElementById('invite-name').value='';
+  document.getElementById('modal-invite').classList.add('open');
+}
+
+async function saveInvite() {
+  const email = document.getElementById('invite-email').value.trim().toLowerCase();
+  const name = document.getElementById('invite-name').value.trim();
+  const region = document.getElementById('invite-region').value;
+  const errEl = document.getElementById('invite-error');
+  const successEl = document.getElementById('invite-success');
+  const btn = document.getElementById('invite-btn');
+  errEl.style.display='none'; successEl.style.display='none';
+  if (!email||!name){errEl.textContent='Заполните имя и email';errEl.style.display='block';return;}
+  btn.disabled=true; btn.textContent='Сохраняем...';
+  const {data:newUser,error} = await db.from('users').insert({email,name,role:'manager',region}).select().single();
+  btn.disabled=false; btn.textContent='Добавить менеджера';
+  if (error&&!error.message.includes('duplicate')){errEl.textContent='Ошибка: '+error.message;errEl.style.display='block';return;}
+  successEl.innerHTML = '✅ <strong>'+name+'</strong> добавлен в список!';
+  successEl.style.display='block';
+  if (newUser) allUsers.push(newUser);
+  renderUsers();
+}
+
+function renderUsers() {
+  if (!allUsers.length){document.getElementById('users-list').innerHTML='<div style="color:var(--sub);font-size:14px;padding:20px;text-align:center">Пользователей пока нет</div>';return;}
+  document.getElementById('users-list').innerHTML = allUsers.map(u=>'<div class="user-row"><div class="user-info"><div class="user-email-text">'+( u.name||'—')+'<span class="user-role-badge '+(u.role==='boss'?'role-boss':'role-manager')+'">'+(u.role==='boss'?'👑 Руководитель':'👤 Менеджер')+'</span></div><div class="user-meta">'+u.email+' · '+(u.region||'—')+'</div></div></div>').join('');
+}
+
+async function loadData() {
+  const {data:clients} = await db.from('clients').select('*').order('revenue_total',{ascending:false}).limit(1000);
+  allClients = clients||[];
+  const {data:tasks} = await db.from('tasks').select('*').order('due_date',{ascending:true});
+  allTasks = tasks||[];
+  const {data:visits} = await db.from('visits').select('*').order('created_at',{ascending:false});
+  allVisits = visits||[];
+  const {data:users} = await db.from('users').select('*');
+  allUsers = users||[];
+  // task client search is handled by filterTaskClients()
+}
+
+function goPage(p,title) {
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.bn-item').forEach(e=>e.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  const ni=document.getElementById('nav-'+p); const bi=document.getElementById('bn-'+p);
+  if(ni)ni.classList.add('active'); if(bi)bi.classList.add('active');
+  document.getElementById('topbar-title').textContent=title;
+  if(p==='dashboard')buildDashboard();
+  if(p==='clients')renderClients();
+  if(p==='tasks')renderTasks();
+  if(p==='visits')renderVisits();
+  if(p==='alerts')renderAlerts();
+  if(p==='managers')renderManagers();
+  if(p==='sales')renderSales();
+  if(p==='users')renderUsers();
+  if(p==='route')renderRoute();
+}
+
+function buildDashboard() {
+  const isBoss = currentProfile?.role==='boss';
+  document.getElementById('dash-title').textContent='Добро пожаловать, '+(currentProfile?.name||'')+'!';
+  const myTasks=allTasks.filter(t=>!t.done);
+  const overdue=myTasks.filter(t=>t.due_date<TODAY);
+  const todayT=myTasks.filter(t=>t.due_date===TODAY);
+  const unassigned=allClients.filter(c=>!c.manager_name||c.manager_name==='Не разобрано');
+  document.getElementById('dash-kpi').innerHTML='<div class="kpi"><div class="kpi-label">Клиентов в базе</div><div class="kpi-value">'+allClients.length+'</div></div><div class="kpi"><div class="kpi-label">Открытых задач</div><div class="kpi-value '+(overdue.length>0?'bad':'')+'">'+myTasks.length+'</div>'+(overdue.length?'<div class="kpi-sub bad">⚠️ '+overdue.length+' просрочено</div>':'<div class="kpi-sub ok">Всё в срок</div>')+'</div><div class="kpi"><div class="kpi-label">Задач сегодня</div><div class="kpi-value '+(todayT.length>0?'warn':'')+'">'+todayT.length+'</div></div><div class="kpi"><div class="kpi-label">Визитов записано</div><div class="kpi-value">'+allVisits.length+'</div></div>'+(unassigned.length?'<div class="kpi" style="cursor:pointer" onclick="goPage(\'clients\',\'Клиенты\');setManagerFilter(\'unassigned\',document.querySelectorAll(\'#manager-chips .chip\')[1])"><div class="kpi-label">⚠️ Не разобрано</div><div class="kpi-value bad">'+unassigned.length+'</div><div class="kpi-sub bad">нажмите чтобы разобрать</div></div>':'');
+  document.getElementById('dash-tasks').innerHTML=myTasks.slice(0,5).map(t=>{const c=allClients.find(x=>x.id===t.client_id);const d=daysDiff(t.due_date);const cls=d<0?'bad':d===0?'warn':'ok';const label=d<0?'Просрочено '+Math.abs(d)+'д':d===0?'Сегодня':'Через '+d+'д';return'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)"><span class="'+cls+'" style="font-size:11px;width:80px;flex-shrink:0">'+label+'</span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(c?.name||'—')+'</div><div style="font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+t.text+'</div></div><button onclick="doneTask(\''+t.id+'\')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;flex-shrink:0">✓</button></div>';}).join('')||'<div style="color:var(--sub);font-size:13px;padding:12px 0">Задач нет 🎉</div>';
+  document.getElementById('dash-visits').innerHTML=allVisits.slice(0,5).map(v=>{const c=allClients.find(x=>x.id===v.client_id);return'<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:500">'+(c?.name||'—')+'</span><span style="font-size:11px;color:var(--sub)">'+(v.date||v.created_at?.split('T')[0])+'</span></div><div style="font-size:12px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(v.text||'')+'</div></div>';}).join('')||'<div style="color:var(--sub);font-size:13px;padding:12px 0">Визитов ещё нет</div>';
+  if(isBoss){document.getElementById('boss-no-visit-card').style.display='block';const vi=new Set(allVisits.map(v=>v.client_id));const nv=allClients.filter(c=>!vi.has(c.id)).slice(0,8);document.getElementById('dash-no-visit').innerHTML=nv.length?'<table class="tbl"><thead><tr><th>Клиент</th><th>Регион</th><th>Оборот</th></tr></thead><tbody>'+nv.map(c=>'<tr class="tbl-tap" onclick="openClient(\''+c.id+'\')"><td>'+c.name+'</td><td>'+regionTag(c.region)+'</td><td>'+fmt(c.revenue_total)+' BYN</td></tr>').join('')+'</tbody></table>':'<div style="color:var(--sub);font-size:13px">Все клиенты посещены 🎉</div>';}
+}
+
+function regionTag(r){if(r==='Витебск')return'<span class="tag tag-v">ВТБ</span>';if(r==='Могилёв')return'<span class="tag tag-m">МГЛ</span>';if(r==='Гомель')return'<span class="tag tag-g">ГМЛ</span>';return'<span class="tag tag-gray">'+(r||'—')+'</span>';}
+function setRegionFilter(r,btn){regionFilter=r;document.querySelectorAll('#region-chips .chip').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderClients();}
+function setManagerFilter(m,btn){managerFilter=m;document.querySelectorAll('#manager-chips .chip').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderClients();}
+
+async function claimClient(id,event){
+  if(event)event.stopPropagation();
+  const myName=currentProfile?.name;
+  if(!myName)return;
+  if(!confirm('Взять этого клиента себе?'))return;
+  await db.from('clients').update({manager_name:myName}).eq('id',id);
+  allClients=allClients.map(c=>c.id===id?{...c,manager_name:myName}:c);
+  renderClients();
+  if(document.getElementById('modal-client').classList.contains('open'))openClient(id);
+}
+
+function renderClients(){
+  const q=(document.getElementById('client-search').value||'').toLowerCase();
+  const list=allClients.filter(c=>{
+    const rm=regionFilter==='all'||c.region===regionFilter;
+    const sm=!q||c.name.toLowerCase().includes(q)||(c.code||'').toLowerCase().includes(q)||(c.contact||'').toLowerCase().includes(q);
+    const isUnassigned=!c.manager_name||c.manager_name==='Не разобрано';
+    const mm=managerFilter==='all'||(managerFilter==='unassigned'&&isUnassigned)||(managerFilter==='mine'&&c.manager_name===currentProfile?.name);
+    return rm&&sm&&mm;
+  });
+  document.getElementById('clients-count').textContent='Найдено: '+list.length+' клиентов';
+  document.getElementById('clients-grid').innerHTML=list.map(c=>{
+    const cv=allVisits.filter(v=>v.client_id===c.id);const ct=allTasks.filter(t=>t.client_id===c.id&&!t.done);const lv=cv[0];const ds=lv?Math.abs(daysDiff(lv.date||lv.created_at?.split('T')[0])):null;
+    const vb=ds===null?'<span class="tag tag-r">Нет визитов</span>':ds>30?'<span class="tag tag-r">⚠️ '+ds+'д</span>':ds>14?'<span class="tag" style="background:var(--amb);color:var(--am)">'+ds+'д назад</span>':'<span class="tag tag-m">'+ds+'д назад</span>';
+    const isUnassigned=!c.manager_name||c.manager_name==='Не разобрано';
+    const mgrTag=isUnassigned?'<span class="tag" style="background:var(--rb);color:var(--r)">⚠️ Не разобрано</span>':'<span class="tag tag-gray">👤 '+c.manager_name+'</span>';
+    const claimBtn=isUnassigned?'<button onclick="claimClient(\''+c.id+'\',event)" style="margin-top:8px;width:100%;padding:7px;font-size:12px;border:1px solid var(--a);color:var(--a);background:none;border-radius:8px;cursor:pointer">Взять себе</button>':'';
+    return'<div class="client-card" onclick="openClient(\''+c.id+'\')"><div class="cc-name">'+c.name+'</div><div class="cc-meta">'+regionTag(c.region)+(c.code?'<span class="tag tag-gray">#'+c.code+'</span>':'')+mgrTag+(ct.length?'<span class="tag tag-v">'+ct.length+' задач</span>':'')+'</div><div class="cc-stats"><div class="cc-stat"><div class="cc-stat-label">Оборот</div><div class="cc-stat-value">'+fmt(c.revenue_total)+'</div></div><div class="cc-stat"><div class="cc-stat-label">Визиты</div><div class="cc-stat-value">'+vb+'</div></div></div>'+claimBtn+'</div>';
+  }).join('')||'<div style="color:var(--sub);font-size:14px;padding:20px">Клиенты не найдены</div>';
+}
+
+async function openClient(id){
+  const c=allClients.find(x=>x.id===id);if(!c)return;
+  const cv=allVisits.filter(v=>v.client_id===id);const ct=allTasks.filter(t=>t.client_id===id&&!t.done);
+  const isUnassigned=!c.manager_name||c.manager_name==='Не разобрано';
+  const mgrTag=isUnassigned?'<span class="tag" style="background:var(--rb);color:var(--r)">⚠️ Не разобрано</span>':'<span class="tag tag-gray">👤 '+c.manager_name+'</span>';
+  const claimBtn=isUnassigned?'<button class="btn-primary" style="width:100%;margin-top:10px" onclick="claimClient(\''+id+'\')">Взять себе</button>':'';
+  const addrBlock=c.address?'<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:12px"><div style="font-size:11px;color:var(--sub);margin-bottom:6px;font-weight:600;text-transform:uppercase">📍 Адрес</div><div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:10px">'+c.address+'</div><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="https://yandex.by/maps/?text='+encodeURIComponent(c.address)+'" target="_blank" class="btn-map btn-yandex">🗺 Яндекс Карты</a><a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(c.address)+'" target="_blank" class="btn-map btn-google">🌐 Google Maps</a><button onclick="addToRoute(\''+id+'\')" style="padding:8px 14px;border:1px solid var(--a);color:var(--a);background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">+ В маршрут</button></div></div>':'';
+  const vh=cv.length?cv.map(v=>'<div class="visit-card has-task"><div class="visit-date">'+(v.date||v.created_at?.split('T')[0])+' · Визит</div><div class="visit-text">'+(v.text||'')+'</div>'+(v.result?'<div class="visit-result">✓ '+v.result+'</div>':'')+'</div>').join(''):'<div style="color:var(--sub);font-size:13px">Визитов пока нет</div>';
+  const th=ct.length?ct.map(t=>{const d=daysDiff(t.due_date);const cls=d<0?'bad':d===0?'warn':'ok';const label=d<0?'Просрочено '+Math.abs(d)+'д':d===0?'Сегодня':'Через '+d+'д';return'<div class="visit-card has-task"><div class="visit-date">до '+t.due_date+'</div><div class="visit-text">'+t.text+'</div><div class="'+cls+'" style="font-size:11px;margin-top:4px">'+label+'</div><button onclick="doneTask(\''+t.id+'\')" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer">Выполнено ✓</button></div>';}).join(''):'';
+  document.getElementById('modal-client-content').innerHTML='<div class="modal-head"><div><div class="modal-title">'+c.name+'</div><div style="margin-top:4px">'+regionTag(c.region)+(c.code?' <span class="tag tag-gray">#'+c.code+'</span>':'')+' '+mgrTag+'</div></div><button class="modal-close" onclick="closeModal(\'modal-client\')">×</button></div>'+claimBtn+addrBlock+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;margin-top:12px"><div class="cc-stat"><div class="cc-stat-label">Контакт</div><div style="font-size:13px;font-weight:500">'+(c.contact||'—')+'</div></div><div class="cc-stat"><div class="cc-stat-label">Телефон</div><div style="font-size:13px;font-weight:500">'+(c.phone||'—')+'</div></div><div class="cc-stat"><div class="cc-stat-label">Оборот BYN</div><div style="font-size:16px;font-weight:600">'+fmt(c.revenue_total)+'</div></div><div class="cc-stat"><div class="cc-stat-label">Визитов</div><div style="font-size:16px;font-weight:600">'+cv.length+'</div></div></div>'+(th?'<div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin-bottom:8px">ЗАДАЧИ</div>'+th:'')+'<div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin:12px 0 8px">ИСТОРИЯ ВИЗИТОВ</div>'+vh+'<button class="btn-primary" style="width:100%;margin-top:16px" onclick="closeModal(\'modal-client\');openAddVisit(\''+id+'\')">+ Записать визит</button>';
+  document.getElementById('modal-client').classList.add('open');
+}
+
+// ===== КАТЕГОРИИ ПО РЕГЛАМЕНТУ =====
+// Частота визитов (дней между визитами)
+function visitFrequencyDays(cat){
+  if(!cat)return 30;
+  const c=cat.toString().toUpperCase();
+  if(c.includes('ААА')||c.includes('AAA'))return 7;
+  if(c==='А'||c==='A')return 7;
+  if(c==='B'||c==='В')return 14;
+  return 30; // C и остальные
+}
+
+function catTag(cat){
+  if(!cat)return'<span class="tag tag-gray">—</span>';
+  const c=cat.toString().toUpperCase();
+  if(c.includes('ААА')||c.includes('AAA'))return'<span class="tag" style="background:#7C3AED20;color:#7C3AED">ААА</span>';
+  if(c==='А'||c==='A')return'<span class="tag tag-r">А</span>';
+  if(c==='B'||c==='В')return'<span class="tag tag-v">B</span>';
+  if(c==='C'||c==='С')return'<span class="tag tag-m">C</span>';
+  return'<span class="tag tag-gray">'+cat+'</span>';
+}
+
+function nextVisitDate(cat){
+  const days=visitFrequencyDays(cat);
+  const d=new Date();d.setDate(d.getDate()+days);
+  return d.toISOString().split('T')[0];
+}
+
+function daysSinceVisit(clientId){
+  const visits=allVisits.filter(v=>v.client_id===clientId);
+  if(!visits.length)return 9999;
+  const last=visits[0].date||visits[0].created_at?.split('T')[0];
+  return Math.round((new Date()-new Date(last))/86400000);
+}
+
+function isDueToday(client){
+  const freq=visitFrequencyDays(client.role_type);
+  const since=daysSinceVisit(client.id);
+  return since>=freq;
+}
+
+// ===== АВТОМАРШРУТ =====
+function autoRoute(mode){
+  let candidates=allClients.filter(c=>c.address);
+  const myName=currentProfile?.name;
+
+  if(mode==='my'){
+    // Мои клиенты которым пора визит
+    candidates=candidates.filter(c=>c.manager_name===myName&&isDueToday(c));
+    if(!candidates.length){
+      alert('🎉 У всех ваших клиентов визиты в срок! Нет просроченных или запланированных на сегодня.');
+      return;
+    }
+    // Сортировка: сначала просроченные ААА/А, потом B, потом C
+    const priority={'ААА':0,'AAA':0,'А':1,'A':1,'В':2,'B':2,'С':3,'C':3};
+    candidates.sort((a,b)=>{
+      const pa=priority[a.role_type?.toUpperCase()]??5;
+      const pb=priority[b.role_type?.toUpperCase()]??5;
+      if(pa!==pb)return pa-pb;
+      return daysSinceVisit(b.id)-daysSinceVisit(a.id);
+    });
+    // Берём топ-10 на день
+    candidates=candidates.slice(0,10);
+  } else if(mode==='overdue'){
+    // Все клиенты у кого дата визита просрочена
+    candidates=candidates.filter(c=>(c.manager_name===myName||!myName)&&daysSinceVisit(c.id)>visitFrequencyDays(c.role_type));
+    candidates.sort((a,b)=>daysSinceVisit(b.id)-daysSinceVisit(a.id));
+    candidates=candidates.slice(0,10);
+  }
+
+  routeClients=candidates;
+  renderRoute();
+  // Скроллим к списку
+  setTimeout(()=>document.getElementById('route-list-wrap')?.scrollIntoView({behavior:'smooth'}),100);
+}
+
+// ===== МАРШРУТ ДНЯ =====
+let routeClients = [];
+
+function filterRouteClients(){
+  const q=document.getElementById('route-search').value.toLowerCase();
+  const res=document.getElementById('route-search-results');
+  if(!q){res.style.display='none';return;}
+  const filtered=allClients.filter(c=>c.address&&c.name.toLowerCase().includes(q)&&!routeClients.find(r=>r.id===c.id)).slice(0,10);
+  res.style.display=filtered.length?'block':'none';
+  res.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="addToRoute(\''+c.id+'\')"><div style="font-weight:500">'+catTag(c.role_type)+' '+c.name+'</div><div style="font-size:11px;color:var(--sub);margin-top:2px">📍 '+c.address+'</div></div>').join('');
+}
+
+function addToRoute(id){
+  const c=allClients.find(x=>x.id===id);
+  if(!c||routeClients.find(r=>r.id===id))return;
+  if(!c.address){alert('У этого клиента нет адреса в базе');return;}
+  routeClients.push(c);
+  document.getElementById('route-search').value='';
+  document.getElementById('route-search-results').style.display='none';
+  renderRoute();
+}
+
+function removeFromRoute(id){
+  routeClients=routeClients.filter(c=>c.id!==id);
+  renderRoute();
+}
+
+function clearRoute(){routeClients=[];renderRoute();}
+
+function buildYandexUrl(){
+  if(!routeClients.length)return'#';
+  const addrs=routeClients.map(c=>encodeURIComponent(c.address));
+  if(addrs.length===1)return'https://yandex.by/maps/?text='+addrs[0];
+  return'https://yandex.by/maps/?rtext='+addrs.join('~')+'&rtt=auto';
+}
+
+function buildGoogleUrl(){
+  if(!routeClients.length)return'#';
+  if(routeClients.length===1)return'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(routeClients[0].address);
+  const dest=encodeURIComponent(routeClients[routeClients.length-1].address);
+  const waypoints=routeClients.slice(0,-1).map(c=>encodeURIComponent(c.address)).join('|');
+  return'https://www.google.com/maps/dir/?api=1&destination='+dest+'&waypoints='+waypoints+'&travelmode=driving';
+}
+
+function renderRoute(){
+  const empty=document.getElementById('route-empty');
+  const wrap=document.getElementById('route-list-wrap');
+  const today=new Date().toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('route-date-label').textContent=today;
+  if(!routeClients.length){empty.style.display='block';wrap.style.display='none';return;}
+  empty.style.display='none';wrap.style.display='block';
+  document.getElementById('route-count').textContent=routeClients.length;
+  document.getElementById('route-list').innerHTML=routeClients.map((c,i)=>{
+    const since=daysSinceVisit(c.id);
+    const freq=visitFrequencyDays(c.role_type);
+    const overdue=since>=freq;
+    const sinceLabel=since===9999?'Ни разу не посещён':since+'д назад';
+    const visited=allVisits.some(v=>v.client_id===c.id&&(v.date||v.created_at?.split('T')[0])===TODAY);
+    return'<div class="route-client" style="'+(visited?'opacity:0.5;':'')+(overdue?'border-left:3px solid var(--r);':'')+'">'
+      +'<div class="route-num" style="'+(visited?'background:#27500A':'')+'">'+(visited?'✓':i+1)+'</div>'
+      +'<div class="route-info">'
+        +'<div class="route-name">'+catTag(c.role_type)+' '+c.name+'</div>'
+        +'<div class="route-addr">📍 '+c.address+'</div>'
+        +'<div style="font-size:11px;margin-top:3px;color:'+(overdue?'var(--r)':'var(--sub)')+'">'+sinceLabel+(overdue?' ⚠️':'')+'</div>'
+      +'</div>'
+      +(visited
+        ?'<span style="font-size:11px;color:var(--g);font-weight:600">✓ Визит</span>'
+        :'<button onclick="openQuickVisit(\''+c.id+'\')" style="padding:8px 12px;background:var(--a);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Визит ✍️</button>'
+      )
+      +'<button class="route-del" onclick="removeFromRoute(\''+c.id+'\')">×</button>'
+    +'</div>';
+  }).join('');
+  document.getElementById('btn-yandex-route').href=buildYandexUrl();
+  document.getElementById('btn-google-route').href=buildGoogleUrl();
+}
+
+// ===== БЫСТРЫЙ ВИЗИТ (2 минуты) =====
+let qvCurrentIndex = -1;
+
+function openQuickVisit(clientId){
+  const c=allClients.find(x=>x.id===clientId);if(!c)return;
+  qvCurrentIndex=routeClients.findIndex(x=>x.id===clientId);
+  document.getElementById('qv-client-id').value=clientId;
+  document.getElementById('qv-title').textContent=c.name;
+  document.getElementById('qv-addr').textContent=c.address||'';
+  document.getElementById('qv-text').value='';
+  document.getElementById('qv-result-val').value='';
+  // Авто-подсказка по категории
+  const nd=nextVisitDate(c.role_type);
+  document.getElementById('qv-nextdate').value=nd;
+  const freq=visitFrequencyDays(c.role_type);
+  document.getElementById('qv-cat-hint').textContent='('+c.role_type+' · каждые '+freq+' дн. → '+nd+')';
+  // Сбросить выбор кнопок
+  document.querySelectorAll('.qv-result-btn').forEach(b=>b.style.borderColor='var(--border)');
+  document.getElementById('modal-quick-visit').classList.add('open');
+}
+
+function setQVResult(val){
+  document.getElementById('qv-result-val').value=val;
+  document.querySelectorAll('.qv-result-btn').forEach(b=>b.style.borderColor='var(--border)');
+  event.currentTarget.style.borderColor='var(--a)';
+}
+
+async function saveQuickVisit(){
+  const cid=document.getElementById('qv-client-id').value;
+  const result=document.getElementById('qv-result-val').value;
+  if(!result){alert('Выберите результат визита');return;}
+  const text=document.getElementById('qv-text').value.trim()||result;
+  const nextDate=document.getElementById('qv-nextdate').value;
+  const {data:visit}=await db.from('visits').insert({client_id:cid,date:TODAY,text,result,manager_id:currentUser.id}).select().single();
+  if(visit)allVisits.unshift(visit);
+  // Ставим задачу на следующий визит автоматически
+  if(nextDate){
+    const {data:task}=await db.from('tasks').insert({client_id:cid,text:'Следующий визит ('+result+')',due_date:nextDate,done:false,visit_id:visit?.id}).select().single();
+    if(task)allTasks.unshift(task);
+  }
+  closeModal('modal-quick-visit');
+  renderRoute();
+  buildDashboard();
+  // Автопереход к следующей точке
+  const next=routeClients[qvCurrentIndex+1];
+  if(next&&!allVisits.some(v=>v.client_id===next.id&&v.date===TODAY)){
+    setTimeout(()=>openQuickVisit(next.id),400);
+  }
+}
+
+function setTaskFilter(f,btn){taskFilter=f;document.querySelectorAll('#page-tasks .chip').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderTasks();}
+
+function renderTasks(){
+  let list=allTasks;
+  if(taskFilter==='overdue')list=list.filter(t=>!t.done&&t.due_date<TODAY);
+  else if(taskFilter==='today')list=list.filter(t=>!t.done&&t.due_date===TODAY);
+  else if(taskFilter==='upcoming')list=list.filter(t=>!t.done&&t.due_date>TODAY);
+  else if(taskFilter==='done')list=list.filter(t=>t.done);
+  else list=list.filter(t=>!t.done);
+  if(!list.length){document.getElementById('tasks-list').innerHTML='<div style="color:var(--sub);font-size:14px;padding:20px 0">Нет задач в этой категории</div>';return;}
+  document.getElementById('tasks-list').innerHTML=list.map(t=>{const c=allClients.find(x=>x.id===t.client_id);const d=daysDiff(t.due_date);const cls=t.done?'ok':d<0?'bad':d===0?'warn':'ok';const label=t.done?'✅ Выполнено':d<0?'🔴 Просрочено '+Math.abs(d)+'д':d===0?'🟡 Сегодня':'🟢 Через '+d+'д';return'<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="openClient(\''+(c?.id)+'\')"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">'+(c?.name||'—')+'</div><div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:8px">'+t.text+'</div><span class="'+cls+'" style="font-size:12px">'+label+' · до '+t.due_date+'</span></div>'+(!t.done?'<button onclick="event.stopPropagation();doneTask(\''+t.id+'\')" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:none;cursor:pointer;font-size:12px;white-space:nowrap">✓ Готово</button>':'')+'</div></div>';}).join('');
+}
+
+async function doneTask(id){await db.from('tasks').update({done:true}).eq('id',id);allTasks=allTasks.map(t=>t.id===id?{...t,done:true}:t);renderTasks();buildDashboard();}
+
+function renderVisits(){
+  if(!allVisits.length){document.getElementById('visits-list').innerHTML='<div style="color:var(--sub);font-size:14px;padding:20px 0">Визитов ещё нет. Нажмите "+ Записать визит"</div>';return;}
+  document.getElementById('visits-list').innerHTML=allVisits.map(v=>{const c=allClients.find(x=>x.id===v.client_id);const m=allUsers.find(x=>x.id===v.manager_id);return'<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:14px;font-weight:600;cursor:pointer" onclick="openClient(\''+(c?.id)+'\')">'+(c?.name||'—')+'</span><span style="font-size:12px;color:var(--sub)">'+(v.date||v.created_at?.split('T')[0])+'</span></div>'+(m?'<div style="font-size:11px;color:var(--sub);margin-bottom:6px">👤 '+m.name+'</div>':'')+'<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">'+(v.text||'')+'</div>'+(v.result?'<div style="font-size:12px;color:var(--g)">✓ '+v.result+'</div>':'')+'</div>';}).join('');
+}
+
+function openAddVisit(clientId){
+  visitClientId=clientId;
+  document.getElementById('visit-modal-title').textContent=clientId?'Визит — '+(allClients.find(x=>x.id===clientId)?.name||''):'Записать визит';
+  if(!clientId){
+    document.getElementById('visit-client-select').innerHTML='<div class="form-field"><label class="form-label">Клиент</label><input type="text" class="form-input" id="v-client-search" placeholder="Поиск клиента..." oninput="filterVisitClients()" autocomplete="off"><div id="v-client-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;background:#fff;position:relative;z-index:10"></div><input type="hidden" id="v-client"></div>';
+  } else {
+    document.getElementById('visit-client-select').innerHTML='';
+  }
+  document.getElementById('v-text').value='';
+  document.getElementById('v-result').value='';
+  document.getElementById('v-task').value='';
+  document.getElementById('modal-visit').classList.add('open');
+}
+
+function filterVisitClients(){
+  const q=document.getElementById('v-client-search').value.toLowerCase();
+  const list=document.getElementById('v-client-list');
+  if(!q){list.style.display='none';return;}
+  const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
+  list.style.display=filtered.length?'block':'none';
+  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectVisitClient(\''+c.id+'\',\''+c.name.replace(/'/g,"\\'")+'\')" >'+c.name+'</div>').join('');
+}
+
+function selectVisitClient(id,name){
+  document.getElementById('v-client').value=id;
+  document.getElementById('v-client-search').value=name;
+  document.getElementById('v-client-list').style.display='none';
+}
+
+async function saveVisit(){
+  const cid=visitClientId||document.getElementById('v-client')?.value;
+  const text=document.getElementById('v-text').value.trim();
+  if(!cid||!text){alert('Выберите клиента и заполните описание визита');return;}
+  const result=document.getElementById('v-result').value.trim();
+  const taskText=document.getElementById('v-task').value.trim();
+  const nextDate=document.getElementById('v-nextdate').value;
+  const {data:visit}=await db.from('visits').insert({client_id:cid,date:TODAY,text,result,manager_id:currentUser.id}).select().single();
+  if(visit)allVisits.unshift(visit);
+  if(taskText&&nextDate){const {data:task}=await db.from('tasks').insert({client_id:cid,text:taskText,due_date:nextDate,done:false,visit_id:visit?.id}).select().single();if(task)allTasks.unshift(task);}
+  closeModal('modal-visit');renderVisits();renderTasks();buildDashboard();
+}
+
+function openAddClient(){document.getElementById('modal-add-client').classList.add('open');}
+
+async function saveNewClient(){
+  const name=document.getElementById('nc-name').value.trim();
+  if(!name){alert('Введите название клиента');return;}
+  const {data:client}=await db.from('clients').insert({name,region:document.getElementById('nc-region').value,contact:document.getElementById('nc-contact').value,phone:document.getElementById('nc-phone').value,code:document.getElementById('nc-code').value,revenue_total:parseFloat(document.getElementById('nc-rev').value)||0}).select().single();
+  if(client)allClients.unshift(client);
+  closeModal('modal-add-client');renderClients();
+  // task client search is handled by filterTaskClients()
+}
+
+// openAddTask defined above
+
+async function saveNewTask(){
+  const cid=document.getElementById('nt-client').value;
+  const text=document.getElementById('nt-text').value.trim();
+  const date=document.getElementById('nt-date').value;
+  if(!cid||!text||!date){alert('Заполните все поля');return;}
+  const {data:task}=await db.from('tasks').insert({client_id:cid,text,due_date:date,done:false}).select().single();
+  if(task)allTasks.unshift(task);
+  closeModal('modal-add-task');renderTasks();
+}
+
+function renderAlerts(){
+  const overdue=allTasks.filter(t=>!t.done&&t.due_date<TODAY);
+  const vi=new Set(allVisits.map(v=>v.client_id));
+  const nv=allClients.filter(c=>!vi.has(c.id)&&c.revenue_total>10000);
+  let html='';
+  if(overdue.length){html+='<div style="font-size:13px;font-weight:600;color:var(--r);margin-bottom:8px">🔴 Критично</div>';overdue.forEach(t=>{const c=allClients.find(x=>x.id===t.client_id);const d=Math.abs(daysDiff(t.due_date));html+='<div class="alert-item red"><div class="ai-body"><div class="ai-title">Просроченная задача — '+(c?.name||'—')+'</div><div class="ai-sub">'+t.text+' · просрочено на '+d+' дн</div></div><span class="tag tag-r">'+d+'д</span></div>';});}
+  if(nv.length){html+='<div style="font-size:13px;font-weight:600;color:var(--am);margin-bottom:8px;margin-top:16px">🟡 Внимание</div>';nv.slice(0,5).forEach(c=>{html+='<div class="alert-item amber"><div class="ai-body"><div class="ai-title">Клиент без визита — '+c.name+'</div><div class="ai-sub">'+c.region+' · Оборот '+fmt(c.revenue_total)+' BYN</div></div></div>';});}
+  if(!html)html='<div class="alert-item green"><div class="ai-body"><div class="ai-title">Всё в порядке!</div><div class="ai-sub">Просроченных задач нет, все ключевые клиенты посещены</div></div></div>';
+  document.getElementById('alerts-content').innerHTML=html;
+}
+
+function renderManagers(){
+  const rows=allUsers.filter(u=>u.role==='manager').map(u=>{const uv=allVisits.filter(v=>v.manager_id===u.id);const ut=allTasks.filter(t=>t.manager_id===u.id&&!t.done);const uo=ut.filter(t=>t.due_date<TODAY);const uc=allClients.filter(c=>c.manager_id===u.id);return'<tr><td><strong>'+u.name+'</strong></td><td>'+u.region+'</td><td>'+uv.length+'</td><td>'+ut.length+'</td><td>'+(uo.length?'<span class="tag tag-r">'+uo.length+'</span>':'<span class="tag tag-m">0</span>')+'</td><td>'+uc.length+'</td></tr>';}).join('');
+  document.getElementById('managers-table').innerHTML=rows||'<tr><td colspan="6" style="color:var(--sub);text-align:center">Нет данных</td></tr>';
+}
+
+function renderSales(){
+  const total=allClients.length;const rev=allClients.reduce((s,c)=>s+(c.revenue_total||0),0);const active=allClients.filter(c=>c.revenue_total>0).length;
+  document.getElementById('s-total').textContent=total;document.getElementById('s-rev').textContent=fmt(rev);document.getElementById('s-active').textContent=active;
+  const regions=['Витебск','Могилёв','Гомель'];const maxRev=Math.max(...regions.map(r=>allClients.filter(c=>c.region===r).reduce((s,c)=>s+(c.revenue_total||0),0)));
+  document.getElementById('sales-regions').innerHTML=regions.map(r=>{const rc=allClients.filter(c=>c.region===r);const rr=rc.reduce((s,c)=>s+(c.revenue_total||0),0);return'<div class="bar-row"><div class="bar-head"><span>'+regionTag(r)+' '+r+' · '+rc.length+' клиентов</span><span style="font-weight:600">'+fmt(rr)+' BYN</span></div><div class="bar-bg"><div class="bar-fill" style="width:'+Math.round(rr/maxRev*100)+'%"></div></div></div>';}).join('');
+  document.getElementById('sales-top').innerHTML=allClients.slice(0,15).map((c,i)=>'<tr class="tbl-tap" onclick="openClient(\''+c.id+'\')"><td>'+(i+1)+'</td><td>'+c.name+'</td><td>'+regionTag(c.region)+'</td><td style="font-weight:600">'+fmt(c.revenue_total)+'</td></tr>').join('');
+}
+
+function filterTaskClients(){
+  const q=document.getElementById('nt-client-search').value.toLowerCase();
+  const list=document.getElementById('nt-client-list');
+  if(!q){list.style.display='none';return;}
+  const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
+  list.style.display=filtered.length?'block':'none';
+  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectTaskClient(\''+c.id+'\',\''+c.name.replace(/\'/g,"\\'")+'\')">'+c.name+'</div>').join('');
+}
+
+function selectTaskClient(id,name){
+  document.getElementById('nt-client').value=id;
+  document.getElementById('nt-client-search').value=name;
+  document.getElementById('nt-client-list').style.display='none';
+}
+
+function openAddTask(){
+  document.getElementById('nt-client-search').value='';
+  document.getElementById('nt-client').value='';
+  document.getElementById('nt-client-list').style.display='none';
+  document.getElementById('modal-add-task').classList.add('open');
+}
+
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+}
+
+document.querySelectorAll(".modal-bg").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open");}));
+
+// Auth handling
+async function initAuth(){
+  const {data:{session}} = await db.auth.getSession();
+  if(session && session.user){
+    currentUser=session.user;
+    await loadProfileAndStart();
+    return;
+  }
+  document.getElementById('login-wrap').style.display='flex';
+}
+
+db.auth.onAuthStateChange(async(event,session)=>{
+  if(event==='PASSWORD_RECOVERY'){
+    const newPass=prompt('Введите новый пароль (минимум 6 символов):');
+    if(newPass){const {error}=await db.auth.updateUser({password:newPass});if(!error){alert('✅ Пароль изменён! Войдите с новым паролем.');}}
+    return;
+  }
+  if(event==='SIGNED_OUT'){
+    currentUser=null; currentProfile=null;
+    document.getElementById('login-wrap').style.display='flex';
+    document.getElementById('app').style.display='none';
+  }
+});
+
+initAuth();
+</script>
+</body>
+</html>
