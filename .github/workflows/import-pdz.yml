@@ -22,7 +22,7 @@ jobs:
 
       - name: Запустить импорт
         env:
-          IMAP_HOST: imap.resanta.ru
+          IMAP_HOST: imap.gmail.com
           IMAP_PORT: '993'
           IMAP_USER: ${{ secrets.IMAP_USER }}
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
