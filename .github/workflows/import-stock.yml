@@ -1,0 +1,31 @@
+name: Импорт остатков из почты в CRM
+
+on:
+  schedule:
+    # 09:30 по Минску (UTC+3) = 06:30 UTC. Раньше продаж (10:00) и ПДЗ (11:00),
+    # чтобы к началу работы менеджеров остатки уже были свежие.
+    - cron: '30 6 * * *'
+  workflow_dispatch:   # кнопка "Run workflow" для ручного запуска
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+
+      - name: Запустить импорт остатков
+        env:
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python import_stock.py
