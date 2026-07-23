@@ -1,0 +1,24 @@
+# Секреты и локальные настройки
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.temp
+*.bak
+
+# Редакторы и ОС
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
