@@ -1,0 +1,26 @@
+name: Триовист — первичная полная история
+
+on:
+  workflow_dispatch:
+
+jobs:
+  import-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+
+      - name: Загрузить и сверить всю историю Триовиста
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python import_triovist_history.py data/triovist_history_2023-02_to_2026-07.xlsx
