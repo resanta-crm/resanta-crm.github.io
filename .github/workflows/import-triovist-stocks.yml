@@ -1,0 +1,32 @@
+name: Триовист — ручная загрузка остатков 21vek и Чехова
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-stock-write
+  cancel-in-progress: false
+
+jobs:
+  import-stocks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+      - name: Проверить файлы
+        run: |
+          test -f data/stock_21vek.xlsx
+          test -f data/stock_chekhov.xlsx
+          ls -lh data/stock_21vek.xlsx data/stock_chekhov.xlsx
+      - name: Загрузить остатки
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python import_triovist_stocks.py data/stock_21vek.xlsx data/stock_chekhov.xlsx
