@@ -1,0 +1,33 @@
+name: Продажи — финальная перезагрузка июля 2026
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: all-sales-write
+  cancel-in-progress: false
+
+jobs:
+  import-july:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+      - name: Проверить файл июля
+        run: test -f data/sales_2026-07-final.xlsx && ls -lh data/sales_2026-07-final.xlsx
+      - name: Перезагрузить июль для пяти менеджеров
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python import_sales_snapshot.py data/sales_2026-07-final.xlsx
