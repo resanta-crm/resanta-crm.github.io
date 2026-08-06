@@ -1,0 +1,81 @@
+name: Publish Resanta CRM Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - index.html
+      - CNAME
+      - robots.txt
+      - manifest.json
+      - service-worker.js
+      - assets/**
+      - icons/**
+      - .github/workflows/publish-crm-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: resanta-crm-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Prepare site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare clean site artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+
+          test -f index.html
+          cp index.html _site/index.html
+
+          for file in CNAME robots.txt manifest.json service-worker.js; do
+            if [ -f "$file" ]; then
+              cp "$file" "_site/$file"
+            fi
+          done
+
+          for dir in assets icons; do
+            if [ -d "$dir" ]; then
+              cp -R "$dir" "_site/$dir"
+            fi
+          done
+
+          # Static site: no Jekyll processing is required.
+          touch _site/.nojekyll
+
+          echo "Files prepared for publication:"
+          find _site -maxdepth 3 -type f -print | sort
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy site
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
