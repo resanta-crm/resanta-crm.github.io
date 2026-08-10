@@ -1,0 +1,41 @@
+name: Продажи всех менеджеров — 3 раза в день
+
+on:
+  schedule:
+    # GitHub использует UTC: 10:30, 15:30 и 20:30 по Минску/Москве (UTC+3)
+    - cron: '30 7,12,17 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: all-sales-write
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    # Страховочный лимит. После v22.7.18 импорт обычно должен завершаться значительно раньше.
+    timeout-minutes: 45
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+
+      - name: Обновить Руднева, Ачиновича и Шкуран
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SALES_LOOKBACK_DAYS: '14'
+          SALES_IMAP_TIMEOUT_SECONDS: '45'
+          SALES_MAX_EMAIL_CANDIDATES: '8'
+        run: python import_sales.py
