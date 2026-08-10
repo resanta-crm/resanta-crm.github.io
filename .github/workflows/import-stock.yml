@@ -1,0 +1,48 @@
+name: Импорт остатков из почты в CRM
+
+on:
+  schedule:
+    # Минск UTC+3: 09:30, 13:30 и 17:30.
+    # Три проверки в день нужны, потому что письмо 1С может прийти уже после утреннего запуска.
+    - cron: '30 6,10,14 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: vitebsk-stock-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Установить зависимости
+        run: pip install --disable-pip-version-check openpyxl requests
+
+      - name: Обновить остаток склада Витебск
+        env:
+          # Dedicated Gmail endpoint. Shared IMAP_HOST/PORT secrets intentionally ignored.
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          STOCK_WAREHOUSE: 'Витебск'
+          STOCK_LOOKBACK_DAYS: '10'
+          STOCK_MAX_AGE_DAYS: '3'
+          STOCK_SUBJECT_KEYS: 'остатк,crm,витебск'
+          STOCK_IMAP_TIMEOUT_SECONDS: '45'
+          STOCK_IMAP_ATTEMPTS: '3'
+          STOCK_IMAP_RETRY_SECONDS: '6'
+          STOCK_IMAP_HEADER_BATCH: '75'
+          STOCK_MAX_EMAIL_CANDIDATES: '30'
+        run: python import_stock.py
