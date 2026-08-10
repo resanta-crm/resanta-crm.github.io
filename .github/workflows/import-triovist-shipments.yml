@@ -1,0 +1,47 @@
+name: Триовист — отгрузки 1С
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '50 7,12,17 * * 1-6'
+
+concurrency:
+  group: triovist-shipments
+  cancel-in-progress: false
+
+jobs:
+  import-shipments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Установить зависимости
+        run: pip install --disable-pip-version-check openpyxl requests
+
+      - name: Обновить отгрузки ООО Триовист
+        env:
+          # Dedicated Gmail endpoint: do not read IMAP_HOST from Secrets.
+          # An empty shared secret previously overwrote the Python default and
+          # caused [Errno 111] Connection refused.
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TRIOVIST_SHIPMENTS_LOOKBACK_DAYS: '14'
+          TRIOVIST_SHIPMENTS_SUBJECT_KEYS: 'отгруз,триовист'
+          TRIOVIST_SHIPMENTS_IMAP_TIMEOUT_SECONDS: '45'
+          TRIOVIST_SHIPMENTS_IMAP_ATTEMPTS: '3'
+          TRIOVIST_SHIPMENTS_IMAP_RETRY_SECONDS: '6'
+          TRIOVIST_SHIPMENTS_IMAP_HEADER_BATCH: '75'
+          TRIOVIST_SHIPMENTS_HEADER_DEADLINE_SECONDS: '150'
+          TRIOVIST_SHIPMENTS_MAX_EMAIL_CANDIDATES: '8'
+        run: python import_triovist_shipments.py
