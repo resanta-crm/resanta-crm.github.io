@@ -1,0 +1,104 @@
+name: Продажи — восстановление истории 1С
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Что восстановить
+        required: true
+        default: specific-month
+        type: choice
+        options:
+          - specific-month
+          - previous-month
+          - full-history
+      target_month:
+        description: Конкретный закрытый месяц YYYY-MM (для specific-month)
+        required: false
+        default: '2026-07'
+        type: string
+      dry_run:
+        description: Только проверить письма, без записи в Supabase
+        required: true
+        default: false
+        type: boolean
+  schedule:
+    # 5-го числа каждого месяца в 11:15 по Минску/Москве (08:15 UTC)
+    # автоматически повторно фиксируем предыдущий закрытый месяц.
+    - cron: '15 8 5 * *'
+
+concurrency:
+  group: all-sales-write
+  cancel-in-progress: false
+
+jobs:
+  repair-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+
+      - name: Проверить и восстановить историю продаж
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SALES_IMAP_TIMEOUT_SECONDS: '45'
+          SALES_IMAP_HEADER_BATCH_SIZE: '75'
+          SALES_REPAIR_HEADER_DEADLINE_SECONDS: '300'
+          SALES_REPAIR_MAX_EMAILS_PER_MONTH: '40'
+          SALES_REPAIR_START_MONTH: '2025-01'
+          REPAIR_MODE: ${{ github.event.inputs.mode }}
+          REPAIR_TARGET_MONTH: ${{ github.event.inputs.target_month }}
+          REPAIR_DRY_RUN: ${{ github.event.inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            python repair_sales_history.py --previous-month
+          else
+            EXTRA=""
+            if [[ "${REPAIR_DRY_RUN:-false}" == "true" ]]; then EXTRA="--dry-run"; fi
+            case "${REPAIR_MODE:-specific-month}" in
+              specific-month)
+                if [[ ! "${REPAIR_TARGET_MONTH:-}" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
+                  echo "target_month должен быть в формате YYYY-MM"
+                  exit 2
+                fi
+                python repair_sales_history.py --month "${REPAIR_TARGET_MONTH}" ${EXTRA}
+                ;;
+              previous-month)
+                python repair_sales_history.py --previous-month ${EXTRA}
+                ;;
+              full-history)
+                python repair_sales_history.py --full-history ${EXTRA}
+                ;;
+              *)
+                echo "Неизвестный режим: ${REPAIR_MODE}"
+                exit 2
+                ;;
+            esac
+          fi
+
+      - name: Сохранить отчёт проверки
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-history-repair-summary
+          path: |
+            sales_history_repair_summary.json
+            sales_history_backup_before_repair.json.gz
+          if-no-files-found: ignore
+          retention-days: 30
