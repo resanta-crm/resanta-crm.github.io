@@ -1,0 +1,39 @@
+name: Триовист — продажи 3 раза в день
+
+on:
+  schedule:
+    # GitHub cron = UTC. 06:00 / 10:00 / 14:00 UTC = 09:00 / 13:00 / 17:00 Минск (UTC+3).
+    - cron: '0 6,10,14 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-sales-write
+  cancel-in-progress: false
+
+jobs:
+  import-triovist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install openpyxl requests
+
+      - name: Обновить и проверить продажи ООО Триовист
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TRIOVIST_SALES_LOOKBACK_DAYS: '21'
+          TRIOVIST_MAX_EMAIL_CANDIDATES: '20'
+        run: python sync_triovist_sales.py
