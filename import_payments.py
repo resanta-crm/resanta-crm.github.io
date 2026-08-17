@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Импорт отчёта 1С «Поступление денег» в Resanta CRM.
 
-Версия: 22.2.6 — устойчивый разбор итогов менеджеров.
+Версия: 22.2.7 — экономный IMAP-поиск без полного FETCH всей почты.
 
 Источник:
 - по умолчанию — самое свежее письмо за последние PAYMENTS_LOOKBACK_DAYS дней,
@@ -146,47 +146,165 @@ def select_mailbox(mail: imaplib.IMAP4_SSL) -> None:
 
 
 def candidate_attachments() -> list[tuple[bytes, str, datetime]]:
-    """Возвращает все подходящие Excel-вложения за окно поиска.
+    """Возвращает ограниченный набор подходящих Excel-вложений.
 
-    Выбор самого свежего отчёта выполняется позже по периоду ВНУТРИ файла,
-    а не только по дате письма. Это исключает откат на июль, если старый файл
-    был переслан позже августовского.
+    Раньше импорт каждый час делал FETCH (RFC822) для каждого письма за
+    LOOKBACK_DAYS. На большом ящике Gmail это выбивало command/bandwidth quota.
+    Теперь сначала читаются только заголовки пачками, а полные письма скачиваются
+    только для ограниченного числа реальных кандидатов.
     """
     if not IMAP_USER or not IMAP_PASS:
         raise RuntimeError("Не заданы IMAP_USER / IMAP_PASS")
+
+    header_batch_size = max(20, min(500, int(os.environ.get("PAYMENTS_HEADER_BATCH_SIZE", "100"))))
+    header_scan_limit = max(200, min(20000, int(os.environ.get("PAYMENTS_HEADER_SCAN_LIMIT", "5000"))))
+    max_subject_messages = max(3, min(50, int(os.environ.get("PAYMENTS_MAX_CANDIDATE_EMAILS", "12"))))
+    filename_fallback_messages = max(
+        0, min(50, int(os.environ.get("PAYMENTS_FILENAME_FALLBACK_EMAILS", "12")))
+    )
+
+    def fetch_header_rows(
+        mail: imaplib.IMAP4_SSL, msg_ids: list[bytes]
+    ) -> list[tuple[bytes, str, datetime]]:
+        if not msg_ids:
+            return []
+        sequence_set = b",".join(msg_ids).decode("ascii")
+        status, raw = mail.fetch(
+            sequence_set,
+            "(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])",
+        )
+        if status != "OK":
+            return []
+
+        rows: list[tuple[bytes, str, datetime]] = []
+        for item in raw or []:
+            if not isinstance(item, tuple) or len(item) < 2:
+                continue
+            meta, payload = item[0], item[1]
+            if not isinstance(meta, (bytes, bytearray)) or not isinstance(
+                payload, (bytes, bytearray)
+            ):
+                continue
+            match = re.match(br"\s*(\d+)\s", bytes(meta))
+            if not match:
+                continue
+            header = email.message_from_bytes(bytes(payload))
+            rows.append(
+                (
+                    match.group(1),
+                    decode_header_text(header.get("Subject")),
+                    normalized_message_date(header.get("Date")),
+                )
+            )
+        return rows
+
     mail = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
     try:
         mail.login(IMAP_USER, IMAP_PASS)
         select_mailbox(mail)
+
         since = (date.today() - timedelta(days=LOOKBACK_DAYS)).strftime("%d-%b-%Y")
         status, data = mail.search(None, f'(SINCE "{since}")')
         if status != "OK":
             raise RuntimeError("Не удалось найти письма")
+
+        all_ids = data[0].split() if data and data[0] else []
+        if not all_ids:
+            raise RuntimeError(f"За {LOOKBACK_DAYS} дней писем не найдено")
+
+        newest_ids = list(reversed(all_ids[-header_scan_limit:]))
+        subject_hits: list[tuple[bytes, str, datetime]] = []
+        scanned_headers = 0
+
+        for offset in range(0, len(newest_ids), header_batch_size):
+            batch = newest_ids[offset : offset + header_batch_size]
+            header_rows = fetch_header_rows(mail, batch)
+            scanned_headers += len(header_rows)
+            for msg_id, subject, message_at in header_rows:
+                subject_lower = subject.lower()
+                if (
+                    SUBJECT_MARKER.lower() in subject_lower
+                    or "поступление денег" in subject_lower
+                ):
+                    subject_hits.append((msg_id, subject, message_at))
+
+            if len(subject_hits) >= max_subject_messages:
+                break
+
+        subject_hits.sort(
+            key=lambda row: (row[2], int(row[0])),
+            reverse=True,
+        )
+        selected = subject_hits[:max_subject_messages]
+        selected_ids = {row[0] for row in selected}
+
+        # Резерв: 1С/почтовый робот иногда меняет тему письма, но имя Excel-файла
+        # остаётся корректным. Проверяем только несколько самых новых писем,
+        # а не весь ящик.
+        for msg_id in newest_ids[:filename_fallback_messages]:
+            if msg_id not in selected_ids:
+                selected.append(
+                    (
+                        msg_id,
+                        "",
+                        datetime.min.replace(tzinfo=timezone.utc),
+                    )
+                )
+                selected_ids.add(msg_id)
+
         candidates: list[tuple[bytes, str, datetime]] = []
-        for msg_id in (data[0].split() if data and data[0] else []):
-            st, raw = mail.fetch(msg_id, "(RFC822)")
-            if st != "OK" or not raw or not raw[0]:
+        full_fetches = 0
+        for msg_id, _, _ in selected:
+            st, raw = mail.fetch(msg_id, "(BODY.PEEK[])")
+            if st != "OK" or not raw:
                 continue
-            message = email.message_from_bytes(raw[0][1])
+
+            raw_message = None
+            for item in raw:
+                if (
+                    isinstance(item, tuple)
+                    and len(item) >= 2
+                    and isinstance(item[1], (bytes, bytearray))
+                ):
+                    raw_message = bytes(item[1])
+                    break
+            if not raw_message:
+                continue
+
+            full_fetches += 1
+            message = email.message_from_bytes(raw_message)
             subject = decode_header_text(message.get("Subject"))
             message_at = normalized_message_date(message.get("Date"))
-            subject_ok = SUBJECT_MARKER.lower() in subject.lower() or "поступление денег" in subject.lower()
+            subject_ok = (
+                SUBJECT_MARKER.lower() in subject.lower()
+                or "поступление денег" in subject.lower()
+            )
+
             for part in message.walk():
                 filename = decode_header_text(part.get_filename())
                 if not filename or not filename.lower().endswith((".xlsx", ".xls")):
                     continue
-                # 1С/почтовый робот иногда меняет тему письма. Не пропускаем
-                # корректный отчёт, если в имени вложения явно есть «поступление».
                 filename_ok = "поступ" in filename.lower() or "payment" in filename.lower()
                 if not subject_ok and not filename_ok:
                     continue
                 payload = part.get_payload(decode=True)
                 if payload:
-                    log(f"Кандидат поступлений: {message_at.isoformat()} · {subject} · {filename}")
+                    log(
+                        f"Кандидат поступлений: {message_at.isoformat()} · "
+                        f"{subject} · {filename}"
+                    )
                     candidates.append((payload, filename, message_at))
+
+        log(
+            "IMAP экономный режим: "
+            f"писем в окне={len(all_ids)}, заголовков просмотрено={scanned_headers}, "
+            f"полных писем скачано={full_fetches}, кандидатов={len(candidates)}"
+        )
+
         if not candidates:
             raise RuntimeError(
-                f"За {LOOKBACK_DAYS} дней не найдено письмо с Excel-вложением и темой «{SUBJECT_MARKER}»"
+                f"За {LOOKBACK_DAYS} дней не найдено письмо с Excel-вложением "
+                f"и темой «{SUBJECT_MARKER}»"
             )
         return candidates
     finally:
@@ -194,6 +312,7 @@ def candidate_attachments() -> list[tuple[bytes, str, datetime]]:
             mail.logout()
         except Exception:
             pass
+
 
 def normalize_name(value: Any) -> str:
     text = str(value or "").lower().replace("ё", "е")
