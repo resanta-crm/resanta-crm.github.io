@@ -1,9 +1,9 @@
-/* RESANTA CRM v23.4.5 · TRIOVIST AI PLANS · LOCAL CALC · LEADER APPROVAL */
+/* RESANTA CRM v23.4.6 · TRIOVIST AI PLANS · LOCAL CALC · LEADER APPROVAL */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_AI_PLANS_V2345)return;
+if(window.RESANTA_TRIOVIST_AI_PLANS_V2346)return;
 
-const V='v23.4.5';
+const V='v23.4.6';
 const A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru',M=[A,K];
 const N={[A]:'Александренко',[K]:'Кришталь'};
 const B=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
@@ -77,7 +77,7 @@ function allocate(m,gap){
 }
 function stockDates(){const x=meta(),p=x.partner||{},o=x.own||{},c=x.chekhov||{};return `21vek <b>${esc(p.snapshot_date||'нет даты')}</b> · Витебск <b>${esc(o.report_date||'нет даты')}</b> · Чехов <b>${esc(c.snapshot_date||'нет даты')}</b>`}
 
-/* v23.4.5: calculation uses data already loaded on the Triovist screen.
+/* v23.4.6: calculation uses data already loaded on the Triovist screen.
    No extra triovist_get_dashboard RPCs => no statement timeout from four heavy parallel calls. */
 function calculateLocal(m){
   const month=selectedMonth(),f=fact(m),ly=lastYear(m),fc=forecast(f,month);
@@ -90,7 +90,7 @@ function calculateLocal(m){
 }
 
 function css(){
-  let s=document.getElementById('tri-ai-plans-css-v2345');if(!s){s=document.createElement('style');s.id='tri-ai-plans-css-v2345';document.head.appendChild(s)}
+  let s=document.getElementById('tri-ai-plans-css-v2346');if(!s){s=document.createElement('style');s.id='tri-ai-plans-css-v2346';document.head.appendChild(s)}
   s.textContent=`.tri-ai-motivation:not([data-ai-version="${V}"]){display:none!important}.tri-ai-motivation[data-ai-version="${V}"]{margin-top:12px;border:1px solid #93c5fd;background:#f8fbff;border-radius:11px;padding:11px}.tri-ai-h{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.tri-ai-t{font-weight:900;color:var(--at)}.tri-ai-n{font-size:10px;color:var(--sub);line-height:1.45}.tri-ai-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-top:8px}.tri-ai-grid>div,.tri-ai-three>div{background:#fff;border:1px solid var(--border);border-radius:8px;padding:7px}.tri-ai-grid span,.tri-ai-three span{display:block;font-size:8px;color:var(--sub);text-transform:uppercase}.tri-ai-grid b,.tri-ai-three b{display:block;margin-top:3px}.tri-ai-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}.tri-ai-gap{margin-top:8px}.tri-ai-box{border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;padding:8px}.tri-ai-row{display:flex;justify-content:space-between;gap:10px;border-top:1px dashed var(--border);padding-top:4px;margin-top:4px;font-size:10px}.tri-ai-ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:7px;font-size:10px}.tri-ai-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:7px;font-size:10px;margin-top:6px}.tri-ai-meta{font-size:9px;color:var(--sub);margin-top:6px}.tri-ai-leader{margin-top:8px;padding:9px;border:1px solid #dbeafe;background:#fff;border-radius:9px}.tri-ai-leader-row{display:grid;grid-template-columns:minmax(180px,1fr) auto auto;gap:7px;align-items:end}.tri-ai-leader .form-input{margin:0}@media(max-width:1000px){.tri-ai-grid{grid-template-columns:repeat(3,1fr)}.tri-ai-three{grid-template-columns:1fr}}@media(max-width:700px){.tri-ai-leader-row{grid-template-columns:1fr}}`;
 }
 function gapHtml(m,gap){
@@ -105,7 +105,7 @@ function gapHtml(m,gap){
 function leaderEditor(m,r){
   if(!boss()||!r||r.err||r.month!==selectedMonth())return'';
   const cur=D.has(m)?n(D.get(m)):n(approvedPlan(m));
-  return `<div class="tri-ai-leader"><div style="font-weight:800;margin-bottom:5px">✍️ План утверждает руководитель</div><div class="tri-ai-n" style="margin-bottom:7px">ИИ только рекомендует <b>${money(r.recommendation)}</b>. Если не согласны — введите свою сумму и сохраните.</div><div class="tri-ai-leader-row"><div><label class="form-label">План руководителя, BYN</label><input class="form-input" type="number" min="0" step="0.01" value="${cur>0?cur.toFixed(2):''}" oninput="triovistAiDraftPlanV2345('${m}',this.value)" placeholder="Введите план"></div><button class="btn-secondary" onclick="triovistAiUseRecommendationV2345('${m}')">Взять рекомендацию</button><button class="btn-primary" onclick="triovistAiSaveLeaderPlanV2345('${m}')">Сохранить мой план</button></div><div class="tri-ai-meta">До нажатия «Сохранить мой план» данные в CRM не меняются.</div></div>`;
+  return `<div class="tri-ai-leader"><div style="font-weight:800;margin-bottom:5px">✍️ План утверждает руководитель</div><div class="tri-ai-n" style="margin-bottom:7px">ИИ только рекомендует <b>${money(r.recommendation)}</b>. Если не согласны — введите свою сумму и сохраните.</div><div class="tri-ai-leader-row"><div><label class="form-label">План руководителя, BYN</label><input class="form-input" type="number" min="0" step="0.01" value="${cur>0?cur.toFixed(2):''}" onchange="triovistAiDraftPlanV2346('${m}',this.value)" placeholder="Введите план"></div><button class="btn-secondary" onclick="triovistAiUseRecommendationV2346('${m}')">Взять рекомендацию</button><button class="btn-primary" onclick="triovistAiSaveLeaderPlanV2346('${m}')">Сохранить мой план</button></div><div class="tri-ai-meta">До нажатия «Сохранить мой план» данные в CRM не меняются.</div></div>`;
 }
 function html(m){
   const p=workingPlan(m),approved=n(approvedPlan(m)),f=fact(m),fc=forecast(f,selectedMonth()),pr=p>0?f/p:0,gap=p>0?Math.max(0,p-n(fc)):0,o=opportunities(m),r=R.get(m),b=boss();
@@ -114,7 +114,7 @@ function html(m){
   else if(r&&r.month===selectedMonth())top=`<div class="tri-ai-three"><div><span>Текущий утверждённый план</span><b>${approved>0?money(approved):'Не задан'}</b></div><div><span>Рекомендация ИИ</span><b>${money(r.recommendation)}</b></div><div><span>Обеспечено темпом + товаром</span><b>${money(Math.min(r.recommendation,n(r.fc)+r.stock))}</b></div></div><div class="tri-ai-meta">Аналогичный месяц прошлого года ${money(r.last)} · минимум +30% = ${money(r.floor30)} · текущий прогноз ${r.fc==null?'—':money(r.fc)}.<br>Товарный резерв ${money(r.stock)} · не обеспечено для рекомендации ИИ ${money(r.unsupported)} · ${stockDates()}</div>${leaderEditor(m,r)}`;
   else top=`<div class="tri-ai-n" style="margin-top:5px">${b?'Нажмите «Рассчитать ИИ». Расчёт идёт по уже загруженным данным: прошлый год, текущий темп, остаток 21vek и наличие Витебск + Чехов.':'Ниже показан ваш утверждённый план, прогноз и только подтверждённые товаром точки роста.'}</div>`;
   const draftNote=b&&D.has(m)?'<div class="tri-ai-meta">Для расчёта ниже используется <b>черновик руководителя</b>. Менеджер увидит его только после сохранения.</div>':'';
-  return `<div class="tri-ai-h"><div><div class="tri-ai-t">🤖 ИИ-план · ${esc(managerName(m))} · ${V}</div><div class="tri-ai-n">${esc(selectedMonth())} · без дополнительных тяжёлых запросов · остатки Витебск + Чехов · спрос/остаток 21vek</div></div>${b?`<button class="btn-secondary" onclick="triovistAiCalculatePlanV2345('${m}')">🤖 Рассчитать ИИ</button>`:''}</div>${top}${p>0?`<div class="tri-ai-grid"><div><span>${D.has(m)&&b?'План (черновик)':'План'}</span><b>${money(p)}</b></div><div><span>Факт</span><b>${money(f)}</b></div><div><span>Выполнение</span><b>${pct(pr)}</b></div><div><span>Прогноз</span><b>${fc==null?'—':money(fc)}</b></div><div><span>Разрыв</span><b>${money(gap)}</b></div><div><span>Товарный резерв</span><b>${money(o.total)}</b></div></div>${draftNote}<div class="tri-ai-gap">${gapHtml(m,gap)}</div>`:'<div class="tri-ai-warn">План не задан.</div>'}`;
+  return `<div class="tri-ai-h"><div><div class="tri-ai-t">🤖 ИИ-план · ${esc(managerName(m))} · ${V}</div><div class="tri-ai-n">${esc(selectedMonth())} · без дополнительных тяжёлых запросов · остатки Витебск + Чехов · спрос/остаток 21vek</div></div>${b?`<button class="btn-secondary" onclick="triovistAiCalculatePlanV2346('${m}')">🤖 Рассчитать ИИ</button>`:''}</div>${top}${p>0?`<div class="tri-ai-grid"><div><span>${D.has(m)&&b?'План (черновик)':'План'}</span><b>${money(p)}</b></div><div><span>Факт</span><b>${money(f)}</b></div><div><span>Выполнение</span><b>${pct(pr)}</b></div><div><span>Прогноз</span><b>${fc==null?'—':money(fc)}</b></div><div><span>Разрыв</span><b>${money(gap)}</b></div><div><span>Товарный резерв</span><b>${money(o.total)}</b></div></div>${draftNote}<div class="tri-ai-gap">${gapHtml(m,gap)}</div>`:'<div class="tri-ai-warn">План не задан.</div>'}`;
 }
 function mark(){const t=document.querySelector('#tri-motivation-card .card-title');if(!t)return;let x=t.querySelector('.tri-ai-mot-version');if(!x){x=document.createElement('span');x.className='tri-ai-mot-version';x.style.cssText='font-size:9px;color:var(--sub);margin-left:5px';t.appendChild(x)}x.textContent='· ИИ '+V}
 function render(){
@@ -136,14 +136,14 @@ function render(){
 function schedule(d=40){clearTimeout(timer);timer=setTimeout(()=>{render();watch()},d)}
 function watch(){const p=document.getElementById('page-triovist');if(!p||p===obsPage)return;obs?.disconnect();obsPage=p;obs=new MutationObserver(()=>{if(p.classList.contains('active'))schedule(80)});obs.observe(p,{childList:true,subtree:true})}
 
-window.triovistAiCalculatePlanV2345=m=>{
+window.triovistAiCalculatePlanV2346=m=>{
   m=String(m).toLowerCase();if(!boss()||!M.includes(m))return;
   try{R.set(m,calculateLocal(m))}catch(x){R.set(m,{month:selectedMonth(),err:'Не удалось рассчитать: '+String(x?.message||x),at:Date.now()})}
   schedule(0);
 };
-window.triovistAiDraftPlanV2345=(m,v)=>{m=String(m).toLowerCase();if(!boss()||!M.includes(m))return;const z=parse(v);if(z==null||z<0)D.delete(m);else D.set(m,z);schedule(0)};
-window.triovistAiUseRecommendationV2345=m=>{m=String(m).toLowerCase();if(!boss())return;const r=R.get(m);if(!r||r.err)return;D.set(m,r.recommendation);schedule(0)};
-window.triovistAiSaveLeaderPlanV2345=async m=>{
+window.triovistAiDraftPlanV2346=(m,v)=>{m=String(m).toLowerCase();if(!boss()||!M.includes(m))return;const z=parse(v);if(z==null||z<0)D.delete(m);else D.set(m,z);schedule(0)};
+window.triovistAiUseRecommendationV2346=m=>{m=String(m).toLowerCase();if(!boss())return;const r=R.get(m);if(!r||r.err)return;D.set(m,r.recommendation);schedule(0)};
+window.triovistAiSaveLeaderPlanV2346=async m=>{
   m=String(m).toLowerCase();if(!boss()||saving)return;
   const v=D.has(m)?n(D.get(m)):n(approvedPlan(m));if(!(v>=0))return alert('Введите корректный план.');
   saving=true;
@@ -156,20 +156,20 @@ window.triovistAiSaveLeaderPlanV2345=async m=>{
 };
 
 /* Compatibility aliases: old buttons cannot trigger heavy RPC calculation anymore. */
-window.triovistAiCalculatePlanV2343=window.triovistAiCalculatePlanV2345;
-window.triovistAiCalculatePlanV2341=window.triovistAiCalculatePlanV2345;
-window.triovistAiCalculatePlanV2340=window.triovistAiCalculatePlanV2345;
-window.triovistAiApplyRecommendationV2343=m=>window.triovistAiUseRecommendationV2345(m);
-window.triovistAiApplyRecommendationV2341=m=>window.triovistAiUseRecommendationV2345(m);
+window.triovistAiCalculatePlanV2343=window.triovistAiCalculatePlanV2346;
+window.triovistAiCalculatePlanV2341=window.triovistAiCalculatePlanV2346;
+window.triovistAiCalculatePlanV2340=window.triovistAiCalculatePlanV2346;
+window.triovistAiApplyRecommendationV2343=m=>window.triovistAiUseRecommendationV2346(m);
+window.triovistAiApplyRecommendationV2341=m=>window.triovistAiUseRecommendationV2346(m);
 
 function boot(){
   document.querySelectorAll('.tri-ai-motivation').forEach(x=>x.remove());
   const base=window.renderTriovist;
-  if(typeof base==='function'&&!base.__ai2345){const w=function(){const r=base.apply(this,arguments);schedule(0);return r};w.__ai2345=true;window.renderTriovist=w;try{renderTriovist=w}catch(_){}}
+  if(typeof base==='function'&&!base.__ai2346){const w=function(){const r=base.apply(this,arguments);schedule(0);return r};w.__ai2346=true;window.renderTriovist=w;try{renderTriovist=w}catch(_){}}
   watch();schedule(0);
   document.addEventListener('click',x=>{if(x.target?.closest?.('[data-tab="motivation"]'))schedule(120)});
   window.addEventListener('focus',()=>{if(document.getElementById('page-triovist')?.classList.contains('active'))schedule(30)});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-window.RESANTA_TRIOVIST_AI_PLANS_V2345=Object.freeze({version:V,directRoot:true,localCalculation:true,noHeavyAiRpc:true,leaderManualApproval:true,stockAware:true,managerGapVisible:true,exactGapArithmetic:true,noAutoSave:true,noSqlChanges:true});
+window.RESANTA_TRIOVIST_AI_PLANS_V2346=Object.freeze({version:V,directRoot:true,localCalculation:true,noHeavyAiRpc:true,leaderManualApproval:true,stockAware:true,managerGapVisible:true,exactGapArithmetic:true,noAutoSave:true,noSqlChanges:true});
 })();
