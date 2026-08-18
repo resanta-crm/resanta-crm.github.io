@@ -1,15 +1,16 @@
-/* RESANTA CRM v23.1.2 · AI MANAGER PLANS · MODAL HOOK TRUTH
+/* RESANTA CRM v23.1.3 · AI MANAGER PLANS · DATA QUALITY GUARD
  * FIELD MANAGERS ONLY.
- * Source of ownership = clients currently assigned to the selected field manager.
+ * Ownership truth = clients currently assigned to selected field manager.
  * purchase_history.manager_name is NEVER used for ownership.
- * Triovist is excluded from field-manager calculations.
+ * Triovist / 21vek is excluded from field-manager calculations.
  * No automatic DB writes. Boss explicitly applies and saves a plan.
+ * If historical month has quantity/clients but no revenue, recommendation is BLOCKED.
  */
 (function(){
 'use strict';
-if(window.RESANTA_AI_MANAGER_PLANS_V2312)return;
+if(window.RESANTA_AI_MANAGER_PLANS_V2313)return;
 
-const VERSION='v23.1.2-ai-manager-plans-modal-hook';
+const VERSION='v23.1.3-ai-manager-plans-data-quality';
 const BUSINESS_GROWTH_TARGET=0.30;
 let lastRecommendation=null;
 
@@ -75,18 +76,17 @@ function managerRows(manager){
   const rows=(allPurchaseHistory||[]).filter(r=>rowOwnedBy(r,ownership));
   return {ownership,rows};
 }
-function positiveSale(r){return n(r?.revenue)>0||n(r?.qty)>0;}
 function revenueByMonth(rows){
   const out=new Map();
   rows.forEach(r=>{const m=ym(r.month);if(/^\d{4}-\d{2}$/.test(m))out.set(m,(out.get(m)||0)+n(r.revenue));});
   return out;
 }
 function activeClientsForMonth(rows,month){
-  return new Set(rows.filter(r=>ym(r.month)===month&&positiveSale(r)).map(r=>clientKey(r.client_name)).filter(Boolean));
+  return new Set(rows.filter(r=>ym(r.month)===month&&n(r.revenue)>0).map(r=>clientKey(r.client_name)).filter(Boolean));
 }
 function activeClientsForMonths(rows,months){
   const s=new Set(months);
-  return new Set(rows.filter(r=>s.has(ym(r.month))&&positiveSale(r)).map(r=>clientKey(r.client_name)).filter(Boolean));
+  return new Set(rows.filter(r=>s.has(ym(r.month))&&n(r.revenue)>0).map(r=>clientKey(r.client_name)).filter(Boolean));
 }
 function clientRevenueForMonth(rows,month){
   const out=new Map();
@@ -99,6 +99,20 @@ function clientAvgForMonths(rows,months){
   for(const [k,v] of out)out.set(k,v/den);
   return out;
 }
+function monthDiagnostics(rows,month){
+  const mr=rows.filter(r=>ym(r.month)===month);
+  const revenueTotal=mr.reduce((s,r)=>s+n(r.revenue),0);
+  const revenueRows=mr.filter(r=>Math.abs(n(r.revenue))>0.000001).length;
+  const qtyRows=mr.filter(r=>Math.abs(n(r.qty))>0.000001).length;
+  const qtyClients=new Set(mr.filter(r=>Math.abs(n(r.qty))>0.000001).map(r=>clientKey(r.client_name)).filter(Boolean)).size;
+  const revenueClients=new Set(mr.filter(r=>n(r.revenue)>0).map(r=>clientKey(r.client_name)).filter(Boolean)).size;
+  const rawRevenueTypes={};
+  mr.slice(0,500).forEach(r=>{const t=typeof r.revenue;rawRevenueTypes[t]=(rawRevenueTypes[t]||0)+1;});
+  return {month,rows:mr.length,revenueTotal,revenueRows,qtyRows,qtyClients,revenueClients,rawRevenueTypes};
+}
+function historyQualityError(diag){
+  return diag.rows>0&&diag.revenueRows===0&&diag.qtyRows>0;
+}
 
 function calcRecommendation(manager,targetMonth){
   const pack=managerRows(manager),ownership=pack.ownership,rows=pack.rows;
@@ -107,6 +121,13 @@ function calcRecommendation(manager,targetMonth){
 
   const revMap=revenueByMonth(rows);
   const lastYearMonth=shiftMonth(targetMonth,-12);
+  const lastYearDiag=monthDiagnostics(rows,lastYearMonth);
+  if(historyQualityError(lastYearDiag)){
+    const e=new Error('В истории 1С за '+lastYearMonth+' есть количество/клиенты, но во всех строках выручка равна нулю.');
+    e.code='BROKEN_HISTORY_REVENUE';e.diag=lastYearDiag;e.ownershipCount=ownership.clients.length;e.rowsCount=rows.length;
+    throw e;
+  }
+
   const lastYear=n(revMap.get(lastYearMonth));
   const currentMonth=String(typeof TODAY!=='undefined'?TODAY:new Date().toISOString()).slice(0,7);
   const lastClosed=shiftMonth(currentMonth,-1);
@@ -145,7 +166,7 @@ function calcRecommendation(manager,targetMonth){
     supported=clamp(supported,floor,ceiling);
   }
 
-  const target30=lastYear>0?lastYear*1.30:0;
+  const target30=lastYear>0?lastYear*(1+BUSINESS_GROWTH_TARGET):0;
   const targetConfirmed=target30>0&&supported>=target30;
   const recommendedShipment=roundPlan(targetConfirmed?Math.max(target30,supported):supported);
   const recommendedGrowth=lastYear>0?recommendedShipment/lastYear-1:null;
@@ -158,7 +179,6 @@ function calcRecommendation(manager,targetMonth){
   const active12=activeClientsForMonths(rows,active12Months),activeRecent=activeClientsForMonths(rows,prev3);
   let returnable=0;active12.forEach(k=>{if(!activeRecent.has(k))returnable++;});
   const potentialAssigned=ownership.clients.filter(c=>String(c.client_status||'').toLowerCase()==='потенциальный'&&!active12.has(clientKey(c.name))).length;
-
   const akbBase=Math.max(sameLyAkb,avgAkb3,maxAkb3);
   const salesGrowthForAkb=recommendedGrowth==null?0.15:Math.max(0,recommendedGrowth);
   const akbGrowth=clamp(0.05+salesGrowthForAkb*0.20,0.05,0.12);
@@ -170,9 +190,8 @@ function calcRecommendation(manager,targetMonth){
 
   const monthsWithData=prev6.filter(m=>revMap.has(m)).length;
   const confidence=lastYear>0&&monthsWithData>=5?'высокая':monthsWithData>=3?'средняя':'низкая';
-
-  return {manager,targetMonth,ownershipCount:ownership.clients.length,rowsCount:rows.length,lastYearMonth,lastYear,target30,targetConfirmed,gap30,
-    avg3,avg6,recentYoy,annualTrend,blendedTrend,yearCurrent,yearPrevious,seasonal,historyExpected,recentExpected,supported,recoverableReserve,lostClientCount,
+  return {manager,targetMonth,ownershipCount:ownership.clients.length,rowsCount:rows.length,lastYearMonth,lastYear,lastYearDiag,target30,targetConfirmed,gap30,
+    avg3,avg6,recentYoy,annualTrend,yearCurrent,yearPrevious,seasonal,historyExpected,recentExpected,supported,recoverableReserve,lostClientCount,
     recommendedShipment,recommendedGrowth,sameLyAkb,avgAkb3,maxAkb3,returnable,potentialAssigned,recommendedAkb,akbGrowth,confidence,monthsWithData};
 }
 
@@ -184,19 +203,20 @@ function currentExistingPlan(){
 function injectPanel(){
   if(currentProfile?.role!=='boss')return null;
   const modal=document.querySelector('#modal-manager-plan .modal');if(!modal)return null;
-  let root=document.getElementById('manager-ai-plan-v2312');
   document.getElementById('manager-ai-plan-v2310')?.remove();
   document.getElementById('manager-ai-plan-v2311')?.remove();
+  document.getElementById('manager-ai-plan-v2312')?.remove();
+  let root=document.getElementById('manager-ai-plan-v2313');
   if(!root){
-    root=document.createElement('div');root.id='manager-ai-plan-v2312';
+    root=document.createElement('div');root.id='manager-ai-plan-v2313';
     const note=document.getElementById('manager-plan-note')?.closest('.form-field');
     (note||modal.querySelector('.modal-head'))?.insertAdjacentElement(note?'beforebegin':'afterend',root);
   }
   root.innerHTML='<div style="border:1px solid #BFDBFE;background:#F8FBFF;border-radius:12px;padding:12px 13px;margin-bottom:14px">'
-    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя</div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">Расчёт только по клиентам, закреплённым за выбранным полевым менеджером. Триовист и чужие клиенты исключены.</div></div>'
-    +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2312()">Рассчитать</button></div>'
-    +'<div id="manager-ai-plan-result-v2312" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». Никаких автоматических записей в план нет.</div></div>';
+    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя <span style="font-size:10px;color:var(--sub)">v23.1.3</span></div>'
+    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">Расчёт только по закреплённой базе полевого менеджера. Перед рекомендацией CRM проверяет качество исторической выручки.</div></div>'
+    +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2313()">Рассчитать</button></div>'
+    +'<div id="manager-ai-plan-result-v2313" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». Никаких автоматических записей в план нет.</div></div>';
   const save=[...modal.querySelectorAll('button')].find(b=>String(b.getAttribute('onclick')||'').includes('saveManagerKpiPlan'));
   if(save)save.textContent='✅ Утвердить и зафиксировать';
   return root;
@@ -204,27 +224,35 @@ function injectPanel(){
 function resetPanel(){
   const root=injectPanel();if(!root)return;
   lastRecommendation=null;
-  const out=document.getElementById('manager-ai-plan-result-v2312');if(!out)return;
+  const out=document.getElementById('manager-ai-plan-result-v2313');if(!out)return;
   const p=currentExistingPlan();
-  out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> Пересчёт ничего сам не изменит.':'Нажмите «Рассчитать» — CRM возьмёт только закреплённую клиентскую базу выбранного менеджера.';
+  out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> Пересчёт ничего сам не изменит.':'Нажмите «Рассчитать» — CRM сначала проверит историю 1С.';
+}
+function renderBrokenHistory(out,e){
+  const d=e.diag||{};
+  out.innerHTML='<div style="padding:10px 12px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;color:#991B1B">'
+    +'<b>⛔ Расчёт остановлен: повреждена историческая выручка за '+escLocal(d.month||'нужный месяц')+'.</b>'
+    +'<div style="font-size:12px;line-height:1.6;margin-top:7px">В purchase_history найдено <b>'+n(d.rows)+'</b> строк. Из них строк с количеством: <b>'+n(d.qtyRows)+'</b>, клиентов с количеством: <b>'+n(d.qtyClients)+'</b>, но строк с ненулевой выручкой: <b>'+n(d.revenueRows)+'</b>, итог выручки: <b>'+money(d.revenueTotal)+'</b>.</div>'
+    +'<div style="font-size:12px;line-height:1.6;margin-top:7px"><b>Рекомендация плана намеренно не строится</b>, чтобы не показать руководителю ложную цифру. Закреплённая база: '+n(e.ownershipCount)+' клиентов · всего использовано '+n(e.rowsCount)+' строк истории 1С.</div>'
+    +'</div>';
 }
 async function calculate(){
   if(currentProfile?.role!=='boss')return;
   injectPanel();
-  const out=document.getElementById('manager-ai-plan-result-v2312');
+  const out=document.getElementById('manager-ai-plan-result-v2313');
   const manager=document.getElementById('manager-plan-name')?.value||'',month=ym(document.getElementById('manager-plan-month')?.value||'');
   if(!manager||!month){if(out)out.textContent='Выберите менеджера и месяц.';return;}
   if(out)out.innerHTML='<b style="color:var(--a)">⏳ Проверяю закреплённых клиентов и историю продаж 1С…</b>';
   try{
     if(typeof window.v22722EnsureHistory!=='function')throw new Error('загрузчик истории продаж недоступен');
-    await window.v22722EnsureHistory({reason:'manager-ai-plan-v2312'});
+    await window.v22722EnsureHistory({reason:'manager-ai-plan-v2313'});
     const r=calcRecommendation(manager,month);lastRecommendation=r;
     const existing=currentExistingPlan();
     const targetLine=r.lastYear>0?'<b>Аналогичный месяц прошлого года:</b> '+money(r.lastYear)+' → <b>бизнес-цель +30%:</b> '+money(r.target30)
-      :'<b style="color:var(--am)">Нет продаж закреплённой базы за аналогичный месяц прошлого года — +30% год к году проверить нельзя.</b>';
+      :'<b style="color:var(--am)">За аналогичный месяц прошлого года нет валидной выручки — +30% год к году проверить нельзя.</b>';
     const verdict=r.lastYear<=0?'':(r.targetConfirmed
       ?'<div style="margin-top:8px;padding:8px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#166534"><b>✅ +30% подтверждается текущими данными.</b></div>'
-      :'<div style="margin-top:8px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E"><b>⚠️ +30% сейчас не подтверждается.</b> До бизнес-цели не обеспечено <b>'+money(r.gap30)+'</b>. Руководитель может всё равно утвердить +30%.</div>');
+      :'<div style="margin-top:8px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E"><b>⚠️ +30% сейчас не подтверждается.</b> До бизнес-цели не обеспечено <b>'+money(r.gap30)+'</b>.</div>');
     out.innerHTML='<div>'+targetLine+'</div>'
       +'<div style="font-size:11px;color:var(--sub);margin-top:5px">В расчёте: <b>'+r.ownershipCount+'</b> закреплённых клиентов · '+r.rowsCount+' строк истории 1С. Чужие менеджеры и Триовист не используются.</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
@@ -243,60 +271,55 @@ async function calculate(){
         +'• надёжность: <b>'+r.confidence+'</b> ('+r.monthsWithData+'/6 последних месяцев есть в истории)'
       +'</div>'
       +(existing?'<div style="margin-top:8px;color:var(--g)"><b>Сохранённый план:</b> '+money(existing.shipment_plan)+' · АКБ '+n(existing.akb_plan)+'. Он не меняется автоматически.</div>':'')
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2312()">↳ Подставить рекомендацию</button>'
-      +(r.target30>0&&!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerGrowth30V2312()">Поставить всё равно +30%</button>':'')+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2313()">↳ Подставить рекомендацию</button>'
+      +(r.target30>0&&!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerGrowth30V2313()">Поставить всё равно +30%</button>':'')+'</div>'
       +'<div style="font-size:10px;color:var(--sub);margin-top:6px">Подстановка не сохраняет план. Сохранение только после явного подтверждения руководителя.</div>';
-  }catch(e){lastRecommendation=null;console.error(VERSION,e);if(out)out.innerHTML='<b style="color:var(--r)">Расчёт остановлен:</b> '+escLocal(e?.message||e)+'. План не изменён.';}
+  }catch(e){
+    lastRecommendation=null;console.error(VERSION,e);
+    if(!out)return;
+    if(e?.code==='BROKEN_HISTORY_REVENUE'){renderBrokenHistory(out,e);return;}
+    out.innerHTML='<b style="color:var(--r)">Расчёт остановлен:</b> '+escLocal(e?.message||e)+'. План не изменён.';
+  }
 }
 function apply(use30){
   const r=lastRecommendation;if(!r)return;
   const ship=document.getElementById('manager-plan-shipment'),akb=document.getElementById('manager-plan-akb');
   if(ship)ship.value=String(Math.round(use30&&r.target30>0?r.target30:r.recommendedShipment));
   if(akb)akb.value=String(r.recommendedAkb);
-  const out=document.getElementById('manager-ai-plan-result-v2312');if(out)out.insertAdjacentHTML('beforeend','<div style="margin-top:8px;color:var(--a);font-weight:700">✓ Значения только подставлены. Проверьте перед сохранением.</div>');
+  const out=document.getElementById('manager-ai-plan-result-v2313');if(out)out.insertAdjacentHTML('beforeend','<div style="margin-top:8px;color:var(--a);font-weight:700">✓ Значения только подставлены. Проверьте перед сохранением.</div>');
 }
+window.crmCalculateManagerAiPlanV2313=calculate;
+window.crmApplyManagerAiPlanV2313=()=>apply(false);
+window.crmApplyManagerGrowth30V2313=()=>apply(true);
 
-function modalOpen(){return document.getElementById('modal-manager-plan')?.classList.contains('open');}
-function installModalHook(){
-  const modal=document.getElementById('modal-manager-plan');
-  if(!modal||modal.dataset.aiPlanHookV2312==='1')return;
-  modal.dataset.aiPlanHookV2312='1';
-  const observer=new MutationObserver(()=>{if(modalOpen())setTimeout(resetPanel,0);});
-  observer.observe(modal,{attributes:true,attributeFilter:['class']});
-  if(modalOpen())setTimeout(resetPanel,0);
+function hookModal(){
+  const modal=document.getElementById('modal-manager-plan');if(!modal)return;
+  if(modal.dataset.aiPlansHook2313==='1')return;
+  modal.dataset.aiPlansHook2313='1';
+  let wasOpen=modal.classList.contains('open');
+  const sync=()=>{
+    const open=modal.classList.contains('open');
+    if(open&&!wasOpen)setTimeout(resetPanel,0);
+    wasOpen=open;
+  };
+  new MutationObserver(sync).observe(modal,{attributes:true,attributeFilter:['class']});
+  modal.addEventListener('change',e=>{if(e.target?.id==='manager-plan-name'||e.target?.id==='manager-plan-month')setTimeout(resetPanel,0);});
+  if(wasOpen)setTimeout(resetPanel,0);
 }
-function installEvents(){
-  document.addEventListener('click',e=>{
-    const btn=e.target?.closest?.('button[onclick*="openManagerPlanEditor"]');
-    if(btn)setTimeout(()=>{installModalHook();if(modalOpen())resetPanel();},0);
-  },true);
-  document.addEventListener('change',e=>{
-    if(!modalOpen())return;
-    if(e.target?.id==='manager-plan-name'||e.target?.id==='manager-plan-month')setTimeout(resetPanel,0);
-  },true);
-  installModalHook();
-}
+function bootHook(){hookModal();if(!document.getElementById('modal-manager-plan'))setTimeout(bootHook,500);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootHook,{once:true});else bootHook();
 
-window.crmCalculateManagerAiPlanV2312=calculate;
-window.crmApplyManagerAiPlanV2312=()=>apply(false);
-window.crmApplyManagerGrowth30V2312=()=>apply(true);
-window.crmManagerAiPlanEnsureUiV2312=()=>{installModalHook();if(modalOpen())resetPanel();};
-
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installEvents,{once:true});
-else installEvents();
-
-window.RESANTA_AI_MANAGER_PLANS_V2312=Object.freeze({
+window.RESANTA_AI_MANAGER_PLANS_V2313=Object.freeze({
   version:VERSION,
   ownershipSource:'clients.manager_name',
   purchaseHistoryManagerFieldIgnored:true,
   strictManagerOwnership:true,
-  looseOwnershipMatch:false,
   triovistExcluded:true,
+  dataQualityGuard:true,
+  brokenHistoricalRevenueBlocksRecommendation:true,
   bossApprovalRequired:true,
   savedPlanNeverAutoChanges:true,
   targetGrowthPct:30,
-  akbIndividualGrowth:true,
-  modalMutationObserver:true,
   sqlChanges:false
 });
 })();
