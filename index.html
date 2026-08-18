@@ -50,7 +50,7 @@ const APP_VERSION = '2026-08-18-resanta-crm-v23.1.1';
 <script defer src="./assets/04-business-analytics.js?v=23.0.0"></script>
 <script defer src="./assets/05-performance-core.js?v=23.0.0"></script>
 <script defer src="./assets/06-root-fixes.js?v=23.0.0"></script>
-<script defer src="./assets/07-ai-manager-plans.js?v=23.1.1"></script>
+<script defer src="./assets/07-ai-manager-plans.js?v=23.2.0"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--a:#185FA5;--ab:#E6F1FB;--at:#0C447C;--g:#27500A;--gb:#EAF3DE;--am:#854F0B;--amb:#FAEEDA;--r:#A32D2D;--rb:#FCEBEB;--border:#E5E7EB;--bg:#F9FAFB;--card:#fff;--text:#111827;--sub:#6B7280}
@@ -315,6 +315,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 .v2273214-plan-marker{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#94a3b8;color:#fff;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.24);font-size:9px;font-weight:900}
 .v2273214-technical{font-size:10px;color:var(--sub)}
 </style>
+
 
 </head>
 <body>
@@ -739,7 +740,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
           <button class="chip" onclick="document.getElementById('rb-date-filter').value='';renderRoutesBoss()">Сбросить дату</button>
         </div>
         <div style="font-size:12px;color:var(--sub);margin:-8px 0 14px">Колонка «Задача»: <span class="tag tag-m">✓ Есть</span> — задача стоит · <span class="tag" style="background:var(--rb);color:var(--r)">❗ Нет</span> — задачи нет вообще · <span class="tag" style="background:var(--rb);color:var(--r)">⚠ Не выполнена</span> — менеджер был на точке, а задача осталась открытой · <span class="tag tag-gray">?</span> — не смогли найти такого клиента в базе (проверьте написание названия)</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
           <div class="chips" id="rb-mgr-chips" style="margin-bottom:0">
             <button class="chip active" onclick="setRBFilter('all',this)">Все</button>
             <button class="chip" onclick="setRBFilter('Руднев',this)">Руднев</button>
@@ -1435,11 +1436,9 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 
 
 <style id="v20-falling-payments-styles">
-.v20-filter-grid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px;align-items:end}.v20-fall-card{border-left:5px solid var(--border)}.v20-fall-card.critical{border-left-color:var(--r)}.v20-fall-card.action{border-left-color:var(--w)}.v20-fall-card.watch{border-left-color:var(--sub)}.v20-fall-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.v20-money-bad{color:var(--r);font-weight:800}.v20-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.v20-mini-table{width:100%;border-collapse:collapse;font-size:12px}.v20-mini-table th,.v20-mini-table td{padding:7px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}.v20-mini-table th{font-size:10px;color:var(--sub);text-transform:uppercase}.v20-payment-manager{margin-bottom:14px}.v20-payment-client{border:1px solid var(--border);border-radius:10px;margin-top:8px;overflow:hidden}.v20-payment-client summary{list-style:none;cursor:pointer;padding:11px 12px;background:var(--bg);display:flex;justify-content:space-between;gap:10px}.v20-payment-client summary::-webkit-details-marker{display:none}.v20-payment-docs{padding:0 12px 10px}.v20-period-warning{padding:9px 11px;border-radius:8px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:11px;margin-bottom:12px}.v20-pill{display:inline-block;padding:3px 7px;border-radius:99px;font-size:10px;font-weight:700}.v20-pill-a{background:#DCFCE7;color:#166534}.v20-pill-b{background:#FEF3C7;color:#92400E}.v20-pill-c{background:#F3F4F6;color:#4B5563}.v20-pill-r{background:#FEE2E2;color:#991B1B}
+.v20-filter-grid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px;align-items:end}.v20-fall-card{border-left:5px solid var(--border)}.v20-fall-card.critical{border-left-color:var(--r)}.v20-fall-card.action{border-left-color:var(--w)}.v20-fall-card.watch{border-left-color:var(--sub)}.v20-money-bad{color:var(--r);font-weight:800}.v20-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.v20-mini-table{width:100%;border-collapse:collapse;font-size:12px}.v20-mini-table th,.v20-mini-table td{padding:7px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}.v20-mini-table th{font-size:10px;color:var(--sub);text-transform:uppercase}.v20-payment-manager{margin-bottom:14px}.v20-payment-client{border:1px solid var(--border);border-radius:10px;margin-top:8px;overflow:hidden}.v20-payment-client summary{list-style:none;cursor:pointer;padding:11px 12px;background:var(--bg);display:flex;justify-content:space-between;gap:10px}.v20-payment-client summary::-webkit-details-marker{display:none}.v20-payment-docs{padding:0 12px 10px}.v20-period-warning{padding:9px 11px;border-radius:8px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:11px;margin-bottom:12px}.v20-pill{display:inline-block;padding:3px 7px;border-radius:99px;font-size:10px;font-weight:700}.v20-pill-a{background:#DCFCE7;color:#166534}.v20-pill-b{background:#FEF3C7;color:#92400E}.v20-pill-c{background:#F3F4F6;color:#4B5563}.v20-pill-r{background:#FEE2E2;color:#991B1B}
 @media(max-width:900px){.v20-filter-grid{grid-template-columns:1fr 1fr}.v20-detail-grid{grid-template-columns:1fr}}@media(max-width:560px){.v20-filter-grid{grid-template-columns:1fr}.v20-fall-head{display:block}.v20-fall-head>div:last-child{margin-top:10px}}
 </style>
-
-
 
 
 
@@ -1533,7 +1532,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
   .v2274-item{grid-template-columns:72px minmax(130px,1fr) 58px}.v2274-item span:last-child{display:none}
 }
 </style>
-
 
 
 
