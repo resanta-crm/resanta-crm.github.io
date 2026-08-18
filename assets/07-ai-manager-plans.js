@@ -1,10 +1,9 @@
-/* RESANTA CRM v23.2.0 · AI MANAGER PLANS · CURRENT-YEAR FIRST
+/* RESANTA CRM v23.2.1 · AI MANAGER PLANS · BUSINESS PLAN VS FORECAST
  * FIELD MANAGERS ONLY.
  * Sales fact uses the same month ownership logic as existing Managers · KPI.
- * Main planning base = CURRENT YEAR dynamics (YTD + recent 3 months + trend).
- * Same month last year is a reference only. If it is positive/valid it defines
- * the +30% YoY business target; if it is non-positive/missing, +30% is applied
- * to the current-year operating baseline instead.
+ * Business plan base = stronger valid base: current-year operating level OR
+ * positive same month last year. Minimum business plan = +30% from that base.
+ * Current dynamics are a FORECAST / feasibility signal and never lower the plan.
  * AKB / recoverable potential = currently assigned CRM client base.
  * No automatic DB writes. Boss explicitly applies and saves a plan.
  */
@@ -12,7 +11,7 @@
 'use strict';
 if(window.RESANTA_AI_MANAGER_PLANS_V2320)return;
 
-const VERSION='v23.2.0-current-year-first';
+const VERSION='v23.2.1-business-plan-vs-forecast';
 const BUSINESS_GROWTH_TARGET=0.30;
 let lastRecommendation=null;
 
@@ -22,8 +21,9 @@ const avg=a=>a.length?a.reduce((s,x)=>s+num(x),0)/a.length:0;
 const money=v=>Math.round(num(v)).toLocaleString('ru-RU')+' BYN';
 const pct=v=>(v>=0?'+':'')+(num(v)*100).toFixed(1)+'%';
 const roundPlan=v=>Math.max(0,Math.round(num(v)/1000)*1000);
+const ceilPlan=v=>Math.max(0,Math.ceil(num(v)/1000)*1000);
 const norm=v=>String(v||'').trim().toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/gi,' ').replace(/\s+/g,' ').trim();
-const escLocal=v=>typeof esc==='function'?esc(v):String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const escLocal=v=>typeof esc==='function'?esc(v):String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[ch]));
 const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 
 function ym(v){return String(v||'').slice(0,7);}
@@ -63,8 +63,6 @@ function fallbackKpiRowsForMonth(manager,month){
 function kpiRowsForMonth(manager,month){
   try{
     if(typeof v18RowsForManagerMonth==='function'){
-      // Existing KPI function may treat a fully empty source too loosely in legacy data.
-      // Keep only rows that have either direct manager or a matched client manager.
       return (v18RowsForManagerMonth(manager,month)||[]).filter(r=>!!inferredManager(r).name);
     }
   }catch(_){}
@@ -164,8 +162,6 @@ function calcRecommendation(manager,targetMonth){
   const upper=Math.max(ytdAvg,recentWeighted,1)*1.40;
   trendForecast=clamp(trendForecast,lower,upper);
 
-  // Last year is NOT the main engine. It may only softly adjust seasonality
-  // and/or define a true YoY +30% business target when the base is positive.
   const lastYearMonth=shiftMonth(targetMonth,-12);
   const lastYear=monthRevenue(manager,lastYearMonth);
   const lastYearRows=monthHasRows(manager,lastYearMonth);
@@ -175,7 +171,7 @@ function calcRecommendation(manager,targetMonth){
   const seasonalRaw=lastYear>0&&lyPrevAvg>0?lastYear/lyPrevAvg:1;
   const seasonal=clamp(seasonalRaw,0.80,1.25);
 
-  // Current-year first supported potential.
+  // Supported potential is a FORECAST. It never determines a lower business plan.
   let supported=(trendForecast*0.70+ytdAvg*0.30);
   if(lastYear>0&&lyPrevAvg>0)supported*=1+(seasonal-1)*0.15;
 
@@ -197,12 +193,15 @@ function calcRecommendation(manager,targetMonth){
   recoverableReserve=Math.min(recoverableReserve,Math.max(ytdAvg,recentWeighted,1)*0.08);
   supported=Math.max(0,supported+recoverableReserve);
 
+  // BUSINESS PLAN: use the stronger valid base and add at least +30%.
   const currentOperatingBase=Math.max(ytdAvg,recentWeighted,avg3);
-  const target30Base=lastYear>0?lastYear:currentOperatingBase;
+  const validLastYearBase=lastYear>0?lastYear:0;
+  const target30Base=Math.max(currentOperatingBase,validLastYearBase);
   const target30=target30Base*(1+BUSINESS_GROWTH_TARGET);
-  const target30Source=lastYear>0?'last_year':'current_year';
+  const target30Source=validLastYearBase>currentOperatingBase?'last_year':'current_year';
   const targetConfirmed=supported>=target30;
-  const recommendedShipment=roundPlan(targetConfirmed?Math.max(target30,supported):supported);
+  const minimumBusinessPlan=ceilPlan(target30);
+  const recommendedShipment=Math.max(minimumBusinessPlan,roundPlan(supported));
   const gap30=Math.max(0,target30-supported);
   const growthVsCurrent=currentOperatingBase>0?recommendedShipment/currentOperatingBase-1:null;
   const growthVsLastYear=lastYear>0?recommendedShipment/lastYear-1:null;
@@ -229,7 +228,7 @@ function calcRecommendation(manager,targetMonth){
   const confidence=cy.usable.length>=6?'высокая':cy.usable.length>=4?'средняя':'низкая';
 
   return {
-    manager,targetMonth,lastYearMonth,lastYear,lastYearRows,target30,target30Source,targetConfirmed,gap30,
+    manager,targetMonth,lastYearMonth,lastYear,lastYearRows,target30,target30Base,target30Source,targetConfirmed,gap30,minimumBusinessPlan,
     recommendedShipment,growthVsCurrent,growthVsLastYear,currentOperatingBase,supported,
     ytdTotal,ytdAvg,avg3,recentWeighted,slope,slopePct,trendForecast,seasonal,recoverableReserve,lostClientCount,
     months:cy.usableMonths,values,confidence,
@@ -253,8 +252,8 @@ function injectPanel(){
     (note||modal.querySelector('.modal-head'))?.insertAdjacentElement(note?'beforebegin':'afterend',root);
   }
   root.innerHTML='<div style="border:1px solid #BFDBFE;background:#F8FBFF;border-radius:12px;padding:12px 13px;margin-bottom:14px">'
-    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя <span style="font-size:10px;color:var(--sub)">v23.2.0</span></div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">Главная база плана — динамика текущего года. Прошлый год используется только как дополнительное сравнение и не тянет план вниз, если база была минусовой/невалидной.</div></div>'
+    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя <span style="font-size:10px;color:var(--sub)">v23.2.1</span></div>'
+    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">План и прогноз разделены: план — минимум +30% от более сильной рабочей базы; текущая динамика показывает, насколько этот план реально обеспечен.</div></div>'
     +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2320()">Рассчитать</button></div>'
     +'<div id="manager-ai-plan-result-v2320" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». План автоматически не сохраняется.</div></div>';
   const save=[...modal.querySelectorAll('button')].find(b=>String(b.getAttribute('onclick')||'').includes('saveManagerKpiPlan'));
@@ -266,7 +265,7 @@ function resetPanel(){
   lastRecommendation=null;
   const out=document.getElementById('manager-ai-plan-result-v2320');if(!out)return;
   const p=currentExistingPlan();
-  out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> ИИ его сам не меняет.':'Нажмите «Рассчитать» — CRM сначала перечитает свежую историю и построит план от текущего года.';
+  out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> ИИ его сам не меняет.':'Нажмите «Рассчитать» — CRM перечитает свежую историю и отдельно покажет бизнес-план и прогноз.';
 }
 function dynamicLine(r){
   return r.months.slice(-6).map((m,i)=>{
@@ -280,50 +279,50 @@ async function calculate(){
   const out=document.getElementById('manager-ai-plan-result-v2320');
   const manager=document.getElementById('manager-plan-name')?.value||'',month=ym(document.getElementById('manager-plan-month')?.value||'');
   if(!manager||!month){if(out)out.textContent='Выберите менеджера и месяц.';return;}
-  if(out)out.innerHTML='<b style="color:var(--a)">⏳ Перечитываю свежую историю 1С и анализирую динамику текущего года…</b>';
+  if(out)out.innerHTML='<b style="color:var(--a)">⏳ Перечитываю свежую историю 1С и разделяю бизнес-план и прогноз…</b>';
   try{
     if(typeof window.v22722EnsureHistory!=='function')throw new Error('загрузчик истории продаж недоступен');
-    await window.v22722EnsureHistory({force:true,reason:'manager-ai-plan-v2320'});
+    await window.v22722EnsureHistory({force:true,reason:'manager-ai-plan-v2321'});
     const r=calcRecommendation(manager,month);lastRecommendation=r;
     const existing=currentExistingPlan();
 
-    const lyText=r.lastYear>0
-      ?'<b>Аналогичный месяц прошлого года:</b> '+money(r.lastYear)+' · цель +30% к нему: <b>'+money(r.target30)+'</b>'
-      :'<b>Прошлый год:</b> '+money(r.lastYear)+' — <b>в базу плана не используется</b>. Цель +30% считается от рабочей базы текущего года '+money(r.currentOperatingBase)+' → <b>'+money(r.target30)+'</b>';
+    const baseSource=r.target30Source==='last_year'?'аналогичный месяц прошлого года':'рабочая база текущего года';
+    const lyText='<b>Прошлый год:</b> '+money(r.lastYear)+' · <b>текущая рабочая база:</b> '+money(r.currentOperatingBase)
+      +' · <b>база плана:</b> '+money(r.target30Base)+' ('+baseSource+') → минимум +30%: <b>'+money(r.target30)+'</b>';
     const verdict=r.targetConfirmed
-      ?'<div style="margin-top:8px;padding:8px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#166534"><b>✅ Цель +30% подтверждается текущей динамикой.</b></div>'
-      :'<div style="margin-top:8px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E"><b>⚠️ Цель +30% сейчас не подтверждается.</b> Реально подтверждённый потенциал ниже на <b>'+money(r.gap30)+'</b>. Решение остаётся за руководителем.</div>';
+      ?'<div style="margin-top:8px;padding:8px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#166534"><b>✅ Текущий прогноз покрывает бизнес-план.</b> Подтверждённый потенциал: <b>'+money(r.supported)+'</b>.</div>'
+      :'<div style="margin-top:8px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E"><b>⚠️ Бизнес-план выше текущего прогноза.</b> Прогноз: <b>'+money(r.supported)+'</b> · разрыв до минимальной цели: <b>'+money(r.gap30)+'</b>. План не снижается — руководителю показан риск.</div>';
 
     out.innerHTML='<div>'+lyText+'</div>'
       +'<div style="font-size:11px;color:var(--sub);margin-top:5px">Источник продаж совпадает с логикой Managers · KPI. Текущая закреплённая база: <b>'+r.currentClients+'</b> клиентов.</div>'
       +'<div style="margin-top:9px;padding:9px 10px;background:#fff;border:1px solid var(--border);border-radius:9px"><b>Динамика текущего года:</b> '+escLocal(dynamicLine(r))+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
-        +'<div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--sub);text-transform:uppercase">Рекомендация продаж</div><div style="font-size:19px;font-weight:800;margin-top:3px">'+money(r.recommendedShipment)+'</div><div style="font-size:11px;color:var(--sub)">'+(r.growthVsCurrent==null?'':'к текущей рабочей базе '+pct(r.growthVsCurrent))+'</div></div>'
+        +'<div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--sub);text-transform:uppercase">Рекомендуемый план продаж</div><div style="font-size:19px;font-weight:800;margin-top:3px">'+money(r.recommendedShipment)+'</div><div style="font-size:11px;color:var(--sub)">не ниже +30% от сильной базы · к текущей базе '+pct(r.growthVsCurrent)+'</div></div>'
         +'<div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--sub);text-transform:uppercase">Рекомендация АКБ</div><div style="font-size:19px;font-weight:800;margin-top:3px">'+r.recommendedAkb+' клиентов</div><div style="font-size:11px;color:var(--sub)">среднее 3 мес. '+r.avgAkb3.toFixed(1)+' · максимум '+r.maxAkb3+'</div></div>'
       +'</div>'+verdict
       +'<div style="margin-top:10px;line-height:1.65"><b>Почему такая цифра:</b><br>'
         +'• оборот текущего года по закрытым месяцам: '+money(r.ytdTotal)+' · среднемесячно '+money(r.ytdAvg)+'<br>'
         +'• последние 3 месяца: среднее '+money(r.avg3)+' · взвешенный темп '+money(r.recentWeighted)+'<br>'
         +'• направление тренда: '+(r.slope>=0?'рост ':'снижение ')+money(Math.abs(r.slope))+' на месяц ('+pct(r.slopePct)+')<br>'
-        +'• прогноз по текущей динамике: '+money(r.trendForecast)+'<br>'
-        +(r.lastYear>0?'• прошлогодняя сезонность учитывается мягко: коэффициент '+r.seasonal.toFixed(2)+'<br>':'• прошлогодняя отрицательная/нулевая база в расчёт потенциала не включена<br>')
+        +'• прогноз по текущей динамике: '+money(r.trendForecast)+' · прогноз с резервом: '+money(r.supported)+'<br>'
+        +'• база бизнес-плана: '+money(r.target30Base)+' → обязательный минимум +30%: '+money(r.target30)+'<br>'
+        +(r.lastYear>0?'• прошлогодняя сезонность учитывается мягко в прогнозе: коэффициент '+r.seasonal.toFixed(2)+'<br>':'• прошлогодняя отрицательная/нулевая база не снижает план<br>')
         +'• резерв возврата текущей закреплённой базы: '+money(r.recoverableReserve)+' ('+r.lostClientCount+' просевших до нуля)<br>'
         +'• АКБ: вернуть можно '+r.returnable+' · потенциальных закреплено '+r.potentialAssigned+' · рекомендуемый рост '+pct(r.akbGrowth)+'<br>'
         +'• качество данных: <b>'+r.confidence+'</b> · строк менеджера '+r.stats.rows+' (1С '+r.stats.direct+', восстановлено по карточке '+r.stats.fallback+')'
       +'</div>'
       +(existing?'<div style="margin-top:8px;color:var(--g)"><b>Сохранённый план:</b> '+money(existing.shipment_plan)+' · АКБ '+num(existing.akb_plan)+'. Он не меняется автоматически.</div>':'')
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2320(false)">↳ Подставить рекомендацию</button>'
-      +(!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerAiPlanV2320(true)">Поставить бизнес-цель +30%</button>':'')+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2320(false)">↳ Подставить рекомендуемый план</button></div>'
       +'<div style="font-size:10px;color:var(--sub);margin-top:6px">Подстановка ничего не сохраняет. План фиксируется только после явного подтверждения руководителя.</div>';
   }catch(e){
     lastRecommendation=null;console.error(VERSION,e);
     if(out)out.innerHTML='<b style="color:var(--r)">Расчёт остановлен:</b> '+escLocal(e?.message||e)+'. План не изменён.';
   }
 }
-function apply(useBusinessTarget){
+function apply(){
   const r=lastRecommendation;if(!r)return;
   const ship=document.getElementById('manager-plan-shipment'),akb=document.getElementById('manager-plan-akb');
-  if(ship)ship.value=String(Math.round(useBusinessTarget?r.target30:r.recommendedShipment));
+  if(ship)ship.value=String(Math.round(r.recommendedShipment));
   if(akb)akb.value=String(r.recommendedAkb);
   const out=document.getElementById('manager-ai-plan-result-v2320');
   if(out)out.insertAdjacentHTML('beforeend','<div style="margin-top:8px;color:var(--a);font-weight:700">✓ Значения только подставлены. Проверьте перед сохранением.</div>');
@@ -346,8 +345,12 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
 window.RESANTA_AI_MANAGER_PLANS_V2320=Object.freeze({
   version:VERSION,
-  currentYearIsPrimaryPlanBase:true,
-  lastYearOnlyReference:true,
+  currentYearIsPrimaryPlanBase:false,
+  strongerValidBaseUsed:true,
+  minimumGrowthFloorPct:30,
+  planNeverLoweredByForecast:true,
+  planAndForecastSeparated:true,
+  lastYearOnlyReferenceWhenWeaker:true,
   negativeLastYearNeverPullsPlanDown:true,
   kpiSalesTruth:true,
   currentAssignedBaseForAkb:true,
