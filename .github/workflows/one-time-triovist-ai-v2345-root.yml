@@ -1,0 +1,44 @@
+name: One-time Triovist AI v23.4.5 root
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one-time-triovist-ai-v2345-root.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install direct v23.4.5 root
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          replacements = [
+              ("const APP_VERSION = '2026-08-18-resanta-crm-v23.4.4';", "const APP_VERSION = '2026-08-18-resanta-crm-v23.4.5';"),
+              ('./assets/09-manager-kpi-save-fix.js?v=23.4.4', './assets/09-manager-kpi-save-fix.js?v=23.4.5'),
+              ('./assets/11-triovist-ai-plans-v2340.js?v=23.4.4', './assets/11-triovist-ai-plans-v2345.js?v=23.4.5'),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'Expected root marker not found: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+      - name: Remove one-time installer and commit
+        run: |
+          rm -f .github/workflows/one-time-triovist-ai-v2345-root.yml
+          git config user.name "resanta-crm-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html .github/workflows/one-time-triovist-ai-v2345-root.yml
+          git commit -m "Install Triovist AI plans v23.4.5 direct root"
+          git push
