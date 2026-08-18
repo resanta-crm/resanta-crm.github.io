@@ -2,6 +2,7 @@
  * Permanent bootstrap loaded by the existing index entry.
  * 1) Robust save: DB period rows are checked first; duplicate-key race retries as UPDATE.
  * 2) Loads the unified manager-plans root controller with a no-cache URL.
+ * 3) v23.4.2 compatibility bridge exposes lexical auth state to lazy modules.
  */
 (function(){
 'use strict';
@@ -64,6 +65,55 @@ async function saveManagerKpiPlanV2330(){
 window.saveManagerKpiPlan=saveManagerKpiPlanV2330;
 try{saveManagerKpiPlan=saveManagerKpiPlanV2330;}catch(_){}
 
+/*
+ * v23.4.2 ROOT FIX
+ * 01-crm-core.js declares currentProfile/currentUser with top-level `let`.
+ * Such bindings are visible to later classic scripts by identifier, but are NOT
+ * properties of window. Lazy Triovist modules used window.currentProfile, so
+ * they could render their version marker while treating every signed-in user
+ * as unauthorised and therefore never insert the AI blocks.
+ *
+ * Expose live accessors once at the permanent bootstrap level. The getter keeps
+ * following the real lexical auth state after login/profile refresh; no copied
+ * stale value and no polling are involved. This also protects future lazy
+ * modules from the same global-scope mistake.
+ */
+function installGlobalProfileBridgeV2342(){
+  try{
+    if(typeof currentProfile!=='undefined'){
+      const d=Object.getOwnPropertyDescriptor(window,'currentProfile');
+      if(!d||d.configurable){
+        Object.defineProperty(window,'currentProfile',{
+          configurable:true,
+          enumerable:false,
+          get:()=>currentProfile,
+          set:v=>{currentProfile=v;}
+        });
+      }
+    }
+    if(typeof currentUser!=='undefined'){
+      const d=Object.getOwnPropertyDescriptor(window,'currentUser');
+      if(!d||d.configurable){
+        Object.defineProperty(window,'currentUser',{
+          configurable:true,
+          enumerable:false,
+          get:()=>currentUser,
+          set:v=>{currentUser=v;}
+        });
+      }
+    }
+    window.RESANTA_GLOBAL_PROFILE_BRIDGE_V2342=Object.freeze({
+      version:'v23.4.2',
+      liveCurrentProfile:true,
+      liveCurrentUser:true,
+      fixesLazyModuleAuth:true
+    });
+  }catch(e){
+    console.warn('Global profile bridge v23.4.2 failed',e);
+  }
+}
+installGlobalProfileBridgeV2342();
+
 function loadRoot(){
   if(window.RESANTA_MANAGER_PLANS_ROOT_V2330||document.querySelector('script[data-manager-plans-root-v2330]'))return;
   const s=document.createElement('script');
@@ -80,6 +130,7 @@ window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
   dbFirstUpdate:true,
   duplicateRaceRetry:true,
   rootNoCacheBootstrap:true,
+  globalProfileBridge:'v23.4.2',
   noSqlChanges:true
 });
 })();
