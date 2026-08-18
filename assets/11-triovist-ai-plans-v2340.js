@@ -197,7 +197,7 @@ function markMotivationVersion(){
   const card=document.getElementById('tri-motivation-card'),title=card?.querySelector('.card-title');if(!title)return;
   let tag=title.querySelector('.tri-ai-mot-version');
   if(!tag){tag=document.createElement('span');tag.className='tri-ai-mot-version';tag.style.cssText='font-size:9px;color:var(--sub);font-weight:700;margin-left:5px';title.appendChild(tag);}
-  tag.textContent='· ИИ '+VERSION;
+  const text='· ИИ '+VERSION;if(tag.textContent!==text)tag.textContent=text;
 }
 function renderMotivationAi(){
   if(renderBusy)return;renderBusy=true;
@@ -211,7 +211,9 @@ function renderMotivationAi(){
       const card=motivationCardFor(manager);if(!card)return;
       let panel=card.querySelector('.tri-ai-motivation[data-email="'+manager+'"]');
       if(!panel){panel=document.createElement('div');panel.className='tri-ai-motivation';panel.dataset.email=manager;const anchor=card.querySelector('.tri-mot-planline');if(anchor)anchor.insertAdjacentElement('afterend',panel);else card.appendChild(panel);}
-      const html=panelHtml(manager);if(panel.innerHTML!==html)panel.innerHTML=html;
+      const rec=recommendations.get(manager),items=runtimeItems();
+      const sig=[selectedMonth(),selectedMode(),currentPlan(manager),currentFact(manager),sumRevenue(items,manager,'previous_revenue'),items.length,rec?.calculatedAt||'',rec?.error||''].join('|');
+      if(panel.dataset.signature!==sig){panel.innerHTML=panelHtml(manager);panel.dataset.signature=sig;}
     });
   }catch(e){console.warn('Triovist AI plans '+VERSION,e);}finally{renderBusy=false;}
 }
