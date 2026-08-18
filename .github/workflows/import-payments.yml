@@ -35,10 +35,11 @@ jobs:
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          FINANCE_SOCKET_TIMEOUT_SECONDS: '45'
           PAYMENTS_SUBJECT_MARKER: 'Поступление денег для CRM'
           PAYMENTS_LOOKBACK_DAYS: '30'
           PAYMENTS_HEADER_BATCH_SIZE: '100'
           PAYMENTS_HEADER_SCAN_LIMIT: '5000'
           PAYMENTS_MAX_CANDIDATE_EMAILS: '12'
           PAYMENTS_FILENAME_FALLBACK_EMAILS: '12'
-        run: python import_payments.py
+        run: python finance_import_runner.py payments
