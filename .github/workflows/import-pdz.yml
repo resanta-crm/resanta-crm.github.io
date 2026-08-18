@@ -35,9 +35,10 @@ jobs:
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          FINANCE_SOCKET_TIMEOUT_SECONDS: '45'
           PDZ_LOOKBACK_DAYS: '14'
           PDZ_MAX_AGE_DAYS: '1'
           PDZ_HEADER_BATCH_SIZE: '100'
           PDZ_HEADER_SCAN_LIMIT: '3000'
           PDZ_MAX_CANDIDATE_EMAILS: '12'
-        run: python import_pdz_safe.py
+        run: python finance_import_runner.py pdz
