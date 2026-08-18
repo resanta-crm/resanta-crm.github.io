@@ -1,17 +1,16 @@
-/* RESANTA CRM v23.1.4 · AI MANAGER PLANS · FRESH HISTORY + NET REVENUE TRUTH
+/* RESANTA CRM v23.1.5 · AI MANAGER PLANS · SOURCE TRUTH SPLIT
  * FIELD MANAGERS ONLY.
- * Ownership truth = clients currently assigned to selected field manager.
- * purchase_history.manager_name is NEVER used for ownership.
- * Triovist / 21vek is excluded from field-manager calculations.
- * Every calculation forces a fresh Supabase purchase_history read.
- * Historical comparison is blocked when active clients exist but monthly net revenue <= 0.
+ * Historical sales truth = purchase_history.manager_name, strict non-empty match.
+ * Current AKB/potential truth = clients currently assigned in CRM.
+ * Blank manager_name rows are ignored for historical manager sales.
+ * Triovist/21vek is excluded.
  * No automatic DB writes. Boss explicitly applies and saves a plan.
  */
 (function(){
 'use strict';
-if(window.RESANTA_AI_MANAGER_PLANS_V2314)return;
+if(window.RESANTA_AI_MANAGER_PLANS_V2315)return;
 
-const VERSION='v23.1.4-ai-manager-plans-fresh-net-truth';
+const VERSION='v23.1.5-ai-manager-plans-source-truth-split';
 const BUSINESS_GROWTH_TARGET=0.30;
 let lastRecommendation=null;
 
@@ -34,6 +33,7 @@ function strictManager(a,b){
   const x=norm(a),y=norm(b);
   return !!x&&!!y&&x===y;
 }
+function isTriovistText(v){return /(триовист|21vek)/i.test(String(v||''));}
 function clientKey(v){
   try{if(typeof canonicalSalesClientName==='function')return canonicalSalesClientName(v)||norm(v);}catch(_){}
   try{if(typeof normalizeClientName==='function')return normalizeClientName(v)||norm(v);}catch(_){}
@@ -51,11 +51,12 @@ function clientVariants(c){
   }catch(_){}
   return out;
 }
+
+// CURRENT ownership truth: used only for AKB, returnable clients and current potential.
 function assignedClients(manager){
   return (allClients||[]).filter(c=>{
     if(!strictManager(c.manager_name,manager)||c.is_archived)return false;
-    const text=String(c.name||'')+' '+String(c.region||'');
-    return !/(триовист|21vek)/i.test(text);
+    return !isTriovistText(String(c.name||'')+' '+String(c.region||''));
   });
 }
 function buildOwnership(manager){
@@ -71,10 +72,17 @@ function rowOwnedBy(r,o){
   const k=clientKey(r.client_name);
   return !!(k&&o.names.has(k));
 }
-function managerRows(manager){
+function currentOwnershipRows(manager){
   const ownership=buildOwnership(manager);
-  if(!ownership.clients.length)return {ownership,rows:[]};
   return {ownership,rows:(allPurchaseHistory||[]).filter(r=>rowOwnedBy(r,ownership))};
+}
+
+// HISTORICAL sales truth: strict manager column from 1C. No loose matching.
+function historicalManagerRows(manager){
+  return (allPurchaseHistory||[]).filter(r=>{
+    if(!strictManager(r.manager_name,manager))return false;
+    return !isTriovistText(r.client_name);
+  });
 }
 function revenueByMonth(rows){
   const out=new Map();
@@ -104,46 +112,38 @@ function clientAvgForMonths(rows,months){
 }
 function monthDiagnostics(rows,month){
   const mr=rows.filter(r=>ym(r.month)===month);
-  let positiveRevenue=0,negativeRevenue=0,positiveRows=0,negativeRows=0,qtyRows=0;
-  const clientNet=new Map();
-  mr.forEach(r=>{
-    const rev=num(r.revenue),qty=num(r.qty),k=clientKey(r.client_name)||String(r.client_name||'—');
-    if(rev>0){positiveRevenue+=rev;positiveRows++;}
-    else if(rev<0){negativeRevenue+=rev;negativeRows++;}
-    if(Math.abs(qty)>0.000001)qtyRows++;
-    clientNet.set(k,(clientNet.get(k)||0)+rev);
-  });
-  const netRevenue=positiveRevenue+negativeRevenue;
-  const positiveClients=[...clientNet].filter(([,v])=>v>0.000001).sort((a,b)=>b[1]-a[1]);
-  const negativeClients=[...clientNet].filter(([,v])=>v<-0.000001).sort((a,b)=>a[1]-b[1]);
-  return {
-    month,rows:mr.length,positiveRevenue,negativeRevenue,netRevenue,positiveRows,negativeRows,qtyRows,
-    activeClients:positiveClients.length,negativeClientCount:negativeClients.length,
-    topNegative:negativeClients.slice(0,6),topPositive:positiveClients.slice(0,3)
-  };
+  let positiveRevenue=0,negativeRevenue=0,positiveRows=0,negativeRows=0;
+  mr.forEach(r=>{const rev=num(r.revenue);if(rev>0){positiveRevenue+=rev;positiveRows++;}else if(rev<0){negativeRevenue+=rev;negativeRows++;}});
+  return {month,rows:mr.length,positiveRevenue,negativeRevenue,netRevenue:positiveRevenue+negativeRevenue,positiveRows,negativeRows};
 }
-function brokenHistoricalMonth(d){
-  if(!d.rows)return false;
-  if(d.positiveRows===0&&d.qtyRows>0)return true;
-  return d.netRevenue<=0&&(d.positiveRows>0||d.qtyRows>0||d.activeClients>0);
+
+function currentReserve(rows,prev3,prev6){
+  const recent=clientAvgForMonths(rows,prev3),base=clientAvgForMonths(rows,prev6);
+  let reserve=0,falling=0;
+  for(const [k,b] of base){
+    if(b<=0)continue;
+    const cur=Math.max(0,num(recent.get(k)));
+    if(cur<b){reserve+=(b-cur)*0.20;falling++;}
+  }
+  return {reserve,falling};
 }
 
 function calcRecommendation(manager,targetMonth){
-  const pack=managerRows(manager),ownership=pack.ownership,rows=pack.rows;
-  if(!ownership.clients.length)throw new Error('У менеджера нет закреплённых клиентов в CRM.');
-  if(!rows.length)throw new Error('По закреплённым клиентам менеджера нет истории продаж 1С.');
+  const salesRows=historicalManagerRows(manager);
+  const currentPack=currentOwnershipRows(manager),ownership=currentPack.ownership,currentRows=currentPack.rows;
+  if(!salesRows.length)throw new Error('В purchase_history нет строк 1С со строгим manager_name = «'+manager+'». Пустые и чужие manager_name не используются.');
+  if(!ownership.clients.length)throw new Error('У менеджера нет текущих закреплённых клиентов в CRM.');
 
-  const revMap=revenueByMonth(rows);
+  const revMap=revenueByMonth(salesRows);
   const lastYearMonth=shiftMonth(targetMonth,-12);
-  const lastYearDiag=monthDiagnostics(rows,lastYearMonth);
-  if(brokenHistoricalMonth(lastYearDiag)){
-    const e=new Error('Исторический месяц имеет активность, но не имеет положительной чистой выручки.');
-    e.code='BROKEN_HISTORY_NET_REVENUE';
-    e.diag=lastYearDiag;e.ownershipCount=ownership.clients.length;e.rowsCount=rows.length;
+  const lastYearDiag=monthDiagnostics(salesRows,lastYearMonth);
+  const lastYear=num(revMap.get(lastYearMonth));
+  if(lastYearDiag.rows>0&&lastYear<=0){
+    const e=new Error('Чистый оборот менеджера из 1С за '+lastYearMonth+' не положительный.');
+    e.code='NONPOSITIVE_MANAGER_HISTORY';e.diag=lastYearDiag;e.salesRowsCount=salesRows.length;e.ownershipCount=ownership.clients.length;
     throw e;
   }
 
-  const lastYear=num(revMap.get(lastYearMonth));
   const currentMonth=String(typeof TODAY!=='undefined'?TODAY:new Date().toISOString()).slice(0,7);
   const lastClosed=shiftMonth(currentMonth,-1);
   const closedBeforeTarget=[...Array(18)].map((_,i)=>shiftMonth(targetMonth,-1-i)).filter(m=>m&&m<=lastClosed);
@@ -165,14 +165,9 @@ function calcRecommendation(manager,targetMonth){
   const recentExpected=avg3>0?avg3*seasonal:0;
   let supported=historyExpected>0&&recentExpected>0?historyExpected*0.60+recentExpected*0.40:Math.max(historyExpected,recentExpected,avg3,avg6);
 
-  const lyClient=clientNetMap(rows,lastYearMonth),recentClient=clientAvgForMonths(rows,prev3);
-  let recoverableReserve=0,lostClientCount=0;
-  for(const [k,lyRev] of lyClient){
-    if(lyRev<=0)continue;
-    const cur=num(recentClient.get(k));
-    if(cur<lyRev){recoverableReserve+=(lyRev-Math.max(0,cur))*0.20;if(cur<=0)lostClientCount++;}
-  }
-  recoverableReserve=Math.min(recoverableReserve,Math.max(lastYear,avg3,1)*0.10);
+  const reserve=currentReserve(currentRows,prev3,prev6);
+  const reserveCap=Math.max(lastYear,avg3,1)*0.10;
+  const recoverableReserve=Math.min(reserve.reserve,reserveCap);
   supported+=recoverableReserve;
   if(lastYear>0){
     const floor=Math.min(lastYear,avg3||lastYear)*0.75;
@@ -186,11 +181,12 @@ function calcRecommendation(manager,targetMonth){
   const recommendedGrowth=lastYear>0?recommendedShipment/lastYear-1:null;
   const gap30=target30>0?Math.max(0,target30-supported):0;
 
-  const sameLyAkb=activeClientsForMonth(rows,lastYearMonth).size;
-  const akb3=prev3.map(m=>activeClientsForMonth(rows,m).size);
+  // AKB uses CURRENT assigned client base, not historical manager ownership.
+  const sameLyAkb=activeClientsForMonth(currentRows,lastYearMonth).size;
+  const akb3=prev3.map(m=>activeClientsForMonth(currentRows,m).size);
   const avgAkb3=avg(akb3),maxAkb3=Math.max(0,...akb3);
   const active12Months=[...Array(12)].map((_,i)=>shiftMonth(targetMonth,-1-i));
-  const active12=activeClientsForMonths(rows,active12Months),activeRecent=activeClientsForMonths(rows,prev3);
+  const active12=activeClientsForMonths(currentRows,active12Months),activeRecent=activeClientsForMonths(currentRows,prev3);
   let returnable=0;active12.forEach(k=>{if(!activeRecent.has(k))returnable++;});
   const potentialAssigned=ownership.clients.filter(c=>String(c.client_status||'').toLowerCase()==='потенциальный'&&!active12.has(clientKey(c.name))).length;
   const akbBase=Math.max(sameLyAkb,avgAkb3,maxAkb3);
@@ -204,9 +200,12 @@ function calcRecommendation(manager,targetMonth){
 
   const monthsWithData=prev6.filter(m=>revMap.has(m)).length;
   const confidence=lastYear>0&&monthsWithData>=5?'высокая':monthsWithData>=3?'средняя':'низкая';
-  return {manager,targetMonth,ownershipCount:ownership.clients.length,rowsCount:rows.length,lastYearMonth,lastYear,lastYearDiag,target30,targetConfirmed,gap30,
-    avg3,avg6,recentYoy,annualTrend,yearCurrent,yearPrevious,seasonal,historyExpected,recentExpected,supported,recoverableReserve,lostClientCount,
-    recommendedShipment,recommendedGrowth,sameLyAkb,avgAkb3,maxAkb3,returnable,potentialAssigned,recommendedAkb,akbGrowth,confidence,monthsWithData};
+  return {
+    manager,targetMonth,lastYearMonth,lastYear,lastYearDiag,target30,targetConfirmed,gap30,
+    avg3,avg6,recentYoy,annualTrend,historyExpected,recentExpected,recoverableReserve,fallingCurrentClients:reserve.falling,
+    recommendedShipment,recommendedGrowth,sameLyAkb,avgAkb3,maxAkb3,returnable,potentialAssigned,recommendedAkb,akbGrowth,confidence,monthsWithData,
+    salesRowsCount:salesRows.length,ownershipCount:ownership.clients.length,currentRowsCount:currentRows.length
+  };
 }
 
 function currentExistingPlan(){
@@ -217,18 +216,18 @@ function currentExistingPlan(){
 function injectPanel(){
   if(currentProfile?.role!=='boss')return null;
   const modal=document.querySelector('#modal-manager-plan .modal');if(!modal)return null;
-  ['2310','2311','2312','2313'].forEach(v=>document.getElementById('manager-ai-plan-v'+v)?.remove());
-  let root=document.getElementById('manager-ai-plan-v2314');
+  ['2310','2311','2312','2313','2314'].forEach(v=>document.getElementById('manager-ai-plan-v'+v)?.remove());
+  let root=document.getElementById('manager-ai-plan-v2315');
   if(!root){
-    root=document.createElement('div');root.id='manager-ai-plan-v2314';
+    root=document.createElement('div');root.id='manager-ai-plan-v2315';
     const note=document.getElementById('manager-plan-note')?.closest('.form-field');
     (note||modal.querySelector('.modal-head'))?.insertAdjacentElement(note?'beforebegin':'afterend',root);
   }
   root.innerHTML='<div style="border:1px solid #BFDBFE;background:#F8FBFF;border-radius:12px;padding:12px 13px;margin-bottom:14px">'
-    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя <span style="font-size:10px;color:var(--sub)">v23.1.4</span></div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">Только закреплённая база полевого менеджера. При расчёте CRM перечитывает свежую историю 1С и проверяет чистую выручку прошлого года.</div></div>'
-    +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2314()">Рассчитать</button></div>'
-    +'<div id="manager-ai-plan-result-v2314" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». Никаких автоматических записей в план нет.</div></div>';
+    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя <span style="font-size:10px;color:var(--sub)">v23.1.5</span></div>'
+    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">Продажи прошлого года и тренды — строго по менеджеру из отчёта 1С. АКБ и текущий потенциал — по закреплённой базе CRM.</div></div>'
+    +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2315()">Рассчитать</button></div>'
+    +'<div id="manager-ai-plan-result-v2315" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». План автоматически не сохраняется.</div></div>';
   const save=[...modal.querySelectorAll('button')].find(b=>String(b.getAttribute('onclick')||'').includes('saveManagerKpiPlan'));
   if(save)save.textContent='✅ Утвердить и зафиксировать';
   return root;
@@ -236,64 +235,60 @@ function injectPanel(){
 function resetPanel(){
   const root=injectPanel();if(!root)return;
   lastRecommendation=null;
-  const out=document.getElementById('manager-ai-plan-result-v2314');if(!out)return;
+  const out=document.getElementById('manager-ai-plan-result-v2315');if(!out)return;
   const p=currentExistingPlan();
-  out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> Пересчёт ничего сам не изменит.':'Нажмите «Рассчитать» — CRM сначала перечитает свежую историю 1С.';
+  out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> Пересчёт ничего сам не изменит.':'Нажмите «Рассчитать» — CRM перечитает свежую историю 1С.';
 }
-function renderBrokenHistory(out,e){
+function renderHistoryProblem(out,e){
   const d=e.diag||{};
-  const negatives=(d.topNegative||[]).length
-    ?'<div style="margin-top:7px"><b>Крупнейший отрицательный чистый оборот:</b><br>'+(d.topNegative||[]).map(([k,v])=>'• '+escLocal(k)+': <b>'+money(v)+'</b>').join('<br>')+'</div>':'';
   out.innerHTML='<div style="padding:10px 12px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;color:#991B1B">'
-    +'<b>⛔ Расчёт остановлен: история за '+escLocal(d.month||'нужный месяц')+' не даёт валидной положительной базы.</b>'
-    +'<div style="font-size:12px;line-height:1.65;margin-top:7px">Строк: <b>'+num(d.rows)+'</b> · плюс: <b>'+money(d.positiveRevenue)+'</b> ('+num(d.positiveRows)+' строк) · минус/возвраты: <b>'+money(d.negativeRevenue)+'</b> ('+num(d.negativeRows)+' строк) · <b>чистый итог: '+money(d.netRevenue)+'</b>.</div>'
-    +'<div style="font-size:12px;line-height:1.65;margin-top:4px">Клиентов с положительным чистым оборотом: <b>'+num(d.activeClients)+'</b> · клиентов с отрицательным итогом: <b>'+num(d.negativeClientCount)+'</b>.</div>'
-    +negatives
-    +'<div style="font-size:12px;line-height:1.6;margin-top:8px"><b>Рекомендация намеренно заблокирована.</b> Закреплённая база: '+num(e.ownershipCount)+' клиентов · всего строк истории менеджера: '+num(e.rowsCount)+'.</div>'
+    +'<b>⛔ Расчёт остановлен: строгая история менеджера за '+escLocal(d.month||'месяц')+' не даёт положительной базы.</b>'
+    +'<div style="margin-top:7px">Строк менеджера за месяц: <b>'+num(d.rows)+'</b> · плюс '+money(d.positiveRevenue)+' · минус/возвраты '+money(d.negativeRevenue)+' · чистый итог <b>'+money(d.netRevenue)+'</b>.</div>'
+    +'<div style="margin-top:7px">Всего строгих строк 1С по менеджеру: '+num(e.salesRowsCount)+' · текущая закреплённая база: '+num(e.ownershipCount)+' клиентов.</div>'
     +'</div>';
 }
 async function calculate(){
   if(currentProfile?.role!=='boss')return;
   injectPanel();
-  const out=document.getElementById('manager-ai-plan-result-v2314');
+  const out=document.getElementById('manager-ai-plan-result-v2315');
   const manager=document.getElementById('manager-plan-name')?.value||'',month=ym(document.getElementById('manager-plan-month')?.value||'');
   if(!manager||!month){if(out)out.textContent='Выберите менеджера и месяц.';return;}
-  if(out)out.innerHTML='<b style="color:var(--a)">⏳ Перечитываю свежую purchase_history из Supabase и считаю закреплённую базу…</b>';
+  if(out)out.innerHTML='<b style="color:var(--a)">⏳ Перечитываю свежую историю 1С и разделяю исторические продажи / текущую базу…</b>';
   try{
     if(typeof window.v22722EnsureHistory!=='function')throw new Error('загрузчик истории продаж недоступен');
-    await window.v22722EnsureHistory({force:true,reason:'manager-ai-plan-v2314'});
+    await window.v22722EnsureHistory({force:true,reason:'manager-ai-plan-v2315'});
     const r=calcRecommendation(manager,month);lastRecommendation=r;
     const existing=currentExistingPlan();
-    const targetLine=r.lastYear>0?'<b>Аналогичный месяц прошлого года:</b> '+money(r.lastYear)+' → <b>бизнес-цель +30%:</b> '+money(r.target30)
-      :'<b style="color:var(--am)">За аналогичный месяц прошлого года нет продаж закреплённой базы — +30% год к году проверить нельзя.</b>';
+    const targetLine=r.lastYear>0?'<b>Продажи менеджера из 1С за '+escLocal(r.lastYearMonth)+':</b> '+money(r.lastYear)+' → <b>бизнес-цель +30%:</b> '+money(r.target30)
+      :'<b style="color:var(--am)">В строгой истории 1С нет продаж менеджера за аналогичный месяц прошлого года — +30% проверить нельзя.</b>';
     const verdict=r.lastYear<=0?'':(r.targetConfirmed
       ?'<div style="margin-top:8px;padding:8px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#166534"><b>✅ +30% подтверждается текущими данными.</b></div>'
       :'<div style="margin-top:8px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E"><b>⚠️ +30% сейчас не подтверждается.</b> До бизнес-цели не обеспечено <b>'+money(r.gap30)+'</b>.</div>');
     out.innerHTML='<div>'+targetLine+'</div>'
-      +'<div style="font-size:11px;color:var(--sub);margin-top:5px">Свежий расчёт: <b>'+r.ownershipCount+'</b> закреплённых клиентов · '+r.rowsCount+' строк истории 1С. Чужие менеджеры и Триовист не используются.</div>'
+      +'<div style="font-size:11px;color:var(--sub);margin-top:5px"><b>История продаж:</b> '+r.salesRowsCount+' строк строго manager_name = «'+escLocal(r.manager)+'». Пустые/чужие менеджеры исключены.<br><b>Текущая база:</b> '+r.ownershipCount+' закреплённых клиентов · '+r.currentRowsCount+' строк их истории для АКБ/потенциала.</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
         +'<div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--sub);text-transform:uppercase">Рекомендация продаж</div><div style="font-size:19px;font-weight:800;margin-top:3px">'+money(r.recommendedShipment)+'</div><div style="font-size:11px;color:var(--sub)">'+(r.recommendedGrowth==null?'нет годовой базы':pct(r.recommendedGrowth)+' к прошлому году')+'</div></div>'
-        +'<div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--sub);text-transform:uppercase">Рекомендация АКБ</div><div style="font-size:19px;font-weight:800;margin-top:3px">'+r.recommendedAkb+' клиентов</div><div style="font-size:11px;color:var(--sub)">прошлый год '+r.sameLyAkb+' · среднее 3 мес. '+r.avgAkb3.toFixed(1)+'</div></div>'
+        +'<div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:9px"><div style="font-size:10px;color:var(--sub);text-transform:uppercase">Рекомендация АКБ</div><div style="font-size:19px;font-weight:800;margin-top:3px">'+r.recommendedAkb+' клиентов</div><div style="font-size:11px;color:var(--sub)">текущая база · среднее 3 мес. '+r.avgAkb3.toFixed(1)+'</div></div>'
       +'</div>'+verdict
-      +'<div style="margin-top:10px;line-height:1.6"><b>Как получена цифра:</b><br>'
-        +'• среднее последних 3 закрытых месяцев: '+money(r.avg3)+'<br>'
-        +'• среднее последних 6 месяцев: '+money(r.avg6)+'<br>'
+      +'<div style="margin-top:10px;line-height:1.6"><b>Как получена цифра продаж:</b><br>'
+        +'• среднее менеджера из 1С за последние 3 закрытых месяца: '+money(r.avg3)+'<br>'
+        +'• среднее за 6 месяцев: '+money(r.avg6)+'<br>'
         +'• тренд последних месяцев год к году: '+pct(r.recentYoy)+'<br>'
         +'• тренд 12 закрытых месяцев: '+pct(r.annualTrend)+'<br>'
         +'• расчёт по годовому тренду: '+money(r.historyExpected)+'<br>'
         +'• расчёт по текущему темпу с сезонностью: '+money(r.recentExpected)+'<br>'
-        +'• осторожный резерв возврата просевших закреплённых клиентов: '+money(r.recoverableReserve)+' ('+r.lostClientCount+' полностью выпавших)<br>'
+        +'• резерв текущей закреплённой базы: '+money(r.recoverableReserve)+' ('+r.fallingCurrentClients+' клиентов просели)<br>'
         +'• АКБ: вернуть можно '+r.returnable+' · потенциальных закреплено '+r.potentialAssigned+' · рекомендуемый рост АКБ '+pct(r.akbGrowth)+'<br>'
-        +'• надёжность: <b>'+r.confidence+'</b> ('+r.monthsWithData+'/6 последних месяцев есть в истории)'
+        +'• надёжность: <b>'+r.confidence+'</b> ('+r.monthsWithData+'/6 последних месяцев есть в строгой истории менеджера)'
       +'</div>'
       +(existing?'<div style="margin-top:8px;color:var(--g)"><b>Сохранённый план:</b> '+money(existing.shipment_plan)+' · АКБ '+num(existing.akb_plan)+'. Он не меняется автоматически.</div>':'')
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2314()">↳ Подставить рекомендацию</button>'
-      +(r.target30>0&&!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerGrowth30V2314()">Поставить всё равно +30%</button>':'')+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2315()">↳ Подставить рекомендацию</button>'
+      +(r.target30>0&&!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerGrowth30V2315()">Поставить всё равно +30%</button>':'')+'</div>'
       +'<div style="font-size:10px;color:var(--sub);margin-top:6px">Подстановка не сохраняет план. Сохранение только после явного подтверждения руководителя.</div>';
   }catch(e){
     lastRecommendation=null;console.error(VERSION,e);
     if(!out)return;
-    if(e?.code==='BROKEN_HISTORY_NET_REVENUE'){renderBrokenHistory(out,e);return;}
+    if(e?.code==='NONPOSITIVE_MANAGER_HISTORY'){renderHistoryProblem(out,e);return;}
     out.innerHTML='<b style="color:var(--r)">Расчёт остановлен:</b> '+escLocal(e?.message||e)+'. План не изменён.';
   }
 }
@@ -302,23 +297,19 @@ function apply(use30){
   const ship=document.getElementById('manager-plan-shipment'),akb=document.getElementById('manager-plan-akb');
   if(ship)ship.value=String(Math.round(use30&&r.target30>0?r.target30:r.recommendedShipment));
   if(akb)akb.value=String(r.recommendedAkb);
-  const out=document.getElementById('manager-ai-plan-result-v2314');
+  const out=document.getElementById('manager-ai-plan-result-v2315');
   if(out)out.insertAdjacentHTML('beforeend','<div style="margin-top:8px;color:var(--a);font-weight:700">✓ Значения только подставлены. Проверьте перед сохранением.</div>');
 }
-window.crmCalculateManagerAiPlanV2314=calculate;
-window.crmApplyManagerAiPlanV2314=()=>apply(false);
-window.crmApplyManagerGrowth30V2314=()=>apply(true);
+window.crmCalculateManagerAiPlanV2315=calculate;
+window.crmApplyManagerAiPlanV2315=()=>apply(false);
+window.crmApplyManagerGrowth30V2315=()=>apply(true);
 
 function hookModal(){
   const modal=document.getElementById('modal-manager-plan');if(!modal)return;
-  if(modal.dataset.aiPlansHook2314==='1')return;
-  modal.dataset.aiPlansHook2314='1';
+  if(modal.dataset.aiPlansHook2315==='1')return;
+  modal.dataset.aiPlansHook2315='1';
   let wasOpen=modal.classList.contains('open');
-  const sync=()=>{
-    const open=modal.classList.contains('open');
-    if(open&&!wasOpen)setTimeout(resetPanel,0);
-    wasOpen=open;
-  };
+  const sync=()=>{const open=modal.classList.contains('open');if(open&&!wasOpen)setTimeout(resetPanel,0);wasOpen=open;};
   new MutationObserver(sync).observe(modal,{attributes:true,attributeFilter:['class']});
   modal.addEventListener('change',e=>{if(e.target?.id==='manager-plan-name'||e.target?.id==='manager-plan-month')setTimeout(resetPanel,0);});
   if(wasOpen)setTimeout(resetPanel,0);
@@ -326,15 +317,13 @@ function hookModal(){
 function bootHook(){hookModal();if(!document.getElementById('modal-manager-plan'))setTimeout(bootHook,500);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootHook,{once:true});else bootHook();
 
-window.RESANTA_AI_MANAGER_PLANS_V2314=Object.freeze({
+window.RESANTA_AI_MANAGER_PLANS_V2315=Object.freeze({
   version:VERSION,
-  ownershipSource:'clients.manager_name',
-  purchaseHistoryManagerFieldIgnored:true,
-  strictManagerOwnership:true,
+  historicalSalesSource:'purchase_history.manager_name strict non-empty',
+  currentAkbSource:'clients.manager_name current ownership',
+  blankHistoricalManagerRowsIgnored:true,
   triovistExcluded:true,
   forceFreshHistoryOnEveryCalculation:true,
-  clientMonthlyNetRevenueForAkb:true,
-  nonPositiveHistoricalNetBlocksRecommendation:true,
   bossApprovalRequired:true,
   savedPlanNeverAutoChanges:true,
   targetGrowthPct:30,
