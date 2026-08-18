@@ -1,0 +1,41 @@
+name: One-time load manager KPI save fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one-time-load-manager-kpi-save-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add one loader line safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check assets/09-manager-kpi-save-fix.js
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          anchor='<script defer src="./assets/08-manager-gap-sources.js?v=23.2.2"></script>'
+          line='<script defer src="./assets/09-manager-kpi-save-fix.js?v=23.2.3"></script>'
+          if line in s:
+              raise SystemExit('Loader already present')
+          if s.count(anchor)!=1:
+              raise SystemExit(f'Expected one anchor, found {s.count(anchor)}')
+          p.write_text(s.replace(anchor, anchor+'\n'+line), encoding='utf-8')
+          PY
+          test "$(git diff --numstat -- index.html)" = $'1\t0\tindex.html'
+          rm .github/workflows/one-time-load-manager-kpi-save-fix.yml
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html .github/workflows/one-time-load-manager-kpi-save-fix.yml
+          git commit -m 'Load manager KPI save fix'
+          git push origin HEAD:main
