@@ -5,9 +5,16 @@ on:
     - cron: '0 * * * *'
   workflow_dispatch:
 
+# ПДЗ и поступления читают один Gmail-ящик. Никогда не запускаем их одновременно:
+# это закрывает IMAP OVERQUOTA и гонки двух финансовых импортов.
+concurrency:
+  group: finance-imap-import
+  cancel-in-progress: false
+
 jobs:
   import:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
@@ -20,7 +27,7 @@ jobs:
       - name: Установить зависимости
         run: pip install pandas openpyxl requests
 
-      - name: Запустить импорт
+      - name: Запустить устойчивый импорт ПДЗ
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_PORT: '993'
@@ -29,5 +36,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           PDZ_LOOKBACK_DAYS: '14'
-          PDZ_MAX_AGE_DAYS: '3'
-        run: python import_pdz.py
+          PDZ_MAX_AGE_DAYS: '1'
+          PDZ_HEADER_BATCH_SIZE: '100'
+          PDZ_HEADER_SCAN_LIMIT: '3000'
+          PDZ_MAX_CANDIDATE_EMAILS: '12'
+        run: python import_pdz_safe.py
