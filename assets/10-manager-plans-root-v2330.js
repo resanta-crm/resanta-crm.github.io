@@ -216,3 +216,17 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 window.RESANTA_MANAGER_PLANS_ROOT_V2330=Object.freeze({release:RELEASE,robustSave:true,gapAfterCalculation:true,triovistExcluded:true,noDbSchemaChanges:true});
 })();
+
+/* RESANTA CRM v23.4.0 · TRIOVIST AI PLANS BOOTSTRAP
+ * Separate lazy extension. Field-manager plan logic above is unchanged.
+ */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_AI_PLANS_V2340||document.querySelector('script[data-triovist-ai-v2340]'))return;
+const s=document.createElement('script');
+s.src='./assets/11-triovist-ai-plans-v2340.js?_='+Date.now();
+s.async=false;
+s.dataset.triovistAiV2340='1';
+s.onerror=()=>console.warn('Triovist AI plans v23.4.0 failed to load; base CRM remains available.');
+document.head.appendChild(s);
+})();
