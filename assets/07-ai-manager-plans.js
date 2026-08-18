@@ -1,14 +1,15 @@
-/* RESANTA CRM v23.1.1 · AI MANAGER PLANS OWNERSHIP TRUTH
+/* RESANTA CRM v23.1.2 · AI MANAGER PLANS · MODAL HOOK TRUTH
  * FIELD MANAGERS ONLY.
- * Source of manager truth = clients currently assigned to that field manager.
- * purchase_history.manager_name is NOT used for ownership because it may be blank/stale.
+ * Source of ownership = clients currently assigned to the selected field manager.
+ * purchase_history.manager_name is NEVER used for ownership.
+ * Triovist is excluded from field-manager calculations.
  * No automatic DB writes. Boss explicitly applies and saves a plan.
  */
 (function(){
 'use strict';
-if(window.RESANTA_AI_MANAGER_PLANS_V2311)return;
+if(window.RESANTA_AI_MANAGER_PLANS_V2312)return;
 
-const VERSION='v23.1.1-ai-manager-plans-ownership-truth';
+const VERSION='v23.1.2-ai-manager-plans-modal-hook';
 const BUSINESS_GROWTH_TARGET=0.30;
 let lastRecommendation=null;
 
@@ -49,7 +50,11 @@ function clientVariants(c){
   return out;
 }
 function assignedClients(manager){
-  return (allClients||[]).filter(c=>strictManager(c.manager_name,manager)&&!c.is_archived&&String(c.region||'').toLowerCase()!=='триовист / 21vek.by');
+  return (allClients||[]).filter(c=>{
+    if(!strictManager(c.manager_name,manager)||c.is_archived)return false;
+    const tri=String(c.name||'')+' '+String(c.region||'');
+    return !/(триовист|21vek)/i.test(tri);
+  });
 }
 function buildOwnership(manager){
   const clients=assignedClients(manager);
@@ -62,13 +67,7 @@ function rowOwnedBy(r,ownership){
   if(!r)return false;
   if(r.client_id&&ownership.ids.has(String(r.client_id)))return true;
   const key=clientKey(r.client_name);
-  if(key&&ownership.names.has(key))return true;
-  if(r.client_name){
-    for(const c of ownership.clients){
-      try{if(clientNameVariants(c).some(v=>nameLooseMatch(v,r.client_name)))return true;}catch(_){}
-    }
-  }
-  return false;
+  return !!(key&&ownership.names.has(key));
 }
 function managerRows(manager){
   const ownership=buildOwnership(manager);
@@ -135,10 +134,7 @@ function calcRecommendation(manager,targetMonth){
   let recoverableReserve=0,lostClientCount=0;
   for(const [k,lyRev] of lyClient){
     const cur=n(recentClient.get(k));
-    if(lyRev>0&&cur<lyRev){
-      recoverableReserve+=(lyRev-cur)*0.20;
-      if(cur<=0)lostClientCount++;
-    }
+    if(lyRev>0&&cur<lyRev){recoverableReserve+=(lyRev-cur)*0.20;if(cur<=0)lostClientCount++;}
   }
   recoverableReserve=Math.min(recoverableReserve,Math.max(lastYear,avg3,1)*0.10);
   supported+=recoverableReserve;
@@ -188,38 +184,40 @@ function currentExistingPlan(){
 function injectPanel(){
   if(currentProfile?.role!=='boss')return null;
   const modal=document.querySelector('#modal-manager-plan .modal');if(!modal)return null;
-  let root=document.getElementById('manager-ai-plan-v2311');
-  const old=document.getElementById('manager-ai-plan-v2310');if(old)old.remove();
+  let root=document.getElementById('manager-ai-plan-v2312');
+  document.getElementById('manager-ai-plan-v2310')?.remove();
+  document.getElementById('manager-ai-plan-v2311')?.remove();
   if(!root){
-    root=document.createElement('div');root.id='manager-ai-plan-v2311';
+    root=document.createElement('div');root.id='manager-ai-plan-v2312';
     const note=document.getElementById('manager-plan-note')?.closest('.form-field');
     (note||modal.querySelector('.modal-head'))?.insertAdjacentElement(note?'beforebegin':'afterend',root);
   }
   root.innerHTML='<div style="border:1px solid #BFDBFE;background:#F8FBFF;border-radius:12px;padding:12px 13px;margin-bottom:14px">'
     +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:var(--at)">🤖 ИИ-план · черновик руководителя</div>'
     +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-top:3px">Расчёт только по клиентам, закреплённым за выбранным полевым менеджером. Триовист и чужие клиенты исключены.</div></div>'
-    +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2311()">Рассчитать</button></div>'
-    +'<div id="manager-ai-plan-result-v2311" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». Никаких автоматических записей в план нет.</div></div>';
+    +'<button type="button" class="btn-secondary" style="padding:7px 10px" onclick="crmCalculateManagerAiPlanV2312()">Рассчитать</button></div>'
+    +'<div id="manager-ai-plan-result-v2312" style="margin-top:10px;font-size:12px;color:var(--sub)">Нажмите «Рассчитать». Никаких автоматических записей в план нет.</div></div>';
   const save=[...modal.querySelectorAll('button')].find(b=>String(b.getAttribute('onclick')||'').includes('saveManagerKpiPlan'));
   if(save)save.textContent='✅ Утвердить и зафиксировать';
   return root;
 }
 function resetPanel(){
-  injectPanel();lastRecommendation=null;
-  const out=document.getElementById('manager-ai-plan-result-v2311');if(!out)return;
+  const root=injectPanel();if(!root)return;
+  lastRecommendation=null;
+  const out=document.getElementById('manager-ai-plan-result-v2312');if(!out)return;
   const p=currentExistingPlan();
   out.innerHTML=p?'<b style="color:var(--g)">✅ План на этот месяц уже сохранён.</b> Пересчёт ничего сам не изменит.':'Нажмите «Рассчитать» — CRM возьмёт только закреплённую клиентскую базу выбранного менеджера.';
 }
 async function calculate(){
   if(currentProfile?.role!=='boss')return;
   injectPanel();
-  const out=document.getElementById('manager-ai-plan-result-v2311');
+  const out=document.getElementById('manager-ai-plan-result-v2312');
   const manager=document.getElementById('manager-plan-name')?.value||'',month=ym(document.getElementById('manager-plan-month')?.value||'');
   if(!manager||!month){if(out)out.textContent='Выберите менеджера и месяц.';return;}
   if(out)out.innerHTML='<b style="color:var(--a)">⏳ Проверяю закреплённых клиентов и историю продаж 1С…</b>';
   try{
     if(typeof window.v22722EnsureHistory!=='function')throw new Error('загрузчик истории продаж недоступен');
-    await window.v22722EnsureHistory({reason:'manager-ai-plan-v2311'});
+    await window.v22722EnsureHistory({reason:'manager-ai-plan-v2312'});
     const r=calcRecommendation(manager,month);lastRecommendation=r;
     const existing=currentExistingPlan();
     const targetLine=r.lastYear>0?'<b>Аналогичный месяц прошлого года:</b> '+money(r.lastYear)+' → <b>бизнес-цель +30%:</b> '+money(r.target30)
@@ -245,8 +243,8 @@ async function calculate(){
         +'• надёжность: <b>'+r.confidence+'</b> ('+r.monthsWithData+'/6 последних месяцев есть в истории)'
       +'</div>'
       +(existing?'<div style="margin-top:8px;color:var(--g)"><b>Сохранённый план:</b> '+money(existing.shipment_plan)+' · АКБ '+n(existing.akb_plan)+'. Он не меняется автоматически.</div>':'')
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2311()">↳ Подставить рекомендацию</button>'
-      +(r.target30>0&&!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerGrowth30V2311()">Поставить всё равно +30%</button>':'')+'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn-primary" onclick="crmApplyManagerAiPlanV2312()">↳ Подставить рекомендацию</button>'
+      +(r.target30>0&&!r.targetConfirmed?'<button type="button" class="btn-secondary" onclick="crmApplyManagerGrowth30V2312()">Поставить всё равно +30%</button>':'')+'</div>'
       +'<div style="font-size:10px;color:var(--sub);margin-top:6px">Подстановка не сохраняет план. Сохранение только после явного подтверждения руководителя.</div>';
   }catch(e){lastRecommendation=null;console.error(VERSION,e);if(out)out.innerHTML='<b style="color:var(--r)">Расчёт остановлен:</b> '+escLocal(e?.message||e)+'. План не изменён.';}
 }
@@ -255,33 +253,50 @@ function apply(use30){
   const ship=document.getElementById('manager-plan-shipment'),akb=document.getElementById('manager-plan-akb');
   if(ship)ship.value=String(Math.round(use30&&r.target30>0?r.target30:r.recommendedShipment));
   if(akb)akb.value=String(r.recommendedAkb);
-  const out=document.getElementById('manager-ai-plan-result-v2311');if(out)out.insertAdjacentHTML('beforeend','<div style="margin-top:8px;color:var(--a);font-weight:700">✓ Значения только подставлены. Проверьте перед сохранением.</div>');
-}
-window.crmCalculateManagerAiPlanV2311=calculate;
-window.crmApplyManagerAiPlanV2311=()=>apply(false);
-window.crmApplyManagerGrowth30V2311=()=>apply(true);
-
-const baseOpen=window.openManagerPlanEditor;
-if(typeof baseOpen==='function'){
-  window.openManagerPlanEditor=function(){const x=baseOpen.apply(this,arguments);injectPanel();resetPanel();const s=document.getElementById('manager-plan-name');if(s)s.onchange=window.loadManagerPlanEditor;return x;};
-  try{openManagerPlanEditor=window.openManagerPlanEditor;}catch(_){}
-}
-const baseLoad=window.loadManagerPlanEditor;
-if(typeof baseLoad==='function'){
-  window.loadManagerPlanEditor=function(){const x=baseLoad.apply(this,arguments);resetPanel();return x;};
-  try{loadManagerPlanEditor=window.loadManagerPlanEditor;}catch(_){}
+  const out=document.getElementById('manager-ai-plan-result-v2312');if(out)out.insertAdjacentHTML('beforeend','<div style="margin-top:8px;color:var(--a);font-weight:700">✓ Значения только подставлены. Проверьте перед сохранением.</div>');
 }
 
-window.RESANTA_AI_MANAGER_PLANS_V2311=Object.freeze({
+function modalOpen(){return document.getElementById('modal-manager-plan')?.classList.contains('open');}
+function installModalHook(){
+  const modal=document.getElementById('modal-manager-plan');
+  if(!modal||modal.dataset.aiPlanHookV2312==='1')return;
+  modal.dataset.aiPlanHookV2312='1';
+  const observer=new MutationObserver(()=>{if(modalOpen())setTimeout(resetPanel,0);});
+  observer.observe(modal,{attributes:true,attributeFilter:['class']});
+  if(modalOpen())setTimeout(resetPanel,0);
+}
+function installEvents(){
+  document.addEventListener('click',e=>{
+    const btn=e.target?.closest?.('button[onclick*="openManagerPlanEditor"]');
+    if(btn)setTimeout(()=>{installModalHook();if(modalOpen())resetPanel();},0);
+  },true);
+  document.addEventListener('change',e=>{
+    if(!modalOpen())return;
+    if(e.target?.id==='manager-plan-name'||e.target?.id==='manager-plan-month')setTimeout(resetPanel,0);
+  },true);
+  installModalHook();
+}
+
+window.crmCalculateManagerAiPlanV2312=calculate;
+window.crmApplyManagerAiPlanV2312=()=>apply(false);
+window.crmApplyManagerGrowth30V2312=()=>apply(true);
+window.crmManagerAiPlanEnsureUiV2312=()=>{installModalHook();if(modalOpen())resetPanel();};
+
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installEvents,{once:true});
+else installEvents();
+
+window.RESANTA_AI_MANAGER_PLANS_V2312=Object.freeze({
   version:VERSION,
   ownershipSource:'clients.manager_name',
   purchaseHistoryManagerFieldIgnored:true,
   strictManagerOwnership:true,
+  looseOwnershipMatch:false,
   triovistExcluded:true,
   bossApprovalRequired:true,
   savedPlanNeverAutoChanges:true,
   targetGrowthPct:30,
   akbIndividualGrowth:true,
+  modalMutationObserver:true,
   sqlChanges:false
 });
 })();
