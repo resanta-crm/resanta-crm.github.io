@@ -1,0 +1,151 @@
+name: One-time finance root v23.4.9
+
+on:
+  push:
+    paths:
+      - '.github/finance-import-trigger-v2349'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finance-imap-import
+  cancel-in-progress: false
+
+jobs:
+  install-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Проверить код
+        run: |
+          python -m py_compile import_pdz.py import_pdz_safe.py import_payments.py
+          node --check assets/12-finance-data-root-v2349.js
+
+      - name: Подключить finance root прямо в index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          s=re.sub(r"const APP_VERSION = '[^']+';", "const APP_VERSION = '2026-08-18-resanta-crm-v23.4.9';", s, count=1)
+          s=re.sub(r'<script defer src="\./assets/09-manager-kpi-save-fix\.js\?v=[^"]+"></script>', '<script defer src="./assets/09-manager-kpi-save-fix.js?v=23.4.9"></script>', s, count=1)
+          finance='<script defer src="./assets/12-finance-data-root-v2349.js?v=23.4.9" data-finance-root-v2349="1"></script>'
+          if '12-finance-data-root-v2349.js' not in s:
+              anchor='<script defer src="./assets/09-manager-kpi-save-fix.js?v=23.4.9"></script>'
+              if anchor not in s:
+                  raise SystemExit('Не найден anchor 09-manager-kpi-save-fix.js')
+              s=s.replace(anchor, anchor+'\n'+finance, 1)
+          else:
+              s=re.sub(r'<script defer src="\./assets/12-finance-data-root-v2349\.js\?v=[^"]+"[^>]*></script>', finance, s, count=1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Опубликовать корневое подключение
+        run: |
+          if git diff --quiet -- index.html; then
+            echo 'index.html уже актуален'
+          else
+            git config user.name 'resanta-crm'
+            git config user.email 'resantavitebsc@gmail.com'
+            git add index.html
+            git commit -m 'Install finance data root v23.4.9'
+            git push
+          fi
+
+      - name: Установить зависимости импортов
+        run: pip install pandas openpyxl requests
+
+      - name: Принудительно проверить ПДЗ и поступления
+        id: imports
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          PDZ_LOOKBACK_DAYS: '14'
+          PDZ_MAX_AGE_DAYS: '1'
+          PDZ_HEADER_BATCH_SIZE: '100'
+          PDZ_HEADER_SCAN_LIMIT: '3000'
+          PDZ_MAX_CANDIDATE_EMAILS: '12'
+          PAYMENTS_SUBJECT_MARKER: 'Поступление денег для CRM'
+          PAYMENTS_LOOKBACK_DAYS: '30'
+          PAYMENTS_HEADER_BATCH_SIZE: '100'
+          PAYMENTS_HEADER_SCAN_LIMIT: '5000'
+          PAYMENTS_MAX_CANDIDATE_EMAILS: '12'
+          PAYMENTS_FILENAME_FALLBACK_EMAILS: '12'
+        run: |
+          set +e
+          python import_pdz_safe.py
+          PDZ=$?
+          python import_payments.py
+          PAY=$?
+          echo "pdz=$PDZ" >> "$GITHUB_OUTPUT"
+          echo "payments=$PAY" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Записать контроль импорта
+        if: always()
+        env:
+          PDZ_RESULT: ${{ steps.imports.outputs.pdz }}
+          PAY_RESULT: ${{ steps.imports.outputs.payments }}
+        run: |
+          mkdir -p data
+          python - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import json, os
+          def ok(v): return str(v or '1') == '0'
+          payload={
+            'version':'v23.4.9',
+            'checked_at_utc':datetime.now(timezone.utc).isoformat(),
+            'pdz_ok':ok(os.environ.get('PDZ_RESULT')),
+            'payments_ok':ok(os.environ.get('PAY_RESULT')),
+          }
+          Path('data/finance-import-health.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git add data/finance-import-health.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record finance import health v23.4.9'
+            git push
+          fi
+
+      - name: Удалить одноразовый установщик
+        if: always()
+        run: |
+          git pull --rebase
+          rm -f .github/workflows/install-finance-root-v2349.yml .github/finance-import-trigger-v2349
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Clean finance root installer v23.4.9'
+            git push
+          fi
+
+      - name: Завершить с ошибкой, если импорт не прошёл
+        if: always()
+        env:
+          PDZ_RESULT: ${{ steps.imports.outputs.pdz }}
+          PAY_RESULT: ${{ steps.imports.outputs.payments }}
+        run: |
+          if [ "${PDZ_RESULT:-1}" != "0" ] || [ "${PAY_RESULT:-1}" != "0" ]; then
+            echo "Finance import check failed: PDZ=${PDZ_RESULT:-missing}, payments=${PAY_RESULT:-missing}"
+            exit 1
+          fi
+          echo 'Finance import check OK'
