@@ -1,8 +1,8 @@
-/* RESANTA CRM v23.4.3 · TRIOVIST AI PLANS · STOCK AWARE */
+/* RESANTA CRM v23.4.4 · TRIOVIST AI PLANS · STOCK AWARE · DIRECT ROOT */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_AI_PLANS_V2343)return;
-const V='v23.4.3',G=.30,A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru',M=[A,K],N={[A]:'Александренко',[K]:'Кришталь'},B=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),C=new Map(),R=new Map();
+if(window.RESANTA_TRIOVIST_AI_PLANS_V2344)return;
+const V='v23.4.4',G=.30,A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru',M=[A,K],N={[A]:'Александренко',[K]:'Кришталь'},B=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),C=new Map(),R=new Map();
 let timer=0,obs=null,obsPage=null,busy=false;
 const n=v=>Number(v)||0,e=()=>String(window.currentProfile?.email||window.currentUser?.email||'').trim().toLowerCase(),boss=()=>window.currentProfile?.role==='boss'&&B.has(e()),mgr=()=>M.includes(e()),name=x=>N[String(x||'').toLowerCase()]||String(x||''),money=v=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN',qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:1}),pct=v=>(n(v)*100).toFixed(1)+'%',h=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),sk=v=>String(v||'').trim().replace(/^'/,'').toLowerCase();
 function ym(v){return String(v||'').slice(0,7)}
@@ -34,5 +34,5 @@ window.triovistAiCalculatePlanV2343=async m=>{m=String(m).toLowerCase();if(!boss
 window.triovistAiApplyRecommendationV2343=(m,k='commercial')=>{m=String(m).toLowerCase();if(!boss())return;const r=R.get(m),i=input(m);if(!r||r.err||!i)return alert('Сначала рассчитайте ИИ-план и откройте «Настройки».');const v=k==='supported'?r.supported:r.commercial;i.value=n(v).toFixed(2).replace('.',',');i.dispatchEvent(new Event('input',{bubbles:true}));schedule(0);alert('План '+money(v)+' подставлен. ИИ его не сохранил автоматически — сохранение остаётся за руководителем.')};window.triovistAiApplyRecommendationV2341=m=>window.triovistAiApplyRecommendationV2343(m,'commercial');
 function boot(){const base=window.renderTriovist;if(typeof base==='function'&&!base.__ai2343){const w=function(){const r=base.apply(this,arguments);schedule(0);return r};w.__ai2343=true;window.renderTriovist=w;try{renderTriovist=w}catch(_){}}watch();schedule(0);document.addEventListener('click',x=>{if(x.target?.closest?.('[data-tab="motivation"]'))schedule(120)});window.addEventListener('focus',()=>{if(document.getElementById('page-triovist')?.classList.contains('active'))schedule(30)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-window.RESANTA_TRIOVIST_AI_PLANS_V2340=Object.freeze({version:V,compat:true});window.RESANTA_TRIOVIST_AI_PLANS_V2341=Object.freeze({version:V,compat:true});window.RESANTA_TRIOVIST_AI_PLANS_V2343=Object.freeze({version:V,stockAware:true,managerGapVisible:true,exactGapArithmetic:true,noAutoSave:true,noSqlChanges:true});
+window.RESANTA_TRIOVIST_AI_PLANS_V2340=Object.freeze({version:V,compat:true});window.RESANTA_TRIOVIST_AI_PLANS_V2341=Object.freeze({version:V,compat:true});window.RESANTA_TRIOVIST_AI_PLANS_V2343=Object.freeze({version:V,compat:true});window.RESANTA_TRIOVIST_AI_PLANS_V2344=Object.freeze({version:V,directRoot:true,stockAware:true,managerGapVisible:true,exactGapArithmetic:true,noAutoSave:true,noSqlChanges:true});
 })();
