@@ -22,32 +22,31 @@ jobs:
         run: |
           from pathlib import Path
 
-          # Permanent no-cache loader: even an old cached index/09 always fetches 10 with Date.now().
           p = Path('assets/10-manager-plans-root-v2330.js')
           s = p.read_text(encoding='utf-8')
           marker = 'RESANTA_TRIOVIST_AI_CACHE_SAFE_LOADER_V2348'
           if marker not in s:
-              insert = r'''
-
-/* v23.4.8 · permanent cache-safe Triovist AI bootstrap.
- * 09-manager-kpi-save-fix loads this file with Date.now(), so this bootstrap
- * works even when a browser still has an older index.html cached.
- */
-(function loadTriovistAiCacheSafeV2348(){
-  if(window.RESANTA_TRIOVIST_AI_PLANS_V2348||document.querySelector('script[data-triovist-ai-cache-safe-v2348]'))return;
-  const x=document.createElement('script');
-  x.src='./assets/11-triovist-ai-plans-v2348.js?_='+Date.now();
-  x.async=false;
-  x.dataset.triovistAiCacheSafeV2348='1';
-  x.onerror=()=>console.warn('Triovist AI v23.4.8 failed to load; base CRM remains available.');
-  document.head.appendChild(x);
-  window.RESANTA_TRIOVIST_AI_CACHE_SAFE_LOADER_V2348=Object.freeze({version:'v23.4.8',noCache:true});
-})();
-'''
-              s = s.rstrip() + insert + '\n'
+              lines = [
+                  '',
+                  '/* v23.4.8 · permanent cache-safe Triovist AI bootstrap.',
+                  ' * 09-manager-kpi-save-fix loads this file with Date.now(), so this bootstrap',
+                  ' * works even when a browser still has an older index.html cached.',
+                  ' */',
+                  '(function loadTriovistAiCacheSafeV2348(){',
+                  "  if(window.RESANTA_TRIOVIST_AI_PLANS_V2348||document.querySelector('script[data-triovist-ai-cache-safe-v2348]'))return;",
+                  "  const x=document.createElement('script');",
+                  "  x.src='./assets/11-triovist-ai-plans-v2348.js?_='+Date.now();",
+                  '  x.async=false;',
+                  "  x.dataset.triovistAiCacheSafeV2348='1';",
+                  "  x.onerror=()=>console.warn('Triovist AI v23.4.8 failed to load; base CRM remains available.');",
+                  '  document.head.appendChild(x);',
+                  "  window.RESANTA_TRIOVIST_AI_CACHE_SAFE_LOADER_V2348=Object.freeze({version:'v23.4.8',noCache:true});",
+                  '})();',
+                  ''
+              ]
+              s = s.rstrip() + '\n' + '\n'.join(lines)
               p.write_text(s, encoding='utf-8')
 
-          # Direct root for fresh browsers + force one cache reset.
           i = Path('index.html')
           h = i.read_text(encoding='utf-8')
           h = h.replace("const APP_VERSION = '2026-08-18-resanta-crm-v23.4.7';", "const APP_VERSION = '2026-08-18-resanta-crm-v23.4.8';")
