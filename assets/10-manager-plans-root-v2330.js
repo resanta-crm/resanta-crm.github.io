@@ -216,3 +216,18 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 window.RESANTA_MANAGER_PLANS_ROOT_V2330=Object.freeze({release:RELEASE,robustSave:true,gapAfterCalculation:true,triovistExcluded:true,noDbSchemaChanges:true});
 })();
+
+/* v23.4.8 · permanent cache-safe Triovist AI bootstrap.
+ * 09-manager-kpi-save-fix loads this file with Date.now(), so this bootstrap
+ * works even when a browser still has an older index.html cached.
+ */
+(function loadTriovistAiCacheSafeV2348(){
+  if(window.RESANTA_TRIOVIST_AI_PLANS_V2348||document.querySelector('script[data-triovist-ai-cache-safe-v2348]'))return;
+  const x=document.createElement('script');
+  x.src='./assets/11-triovist-ai-plans-v2348.js?_='+Date.now();
+  x.async=false;
+  x.dataset.triovistAiCacheSafeV2348='1';
+  x.onerror=()=>console.warn('Triovist AI v23.4.8 failed to load; base CRM remains available.');
+  document.head.appendChild(x);
+  window.RESANTA_TRIOVIST_AI_CACHE_SAFE_LOADER_V2348=Object.freeze({version:'v23.4.8',noCache:true});
+})();
