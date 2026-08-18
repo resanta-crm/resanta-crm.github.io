@@ -1,6 +1,7 @@
 name: One-time manager plans v23.3.0 root fix
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/one-time-manager-plans-v2330-root-fix.yml'
@@ -140,7 +141,6 @@ jobs:
           node --check assets/08-manager-gap-sources.js
           node --check assets/09-manager-kpi-save-fix.js
 
-          # Ensure only the intended files changed.
           changed="$(git diff --name-only | sort)"
           expected=$'assets/07-ai-manager-plans.js\nassets/08-manager-gap-sources.js\nassets/09-manager-kpi-save-fix.js\nindex.html'
           if [ "$changed" != "$expected" ]; then
