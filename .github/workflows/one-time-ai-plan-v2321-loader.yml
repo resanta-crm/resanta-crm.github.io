@@ -1,0 +1,51 @@
+name: One-time AI manager plans v23.2.1 deploy
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one-time-ai-plan-v2321-loader.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate AI plan JavaScript
+        run: node --check assets/07-ai-manager-plans.js
+
+      - name: Change only AI plan loader version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = '<script defer src="./assets/07-ai-manager-plans.js?v=23.2.0"></script>'
+          new = '<script defer src="./assets/07-ai-manager-plans.js?v=23.2.1"></script>'
+          if s.count(old) != 1:
+              raise SystemExit(f'Expected exactly one loader line, found {s.count(old)}')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+
+          expected=$'1\t1\tindex.html'
+          actual="$(git diff --numstat -- index.html)"
+          if [ "$actual" != "$expected" ]; then
+            echo "Unexpected index diff: $actual"
+            git diff -- index.html
+            exit 1
+          fi
+
+          rm .github/workflows/one-time-ai-plan-v2321-loader.yml
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html .github/workflows/one-time-ai-plan-v2321-loader.yml
+          git commit -m 'Set AI manager plans loader to 23.2.1 only'
+          git push origin HEAD:main
