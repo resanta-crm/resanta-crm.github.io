@@ -1,8 +1,9 @@
-/* RESANTA CRM v23.3.0 · MANAGER KPI SAVE + ROOT BOOTSTRAP
+/* RESANTA CRM v23.4.9 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
  * Permanent bootstrap loaded by the existing index entry.
  * 1) Robust save: DB period rows are checked first; duplicate-key race retries as UPDATE.
  * 2) Loads the unified manager-plans root controller with a no-cache URL.
  * 3) v23.4.2 compatibility bridge exposes lexical auth state to lazy modules.
+ * 4) v23.4.9 loads the finance truth controller with a no-cache URL.
  */
 (function(){
 'use strict';
@@ -65,19 +66,6 @@ async function saveManagerKpiPlanV2330(){
 window.saveManagerKpiPlan=saveManagerKpiPlanV2330;
 try{saveManagerKpiPlan=saveManagerKpiPlanV2330;}catch(_){}
 
-/*
- * v23.4.2 ROOT FIX
- * 01-crm-core.js declares currentProfile/currentUser with top-level `let`.
- * Such bindings are visible to later classic scripts by identifier, but are NOT
- * properties of window. Lazy Triovist modules used window.currentProfile, so
- * they could render their version marker while treating every signed-in user
- * as unauthorised and therefore never insert the AI blocks.
- *
- * Expose live accessors once at the permanent bootstrap level. The getter keeps
- * following the real lexical auth state after login/profile refresh; no copied
- * stale value and no polling are involved. This also protects future lazy
- * modules from the same global-scope mistake.
- */
 function installGlobalProfileBridgeV2342(){
   try{
     if(typeof currentProfile!=='undefined'){
@@ -125,12 +113,24 @@ function loadRoot(){
 }
 loadRoot();
 
+function loadFinanceRootV2349(){
+  if(window.RESANTA_FINANCE_DATA_ROOT_V2349||document.querySelector('script[data-finance-root-v2349]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/12-finance-data-root-v2349.js?_='+Date.now();
+  s.async=false;
+  s.dataset.financeRootV2349='1';
+  s.onerror=()=>console.warn('Finance data root v23.4.9 failed to load; base CRM remains available.');
+  document.head.appendChild(s);
+}
+loadFinanceRootV2349();
+
 window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
-  version:'v23.3.0',
+  version:'v23.4.9',
   dbFirstUpdate:true,
   duplicateRaceRetry:true,
   rootNoCacheBootstrap:true,
   globalProfileBridge:'v23.4.2',
+  financeRoot:'v23.4.9',
   noSqlChanges:true
 });
 })();
