@@ -1,0 +1,60 @@
+name: One-time install Triovist AI plans v23.4.0
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one-time-install-triovist-ai-v2340.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Triovist AI loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check assets/11-triovist-ai-plans-v2340.js
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('assets/10-manager-plans-root-v2330.js')
+          s=p.read_text(encoding='utf-8')
+          marker='data-triovist-ai-v2340'
+          if marker not in s:
+              loader=r'''
+
+/* RESANTA CRM v23.4.0 · TRIOVIST AI PLANS BOOTSTRAP
+ * Separate lazy extension. Field-manager plan logic above is unchanged.
+ */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_AI_PLANS_V2340||document.querySelector('script[data-triovist-ai-v2340]'))return;
+const s=document.createElement('script');
+s.src='./assets/11-triovist-ai-plans-v2340.js?_='+Date.now();
+s.async=false;
+s.dataset.triovistAiV2340='1';
+s.onerror=()=>console.warn('Triovist AI plans v23.4.0 failed to load; base CRM remains available.');
+document.head.appendChild(s);
+})();
+'''
+              s=s.rstrip()+loader+'\n'
+              p.write_text(s,encoding='utf-8')
+          PY
+          node --check assets/10-manager-plans-root-v2330.js
+          grep -q "data-triovist-ai-v2340" assets/10-manager-plans-root-v2330.js
+          rm .github/workflows/one-time-install-triovist-ai-v2340.yml
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets/10-manager-plans-root-v2330.js .github/workflows/one-time-install-triovist-ai-v2340.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Install Triovist AI plans v23.4.0 loader'
+          git push origin HEAD:main
