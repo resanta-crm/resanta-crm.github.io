@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - 'assets/13-triovist-seasonal-stock-v2350.js'
+      - 'assets/19-triovist-stock-upload-truth-v23551.js'
+      - 'assets/09-manager-kpi-save-fix.js'
       - 'import_triovist_stocks_truth_v2355.py'
       - 'validate_triovist_stock_truth_v2355.py'
       - 'data/stock_21vek.xlsx'
@@ -34,7 +36,10 @@ jobs:
       - name: Dependencies
         run: pip install openpyxl requests
       - name: JavaScript syntax
-        run: node --check assets/13-triovist-seasonal-stock-v2350.js
+        run: |
+          node --check assets/13-triovist-seasonal-stock-v2350.js
+          node --check assets/19-triovist-stock-upload-truth-v23551.js
+          node --check assets/09-manager-kpi-save-fix.js
       - name: Python syntax
         run: python -m py_compile import_triovist_stocks_truth_v2355.py validate_triovist_stock_truth_v2355.py
       - name: Numerical truth tests
