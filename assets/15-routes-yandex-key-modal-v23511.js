@@ -1,0 +1,121 @@
+/* RESANTA CRM v23.5.1.1 · YANDEX MAPS KEY MODAL HOTFIX
+ * Fixes the non-responsive "Подключить Яндекс Карты" button.
+ * Replaces prompt()/inline-click dependency with a normal CRM modal and delegated click handler.
+ * Does not touch GPS, route calculations, visits, stops or OpenStreetMap fallback.
+ */
+(function(){
+'use strict';
+if(window.RESANTA_YANDEX_KEY_MODAL_V23511)return;
+
+const VERSION='v23.5.1.1';
+const KEY_STORAGE='resanta_yandex_maps_api_key_v2351';
+const MODAL_ID='modal-yandex-key-v23511';
+const INPUT_ID='yandex-key-input-v23511';
+const ERROR_ID='yandex-key-error-v23511';
+
+function currentKey(){
+  try{return String(window.RESANTA_YANDEX_MAPS_API_KEY||localStorage.getItem(KEY_STORAGE)||'').trim();}
+  catch(_){return String(window.RESANTA_YANDEX_MAPS_API_KEY||'').trim();}
+}
+function escAttr(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function ensureModal(){
+  let modal=document.getElementById(MODAL_ID);
+  if(modal)return modal;
+
+  modal=document.createElement('div');
+  modal.id=MODAL_ID;
+  modal.style.cssText='position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(17,24,39,.48)';
+  modal.innerHTML=`
+    <div role="dialog" aria-modal="true" aria-labelledby="yandex-key-title-v23511" style="width:min(560px,100%);background:#fff;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.25);padding:20px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
+        <div>
+          <div id="yandex-key-title-v23511" style="font-size:18px;font-weight:800;color:var(--text,#111827)">🗺 Подключение Яндекс Карт</div>
+          <div style="font-size:12px;color:var(--sub,#6B7280);line-height:1.5;margin-top:5px">Введите официальный API-ключ <b>JavaScript API Яндекс Карт 2.1</b>. Для безопасности ключ должен быть ограничен доменом <b>resanta-crm.by</b>.</div>
+        </div>
+        <button type="button" data-yandex-key-close class="btn-secondary" aria-label="Закрыть" style="padding:5px 10px;font-size:18px;line-height:1">×</button>
+      </div>
+      <label for="${INPUT_ID}" style="display:block;font-size:12px;font-weight:700;color:var(--sub,#6B7280);margin-bottom:6px">API-КЛЮЧ</label>
+      <input id="${INPUT_ID}" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Вставьте ключ Яндекс Карт" style="width:100%;padding:11px 12px;border:1.5px solid var(--border,#E5E7EB);border-radius:9px;font-size:14px;outline:none">
+      <div id="${ERROR_ID}" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;font-size:12px"></div>
+      <div style="font-size:11px;color:var(--sub,#6B7280);line-height:1.45;margin-top:9px">Ключ сохраняется в этом браузере. После сохранения CRM один раз перезагрузится и попробует включить Яндекс-карту. Если ключ неверный или домен не разрешён, старая карта продолжит работать.</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:16px">
+        <button type="button" data-yandex-key-close class="btn-secondary">Отмена</button>
+        <button type="button" id="yandex-key-save-v23511" class="btn-primary">Сохранить и подключить</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  modal.querySelectorAll('[data-yandex-key-close]').forEach(btn=>btn.addEventListener('click',closeModal));
+  modal.addEventListener('click',e=>{if(e.target===modal)closeModal();});
+  document.getElementById('yandex-key-save-v23511')?.addEventListener('click',saveKey);
+  document.getElementById(INPUT_ID)?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveKey();}});
+  return modal;
+}
+function setError(text=''){
+  const box=document.getElementById(ERROR_ID);if(!box)return;
+  if(!text){box.style.display='none';box.textContent='';return;}
+  box.style.display='block';box.textContent=text;
+}
+function openModal(){
+  const modal=ensureModal();
+  const input=document.getElementById(INPUT_ID);
+  if(input)input.value=currentKey();
+  setError('');
+  modal.style.display='flex';
+  setTimeout(()=>{try{input?.focus();input?.select();}catch(_){}},30);
+}
+function closeModal(){
+  const modal=document.getElementById(MODAL_ID);if(modal)modal.style.display='none';
+  setError('');
+}
+function saveKey(){
+  const input=document.getElementById(INPUT_ID);
+  const value=String(input?.value||'').trim();
+  if(!value){setError('Вставьте API-ключ Яндекс Карт.');input?.focus();return;}
+  try{
+    localStorage.setItem(KEY_STORAGE,value);
+    window.RESANTA_YANDEX_MAPS_API_KEY=value;
+  }catch(e){
+    setError('Браузер не дал сохранить ключ: '+String(e?.message||e));return;
+  }
+  const btn=document.getElementById('yandex-key-save-v23511');
+  if(btn){btn.disabled=true;btn.textContent='Подключаю…';}
+  const status=document.getElementById('gps-yandex-status-v2351');
+  if(status){
+    status.style.background='#EFF6FF';status.style.border='1px solid #BFDBFE';status.style.color='#1E3A8A';
+    status.innerHTML='<b>Ключ сохранён.</b> Перезапускаю карту…';
+  }
+  closeModal();
+  setTimeout(()=>location.reload(),220);
+}
+
+// Keep compatibility with buttons already rendered by v23.5.1.
+window.resantaSetYandexMapsKeyV2351=openModal;
+window.resantaOpenYandexKeyModalV23511=openModal;
+
+// Capture the click before the old inline onclick/prompt handler can run.
+document.addEventListener('click',e=>{
+  const btn=e.target?.closest?.('button');
+  if(!btn)return;
+  if(!btn.closest('#gps-yandex-status-v2351'))return;
+  const text=String(btn.textContent||'').trim();
+  if(!/(Подключить Яндекс Карты|Ключ Яндекс Карт|Сменить ключ)/i.test(text))return;
+  e.preventDefault();
+  e.stopPropagation();
+  if(typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();
+  openModal();
+},true);
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById(MODAL_ID)?.style.display==='flex')closeModal();});
+
+window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
+  version:VERSION,
+  modalInput:true,
+  delegatedClick:true,
+  promptRemoved:true,
+  storageKey:KEY_STORAGE,
+  gpsUntouched:true,
+  routeLogicUntouched:true,
+  osmFallbackUntouched:true
+});
+})();
