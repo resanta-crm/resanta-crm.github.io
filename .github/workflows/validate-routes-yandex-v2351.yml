@@ -1,4 +1,4 @@
-name: Validate routes Yandex v23.5.1.1
+name: Validate routes Yandex v23.5.1.2
 
 on:
   workflow_dispatch:
@@ -23,15 +23,20 @@ jobs:
           node --check assets/09-manager-kpi-save-fix.js
           node --check assets/14-routes-yandex-ui-v2351.js
           node --check assets/15-routes-yandex-key-modal-v23511.js
+      - name: Check lifecycle guards
+        run: |
+          grep -q "recreatesOnRouteDomChange:true" assets/14-routes-yandex-ui-v2351.js
+          grep -q "greenStatusOnlyWhenMapActive:true" assets/14-routes-yandex-ui-v2351.js
+          grep -q "ymap.destroy" assets/14-routes-yandex-ui-v2351.js
       - name: Record validation
         run: |
           mkdir -p data
           node - <<'NODE'
           const fs=require('fs');
           fs.writeFileSync('data/routes-yandex-validation.json',JSON.stringify({
-            version:'v23.5.1.1',status:'ok',validated_at:new Date().toISOString(),
-            checks:['09 bootstrap syntax','14 route/yandex adapter syntax','15 key modal syntax'],
-            note:'Connect button uses CRM modal; runtime Yandex activation still requires a valid official API key.'
+            version:'v23.5.1.2',status:'ok',validated_at:new Date().toISOString(),
+            checks:['09 bootstrap syntax','14 route/yandex lifecycle syntax','15 key modal syntax','route DOM lifecycle guards'],
+            note:'One active Yandex map is destroyed/recreated when CRM replaces the opened manager/day map container; OSM fallback and GPS logic remain untouched.'
           }));
           NODE
       - name: Commit validation result
@@ -40,5 +45,5 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add data/routes-yandex-validation.json
           git diff --cached --quiet && exit 0
-          git commit -m 'Validate routes Yandex v23.5.1.1'
+          git commit -m 'Validate routes Yandex v23.5.1.2'
           git push
