@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Shared guard for CRM finance imports v23.4.9.
+"""Shared guard for CRM finance imports v23.4.11.
 
-Sets a finite socket timeout before any IMAP module is imported. This prevents a
-stuck Gmail connection from hanging a workflow indefinitely. The actual parsing
-and safe database replacement remain in the dedicated import modules.
+Sets a finite socket timeout before any IMAP module is imported. Finance imports
+use compatibility wrappers that preserve the existing atomic writes while
+handling current 1C report layouts safely.
 """
 from __future__ import annotations
 
@@ -18,12 +18,12 @@ socket.setdefaulttimeout(SOCKET_TIMEOUT)
 def main() -> None:
     mode = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower()
     if mode == "pdz":
-        import import_pdz_safe
-        import_pdz_safe.main()
+        import import_pdz_safe_v23411
+        import_pdz_safe_v23411.main()
         return
     if mode == "payments":
-        import import_payments
-        import_payments.main()
+        import import_payments_safe_v23411
+        import_payments_safe_v23411.main()
         return
     raise SystemExit("Usage: finance_import_runner.py pdz|payments")
 
