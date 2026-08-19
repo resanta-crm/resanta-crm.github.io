@@ -1,9 +1,10 @@
-/* RESANTA CRM v23.4.9 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
+/* RESANTA CRM v23.5.0 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
  * Permanent bootstrap loaded by the existing index entry.
  * 1) Robust save: DB period rows are checked first; duplicate-key race retries as UPDATE.
  * 2) Loads the unified manager-plans root controller with a no-cache URL.
  * 3) v23.4.2 compatibility bridge exposes lexical auth state to lazy modules.
- * 4) v23.4.9 loads the finance truth controller with a no-cache URL.
+ * 4) Loads the finance truth controller with a no-cache URL.
+ * 5) v23.5.0 loads seasonal Triovist stock recommendations with a no-cache URL.
  */
 (function(){
 'use strict';
@@ -124,13 +125,25 @@ function loadFinanceRootV2349(){
 }
 loadFinanceRootV2349();
 
+function loadTriovistSeasonalStockV2350(){
+  if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350||document.querySelector('script[data-triovist-seasonal-stock-v2350]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/13-triovist-seasonal-stock-v2350.js?_='+Date.now();
+  s.async=false;
+  s.dataset.triovistSeasonalStockV2350='1';
+  s.onerror=()=>console.warn('Triovist seasonal stock v23.5.0 failed to load; base stock recommendation remains available.');
+  document.head.appendChild(s);
+}
+loadTriovistSeasonalStockV2350();
+
 window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
-  version:'v23.4.9',
+  version:'v23.5.0',
   dbFirstUpdate:true,
   duplicateRaceRetry:true,
   rootNoCacheBootstrap:true,
   globalProfileBridge:'v23.4.2',
   financeRoot:'v23.4.9',
+  triovistSeasonalStock:'v23.5.0',
   noSqlChanges:true
 });
 })();
