@@ -11,6 +11,7 @@ on:
       - manifest.json
       - service-worker.js
       - assets/**
+      - data/**
       - icons/**
       - .github/workflows/publish-crm-pages.yml
   workflow_dispatch:
@@ -59,7 +60,7 @@ jobs:
             fi
           done
 
-          for dir in assets icons; do
+          for dir in assets data icons; do
             if [ -d "$dir" ]; then
               cp -R "$dir" "_site/$dir"
             fi
@@ -69,6 +70,24 @@ jobs:
 
           echo "Prepared Pages artifact:"
           find _site -maxdepth 3 -type f -print | sort
+
+      - name: Validate published Triovist seasonality profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s _site/data/triovist_seasonality.json
+          python - <<'PY'
+          import json
+          path = '_site/data/triovist_seasonality.json'
+          with open(path, encoding='utf-8') as f:
+              profile = json.load(f)
+          assert profile.get('version') == 'v23.5.0', profile.get('version')
+          levels = profile.get('levels') or {}
+          assert levels.get('sku'), 'seasonality SKU level is empty'
+          assert levels.get('subgroup'), 'seasonality subgroup level is empty'
+          assert levels.get('category'), 'seasonality category level is empty'
+          print('Triovist seasonality profile ready for Pages:', profile.get('version'), profile.get('history_from'), profile.get('history_to'))
+          PY
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
