@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -71,7 +73,7 @@ jobs:
           echo "Prepared Pages artifact:"
           find _site -maxdepth 3 -type f -print | sort
 
-      - name: Validate published Triovist seasonality profile
+      - name: Validate packaged Triovist seasonality profile
         shell: bash
         run: |
           set -euo pipefail
@@ -97,3 +99,52 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+      - name: Verify public seasonality URL and record health marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://resanta-crm.by/data/triovist_seasonality.json?v=23.5.0'
+          OK=0
+          for attempt in $(seq 1 18); do
+            echo "Public profile check $attempt/18"
+            if curl -fsSL --connect-timeout 10 --max-time 30 "$URL" -o /tmp/triovist_seasonality.json; then
+              if python - <<'PY'
+          import json
+          with open('/tmp/triovist_seasonality.json', encoding='utf-8') as f:
+              p = json.load(f)
+          assert p.get('version') == 'v23.5.0', p.get('version')
+          levels = p.get('levels') or {}
+          assert levels.get('sku') and levels.get('subgroup') and levels.get('category')
+          print('Public profile verified:', p.get('version'), p.get('history_from'), p.get('history_to'))
+          PY
+              then
+                OK=1
+                break
+              fi
+            fi
+            sleep 5
+          done
+          if [ "$OK" != '1' ]; then
+            echo '::error::Public Triovist seasonality profile is still unavailable or invalid after deploy'
+            exit 1
+          fi
+          python - <<'PY'
+          import json, datetime, os
+          p=json.load(open('/tmp/triovist_seasonality.json',encoding='utf-8'))
+          out={
+            'status':'ok',
+            'version':p.get('version'),
+            'history_from':p.get('history_from'),
+            'history_to':p.get('history_to'),
+            'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'source_sha':os.environ.get('GITHUB_SHA'),
+            'url':'https://resanta-crm.by/data/triovist_seasonality.json?v=23.5.0'
+          }
+          open('.github/triovist-seasonality-public-status.json','w',encoding='utf-8').write(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+          PY
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/triovist-seasonality-public-status.json
+          git commit -m 'Verify public Triovist seasonality profile [skip ci]' || exit 0
+          git push
