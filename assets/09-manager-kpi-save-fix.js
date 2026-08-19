@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.5.1 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
+/* RESANTA CRM v23.5.1.1 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
  * Permanent bootstrap loaded by the existing index entry.
  * 1) Robust save: DB period rows are checked first; duplicate-key race retries as UPDATE.
  * 2) Loads the unified manager-plans root controller with a no-cache URL.
@@ -6,6 +6,7 @@
  * 4) Loads the finance truth controller with a no-cache URL.
  * 5) v23.5.0 loads seasonal Triovist stock recommendations with a no-cache URL.
  * 6) v23.5.1 loads routes top-search + safe Yandex Maps adapter with a no-cache URL.
+ * 7) v23.5.1.1 fixes Yandex Maps connect button with a normal CRM modal.
  */
 (function(){
 'use strict';
@@ -148,8 +149,19 @@ function loadRoutesYandexUiV2351(){
 }
 loadRoutesYandexUiV2351();
 
+function loadRoutesYandexKeyModalV23511(){
+  if(window.RESANTA_YANDEX_KEY_MODAL_V23511||document.querySelector('script[data-routes-yandex-key-modal-v23511]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/15-routes-yandex-key-modal-v23511.js?_='+Date.now();
+  s.async=false;
+  s.dataset.routesYandexKeyModalV23511='1';
+  s.onerror=()=>console.warn('Yandex Maps key modal v23.5.1.1 failed to load; base routes remain available.');
+  document.head.appendChild(s);
+}
+loadRoutesYandexKeyModalV23511();
+
 window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
-  version:'v23.5.1',
+  version:'v23.5.1.1',
   dbFirstUpdate:true,
   duplicateRaceRetry:true,
   rootNoCacheBootstrap:true,
@@ -157,6 +169,7 @@ window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
   financeRoot:'v23.4.9',
   triovistSeasonalStock:'v23.5.0',
   routesYandexUi:'v23.5.1',
+  routesYandexKeyModal:'v23.5.1.1',
   noSqlChanges:true
 });
 })();
