@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.5.2 · AUTO ROUTE PILOT / READ-ONLY RETROTEST
+/* RESANTA CRM v23.5.2.1 · AUTO ROUTE PILOT / READ-ONLY RETROTEST
  * Pilot only: Aчинович, 2026-08-10..2026-08-14.
  * Absolutely no writes to route_plans or any other table.
  * Reads current client/physical-point assignments and historical GPS/visits,
@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_ROUTE_PILOT_V2352)return;
 
-const VERSION='v23.5.2';
+const VERSION='v23.5.2.1';
 const PILOT_MANAGER='Ачинович';
 const PILOT_START='2026-08-10';
 const PILOT_END='2026-08-14';
@@ -150,6 +150,15 @@ function buildPhysicalModel(data){
     const coord=coordOf(point)||coordOf(primary.client);
     const city=String(point.city||primary.client.city||primary.profile.route_city||primary.client.region||'').trim();
     const region=String(point.region||primary.profile.route_region||primary.client.region||'').trim();
+    if(!coord){
+      manual.push({
+        client:primary.client,
+        profile:primary.profile,
+        decision:{kind:'manual',reason:'Нет подтверждённых координат физической ТТ'},
+        pointLabel:String(point.address||point.city||primary.client.address||city||'физическая ТТ').trim()
+      });
+      continue;
+    }
     auto.push({
       key:'point:'+String(point.id),pointId:String(point.id),clientIds:eligible.map(x=>String(x.client.id)),
       label:allNames.length>1?clientName(primary.client)+' + ещё '+(allNames.length-1)+' юрлиц':clientName(primary.client),
@@ -208,8 +217,14 @@ function dueForPilotWeek(points,data){
   return{due,weeks,weekIndex:wi};
 }
 
-function centroid(items){if(!items.length)return HOME;return{lat:items.reduce((s,x)=>s+x.coord.lat,0)/items.length,lng:items.reduce((s,x)=>s+x.coord.lng,0)/items.length};}
+function validCoordItem(x){return !!(x?.coord&&finite(x.coord.lat)&&finite(x.coord.lng));}
+function centroid(items){
+  const valid=(items||[]).filter(validCoordItem);
+  if(!valid.length)return HOME;
+  return{lat:valid.reduce((s,x)=>s+x.coord.lat,0)/valid.length,lng:valid.reduce((s,x)=>s+x.coord.lng,0)/valid.length};
+}
 function clusterPoints(items,k){
+  items=(items||[]).filter(validCoordItem);
   if(!items.length)return[];k=Math.max(1,Math.min(k,items.length));
   const seeds=[];let first=items.slice().sort((a,b)=>haversine(HOME,b.coord)-haversine(HOME,a.coord))[0];seeds.push({...first.coord});
   while(seeds.length<k){let best=null;for(const x of items){const d=Math.min(...seeds.map(s=>haversine(s,x.coord)));if(!best||d>best.d)best={d,x};}seeds.push({...best.x.coord});}
@@ -222,12 +237,16 @@ function clusterPoints(items,k){
   return groups.filter(Boolean).filter(g=>g.length);
 }
 function pathFromStart(items,startIndex){
+  items=(items||[]).filter(validCoordItem);
+  if(!items.length)return[];
+  startIndex=Math.max(0,Math.min(Number(startIndex)||0,items.length-1));
   const left=items.slice(),out=[];let current=left.splice(startIndex,1)[0];out.push(current);
   while(left.length){let bi=0,bd=Infinity;left.forEach((x,i)=>{const d=roadKm(current.coord,x.coord);if(d<bd){bd=d;bi=i;}});current=left.splice(bi,1)[0];out.push(current);}
   return out;
 }
 function pathKm(path){let km=0;for(let i=1;i<path.length;i++)km+=roadKm(path[i-1].coord,path[i].coord);return km;}
 function orderCluster(items){
+  items=(items||[]).filter(validCoordItem);
   if(items.length<2)return{items:items.slice(),km:0,mode:'одна зона'};
   let near=0,far=0,nearD=Infinity,farD=-1;
   items.forEach((x,i)=>{const d=haversine(HOME,x.coord);if(d<nearD){nearD=d;near=i;}if(d>farD){farD=d;far=i;}});
