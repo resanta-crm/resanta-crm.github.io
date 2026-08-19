@@ -1,0 +1,97 @@
+name: One-time route pilot null-coordinate fix v23.5.2.1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one-time-route-pilot-null-coord-v23521.yml'
+      - '.github/route-pilot-v23521-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch read-only route pilot
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('assets/16-route-auto-pilot-v2352.js')
+          s=p.read_text(encoding='utf-8')
+
+          def rep(old,new,label):
+              global s
+              n=s.count(old)
+              if n!=1:
+                  raise SystemExit(f'{label}: expected 1 match, got {n}')
+              s=s.replace(old,new,1)
+
+          rep("/* RESANTA CRM v23.5.2 · AUTO ROUTE PILOT / READ-ONLY RETROTEST", "/* RESANTA CRM v23.5.2.1 · AUTO ROUTE PILOT / READ-ONLY RETROTEST", 'header version')
+          rep("const VERSION='v23.5.2';", "const VERSION='v23.5.2.1';", 'runtime version')
+
+          rep("""    const region=String(point.region||primary.profile.route_region||primary.client.region||'').trim();
+    auto.push({
+""","""    const region=String(point.region||primary.profile.route_region||primary.client.region||'').trim();
+    if(!coord){
+      manual.push({
+        client:primary.client,
+        profile:primary.profile,
+        decision:{kind:'manual',reason:'Нет подтверждённых координат физической ТТ'},
+        pointLabel:String(point.address||point.city||primary.client.address||city||'физическая ТТ').trim()
+      });
+      continue;
+    }
+    auto.push({
+""",'physical-point null guard')
+
+          rep("""function centroid(items){if(!items.length)return HOME;return{lat:items.reduce((s,x)=>s+x.coord.lat,0)/items.length,lng:items.reduce((s,x)=>s+x.coord.lng,0)/items.length};}
+function clusterPoints(items,k){
+  if(!items.length)return[];k=Math.max(1,Math.min(k,items.length));
+""","""function validCoordItem(x){return !!(x?.coord&&finite(x.coord.lat)&&finite(x.coord.lng));}
+function centroid(items){
+  const valid=(items||[]).filter(validCoordItem);
+  if(!valid.length)return HOME;
+  return{lat:valid.reduce((s,x)=>s+x.coord.lat,0)/valid.length,lng:valid.reduce((s,x)=>s+x.coord.lng,0)/valid.length};
+}
+function clusterPoints(items,k){
+  items=(items||[]).filter(validCoordItem);
+  if(!items.length)return[];k=Math.max(1,Math.min(k,items.length));
+""",'cluster defensive guard')
+
+          rep("""function pathFromStart(items,startIndex){
+  const left=items.slice(),out=[];let current=left.splice(startIndex,1)[0];out.push(current);
+""","""function pathFromStart(items,startIndex){
+  items=(items||[]).filter(validCoordItem);
+  if(!items.length)return[];
+  startIndex=Math.max(0,Math.min(Number(startIndex)||0,items.length-1));
+  const left=items.slice(),out=[];let current=left.splice(startIndex,1)[0];out.push(current);
+""",'path defensive guard')
+
+          rep("""function orderCluster(items){
+  if(items.length<2)return{items:items.slice(),km:0,mode:'одна зона'};
+""","""function orderCluster(items){
+  items=(items||[]).filter(validCoordItem);
+  if(items.length<2)return{items:items.slice(),km:0,mode:'одна зона'};
+""",'order defensive guard')
+
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Validate pilot patch
+        run: |
+          grep -q "const VERSION='v23.5.2.1'" assets/16-route-auto-pilot-v2352.js
+          grep -q 'function validCoordItem' assets/16-route-auto-pilot-v2352.js
+          grep -q "Нет подтверждённых координат физической ТТ" assets/16-route-auto-pilot-v2352.js
+          node --check assets/16-route-auto-pilot-v2352.js
+          git diff --check
+      - name: Commit fix and remove installer
+        run: |
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets/16-route-auto-pilot-v2352.js
+          git rm -f .github/workflows/one-time-route-pilot-null-coord-v23521.yml
+          git rm -f .github/route-pilot-v23521-trigger || true
+          git commit -m 'Route pilot v23.5.2.1: handle missing physical-point coordinates'
+          git push
