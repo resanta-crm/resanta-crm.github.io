@@ -1,12 +1,13 @@
-/* RESANTA CRM v23.5.1.1 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
+/* RESANTA CRM v23.5.5.1 · MANAGER KPI SAVE + PERMANENT ROOT BOOTSTRAP
  * Permanent bootstrap loaded by the existing index entry.
  * 1) Robust save: DB period rows are checked first; duplicate-key race retries as UPDATE.
  * 2) Loads the unified manager-plans root controller with a no-cache URL.
  * 3) v23.4.2 compatibility bridge exposes lexical auth state to lazy modules.
  * 4) Loads the finance truth controller with a no-cache URL.
- * 5) v23.5.0 loads seasonal Triovist stock recommendations with a no-cache URL.
- * 6) v23.5.1 loads routes top-search + safe Yandex Maps adapter with a no-cache URL.
- * 7) v23.5.1.1 fixes Yandex Maps connect button with a normal CRM modal.
+ * 5) v23.5.5 loads corrected seasonal Triovist stock recommendations with a no-cache URL.
+ * 6) v23.5.5.1 chains the final 21vek upload guard after the stock root.
+ * 7) v23.5.1 loads routes top-search + safe Yandex Maps adapter with a no-cache URL.
+ * 8) v23.5.1.1 fixes Yandex Maps connect button with a normal CRM modal.
  */
 (function(){
 'use strict';
@@ -127,13 +128,26 @@ function loadFinanceRootV2349(){
 }
 loadFinanceRootV2349();
 
+function loadTriovistStockUploadTruthV23551(){
+  if(window.RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551||document.querySelector('script[data-triovist-stock-upload-truth-v23551]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/19-triovist-stock-upload-truth-v23551.js?_='+Date.now();
+  s.async=false;
+  s.dataset.triovistStockUploadTruthV23551='1';
+  s.onerror=()=>console.warn('Triovist 21vek upload truth guard v23.5.5.1 failed to load; stock page remains read-only safe until reload.');
+  document.head.appendChild(s);
+}
+
 function loadTriovistSeasonalStockV2350(){
-  if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350||document.querySelector('script[data-triovist-seasonal-stock-v2350]'))return;
+  if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350){loadTriovistStockUploadTruthV23551();return;}
+  const existing=document.querySelector('script[data-triovist-seasonal-stock-v2350]');
+  if(existing){existing.addEventListener('load',loadTriovistStockUploadTruthV23551,{once:true});setTimeout(()=>{if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350)loadTriovistStockUploadTruthV23551();},250);return;}
   const s=document.createElement('script');
   s.src='./assets/13-triovist-seasonal-stock-v2350.js?_='+Date.now();
   s.async=false;
   s.dataset.triovistSeasonalStockV2350='1';
-  s.onerror=()=>console.warn('Triovist seasonal stock v23.5.0 failed to load; base stock recommendation remains available.');
+  s.onload=loadTriovistStockUploadTruthV23551;
+  s.onerror=()=>console.warn('Triovist stock truth v23.5.5 failed to load; base stock recommendation remains available.');
   document.head.appendChild(s);
 }
 loadTriovistSeasonalStockV2350();
@@ -161,13 +175,14 @@ function loadRoutesYandexKeyModalV23511(){
 loadRoutesYandexKeyModalV23511();
 
 window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
-  version:'v23.5.1.1',
+  version:'v23.5.5.1',
   dbFirstUpdate:true,
   duplicateRaceRetry:true,
   rootNoCacheBootstrap:true,
   globalProfileBridge:'v23.4.2',
   financeRoot:'v23.4.9',
-  triovistSeasonalStock:'v23.5.0',
+  triovistSeasonalStock:'v23.5.5',
+  triovistStockUploadTruth:'v23.5.5.1',
   routesYandexUi:'v23.5.1',
   routesYandexKeyModal:'v23.5.1.1',
   noSqlChanges:true
