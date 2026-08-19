@@ -4,6 +4,7 @@
   "synthetic": {
     "sales_3m_not_summed_with_statistics": true,
     "free_in_transit_only": true,
+    "free_transit_never_exceeds_total_transit": true,
     "partner_forecast_preserved": true,
     "sample": {
       "70/1/65": {
@@ -19,7 +20,8 @@
         "free_in_transit": 0.0,
         "partner_forecast": 23.0
       },
-      "65/60_available": 51.0
+      "65/60_available": 51.0,
+      "72/17/1_available_when_transit_zero": 28.0
     }
   },
   "actual_repo_file": {
@@ -40,6 +42,7 @@
       "Свободно",
       " Заказы"
     ],
+    "free_transit_invariant_ok": true,
     "diagnostics": {
       "version": "v23.5.5",
       "header_row": 1,
@@ -499,6 +502,7 @@
         "free_now": 206.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -512,6 +516,7 @@
         "free_now": 13.0,
         "reserve": 10.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 10.0,
         "free_in_transit": 0.0
       },
       {
@@ -525,6 +530,7 @@
         "free_now": 28.0,
         "reserve": 36.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 36.0,
         "free_in_transit": 0.0
       },
       {
@@ -538,6 +544,7 @@
         "free_now": 41.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -551,6 +558,7 @@
         "free_now": 8.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -564,6 +572,7 @@
         "free_now": 47.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -577,6 +586,7 @@
         "free_now": 7.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -590,6 +600,7 @@
         "free_now": 3.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -603,6 +614,7 @@
         "free_now": 17.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -616,6 +628,7 @@
         "free_now": 1.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -629,6 +642,7 @@
         "free_now": 6.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -642,6 +656,7 @@
         "free_now": 57.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       },
       {
@@ -655,6 +670,7 @@
         "free_now": 48.0,
         "reserve": 0.0,
         "in_transit": 0.0,
+        "free_in_transit_raw": 0.0,
         "free_in_transit": 0.0
       }
     ]
