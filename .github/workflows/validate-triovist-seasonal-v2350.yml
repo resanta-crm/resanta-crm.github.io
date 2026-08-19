@@ -6,12 +6,17 @@ on:
     paths:
       - '.github/triovist-seasonal-validate-trigger-v2350'
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -33,3 +38,24 @@ jobs:
           assert p['levels']['category']
           print(p['counts'])
           PY
+      - name: Write validation marker
+        run: |
+          python - <<'PY'
+          import json, datetime
+          p=json.load(open('data/triovist_seasonality.json',encoding='utf-8'))
+          out={
+            'version':'v23.5.0',
+            'status':'ok',
+            'validated_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'counts':p.get('counts',{}),
+            'history_from':p.get('history_from'),
+            'history_to':p.get('history_to'),
+            'checks':['node --check','python py_compile','profile structure']
+          }
+          open('data/triovist-seasonal-validation.json','w',encoding='utf-8').write(json.dumps(out,ensure_ascii=False))
+          PY
+          git config user.name "resanta-crm-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/triovist-seasonal-validation.json
+          git commit -m "Validate Triovist seasonal v23.5.0" || exit 0
+          git push
