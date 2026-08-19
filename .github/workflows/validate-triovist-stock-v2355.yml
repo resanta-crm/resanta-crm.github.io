@@ -1,4 +1,4 @@
-name: Validate Triovist stock truth v23.5.5
+name: Validate Triovist stock truth v23.5.6
 
 on:
   workflow_dispatch:
@@ -6,9 +6,11 @@ on:
     paths:
       - 'assets/13-triovist-seasonal-stock-v2350.js'
       - 'assets/19-triovist-stock-upload-truth-v23551.js'
+      - 'assets/20-triovist-partner-forecast-v2356.js'
       - 'assets/09-manager-kpi-save-fix.js'
       - 'import_triovist_stocks_truth_v2355.py'
       - 'validate_triovist_stock_truth_v2355.py'
+      - 'validate_triovist_partner_forecast_v2356.py'
       - 'data/stock_21vek.xlsx'
       - '.github/workflows/validate-triovist-stock-v2355.yml'
 
@@ -16,7 +18,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: validate-triovist-stock-v2355
+  group: validate-triovist-stock-v2356
   cancel-in-progress: true
 
 jobs:
@@ -39,15 +41,18 @@ jobs:
         run: |
           node --check assets/13-triovist-seasonal-stock-v2350.js
           node --check assets/19-triovist-stock-upload-truth-v23551.js
+          node --check assets/20-triovist-partner-forecast-v2356.js
           node --check assets/09-manager-kpi-save-fix.js
       - name: Python syntax
-        run: python -m py_compile import_triovist_stocks_truth_v2355.py validate_triovist_stock_truth_v2355.py
+        run: python -m py_compile import_triovist_stocks_truth_v2355.py validate_triovist_stock_truth_v2355.py validate_triovist_partner_forecast_v2356.py
       - name: Numerical truth tests
-        run: python validate_triovist_stock_truth_v2355.py
+        run: |
+          python validate_triovist_stock_truth_v2355.py
+          python validate_triovist_partner_forecast_v2356.py
       - name: Commit validation report
         run: |
           git config user.name "resanta-crm-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/triovist-stock-truth-validation.json
-          git commit -m "Validate Triovist stock truth v23.5.5 [skip ci]" || exit 0
+          git commit -m "Validate Triovist stock truth v23.5.6 [skip ci]" || exit 0
           git push
