@@ -2,6 +2,7 @@
  * Fixes the non-responsive "Подключить Яндекс Карты" button.
  * Replaces prompt()/inline-click dependency with a normal CRM modal and delegated click handler.
  * Does not touch GPS, route calculations, visits, stops or OpenStreetMap fallback.
+ * v23.5.2 bridge: loads the read-only route auto-pilot with a no-cache URL.
  */
 (function(){
 'use strict';
@@ -108,6 +109,17 @@ document.addEventListener('click',e=>{
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById(MODAL_ID)?.style.display==='flex')closeModal();});
 
+function loadRouteAutoPilotV2352(){
+  if(window.RESANTA_ROUTE_PILOT_V2352||document.querySelector('script[data-route-auto-pilot-v2352]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/16-route-auto-pilot-v2352.js?_='+Date.now();
+  s.async=false;
+  s.dataset.routeAutoPilotV2352='1';
+  s.onerror=()=>console.warn('Route auto pilot v23.5.2 failed to load; manual routes remain untouched.');
+  document.head.appendChild(s);
+}
+loadRouteAutoPilotV2352();
+
 window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
   version:VERSION,
   modalInput:true,
@@ -116,6 +128,8 @@ window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
   storageKey:KEY_STORAGE,
   gpsUntouched:true,
   routeLogicUntouched:true,
-  osmFallbackUntouched:true
+  osmFallbackUntouched:true,
+  routePilot:'v23.5.2',
+  routePilotReadOnly:true
 });
 })();
