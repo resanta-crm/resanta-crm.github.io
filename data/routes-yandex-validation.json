@@ -1,0 +1,1 @@
+{"version":"v23.5.1","status":"ok","validated_at":"2026-08-19T06:51:20.092Z","checks":["09 bootstrap syntax","14 route/yandex adapter syntax"],"note":"Runtime Yandex map activation still requires a valid official API key."}
