@@ -33,12 +33,21 @@ def synthetic_check():
 def actual_check(path: Path):
     if not path.exists(): return {'present':False}
     rows,diag=parse_partner_truth(path)
+    wb=openpyxl.load_workbook(path,data_only=True,read_only=True); ws=wb.active
+    header_row=int(diag.get('header_row') or 1)
+    headers=[str(v or '') for v in next(ws.iter_rows(min_row=header_row,max_row=header_row,values_only=True))]
+    sample_rows=[]
+    for x in diag.get('samples',[]):
+        rn=int(x.get('row') or 0)
+        if rn>0:
+            vals=list(next(ws.iter_rows(min_row=rn,max_row=rn,values_only=True)))
+            sample_rows.append({'row':rn,'sku':x.get('sku'),'values':vals[:min(len(headers),20)]})
     wanted={'70/1/65','72/17/1','72/11/6','65/60'}
     samples=[]
     for r in rows:
         if r['sku'] in wanted:
-            n=json.loads(r['match_note']); samples.append({'sku':r['sku'],'sales_3m':float(r['sales_m3']),'available_21vek':float(r['qty_total']),'orders':float(r['qty_orders']),'partner_forecast':n.get('partner_forecast'),'stat_sales_2':n.get('stat_sales_2'),'stat_sales_1':n.get('stat_sales_1'),'free_now':n.get('free_now'),'in_transit':n.get('in_transit'),'free_in_transit':n.get('free_in_transit')})
-    return {'present':True,'rows':len(rows),'diagnostics':diag,'control_samples':samples}
+            n=json.loads(r['match_note']); samples.append({'sku':r['sku'],'sales_3m':float(r['sales_m3']),'available_21vek':float(r['qty_total']),'orders':float(r['qty_orders']),'partner_forecast':n.get('partner_forecast'),'stat_sales_2':n.get('stat_sales_2'),'stat_sales_1':n.get('stat_sales_1'),'free_now':n.get('free_now'),'reserve':n.get('reserve'),'in_transit':n.get('in_transit'),'free_in_transit':n.get('free_in_transit')})
+    return {'present':True,'rows':len(rows),'headers':headers[:20],'diagnostics':diag,'raw_sample_rows':sample_rows,'control_samples':samples}
 
 out={'version':VERSION,'status':'ok','synthetic':synthetic_check(),'actual_repo_file':actual_check(Path('data/stock_21vek.xlsx'))}
 Path('data/triovist-stock-truth-validation.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
