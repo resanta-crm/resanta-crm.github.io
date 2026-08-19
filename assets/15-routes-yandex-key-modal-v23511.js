@@ -3,6 +3,7 @@
  * Replaces prompt()/inline-click dependency with a normal CRM modal and delegated click handler.
  * Does not touch GPS, route calculations, visits, stops or OpenStreetMap fallback.
  * v23.5.2 bridge: loads the read-only route auto-pilot with a no-cache URL.
+ * v23.5.3 bridge: loads the GPS reliability/preflight guard with a no-cache URL.
  */
 (function(){
 'use strict';
@@ -120,6 +121,17 @@ function loadRouteAutoPilotV2352(){
 }
 loadRouteAutoPilotV2352();
 
+function loadGpsReliabilityV2353(){
+  if(window.RESANTA_GPS_RELIABILITY_V2353||document.querySelector('script[data-gps-reliability-v2353]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/17-gps-reliability-v2353.js?_='+Date.now();
+  s.async=false;
+  s.dataset.gpsReliabilityV2353='1';
+  s.onerror=()=>console.warn('GPS reliability v23.5.3 failed to load; base GPS remains available.');
+  document.head.appendChild(s);
+}
+loadGpsReliabilityV2353();
+
 window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
   version:VERSION,
   modalInput:true,
@@ -130,6 +142,7 @@ window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
   routeLogicUntouched:true,
   osmFallbackUntouched:true,
   routePilot:'v23.5.2',
-  routePilotReadOnly:true
+  routePilotReadOnly:true,
+  gpsReliability:'v23.5.3'
 });
 })();
