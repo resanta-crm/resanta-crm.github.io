@@ -25,8 +25,10 @@ jobs:
           test -f data/stock_21vek.xlsx
           test -f data/stock_chekhov.xlsx
           ls -lh data/stock_21vek.xlsx data/stock_chekhov.xlsx
+      - name: Проверить синтаксис truth importer
+        run: python -m py_compile import_triovist_stocks_truth_v2355.py import_triovist_stocks.py
       - name: Загрузить остатки
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python import_triovist_stocks.py data/stock_21vek.xlsx data/stock_chekhov.xlsx
+        run: python import_triovist_stocks_truth_v2355.py data/stock_21vek.xlsx data/stock_chekhov.xlsx
