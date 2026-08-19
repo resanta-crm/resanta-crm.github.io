@@ -1,12 +1,14 @@
-/* RESANTA CRM v23.5.3 · GPS RELIABILITY GUARD
- * 1) Blocks a new Android workday until background location + battery settings are safe.
- * 2) Makes boss GPS status truthful: online / delayed / not transmitting.
- * 3) Does not change routes, visits, distance calculation or stored GPS points.
+/* RESANTA CRM v23.5.3.1 · GPS RELIABILITY GUARD
+ * 1) Blocks a new Android workday only for real permission/background failures.
+ * 2) A missing notification channel is created by the native plugin and never causes a settings loop.
+ * 3) Makes boss GPS status truthful: online / delayed / not transmitting.
+ * 4) Does not change routes, visits, distance calculation or stored GPS points.
  */
 (function(){
 'use strict';
 if(window.RESANTA_GPS_RELIABILITY_V2353)return;
-const VERSION='v23.5.3';
+const VERSION='v23.5.3.1';
+let lastPromptKey='',lastPromptAt=0;
 
 function tracker(){
   try{return typeof v19NativeTracker==='function'?v19NativeTracker():(window.Capacitor?.Plugins?.WorkdayTracker||null);}catch(_){return null;}
@@ -17,41 +19,77 @@ function isAndroid(){
 async function nativeStatus(){
   const t=tracker();
   if(!t||typeof t.status!=='function')return null;
-  try{return await t.status();}catch(e){console.warn('GPS v23.5.3 status unavailable',e);return null;}
+  try{return await t.status();}catch(e){console.warn('GPS '+VERSION+' status unavailable',e);return null;}
 }
 async function openSetting(method){
   const t=tracker();
   if(!t||typeof t[method]!=='function')return;
   try{await t[method]();}catch(e){console.warn('GPS settings open failed',method,e);}
 }
+async function ensureNotificationChannel(){
+  const t=tracker();
+  if(!t||typeof t.ensureNotificationChannel!=='function')return null;
+  try{return await t.ensureNotificationChannel();}catch(e){console.warn('GPS notification channel bootstrap failed',e);return null;}
+}
+async function askOnce(key,message,method){
+  const now=Date.now();
+  if(lastPromptKey===key&&now-lastPromptAt<15000)return false;
+  lastPromptKey=key;lastPromptAt=now;
+  if(confirm(message)){await openSetting(method);return true;}
+  return false;
+}
 
 const baseEnsure=(typeof window.v19EnsureNativePermissions==='function'&&window.v19EnsureNativePermissions)
   ||(typeof v19EnsureNativePermissions==='function'?v19EnsureNativePermissions:null);
 async function strictEnsureNativePermissionsV2353(){
+  if(!isAndroid()){
+    if(baseEnsure)await baseEnsure();
+    return true;
+  }
+
+  // v23.5.3.1: create the dedicated channel BEFORE any legacy/base permission check.
+  // This removes the old deadlock: "channel absent -> block service -> service can never create channel".
+  await ensureNotificationChannel();
   if(baseEnsure)await baseEnsure();
-  if(!isAndroid())return true;
-  const s=await nativeStatus();
+
+  let s=await nativeStatus();
   if(!s)return true;
   if(s.locationProviderEnabled===false){
-    if(confirm('На телефоне выключена геолокация Android.\n\nОткрыть настройки местоположения?'))await openSetting('openLocationSettings');
+    await askOnce('location-provider','На телефоне выключена геолокация Android.\n\nОткрыть настройки местоположения?','openLocationSettings');
     throw new Error('Включите геолокацию Android и снова нажмите «Начать рабочий день».');
   }
   if(s.fineLocationGranted===false){
-    if(confirm('Ресанта CRM не получила точное местоположение.\n\nОткрыть настройки приложения?'))await openSetting('openAppSettings');
+    await askOnce('fine-location','Ресанта CRM не получила точное местоположение.\n\nОткрыть настройки приложения?','openAppSettings');
     throw new Error('Разрешите Ресанта CRM точное местоположение.');
   }
   if(s.backgroundLocationGranted===false){
-    if(confirm('Для рабочего маршрута нужно разрешить местоположение «Всегда». Иначе Android может перестать передавать GPS, когда телефон в кармане.\n\nОткрыть настройки приложения?'))await openSetting('openAppSettings');
+    await askOnce('background-location','Для рабочего маршрута нужно разрешить местоположение «Всегда». Иначе Android может перестать передавать GPS, когда телефон в кармане.\n\nОткрыть настройки приложения?','openAppSettings');
     throw new Error('Разрешите: Местоположение → Разрешать всегда. После этого снова начните рабочий день.');
   }
-  if(s.notificationsEnabled===false||s.notificationChannelEnabled===false){
-    if(confirm('Отключено постоянное уведомление рабочего GPS. Без него Android может остановить запись.\n\nОткрыть настройки уведомлений?'))await openSetting('openNotificationSettings');
-    throw new Error('Включите уведомления Ресанта CRM и канал «Рабочий GPS-маршрут».');
+
+  // Whole-app notification permission is a real blocker.
+  if(s.notificationsEnabled===false||s.notificationPermissionGranted===false){
+    await askOnce('notifications-off','Уведомления Ресанта CRM действительно отключены в Android. Без постоянного уведомления рабочий GPS не сможет надёжно работать.\n\nОткрыть настройки уведомлений?','openNotificationSettings');
+    throw new Error('Включите уведомления Ресанта CRM, затем снова начните рабочий день.');
   }
+
+  // A missing channel is NOT treated as disabled. New APK creates it itself.
+  // For compatibility with the previous APK (which had no notificationChannelExists field),
+  // do not block solely on notificationChannelEnabled=false when the app-wide permission is on.
+  if(s.notificationChannelExists===false){
+    await ensureNotificationChannel();
+    s=await nativeStatus()||s;
+  }
+  if(s.notificationChannelExists===true&&s.notificationChannelEnabled===false){
+    await askOnce('gps-channel-off','Канал «Рабочий GPS-маршрут» действительно отключён в Android.\n\nОткрыть настройки уведомлений?','openNotificationSettings');
+    throw new Error('Включите канал «Рабочий GPS-маршрут», затем снова начните рабочий день.');
+  }
+
   if(s.batteryUnrestricted===false){
-    if(confirm('Android ограничивает Ресанта CRM по батарее. Для надёжной записи маршрута установите для приложения режим «Без ограничений».\n\nОткрыть настройки батареи?'))await openSetting('openBatterySettings');
+    await askOnce('battery','Android ограничивает Ресанта CRM по батарее. Для надёжной записи маршрута установите для приложения режим «Без ограничений».\n\nОткрыть настройки батареи?','openBatterySettings');
     throw new Error('Установите для Ресанта CRM батарею «Без ограничений», затем снова начните рабочий день.');
   }
+  lastPromptKey='';lastPromptAt=0;
   return true;
 }
 window.v19EnsureNativePermissions=strictEnsureNativePermissionsV2353;
@@ -109,6 +147,9 @@ setTimeout(()=>{const root=document.getElementById('page-gps-control');if(root)m
 window.RESANTA_GPS_RELIABILITY_V2353=Object.freeze({
   version:VERSION,
   strictAndroidPreflight:true,
+  notificationChannelBootstrap:true,
+  noMissingChannelLoop:true,
+  repeatedPromptGuardMs:15000,
   requiresBackgroundLocation:true,
   requiresBatteryUnrestricted:true,
   truthfulBossStatus:true,
