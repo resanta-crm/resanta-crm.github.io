@@ -1,0 +1,43 @@
+name: Validate routes Yandex v23.5.1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/routes-yandex-validate-trigger-v2351'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check JavaScript syntax
+        run: |
+          node --check assets/09-manager-kpi-save-fix.js
+          node --check assets/14-routes-yandex-ui-v2351.js
+      - name: Record validation
+        run: |
+          mkdir -p data
+          node - <<'NODE'
+          const fs=require('fs');
+          fs.writeFileSync('data/routes-yandex-validation.json',JSON.stringify({
+            version:'v23.5.1',status:'ok',validated_at:new Date().toISOString(),
+            checks:['09 bootstrap syntax','14 route/yandex adapter syntax'],
+            note:'Runtime Yandex map activation still requires a valid official API key.'
+          }));
+          NODE
+      - name: Commit validation result
+        run: |
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add data/routes-yandex-validation.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Validate routes Yandex v23.5.1'
+          git push
