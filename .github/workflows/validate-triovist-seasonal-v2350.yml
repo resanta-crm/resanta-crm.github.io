@@ -1,0 +1,35 @@
+name: Validate Triovist seasonal v23.5.0
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/triovist-seasonal-validate-trigger-v2350'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check JavaScript syntax
+        run: node --check assets/13-triovist-seasonal-stock-v2350.js
+      - name: Check Python syntax
+        run: python -m py_compile build_triovist_seasonality.py
+      - name: Check generated profile
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('data/triovist_seasonality.json',encoding='utf-8'))
+          assert p['version']=='v23.5.0'
+          assert p['levels']['sku']
+          assert p['levels']['subgroup']
+          assert p['levels']['category']
+          print(p['counts'])
+          PY
