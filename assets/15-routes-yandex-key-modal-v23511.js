@@ -4,6 +4,7 @@
  * Does not touch GPS, route calculations, visits, stops or OpenStreetMap fallback.
  * v23.5.2 bridge: loads the read-only route auto-pilot with a no-cache URL.
  * v23.5.3 bridge: loads the GPS reliability/preflight guard with a no-cache URL.
+ * v23.5.4 bridge: loads strict visit GPS truth + boss review with a no-cache URL.
  */
 (function(){
 'use strict';
@@ -91,11 +92,9 @@ function saveKey(){
   setTimeout(()=>location.reload(),220);
 }
 
-// Keep compatibility with buttons already rendered by v23.5.1.
 window.resantaSetYandexMapsKeyV2351=openModal;
 window.resantaOpenYandexKeyModalV23511=openModal;
 
-// Capture the click before the old inline onclick/prompt handler can run.
 document.addEventListener('click',e=>{
   const btn=e.target?.closest?.('button');
   if(!btn)return;
@@ -132,6 +131,17 @@ function loadGpsReliabilityV2353(){
 }
 loadGpsReliabilityV2353();
 
+function loadVisitGpsTruthV2354(){
+  if(window.RESANTA_VISIT_GPS_TRUTH_V2354||document.querySelector('script[data-visit-gps-truth-v2354]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/18-visit-gps-truth-v2354.js?_='+Date.now();
+  s.async=false;
+  s.dataset.visitGpsTruthV2354='1';
+  s.onerror=()=>console.warn('Visit GPS truth v23.5.4 failed to load; previous route truth remains available.');
+  document.head.appendChild(s);
+}
+loadVisitGpsTruthV2354();
+
 window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
   version:VERSION,
   modalInput:true,
@@ -143,6 +153,7 @@ window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
   osmFallbackUntouched:true,
   routePilot:'v23.5.2',
   routePilotReadOnly:true,
-  gpsReliability:'v23.5.3'
+  gpsReliability:'v23.5.3',
+  visitGpsTruth:'v23.5.4'
 });
 })();
