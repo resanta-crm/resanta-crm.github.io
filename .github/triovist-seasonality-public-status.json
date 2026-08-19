@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "version": "v23.5.0",
+  "history_from": "2023-02",
+  "history_to": "2026-07",
+  "checked_at": "2026-08-19T11:13:51.365246+00:00",
+  "source_sha": "c43d284ee45b70647e41642cb739583215eda1c7",
+  "url": "https://resanta-crm.by/data/triovist_seasonality.json?v=23.5.0"
+}
