@@ -13,7 +13,7 @@ if(window.RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363)return;
 const VERSION='v23.6.3';
 let substitutions=[],subLoadedAt=0,subFlight=null;
 const norm=v=>String(v||'').trim().toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ');
-const today=()=>String(window.TODAY||new Date().toISOString().slice(0,10));
+const today=()=>String((typeof TODAY!=='undefined'&&TODAY)||new Date().toISOString().slice(0,10));
 function actor(){try{return typeof promoActorName==='function'?String(promoActorName()||'').trim():'';}catch(_){return '';}}
 function isActiveSubstitute(managerName,actorName){const m=norm(managerName),a=norm(actorName||actor());if(!m||!a)return false;return substitutions.some(x=>norm(x.manager_name)===m&&norm(x.substitute_name)===a&&String(x.status||'').toLowerCase()==='active'&&String(x.date_from||'')<=today()&&String(x.date_to||'')>=today());}
 async function refreshSubstitutions(force=false){
