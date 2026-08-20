@@ -45,7 +45,7 @@ function patchPermissions(){
 }
 function patchRender(){
   const base=window.renderPromotions;if(typeof base!=='function')return;
-  window.renderPromotions=function(){const r=base.apply(this,arguments);const b=document.getElementById('promo-create-btn');if(b&&typeof promoIsBoss==='function'&&promoIsBoss())b.style.display='inline-flex';return r;};
+  window.renderPromotions=function(){refreshSubstitutions(false);const r=base.apply(this,arguments);const b=document.getElementById('promo-create-btn');if(b&&typeof promoIsBoss==='function'&&promoIsBoss())b.style.display='inline-flex';return r;};
   try{renderPromotions=window.renderPromotions;}catch(_){}
 }
 function labelSubstituteAction(){
@@ -63,5 +63,4 @@ function install(){
   }catch(e){console.error('Promotions '+VERSION+' NOT installed safely:',e);return false;}
 }
 if(!install()){let tries=0;const timer=setInterval(()=>{tries++;if(install()||tries>=60)clearInterval(timer);},250);}
-setInterval(()=>refreshSubstitutions(false),60000);
 })();
