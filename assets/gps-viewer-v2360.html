@@ -1,29 +1,253 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#185FA5"><title>GPS маршрут · Ресанта CRM</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
-:root{--a:#185FA5;--bg:#F8FAFC;--border:#E5E7EB;--text:#111827;--sub:#6B7280;--r:#991B1B;--am:#92400E;--g:#166534}*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text)}header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);padding:12px 18px;display:flex;align-items:center;gap:12px}header b{font-size:18px}header span{font-size:12px;color:var(--sub)}main{max-width:1180px;margin:0 auto;padding:18px}.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.kpi{padding:12px;background:#F9FAFB;border-radius:10px}.kpi small{display:block;color:var(--sub);margin-bottom:4px}.kpi strong{font-size:21px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.btn{border:1px solid var(--border);background:#fff;padding:9px 13px;border-radius:9px;cursor:pointer;font-size:13px}.btn.primary{background:var(--a);color:#fff;border-color:var(--a)}#map{height:min(68vh,700px);min-height:420px;border-radius:12px;overflow:hidden;background:#EEF2F7}.msg{padding:12px;border-radius:10px;font-size:13px;line-height:1.5}.info{background:#EFF6FF;color:#1E3A8A;border:1px solid #BFDBFE}.bad{background:#FEF2F2;color:var(--r);border:1px solid #FECACA}.warn{background:#FFFBEB;color:var(--am);border:1px solid #FDE68A}.muted{color:var(--sub);font-size:12px}.hide{display:none}.visit{display:grid;grid-template-columns:42px minmax(220px,1fr) minmax(180px,.8fr);gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--border)}.num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#EFF6FF;color:#1D4ED8}.st-ok{color:var(--g);font-weight:800}.st-warn{color:#B45309;font-weight:800}.st-bad{color:#B91C1C;font-weight:800}.st-muted{color:var(--sub);font-weight:700}.stop{padding:9px 0;border-top:1px solid var(--border);font-size:13px}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:8px}@media(max-width:700px){main{padding:10px}#map{min-height:480px}.kpis{grid-template-columns:1fr 1fr}.visit{grid-template-columns:38px 1fr}.visit>div:last-child{grid-column:2}}
-</style></head><body><header><b>📍 GPS маршрут</b><span id="head">Ресанта CRM · посещения и остановки</span><div style="flex:1"></div><button class="btn" onclick="window.close()">Закрыть</button></header><main><div id="status" class="msg info">Проверяю авторизацию и готовлю агрегированный маршрут…</div><section id="content" class="hide"><div class="card"><div class="row"><div><div id="title" style="font-size:18px;font-weight:800"></div><div id="meta" class="muted" style="margin-top:4px"></div></div><div style="flex:1"></div><button id="refresh" class="btn primary">Обновить сейчас</button></div><div class="kpis" style="margin-top:14px"><div class="kpi"><small>Пробег</small><strong id="km">—</strong></div><div class="kpi"><small>GPS-точек</small><strong id="pts">—</strong></div><div class="kpi"><small>Физ. остановок ≥5 мин</small><strong id="stops">—</strong></div><div class="kpi"><small>План / GPS-факт</small><strong id="pf">—</strong></div><div class="kpi"><small>Отчёт без GPS</small><strong id="review">—</strong></div><div class="kpi"><small>Не подтверждено</small><strong id="missed">—</strong></div></div></div><div class="card"><div id="mapStatus" class="msg info" style="margin-bottom:10px">Подключаю Яндекс Карты…</div><div id="map"></div><div class="legend"><span>🟠 1,2,3… — реальные физические остановки</span><span>🟢 ТТ — посещение подтверждено GPS/отчётом</span><span>🟡 — отчёт есть, GPS не подтвердил</span><span>🔴 — GPS рядом не найден</span></div></div><div class="card"><b>Плановые ТТ и подтверждение посещения</b><div id="visits" class="muted" style="margin-top:8px">Загружаю…</div></div><div class="card"><b>Физические остановки по GPS</b><div class="muted" style="margin-top:5px">Остановка считается физической, если менеджер находился в одной зоне не менее 5 минут. Одна остановка никогда не засчитывается двум ТТ.</div><div id="stopList" style="margin-top:8px"></div></div><div class="card"><b>Обновление в реальном времени</b><div class="muted" style="line-height:1.55;margin-top:7px">Телефон продолжает писать сырые GPS-точки постоянно. Этот экран раз в 60 секунд тихо перестраивает серверный агрегат активного дня. В браузер загружаются только до 220 точек линии, готовые остановки и статусы ТТ — поэтому основная CRM не зависает.</div></div></section></main><script>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#185FA5">
+<title>GPS маршрут · Ресанта CRM</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--a:#185FA5;--bg:#F8FAFC;--border:#E5E7EB;--text:#111827;--sub:#6B7280;--r:#991B1B;--am:#92400E;--g:#166534}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);padding:12px 18px;display:flex;align-items:center;gap:12px}
+header b{font-size:18px}header span{font-size:12px;color:var(--sub)}main{max-width:1220px;margin:0 auto;padding:18px}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(145px,1fr));gap:10px}.kpi{padding:12px;background:#F9FAFB;border-radius:10px}.kpi small{display:block;color:var(--sub);margin-bottom:4px}.kpi strong{font-size:23px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.btn{border:1px solid var(--border);background:#fff;padding:9px 13px;border-radius:9px;cursor:pointer;font-size:13px}.btn.primary{background:var(--a);color:#fff;border-color:var(--a)}
+#map{height:min(68vh,700px);min-height:460px;border-radius:12px;overflow:hidden;background:#EEF2F7}
+.msg{padding:12px;border-radius:10px;font-size:13px;line-height:1.5}.info{background:#EFF6FF;color:#1E3A8A;border:1px solid #BFDBFE}.bad{background:#FEF2F2;color:var(--r);border:1px solid #FECACA}.warnbox{background:#FFFBEB;color:var(--am);border:1px solid #FDE68A}
+.muted{color:var(--sub);font-size:12px}.hide{display:none}
+.visit{display:grid;grid-template-columns:42px minmax(260px,1fr) minmax(260px,.9fr);gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--border)}
+.num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#EFF6FF;color:#1D4ED8}
+.st-ok{color:var(--g);font-weight:800}.st-warn{color:#B45309;font-weight:800}.st-bad{color:#B91C1C;font-weight:800}.st-muted{color:var(--sub);font-weight:700}
+.offplan{padding:11px 0;border-top:1px solid var(--border)}.stop{padding:9px 0;border-top:1px solid var(--border);font-size:13px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:8px}
+details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;margin-bottom:14px}details.diag>summary{cursor:pointer;padding:14px 16px;font-weight:800}details.diag .inside{padding:0 16px 16px}
+@media(max-width:760px){main{padding:10px}#map{min-height:480px}.kpis{grid-template-columns:1fr 1fr}.visit{grid-template-columns:38px 1fr}.visit>div:last-child{grid-column:2}}
+</style>
+</head>
+<body>
+<header><b>📍 Маршрут менеджера</b><span id="head">Ресанта CRM · контроль руководителя</span><div style="flex:1"></div><button class="btn" onclick="window.close()">Закрыть</button></header>
+<main>
+<div id="status" class="msg info">Проверяю данные рабочего дня…</div>
+<section id="content" class="hide">
+  <div class="card">
+    <div class="row">
+      <div><div id="title" style="font-size:18px;font-weight:800"></div><div id="meta" class="muted" style="margin-top:4px"></div></div>
+      <div style="flex:1"></div>
+      <button id="refresh" class="btn primary">Обновить сейчас</button>
+    </div>
+    <div class="kpis" style="margin-top:14px">
+      <div class="kpi"><small>Пробег</small><strong id="km">—</strong></div>
+      <div class="kpi"><small>Клиентов посещено</small><strong id="visTotal">—</strong></div>
+      <div class="kpi"><small>План</small><strong id="pf">—</strong></div>
+      <div class="kpi"><small>GPS к проверке</small><strong id="warnings">—</strong></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <div id="mapStatus" class="msg info" style="flex:1;margin:0">Подключаю карту…</div>
+      <button id="focusNow" class="btn">📍 Где сейчас</button>
+      <button id="focusRoute" class="btn">🛣 Весь маршрут</button>
+      <button id="focusPlan" class="btn">🗓 Весь план</button>
+      <button id="toggleStops" class="btn">🔧 Диагностика GPS</button>
+    </div>
+    <div id="map"></div>
+    <div class="legend">
+      <span>🟢 клиент посещён</span>
+      <span>🟡 отчёт есть, GPS требует проверки</span>
+      <span>🔴 плановый клиент пока не посещён</span>
+      <span>🔵 внеплановый визит</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>Плановые клиенты</b>
+    <div class="muted" style="margin-top:5px">Главный факт — был менеджер у клиента или нет. Качество GPS показывается отдельно и не стирает записанный визит.</div>
+    <div id="visits" style="margin-top:8px"></div>
+  </div>
+
+  <div id="offplanCard" class="card hide">
+    <b>Внеплановые визиты</b>
+    <div class="muted" style="margin-top:5px">Клиенты, у которых менеджер был сегодня, но которых нет в утверждённом плане на этот день.</div>
+    <div id="offplanList" style="margin-top:8px"></div>
+  </div>
+
+  <details class="diag">
+    <summary>🔧 Диагностика GPS — технические данные</summary>
+    <div class="inside">
+      <div id="diagSummary" class="muted"></div>
+      <div id="stopList" style="margin-top:8px"></div>
+    </div>
+  </details>
+</section>
+</main>
+<script>
 'use strict';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co',SUPABASE_KEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-const qs=new URLSearchParams(location.search),workday=qs.get('workday');let aggregate=null,map=null,busy=false,autoTimer=null;
+const qs=new URLSearchParams(location.search),workday=qs.get('workday');
+let aggregate=null,map=null,busy=false,autoTimer=null,mapRouteCoords=[],mapPlanCoords=[],stopCollection=null,stopsVisible=false;
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function setStatus(text,kind='info'){const e=$('status');e.className='msg '+kind;e.innerHTML=text;}
 function km(v){return((Number(v)||0)/1000).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})+' км';}
 function dt(v){if(!v)return'—';return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
 function tm(v){if(!v)return'—';return new Date(v).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
+function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000?Math.round(n)+' м':(n/1000).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:2})+' км';}
+function validCoord(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));}
+function coord(lat,lng){return validCoord(lat)&&validCoord(lng)?[Number(lat),Number(lng)]:null;}
 function key(){try{return String(localStorage.getItem('resanta_yandex_maps_api_key_v2358')||localStorage.getItem('resanta_yandex_maps_api_key_v2351')||'').trim();}catch(_){return'';}}
 async function ensureAuth(){const {data,error}=await db.auth.getSession();if(error)throw error;if(!data?.session)throw new Error('Нет активной сессии CRM. Вернитесь в CRM, войдите и откройте маршрут снова.');}
-async function getAggregate(rebuild=false){if(!workday)throw new Error('Не указан рабочий день.');const fn=rebuild?'gps_rebuild_workday_aggregate_v2361':'gps_get_workday_aggregate';const {data,error}=await db.rpc(fn,{p_workday_id:workday});if(error)throw error;return data||{};}
-function stale(a){if(!a||!Object.keys(a).length)return true;if(a.aggregation_status!=='ready')return true;const src=new Date(a.source_last_point_at||0).getTime(),gen=new Date(a.generated_at||0).getTime();return src&&(!gen||src>gen);}
-function stateInfo(s){return({confirmed:['✅ Подтверждено','st-ok'],gps_and_report:['✅ GPS + отчёт','st-ok'],gps_only:['📍 GPS был · отчёта нет','st-ok'],report_no_gps:['⚠️ Отчёт есть · GPS не подтвердил','st-warn'],no_coordinates:['? Координаты ТТ не выверены','st-muted'],not_seen:['❌ GPS рядом не найден','st-bad']})[s]||['—','st-muted'];}
-function renderVisits(a){const plans=Array.isArray(a.planned_points)?a.planned_points:[];if(!plans.length){$('visits').innerHTML='<div class="muted">На этот день плановых ТТ нет.</div>';return;}$('visits').innerHTML=plans.map(p=>{const st=stateInfo(p.state),stop=p.stop_seq?`Остановка №${p.stop_seq} · ${Number(p.stop_minutes||0).toFixed(0)} мин · ${Math.round(Number(p.distance_m||0))} м от ТТ`:'';const report=p.report_exists?`Отчёт: ${esc(p.report_gps_status||'есть')}`:'Отчёта пока нет';const coord=p.coord_source==='missing'?' · координаты отсутствуют':'';return `<div class="visit"><div class="num">${esc(p.sort_order||'?')}</div><div><div style="font-weight:800">${esc(p.client_name||'Клиент')}</div><div class="muted">${esc([p.city,p.address].filter(Boolean).join(', '))}${coord}</div></div><div><div class="${st[1]}">${st[0]}</div><div class="muted" style="margin-top:3px">${stop||report}</div></div></div>`}).join('');}
-function renderStops(a){const stops=Array.isArray(a.physical_stops)?a.physical_stops:[],plans=Array.isArray(a.planned_points)?a.planned_points:[];if(!stops.length){$('stopList').innerHTML='<div class="muted">Физических остановок ≥5 минут пока не найдено.</div>';return;}$('stopList').innerHTML=stops.map(s=>{const p=plans.find(x=>Number(x.stop_seq)===Number(s.seq));return `<div class="stop"><b>🟠 №${s.seq}</b> · ${tm(s.start_at)}—${tm(s.end_at)} · <b>${Number(s.minutes||0).toFixed(0)} мин</b>${p?` · <span class="st-ok">${esc(p.client_name)}</span>`:' · <span class="muted">не сопоставлена с плановой ТТ</span>'}<div class="muted">точек остановки: ${s.samples||0} · средняя точность ±${Number(s.avg_accuracy||0).toFixed(0)} м</div></div>`}).join('');}
-function render(a){aggregate=a;$('content').classList.remove('hide');$('status').classList.add('hide');$('title').textContent=(a.manager_name||'Менеджер')+' · '+(a.work_date||'');$('meta').textContent='Агрегат: '+(a.aggregation_status||'—')+' · построен '+dt(a.generated_at)+' · последняя GPS '+dt(a.source_last_point_at);$('head').textContent=(a.manager_name||'GPS')+' · '+(a.work_date||'');$('km').textContent=km(a.distance_m);$('pts').textContent=(a.valid_points||0)+' / '+(a.raw_points||0);$('stops').textContent=a.stop_count||0;$('pf').textContent=(a.visited_count||0)+' / '+(a.planned_count||0);$('review').textContent=a.review_count||0;$('missed').textContent=a.missed_count||0;renderVisits(a);renderStops(a);drawMap(a).catch(e=>{$('mapStatus').className='msg bad';$('mapStatus').textContent='Карта не открылась: '+(e.message||e);});scheduleAuto();}
+async function getAggregate(rebuild=false){
+  if(!workday)throw new Error('Не указан рабочий день.');
+  const fn=rebuild?'gps_rebuild_workday_aggregate_v2362':'gps_get_workday_aggregate_director_v2362';
+  const {data,error}=await db.rpc(fn,{p_workday_id:workday});
+  if(error)throw error;
+  return data||{};
+}
+function stale(a){
+  if(!a||!Object.keys(a).length)return true;
+  if(a.director_version!=='v23.6.2')return true;
+  if(a.aggregation_status!=='ready')return true;
+  const src=new Date(a.source_last_point_at||0).getTime(),gen=new Date(a.generated_at||0).getTime();
+  return !!(src&&(!gen||src>gen));
+}
+function pendingText(a){return a?.workday_status==='active'?'⏳ Пока не посещён':'❌ Не посещён';}
+function visitPresentation(p,a){
+  const state=String(p.state||'');
+  if(['confirmed','gps_and_report','gps_only'].includes(state)){
+    if(p.gps_warning){
+      const d=Number(p.report_gps_distance);
+      return {cls:'st-ok',title:'✅ Визит записан',note:'⚠ GPS требует проверки'+(Number.isFinite(d)&&d>0?' · точка отчёта отличается на '+dist(d):'')};
+    }
+    if(state==='gps_only')return{cls:'st-ok',title:'📍 Был у клиента по GPS',note:'Отчёт о визите ещё не записан'};
+    if(state==='gps_and_report')return{cls:'st-ok',title:'✅ Был у клиента',note:'GPS + отчёт подтверждены'};
+    if(String(p.gps_quality)==='confirmed')return{cls:'st-ok',title:'✅ Был у клиента',note:'GPS подтверждён'};
+    return{cls:'st-ok',title:'✅ Визит записан',note:'Посещение связано с маршрутом'};
+  }
+  if(state==='report_no_gps')return{cls:'st-warn',title:'⚠ Отчёт есть, GPS не подтвердил',note:p.report_gps_distance?'Расхождение '+dist(p.report_gps_distance):'Нужна проверка руководителя'};
+  if(state==='no_coordinates')return{cls:'st-warn',title:'⚠ Нет координат клиента',note:'GPS не может подтвердить эту ТТ, пока не выверена точка'};
+  return{cls:a?.workday_status==='active'?'st-muted':'st-bad',title:pendingText(a),note:'Отчёта и подтверждения посещения пока нет'};
+}
+function renderVisits(a){
+  const plans=Array.isArray(a.planned_points)?a.planned_points:[];
+  if(!plans.length){$('visits').innerHTML='<div class="muted">На этот день плановых ТТ нет.</div>';return;}
+  $('visits').innerHTML=plans.map(p=>{
+    const st=visitPresentation(p,a);
+    const where=[p.city,p.address].filter(Boolean).join(', ');
+    return `<div class="visit">
+      <div class="num">${esc(p.sort_order||'?')}</div>
+      <div><div style="font-weight:800">${esc(p.client_name||'Клиент')}</div><div class="muted">${esc(where||'Адрес не заполнен')}</div></div>
+      <div><div class="${st.cls}">${esc(st.title)}</div><div class="muted" style="margin-top:4px">${esc(st.note)}</div></div>
+    </div>`;
+  }).join('');
+}
+function renderOffplan(a){
+  const rows=Array.isArray(a.offplan_visits)?a.offplan_visits:[];
+  const card=$('offplanCard');
+  if(!rows.length){card.classList.add('hide');$('offplanList').innerHTML='';return;}
+  card.classList.remove('hide');
+  $('offplanList').innerHTML=rows.map(v=>{
+    const ok=String(v.gps_status||'').toLowerCase()==='confirmed'&&!v.gps_warning;
+    const note=ok?'GPS подтверждён'+(v.gps_distance!=null?' · '+dist(v.gps_distance):''):'GPS требует проверки'+(v.gps_distance!=null?' · '+dist(v.gps_distance):'');
+    return `<div class="offplan"><b>🔵 ${esc(v.client_name||'Клиент')}</b> · ${tm(v.created_at)}<div class="${ok?'st-ok':'st-warn'}" style="font-size:12px;margin-top:4px">✅ Вне плана · ${esc(note)}</div>${v.result?`<div class="muted" style="margin-top:3px">${esc(v.result)}</div>`:''}</div>`;
+  }).join('');
+}
+function renderDiagnostics(a){
+  const stops=Array.isArray(a.physical_stops)?a.physical_stops:[];
+  $('diagSummary').textContent='GPS-точек: '+(a.valid_points||0)+' валидных / '+(a.raw_points||0)+' сырых · физических остановок ≥5 минут: '+stops.length+'. Эти цифры диагностические и не являются количеством клиентов.';
+  if(!stops.length){$('stopList').innerHTML='<div class="muted">Физических остановок ≥5 минут пока не найдено.</div>';return;}
+  const plans=Array.isArray(a.planned_points)?a.planned_points:[];
+  $('stopList').innerHTML=stops.map(s=>{
+    const p=plans.find(x=>Number(x.stop_seq)===Number(s.seq));
+    return `<div class="stop"><b>Остановка ${s.seq}</b> · ${tm(s.start_at)}—${tm(s.end_at)} · <b>${Number(s.minutes||0).toFixed(0)} мин</b>${p?` · <span class="st-ok">${esc(p.client_name)}</span>`:' · <span class="muted">не сопоставлена с плановой ТТ</span>'}<div class="muted">точек: ${s.samples||0} · средняя точность ±${Number(s.avg_accuracy||0).toFixed(0)} м</div></div>`;
+  }).join('');
+}
+function render(a){
+  aggregate=a;$('content').classList.remove('hide');$('status').classList.add('hide');
+  $('title').textContent=(a.manager_name||'Менеджер')+' · '+(a.work_date||'');
+  $('meta').textContent='Последняя GPS '+dt(a.source_last_point_at)+' · данные обновлены '+dt(a.generated_at);
+  $('head').textContent=(a.manager_name||'GPS')+' · '+(a.work_date||'');
+  $('km').textContent=km(a.distance_m);
+  $('visTotal').textContent=String(a.visit_total||0)+(Number(a.offplan_count)>0?' (+'+a.offplan_count+' вне плана)':'');
+  $('pf').textContent=(a.visited_count||0)+' / '+(a.planned_count||0);
+  $('warnings').textContent=a.gps_warning_count||0;
+  renderVisits(a);renderOffplan(a);renderDiagnostics(a);
+  drawMap(a).catch(e=>{$('mapStatus').className='msg bad';$('mapStatus').textContent='Карта не открылась: '+(e.message||e);});
+  scheduleAuto();
+}
 function loadYandex(){return new Promise((resolve,reject)=>{if(window.ymaps){ymaps.ready(()=>resolve(ymaps));return;}const api=key();if(!api){reject(new Error('API-ключ Яндекс Карт не найден в этом браузере. Откройте GPS-контроль в CRM и подключите Яндекс Карты.'));return;}const s=document.createElement('script');s.src='https://api-maps.yandex.ru/2.1/?apikey='+encodeURIComponent(api)+'&lang=ru_RU';s.async=true;s.onload=()=>window.ymaps?ymaps.ready(()=>resolve(ymaps)):reject(new Error('Яндекс API не инициализирован'));s.onerror=()=>reject(new Error('Не удалось загрузить API Яндекс Карт'));document.head.appendChild(s);});}
-async function drawMap(a){const y=await loadYandex(),rows=Array.isArray(a.route_points)?a.route_points:[],stops=Array.isArray(a.physical_stops)?a.physical_stops:[],plans=Array.isArray(a.planned_points)?a.planned_points:[];$('mapStatus').className='msg info';$('mapStatus').textContent=`Маршрут: ${rows.length} агрегированных точек · физических остановок: ${stops.length} · плановых ТТ: ${plans.length}.`;if(map){try{map.destroy()}catch(_){}map=null;}const center=rows.length?[Number(rows[rows.length-1].lat),Number(rows[rows.length-1].lng)]:[55.19,30.20];map=new y.Map('map',{center,zoom:13,controls:['zoomControl','typeSelector','fullscreenControl']},{suppressMapOpenBlock:true});let bounds=[];if(rows.length>1){const coords=rows.map(p=>[Number(p.lat),Number(p.lng)]).filter(p=>p.every(Number.isFinite));bounds=bounds.concat(coords);const line=new y.Polyline(coords,{}, {strokeColor:'#1666d3',strokeWidth:5,strokeOpacity:.92});map.geoObjects.add(line);map.geoObjects.add(new y.Placemark(coords[0],{hintContent:'Начало маршрута'},{preset:'islands#greenCircleDotIcon'}));map.geoObjects.add(new y.Placemark(coords[coords.length-1],{hintContent:'Последняя GPS-точка'},{preset:'islands#redCircleDotIcon'}));}
-for(const s of stops){const c=[Number(s.lat),Number(s.lng)];if(!c.every(Number.isFinite))continue;bounds.push(c);const p=plans.find(x=>Number(x.stop_seq)===Number(s.seq));map.geoObjects.add(new y.Placemark(c,{iconContent:String(s.seq),hintContent:`Остановка №${s.seq} · ${Number(s.minutes||0).toFixed(0)} мин`,balloonContent:`<b>Физическая остановка №${s.seq}</b><br>${tm(s.start_at)}—${tm(s.end_at)} · ${Number(s.minutes||0).toFixed(0)} мин${p?`<br><b>${esc(p.client_name)}</b>`:'<br>Не сопоставлена с плановой ТТ'}`},{preset:'islands#orangeCircleIcon'}));}
-for(const p of plans){const c=[Number(p.lat),Number(p.lng)];if(!c.every(Number.isFinite))continue;bounds.push(c);const good=['confirmed','gps_and_report','gps_only'].includes(p.state),warn=p.state==='report_no_gps',preset=good?'islands#greenCircleIcon':warn?'islands#yellowCircleIcon':'islands#redCircleIcon',st=stateInfo(p.state)[0];map.geoObjects.add(new y.Placemark(c,{iconContent:String(p.sort_order||''),hintContent:`ТТ ${p.sort_order}: ${p.client_name}`,balloonContent:`<b>ТТ ${p.sort_order}. ${esc(p.client_name)}</b><br>${esc([p.city,p.address].filter(Boolean).join(', '))}<br><b>${esc(st)}</b>${p.stop_seq?`<br>Физическая остановка №${p.stop_seq} · ${Number(p.stop_minutes||0).toFixed(0)} мин`:''}`},{preset}));}
-if(bounds.length>1){try{map.setBounds(bounds,{checkZoomRange:true,zoomMargin:35});}catch(_){}}}
-async function boot(force=false,quiet=false){if(busy)return;busy=true;try{if(!quiet)setStatus(force?'Перестраиваю остановки и посещения на сервере…':'Проверяю агрегат…');await ensureAuth();let a=await getAggregate(force);if(!force&&stale(a)){if(!quiet)setStatus('Есть новые GPS-точки — обновляю остановки и посещения…');a=await getAggregate(true);}render(a);}catch(e){console.error(e);if(!quiet)setStatus('<b>Не удалось открыть GPS-маршрут.</b><br>'+esc(e?.message||e),'bad');}finally{busy=false;}}
+function safeBounds(coords){const c=(coords||[]).filter(x=>Array.isArray(x)&&x.length===2&&x.every(Number.isFinite));if(c.length>1){try{map.setBounds(c,{checkZoomRange:true,zoomMargin:45});return true;}catch(_){}}if(c.length===1){map.setCenter(c[0],14);return true;}return false;}
+function focusNow(){if(!mapRouteCoords.length)return;map.setCenter(mapRouteCoords[mapRouteCoords.length-1],14);}
+function focusRoute(){if(!safeBounds(mapRouteCoords))focusNow();}
+function focusPlan(){const x=[...mapPlanCoords];if(mapRouteCoords.length)x.push(mapRouteCoords[mapRouteCoords.length-1]);if(!safeBounds(x))focusNow();}
+function toggleStops(){
+  if(!map||!stopCollection)return;
+  if(stopsVisible){try{map.geoObjects.remove(stopCollection);}catch(_){}stopsVisible=false;$('toggleStops').textContent='🔧 Диагностика GPS';}
+  else{try{map.geoObjects.add(stopCollection);}catch(_){}stopsVisible=true;$('toggleStops').textContent='Скрыть GPS-остановки';}
+}
+async function drawMap(a){
+  const y=await loadYandex(),rows=Array.isArray(a.route_points)?a.route_points:[],stops=Array.isArray(a.physical_stops)?a.physical_stops:[],plans=Array.isArray(a.planned_points)?a.planned_points:[],off=Array.isArray(a.offplan_visits)?a.offplan_visits:[];
+  mapRouteCoords=rows.map(p=>coord(p.lat,p.lng)).filter(Boolean);mapPlanCoords=plans.map(p=>coord(p.lat,p.lng)).filter(Boolean);stopsVisible=false;
+  $('toggleStops').textContent='🔧 Диагностика GPS';
+  $('mapStatus').className='msg info';
+  $('mapStatus').textContent=`Посещено клиентов: ${a.visit_total||0} · по плану ${a.visited_count||0}/${a.planned_count||0}${Number(a.offplan_count)>0?' · вне плана '+a.offplan_count:''}.`;
+  if(map){try{map.destroy()}catch(_){}map=null;}
+  const center=mapRouteCoords.length?mapRouteCoords[mapRouteCoords.length-1]:mapPlanCoords.length?mapPlanCoords[0]:[55.19,30.20];
+  map=new y.Map('map',{center,zoom:14,controls:['zoomControl','typeSelector','fullscreenControl']},{suppressMapOpenBlock:true});
+
+  if(mapRouteCoords.length>1){
+    map.geoObjects.add(new y.Polyline(mapRouteCoords,{}, {strokeColor:'#1666d3',strokeWidth:5,strokeOpacity:.92}));
+    map.geoObjects.add(new y.Placemark(mapRouteCoords[0],{hintContent:'Начало рабочего маршрута'},{preset:'islands#greenCircleDotIcon'}));
+  }
+  if(mapRouteCoords.length){
+    map.geoObjects.add(new y.Placemark(mapRouteCoords[mapRouteCoords.length-1],{hintContent:'Менеджер сейчас / последняя GPS',balloonContent:'<b>Последняя GPS-точка</b><br>'+esc(dt(a.source_last_point_at))},{preset:'islands#blueCircleDotIcon'}));
+  }
+
+  for(const p of plans){
+    const c=coord(p.lat,p.lng);if(!c)continue;
+    const good=['confirmed','gps_and_report','gps_only'].includes(String(p.state||'')),warn=String(p.state||'')==='report_no_gps'||!!p.gps_warning;
+    const preset=good&&!warn?'islands#greenCircleIcon':warn?'islands#yellowCircleIcon':'islands#redCircleIcon';
+    const st=visitPresentation(p,a);
+    map.geoObjects.add(new y.Placemark(c,{hintContent:p.client_name||'Клиент',balloonContent:`<b>${esc(p.client_name||'Клиент')}</b><br>${esc([p.city,p.address].filter(Boolean).join(', '))}<br><b>${esc(st.title)}</b><br>${esc(st.note)}`},{preset}));
+  }
+
+  for(const v of off){
+    const c=coord(v.lat,v.lng);if(!c)continue;
+    map.geoObjects.add(new y.Placemark(c,{hintContent:'Вне плана: '+(v.client_name||'Клиент'),balloonContent:`<b>Внеплановый визит</b><br>${esc(v.client_name||'Клиент')}<br>${tm(v.created_at)} · ${esc(String(v.gps_status||'GPS не указан'))}`},{preset:'islands#blueCircleIcon'}));
+  }
+
+  stopCollection=new y.GeoObjectCollection();
+  for(const s of stops){
+    const c=coord(s.lat,s.lng);if(!c)continue;
+    const p=plans.find(x=>Number(x.stop_seq)===Number(s.seq));
+    stopCollection.add(new y.Placemark(c,{iconContent:String(s.seq),hintContent:`GPS-остановка ${s.seq} · ${Number(s.minutes||0).toFixed(0)} мин`,balloonContent:`<b>Техническая GPS-остановка ${s.seq}</b><br>${tm(s.start_at)}—${tm(s.end_at)} · ${Number(s.minutes||0).toFixed(0)} мин${p?`<br>${esc(p.client_name)}`:''}`},{preset:'islands#orangeCircleIcon'}));
+  }
+
+  focusNow();
+}
+async function boot(force=false,quiet=false){
+  if(busy)return;busy=true;
+  try{
+    if(!quiet)setStatus(force?'Обновляю маршрут и визиты…':'Проверяю маршрут…');
+    await ensureAuth();
+    let a=await getAggregate(force);
+    if(!force&&stale(a)){if(!quiet)setStatus('Есть новые данные — обновляю маршрут и посещения…');a=await getAggregate(true);}
+    render(a);
+  }catch(e){
+    console.error(e);
+    if(!quiet)setStatus('<b>Не удалось открыть GPS-маршрут.</b><br>'+esc(e?.message||e),'bad');
+  }finally{busy=false;}
+}
 function scheduleAuto(){clearInterval(autoTimer);if(aggregate?.workday_status==='active'){autoTimer=setInterval(()=>{if(!document.hidden)boot(true,true);},60000);}}
-$('refresh').addEventListener('click',()=>boot(true,false));document.addEventListener('visibilitychange',()=>{if(!document.hidden&&aggregate?.workday_status==='active')boot(false,true);});boot(false,false);
-</script></body></html>
+$('refresh').addEventListener('click',()=>boot(true,false));
+$('focusNow').addEventListener('click',focusNow);
+$('focusRoute').addEventListener('click',focusRoute);
+$('focusPlan').addEventListener('click',focusPlan);
+$('toggleStops').addEventListener('click',toggleStops);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&aggregate?.workday_status==='active')boot(false,true);});
+boot(false,false);
+</script>
+</body>
+</html>
