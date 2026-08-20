@@ -158,3 +158,16 @@ window.RESANTA_GPS_RELIABILITY_V2353=Object.freeze({
   distanceUntouched:true
 });
 })();
+
+// v23.5.8 no-cache bridge. This file itself is already loaded with Date.now() by the
+// Yandex key-modal bridge, so the hard-stop reaches browsers even when an older
+// index/14-routes asset is still cached.
+(function loadGpsHardStopV2358(){
+  if(window.RESANTA_GPS_HARD_STOP_V2358||document.querySelector('script[data-gps-hard-stop-v2358]'))return;
+  const s=document.createElement('script');
+  s.src='./assets/22-gps-hard-stop-v2358.js?_='+Date.now();
+  s.async=false;
+  s.dataset.gpsHardStopV2358='1';
+  s.onerror=()=>console.warn('GPS hard-stop v23.5.8 failed to load; base GPS remains available.');
+  document.head.appendChild(s);
+})();
