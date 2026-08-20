@@ -1,222 +1,43 @@
-/* RESANTA CRM v23.5.4 · VISIT GPS TRUTH
- * Strict route truth from 2026-08-19 forward:
- * - a task report never proves a physical visit;
- * - a route visit is auto-confirmed only when the saved visit has gps_status=confirmed;
- * - no_gps / unverified / far visits go to a boss review queue;
- * - boss can explicitly confirm or reject the physical visit using existing route_plans fields;
- * - no schema changes; old route history before the cutoff keeps the previous logic.
+/* RESANTA CRM v23.6.0 · VISIT GPS TRUTH (LAZY)
+ * Preserves strict route truth from 2026-08-19, but never scans all visits on CRM startup.
  */
 (function(){
 'use strict';
 if(window.RESANTA_VISIT_GPS_TRUTH_V2354)return;
-const VERSION='v23.5.4';
-const STRICT_FROM='2026-08-19';
-const PENDING='gps_review_pending';
-const BOSS_OK='boss_confirmed_gps_review';
-const BOSS_NO='boss_rejected_gps_review';
-const AUTO_OK='verified_visit_gps';
-
-const norm=v=>String(v==null?'':v).trim();
-const escHtml=v=>String(v==null?'':v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-function allVisitsSafe(){try{return Array.isArray(allVisits)?allVisits:[];}catch(_){return[];}}
-function allRoutesSafe(){try{return Array.isArray(allRoutePlans)?allRoutePlans:[];}catch(_){return[];}}
-function role(){try{return currentProfile?.role||'';}catch(_){return'';}}
-function isBoss(){return role()==='boss';}
-function routeId(r){try{return typeof routePlanId==='function'?routePlanId(r):String(r?.id||'');}catch(_){return String(r?.id||'');}}
+const VERSION='v23.6.0',STRICT_FROM='2026-08-19',PENDING='gps_review_pending',BOSS_OK='boss_confirmed_gps_review',BOSS_NO='boss_rejected_gps_review',AUTO_OK='verified_visit_gps';
+const norm=v=>String(v??'').trim(),low=v=>norm(v).toLowerCase();
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function visits(){try{return Array.isArray(allVisits)?allVisits:[];}catch(_){return[];}}
+function routes(){try{return Array.isArray(allRoutePlans)?allRoutePlans:[];}catch(_){return[];}}
+function routeId(r){try{return typeof routePlanId==='function'?String(routePlanId(r)||''):String(r?.id||'');}catch(_){return String(r?.id||'');}}
 function visitId(v){return String(v?.id||'');}
-function visitDateSafe(v){try{return typeof visitDate==='function'?visitDate(v):String(v?.date||v?.created_at||'').slice(0,10);}catch(_){return String(v?.date||v?.created_at||'').slice(0,10);}}
-function visitManager(v){try{return typeof visitManagerName==='function'?visitManagerName(v):String(v?.manager_name||'');}catch(_){return String(v?.manager_name||'');}}
-function mgrMatch(a,b){try{return typeof managerLooseMatch==='function'?managerLooseMatch(a,b):norm(a).toLowerCase()===norm(b).toLowerCase();}catch(_){return norm(a).toLowerCase()===norm(b).toLowerCase();}}
+function vDate(v){try{return typeof visitDate==='function'?String(visitDate(v)||'').slice(0,10):String(v?.date||v?.created_at||'').slice(0,10);}catch(_){return String(v?.date||v?.created_at||'').slice(0,10);}}
+function vMgr(v){try{return typeof visitManagerName==='function'?String(visitManagerName(v)||''):String(v?.manager_name||'');}catch(_){return String(v?.manager_name||'');}}
+function mgrMatch(a,b){try{return typeof managerLooseMatch==='function'?managerLooseMatch(a,b):low(a)===low(b);}catch(_){return low(a)===low(b);}}
 function clientMatch(r,v){try{return typeof routeClientMatchesVisit==='function'?routeClientMatchesVisit(r,v):String(r?.client_id||'')===String(v?.client_id||'');}catch(_){return String(r?.client_id||'')===String(v?.client_id||'');}}
-function explicitMatch(r,v){
-  try{return typeof routePlanExplicitlyLinked==='function'?routePlanExplicitlyLinked(r,v):((routeId(r)&&String(v?.route_plan_id||'')===routeId(r))||(r?.linked_visit_id&&String(r.linked_visit_id)===visitId(v)));}
-  catch(_){return false;}
-}
-function identityMatch(r,v){
-  if(!r||!v||v.is_duplicate)return false;
-  try{if(typeof routePlanIdentityMatchesVisit==='function')return routePlanIdentityMatchesVisit(r,v);}catch(_){}
-  return visitDateSafe(v)===String(r?.visit_date||'').slice(0,10)&&mgrMatch(r?.manager_name,visitManager(v))&&clientMatch(r,v);
-}
-function visitGpsConfirmed(v){return String(v?.gps_status||'').toLowerCase()==='confirmed';}
-function strictRoute(r){return String(r?.visit_date||'').slice(0,10)>=STRICT_FROM;}
-function bossConfirmed(r){return String(r?.link_status||'')===BOSS_OK;}
-function bossRejected(r){return String(r?.link_status||'')===BOSS_NO;}
-function matchingVisits(r,visits){
-  const rows=(visits||allVisitsSafe()).filter(v=>v&&!v.is_duplicate);
-  return rows.filter(v=>explicitMatch(r,v)||identityMatch(r,v));
-}
-function reviewVisitForRoute(r,visits){
-  const rows=matchingVisits(r,visits);
-  if(!rows.length)return null;
-  const linked=String(r?.linked_visit_id||'');
-  return rows.find(v=>linked&&visitId(v)===linked)
-    ||rows.slice().sort((a,b)=>String(b?.created_at||'').localeCompare(String(a?.created_at||'')))[0]
-    ||null;
-}
-function strictVerified(r,visits){
-  if(!strictRoute(r))return null;
-  const matches=matchingVisits(r,visits);
-  if(matches.some(visitGpsConfirmed))return true;
-  if(bossConfirmed(r))return true;
-  return false;
-}
-
-const baseRoutePlanVerified=(typeof window.routePlanVerified==='function'&&window.routePlanVerified)
-  ||(typeof routePlanVerified==='function'?routePlanVerified:null);
-if(baseRoutePlanVerified&&!baseRoutePlanVerified.__gpsTruthV2354){
-  const wrapped=function(r,visits,plans){
-    const strict=strictVerified(r,visits);
-    return strict===null?baseRoutePlanVerified.call(this,r,visits,plans):strict;
-  };
-  wrapped.__gpsTruthV2354=true;
-  wrapped.__base=baseRoutePlanVerified;
-  window.routePlanVerified=wrapped;
-  try{routePlanVerified=wrapped;}catch(_){}
-}
-
-function gpsLabel(v){
-  const status=String(v?.gps_status||'').toLowerCase();
-  const dist=Number(v?.gps_distance);
-  if(status==='confirmed')return {status,text:'GPS подтверждён'+(Number.isFinite(dist)?' · '+Math.round(dist)+' м':'')};
-  if(status==='far')return {status,text:'GPS вне геозоны'+(Number.isFinite(dist)?' · '+Math.round(dist)+' м':'')};
-  if(status==='unverified')return {status,text:'GPS есть, но координаты ТТ не выверены'+(Number.isFinite(dist)?' · '+Math.round(dist)+' м':'')};
-  if(status==='no_gps')return {status,text:'GPS визита не получен'};
-  return {status:status||'unknown',text:'GPS-подтверждение отсутствует'};
-}
-
-async function persistRouteState(route,visit,state,visited){
-  if(!route||!route.id)return false;
-  const upd={
-    visited:!!visited,
-    linked_visit_id:visit?.id?String(visit.id):(route.linked_visit_id||null),
-    link_status:state,
-    linked_at:new Date().toISOString()
-  };
-  try{
-    const {error}=await db.from('route_plans').update(upd).eq('id',route.id);
-    if(error){console.warn('GPS route truth state was not persisted',error);return false;}
-    Object.assign(route,upd);
-    return true;
-  }catch(e){console.warn('GPS route truth state persist failed',e);return false;}
-}
-
-async function normalizeNewVisit(v){
-  if(!v||v.is_duplicate)return;
-  const rid=String(v.route_plan_id||'');
-  if(!rid)return;
-  const route=allRoutesSafe().find(r=>routeId(r)===rid);
-  if(!route||!strictRoute(route))return;
-  if(visitGpsConfirmed(v)){
-    if(!bossConfirmed(route))await persistRouteState(route,v,AUTO_OK,true);
-    return;
-  }
-  if(bossConfirmed(route)||bossRejected(route))return;
-  await persistRouteState(route,v,PENDING,false);
-}
-
-function newVisitSince(before){
-  const rows=allVisitsSafe();
-  const created=rows.filter(v=>v?.id&&!before.has(String(v.id)));
-  if(!created.length)return null;
-  return created.slice().sort((a,b)=>String(b?.created_at||'').localeCompare(String(a?.created_at||'')))[0]||created[0];
-}
-function refreshTruthUi(){
-  try{if(typeof renderVisits==='function'&&document.getElementById('page-visits')?.classList.contains('active'))renderVisits();}catch(_){}
-  try{if(typeof buildDashboard==='function')buildDashboard();}catch(_){}
-  try{if(typeof renderAlerts==='function'&&document.getElementById('page-alerts')?.classList.contains('active'))renderAlerts();}catch(_){}
-  setTimeout(renderReviewCard,0);
-}
-function wrapSaver(name){
-  let base=null;
-  try{base=window[name]||(name==='saveVisit'&&typeof saveVisit==='function'?saveVisit:null)||(name==='saveQuickVisit'&&typeof saveQuickVisit==='function'?saveQuickVisit:null);}catch(_){}
-  if(typeof base!=='function'||base.__gpsTruthV2354)return;
-  const wrapped=async function(){
-    const before=new Set(allVisitsSafe().map(v=>String(v?.id||'')).filter(Boolean));
-    const out=await base.apply(this,arguments);
-    const v=newVisitSince(before);
-    if(v){await normalizeNewVisit(v);refreshTruthUi();}
-    return out;
-  };
-  wrapped.__gpsTruthV2354=true;wrapped.__base=base;
-  window[name]=wrapped;
-  try{if(name==='saveVisit')saveVisit=wrapped;else if(name==='saveQuickVisit')saveQuickVisit=wrapped;}catch(_){}
-}
-
-function pendingReviews(){
-  const routes=allRoutesSafe().filter(r=>r&&!r.removed&&strictRoute(r)&&r.review_status!=='pending'&&r.review_status!=='rejected');
-  const out=[];
-  for(const r of routes){
-    const matches=matchingVisits(r);
-    if(!matches.length)continue;
-    if(matches.some(visitGpsConfirmed)||bossConfirmed(r)||bossRejected(r))continue;
-    const v=reviewVisitForRoute(r,matches);
-    if(v)out.push({route:r,visit:v,gps:gpsLabel(v)});
-  }
-  return out.sort((a,b)=>String(b.route.visit_date||'').localeCompare(String(a.route.visit_date||'')));
-}
-
-async function decide(routeIdValue,visitIdValue,ok){
-  if(!isBoss()){alert('Подтвердить или отклонить визит может только руководитель.');return;}
-  const route=allRoutesSafe().find(r=>routeId(r)===String(routeIdValue));
-  const visit=allVisitsSafe().find(v=>visitId(v)===String(visitIdValue));
-  if(!route||!visit){alert('Маршрут или визит не найден. Обновите CRM и попробуйте снова.');return;}
-  const g=gpsLabel(visit);
-  const question=ok
-    ?'Подтвердить физический визит без автоматического GPS-подтверждения?\n\n'+String(route.client_name||'Клиент')+'\n'+g.text+'\n\nПодтверждайте только после проверки GPS-трека/объяснения менеджера.'
-    :'Отметить, что физический визит НЕ подтверждён?\n\n'+String(route.client_name||'Клиент')+'\n'+g.text+'\n\nТочка останется невыполненной.';
-  if(!confirm(question))return;
-  const saved=await persistRouteState(route,visit,ok?BOSS_OK:BOSS_NO,!!ok);
-  if(!saved){alert('Не удалось сохранить решение руководителя. Данные маршрута не изменены.');return;}
-  refreshTruthUi();
-}
+function explicit(r,v){try{return typeof routePlanExplicitlyLinked==='function'?routePlanExplicitlyLinked(r,v):((routeId(r)&&String(v?.route_plan_id||'')===routeId(r))||(r?.linked_visit_id&&String(r.linked_visit_id)===visitId(v)));}catch(_){return false;}}
+function identity(r,v){if(!r||!v||v.is_duplicate)return false;try{if(typeof routePlanIdentityMatchesVisit==='function')return routePlanIdentityMatchesVisit(r,v);}catch(_){}return vDate(v)===String(r?.visit_date||'').slice(0,10)&&mgrMatch(r?.manager_name,vMgr(v))&&clientMatch(r,v);}
+function strict(r){return String(r?.visit_date||'').slice(0,10)>=STRICT_FROM;}
+function gpsOk(v){return low(v?.gps_status)==='confirmed';}
+function bossOk(r){return String(r?.link_status||'')===BOSS_OK;}
+function bossNo(r){return String(r?.link_status||'')===BOSS_NO;}
+let idxSig='',byRoute=new Map(),byDateMgr=new Map(),byId=new Map();
+function indexVisits(){const rows=visits(),last=rows.length?String(rows[rows.length-1]?.id||''):'';const sig=rows.length+'|'+last;if(sig===idxSig)return;idxSig=sig;byRoute=new Map();byDateMgr=new Map();byId=new Map();for(const v of rows){if(!v||v.is_duplicate)continue;const id=visitId(v);if(id)byId.set(id,v);const rid=String(v.route_plan_id||'');if(rid){if(!byRoute.has(rid))byRoute.set(rid,[]);byRoute.get(rid).push(v);}const k=vDate(v)+'|'+low(vMgr(v));if(!byDateMgr.has(k))byDateMgr.set(k,[]);byDateMgr.get(k).push(v);}}
+function matching(r,provided){if(Array.isArray(provided))return provided.filter(v=>v&&!v.is_duplicate&&(explicit(r,v)||identity(r,v)));indexVisits();const cand=[],seen=new Set(),add=v=>{if(v&&!seen.has(visitId(v))){seen.add(visitId(v));cand.push(v);}};for(const v of byRoute.get(routeId(r))||[])add(v);if(r?.linked_visit_id)add(byId.get(String(r.linked_visit_id)));const key=String(r?.visit_date||'').slice(0,10)+'|'+low(r?.manager_name);for(const v of byDateMgr.get(key)||[])add(v);return cand.filter(v=>explicit(r,v)||identity(r,v));}
+function strictVerified(r,provided){if(!strict(r))return null;const m=matching(r,provided);if(m.some(gpsOk))return true;if(bossOk(r))return true;return false;}
+const baseVerified=(typeof window.routePlanVerified==='function'&&window.routePlanVerified)||(typeof routePlanVerified==='function'?routePlanVerified:null);
+if(baseVerified&&!baseVerified.__gpsTruthV2360){const w=function(r,v,p){const s=strictVerified(r,v);return s===null?baseVerified.call(this,r,v,p):s;};w.__gpsTruthV2360=true;w.__base=baseVerified;window.routePlanVerified=w;try{routePlanVerified=w;}catch(_){}}
+async function persist(r,v,state,visited){if(!r?.id)return false;const upd={visited:!!visited,linked_visit_id:v?.id?String(v.id):(r.linked_visit_id||null),link_status:state,linked_at:new Date().toISOString()};try{const {error}=await db.from('route_plans').update(upd).eq('id',r.id);if(error)throw error;Object.assign(r,upd);return true;}catch(e){console.warn('GPS route truth persist',e);return false;}}
+async function normalizeVisit(v){if(!v||v.is_duplicate)return;const rid=String(v.route_plan_id||'');if(!rid)return;const r=routes().find(x=>routeId(x)===rid);if(!r||!strict(r))return;if(gpsOk(v)){if(!bossOk(r))await persist(r,v,AUTO_OK,true);return;}if(!bossOk(r)&&!bossNo(r))await persist(r,v,PENDING,false);}
+function refreshActive(){idxSig='';try{if(document.getElementById('page-visits')?.classList.contains('active')&&typeof renderVisits==='function')renderVisits();}catch(_){}try{if(document.getElementById('page-alerts')?.classList.contains('active')&&typeof renderAlerts==='function')renderAlerts();}catch(_){}try{if(typeof buildDashboard==='function'&&document.getElementById('page-dashboard')?.classList.contains('active'))buildDashboard();}catch(_){} }
+function wrapSaver(name){let base=null;try{base=window[name]||(name==='saveVisit'&&typeof saveVisit==='function'?saveVisit:null)||(name==='saveQuickVisit'&&typeof saveQuickVisit==='function'?saveQuickVisit:null);}catch(_){}if(typeof base!=='function'||base.__gpsTruthV2360)return;const w=async function(){const before=new Set(visits().map(x=>visitId(x)).filter(Boolean));const out=await base.apply(this,arguments);const created=visits().filter(x=>x?.id&&!before.has(visitId(x))).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];if(created){await normalizeVisit(created);refreshActive();}return out;};w.__gpsTruthV2360=true;w.__base=base;window[name]=w;try{if(name==='saveVisit')saveVisit=w;else saveQuickVisit=w;}catch(_){} }
+function gpsLabel(v){const s=low(v?.gps_status),d=Number(v?.gps_distance),tail=Number.isFinite(d)?' · '+Math.round(d)+' м':'';if(s==='confirmed')return'GPS подтверждён'+tail;if(s==='far')return'GPS вне геозоны'+tail;if(s==='unverified')return'GPS есть, координаты ТТ не выверены'+tail;if(s==='no_gps')return'GPS визита не получен';return'GPS-подтверждение отсутствует';}
+function pending(){if(!document.getElementById('page-visits')?.classList.contains('active'))return[];indexVisits();const out=[];for(const r of routes()){if(!r||r.removed||!strict(r)||r.review_status==='pending'||r.review_status==='rejected'||bossOk(r)||bossNo(r))continue;const m=matching(r);if(!m.length||m.some(gpsOk))continue;const linked=String(r.linked_visit_id||'');const v=m.find(x=>linked&&visitId(x)===linked)||m.slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];if(v)out.push({r,v});}return out.sort((a,b)=>String(b.r.visit_date||'').localeCompare(String(a.r.visit_date||'')));}
+async function decide(rid,vid,ok){try{if(String(currentProfile?.role||'')!=='boss'){alert('Решение может принять только руководитель.');return;}}catch(_){return;}const r=routes().find(x=>routeId(x)===String(rid)),v=visits().find(x=>visitId(x)===String(vid));if(!r||!v){alert('Маршрут или визит не найден. Обновите CRM.');return;}if(!confirm((ok?'Подтвердить физический визит?':'Отметить, что физический визит НЕ подтверждён?')+'\n\n'+String(r.client_name||'Клиент')+'\n'+gpsLabel(v)))return;if(await persist(r,v,ok?BOSS_OK:BOSS_NO,!!ok)){idxSig='';renderReview();}}
 window.crmGpsVisitReviewDecisionV2354=decide;
-
-function reviewRow(x){
-  const r=x.route,v=x.visit,g=x.gps;
-  const d=String(r.visit_date||'').slice(0,10)||'—';
-  const result=String(v.result||v.text||'').trim();
-  return '<div style="padding:10px 0;border-top:1px solid var(--border);display:grid;grid-template-columns:minmax(240px,1fr) auto;gap:10px;align-items:center">'
-    +'<div><div style="font-weight:800">'+escHtml(r.client_name||'Клиент')+' <span style="font-size:11px;color:var(--sub);font-weight:600">· '+escHtml(r.manager_name||'—')+'</span></div>'
-    +'<div style="font-size:11px;color:var(--sub);margin-top:3px">план '+escHtml(d)+' · '+escHtml(g.text)+(Number.isFinite(Number(v.gps_accuracy))?' · точность ±'+Math.round(Number(v.gps_accuracy))+' м':'')+'</div>'
-    +(result?'<div style="font-size:11px;margin-top:3px"><b>Отчёт:</b> '+escHtml(result.slice(0,180))+'</div>':'')
-    +'</div>'
-    +(isBoss()?'<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn-secondary" onclick="crmGpsVisitReviewDecisionV2354(\''+escHtml(routeId(r))+'\',\''+escHtml(visitId(v))+'\',true)">✅ Подтвердить визит</button><button class="btn-secondary" style="border-color:#FCA5A5;color:#B91C1C" onclick="crmGpsVisitReviewDecisionV2354(\''+escHtml(routeId(r))+'\',\''+escHtml(visitId(v))+'\',false)">❌ Не был</button></div>':'<span class="tag tag-a">На проверке руководителя</span>')
-    +'</div>';
-}
-function renderReviewCard(){
-  const page=document.getElementById('page-visits');
-  if(!page)return;
-  let card=document.getElementById('gps-visit-review-v2354');
-  const rows=pendingReviews();
-  if(!rows.length){if(card)card.remove();return;}
-  if(!card){
-    card=document.createElement('div');card.id='gps-visit-review-v2354';card.className='card';card.style.marginBottom='12px';
-    const anchor=document.getElementById('overdue-visits-block')||page.firstElementChild;
-    if(anchor&&anchor.parentNode===page)page.insertBefore(card,anchor);else page.appendChild(card);
-  }
-  card.innerHTML='<div class="card-title" style="color:var(--am)">📍 Визиты без GPS-подтверждения — на разбор ('+rows.length+')</div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px">Отчёт менеджера сохранён, но физическое присутствие автоматически не подтверждено. Такая точка <b>не считается выполненной</b>, пока GPS не подтвердит визит или руководитель не примет решение.</div>'
-    +rows.slice(0,100).map(reviewRow).join('');
-}
-
-const baseRenderVisits=(typeof window.renderVisits==='function'&&window.renderVisits)||(typeof renderVisits==='function'?renderVisits:null);
-if(baseRenderVisits&&!baseRenderVisits.__gpsTruthV2354){
-  const wrapped=function(){const out=baseRenderVisits.apply(this,arguments);setTimeout(renderReviewCard,0);return out;};
-  wrapped.__gpsTruthV2354=true;wrapped.__base=baseRenderVisits;
-  window.renderVisits=wrapped;try{renderVisits=wrapped;}catch(_){}
-}
-
-function install(){wrapSaver('saveVisit');wrapSaver('saveQuickVisit');renderReviewCard();}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0),{once:true});else setTimeout(install,0);
-setTimeout(install,800);setTimeout(install,2200);
-
-window.RESANTA_VISIT_GPS_TRUTH_V2354=Object.freeze({
-  version:VERSION,
-  strictFrom:STRICT_FROM,
-  autoConfirmGpsStatus:'confirmed',
-  taskReportDoesNotConfirmVisit:true,
-  bossReviewFor:['no_gps','unverified','far','unknown'],
-  noSchemaChanges:true,
-  routeHistoryBeforeCutoffUntouched:true
-});
+function renderReview(){const page=document.getElementById('page-visits');if(!page||!page.classList.contains('active'))return;let card=document.getElementById('gps-visit-review-v2354');const rows=pending();if(!rows.length){card?.remove();return;}if(!card){card=document.createElement('div');card.id='gps-visit-review-v2354';card.className='card';card.style.marginBottom='12px';const a=document.getElementById('overdue-visits-block')||page.firstElementChild;if(a&&a.parentNode===page)page.insertBefore(card,a);else page.appendChild(card);}const boss=String(currentProfile?.role||'')==='boss';card.innerHTML='<div class="card-title" style="color:var(--am)">📍 Визиты без GPS-подтверждения — на разбор ('+rows.length+')</div><div style="font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px">Расчёт выполняется только при открытии этого раздела и больше не тормозит запуск CRM.</div>'+rows.slice(0,100).map(x=>'<div style="padding:9px 0;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:space-between;align-items:center"><div><b>'+esc(x.r.client_name||'Клиент')+'</b> · '+esc(x.r.manager_name||'')+'<div style="font-size:11px;color:var(--sub)">'+esc(x.r.visit_date||'')+' · '+esc(gpsLabel(x.v))+'</div></div>'+(boss?'<div style="display:flex;gap:6px"><button class="btn-secondary" onclick="crmGpsVisitReviewDecisionV2354(\''+esc(routeId(x.r))+'\',\''+esc(visitId(x.v))+'\',true)">✅ Подтвердить</button><button class="btn-secondary" onclick="crmGpsVisitReviewDecisionV2354(\''+esc(routeId(x.r))+'\',\''+esc(visitId(x.v))+'\',false)">❌ Не был</button></div>':'<span class="tag tag-a">На проверке</span>')+'</div>').join('');}
+const baseRenderVisits=(typeof window.renderVisits==='function'&&window.renderVisits)||(typeof renderVisits==='function'?renderVisits:null);if(baseRenderVisits&&!baseRenderVisits.__gpsTruthV2360){const w=function(){const out=baseRenderVisits.apply(this,arguments);if(document.getElementById('page-visits')?.classList.contains('active'))setTimeout(renderReview,0);return out;};w.__gpsTruthV2360=true;w.__base=baseRenderVisits;window.renderVisits=w;try{renderVisits=w;}catch(_){} }
+function install(){wrapSaver('saveVisit');wrapSaver('saveQuickVisit');}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();setTimeout(install,700);setTimeout(install,1800);
+window.RESANTA_VISIT_GPS_TRUTH_V2354=Object.freeze({version:VERSION,strictFrom:STRICT_FROM,lazyReview:true,noStartupVisitScan:true,indexedMatching:true,taskReportDoesNotConfirmVisit:true});
 })();
