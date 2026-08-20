@@ -26,3 +26,15 @@ function loadGpsControlPerformanceV2357(){if(window.RESANTA_GPS_CONTROL_PERFORMA
 function loadVisitGpsTruthV2354(){if(window.RESANTA_VISIT_GPS_TRUTH_V2354){loadGpsControlPerformanceV2357();return;}const existing=document.querySelector('script[data-visit-gps-truth-v2354]');if(existing){existing.addEventListener('load',loadGpsControlPerformanceV2357,{once:true});setTimeout(()=>{if(window.RESANTA_VISIT_GPS_TRUTH_V2354)loadGpsControlPerformanceV2357();},500);return;}const s=document.createElement('script');s.src='./assets/18-visit-gps-truth-v2354.js?_='+Date.now();s.async=false;s.dataset.visitGpsTruthV2354='1';s.onload=loadGpsControlPerformanceV2357;s.onerror=()=>console.warn('Visit GPS truth v23.5.4 failed to load; previous route truth remains available.');document.head.appendChild(s);}loadVisitGpsTruthV2354();
 window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({version:VERSION,modalInput:true,delegatedClick:true,promptRemoved:true,storageKey:KEY_STORAGE,gpsUntouched:true,routeLogicUntouched:true,osmFallbackUntouched:true,routePilot:'v23.5.2',routePilotReadOnly:true,gpsReliability:'v23.5.3',visitGpsTruth:'v23.5.4',gpsControlPerformance:'v23.5.7'});
 })();
+
+/* v23.6.3 bridge: promotion boss-create + active manager substitution. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363||document.querySelector('script[data-promotions-boss-substitute-v2363]'))return;
+const s=document.createElement('script');
+s.src='./assets/25-promotions-boss-substitute-v2363.js?_='+Date.now();
+s.async=false;
+s.dataset.promotionsBossSubstituteV2363='1';
+s.onerror=()=>console.warn('Promotions v23.6.3 failed to load; existing promotion workflow remains unchanged.');
+document.head.appendChild(s);
+})();
