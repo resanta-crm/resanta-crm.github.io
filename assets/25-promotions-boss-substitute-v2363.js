@@ -64,3 +64,15 @@ function install(){
 }
 if(!install()){let tries=0;const timer=setInterval(()=>{tries++;if(install()||tries>=60)clearInterval(timer);},250);}
 })();
+
+/* v23.6.4 bridge: actual GPS client visit order. */
+(function(){
+'use strict';
+if(window.RESANTA_GPS_VISIT_ORDER_V2364||document.querySelector('script[data-gps-visit-order-v2364]'))return;
+const s=document.createElement('script');
+s.src='./assets/26-gps-visit-order-v2364.js?_='+Date.now();
+s.async=false;
+s.dataset.gpsVisitOrderV2364='1';
+s.onerror=()=>console.warn('GPS visit order v23.6.4 failed to load; v23.6.2 viewer remains available.');
+document.head.appendChild(s);
+})();
