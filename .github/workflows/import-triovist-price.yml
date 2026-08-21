@@ -35,3 +35,5 @@ jobs:
           TRIOVIST_PRICE_LOOKBACK_DAYS: '14'
           TRIOVIST_PRICE_IMAP_TIMEOUT_SECONDS: '45'
         run: python import_triovist_price.py
+
+# v23.6.6: first production trigger after 1C mail verification.
