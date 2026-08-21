@@ -88,3 +88,15 @@ s.dataset.triovistCommercialV2366='1';
 s.onerror=()=>console.warn('Triovist commercial v23.6.6 failed to load; existing Triovist remains unchanged.');
 document.head.appendChild(s);
 })();
+
+/* v23.6.7 bridge: compact Triovist workspace for managers. */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_MANAGER_SHELL_V2367||document.querySelector('script[data-triovist-manager-shell-v2367]'))return;
+const s=document.createElement('script');
+s.src='./assets/28-triovist-manager-shell-v2367.js?_='+Date.now();
+s.async=false;
+s.dataset.triovistManagerShellV2367='1';
+s.onerror=()=>console.warn('Triovist manager workspace v23.6.7 failed to load; existing Triovist remains available.');
+document.head.appendChild(s);
+})();
