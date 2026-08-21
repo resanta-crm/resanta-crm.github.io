@@ -76,3 +76,15 @@ s.dataset.gpsVisitOrderV2364='1';
 s.onerror=()=>console.warn('GPS visit order v23.6.4 failed to load; v23.6.2 viewer remains available.');
 document.head.appendChild(s);
 })();
+
+/* v23.6.6 bridge: Triovist commercial control, expenses and price calculator. */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_COMMERCIAL_V2366||document.querySelector('script[data-triovist-commercial-v2366]'))return;
+const s=document.createElement('script');
+s.src='./assets/27-triovist-commercial-v2366.js?_='+Date.now();
+s.async=false;
+s.dataset.triovistCommercialV2366='1';
+s.onerror=()=>console.warn('Triovist commercial v23.6.6 failed to load; existing Triovist remains unchanged.');
+document.head.appendChild(s);
+})();
