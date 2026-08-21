@@ -1,0 +1,37 @@
+name: Триовист — прайс 1С
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'import_triovist_price.py'
+      - '.github/workflows/import-triovist-price.yml'
+  schedule:
+    - cron: '10 8,13,17 * * 1-6'
+
+concurrency:
+  group: triovist-price
+  cancel-in-progress: false
+
+jobs:
+  import-price:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Установить зависимости
+        run: pip install --disable-pip-version-check openpyxl requests
+      - name: Обновить прайс Витебск для Триовист
+        env:
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TRIOVIST_PRICE_LOOKBACK_DAYS: '14'
+          TRIOVIST_PRICE_IMAP_TIMEOUT_SECONDS: '45'
+        run: python import_triovist_price.py
