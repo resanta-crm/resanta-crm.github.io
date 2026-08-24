@@ -77,27 +77,15 @@ s.onerror=()=>console.warn('GPS visit order v23.6.4 failed to load; v23.6.2 view
 document.head.appendChild(s);
 })();
 
-/* v23.6.6 bridge: Triovist commercial control, expenses and price calculator. */
+/* v23.6.9 bridge: stable Triovist access for managers and leaders. */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_COMMERCIAL_V2366||document.querySelector('script[data-triovist-commercial-v2366]'))return;
+if(window.RESANTA_TRIOVIST_ACCESS_V2369||document.querySelector('script[data-triovist-access-v2369]'))return;
 const s=document.createElement('script');
-s.src='./assets/27-triovist-commercial-v2366.js?_='+Date.now();
+s.src='./assets/30-triovist-access-v2369.js?_='+Date.now();
 s.async=false;
-s.dataset.triovistCommercialV2366='1';
-s.onerror=()=>console.warn('Triovist commercial v23.6.6 failed to load; existing Triovist remains unchanged.');
-document.head.appendChild(s);
-})();
-
-/* v23.6.7 bridge: compact Triovist workspace for managers. */
-(function(){
-'use strict';
-if(window.RESANTA_TRIOVIST_MANAGER_SHELL_V2367||document.querySelector('script[data-triovist-manager-shell-v2367]'))return;
-const s=document.createElement('script');
-s.src='./assets/28-triovist-manager-shell-v2367.js?_='+Date.now();
-s.async=false;
-s.dataset.triovistManagerShellV2367='1';
-s.onerror=()=>console.warn('Triovist manager workspace v23.6.7 failed to load; existing Triovist remains available.');
+s.dataset.triovistAccessV2369='1';
+s.onerror=()=>console.warn('Triovist v23.6.9 failed to load; base Triovist remains available.');
 document.head.appendChild(s);
 })();
 
