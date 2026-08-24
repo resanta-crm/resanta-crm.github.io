@@ -66,3 +66,15 @@ s.dataset.warehouseControlV23620='1';
 s.onerror=()=>console.warn('Warehouse control v23.6.20 failed to load; existing CRM remains available.');
 document.head.appendChild(s);
 })();
+
+/* v23.6.21 no-cache presentation: physical Vitebsk stock + weekly auto-order horizon. */
+(function loadWarehouseWeeklyV23621(){
+'use strict';
+if(window.RESANTA_WAREHOUSE_WEEKLY_V23621||document.querySelector('script[data-warehouse-weekly-v23621]'))return;
+const s=document.createElement('script');
+s.src='./assets/37-warehouse-weekly-v23621.js?v=23.6.21&_='+Date.now();
+s.async=false;
+s.dataset.warehouseWeeklyV23621='1';
+s.onerror=()=>console.warn('Warehouse weekly v23.6.21 failed to load; base warehouse screen remains available.');
+document.head.appendChild(s);
+})();
