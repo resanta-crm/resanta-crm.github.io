@@ -52,3 +52,21 @@ s.dataset.promotionsBossSubstituteV2363='1';
 s.onerror=()=>console.warn('Promotions v23.6.3 failed to load; existing promotion workflow remains unchanged.');
 document.head.appendChild(s);
 })();
+
+/* v23.6.13 ROOT guard: legacy Triovist tabs must never hide the unified shell. */
+(function(){
+'use strict';
+function loadGuard(){
+  if(window.RESANTA_TRIOVIST_SHELL_GUARD_V23613||document.querySelector('script[data-triovist-shell-guard-v23613]'))return;
+  const g=document.createElement('script');
+  g.src='./assets/33-triovist-shell-guard-v23613.js?v=23.6.13&_='+Date.now();
+  g.async=false;
+  g.dataset.triovistShellGuardV23613='1';
+  g.onerror=()=>console.error('Triovist shell guard v23.6.13 failed to load.');
+  document.head.appendChild(g);
+}
+const root=document.querySelector('script[data-triovist-root-v23612]');
+if(window.RESANTA_TRIOVIST_SINGLE_V23612)loadGuard();
+else if(root){root.addEventListener('load',loadGuard,{once:true});setTimeout(()=>{if(window.RESANTA_TRIOVIST_SINGLE_V23612)loadGuard();},1200);}
+else setTimeout(loadGuard,600);
+})();
