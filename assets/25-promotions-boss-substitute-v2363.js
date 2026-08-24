@@ -100,3 +100,15 @@ s.dataset.triovistManagerShellV2367='1';
 s.onerror=()=>console.warn('Triovist manager workspace v23.6.7 failed to load; existing Triovist remains available.');
 document.head.appendChild(s);
 })();
+
+/* v23.6.8 bridge: director-friendly promotion approvals, budgets and interim sales. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_DECISION_UI_V2368||document.querySelector('script[data-promotions-decision-ui-v2368]'))return;
+const s=document.createElement('script');
+s.src='./assets/29-promotions-decision-ui-v2368.js?_='+Date.now();
+s.async=false;
+s.dataset.promotionsDecisionUiV2368='1';
+s.onerror=()=>console.warn('Promotions decision UI v23.6.8 failed to load; existing promotions remain available.');
+document.head.appendChild(s);
+})();
