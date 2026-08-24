@@ -1,6 +1,11 @@
 name: Себестоимость склада Витебск — 3 раза в день
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'import_warehouse_cost.py'
+      - '.github/workflows/import-warehouse-cost.yml'
   schedule:
     # GitHub UTC. По Минску: 10:30, 15:30, 20:30.
     - cron: '30 7,12,17 * * *'
