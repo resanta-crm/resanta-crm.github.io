@@ -27,6 +27,20 @@ function loadVisitGpsTruthV2354(){if(window.RESANTA_VISIT_GPS_TRUTH_V2354){loadG
 window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({version:VERSION,modalInput:true,delegatedClick:true,promptRemoved:true,storageKey:KEY_STORAGE,gpsUntouched:true,routeLogicUntouched:true,osmFallbackUntouched:true,routePilot:'v23.5.2',routePilotReadOnly:true,gpsReliability:'v23.5.3',visitGpsTruth:'v23.5.4',gpsControlPerformance:'v23.5.7'});
 })();
 
+/* v23.6.12 ROOT bridge: Triovist is loaded from the permanent no-cache bootstrap chain. */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_SINGLE_V23612||document.querySelector('script[data-triovist-root-v23612]'))return;
+const s=document.createElement('script');
+s.src='./assets/32-triovist-v23611.js?v=23.6.12&_='+Date.now();
+s.async=false;
+s.dataset.triovistRootV23612='1';
+/* Compatibility marker prevents the older v23.6.11 bridge from loading the same file twice. */
+s.dataset.triovistV23611='1';
+s.onerror=()=>console.error('Triovist ROOT v23.6.12 failed to load. Base Triovist remains available.');
+document.head.appendChild(s);
+})();
+
 /* v23.6.3 bridge: promotion boss-create + active manager substitution. */
 (function(){
 'use strict';
