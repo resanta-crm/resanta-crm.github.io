@@ -1,0 +1,36 @@
+name: Себестоимость склада Витебск — 3 раза в день
+
+on:
+  schedule:
+    # GitHub UTC. По Минску: 10:30, 15:30, 20:30.
+    - cron: '30 7,12,17 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: warehouse-cost-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Установить зависимости
+        run: pip install --disable-pip-version-check requests
+      - name: Проверить синтаксис
+        run: python -m py_compile import_warehouse_cost.py
+      - name: Импортировать себестоимость из Gmail
+        env:
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          WAREHOUSE_COST_LOOKBACK_DAYS: '10'
+          WAREHOUSE_COST_IMAP_TIMEOUT_SECONDS: '45'
+        run: python import_warehouse_cost.py
