@@ -77,27 +77,15 @@ s.onerror=()=>console.warn('GPS visit order v23.6.4 failed to load; v23.6.2 view
 document.head.appendChild(s);
 })();
 
-/* v23.6.9 bridge: stable Triovist access for managers and leaders. */
+/* v23.6.11 bridge: single stable Triovist workspace. */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_ACCESS_V2369||document.querySelector('script[data-triovist-access-v2369]'))return;
+if(window.RESANTA_TRIOVIST_SINGLE_V23611||document.querySelector('script[data-triovist-v23611]'))return;
 const s=document.createElement('script');
-s.src='./assets/30-triovist-access-v2369.js?_='+Date.now();
+s.src='./assets/32-triovist-v23611.js?_='+Date.now();
 s.async=false;
-s.dataset.triovistAccessV2369='1';
-s.onerror=()=>console.warn('Triovist v23.6.9 failed to load; base Triovist remains available.');
-document.head.appendChild(s);
-})();
-
-/* v23.6.10 bridge: compact manager UI, VAT budget and price safety. */
-(function(){
-'use strict';
-if(window.RESANTA_TRIOVIST_UI_PRICE_V23610||document.querySelector('script[data-triovist-ui-price-v23610]'))return;
-const s=document.createElement('script');
-s.src='./assets/31-triovist-ui-price-v23610.js?_='+Date.now();
-s.async=false;
-s.dataset.triovistUiPriceV23610='1';
-s.onerror=()=>console.warn('Triovist v23.6.10 UI failed to load; v23.6.9 remains available.');
+s.dataset.triovistV23611='1';
+s.onerror=()=>console.warn('Triovist v23.6.11 failed to load; base Triovist remains available.');
 document.head.appendChild(s);
 })();
 
