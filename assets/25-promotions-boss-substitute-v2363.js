@@ -89,6 +89,18 @@ s.onerror=()=>console.warn('Triovist v23.6.9 failed to load; base Triovist remai
 document.head.appendChild(s);
 })();
 
+/* v23.6.10 bridge: compact manager UI, VAT budget and price safety. */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_UI_PRICE_V23610||document.querySelector('script[data-triovist-ui-price-v23610]'))return;
+const s=document.createElement('script');
+s.src='./assets/31-triovist-ui-price-v23610.js?_='+Date.now();
+s.async=false;
+s.dataset.triovistUiPriceV23610='1';
+s.onerror=()=>console.warn('Triovist v23.6.10 UI failed to load; v23.6.9 remains available.');
+document.head.appendChild(s);
+})();
+
 /* v23.6.8 bridge: director-friendly promotion approvals, budgets and interim sales. */
 (function(){
 'use strict';
