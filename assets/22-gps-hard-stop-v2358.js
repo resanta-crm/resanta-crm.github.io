@@ -46,3 +46,10 @@ const s=document.createElement('script');s.src='./assets/37-warehouse-weekly-v23
 if(window.RESANTA_PAYMENT_REGISTRY_V23623||document.querySelector('script[data-payment-registry-v23623]'))return;
 const s=document.createElement('script');s.src='./assets/38-payment-registry-v23623.js?v=23.6.23&_='+Date.now();s.async=false;s.dataset.paymentRegistryV23623='1';s.onerror=()=>console.warn('Payment registry v23.6.23 failed to load; existing CRM remains available.');document.head.appendChild(s);
 })();
+
+/* v23.6.24 office manager lightweight shell: payments only. */
+(function loadOfficeManagerPaymentsOnlyV23624(){
+'use strict';
+if(window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624||document.querySelector('script[data-office-manager-payments-v23624]'))return;
+const s=document.createElement('script');s.src='./assets/39-office-manager-payments-only-v23624.js?v=23.6.24&_='+Date.now();s.async=false;s.dataset.officeManagerPaymentsV23624='1';s.onerror=()=>console.warn('Office manager payments-only shell v23.6.24 failed to load.');document.head.appendChild(s);
+})();
