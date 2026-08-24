@@ -54,3 +54,15 @@ install();
 [250,700,1300,2200,4000].forEach(ms=>setTimeout(install,ms));
 window.RESANTA_GPS_VIEWER_UNIVERSAL_V23616=Object.freeze({version:'v23.6.16',yandexPrimary:true,osmFallback:true,noPerBrowserKeyRequired:true,gpsWritesUntouched:true,routesUntouched:true,visitsUntouched:true});
 })();
+
+/* v23.6.20 no-cache bridge: warehouse overlimit + deficit + Chekhov auto-order. */
+(function loadWarehouseControlV23620(){
+'use strict';
+if(window.RESANTA_WAREHOUSE_CONTROL_V23620||document.querySelector('script[data-warehouse-control-v23620]'))return;
+const s=document.createElement('script');
+s.src='./assets/36-warehouse-control-v23620.js?v=23.6.20&_='+Date.now();
+s.async=false;
+s.dataset.warehouseControlV23620='1';
+s.onerror=()=>console.warn('Warehouse control v23.6.20 failed to load; existing CRM remains available.');
+document.head.appendChild(s);
+})();
