@@ -60,3 +60,10 @@ const s=document.createElement('script');s.src='./assets/39-office-manager-payme
 if(window.RESANTA_LOGIN_SAFETY_V23625||document.querySelector('script[data-login-safety-v23625]'))return;
 const s=document.createElement('script');s.src='./assets/40-login-safety-v23625.js?v=23.6.25&_='+Date.now();s.async=false;s.dataset.loginSafetyV23625='1';s.onerror=()=>console.warn('Login safety v23.6.25 failed to load.');document.head.appendChild(s);
 })();
+
+/* v23.6.26 promotions director work-filter root fix. */
+(function loadPromotionsWorkFilterV23626(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626||document.querySelector('script[data-promotions-work-filter-v23626]'))return;
+const s=document.createElement('script');s.src='./assets/41-promotions-work-filter-v23626.js?v=23.6.26&_='+Date.now();s.async=false;s.dataset.promotionsWorkFilterV23626='1';s.onerror=()=>console.warn('Promotions work filter v23.6.26 failed to load; existing promotions remain available.');document.head.appendChild(s);
+})();
