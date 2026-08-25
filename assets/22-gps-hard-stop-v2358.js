@@ -53,3 +53,10 @@ const s=document.createElement('script');s.src='./assets/38-payment-registry-v23
 if(window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624||document.querySelector('script[data-office-manager-payments-v23624]'))return;
 const s=document.createElement('script');s.src='./assets/39-office-manager-payments-only-v23624.js?v=23.6.24&_='+Date.now();s.async=false;s.dataset.officeManagerPaymentsV23624='1';s.onerror=()=>console.warn('Office manager payments-only shell v23.6.24 failed to load.');document.head.appendChild(s);
 })();
+
+/* v23.6.25 login isolation and autofill safety. */
+(function loadLoginSafetyV23625(){
+'use strict';
+if(window.RESANTA_LOGIN_SAFETY_V23625||document.querySelector('script[data-login-safety-v23625]'))return;
+const s=document.createElement('script');s.src='./assets/40-login-safety-v23625.js?v=23.6.25&_='+Date.now();s.async=false;s.dataset.loginSafetyV23625='1';s.onerror=()=>console.warn('Login safety v23.6.25 failed to load.');document.head.appendChild(s);
+})();
