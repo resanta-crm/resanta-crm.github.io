@@ -42,8 +42,9 @@ function wrapVerified(){
   w.__routeEvidenceV23629=true;w.__base=base;window.routePlanVerified=w;try{routePlanVerified=w}catch(_){}return true;
 }
 function wrapSaver(name){
+  if(!window.RESANTA_VISIT_GPS_TRUTH_V2354)return false;
   let base=null;try{base=window[name]||(name==='saveVisit'&&typeof saveVisit==='function'?saveVisit:null)||(name==='saveQuickVisit'&&typeof saveQuickVisit==='function'?saveQuickVisit:null)}catch(_){}
-  if(typeof base!=='function'||base.__routeEvidenceV23629||!base.__gpsTruthV2360)return false;
+  if(typeof base!=='function'||base.__routeEvidenceV23629)return false;
   const w=async function(){
     const before=new Set(visits().map(x=>visitId(x)).filter(Boolean));
     const out=await base.apply(this,arguments);
@@ -55,7 +56,9 @@ function wrapSaver(name){
     }
     return out;
   };
-  w.__routeEvidenceV23629=true;w.__gpsTruthV2360=true;w.__base=base;window[name]=w;try{if(name==='saveVisit')saveVisit=w;else saveQuickVisit=w}catch(_){}return true;
+  w.__routeEvidenceV23629=true;w.__gpsTruthV2360=true;w.__base=base;
+  if(base.__resantaVisitSingleSubmitV23628)w.__resantaVisitSingleSubmitV23628=true;
+  window[name]=w;try{if(name==='saveVisit')saveVisit=w;else saveQuickVisit=w}catch(_){}return true;
 }
 function cleanFalseReview(){
   const card=document.getElementById('gps-visit-review-v2354');if(!card)return;
@@ -72,5 +75,5 @@ function wrapRender(){
 }
 function install(){wrapVerified();wrapSaver('saveVisit');wrapSaver('saveQuickVisit');wrapRender();setTimeout(reconcileRecent,100);}
 [300,900,1900,3500].forEach(ms=>setTimeout(install,ms));
-window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629=Object.freeze({version:VERSION,checkinTruth:true,sustainedStopTruth:true,reportGpsKeptForAudit:true,noRadiusInflation:true});
+window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629=Object.freeze({version:VERSION,checkinTruth:true,sustainedStopTruth:true,reportGpsKeptForAudit:true,noRadiusInflation:true,singleSubmitPreserved:true});
 })();
