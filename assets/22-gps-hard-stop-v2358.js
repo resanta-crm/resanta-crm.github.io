@@ -74,3 +74,10 @@ const s=document.createElement('script');s.src='./assets/41-promotions-work-filt
 if(window.RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627||document.querySelector('script[data-payment-registry-nav-root-v23627]'))return;
 const s=document.createElement('script');s.src='./assets/42-payment-registry-nav-root-v23627.js?v=23.6.27&_='+Date.now();s.async=false;s.dataset.paymentRegistryNavRootV23627='1';s.onerror=()=>console.warn('Payment registry nav root fix v23.6.27 failed to load.');document.head.appendChild(s);
 })();
+
+/* v23.6.28 visit single-submit root fix: never start two save flows from double tap. */
+(function loadVisitsSingleSubmitV23628(){
+'use strict';
+if(window.RESANTA_VISITS_SINGLE_SUBMIT_V23628||document.querySelector('script[data-visits-single-submit-v23628]'))return;
+const s=document.createElement('script');s.src='./assets/43-visits-single-submit-v23628.js?v=23.6.28&_='+Date.now();s.async=false;s.dataset.visitsSingleSubmitV23628='1';s.onerror=()=>console.warn('Visits single-submit v23.6.28 failed to load; existing server duplicate protection remains active.');document.head.appendChild(s);
+})();
