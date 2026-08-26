@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPS маршрут · Ресанта CRM</title>
+<style>html,body,#viewer{margin:0;width:100%;height:100%;border:0;display:block;background:#f8fafc}</style>
+</head>
+<body>
+<iframe id="viewer" title="GPS маршрут"></iframe>
+<script>
+(function(){
+'use strict';
+const frame=document.getElementById('viewer');
+const u=new URL('./gps-viewer-osm-v23616.html',location.href);
+for(const [k,v] of new URLSearchParams(location.search))u.searchParams.set(k,v);
+u.searchParams.set('_clean','23.6.27');
+frame.src=u.toString();
+frame.addEventListener('load',()=>{
+  let doc;try{doc=frame.contentDocument}catch(_){return}if(!doc)return;
+  const clean=()=>{
+    const box=doc.querySelector('.leaflet-control-attribution');
+    if(box&&box.dataset.resantaClean!=='1'){
+      box.dataset.resantaClean='1';
+      box.innerHTML='<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>';
+    }
+  };
+  clean();
+  try{new MutationObserver(()=>clean()).observe(doc.documentElement,{childList:true,subtree:true});}catch(_){}
+  const close=[...doc.querySelectorAll('button')].find(b=>/Закрыть/i.test(String(b.textContent||'')));
+  if(close)close.addEventListener('click',e=>{e.preventDefault();try{window.close()}catch(_){}},{capture:true});
+});
+})();
+</script>
+</body>
+</html>
