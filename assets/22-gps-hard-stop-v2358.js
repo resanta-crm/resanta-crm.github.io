@@ -14,16 +14,16 @@ if(window.RESANTA_VISITS_QUALITY_MPP_V23615||document.querySelector('script[data
 const s=document.createElement('script');s.src='./assets/35-visits-quality-mpp-v23615.js?v=23.6.15&_='+Date.now();s.async=false;s.dataset.visitsQualityMppV23615='1';s.onerror=()=>console.warn('Visits v23.6.15 failed to load; existing Visits page remains available.');document.head.appendChild(s);
 })();
 
-/* v23.6.16 universal director GPS viewer. */
+/* v23.6.29 universal director GPS viewer: Yandex primary, clean OSM fallback. */
 (function(){
 'use strict';
 if(window.RESANTA_GPS_VIEWER_UNIVERSAL_V23616)return;
 function localYandexKey(){try{return String(localStorage.getItem('resanta_yandex_maps_api_key_v2358')||localStorage.getItem('resanta_yandex_maps_api_key_v2351')||'').trim()}catch(_){return''}}
-function viewerUrl(id){const file=localYandexKey()?'gps-viewer-v2360.html':'gps-viewer-osm-v23616.html';return './assets/'+file+'?v=23.6.16&workday='+encodeURIComponent(String(id||''))+'&_='+Date.now()}
+function viewerUrl(id){const file=localYandexKey()?'gps-viewer-v2360.html':'gps-viewer-osm-clean-v23627.html';return './assets/'+file+'?v=23.6.29&workday='+encodeURIComponent(String(id||''))+'&_='+Date.now()}
 function openUniversal(id){if(id)window.open(viewerUrl(id),'_blank','noopener')}
 function install(){window.crmOpenGpsViewerV2360=openUniversal;window.v19OpenGpsWorkday=openUniversal;try{crmOpenGpsViewerV2360=openUniversal}catch(_){}try{v19OpenGpsWorkday=openUniversal}catch(_){}}
 install();[250,700,1300,2200,4000].forEach(ms=>setTimeout(install,ms));
-window.RESANTA_GPS_VIEWER_UNIVERSAL_V23616=Object.freeze({version:'v23.6.16',yandexPrimary:true,osmFallback:true,noPerBrowserKeyRequired:true,gpsWritesUntouched:true,routesUntouched:true,visitsUntouched:true});
+window.RESANTA_GPS_VIEWER_UNIVERSAL_V23616=Object.freeze({version:'v23.6.29',yandexPrimary:true,osmFallback:true,osmAttributionClean:true,noPerBrowserKeyRequired:true,gpsWritesUntouched:true,routesUntouched:true,visitsUntouched:true});
 })();
 
 /* v23.6.20 warehouse control. */
@@ -65,7 +65,7 @@ const s=document.createElement('script');s.src='./assets/40-login-safety-v23625.
 (function loadPromotionsWorkFilterV23626(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626||document.querySelector('script[data-promotions-work-filter-v23626]'))return;
-const s=document.createElement('script');s.src='./assets/41-promotions-work-filter-v23626.js?v=23.6.26&_='+Date.now();s.async=false;s.dataset.promotionsWorkFilterV23626='1';s.onerror=()=>console.warn('Promotions work filter v23.6.26 failed to load; existing promotions remain available.');document.head.appendChild(s);
+const s=document.createElement('script');s.src='./assets/41-promotions-work-filter-v23626.js?v=23.6.26&_='+Date.now();s.async=false;s.datasetPromotionsWorkFilterV23626='1';s.dataset.promotionsWorkFilterV23626='1';s.onerror=()=>console.warn('Promotions work filter v23.6.26 failed to load; existing promotions remain available.');document.head.appendChild(s);
 })();
 
 /* v23.6.27 payment registry nav root fix: wait for profile readiness. */
@@ -80,4 +80,11 @@ const s=document.createElement('script');s.src='./assets/42-payment-registry-nav
 'use strict';
 if(window.RESANTA_VISITS_SINGLE_SUBMIT_V23628||document.querySelector('script[data-visits-single-submit-v23628]'))return;
 const s=document.createElement('script');s.src='./assets/43-visits-single-submit-v23628.js?v=23.6.28&_='+Date.now();s.async=false;s.dataset.visitsSingleSubmitV23628='1';s.onerror=()=>console.warn('Visits single-submit v23.6.28 failed to load; existing server duplicate protection remains active.');document.head.appendChild(s);
+})();
+
+/* v23.6.29 route visit evidence: check-in / sustained stop outranks late report GPS. */
+(function loadRouteVisitEvidenceV23629(){
+'use strict';
+if(window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629||document.querySelector('script[data-route-visit-evidence-v23629]'))return;
+const s=document.createElement('script');s.src='./assets/44-route-visit-evidence-v23629.js?v=23.6.29&_='+Date.now();s.async=false;s.dataset.routeVisitEvidenceV23629='1';s.onerror=()=>console.warn('Route visit evidence v23.6.29 failed to load; existing GPS review remains available.');document.head.appendChild(s);
 })();
