@@ -67,3 +67,10 @@ const s=document.createElement('script');s.src='./assets/40-login-safety-v23625.
 if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626||document.querySelector('script[data-promotions-work-filter-v23626]'))return;
 const s=document.createElement('script');s.src='./assets/41-promotions-work-filter-v23626.js?v=23.6.26&_='+Date.now();s.async=false;s.dataset.promotionsWorkFilterV23626='1';s.onerror=()=>console.warn('Promotions work filter v23.6.26 failed to load; existing promotions remain available.');document.head.appendChild(s);
 })();
+
+/* v23.6.27 payment registry nav root fix: wait for profile readiness. */
+(function loadPaymentRegistryNavRootV23627(){
+'use strict';
+if(window.RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627||document.querySelector('script[data-payment-registry-nav-root-v23627]'))return;
+const s=document.createElement('script');s.src='./assets/42-payment-registry-nav-root-v23627.js?v=23.6.27&_='+Date.now();s.async=false;s.dataset.paymentRegistryNavRootV23627='1';s.onerror=()=>console.warn('Payment registry nav root fix v23.6.27 failed to load.');document.head.appendChild(s);
+})();
