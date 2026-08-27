@@ -102,3 +102,10 @@ const s=document.createElement('script');s.src='./assets/45-promotions-budget-tr
 if(window.RESANTA_PROMOTIONS_BUDGET_DFS_OVERRIDE_V23631||document.querySelector('script[data-promotions-budget-dfs-override-v23631]'))return;
 const s=document.createElement('script');s.src='./assets/46-promotions-budget-dfs-override-v23631.js?v=23.6.31&_='+Date.now();s.async=false;s.dataset.promotionsBudgetDfsOverrideV23631='1';s.onerror=()=>console.warn('Promotions DFS budget override v23.6.31 failed to load; budget remains protected.');document.head.appendChild(s);
 })();
+
+/* v23.6.32 factual promotion budget checkpoint: historical spend is not subtracted twice. */
+(function loadPromotionsBudgetSnapshotV23632(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_BUDGET_SNAPSHOT_V23632||document.querySelector('script[data-promotions-budget-snapshot-v23632]'))return;
+const s=document.createElement('script');s.src='./assets/47-promotions-budget-snapshot-v23632.js?v=23.6.32&_='+Date.now();s.async=false;s.dataset.promotionsBudgetSnapshotV23632='1';s.onerror=()=>console.warn('Promotions factual budget v23.6.32 failed to load; server calculation remains authoritative.');document.head.appendChild(s);
+})();
