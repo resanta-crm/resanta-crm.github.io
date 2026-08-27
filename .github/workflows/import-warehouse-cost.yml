@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Установить зависимости
-        run: pip install --disable-pip-check requests
+        run: pip install --disable-pip-version-check requests
       - name: Проверить синтаксис
         run: python -m py_compile import_warehouse_cost.py
       - name: Импортировать себестоимость из Gmail
