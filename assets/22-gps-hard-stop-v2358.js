@@ -88,3 +88,10 @@ const s=document.createElement('script');s.src='./assets/43-visits-single-submit
 if(window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629||document.querySelector('script[data-route-visit-evidence-v23629]'))return;
 const s=document.createElement('script');s.src='./assets/44-route-visit-evidence-v23629.js?v=23.6.29&_='+Date.now();s.async=false;s.dataset.routeVisitEvidenceV23629='1';s.onerror=()=>console.warn('Route visit evidence v23.6.29 failed to load; existing GPS review remains available.');document.head.appendChild(s);
 })();
+
+/* v23.6.30 promotions budget single source of truth. */
+(function loadPromotionsBudgetTruthV23630(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_BUDGET_TRUTH_V23630||document.querySelector('script[data-promotions-budget-truth-v23630]'))return;
+const s=document.createElement('script');s.src='./assets/45-promotions-budget-truth-v23630.js?v=23.6.30&_='+Date.now();s.async=false;s.dataset.promotionsBudgetTruthV23630='1';s.onerror=()=>console.warn('Promotions budget truth v23.6.30 failed to load; existing promotions remain available.');document.head.appendChild(s);
+})();
