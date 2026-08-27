@@ -65,7 +65,7 @@ const s=document.createElement('script');s.src='./assets/40-login-safety-v23625.
 (function loadPromotionsWorkFilterV23626(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626||document.querySelector('script[data-promotions-work-filter-v23626]'))return;
-const s=document.createElement('script');s.src='./assets/41-promotions-work-filter-v23626.js?v=23.6.26&_='+Date.now();s.async=false;s.dataset.promotionsWorkFilterV23626='1';s.onerror=()=>console.warn('Promotions work filter v23.6.26 failed to load; existing promotions remain available.');document.head.appendChild(s);
+const s=document.createElement('script');s.src='./assets/41-promotions-work-filter-v23626.js?v=23.6.26&_='+Date.now();s.async=false;s.datasetPromotionsWorkFilterV23626='1';s.onerror=()=>console.warn('Promotions work filter v23.6.26 failed to load; existing promotions remain available.');document.head.appendChild(s);
 })();
 
 /* v23.6.27 payment registry nav root fix: wait for profile readiness. */
@@ -108,4 +108,11 @@ const s=document.createElement('script');s.src='./assets/46-promotions-budget-df
 'use strict';
 if(window.RESANTA_PROMOTIONS_BUDGET_SNAPSHOT_V23632||document.querySelector('script[data-promotions-budget-snapshot-v23632]'))return;
 const s=document.createElement('script');s.src='./assets/47-promotions-budget-snapshot-v23632.js?v=23.6.32&_='+Date.now();s.async=false;s.dataset.promotionsBudgetSnapshotV23632='1';s.onerror=()=>console.warn('Promotions factual budget v23.6.32 failed to load; server calculation remains authoritative.');document.head.appendChild(s);
+})();
+
+/* v23.6.33 warehouse freshness guard: automatic sources must be today; Chekhov is manual. */
+(function loadWarehouseFreshnessV23633(){
+'use strict';
+if(window.RESANTA_WAREHOUSE_FRESHNESS_V23633||document.querySelector('script[data-warehouse-freshness-v23633]'))return;
+const s=document.createElement('script');s.src='./assets/48-warehouse-freshness-v23633.js?v=23.6.33&_='+Date.now();s.async=false;s.dataset.warehouseFreshnessV23633='1';s.onerror=()=>console.warn('Warehouse freshness v23.6.33 failed to load; base warehouse screen remains available.');document.head.appendChild(s);
 })();
