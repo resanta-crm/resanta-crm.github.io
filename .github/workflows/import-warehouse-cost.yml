@@ -1,4 +1,4 @@
-name: Себестоимость склада Витебск — 3 раза в день
+name: Себестоимость склада Витебск — автообновление
 
 on:
   push:
@@ -7,8 +7,9 @@ on:
       - 'import_warehouse_cost.py'
       - '.github/workflows/import-warehouse-cost.yml'
   schedule:
-    # GitHub UTC. По Минску: 10:30, 15:30, 20:30.
-    - cron: '30 7,12,17 * * *'
+    # Минск UTC+3. Письмо 1С обычно приходит около 07:30.
+    # Несколько запусков после письма страхуют задержки GitHub/Gmail.
+    - cron: '0 5,8,11,14,17 * * *'   # 08:00, 11:00, 14:00, 17:00, 20:00 Минск
   workflow_dispatch:
 
 concurrency:
@@ -27,7 +28,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Установить зависимости
-        run: pip install --disable-pip-version-check requests
+        run: pip install --disable-pip-check requests
       - name: Проверить синтаксис
         run: python -m py_compile import_warehouse_cost.py
       - name: Импортировать себестоимость из Gmail
