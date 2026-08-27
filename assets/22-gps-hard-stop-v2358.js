@@ -95,3 +95,10 @@ const s=document.createElement('script');s.src='./assets/44-route-visit-evidence
 if(window.RESANTA_PROMOTIONS_BUDGET_TRUTH_V23630||document.querySelector('script[data-promotions-budget-truth-v23630]'))return;
 const s=document.createElement('script');s.src='./assets/45-promotions-budget-truth-v23630.js?v=23.6.30&_='+Date.now();s.async=false;s.dataset.promotionsBudgetTruthV23630='1';s.onerror=()=>console.warn('Promotions budget truth v23.6.30 failed to load; existing promotions remain available.');document.head.appendChild(s);
 })();
+
+/* v23.6.31 DFS may explicitly approve above free client budget. */
+(function loadPromotionsBudgetDfsOverrideV23631(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_BUDGET_DFS_OVERRIDE_V23631||document.querySelector('script[data-promotions-budget-dfs-override-v23631]'))return;
+const s=document.createElement('script');s.src='./assets/46-promotions-budget-dfs-override-v23631.js?v=23.6.31&_='+Date.now();s.async=false;s.dataset.promotionsBudgetDfsOverrideV23631='1';s.onerror=()=>console.warn('Promotions DFS budget override v23.6.31 failed to load; budget remains protected.');document.head.appendChild(s);
+})();
