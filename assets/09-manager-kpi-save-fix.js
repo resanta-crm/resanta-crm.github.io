@@ -203,3 +203,14 @@ window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
   noSqlChanges:true
 });
 })();
+
+(function loadManagerSalesYoyV23634(){
+'use strict';
+if(window.RESANTA_MANAGER_SALES_YOY_V23634||document.querySelector('script[data-manager-sales-yoy-v23634]'))return;
+const s=document.createElement('script');
+s.src='./assets/49-manager-sales-yoy-v23634.js?_='+Date.now();
+s.async=false;
+s.dataset.managerSalesYoyV23634='1';
+s.onerror=()=>console.warn('Manager sales YoY v23.6.34 failed to load; base sales analytics remains available.');
+document.head.appendChild(s);
+})();
