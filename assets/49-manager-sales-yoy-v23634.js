@@ -26,8 +26,6 @@ function periodLabel(d){
   if((d?.period_type||state.mode)==='quarter')return (d?.period||state.period)+' квартал '+y+' ↔ '+(d?.period||state.period)+' квартал '+py;
   return 'Январь–'+monthName(d?.period||state.period)+' '+y+' ↔ тот же период '+py;
 }
-function currentRole(){try{return String(window.currentProfile?.role||currentProfile?.role||'');}catch(_){return String(window.currentProfile?.role||'');}}
-function allowed(){return ['boss','manager'].includes(currentRole());}
 
 function style(){
   if(document.getElementById('manager-sales-yoy-style-v23634'))return;
@@ -53,7 +51,6 @@ function rootHtml(){return `
   <div id="msy-body-v23634" style="display:none"></div>`;}
 
 function install(){
-  if(!allowed())return;
   if(document.getElementById(ROOT_ID))return;
   const page=document.getElementById('page-sales');if(!page)return;
   style();
@@ -80,7 +77,7 @@ function summaryTable(d){
   const rows=d?.managers||[];if(!rows.length)return'<div class="msy-error">За выбранный период нет привязанных продаж менеджеров.</div>';
   const cy=d.year,py=d.previous_year;
   return `<div class="msy-table-wrap"><table class="msy-table"><thead><tr><th>Менеджер</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Клиентов</th><th>Рост</th><th>Падение</th><th>Новые</th><th>Потеряны</th></tr></thead><tbody>${rows.map(r=>{
-    const delta=num(r.delta),cls=delta>=0?'msy-pos':'msy-neg';return `<tr class="msy-row" onclick="window.msyManagerV23634('${String(r.manager_name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')"><td><b>${esc(r.manager_name)}</b><div style="font-size:10px;color:var(--sub);margin-top:2px">открыть клиентов →</div></td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td>${Number(r.clients_any||0)}</td><td class="msy-pos">${Number(r.growing||0)}</td><td class="msy-neg">${Number(r.falling||0)}</td><td>${Number(r.new_clients||0)}</td><td class="msy-neg">${Number(r.lost_clients||0)}</td></tr>`;
+    const delta=num(r.delta),cls=delta>=0?'msy-pos':'msy-neg';return `<tr class="msy-row" onclick="window.msyManagerV23634('${esc(String(r.manager_name)).replace(/'/g,'&#39;')}')"><td><b>${esc(r.manager_name)}</b><div style="font-size:10px;color:var(--sub);margin-top:2px">открыть клиентов →</div></td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td>${Number(r.clients_any||0)}</td><td class="msy-pos">${Number(r.growing||0)}</td><td class="msy-neg">${Number(r.falling||0)}</td><td>${Number(r.new_clients||0)}</td><td class="msy-neg">${Number(r.lost_clients||0)}</td></tr>`;
   }).join('')}</tbody></table></div>`;}
 
 function bodyLoading(){const b=document.getElementById('msy-body-v23634');if(b)b.innerHTML=controls()+'<div class="msy-loader">Загружаю сравнение продаж…</div>';}
