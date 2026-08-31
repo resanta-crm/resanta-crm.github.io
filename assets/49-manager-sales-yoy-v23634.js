@@ -1,13 +1,14 @@
-/* RESANTA CRM v23.6.34 · MANAGER SALES YEAR-OVER-YEAR
+/* RESANTA CRM v23.6.34.1 · MANAGER SALES YEAR-OVER-YEAR
  * Separate lazy sales comparison inside Sales · Analytics.
  * Month / quarter / YTD, all current field managers, client drilldown.
+ * Returns/negative corrections are separated from growth/new/lost/falling.
  * No polling, no observers, no writes.
  */
 (function(){
 'use strict';
 if(window.RESANTA_MANAGER_SALES_YOY_V23634)return;
 
-const VERSION='v23.6.34';
+const VERSION='v23.6.34.1';
 const ROOT_ID='manager-sales-yoy-v23634';
 const CACHE_TTL=120000;
 const cache=new Map();
@@ -18,7 +19,7 @@ const num=v=>Number.isFinite(Number(v))?Number(v):0;
 function money(v){return Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';}
 function signed(v){const n=num(v);return (n>0?'+':'')+money(n);}
 function pct(v){if(v===null||v===undefined||v==='')return'—';const n=num(v);return(n>0?'+':'')+n.toLocaleString('ru-RU',{maximumFractionDigits:1})+'%';}
-function trendMeta(t){return({fall:['🔴','Падение','var(--r)'],growth:['🟢','Рост','var(--g)'],new:['🆕','Новый','var(--at)'],lost:['❌','Потерян','var(--r)'],same:['⚪','Без изменений','var(--sub)']}[t]||['⚪','—','var(--sub)']);}
+function trendMeta(t){return({fall:['🔴','Падение','var(--r)'],growth:['🟢','Рост','var(--g)'],new:['🆕','Новый','var(--at)'],lost:['❌','Потерян','var(--r)'],adjustment:['🟠','Возврат / корректировка','var(--am)'],same:['⚪','Без изменений','var(--sub)']}[t]||['⚪','—','var(--sub)']);}
 function monthName(m){return['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][Number(m)]||String(m);}
 function periodLabel(d){
   const y=d?.year||state.year,py=d?.previous_year||y-1;
@@ -36,7 +37,7 @@ function style(){
   .msy-title{font-size:15px;font-weight:800;color:var(--text)}.msy-sub{font-size:11px;color:var(--sub);line-height:1.5;margin-top:4px}
   .msy-filters{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:12px 0}.msy-filter{min-width:120px}.msy-filter label{display:block;font-size:10px;color:var(--sub);margin-bottom:4px;text-transform:uppercase;font-weight:700}
   .msy-mini{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;color:var(--text)}
-  .msy-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff}.msy-table{width:100%;border-collapse:collapse;min-width:900px}.msy-table th{font-size:10px;text-transform:uppercase;color:var(--sub);text-align:right;padding:8px;border-bottom:1px solid var(--border);background:#F8FAFC;white-space:nowrap}.msy-table th:first-child,.msy-table td:first-child{text-align:left}.msy-table td{font-size:12px;text-align:right;padding:9px 8px;border-bottom:1px solid var(--border);white-space:nowrap}.msy-table tr:last-child td{border-bottom:none}.msy-row{cursor:pointer}.msy-row:hover td{background:#F8FBFF}.msy-pos{color:var(--g);font-weight:700}.msy-neg{color:var(--r);font-weight:700}
+  .msy-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff}.msy-table{width:100%;border-collapse:collapse;min-width:980px}.msy-table th{font-size:10px;text-transform:uppercase;color:var(--sub);text-align:right;padding:8px;border-bottom:1px solid var(--border);background:#F8FAFC;white-space:nowrap}.msy-table th:first-child,.msy-table td:first-child{text-align:left}.msy-table td{font-size:12px;text-align:right;padding:9px 8px;border-bottom:1px solid var(--border);white-space:nowrap}.msy-table tr:last-child td{border-bottom:none}.msy-row{cursor:pointer}.msy-row:hover td{background:#F8FBFF}.msy-pos{color:var(--g);font-weight:700}.msy-neg{color:var(--r);font-weight:700}.msy-adj{color:var(--am);font-weight:700}
   .msy-note{font-size:11px;color:var(--sub);line-height:1.5;margin-top:9px}.msy-detail{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}.msy-detail-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}.msy-chips{display:flex;gap:6px;flex-wrap:wrap}.msy-chip{border:1px solid var(--border);background:#fff;border-radius:999px;padding:5px 9px;font-size:11px;cursor:pointer}.msy-chip.active{background:var(--ab);border-color:var(--a);color:var(--at);font-weight:700}.msy-search{padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;min-width:230px}.msy-loader{padding:20px;text-align:center;color:var(--sub);font-size:12px}.msy-error{padding:10px 12px;border-radius:8px;background:var(--rb);color:var(--r);font-size:12px;line-height:1.5}.msy-fresh{padding:8px 10px;border-radius:8px;background:var(--amb);color:var(--am);font-size:11px;line-height:1.45;margin-bottom:10px}
   @media(max-width:700px){.msy-filter{min-width:calc(50% - 4px)}.msy-filters .btn-secondary{width:100%}.msy-search{width:100%;min-width:0}}
   `;
@@ -76,15 +77,15 @@ function freshness(d){const f=d?.freshness||{};if(!f.report_date&&!f.last_succes
 function summaryTable(d){
   const rows=d?.managers||[];if(!rows.length)return'<div class="msy-error">За выбранный период нет привязанных продаж менеджеров.</div>';
   const cy=d.year,py=d.previous_year;
-  return `<div class="msy-table-wrap"><table class="msy-table"><thead><tr><th>Менеджер</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Клиентов</th><th>Рост</th><th>Падение</th><th>Новые</th><th>Потеряны</th></tr></thead><tbody>${rows.map(r=>{
-    const delta=num(r.delta),cls=delta>=0?'msy-pos':'msy-neg';return `<tr class="msy-row" onclick="window.msyManagerV23634('${esc(String(r.manager_name)).replace(/'/g,'&#39;')}')"><td><b>${esc(r.manager_name)}</b><div style="font-size:10px;color:var(--sub);margin-top:2px">открыть клиентов →</div></td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td>${Number(r.clients_any||0)}</td><td class="msy-pos">${Number(r.growing||0)}</td><td class="msy-neg">${Number(r.falling||0)}</td><td>${Number(r.new_clients||0)}</td><td class="msy-neg">${Number(r.lost_clients||0)}</td></tr>`;
+  return `<div class="msy-table-wrap"><table class="msy-table"><thead><tr><th>Менеджер</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Клиентов</th><th>Рост</th><th>Падение</th><th>Новые</th><th>Потеряны</th><th>Корректировки</th></tr></thead><tbody>${rows.map(r=>{
+    const delta=num(r.delta),cls=delta>=0?'msy-pos':'msy-neg';return `<tr class="msy-row" onclick="window.msyManagerV23634('${esc(String(r.manager_name)).replace(/'/g,'&#39;')}')"><td><b>${esc(r.manager_name)}</b><div style="font-size:10px;color:var(--sub);margin-top:2px">открыть клиентов →</div></td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td>${Number(r.clients_any||0)}</td><td class="msy-pos">${Number(r.growing||0)}</td><td class="msy-neg">${Number(r.falling||0)}</td><td>${Number(r.new_clients||0)}</td><td class="msy-neg">${Number(r.lost_clients||0)}</td><td class="msy-adj">${Number(r.adjustments||0)}</td></tr>`;
   }).join('')}</tbody></table></div>`;}
 
 function bodyLoading(){const b=document.getElementById('msy-body-v23634');if(b)b.innerHTML=controls()+'<div class="msy-loader">Загружаю сравнение продаж…</div>';}
 function renderSummary(){
   const b=document.getElementById('msy-body-v23634');if(!b)return;
   const d=state.summary;if(!d){b.innerHTML=controls();return;}
-  b.innerHTML=controls()+freshness(d)+`<div style="font-size:12px;font-weight:700;margin:2px 0 9px">${esc(periodLabel(d))}</div>`+summaryTable(d)+`<div class="msy-note">Считаются продажи с НДС по текущему закреплению клиента за менеджером. Строки «Итого» из 1С исключены, чтобы не было двойного счёта. Процент не показывается, если база прошлого года ≤ 0.</div><div id="msy-detail-v23634"></div>`;
+  b.innerHTML=controls()+freshness(d)+`<div style="font-size:12px;font-weight:700;margin:2px 0 9px">${esc(periodLabel(d))}</div>`+summaryTable(d)+`<div class="msy-note">Считаются продажи с НДС по текущему закреплению клиента за менеджером. Рост, падение, новые и потерянные теперь взаимоисключающие. Если в одном из сравниваемых периодов итог клиента отрицательный, он отдельно попадает в «Корректировки» и не искажает эти счётчики. Общий оборот остаётся фактическим нетто из 1С. Строки «Итого» исключены.</div><div id="msy-detail-v23634"></div>`;
   if(state.manager)renderDetail();
 }
 
@@ -99,9 +100,9 @@ function renderDetail(){
   const box=document.getElementById('msy-detail-v23634');if(!box||!state.manager)return;
   const d=state.summary||{},rows=filteredClients(),cy=d.year||state.year,py=d.previous_year||state.year-1;
   box.innerHTML=`<div class="msy-detail"><div class="msy-detail-head"><div><b>${esc(state.manager)}</b><div style="font-size:11px;color:var(--sub);margin-top:2px">Клиенты · ${esc(periodLabel(d))}</div></div><button class="btn-secondary" onclick="window.msyCloseManagerV23634()">Закрыть</button></div>
-    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px"><div class="msy-chips">${[['all','Все'],['fall','🔴 Падение'],['growth','🟢 Рост'],['new','🆕 Новые'],['lost','❌ Потеряны']].map(([k,l])=>`<button class="msy-chip ${state.trend===k?'active':''}" onclick="window.msyTrendV23634('${k}')">${l}</button>`).join('')}</div><input class="msy-search" placeholder="Поиск клиента…" value="${esc(state.search)}" oninput="window.msySearchV23634(this.value)"></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px"><div class="msy-chips">${[['all','Все'],['fall','🔴 Падение'],['growth','🟢 Рост'],['new','🆕 Новые'],['lost','❌ Потеряны'],['adjustment','🟠 Корректировки']].map(([k,l])=>`<button class="msy-chip ${state.trend===k?'active':''}" onclick="window.msyTrendV23634('${k}')">${l}</button>`).join('')}</div><input class="msy-search" placeholder="Поиск клиента…" value="${esc(state.search)}" oninput="window.msySearchV23634(this.value)"></div>
     <div style="font-size:11px;color:var(--sub);margin-bottom:7px">Показано клиентов: ${rows.length}</div>
-    <div class="msy-table-wrap"><table class="msy-table" style="min-width:820px"><thead><tr><th>Клиент</th><th>Кат.</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>{const m=trendMeta(r.trend),delta=num(r.delta),cls=delta>=0?'msy-pos':'msy-neg';return `<tr><td>${r.client_id?`<span style="cursor:pointer;font-weight:600" onclick="window.msyClientV23634('${esc(r.client_id)}')">${esc(r.client_name)}</span>`:`<b>${esc(r.client_name)}</b>`}<div style="font-size:10px;color:var(--sub);margin-top:2px">${esc([r.city,r.region].filter(Boolean).join(' · '))}</div></td><td>${esc(r.category||'—')}</td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td style="color:${m[2]};font-weight:700">${m[0]} ${m[1]}</td></tr>`;}).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--sub);padding:18px">Нет клиентов по выбранному фильтру</td></tr>'}</tbody></table></div></div>`;
+    <div class="msy-table-wrap"><table class="msy-table" style="min-width:820px"><thead><tr><th>Клиент</th><th>Кат.</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>{const m=trendMeta(r.trend),delta=num(r.delta),cls=r.trend==='adjustment'?'msy-adj':(delta>=0?'msy-pos':'msy-neg');return `<tr><td>${r.client_id?`<span style="cursor:pointer;font-weight:600" onclick="window.msyClientV23634('${esc(r.client_id)}')">${esc(r.client_name)}</span>`:`<b>${esc(r.client_name)}</b>`}<div style="font-size:10px;color:var(--sub);margin-top:2px">${esc([r.city,r.region].filter(Boolean).join(' · '))}</div></td><td>${esc(r.category||'—')}</td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td style="color:${m[2]};font-weight:700">${m[0]} ${m[1]}</td></tr>`;}).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--sub);padding:18px">Нет клиентов по выбранному фильтру</td></tr>'}</tbody></table></div></div>`;
 }
 
 function cacheKey(manager){return[state.mode,state.year,state.period,manager||'all'].join('|');}
@@ -138,5 +139,5 @@ window.msySearchV23634=function(v){state.search=v;renderDetail();const i=documen
 window.msyClientV23634=function(id){try{if(typeof openClient==='function')openClient(id);}catch(e){console.warn('open client from manager yoy',e);}};
 
 install();
-window.RESANTA_MANAGER_SALES_YOY_V23634=Object.freeze({version:VERSION,lazy:true,month:true,quarter:true,ytd:true,allManagers:true,currentOwnership:true,noPolling:true,noWrites:true});
+window.RESANTA_MANAGER_SALES_YOY_V23634=Object.freeze({version:VERSION,lazy:true,month:true,quarter:true,ytd:true,allManagers:true,currentOwnership:true,separateAdjustments:true,noPolling:true,noWrites:true});
 })();
