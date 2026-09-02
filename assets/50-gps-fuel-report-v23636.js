@@ -11,7 +11,7 @@ const VERSION='v23.6.36',MODAL_ID='gps-fuel-modal-v23636';
 let report=null,settings=null,loading=false;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number.isFinite(Number(v))?Number(v):0;
-const isBoss=()=>String(window.currentProfile?.role||'')==='boss';
+const isBoss=()=>String((typeof currentProfile!=='undefined'&&currentProfile?.role)||'')==='boss';
 function defaultMonth(){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return d.toISOString().slice(0,7);}
 function monthDate(){const v=document.getElementById('gps-fuel-month-v23636')?.value||defaultMonth();return v+'-01';}
 function managerValue(){return document.getElementById('gps-fuel-manager-v23636')?.value||'all';}
