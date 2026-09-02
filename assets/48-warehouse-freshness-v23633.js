@@ -93,3 +93,11 @@ console.info('RESANTA warehouse freshness '+VERSION+' installed');
   const s=document.createElement('script');s.id='warehouse-stock-truth-loader-v23641';s.src='./assets/54-warehouse-stock-truth-v23641.js?_='+Date.now();s.async=true;document.head.appendChild(s);
  }catch(e){console.warn('warehouse stock truth loader',e)}
 })();
+
+// v23.6.42: smart excess classification based on real sales, recent receipts and seasonality.
+(function(){
+ try{
+  if(window.RESANTA_WAREHOUSE_SMART_EXCESS_V23642||document.getElementById('warehouse-smart-excess-loader-v23642'))return;
+  const s=document.createElement('script');s.id='warehouse-smart-excess-loader-v23642';s.src='./assets/55-warehouse-smart-excess-v23642.js?_='+Date.now();s.async=true;document.head.appendChild(s);
+ }catch(e){console.warn('warehouse smart excess loader',e)}
+})();
