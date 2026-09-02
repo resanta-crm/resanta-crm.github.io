@@ -95,133 +95,19 @@ function installGlobalProfileBridgeV2342(){
         });
       }
     }
-    window.RESANTA_GLOBAL_PROFILE_BRIDGE_V2342=Object.freeze({
-      version:'v23.4.2',
-      liveCurrentProfile:true,
-      liveCurrentUser:true,
-      fixesLazyModuleAuth:true
-    });
-  }catch(e){
-    console.warn('Global profile bridge v23.4.2 failed',e);
-  }
+    window.RESANTA_GLOBAL_PROFILE_BRIDGE_V2342=Object.freeze({version:'v23.4.2',liveCurrentProfile:true,liveCurrentUser:true,fixesLazyModuleAuth:true});
+  }catch(e){console.warn('Global profile bridge v23.4.2 failed',e);}
 }
 installGlobalProfileBridgeV2342();
 
-function loadRoot(){
-  if(window.RESANTA_MANAGER_PLANS_ROOT_V2330||document.querySelector('script[data-manager-plans-root-v2330]'))return;
-  const s=document.createElement('script');
-  s.src='./assets/10-manager-plans-root-v2330.js?_='+Date.now();
-  s.async=false;
-  s.dataset.managerPlansRootV2330='1';
-  s.onerror=()=>console.warn('Manager plans v23.3.0 root failed to load; base CRM remains available.');
-  document.head.appendChild(s);
-}
-loadRoot();
-
-function loadFinanceRootV2349(){
-  if(window.RESANTA_FINANCE_DATA_ROOT_V2349||document.querySelector('script[data-finance-root-v2349]'))return;
-  const s=document.createElement('script');
-  s.src='./assets/12-finance-data-root-v2349.js?_='+Date.now();
-  s.async=false;
-  s.dataset.financeRootV2349='1';
-  s.onerror=()=>console.warn('Finance data root v23.4.9 failed to load; base CRM remains available.');
-  document.head.appendChild(s);
-}
-loadFinanceRootV2349();
-
-function loadTriovistPartnerForecastV2356(){
-  if(window.RESANTA_TRIOVIST_PARTNER_FORECAST_V2356||document.querySelector('script[data-triovist-partner-forecast-v2356]'))return;
-  const s=document.createElement('script');
-  s.src='./assets/20-triovist-partner-forecast-v2356.js?_='+Date.now();
-  s.async=false;
-  s.dataset.triovistPartnerForecastV2356='1';
-  s.onerror=()=>console.warn('Triovist partner forecast truth v23.5.6 failed to load; v23.5.5 recommendation remains available.');
-  document.head.appendChild(s);
-}
-
-function loadTriovistStockUploadTruthV23551(){
-  if(window.RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551){loadTriovistPartnerForecastV2356();return;}
-  const existing=document.querySelector('script[data-triovist-stock-upload-truth-v23551]');
-  if(existing){existing.addEventListener('load',loadTriovistPartnerForecastV2356,{once:true});setTimeout(()=>{if(window.RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551)loadTriovistPartnerForecastV2356();},250);return;}
-  const s=document.createElement('script');
-  s.src='./assets/19-triovist-stock-upload-truth-v23551.js?_='+Date.now();
-  s.async=false;
-  s.dataset.triovistStockUploadTruthV23551='1';
-  s.onload=loadTriovistPartnerForecastV2356;
-  s.onerror=()=>console.warn('Triovist 21vek upload truth guard v23.5.5.2 failed to load; stock page remains read-only safe until reload.');
-  document.head.appendChild(s);
-}
-
-function loadTriovistSeasonalStockV2350(){
-  if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350){loadTriovistStockUploadTruthV23551();return;}
-  const existing=document.querySelector('script[data-triovist-seasonal-stock-v2350]');
-  if(existing){existing.addEventListener('load',loadTriovistStockUploadTruthV23551,{once:true});setTimeout(()=>{if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350)loadTriovistStockUploadTruthV23551();},250);return;}
-  const s=document.createElement('script');
-  s.src='./assets/13-triovist-seasonal-stock-v2350.js?_='+Date.now();
-  s.async=false;
-  s.dataset.triovistSeasonalStockV2350='1';
-  s.onload=loadTriovistStockUploadTruthV23551;
-  s.onerror=()=>console.warn('Triovist stock truth v23.5.5 failed to load; base stock recommendation remains available.');
-  document.head.appendChild(s);
-}
-loadTriovistSeasonalStockV2350();
-
-function loadRoutesYandexUiV2351(){
-  if(window.RESANTA_ROUTES_YANDEX_UI_V2351||document.querySelector('script[data-routes-yandex-ui-v2351]'))return;
-  const s=document.createElement('script');
-  s.src='./assets/14-routes-yandex-ui-v2351.js?_='+Date.now();
-  s.async=false;
-  s.dataset.routesYandexUiV2351='1';
-  s.onerror=()=>console.warn('Routes Yandex UI v23.5.1 failed to load; base routes and OpenStreetMap remain available.');
-  document.head.appendChild(s);
-}
-loadRoutesYandexUiV2351();
-
-function loadRoutesYandexKeyModalV23511(){
-  if(window.RESANTA_YANDEX_KEY_MODAL_V23511||document.querySelector('script[data-routes-yandex-key-modal-v23511]'))return;
-  const s=document.createElement('script');
-  s.src='./assets/15-routes-yandex-key-modal-v23511.js?_='+Date.now();
-  s.async=false;
-  s.dataset.routesYandexKeyModalV23511='1';
-  s.onerror=()=>console.warn('Yandex Maps key modal v23.5.1.1 failed to load; base routes remain available.');
-  document.head.appendChild(s);
-}
-loadRoutesYandexKeyModalV23511();
-
-window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({
-  version:'v23.5.6',
-  dbFirstUpdate:true,
-  duplicateRaceRetry:true,
-  rootNoCacheBootstrap:true,
-  globalProfileBridge:'v23.4.2',
-  financeRoot:'v23.4.9',
-  triovistSeasonalStock:'v23.5.5',
-  triovistStockUploadTruth:'v23.5.5.2',
-  triovistPartnerForecast:'v23.5.6',
-  routesYandexUi:'v23.5.1',
-  routesYandexKeyModal:'v23.5.1.1',
-  noSqlChanges:true
-});
+function loadRoot(){if(window.RESANTA_MANAGER_PLANS_ROOT_V2330||document.querySelector('script[data-manager-plans-root-v2330]'))return;const s=document.createElement('script');s.src='./assets/10-manager-plans-root-v2330.js?_='+Date.now();s.async=false;s.dataset.managerPlansRootV2330='1';s.onerror=()=>console.warn('Manager plans v23.3.0 root failed to load; base CRM remains available.');document.head.appendChild(s)}loadRoot();
+function loadFinanceRootV2349(){if(window.RESANTA_FINANCE_DATA_ROOT_V2349||document.querySelector('script[data-finance-root-v2349]'))return;const s=document.createElement('script');s.src='./assets/12-finance-data-root-v2349.js?_='+Date.now();s.async=false;s.dataset.financeRootV2349='1';s.onerror=()=>console.warn('Finance data root v23.4.9 failed to load; base CRM remains available.');document.head.appendChild(s)}loadFinanceRootV2349();
+function loadTriovistPartnerForecastV2356(){if(window.RESANTA_TRIOVIST_PARTNER_FORECAST_V2356||document.querySelector('script[data-triovist-partner-forecast-v2356]'))return;const s=document.createElement('script');s.src='./assets/20-triovist-partner-forecast-v2356.js?_='+Date.now();s.async=false;s.dataset.triovistPartnerForecastV2356='1';s.onerror=()=>console.warn('Triovist partner forecast truth v23.5.6 failed to load; v23.5.5 recommendation remains available.');document.head.appendChild(s)}
+function loadTriovistStockUploadTruthV23551(){if(window.RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551){loadTriovistPartnerForecastV2356();return}const existing=document.querySelector('script[data-triovist-stock-upload-truth-v23551]');if(existing){existing.addEventListener('load',loadTriovistPartnerForecastV2356,{once:true});setTimeout(()=>{if(window.RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551)loadTriovistPartnerForecastV2356()},250);return}const s=document.createElement('script');s.src='./assets/19-triovist-stock-upload-truth-v23551.js?_='+Date.now();s.async=false;s.dataset.triovistStockUploadTruthV23551='1';s.onload=loadTriovistPartnerForecastV2356;s.onerror=()=>console.warn('Triovist 21vek upload truth guard v23.5.5.2 failed to load; stock page remains read-only safe until reload.');document.head.appendChild(s)}
+function loadTriovistSeasonalStockV2350(){if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350){loadTriovistStockUploadTruthV23551();return}const existing=document.querySelector('script[data-triovist-seasonal-stock-v2350]');if(existing){existing.addEventListener('load',loadTriovistStockUploadTruthV23551,{once:true});setTimeout(()=>{if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350)loadTriovistStockUploadTruthV23551()},250);return}const s=document.createElement('script');s.src='./assets/13-triovist-seasonal-stock-v2350.js?_='+Date.now();s.async=false;s.dataset.triovistSeasonalStockV2350='1';s.onload=loadTriovistStockUploadTruthV23551;s.onerror=()=>console.warn('Triovist stock truth v23.5.5 failed to load; base stock recommendation remains available.');document.head.appendChild(s)}loadTriovistSeasonalStockV2350();
+function loadRoutesYandexUiV2351(){if(window.RESANTA_ROUTES_YANDEX_UI_V2351||document.querySelector('script[data-routes-yandex-ui-v2351]'))return;const s=document.createElement('script');s.src='./assets/14-routes-yandex-ui-v2351.js?_='+Date.now();s.async=false;s.dataset.routesYandexUiV2351='1';s.onerror=()=>console.warn('Routes Yandex UI v23.5.1 failed to load; base routes and OpenStreetMap remain available.');document.head.appendChild(s)}loadRoutesYandexUiV2351();
+function loadRoutesYandexKeyModalV23511(){if(window.RESANTA_YANDEX_KEY_MODAL_V23511||document.querySelector('script[data-routes-yandex-key-modal-v23511]'))return;const s=document.createElement('script');s.src='./assets/15-routes-yandex-key-modal-v23511.js?_='+Date.now();s.async=false;s.dataset.routesYandexKeyModalV23511='1';s.onerror=()=>console.warn('Yandex Maps key modal v23.5.1.1 failed to load; base routes remain available.');document.head.appendChild(s)}loadRoutesYandexKeyModalV23511();
+window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({version:'v23.5.6',dbFirstUpdate:true,duplicateRaceRetry:true,rootNoCacheBootstrap:true,globalProfileBridge:'v23.4.2',financeRoot:'v23.4.9',triovistSeasonalStock:'v23.5.5',triovistStockUploadTruth:'v23.5.5.2',triovistPartnerForecast:'v23.5.6',routesYandexUi:'v23.5.1',routesYandexKeyModal:'v23.5.1.1',noSqlChanges:true});
 })();
-
-(function loadManagerSalesYoyV23634(){
-'use strict';
-if(window.RESANTA_MANAGER_SALES_YOY_V23634||document.querySelector('script[data-manager-sales-yoy-v23634]'))return;
-const s=document.createElement('script');
-s.src='./assets/49-manager-sales-yoy-v23634.js?_='+Date.now();
-s.async=false;
-s.dataset.managerSalesYoyV23634='1';
-s.onerror=()=>console.warn('Manager sales YoY v23.6.34 failed to load; base sales analytics remains available.');
-document.head.appendChild(s);
-})();
-
-(function loadControlSmartV23638(){
-'use strict';
-if(window.RESANTA_CONTROL_SMART_V23638||document.querySelector('script[data-control-smart-v23638]'))return;
-const s=document.createElement('script');
-s.src='./assets/52-control-smart-v23638.js?_='+Date.now();
-s.async=false;
-s.dataset.controlSmartV23638='1';
-s.onerror=()=>console.warn('Control smart v23.6.38 failed to load; base control remains available.');
-document.head.appendChild(s);
-})();
+(function loadManagerSalesYoyV23634(){'use strict';if(window.RESANTA_MANAGER_SALES_YOY_V23634||document.querySelector('script[data-manager-sales-yoy-v23634]'))return;const s=document.createElement('script');s.src='./assets/49-manager-sales-yoy-v23634.js?_='+Date.now();s.async=false;s.dataset.managerSalesYoyV23634='1';s.onerror=()=>console.warn('Manager sales YoY v23.6.34 failed to load; base sales analytics remains available.');document.head.appendChild(s)})();
+(function loadControlSmartV23638(){'use strict';if(window.RESANTA_CONTROL_SMART_V23638||document.querySelector('script[data-control-smart-v23638]'))return;const s=document.createElement('script');s.src='./assets/52-control-smart-v23638.js?_='+Date.now();s.async=false;s.dataset.controlSmartV23638='1';s.onload=()=>{if(window.RESANTA_CONTROL_SIMPLE_V23640||document.querySelector('script[data-control-simple-v23640]'))return;const x=document.createElement('script');x.src='./assets/53-control-simple-v23640.js?_='+Date.now();x.async=false;x.dataset.controlSimpleV23640='1';x.onerror=()=>console.warn('Control simple v23.6.40 failed to load; smart control remains available.');document.head.appendChild(x)};s.onerror=()=>console.warn('Control smart v23.6.38 failed to load; base control remains available.');document.head.appendChild(s)})();
