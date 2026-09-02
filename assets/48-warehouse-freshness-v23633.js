@@ -85,3 +85,11 @@ console.info('RESANTA warehouse freshness '+VERSION+' installed');
   const s=document.createElement('script');s.id='warehouse-compact-loader-v23637';s.src='./assets/51-warehouse-compact-days-v23637.js?_='+Date.now();s.async=true;document.head.appendChild(s);
  }catch(e){console.warn('warehouse compact loader',e)}
 })();
+
+// v23.6.41: show exact Vitebsk stock snapshot time and guard SKUs missing from the latest stock file.
+(function(){
+ try{
+  if(window.RESANTA_WAREHOUSE_STOCK_TRUTH_V23641||document.getElementById('warehouse-stock-truth-loader-v23641'))return;
+  const s=document.createElement('script');s.id='warehouse-stock-truth-loader-v23641';s.src='./assets/54-warehouse-stock-truth-v23641.js?_='+Date.now();s.async=true;document.head.appendChild(s);
+ }catch(e){console.warn('warehouse stock truth loader',e)}
+})();
