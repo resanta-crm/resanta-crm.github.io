@@ -214,3 +214,14 @@ s.dataset.managerSalesYoyV23634='1';
 s.onerror=()=>console.warn('Manager sales YoY v23.6.34 failed to load; base sales analytics remains available.');
 document.head.appendChild(s);
 })();
+
+(function loadControlSmartV23638(){
+'use strict';
+if(window.RESANTA_CONTROL_SMART_V23638||document.querySelector('script[data-control-smart-v23638]'))return;
+const s=document.createElement('script');
+s.src='./assets/52-control-smart-v23638.js?_='+Date.now();
+s.async=false;
+s.dataset.controlSmartV23638='1';
+s.onerror=()=>console.warn('Control smart v23.6.38 failed to load; base control remains available.');
+document.head.appendChild(s);
+})();
