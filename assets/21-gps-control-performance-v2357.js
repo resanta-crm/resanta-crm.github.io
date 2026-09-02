@@ -10,7 +10,7 @@
 if(window.RESANTA_GPS_AGGREGATED_ROOT_V2360)return;
 const VERSION='v23.6.2';
 let flight=null,reqSeq=0,lastRows=[];
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const escAttr=v=>esc(v).replace(/`/g,'&#96;');
 function active(){return !!document.getElementById('page-gps-control')?.classList.contains('active');}
 function dateValue(){return document.getElementById('gps-control-date')?.value||String(window.TODAY||new Date().toISOString().slice(0,10));}
