@@ -77,3 +77,11 @@ install();[250,700,1400,2600,5000].forEach(ms=>setTimeout(install,ms));
 window.RESANTA_WAREHOUSE_FRESHNESS_V23633=Object.freeze({version:VERSION,noPolling:true,noMutationObserver:true,chekhovManual:true,blocksStaleOrder:true});
 console.info('RESANTA warehouse freshness '+VERSION+' installed');
 })();
+
+// v23.6.37 compact warehouse table: days cover + sticky header/SKU, loaded lazily as a tiny UI patch.
+(function(){
+ try{
+  if(window.RESANTA_WAREHOUSE_COMPACT_V23637||document.getElementById('warehouse-compact-loader-v23637'))return;
+  const s=document.createElement('script');s.id='warehouse-compact-loader-v23637';s.src='./assets/51-warehouse-compact-days-v23637.js?_='+Date.now();s.async=true;document.head.appendChild(s);
+ }catch(e){console.warn('warehouse compact loader',e)}
+})();
