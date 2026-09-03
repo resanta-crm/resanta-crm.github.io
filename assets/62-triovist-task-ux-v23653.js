@@ -56,3 +56,4 @@ function bind(){if(window.__TRIOVIST_TASK_UX53_BOUND)return;window.__TRIOVIST_TA
 bind();setTimeout(apply,0);setTimeout(apply,350);
 window.RESANTA_TRIOVIST_TASK_UX_V23653=Object.freeze({version:V,apply,refreshRecommendations,noPolling:true,noObserver:true,taskOnly:true});
 })();
+(function(){'use strict';if(window.RESANTA_PROMOTIONS_MANAGEMENT_V23654||document.querySelector('script[data-promotions-management-v23654]'))return;const s=document.createElement('script');s.src='./assets/63-promotions-management-v23654.js?_='+Date.now();s.async=true;s.dataset.promotionsManagementV23654='1';s.onerror=()=>console.warn('Promotions management v23.6.54 failed to load; base promotions remain available.');document.head.appendChild(s)})();
