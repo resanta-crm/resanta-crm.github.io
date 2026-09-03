@@ -44,3 +44,17 @@ jobs:
           SALES_IMAP_TIMEOUT_SECONDS: '45'
           SALES_MAX_EMAIL_CANDIDATES: '8'
         run: python import_sales.py
+
+      - name: Снять точный срез продаж по действующим акциям
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          REPORT_MONTH="$(TZ=Europe/Minsk date +%Y-%m-01)"
+          SOURCE_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          curl --fail --silent --show-error \
+            -X POST "${SUPABASE_URL%/}/rest/v1/rpc/promotion_capture_sales_snapshots_v23654" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"p_report_month\":\"${REPORT_MONTH}\",\"p_source_message_at\":\"${SOURCE_AT}\"}"
