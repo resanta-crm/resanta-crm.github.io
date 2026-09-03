@@ -1,16 +1,17 @@
-/* RESANTA CRM v23.4.9 · FINANCE DATA ROOT
+/* RESANTA CRM v23.6.52 · FINANCE DATA ROOT
  * Permanent truth controller for PDZ and 1C payments.
  * - first page open always gets a fresh server read
  * - single-flight, no duplicate heavy reads
  * - failed refresh never turns last good data into a false zero
  * - active finance page self-refreshes quietly
+ * - payments stale-period guard: a fresh email with an old 1C report period is shown as a warning
  * - does not touch Triovist, GPS, routes, sales or manager plans
  */
 (function(){
 'use strict';
 if(window.RESANTA_FINANCE_DATA_ROOT_V2349)return;
 
-const V='v23.4.9';
+const V='v23.6.52';
 const S={
   payments:{flight:null,lastOk:0,lastTry:0,error:'',loaded:false},
   debt:{flight:null,lastOk:0,lastTry:0,error:'',loaded:false}
@@ -54,6 +55,22 @@ function importStatus(source){
   const rows=getImports().filter(r=>String(r?.source||r?.import_type||'').toLowerCase()===String(source).toLowerCase());
   return rows.sort((a,b)=>String(b?.updated_at||b?.last_attempt_at||b?.created_at||'').localeCompare(String(a?.updated_at||a?.last_attempt_at||a?.created_at||'')))[0]||null;
 }
+function currentMonthKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function reportMonthKey(st){
+  const raw=String(st?.report_date||st?.report_period||'');
+  const m=raw.match(/\b(20\d{2})-(0[1-9]|1[0-2])\b/);
+  return m?m[0]:'';
+}
+function monthRu(key){
+  const m=String(key||'').match(/^(\d{4})-(\d{2})$/);if(!m)return key||'—';
+  try{return new Date(Number(m[1]),Number(m[2])-1,1).toLocaleDateString('ru-RU',{month:'long',year:'numeric'});}catch(_){return key;}
+}
+function stalePaymentsStatus(st,source){
+  if(String(source||'').toLowerCase()!=='payments'||!st||String(st.status||'').toLowerCase()!=='ok')return null;
+  const reportMonth=reportMonthKey(st),currentMonth=currentMonthKey();
+  if(!reportMonth||reportMonth>=currentMonth)return null;
+  return {reportMonth,currentMonth};
+}
 function pageRoot(page){return document.getElementById('page-'+page)||document.querySelector('.page.active');}
 function statusBox(page){
   const root=pageRoot(page);if(!root)return null;
@@ -81,6 +98,12 @@ function paintStatus(page,state,source){
   if(st&&String(st.status||'').toLowerCase()==='error'){
     box.style.cssText='margin:0 0 12px;padding:10px 12px;border-radius:9px;background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;font-size:12px;line-height:1.5';
     box.innerHTML='<b>⚠️ Последний импорт 1С завершился ошибкой.</b> Последний хороший срез не удалён.'+(st.error_text?'<br>'+esc(st.error_text):'');return;
+  }
+  const stale=stalePaymentsStatus(st,source);
+  if(stale){
+    box.style.cssText='margin:0 0 12px;padding:10px 12px;border-radius:9px;background:#FFF7ED;border:1px solid #FDBA74;color:#9A3412;font-size:12px;line-height:1.55';
+    box.innerHTML='<b>⚠️ 1С прислала устаревший отчёт поступлений.</b> Последний успешно загруженный файл содержит период <b>'+esc(monthRu(stale.reportMonth))+'</b>, а сейчас уже <b>'+esc(monthRu(stale.currentMonth))+'</b>.<br>Сентябрьские поступления в этот файл не вошли. CRM сохраняет последний корректный срез и автоматически уберёт это предупреждение после первого успешного отчёта 1С за текущий месяц.';
+    return;
   }
   box.remove();
 }
@@ -174,6 +197,7 @@ window.RESANTA_FINANCE_DATA_ROOT_V2349=Object.freeze({
   keepLastGoodOnError:true,
   activePageAutoRefreshSeconds:ACTIVE_REFRESH_MS/1000,
   noFalseZeroOnLoadError:true,
+  paymentsStalePeriodGuard:true,
   noSqlChanges:true,
   triovistUntouched:true,
   gpsUntouched:true,
