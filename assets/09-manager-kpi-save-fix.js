@@ -120,3 +120,15 @@ window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({version:'v23.5.6',dbFir
  s.textContent='#nav-control{display:none!important}';
  document.head.appendChild(s);
 })();
+
+/* v23.6.46 · One safe monthly rollover for call-instead-of-visit tasks. */
+(function(){
+ 'use strict';
+ if(window.RESANTA_MONTHLY_ROUTE_CALL_ROLLOVER_V23646||document.querySelector('script[data-monthly-route-call-rollover-v23646]'))return;
+ const s=document.createElement('script');
+ s.src='./assets/56-monthly-route-call-rollover-v23646.js?_='+Date.now();
+ s.async=true;
+ s.dataset.monthlyRouteCallRolloverV23646='1';
+ s.onerror=()=>console.warn('Monthly route-call rollover v23.6.46 failed to load; task data remains untouched.');
+ document.head.appendChild(s);
+})();
