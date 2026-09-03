@@ -132,3 +132,15 @@ window.RESANTA_MANAGER_KPI_SAVE_FIX_V2330=Object.freeze({version:'v23.5.6',dbFir
  s.onerror=()=>console.warn('Monthly route-call rollover v23.6.46 failed to load; task data remains untouched.');
  document.head.appendChild(s);
 })();
+
+/* v23.6.50 · Isolated month/history layer ONLY for Triovist AI task card. */
+(function(){
+ 'use strict';
+ if(window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23650||document.querySelector('script[data-triovist-task-month-safe-v23650]'))return;
+ const s=document.createElement('script');
+ s.src='./assets/60-triovist-task-month-safe-v23650.js?_='+Date.now();
+ s.async=true;
+ s.dataset.triovistTaskMonthSafeV23650='1';
+ s.onerror=()=>console.warn('Triovist task month safe v23.6.50 failed to load; original task card remains available.');
+ document.head.appendChild(s);
+})();
