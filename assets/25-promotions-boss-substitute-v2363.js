@@ -65,36 +65,12 @@ function install(){
 if(!install()){let tries=0;const timer=setInterval(()=>{tries++;if(install()||tries>=60)clearInterval(timer);},250);}
 })();
 
-/* v23.6.4 bridge: actual GPS client visit order. */
-(function(){
-'use strict';
-if(window.RESANTA_GPS_VISIT_ORDER_V2364||document.querySelector('script[data-gps-visit-order-v2364]'))return;
-const s=document.createElement('script');
-s.src='./assets/26-gps-visit-order-v2364.js?_='+Date.now();
-s.async=false;
-s.dataset.gpsVisitOrderV2364='1';
-s.onerror=()=>console.warn('GPS visit order v23.6.4 failed to load; v23.6.2 viewer remains available.');
-document.head.appendChild(s);
-})();
-
-/* v23.6.11 bridge: single stable Triovist workspace. */
-(function(){
-'use strict';
-if(window.RESANTA_TRIOVIST_SINGLE_V23611||document.querySelector('script[data-triovist-v23611]'))return;
-const s=document.createElement('script');
-s.src='./assets/32-triovist-v23611.js?_='+Date.now();
-s.async=false;
-s.dataset.triovistV23611='1';
-s.onerror=()=>console.warn('Triovist v23.6.11 failed to load; base Triovist remains available.');
-document.head.appendChild(s);
-})();
-
 /* v23.6.8 bridge: director-friendly promotion approvals, budgets and interim sales. */
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_DECISION_UI_V2368||document.querySelector('script[data-promotions-decision-ui-v2368]'))return;
 const s=document.createElement('script');
-s.src='./assets/29-promotions-decision-ui-v2368.js?_='+Date.now();
+s.src='./assets/29-promotions-decision-ui-v2368.js?v=23.6.57';
 s.async=false;
 s.dataset.promotionsDecisionUiV2368='1';
 s.onerror=()=>console.warn('Promotions decision UI v23.6.8 failed to load; existing promotions remain available.');
