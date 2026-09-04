@@ -1,8 +1,10 @@
-/* RESANTA CRM v23.6.60 · SALES FRESHNESS + DYNAMIC VIP TIERS */
+/* RESANTA CRM v23.6.61 · SALES FRESHNESS + LEGACY VIP MASTER + DYNAMIC TIERS */
 (function(){
 'use strict';
 if(window.RESANTA_DATA_FRESHNESS_V23660)return;
-const VERSION='v23.6.60';
+const VERSION='v23.6.61';
+const legacyVipMemberDefinitions=typeof window.vipMemberDefinitions==='function'?window.vipMemberDefinitions:null;
+const legacyVipMatchedClient=typeof window.vipMatchedClient==='function'?window.vipMatchedClient:null;
 let channel=null,salesFlight=null,triFlight=null,vipCache={sig:'',defs:[],month:''};
 
 function page(){return document.getElementById('app')?.dataset?.activePage||'';}
@@ -114,42 +116,56 @@ function preferredName(g){
 }
 function buildVipDefs(){
   const month=lastClosedMonth(),hist=allPurchaseHistory||[],clients=allClients||[];
+  let baseDefs=[];
+  try{baseDefs=legacyVipMemberDefinitions?legacyVipMemberDefinitions():[];}catch(e){console.warn(VERSION+' legacy VIP master',e);baseDefs=[];}
   const salesStatus=(typeof crmImportStatus==='function'?crmImportStatus('sales'):null);
-  const sig=[month,hist.length,clients.length,salesStatus?.source_message_at||''].join('|');
+  const sig=[month,hist.length,clients.length,(allVipSales||[]).length,salesStatus?.source_message_at||''].join('|');
   if(vipCache.sig===sig)return vipCache.defs;
-  if(!month||!hist.length){vipCache={sig,defs:[],month};return [];}
+  if(!baseDefs.length){vipCache={sig,defs:[],month};return [];}
 
-  const groups=new Map(),byClientId=new Map();
-  function ensure(k,root){
-    if(!groups.has(k))groups.set(k,{key:k,root:root||'',clients:[],names:[],revenue:0});
-    return groups.get(k);
+  // Источник состава VIP — только прежний утверждённый справочник vip_sales.
+  // Новые обычные покупатели сюда автоматически не попадают.
+  if(!month||!hist.length){
+    const fallback=baseDefs.map(d=>({...d,vip_rank:null,vip_basis_month:month||'',vip_basis_revenue:0,vip_master_source:'vip_sales'}));
+    vipCache={sig,defs:fallback,month};return fallback;
   }
-  clients.forEach(c=>{
-    const k=key(c.name);if(!k)return;
-    const g=ensure(k,legalRoot(c.name));g.clients.push(c);if(c.name&&!g.names.includes(c.name))g.names.push(c.name);
-    if(c.id!=null)byClientId.set(String(c.id),k);
+
+  // Строим соответствия за один проход, чтобы не возвращать старый O(VIP × purchase_history).
+  const defs=baseDefs.map((d,i)=>({...d,_rank_index:i,_rank_revenue:0}));
+  const keyToDef=new Map();
+  defs.forEach((d,i)=>{
+    const names=[d.client_name,d.legal_name,...(Array.isArray(d.member_names)?d.member_names:[])].filter(Boolean);
+    names.forEach(n=>{const k=key(n);if(k&&!keyToDef.has(k))keyToDef.set(k,i);});
   });
+
+  const byClientId=new Map();
+  clients.forEach(c=>{
+    let idx=null;
+    let vars=[c?.name||''];
+    try{if(typeof clientNameVariants==='function')vars=clientNameVariants(c)||vars;}catch(_){}
+    for(const v of vars){const k=key(v);if(k&&keyToDef.has(k)){idx=keyToDef.get(k);break;}}
+    if(idx!=null&&c?.id!=null)byClientId.set(String(c.id),idx);
+  });
+
   hist.forEach(r=>{
     if(ym(r.month)!==month)return;
-    let k=r.client_id!=null?byClientId.get(String(r.client_id)):null;
-    if(!k)k=key(r.client_name);
-    if(!k)return;
-    const g=ensure(k,legalRoot(r.client_name));const rev=Number(r.revenue)||0;g.revenue+=rev;
-    if(r.client_name&&!g.names.includes(r.client_name))g.names.push(r.client_name);
+    let idx=r.client_id!=null?byClientId.get(String(r.client_id)):null;
+    if(idx==null){const k=key(r.client_name);if(k&&keyToDef.has(k))idx=keyToDef.get(k);}
+    if(idx==null)return;
+    defs[idx]._rank_revenue+=(Number(r.revenue)||0);
   });
-  const ranked=[...groups.values()].filter(g=>g.revenue>0).sort((a,b)=>b.revenue-a.revenue||preferredName(a).localeCompare(preferredName(b),'ru'));
-  const defs=ranked.map((g,i)=>{
+
+  defs.sort((a,b)=>b._rank_revenue-a._rank_revenue||String(a.client_name||'').localeCompare(String(b.client_name||''),'ru'));
+  const ranked=defs.map((d,i)=>{
     const department=i<10?'ВИП МПП':i<30?'ВИП ДФ':'ВИП ДФС';
-    const name=preferredName(g);
-    return{
-      client_name:name,legal_name:name,holding_name:'',department,
-      member_names:[...new Set((g.names||[]).concat((g.clients||[]).map(c=>c.name)).map(clean).filter(Boolean))],
-      source_rows:[],vip_rank:i+1,vip_basis_month:month,vip_basis_revenue:Math.round(g.revenue*100)/100
-    };
+    const out={...d,department,vip_rank:i+1,vip_basis_month:month,vip_basis_revenue:Math.round(d._rank_revenue*100)/100,vip_master_source:'vip_sales'};
+    delete out._rank_index;delete out._rank_revenue;
+    return out;
   });
-  vipCache={sig,defs,month};return defs;
+  vipCache={sig,defs:ranked,month};return ranked;
 }
 function matchedVip(name){
+  try{if(legacyVipMatchedClient)return legacyVipMatchedClient(name);}catch(_){}
   const k=key(name),def=buildVipDefs().find(d=>key(d.client_name)===k);
   const names=new Set((def?.member_names||[]).map(key).filter(Boolean));
   const candidates=(allClients||[]).filter(c=>key(c.name)===k||names.has(key(c.name)));
@@ -176,7 +192,7 @@ if(typeof baseVipRender==='function'){
         const d=document.createElement('div');d.className='v23660-vip-tier-note';
         d.style.cssText='font-size:12px;color:var(--sub);margin-top:6px';
         let label=month;try{label=new Date(month+'-01T12:00:00').toLocaleDateString('ru-RU',{month:'long',year:'numeric'});}catch(_){}
-        d.innerHTML='<b>Уровень VIP:</b> '+label+' · ТОП-10 = ВИП МПП · места 11–30 = ВИП ДФ · остальные клиенты с продажами = ВИП ДФС.';
+        d.innerHTML='<b>Состав VIP:</b> прежний утверждённый список · <b>уровень по '+label+':</b> ТОП-10 = ВИП МПП · места 11–30 = ВИП ДФ · остальные = ВИП ДФС.';
         info.appendChild(d);
       }
     }catch(e){console.warn(VERSION+' vip note',e);}
@@ -200,6 +216,6 @@ else{try{if(typeof currentProfile!=='undefined'&&currentProfile)installRealtime(
 
 window.RESANTA_DATA_FRESHNESS_V23660=Object.freeze({
   version:VERSION,hourlySourceChecks:true,realtimeActivePageOnly:true,noPolling:true,dynamicVipTiers:true,
-  vipTierRule:'top10_mpp_11to30_df_rest_dfs',vipBasis:'last_closed_month'
+  vipTierRule:'top10_mpp_11to30_df_rest_dfs',vipBasis:'legacy_vip_master_last_closed_month',vipMaster:'vip_sales_legacy_only'
 });
 })();
