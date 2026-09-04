@@ -67,14 +67,5 @@ function install(){
 if(!install()){let tries=0;const timer=setInterval(()=>{tries++;if(install()||tries>=60)clearInterval(timer);},250);}
 })();
 
-/* v23.6.8 bridge: director-friendly promotion approvals, budgets and interim sales. */
-(function(){
-'use strict';
-if(window.RESANTA_PROMOTIONS_DECISION_UI_V2368||document.querySelector('script[data-promotions-decision-ui-v2368]'))return;
-const s=document.createElement('script');
-s.src='./assets/29-promotions-decision-ui-v2368.js?v=23.6.69';
-s.async=false;
-s.dataset.promotionsDecisionUiV2368='1';
-s.onerror=()=>console.warn('Promotions decision UI v23.6.8 failed to load; existing promotions remain available.');
-document.head.appendChild(s);
-})();
+/* v23.6.70: decision UI is loaded explicitly by the Promotions module contract.
+ * Do not chain unrelated scripts from this feature module. */
