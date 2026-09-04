@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
-const V='23.6.62', flights=new Map();
+const V='23.6.65', flights=new Map();
 function activePage(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}catch(_){return''}}
 function loaded(guard){return guard&&!!window[guard]}
 function load(path,marker,guard){
@@ -49,6 +49,50 @@ async function loadPromotions(){
   await load('assets/25-promotions-boss-substitute-v2363.js','perf-promo-flow-v23657','RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363');
   await load('assets/63-promotions-management-v23654.js','perf-promo-management-v23657','RESANTA_PROMOTIONS_MANAGEMENT_V23654');
   await load('assets/65-promotions-close-v23656.js','perf-promo-close-v23657','RESANTA_PROMOTIONS_CLOSE_V23656');
+}
+
+/* v23.6.65: never show fake zero promotion metrics while the page-scoped
+ * promotion modules are still loading. Keep the existing DOM intact and cover
+ * it with a lightweight loading layer; once v23.6.54 + v23.6.56 are ready,
+ * render exactly once through the final promotion renderer. */
+let promoRenderFlight=null;
+function promoPage(){return document.getElementById('page-promotions')}
+function showPromoLoading(){
+  const p=promoPage();if(!p)return;
+  if(!p.style.position)p.style.position='relative';
+  let x=document.getElementById('promo-load-v23665');
+  if(!x){
+    x=document.createElement('div');x.id='promo-load-v23665';
+    x.style.cssText='position:absolute;inset:0;z-index:30;background:rgba(249,250,251,.97);display:flex;align-items:flex-start;justify-content:center;padding-top:34px;min-height:420px';
+    x.innerHTML='<div class="card" style="width:min(560px,calc(100% - 32px));text-align:center;padding:22px"><div style="font-size:20px;margin-bottom:7px">🎯 Акции</div><div style="font-size:13px;color:var(--sub)">Загружаю актуальные акции, бюджеты и продажи из 1С…</div></div>';
+    p.appendChild(x);
+  }
+}
+function hidePromoLoading(){document.getElementById('promo-load-v23665')?.remove()}
+const basePromotionRender=window.renderPromotions;
+function guardedPromotionRender(){
+  const ready=!!window.RESANTA_PROMOTIONS_MANAGEMENT_V23654&&!!window.RESANTA_PROMOTIONS_CLOSE_V23656;
+  if(ready){
+    hidePromoLoading();
+    return typeof basePromotionRender==='function'?basePromotionRender.apply(this,arguments):undefined;
+  }
+  showPromoLoading();
+  if(!promoRenderFlight){
+    promoRenderFlight=loadPromotions().then(()=>{
+      if(activePage()!=='promotions'){hidePromoLoading();return}
+      const current=window.renderPromotions;
+      if(typeof current==='function'&&current!==guardedPromotionRender)current();
+      else if(typeof basePromotionRender==='function')basePromotionRender();
+      hidePromoLoading();
+    }).catch(e=>{
+      hidePromoLoading();console.warn('PERF '+V+' promotions initial render',e);
+      if(typeof basePromotionRender==='function')basePromotionRender();
+    }).finally(()=>{promoRenderFlight=null});
+  }
+}
+if(typeof basePromotionRender==='function'){
+  window.renderPromotions=guardedPromotionRender;
+  try{renderPromotions=guardedPromotionRender}catch(_){}
 }
 async function loadRoutes(){
   await Promise.all([
@@ -114,7 +158,7 @@ window.addEventListener('pageshow',()=>setTimeout(maybeLoadPaymentRegistry,0));
 window.addEventListener('focus',()=>setTimeout(maybeLoadPaymentRegistry,0));
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
-  version:'v23.6.62',pageScopedModules:true,controlHiddenNoLoad:true,noDateNowCacheBust:true,
-  paymentRegistryLazy:true,officeManagerPaymentsOnly:true,noBusinessLogicChanges:true
+  version:'v23.6.65',pageScopedModules:true,controlHiddenNoLoad:true,noDateNowCacheBust:true,
+  paymentRegistryLazy:true,officeManagerPaymentsOnly:true,promotionsNoFakeZeroState:true,noBusinessLogicChanges:true
 });
 })();
