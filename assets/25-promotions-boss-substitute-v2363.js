@@ -72,7 +72,7 @@ if(!install()){let tries=0;const timer=setInterval(()=>{tries++;if(install()||tr
 'use strict';
 if(window.RESANTA_PROMOTIONS_DECISION_UI_V2368||document.querySelector('script[data-promotions-decision-ui-v2368]'))return;
 const s=document.createElement('script');
-s.src='./assets/29-promotions-decision-ui-v2368.js?v=23.6.57';
+s.src='./assets/29-promotions-decision-ui-v2368.js?v=23.6.69';
 s.async=false;
 s.dataset.promotionsDecisionUiV2368='1';
 s.onerror=()=>console.warn('Promotions decision UI v23.6.8 failed to load; existing promotions remain available.');
