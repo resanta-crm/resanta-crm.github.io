@@ -98,7 +98,7 @@ function key(v){
   return s.toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]/giu,'');
 }
 function ym(v){const m=String(v||'').match(/^(\d{4})-(\d{2})/);return m?m[1]+'-'+m[2]:'';}
-function currentYm(){return String(window.TODAY||new Date().toISOString().slice(0,10)).slice(0,7);}
+function currentYm(){let raw='';try{raw=(typeof TODAY!=='undefined'&&TODAY)?TODAY:'';}catch(_){}return String(raw||new Date().toISOString().slice(0,10)).slice(0,7);}
 function lastClosedMonth(){
   const cur=currentYm();
   const months=[...new Set((allPurchaseHistory||[]).map(r=>ym(r.month)).filter(m=>m&&m<cur))].sort();
