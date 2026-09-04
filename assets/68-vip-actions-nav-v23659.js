@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.59 · VIP ACTIONS NAV BOOTSTRAP */
+/* RESANTA CRM v23.6.62 · VIP ACTIONS NAV BOOTSTRAP */
 (function(){
 'use strict';
 if(window.RESANTA_VIP_ACTIONS_NAV_V23659)return;
@@ -11,12 +11,14 @@ function load(){
   flight=new Promise(resolve=>{
     const old=document.querySelector('script[data-vip-actions-v23659]');
     if(old){old.addEventListener('load',()=>resolve(true),{once:true});old.addEventListener('error',()=>resolve(false),{once:true});return}
-    const s=document.createElement('script');s.src='./assets/67-vip-actions-v23659.js?v=23.6.59';s.async=true;s.dataset.vipActionsV23659='1';s.onload=()=>resolve(true);s.onerror=()=>resolve(false);document.head.appendChild(s);
+    const s=document.createElement('script');s.src='./assets/67-vip-actions-v23659.js?v=23.6.62';s.async=true;s.dataset.vipActionsV23659='1';s.onload=()=>resolve(true);s.onerror=()=>resolve(false);document.head.appendChild(s);
   }).finally(()=>{flight=null});
   return flight;
 }
 function ensure(){
   let n=document.getElementById('nav-vip-actions-bootstrap');
+  const real=document.getElementById('nav-vip-actions');
+  if(real){n?.remove();real.style.display=allowed()?'flex':'none';return allowed()}
   if(!allowed()){if(n)n.style.display='none';return false}
   if(!n){
     n=document.createElement('button');n.className='nav-item';n.id='nav-vip-actions-bootstrap';n.innerHTML='<span class="icon">🎯</span> Акции VIP';
@@ -25,7 +27,7 @@ function ensure(){
   }
   n.style.display='flex';return true;
 }
-function boot(){[0,250,700,1500,3000].forEach(ms=>setTimeout(ensure,ms));window.addEventListener('pageshow',()=>setTimeout(ensure,0));window.addEventListener('focus',ensure)}
+function boot(){ensure();window.addEventListener('pageshow',()=>setTimeout(ensure,0),{passive:true})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-window.RESANTA_VIP_ACTIONS_NAV_V23659=Object.freeze({version:'v23.6.59',lazy:true,noDataReads:true,noPolling:true});
+window.RESANTA_VIP_ACTIONS_NAV_V23659=Object.freeze({version:'v23.6.62',lazy:true,noDataReads:true,noPolling:true});
 })();
