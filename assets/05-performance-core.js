@@ -470,11 +470,11 @@ window.RESANTA_CRM_ULTRA_FAST_FINAL=Object.freeze({
 if(window.RESANTA_CRM_RESPONSIVE_CORE_V227325)return;
 
 const VERSION='v22.7.32.2.5';
-const POLL_MS=10000;
+const POLL_MS=0;
 const versions=new Map();
 const dirty=new Set();
 const flights=new Map();
-let started=false,timer=null,baselineReady=false,disabled=false;
+let started=false,timer=null,baselineReady=false,disabled=false,realtimeChannel=null,realtimeRetry=0;
 
 function page(){
   try{return typeof crmActivePage==='function'?crmActivePage():document.getElementById('app')?.dataset?.activePage||'';}
@@ -657,29 +657,69 @@ async function poll(){
     }else console.warn(VERSION+' version watcher',e);
   }
 }
+function acceptRealtimeVersion(row){
+  const k=String(row?.resource_key||''),v=Number(row?.version)||0;
+  if(!k)return;
+  const old=versions.get(k);
+  versions.set(k,v);
+  if(old==null){return;}
+  if(v!==old){
+    dirty.add(k);
+    try{window.crmSingleRenderMarkResourceV227327?.(k);}catch(_){}
+    scheduleDirtyRefresh(page(),500);
+  }
+}
+function startRealtime(){
+  if(disabled||realtimeChannel)return true;
+  let client=null;try{client=(typeof db!=='undefined'&&db)||window.db}catch(_){client=window.db}
+  if(!client||typeof client.channel!=='function'){
+    if(realtimeRetry++<12)setTimeout(startRealtime,1000);
+    return false;
+  }
+  try{
+    realtimeChannel=client.channel('crm-data-versions-v23657')
+      .on('postgres_changes',{event:'*',schema:'public',table:'crm_data_versions'},payload=>acceptRealtimeVersion(payload?.new||payload?.old||{}))
+      .subscribe(status=>{
+        if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+          try{client.removeChannel?.(realtimeChannel)}catch(_){}
+          realtimeChannel=null;
+          if(realtimeRetry++<12)setTimeout(startRealtime,1500);
+        }
+      });
+    return true;
+  }catch(e){
+    realtimeChannel=null;
+    if(realtimeRetry++<12)setTimeout(startRealtime,1500);
+    console.warn(VERSION+' realtime watcher',e);
+    return false;
+  }
+}
 window.crmResponsivePageOpenedV227325=function(p){
-  // Page switch is instant. Dirty data refresh starts only after the user
-  // has had time to see/use the already-rendered DOM.
+  // Navigation stays instant. One tiny version check on page entry is the
+  // fallback if realtime was temporarily unavailable.
   scheduleDirtyRefresh(p,700);
+  setTimeout(poll,120);
 };
 window.crmResponsiveMarkDirtyV227325=function(...keys){
   keys.flat().filter(Boolean).forEach(k=>dirty.add(String(k)));
   scheduleDirtyRefresh(page(),850);
 };
 window.crmResponsiveStartV227325=function(){
-  if(started||disabled)return;started=true;
-  setTimeout(poll,1200);
-  timer=setInterval(poll,POLL_MS);
+  if(disabled)return;
+  if(!started){started=true;setTimeout(poll,900);}
+  startRealtime();
 };
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'){window.crmResponsiveStartV227325();setTimeout(poll,100);}
+  if(document.visibilityState==='visible'){window.crmResponsiveStartV227325();setTimeout(poll,120);}
 });
-window.addEventListener('focus',()=>setTimeout(poll,100));
+window.addEventListener('focus',()=>{window.crmResponsiveStartV227325();setTimeout(poll,120)});
 setTimeout(()=>window.crmResponsiveStartV227325(),1800);
 
 window.RESANTA_CRM_RESPONSIVE_CORE_V227325=Object.freeze({
-  version:'v22.7.32.2.7',
-  versionPollSeconds:POLL_MS/1000,
+  version:'v23.6.57',
+  versionPollSeconds:0,
+  realtimeVersions:true,
+  focusAndPageFallback:true,
   addressableRefresh:true,
   fullPageReloadForData:false,
   purchaseHistoryBackgroundLoad:false,
