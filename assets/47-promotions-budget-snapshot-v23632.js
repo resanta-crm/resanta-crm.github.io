@@ -72,8 +72,9 @@ function rerender(){
 }
 function install(){
   if(!installSummary())return false;
-  rerender();
-  window.RESANTA_PROMOTIONS_BUDGET_SNAPSHOT_V23632=Object.freeze({version:VERSION,factualBalanceCheckpoint:true,noHistoricalDoubleSubtract:true,noPolling:true,noObserver:true});
+  // v23.6.69: no autonomous full-page repaint here. The Promotions module
+  // contract performs exactly one final render after the complete stack is ready.
+  window.RESANTA_PROMOTIONS_BUDGET_SNAPSHOT_V23632=Object.freeze({version:VERSION,factualBalanceCheckpoint:true,noHistoricalDoubleSubtract:true,noPolling:true,noObserver:true,contractManagedRender:true});
   console.info('RESANTA promotions factual budget '+VERSION+' installed');
   return true;
 }
