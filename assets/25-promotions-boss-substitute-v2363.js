@@ -58,7 +58,7 @@ function install(){
     patchCreateFlow();patchPermissions();patchRender();labelSubstituteAction();
     // v23.6.69: startup data readiness is awaited by the Promotions module contract.
     // Never trigger an autonomous full-page render from an installer.
-    window.crmPromotionSubstitutionsReadyV23669=refreshSubstitutions(true);
+    window.crmPromotionSubstitutionsReadyV23670=window.crmPromotionSubstitutionsReadyV23669=refreshSubstitutions(true);
     window.RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363=Object.freeze({version:VERSION,bossCanCreate:true,bossCreateManagerFirst:true,sidorovichCreateShortcutPreserved:true,activeSubstitutionTable:'manager_absences',firstApproval:'Сидарович',finalApproval:'Паюшин',contractManagedRender:true});
     console.info('RESANTA promotions '+VERSION+' installed');
     return true;
