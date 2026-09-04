@@ -221,6 +221,29 @@ def audit(status: str, *, month: str | None = None, sent: datetime | None = None
         log(f"⚠️ Аудит импорта не записан: {exc}")
 
 
+
+def publish_import_status(month: str, sent: datetime, rows: int, details: str) -> None:
+    """Publish one lightweight realtime stamp only after a verified new Triovist import."""
+    try:
+        rpc(
+            "crm_set_import_status",
+            {
+                "p_source": "triovist_sales",
+                "p_status": "ok",
+                "p_report_period": month[:7],
+                "p_report_date": None,
+                "p_source_message_at": sent.isoformat(),
+                "p_row_count": rows,
+                "p_details": details,
+                "p_error_text": None,
+            },
+            30,
+        )
+    except Exception as exc:
+        # Import truth is already verified in triovist tables; status signal must not roll it back.
+        log(f"⚠️ Realtime-статус Триовиста не записан: {exc}")
+
+
 def current_and_previous() -> tuple[str, str]:
     today = date.today()
     current = f"{today.year:04d}-{today.month:02d}-01"
@@ -355,6 +378,7 @@ def main() -> None:
         log(f"✅ {msg}")
         audit("updated", month=month, sent=sent, filename=filename, subject=selected["subject"],
               rows=len(rows), qty=qty, revenue=revenue, before=before_revenue, after=after_revenue, details=msg)
+        publish_import_status(month, sent, len(rows), msg)
     except Exception as exc:
         if selected is not None:
             audit("error", month=selected.get("month"), sent=selected.get("sent"), filename=selected.get("filename"),
