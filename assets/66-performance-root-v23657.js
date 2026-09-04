@@ -28,7 +28,8 @@ function load(path,marker,guard){
   if(loaded(guard))return Promise.resolve(true);
   if(flights.has(path))return flights.get(path);
   const selector='script['+attrName(marker)+']';
-  const existing=document.querySelector(selector);
+  const file=path.split('/').pop();
+  const existing=document.querySelector(selector)||[...document.scripts].find(s=>String(s.src||'').includes('/'+file));
   if(existing){
     const p=new Promise(resolve=>{
       if(loaded(guard)){resolve(true);return}
