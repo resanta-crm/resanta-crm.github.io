@@ -59,9 +59,10 @@ function onImport(payload){
   else if(src==='triovist_sales')onTriovist(row);
 }
 function installRealtime(){
-  if(channel||!window.db?.channel)return false;
+  const client=(typeof db!=='undefined'&&db&&typeof db.channel==='function')?db:null;
+  if(channel||!client)return false;
   try{
-    channel=window.db.channel('crm-import-status-v23660')
+    channel=client.channel('crm-import-status-v23660')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'crm_import_status'},onImport)
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'crm_import_status'},onImport)
       .subscribe();
@@ -113,7 +114,8 @@ function preferredName(g){
 }
 function buildVipDefs(){
   const month=lastClosedMonth(),hist=allPurchaseHistory||[],clients=allClients||[];
-  const sig=[month,hist.length,clients.length,crmImportStatus?.('sales')?.source_message_at||''].join('|');
+  const salesStatus=(typeof crmImportStatus==='function'?crmImportStatus('sales'):null);
+  const sig=[month,hist.length,clients.length,salesStatus?.source_message_at||''].join('|');
   if(vipCache.sig===sig)return vipCache.defs;
   if(!month||!hist.length){vipCache={sig,defs:[],month};return [];}
 
@@ -193,8 +195,8 @@ if(typeof baseLoad==='function'){
   };
   try{loadData=window.loadData;}catch(_){}
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{if(window.currentProfile)installRealtime();},{once:true});
-else if(window.currentProfile)installRealtime();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{try{if(typeof currentProfile!=='undefined'&&currentProfile)installRealtime();}catch(_){}},{once:true});
+else{try{if(typeof currentProfile!=='undefined'&&currentProfile)installRealtime();}catch(_){}}
 
 window.RESANTA_DATA_FRESHNESS_V23660=Object.freeze({
   version:VERSION,hourlySourceChecks:true,realtimeActivePageOnly:true,noPolling:true,dynamicVipTiers:true,
