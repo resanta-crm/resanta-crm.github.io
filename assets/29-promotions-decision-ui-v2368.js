@@ -153,8 +153,9 @@ function install(){
   css();bindClicks();
   const baseRender=window.renderPromotions;window.renderPromotions=function(){const r=baseRender.apply(this,arguments);setTimeout(()=>{try{directorPanel();decorateList();}catch(e){console.warn(VERSION+' render decorate',e);}},0);return r;};try{renderPromotions=window.renderPromotions;}catch(_){}
   const baseOpen=window.openPromotionDetail;window.openPromotionDetail=function(id){const r=baseOpen.apply(this,arguments);setTimeout(()=>{try{decorateDetail(id);}catch(e){console.warn(VERSION+' detail decorate',e);}},0);return r;};try{openPromotionDetail=window.openPromotionDetail;}catch(_){}
-  window.RESANTA_PROMOTIONS_DECISION_UI_V2368=Object.freeze({version:VERSION,uiOnly:true,oneCImportUntouched:true,budgetDataUntouched:true,approvalTransitionsUntouched:true,unfinishedPeriodNoFalseNegative:true,directorBudgetAfterApproval:true});
-  try{window.renderPromotions();}catch(_){}
+  window.RESANTA_PROMOTIONS_DECISION_UI_V2368=Object.freeze({version:VERSION,uiOnly:true,oneCImportUntouched:true,budgetDataUntouched:true,approvalTransitionsUntouched:true,unfinishedPeriodNoFalseNegative:true,directorBudgetAfterApproval:true,contractManagedRender:true});
+  // v23.6.69: the page contract performs the single final render after every
+  // Promotions module is ready. Installer must not repaint the page by itself.
   console.info('RESANTA promotions decision UI '+VERSION+' installed');return true;
 }
 if(!install()){let tries=0;const t=setInterval(()=>{tries++;if(install()||tries>=60)clearInterval(t);},250);}
