@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.34.1 · MANAGER SALES YEAR-OVER-YEAR
+/* RESANTA CRM v23.6.34.2 · MANAGER SALES YEAR-OVER-YEAR
  * Separate lazy sales comparison inside Sales · Analytics.
  * Month / quarter / YTD, all current field managers, client drilldown.
  * Returns/negative corrections are separated from growth/new/lost/falling.
@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_MANAGER_SALES_YOY_V23634)return;
 
-const VERSION='v23.6.34.1';
+const VERSION='v23.6.34.2';
 const ROOT_ID='manager-sales-yoy-v23634';
 const CACHE_TTL=120000;
 const cache=new Map();
@@ -89,20 +89,40 @@ function renderSummary(){
   if(state.manager)renderDetail();
 }
 
+function cleanSearch(v){
+  const s=String(v??'');
+  let email='';try{email=String(currentProfile?.email||'').trim().toLowerCase()}catch(_){}
+  return email&&s.trim().toLowerCase()===email?'':s;
+}
 function filteredClients(){
   let a=[...(state.clients||[])];
   if(state.trend!=='all')a=a.filter(x=>x.trend===state.trend);
-  const q=state.search.trim().toLowerCase();if(q)a=a.filter(x=>[x.client_name,x.city,x.region,x.category].some(v=>String(v||'').toLowerCase().includes(q)));
+  const q=cleanSearch(state.search).trim().toLowerCase();if(q)a=a.filter(x=>[x.client_name,x.city,x.region,x.category].some(v=>String(v||'').toLowerCase().includes(q)));
   if(state.trend==='growth'||state.trend==='new')a.sort((a,b)=>num(b.delta)-num(a.delta));else a.sort((a,b)=>num(a.delta)-num(b.delta));
   return a;
+}
+function scrubSearchAutofill(){
+  const i=document.querySelector('#msy-detail-v23634 .msy-search');if(!i)return;
+  const clean=cleanSearch(i.value);
+  if(clean!==i.value)i.value=clean;
+}
+function applySearchDom(){
+  const q=cleanSearch(state.search).trim().toLowerCase();
+  let shown=0;
+  document.querySelectorAll('#msy-client-rows-v23634 tr[data-msy-search]').forEach(tr=>{
+    const ok=!q||String(tr.dataset.msySearch||'').includes(q);
+    tr.style.display=ok?'':'none';if(ok)shown++;
+  });
+  const n=document.getElementById('msy-client-count-v23634');if(n)n.textContent=String(shown);
 }
 function renderDetail(){
   const box=document.getElementById('msy-detail-v23634');if(!box||!state.manager)return;
   const d=state.summary||{},rows=filteredClients(),cy=d.year||state.year,py=d.previous_year||state.year-1;
   box.innerHTML=`<div class="msy-detail"><div class="msy-detail-head"><div><b>${esc(state.manager)}</b><div style="font-size:11px;color:var(--sub);margin-top:2px">Клиенты · ${esc(periodLabel(d))}</div></div><button class="btn-secondary" onclick="window.msyCloseManagerV23634()">Закрыть</button></div>
-    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px"><div class="msy-chips">${[['all','Все'],['fall','🔴 Падение'],['growth','🟢 Рост'],['new','🆕 Новые'],['lost','❌ Потеряны'],['adjustment','🟠 Корректировки']].map(([k,l])=>`<button class="msy-chip ${state.trend===k?'active':''}" onclick="window.msyTrendV23634('${k}')">${l}</button>`).join('')}</div><input class="msy-search" placeholder="Поиск клиента…" value="${esc(state.search)}" oninput="window.msySearchV23634(this.value)"></div>
-    <div style="font-size:11px;color:var(--sub);margin-bottom:7px">Показано клиентов: ${rows.length}</div>
-    <div class="msy-table-wrap"><table class="msy-table" style="min-width:820px"><thead><tr><th>Клиент</th><th>Кат.</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>{const m=trendMeta(r.trend),delta=num(r.delta),cls=r.trend==='adjustment'?'msy-adj':(delta>=0?'msy-pos':'msy-neg');return `<tr><td>${r.client_id?`<span style="cursor:pointer;font-weight:600" onclick="window.msyClientV23634('${esc(r.client_id)}')">${esc(r.client_name)}</span>`:`<b>${esc(r.client_name)}</b>`}<div style="font-size:10px;color:var(--sub);margin-top:2px">${esc([r.city,r.region].filter(Boolean).join(' · '))}</div></td><td>${esc(r.category||'—')}</td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td style="color:${m[2]};font-weight:700">${m[0]} ${m[1]}</td></tr>`;}).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--sub);padding:18px">Нет клиентов по выбранному фильтру</td></tr>'}</tbody></table></div></div>`;
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px"><div class="msy-chips">${[['all','Все'],['fall','🔴 Падение'],['growth','🟢 Рост'],['new','🆕 Новые'],['lost','❌ Потеряны'],['adjustment','🟠 Корректировки']].map(([k,l])=>`<button class="msy-chip ${state.trend===k?'active':''}" onclick="window.msyTrendV23634('${k}')">${l}</button>`).join('')}</div><input type="search" class="msy-search" name="crm-client-filter-v236342" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" data-1p-ignore="true" placeholder="Поиск клиента…" value="${esc(cleanSearch(state.search))}" oninput="window.msySearchV23634(this.value,this)"></div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:7px">Показано клиентов: <span id="msy-client-count-v23634">${rows.length}</span></div>
+    <div class="msy-table-wrap"><table class="msy-table" style="min-width:820px"><thead><tr><th>Клиент</th><th>Кат.</th><th>${py}</th><th>${cy}</th><th>Δ BYN</th><th>Δ %</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>{const m=trendMeta(r.trend),delta=num(r.delta),cls=r.trend==='adjustment'?'msy-adj':(delta>=0?'msy-pos':'msy-neg');return `<tr data-msy-search="${esc([r.client_name,r.city,r.region,r.category].map(v=>String(v||'').toLowerCase()).join(' '))}"><td>${r.client_id?`<span style="cursor:pointer;font-weight:600" onclick="window.msyClientV23634('${esc(r.client_id)}')">${esc(r.client_name)}</span>`:`<b>${esc(r.client_name)}</b>`}<div style="font-size:10px;color:var(--sub);margin-top:2px">${esc([r.city,r.region].filter(Boolean).join(' · '))}</div></td><td>${esc(r.category||'—')}</td><td>${money(r.previous_revenue)}</td><td>${money(r.current_revenue)}</td><td class="${cls}">${signed(delta)}</td><td class="${cls}">${pct(r.growth_pct)}</td><td style="color:${m[2]};font-weight:700">${m[0]} ${m[1]}</td></tr>`;}).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--sub);padding:18px">Нет клиентов по выбранному фильтру</td></tr>'}</tbody></table></div></div>`;
+  [0,120,500].forEach(ms=>setTimeout(scrubSearchAutofill,ms));
 }
 
 function cacheKey(manager){return[state.mode,state.year,state.period,manager||'all'].join('|');}
@@ -135,9 +155,14 @@ window.msyManagerV23634=async function(name){
 };
 window.msyCloseManagerV23634=function(){state.manager=null;state.clients=[];state.trend='all';state.search='';const b=document.getElementById('msy-detail-v23634');if(b)b.innerHTML='';};
 window.msyTrendV23634=function(v){state.trend=v;renderDetail();};
-window.msySearchV23634=function(v){state.search=v;renderDetail();const i=document.querySelector('#msy-detail-v23634 .msy-search');if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length);}catch(_){}}};
+window.msySearchV23634=function(v,input){
+  const clean=cleanSearch(v);state.search=clean;
+  const i=input||document.querySelector('#msy-detail-v23634 .msy-search');
+  if(i&&i.value!==clean)i.value=clean;
+  applySearchDom();
+};
 window.msyClientV23634=function(id){try{if(typeof openClient==='function')openClient(id);}catch(e){console.warn('open client from manager yoy',e);}};
 
 install();
-window.RESANTA_MANAGER_SALES_YOY_V23634=Object.freeze({version:VERSION,lazy:true,month:true,quarter:true,ytd:true,allManagers:true,currentOwnership:true,separateAdjustments:true,noPolling:true,noWrites:true});
+window.RESANTA_MANAGER_SALES_YOY_V23634=Object.freeze({version:VERSION,lazy:true,month:true,quarter:true,ytd:true,allManagers:true,currentOwnership:true,separateAdjustments:true,searchAutofillGuard:true,searchNoRerender:true,noPolling:true,noWrites:true});
 })();
