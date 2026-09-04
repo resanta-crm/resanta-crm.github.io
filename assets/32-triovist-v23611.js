@@ -10,7 +10,7 @@ window.RESANTA_TRIOVIST_SINGLE_V23612=window.RESANTA_TRIOVIST_SINGLE_V23612||com
 window.RESANTA_TRIOVIST_SINGLE_V23611=window.RESANTA_TRIOVIST_SINGLE_V23611||compat;
 if(window.RESANTA_TRIOVIST_ROOT_V23614||document.querySelector('script[data-triovist-root-v23614]'))return;
 const s=document.createElement('script');
-s.src='./assets/34-triovist-root-v23614.js?v=23.6.14&_='+Date.now();
+s.src='./assets/34-triovist-root-v23614.js?v=23.6.57';
 s.async=false;
 s.dataset.triovistRootV23614='1';
 s.onerror=()=>console.error('Triovist ROOT v23.6.14 failed to load; base Triovist remains available.');
