@@ -186,7 +186,6 @@ function refreshActive(force=false){
 }
 window.addEventListener('focus',()=>setTimeout(()=>refreshActive(false),100));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(()=>refreshActive(false),100)});
-setInterval(()=>refreshActive(false),ACTIVE_REFRESH_MS);
 setTimeout(()=>refreshActive(true),400);
 
 window.RESANTA_FINANCE_DATA_ROOT_V2349=Object.freeze({
@@ -195,7 +194,8 @@ window.RESANTA_FINANCE_DATA_ROOT_V2349=Object.freeze({
   debtFirstOpenFresh:true,
   singleFlight:true,
   keepLastGoodOnError:true,
-  activePageAutoRefreshSeconds:ACTIVE_REFRESH_MS/1000,
+  activePageAutoRefreshSeconds:0,
+  eventDrivenRefresh:true,
   noFalseZeroOnLoadError:true,
   paymentsStalePeriodGuard:true,
   noSqlChanges:true,
