@@ -56,8 +56,10 @@ function install(){
   if(typeof window.renderPromotions!=='function'||typeof window.openPromotionEditor!=='function'||typeof window.savePromotion!=='function'||typeof window.promoCanSubmitManager!=='function')return false;
   try{
     patchCreateFlow();patchPermissions();patchRender();labelSubstituteAction();
-    refreshSubstitutions(true).then(()=>{try{window.renderPromotions();}catch(_){}});
-    window.RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363=Object.freeze({version:VERSION,bossCanCreate:true,bossCreateManagerFirst:true,sidorovichCreateShortcutPreserved:true,activeSubstitutionTable:'manager_absences',firstApproval:'Сидарович',finalApproval:'Паюшин'});
+    // v23.6.69: startup data readiness is awaited by the Promotions module contract.
+    // Never trigger an autonomous full-page render from an installer.
+    window.crmPromotionSubstitutionsReadyV23669=refreshSubstitutions(true);
+    window.RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363=Object.freeze({version:VERSION,bossCanCreate:true,bossCreateManagerFirst:true,sidorovichCreateShortcutPreserved:true,activeSubstitutionTable:'manager_absences',firstApproval:'Сидарович',finalApproval:'Паюшин',contractManagedRender:true});
     console.info('RESANTA promotions '+VERSION+' installed');
     return true;
   }catch(e){console.error('Promotions '+VERSION+' NOT installed safely:',e);return false;}
