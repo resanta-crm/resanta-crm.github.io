@@ -1210,7 +1210,6 @@ def check_period(month):
 
 
 def main():
-    safe_set_import_status("sales", "running")
     log(f"Подключаюсь к почте {IMAP_HOST}:{IMAP_PORT} (таймаут {MAIL_TIMEOUT} сек.)")
     mail = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=MAIL_TIMEOUT)
     mail.login(IMAP_USER, IMAP_PASS)
@@ -1306,6 +1305,15 @@ def main():
         log(f"✅ Письмо {sent:%d.%m.%Y %H:%M} уже загружено — почасовая проверка без изменений.")
         mail.logout()
         return
+
+    safe_set_import_status(
+        "sales", "running",
+        report_period=month[:7],
+        report_date=report_end.isoformat(),
+        source_message_at=sent.isoformat(),
+        row_count=len(rows),
+        details=f"Импорт нового письма {subject}",
+    )
 
     by_mgr = {}
     for row in rows:
