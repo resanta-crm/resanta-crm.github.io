@@ -63,7 +63,7 @@ async function loadForPage(page){
     if(p==='triovist')return await loadTriovist();
     if(p==='promotions'||p==='budgets')return await loadPromotions();
     if(p==='payments'||p==='debt')return await load('assets/12-finance-data-root-v2349.js','perf-finance-v23657','RESANTA_FINANCE_DATA_ROOT_V2349');
-    if(p==='managers')return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23657','RESANTA_MANAGER_PLANS_ROOT_V2330');
+    if(p==='managers'){await load('assets/07-ai-manager-plans.js','perf-manager-ai-v23657','RESANTA_AI_MANAGER_PLANS_V2320');await load('assets/08-manager-gap-sources.js','perf-manager-gap-v23657','RESANTA_MANAGER_GAP_SOURCES_V2322');return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23657','RESANTA_MANAGER_PLANS_ROOT_V2330');}
     if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23657','RESANTA_MANAGER_SALES_YOY_V23634');
     if(['routes-boss','my-routes','route','gps-control','workday'].includes(p))return await loadRoutes();
   }catch(e){console.warn('PERF '+V+' lazy page '+p,e)}
