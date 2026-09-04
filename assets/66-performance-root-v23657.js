@@ -35,7 +35,7 @@ function load(path,marker,guard){
       if(loaded(guard)){resolve(true);return}
       let done=false;
       const finish=ok=>{if(done)return;done=true;resolve(ok)};
-      existing.addEventListener('load',()=>finish(loaded(guard)||true),{once:true});
+      existing.addEventListener('load',()=>finish(guard?loaded(guard):true),{once:true});
       existing.addEventListener('error',()=>finish(false),{once:true});
       setTimeout(()=>finish(loaded(guard)),2500);
     });
@@ -47,7 +47,7 @@ function load(path,marker,guard){
     s.src='./'+path+'?v='+V;
     s.async=true;
     s.setAttribute(attrName(marker),'1');
-    s.onload=()=>resolve(loaded(guard)||true);
+    s.onload=()=>resolve(guard?loaded(guard):true);
     s.onerror=()=>{console.warn('ROOT '+V+' module failed:',path);resolve(false)};
     document.head.appendChild(s);
   });
