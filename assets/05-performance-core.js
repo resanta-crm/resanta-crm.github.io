@@ -763,7 +763,7 @@ window.RESANTA_SIGNALS_FAST_PATH_V227328=Object.freeze({
 (function(){
 'use strict';
 if(window.RESANTA_SINGLE_RENDER_NAV_V227327)return;
-const VERSION='v22.7.32.2.7-v23.6.69';
+const VERSION='v22.7.32.2.7-v23.6.70';
 const rawRender=window.crmRenderPage||globalThis.crmRenderPage;
 const state=new Map(),stats=[];
 const CACHEABLE=new Set([
@@ -829,24 +829,24 @@ function scheduleIdleRefresh(p,reason){
   };
   st.idleTimer=setTimeout(attempt,520);
 }
-let promotionsGateFlightV23669=null;
+let promotionsGateFlightV23670=null;
 function request(p,opts={}){
   if(!p||active()!==p)return false;
   if(p==='promotions'&&!opts.promoContractReady){
-    const ready=typeof window.crmPromotionsReadyV23669==='function'&&window.crmPromotionsReadyV23669();
-    const ensure=window.crmEnsurePromotionsReadyV23669;
+    const ready=typeof window.crmPromotionsReadyV23670==='function'&&window.crmPromotionsReadyV23670();
+    const ensure=window.crmEnsurePromotionsReadyV23670;
     if(!ready&&typeof ensure==='function'){
-      try{window.crmPromotionGateOverlayV23669?.(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…')}catch(_){}
-      if(!promotionsGateFlightV23669){
+      try{window.crmPromotionGateOverlayV23670?.(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…')}catch(_){}
+      if(!promotionsGateFlightV23670){
         const gateEpoch=window.__crmNavEpoch;
-        promotionsGateFlightV23669=Promise.resolve(ensure(gateEpoch)).then(ok=>{
+        promotionsGateFlightV23670=Promise.resolve(ensure(gateEpoch)).then(ok=>{
           if(!ok||active()!=='promotions')return false;
           if(gateEpoch!=null&&window.__crmNavEpoch!=null&&Number(gateEpoch)!==Number(window.__crmNavEpoch))return false;
           return request('promotions',{reason:'promotions-contract-ready',force:true,promoContractReady:true,delay:0});
         }).catch(e=>{
           console.warn(VERSION+' promotions contract gate',e);
           return false;
-        }).finally(()=>{promotionsGateFlightV23669=null});
+        }).finally(()=>{promotionsGateFlightV23670=null});
       }
       return true;
     }
@@ -892,8 +892,8 @@ function request(p,opts={}){
       if(active()===p&&(epoch==null||window.__crmNavEpoch==null||Number(epoch)===Number(window.__crmNavEpoch))){
         st.built=true;st.dirty=false;log(p,reason,ms);
       }
-      if(p==='promotions'&&typeof window.crmPromotionsReadyV23669==='function'&&window.crmPromotionsReadyV23669()){
-        try{window.crmPromotionGateOverlayV23669?.(false)}catch(_){}
+      if(p==='promotions'&&typeof window.crmPromotionsReadyV23670==='function'&&window.crmPromotionsReadyV23670()){
+        try{window.crmPromotionGateOverlayV23670?.(false)}catch(_){}
       }
       if(st.pending&&active()===p){
         st.pending=false;
