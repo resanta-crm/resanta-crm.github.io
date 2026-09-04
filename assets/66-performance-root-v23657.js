@@ -223,6 +223,22 @@ window.crmResponsivePageOpenedV227325=function(page,epoch){
 };
 
 window.crmPerformanceLoadPageV23657=loadForPage;
+
+/* currentProfile is assigned immediately before startApp(). Hook that exact lifecycle
+ * so the boss-only warehouse shell cannot be lost because an auth event fired too early. */
+try{
+  const baseStartApp=window.startApp||(typeof startApp==='function'?startApp:null);
+  if(typeof baseStartApp==='function'&&!baseStartApp.__moduleContractV23668){
+    const wrappedStartApp=function(){
+      setTimeout(maybeLoadWarehouseShell,0);
+      setTimeout(maybeLoadPaymentRegistry,0);
+      return baseStartApp.apply(this,arguments);
+    };
+    wrappedStartApp.__moduleContractV23668=true;
+    window.startApp=wrappedStartApp;try{startApp=wrappedStartApp}catch(_){}
+  }
+}catch(e){console.warn('ROOT '+V+' startApp hook',e)}
+
 window.crmModuleContractCheckV23668=function(){
   return {
     version:'v'+V,
