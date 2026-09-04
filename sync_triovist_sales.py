@@ -222,6 +222,34 @@ def audit(status: str, *, month: str | None = None, sent: datetime | None = None
 
 
 
+
+def last_published_message_at() -> datetime | None:
+    """Fast hourly guard: avoid downloading/parsing the same Excel again."""
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/crm_import_status",
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
+            params={
+                "source": "eq.triovist_sales",
+                "select": "source_message_at,status",
+                "limit": "1",
+            },
+            timeout=20,
+        )
+        if response.status_code != 200:
+            return None
+        rows = response.json() or []
+        if not rows or str(rows[0].get("status") or "") != "ok":
+            return None
+        raw = str(rows[0].get("source_message_at") or "").strip()
+        if not raw:
+            return None
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 def publish_import_status(month: str, sent: datetime, rows: int, details: str) -> None:
     """Publish one lightweight realtime stamp only after a verified new Triovist import."""
     try:
@@ -277,6 +305,16 @@ def main() -> None:
         ids = data[0].split()
         log(f"Писем за последние {LOOKBACK_DAYS} дн.: {len(ids)}. Заголовки — пакетами по {HEADER_BATCH_SIZE}.")
         headers = recent_subject_candidates(mail, ids)
+
+        # v23.6.60: если самое свежее письмо уже является загруженным источником,
+        # заканчиваем почасовую проверку до скачивания и разбора Excel.
+        last_loaded = last_published_message_at()
+        if headers and last_loaded is not None:
+            newest = headers[0]["sent"]
+            newest_utc = newest if newest.tzinfo else newest.replace(tzinfo=timezone.utc)
+            if newest_utc.astimezone(timezone.utc) <= last_loaded.astimezone(timezone.utc):
+                log(f"✅ Письмо {newest:%d.%m.%Y %H:%M} уже загружено в Триовист — без изменений.")
+                return
 
         valid: list[dict] = []
         errors: list[str] = []
