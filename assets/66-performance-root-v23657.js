@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
-const V='23.6.58', flights=new Map();
+const V='23.6.62', flights=new Map();
 function activePage(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}catch(_){return''}}
 function loaded(guard){return guard&&!!window[guard]}
 function load(path,marker,guard){
@@ -93,6 +93,14 @@ window.crmUltraPageOpenedV22734=function(page,epoch){
   setTimeout(()=>loadForPage(page),0);
   return out;
 };
+/* goPage() no longer calls crmUltraPageOpenedV22734. The real navigation hook is
+ * crmResponsivePageOpenedV227325, so optional page modules must attach there too. */
+const baseResponsiveOpen=window.crmResponsivePageOpenedV227325;
+window.crmResponsivePageOpenedV227325=function(page,epoch){
+  const out=typeof baseResponsiveOpen==='function'?baseResponsiveOpen.apply(this,arguments):undefined;
+  setTimeout(()=>loadForPage(page),0);
+  return out;
+};
 window.crmPerformanceLoadPageV23657=loadForPage;
 function boot(){
   setTimeout(()=>loadForPage(activePage()),0);
@@ -106,7 +114,7 @@ window.addEventListener('pageshow',()=>setTimeout(maybeLoadPaymentRegistry,0));
 window.addEventListener('focus',()=>setTimeout(maybeLoadPaymentRegistry,0));
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
-  version:'v23.6.58',pageScopedModules:true,controlHiddenNoLoad:true,noDateNowCacheBust:true,
+  version:'v23.6.62',pageScopedModules:true,controlHiddenNoLoad:true,noDateNowCacheBust:true,
   paymentRegistryLazy:true,officeManagerPaymentsOnly:true,noBusinessLogicChanges:true
 });
 })();
