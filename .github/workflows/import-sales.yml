@@ -7,9 +7,9 @@ on:
       - 'import_sales.py'
       - '.github/workflows/import-sales.yml'
   schedule:
-    # Минск UTC+3. 1С формирует продажи 3 раза в день: 10:00, 14:00 и 18:00.
-    # CRM забирает каждый срез через 15 минут, чтобы письмо успело прийти в Gmail.
-    - cron: '15 7,11,15 * * *'   # 10:15, 14:15, 18:15 Минск
+    # v23.6.60: почасовая страховка. Скрипт сам пропускает уже загруженное письмо,
+    # поэтому без нового отчёта 1С purchase_history и CRM не перезаписываются.
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -44,17 +44,3 @@ jobs:
           SALES_IMAP_TIMEOUT_SECONDS: '45'
           SALES_MAX_EMAIL_CANDIDATES: '8'
         run: python import_sales.py
-
-      - name: Снять точный срез продаж по действующим акциям
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          REPORT_MONTH="$(TZ=Europe/Minsk date +%Y-%m-01)"
-          SOURCE_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          curl --fail --silent --show-error \
-            -X POST "${SUPABASE_URL%/}/rest/v1/rpc/promotion_capture_sales_snapshots_v23654" \
-            -H "apikey: ${SUPABASE_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"p_report_month\":\"${REPORT_MONTH}\",\"p_source_message_at\":\"${SOURCE_AT}\"}"
