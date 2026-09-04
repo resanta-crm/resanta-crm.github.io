@@ -135,6 +135,63 @@ def safe_set_import_status(source, status, **kwargs):
         log(f"  ⚠️ Статус импорта не записан: {exc}")
 
 
+
+def sales_message_already_loaded(report_period, sent):
+    """Hourly guard: the same 1C email must not rewrite purchase_history again."""
+    try:
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/crm_import_status",
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
+            params={
+                "source": "eq.sales",
+                "select": "status,report_period,source_message_at",
+                "limit": "1",
+            },
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return False
+        rows = resp.json() or []
+        if not rows:
+            return False
+        row = rows[0]
+        if str(row.get("status") or "") != "ok" or str(row.get("report_period") or "") != str(report_period or ""):
+            return False
+        raw = str(row.get("source_message_at") or "").strip()
+        if not raw:
+            return False
+        prev = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if prev.tzinfo is None:
+            prev = prev.replace(tzinfo=timezone.utc)
+        cur = sent if sent.tzinfo else sent.replace(tzinfo=timezone.utc)
+        return abs((prev.astimezone(timezone.utc) - cur.astimezone(timezone.utc)).total_seconds()) < 1
+    except Exception as exc:
+        log(f"  ⚠️ Не удалось проверить дубль письма: {exc}")
+        return False
+
+
+def capture_promotion_sales_snapshots(report_month, source_message_at):
+    """Capture action sales only when a genuinely new sales email was imported."""
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/promotion_capture_sales_snapshots_v23654",
+            headers=_api_headers(),
+            json={
+                "p_report_month": report_month,
+                "p_source_message_at": source_message_at,
+            },
+            timeout=60,
+        )
+        if resp.status_code not in (200, 201, 204):
+            log(f"  ⚠️ Срез продаж по акциям не снят: {resp.status_code} {resp.text[:300]}")
+            return False
+        log("  ✅ Срез продаж по действующим акциям обновлён.")
+        return True
+    except Exception as exc:
+        log(f"  ⚠️ Срез продаж по акциям не снят: {exc}")
+        return False
+
+
 def decode_mime_header(value):
     if not value:
         return ""
@@ -1242,6 +1299,14 @@ def main():
 
     period_state = check_period(month)
 
+    # v23.6.60: почасовой workflow может видеть одно и то же письмо много раз.
+    # Если оно уже успешно загружено, выходим без единой записи в БД и без
+    # ложного realtime-сигнала для открытых экранов CRM.
+    if sales_message_already_loaded(month[:7], sent):
+        log(f"✅ Письмо {sent:%d.%m.%Y %H:%M} уже загружено — почасовая проверка без изменений.")
+        mail.logout()
+        return
+
     by_mgr = {}
     for row in rows:
         by_mgr.setdefault(row["manager_name"], {"rev": 0, "clients": set()})
@@ -1279,6 +1344,8 @@ def main():
             log(f"  ⚠️ Пересчёт оборотов после импорта пропущен: {resp.status_code} {resp.text}")
     except Exception as exc:
         log(f"  ⚠️ Пересчёт оборотов после импорта не выполнен: {exc}")
+
+    capture_promotion_sales_snapshots(month, sent.isoformat())
 
     safe_set_import_status(
         "sales", "ok",
