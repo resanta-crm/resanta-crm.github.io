@@ -1,9 +1,15 @@
 name: Триовист — продажи 3 раза в день
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'sync_triovist_sales.py'
+      - 'triovist_import_core.py'
+      - '.github/workflows/import-triovist-sales.yml'
   schedule:
-    # GitHub cron = UTC. 06:00 / 10:00 / 14:00 UTC = 09:00 / 13:00 / 17:00 Минск (UTC+3).
-    - cron: '0 6,10,14 * * *'
+    # v23.6.60: проверяем каждый час. Если нового письма нет, скрипт ничего не перезаписывает.
+    - cron: '27 * * * *'
   workflow_dispatch:
 
 concurrency:
