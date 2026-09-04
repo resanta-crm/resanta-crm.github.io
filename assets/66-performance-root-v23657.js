@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.68',flights=new Map(),contractFlights=new Map();
+const V='23.6.69',flights=new Map(),contractFlights=new Map();
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -69,23 +69,24 @@ function onceContract(key,fn){
 
 const CONTRACT={
   promotions:[
-    {path:'assets/25-promotions-boss-substitute-v2363.js',marker:'perf-promo-flow-v23668',guard:'RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363'},
-    {path:'assets/41-promotions-work-filter-v23626.js',marker:'perf-promo-work-v23668',guard:'RESANTA_PROMOTIONS_WORK_FILTER_V23626'},
-    {path:'assets/45-promotions-budget-truth-v23630.js',marker:'perf-promo-budget-truth-v23668',guard:'RESANTA_PROMOTIONS_BUDGET_TRUTH_V23630'},
-    {path:'assets/46-promotions-budget-dfs-override-v23631.js',marker:'perf-promo-budget-override-v23668',guard:'RESANTA_PROMOTIONS_BUDGET_DFS_OVERRIDE_V23631'},
-    {path:'assets/47-promotions-budget-snapshot-v23632.js',marker:'perf-promo-budget-snapshot-v23668',guard:'RESANTA_PROMOTIONS_BUDGET_SNAPSHOT_V23632'},
-    {path:'assets/63-promotions-management-v23654.js',marker:'perf-promo-management-v23668',guard:'RESANTA_PROMOTIONS_MANAGEMENT_V23654'},
-    {path:'assets/65-promotions-close-v23656.js',marker:'perf-promo-close-v23668',guard:'RESANTA_PROMOTIONS_CLOSE_V23656'}
+    {path:'assets/25-promotions-boss-substitute-v2363.js',marker:'perf-promo-flow-v23669',guard:'RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363'},
+    {path:'assets/29-promotions-decision-ui-v2368.js',marker:'perf-promo-decision-v23669',guard:'RESANTA_PROMOTIONS_DECISION_UI_V2368'},
+    {path:'assets/41-promotions-work-filter-v23626.js',marker:'perf-promo-work-v23669',guard:'RESANTA_PROMOTIONS_WORK_FILTER_V23626'},
+    {path:'assets/45-promotions-budget-truth-v23630.js',marker:'perf-promo-budget-truth-v23669',guard:'RESANTA_PROMOTIONS_BUDGET_TRUTH_V23630'},
+    {path:'assets/46-promotions-budget-dfs-override-v23631.js',marker:'perf-promo-budget-override-v23669',guard:'RESANTA_PROMOTIONS_BUDGET_DFS_OVERRIDE_V23631'},
+    {path:'assets/47-promotions-budget-snapshot-v23632.js',marker:'perf-promo-budget-snapshot-v23669',guard:'RESANTA_PROMOTIONS_BUDGET_SNAPSHOT_V23632'},
+    {path:'assets/63-promotions-management-v23654.js',marker:'perf-promo-management-v23669',guard:'RESANTA_PROMOTIONS_MANAGEMENT_V23654'},
+    {path:'assets/65-promotions-close-v23656.js',marker:'perf-promo-close-v23669',guard:'RESANTA_PROMOTIONS_CLOSE_V23656'}
   ],
   warehouseShell:[
-    {path:'assets/36-warehouse-control-v23620.js',marker:'perf-warehouse-shell-v23668',guard:'RESANTA_WAREHOUSE_CONTROL_V23620'}
+    {path:'assets/36-warehouse-control-v23620.js',marker:'perf-warehouse-shell-v23669',guard:'RESANTA_WAREHOUSE_CONTROL_V23620'}
   ],
   warehouse:[
-    {path:'assets/37-warehouse-weekly-v23621.js',marker:'perf-warehouse-weekly-v23668',guard:'RESANTA_WAREHOUSE_WEEKLY_V23622'},
-    {path:'assets/48-warehouse-freshness-v23633.js',marker:'perf-warehouse-fresh-v23668',guard:'RESANTA_WAREHOUSE_FRESHNESS_V23633'},
-    {path:'assets/51-warehouse-compact-days-v23637.js',marker:'perf-warehouse-compact-v23668',guard:'RESANTA_WAREHOUSE_COMPACT_V23637'},
-    {path:'assets/54-warehouse-stock-truth-v23641.js',marker:'perf-warehouse-stock-truth-v23668',guard:'RESANTA_WAREHOUSE_STOCK_TRUTH_V23641'},
-    {path:'assets/55-warehouse-smart-excess-v23642.js',marker:'perf-warehouse-smart-v23668',guard:'RESANTA_WAREHOUSE_SMART_EXCESS_V23645'}
+    {path:'assets/37-warehouse-weekly-v23621.js',marker:'perf-warehouse-weekly-v23669',guard:'RESANTA_WAREHOUSE_WEEKLY_V23622'},
+    {path:'assets/48-warehouse-freshness-v23633.js',marker:'perf-warehouse-fresh-v23669',guard:'RESANTA_WAREHOUSE_FRESHNESS_V23633'},
+    {path:'assets/51-warehouse-compact-days-v23637.js',marker:'perf-warehouse-compact-v23669',guard:'RESANTA_WAREHOUSE_COMPACT_V23637'},
+    {path:'assets/54-warehouse-stock-truth-v23641.js',marker:'perf-warehouse-stock-truth-v23669',guard:'RESANTA_WAREHOUSE_STOCK_TRUTH_V23641'},
+    {path:'assets/55-warehouse-smart-excess-v23642.js',marker:'perf-warehouse-smart-v23669',guard:'RESANTA_WAREHOUSE_SMART_EXCESS_V23645'}
   ]
 };
 
@@ -95,36 +96,39 @@ async function ensurePromotionData(){
 }
 function promoOverlay(show,text){
   const root=document.getElementById('page-promotions');if(!root)return;
-  let el=document.getElementById('promo-contract-loading-v23668');
+  let el=document.getElementById('promo-contract-loading-v23669');
   if(!show){el?.remove();return}
   if(!root.style.position)root.style.position='relative';
   if(!el){
     el=document.createElement('div');
-    el.id='promo-contract-loading-v23668';
+    el.id='promo-contract-loading-v23669';
     el.style.cssText='position:absolute;inset:0;z-index:120;background:rgba(249,250,251,.992);display:flex;align-items:flex-start;justify-content:center;padding-top:34px;min-height:520px';
-    el.innerHTML='<div class="card" style="width:min(620px,calc(100% - 32px));padding:22px;text-align:center"><div style="font-size:20px;font-weight:800;margin-bottom:7px">🎯 Акции</div><div id="promo-contract-loading-text-v23668" style="font-size:13px;color:var(--sub)">Загружаю актуальные акции…</div></div>';
+    el.innerHTML='<div class="card" style="width:min(620px,calc(100% - 32px));padding:22px;text-align:center"><div style="font-size:20px;font-weight:800;margin-bottom:7px">🎯 Акции</div><div id="promo-contract-loading-text-v23669" style="font-size:13px;color:var(--sub)">Загружаю актуальные акции…</div></div>';
     root.appendChild(el);
   }
-  const t=document.getElementById('promo-contract-loading-text-v23668');if(t&&text)t.textContent=text;
+  const t=document.getElementById('promo-contract-loading-text-v23669');if(t&&text)t.textContent=text;
 }
+let promotionsReady=false;
+function promotionsGuardsReady(){return CONTRACT.promotions.every(x=>loaded(x.guard))}
 async function loadPromotions(){
   return onceContract('promotions',async()=>{
     await Promise.all([ensurePromotionData(),serial(CONTRACT.promotions)]);
-    return CONTRACT.promotions.every(x=>loaded(x.guard));
+    try{await Promise.resolve(window.crmPromotionSubstitutionsReadyV23669)}catch(_){}
+    promotionsReady=promotionsGuardsReady();
+    return promotionsReady;
   });
 }
-async function finalizePromotions(epoch){
+async function ensurePromotionsReady(epoch){
+  if(promotionsReady&&promotionsGuardsReady())return true;
+  promoOverlay(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…');
   const ok=await loadPromotions();
   if(!ok)throw new Error('Не весь стек Акций загрузился');
-  if(activePage()!=='promotions')return true;
-  if(epoch!=null&&window.__crmNavEpoch!=null&&Number(epoch)!==Number(window.__crmNavEpoch))return true;
-  try{window.crmSingleRenderMarkPageV227327?.('promotions')}catch(_){}
-  try{window.crmSingleRenderRequestV227327?.('promotions',{reason:'feature-ready',force:true,delay:0})}catch(_){}
-  setTimeout(()=>{
-    if(activePage()==='promotions')promoOverlay(false);
-  },120);
+  if(epoch!=null&&window.__crmNavEpoch!=null&&activePage()==='promotions'&&Number(epoch)!==Number(window.__crmNavEpoch))return true;
   return true;
 }
+window.crmPromotionsReadyV23669=()=>promotionsReady&&promotionsGuardsReady();
+window.crmEnsurePromotionsReadyV23669=ensurePromotionsReady;
+window.crmPromotionGateOverlayV23669=promoOverlay;
 
 async function loadWarehouseShell(){
   if(!isBoss())return false;
@@ -141,19 +145,19 @@ async function loadWarehouse(){
 
 async function loadTriovist(){
   await Promise.all([
-    load('assets/11-triovist-ai-plans-v2348.js','perf-tri-ai-v23668','RESANTA_TRIOVIST_AI_PLANS_V2348'),
-    load('assets/13-triovist-seasonal-stock-v2350.js','perf-tri-stock-v23668','RESANTA_TRIOVIST_SEASONAL_STOCK_V2350'),
-    load('assets/32-triovist-v23611.js','perf-tri-root-v23668','RESANTA_TRIOVIST_ROOT_V23614'),
-    load('assets/61-triovist-task-month-safe-v23651.js','perf-tri-month-v23668','RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651')
+    load('assets/11-triovist-ai-plans-v2348.js','perf-tri-ai-v23669','RESANTA_TRIOVIST_AI_PLANS_V2348'),
+    load('assets/13-triovist-seasonal-stock-v2350.js','perf-tri-stock-v23669','RESANTA_TRIOVIST_SEASONAL_STOCK_V2350'),
+    load('assets/32-triovist-v23611.js','perf-tri-root-v23669','RESANTA_TRIOVIST_ROOT_V23614'),
+    load('assets/61-triovist-task-month-safe-v23651.js','perf-tri-month-v23669','RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651')
   ]);
-  await load('assets/19-triovist-stock-upload-truth-v23551.js','perf-tri-upload-v23668','RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551');
-  await load('assets/20-triovist-partner-forecast-v2356.js','perf-tri-forecast-v23668','RESANTA_TRIOVIST_PARTNER_FORECAST_V2356');
+  await load('assets/19-triovist-stock-upload-truth-v23551.js','perf-tri-upload-v23669','RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551');
+  await load('assets/20-triovist-partner-forecast-v2356.js','perf-tri-forecast-v23669','RESANTA_TRIOVIST_PARTNER_FORECAST_V2356');
 }
 async function loadRoutes(){
   await Promise.all([
-    load('assets/14-routes-yandex-ui-v2351.js','perf-routes-yandex-v23668','RESANTA_ROUTES_YANDEX_UI_V2351'),
-    load('assets/15-routes-yandex-key-modal-v23511.js','perf-routes-key-v23668','RESANTA_YANDEX_KEY_MODAL_V23511'),
-    load('assets/33-triovist-shell-guard-v23613.js','perf-route-tabs-v23668','RESANTA_ROUTE_MONTH_TABS_SYNC_V23635')
+    load('assets/14-routes-yandex-ui-v2351.js','perf-routes-yandex-v23669','RESANTA_ROUTES_YANDEX_UI_V2351'),
+    load('assets/15-routes-yandex-key-modal-v23511.js','perf-routes-key-v23669','RESANTA_YANDEX_KEY_MODAL_V23511'),
+    load('assets/33-triovist-shell-guard-v23613.js','perf-route-tabs-v23669','RESANTA_ROUTE_MONTH_TABS_SYNC_V23635')
   ]);
 }
 function paymentEligible(){
@@ -163,11 +167,11 @@ function paymentEligible(){
 async function loadPaymentRegistry(){
   if(!paymentEligible())return false;
   const p=profile(),r=String(p?.role||'').toLowerCase();
-  await load('assets/38-payment-registry-v23623.js','perf-payment-registry-v23668','RESANTA_PAYMENT_REGISTRY_V23623');
+  await load('assets/38-payment-registry-v23623.js','perf-payment-registry-v23669','RESANTA_PAYMENT_REGISTRY_V23623');
   if(r==='office_manager'||String(p?.access_scope||'').toLowerCase()==='payments_only'){
-    await load('assets/39-office-manager-payments-only-v23624.js','perf-office-payments-v23668','RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624');
+    await load('assets/39-office-manager-payments-only-v23624.js','perf-office-payments-v23669','RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624');
   }
-  await load('assets/42-payment-registry-nav-root-v23627.js','perf-payment-nav-v23668','RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627');
+  await load('assets/42-payment-registry-nav-root-v23627.js','perf-payment-nav-v23669','RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627');
   return true;
 }
 function maybeLoadPaymentRegistry(){if(paymentEligible())loadPaymentRegistry().catch(e=>console.warn('ROOT '+V+' payment registry',e))}
@@ -177,10 +181,7 @@ async function loadForPage(page,epoch){
   const p=String(page||activePage()||'');
   try{
     if(p==='triovist')return await loadTriovist();
-    if(p==='promotions'){
-      promoOverlay(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…');
-      return await finalizePromotions(epoch);
-    }
+    if(p==='promotions')return await ensurePromotionsReady(epoch);
     if(p==='budgets')return await loadPromotions();
     if(p==='warehouse-control'){
       await loadWarehouse();
@@ -188,13 +189,13 @@ async function loadForPage(page,epoch){
       return true;
     }
     if(p==='payment-registry')return await loadPaymentRegistry();
-    if(p==='payments'||p==='debt')return await load('assets/12-finance-data-root-v2349.js','perf-finance-v23668','RESANTA_FINANCE_DATA_ROOT_V2349');
+    if(p==='payments'||p==='debt')return await load('assets/12-finance-data-root-v2349.js','perf-finance-v23669','RESANTA_FINANCE_DATA_ROOT_V2349');
     if(p==='managers'){
-      await load('assets/07-ai-manager-plans.js','perf-manager-ai-v23668','RESANTA_AI_MANAGER_PLANS_V2320');
-      await load('assets/08-manager-gap-sources.js','perf-manager-gap-v23668','RESANTA_MANAGER_GAP_SOURCES_V2322');
-      return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23668','RESANTA_MANAGER_PLANS_ROOT_V2330');
+      await load('assets/07-ai-manager-plans.js','perf-manager-ai-v23669','RESANTA_AI_MANAGER_PLANS_V2320');
+      await load('assets/08-manager-gap-sources.js','perf-manager-gap-v23669','RESANTA_MANAGER_GAP_SOURCES_V2322');
+      return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23669','RESANTA_MANAGER_PLANS_ROOT_V2330');
     }
-    if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23668','RESANTA_MANAGER_SALES_YOY_V23634');
+    if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23669','RESANTA_MANAGER_SALES_YOY_V23634');
     if(['routes-boss','my-routes','route','gps-control','workday'].includes(p))return await loadRoutes();
   }catch(e){
     if(p==='promotions'){
@@ -239,7 +240,7 @@ try{
   }
 }catch(e){console.warn('ROOT '+V+' startApp hook',e)}
 
-window.crmModuleContractCheckV23668=function(){
+window.crmModuleContractCheckV23669=function(){
   return {
     version:'v'+V,
     promotions:Object.fromEntries(CONTRACT.promotions.map(x=>[x.guard,loaded(x.guard)])),
@@ -272,8 +273,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
   version:'v'+V,
   explicitModuleContracts:true,
-  promotionsStack:['25','41','45','46','47','63','65'],
-  promotionsDataBeforeFinalRender:true,
+  promotionsStack:['25','29','41','45','46','47','63','65'],
+  promotionsDataBeforeFinalRender:true,promotionsSingleFinalRender:true,
   warehouseShell:'36',
   warehouseStack:['37','48','51','54','55'],
   warehouseIndependentOfGps:true,
