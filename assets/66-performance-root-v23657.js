@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
-const V='23.6.57', flights=new Map();
+const V='23.6.58', flights=new Map();
 function activePage(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}catch(_){return''}}
 function loaded(guard){return guard&&!!window[guard]}
 function load(path,marker,guard){
@@ -57,11 +57,29 @@ async function loadRoutes(){
     load('assets/33-triovist-shell-guard-v23613.js','perf-route-tabs-v23657','RESANTA_ROUTE_MONTH_TABS_SYNC_V23635')
   ]);
 }
+
+function paymentProfile(){try{return typeof currentProfile!=='undefined'?currentProfile:(window.currentProfile||null)}catch(_){return window.currentProfile||null}}
+function paymentEligible(){
+  const p=paymentProfile(),r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();
+  return r==='boss'||r==='office_manager'||e==='payushin_ar@resanta.ru'||e==='sidarovich_kn@resanta.ru';
+}
+async function loadPaymentRegistry(){
+  if(!paymentEligible())return false;
+  const p=paymentProfile(),r=String(p?.role||'').toLowerCase();
+  await load('assets/38-payment-registry-v23623.js','perf-payment-registry-v23658','RESANTA_PAYMENT_REGISTRY_V23623');
+  if(r==='office_manager'||String(p?.access_scope||'').toLowerCase()==='payments_only'){
+    await load('assets/39-office-manager-payments-only-v23624.js','perf-office-payments-v23658','RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624');
+  }
+  await load('assets/42-payment-registry-nav-root-v23627.js','perf-payment-nav-v23658','RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627');
+  return true;
+}
+function maybeLoadPaymentRegistry(){if(paymentEligible())loadPaymentRegistry().catch(e=>console.warn('PERF '+V+' payment registry',e))}
 async function loadForPage(page){
   const p=String(page||activePage()||'');
   try{
     if(p==='triovist')return await loadTriovist();
     if(p==='promotions'||p==='budgets')return await loadPromotions();
+    if(p==='payment-registry')return await loadPaymentRegistry();
     if(p==='payments'||p==='debt')return await load('assets/12-finance-data-root-v2349.js','perf-finance-v23657','RESANTA_FINANCE_DATA_ROOT_V2349');
     if(p==='managers'){await load('assets/07-ai-manager-plans.js','perf-manager-ai-v23657','RESANTA_AI_MANAGER_PLANS_V2320');await load('assets/08-manager-gap-sources.js','perf-manager-gap-v23657','RESANTA_MANAGER_GAP_SOURCES_V2322');return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23657','RESANTA_MANAGER_PLANS_ROOT_V2330');}
     if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23657','RESANTA_MANAGER_SALES_YOY_V23634');
@@ -76,9 +94,19 @@ window.crmUltraPageOpenedV22734=function(page,epoch){
   return out;
 };
 window.crmPerformanceLoadPageV23657=loadForPage;
-function boot(){setTimeout(()=>loadForPage(activePage()),0)}
+function boot(){
+  setTimeout(()=>loadForPage(activePage()),0);
+  [120,450,1000,2200,4500].forEach(ms=>setTimeout(maybeLoadPaymentRegistry,ms));
+  try{
+    const d=typeof db!=='undefined'?db:window.db;
+    d?.auth?.onAuthStateChange?.(()=>setTimeout(maybeLoadPaymentRegistry,0));
+  }catch(_){}
+}
+window.addEventListener('pageshow',()=>setTimeout(maybeLoadPaymentRegistry,0));
+window.addEventListener('focus',()=>setTimeout(maybeLoadPaymentRegistry,0));
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
-  version:'v23.6.57',pageScopedModules:true,controlHiddenNoLoad:true,noDateNowCacheBust:true,noBusinessLogicChanges:true
+  version:'v23.6.58',pageScopedModules:true,controlHiddenNoLoad:true,noDateNowCacheBust:true,
+  paymentRegistryLazy:true,officeManagerPaymentsOnly:true,noBusinessLogicChanges:true
 });
 })();
