@@ -737,7 +737,7 @@ window.RESANTA_CRM_NAV_BACKGROUND_ROOT_FIX_V227326=Object.freeze({
   noGlobalBusinessAudit:true,
   noTaskStockCalculationDuringRender:true,
   explicitStockCheckOnly:true,
-  noSqlChanges:true
+  promotionsReadyBeforeFirstRender:true,noFakePromotionZeroState:true,noSqlChanges:true
 });
 window.RESANTA_SIGNALS_FAST_PATH_V227328=Object.freeze({
   version:'v22.7.32.2.8',
@@ -763,7 +763,7 @@ window.RESANTA_SIGNALS_FAST_PATH_V227328=Object.freeze({
 (function(){
 'use strict';
 if(window.RESANTA_SINGLE_RENDER_NAV_V227327)return;
-const VERSION='v22.7.32.2.7';
+const VERSION='v22.7.32.2.7-v23.6.66';
 const rawRender=window.crmRenderPage||globalThis.crmRenderPage;
 const state=new Map(),stats=[];
 const CACHEABLE=new Set([
@@ -829,6 +829,58 @@ function scheduleIdleRefresh(p,reason){
   };
   st.idleTimer=setTimeout(attempt,520);
 }
+let promoReadyFlightV23666=null;
+function promoLoadingV23666(show){
+  const root=document.getElementById('page-promotions');if(!root)return;
+  if(show){
+    if(!root.style.position)root.style.position='relative';
+    let el=document.getElementById('promo-ready-v23666');
+    if(!el){
+      el=document.createElement('div');el.id='promo-ready-v23666';
+      el.style.cssText='position:absolute;inset:0;z-index:80;background:rgba(249,250,251,.985);display:flex;align-items:flex-start;justify-content:center;padding-top:34px;min-height:520px';
+      el.innerHTML='<div class="card" style="width:min(620px,calc(100% - 32px));padding:22px;text-align:center"><div style="font-size:20px;font-weight:800;margin-bottom:7px">🎯 Акции</div><div style="font-size:13px;color:var(--sub)">Загружаю актуальные акции, бюджеты и продажи из 1С…</div></div>';
+      root.appendChild(el);
+    }
+  }else document.getElementById('promo-ready-v23666')?.remove();
+}
+window.crmPromoLoadingV23666=promoLoadingV23666;
+
+function promoScriptV23666(path,flag){
+  if(window[flag])return Promise.resolve(true);
+  const file=path.split('/').pop();
+  let s=[...document.scripts].find(x=>String(x.src||'').includes(file));
+  if(s){
+    if(window[flag])return Promise.resolve(true);
+    return new Promise(resolve=>{
+      let done=false;const finish=()=>{if(done)return;done=true;resolve(!!window[flag])};
+      s.addEventListener('load',finish,{once:true});s.addEventListener('error',finish,{once:true});
+      setTimeout(finish,1800);
+    });
+  }
+  return new Promise(resolve=>{
+    s=document.createElement('script');s.src=path+'?v=23.6.66';s.async=false;
+    s.onload=()=>resolve(!!window[flag]);s.onerror=()=>resolve(false);
+    document.head.appendChild(s);
+  });
+}
+async function ensurePromotionsReadyV23666(){
+  if(promoReadyFlightV23666)return promoReadyFlightV23666;
+  promoReadyFlightV23666=(async()=>{
+    const dataP=typeof window.v2273EnsureFeature==='function'
+      ? window.v2273EnsureFeature('promotions')
+      : Promise.resolve(true);
+    const modulesP=(async()=>{
+      await promoScriptV23666('assets/25-promotions-boss-substitute-v2363.js','RESANTA_PROMOTIONS_BOSS_SUBSTITUTE_V2363');
+      await promoScriptV23666('assets/63-promotions-management-v23654.js','RESANTA_PROMOTIONS_MANAGEMENT_V23654');
+      await promoScriptV23666('assets/65-promotions-close-v23656.js','RESANTA_PROMOTIONS_CLOSE_V23656');
+      return true;
+    })();
+    await Promise.all([dataP,modulesP]);
+    return true;
+  })().finally(()=>{promoReadyFlightV23666=null});
+  return promoReadyFlightV23666;
+}
+
 function request(p,opts={}){
   if(!p||active()!==p)return false;
   const st=pageState(p),force=!!opts.force,idleCommit=!!opts.idleCommit,
@@ -864,9 +916,17 @@ function request(p,opts={}){
     if(st.rendering){st.pending=true;return;}
     st.rendering=true;st.pending=false;
     const t0=performance.now?performance.now():Date.now();
-    try{if(typeof rawRender==='function')await Promise.resolve(rawRender(p));}
+    try{
+      if(p==='promotions'){
+        promoLoadingV23666(true);
+        await ensurePromotionsReadyV23666();
+        if(seq!==st.seq||active()!==p||(epoch!=null&&window.__crmNavEpoch!=null&&Number(epoch)!==Number(window.__crmNavEpoch)))return;
+      }
+      if(typeof rawRender==='function')await Promise.resolve(rawRender(p));
+    }
     catch(e){console.warn(VERSION+' render '+p,e);}
     finally{
+      if(p==='promotions')promoLoadingV23666(false);
       const ms=(performance.now?performance.now():Date.now())-t0;
       st.lastMs=ms;st.lastAt=Date.now();st.rendering=false;
       if(active()===p&&(epoch==null||window.__crmNavEpoch==null||Number(epoch)===Number(window.__crmNavEpoch))){
@@ -932,4 +992,21 @@ window.RESANTA_SINGLE_RENDER_NAV_V227327=Object.freeze({
   stalePageGuard:true,
   noSqlChanges:true
 });
+})();
+
+
+/* v23.6.66 · promotions first-paint guard.
+ * crmResponsivePageOpenedV227325 is called synchronously from goPage after the
+ * page becomes active, so this covers any stale DOM before first paint. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_FIRST_PAINT_V23666)return;
+const base=window.crmResponsivePageOpenedV227325;
+if(typeof base==='function'){
+  window.crmResponsivePageOpenedV227325=function(page,epoch){
+    if(String(page||'')==='promotions')try{window.crmPromoLoadingV23666?.(true)}catch(_){}
+    return base.apply(this,arguments);
+  };
+}
+window.RESANTA_PROMOTIONS_FIRST_PAINT_V23666=Object.freeze({version:'v23.6.66',loadingBeforePaint:true,noPolling:true,noObserver:true});
 })();
