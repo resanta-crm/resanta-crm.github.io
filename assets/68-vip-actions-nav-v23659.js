@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.73 · VIP ACTIONS PERMANENT NAV */
+/* RESANTA CRM v23.6.77 · VIP ACTIONS PERMANENT NAV */
 (function(){
 'use strict';
 if(window.RESANTA_VIP_ACTIONS_NAV_V23659)return;
@@ -29,7 +29,7 @@ function load(){
       setTimeout(()=>{
         if(window.RESANTA_VIP_ACTIONS_V23659){finish(true);return}
         const s=document.createElement('script');
-        s.src='./assets/67-vip-actions-v23659.js?v=23.6.73';
+        s.src='./assets/67-vip-actions-v23659.js?v=23.6.77';
         s.async=false;
         s.onload=()=>finish(!!window.RESANTA_VIP_ACTIONS_V23659);
         s.onerror=()=>finish(false);
@@ -38,7 +38,7 @@ function load(){
       return;
     }
     const s=document.createElement('script');
-    s.src='./assets/67-vip-actions-v23659.js?v=23.6.73';
+    s.src='./assets/67-vip-actions-v23659.js?v=23.6.77';
     s.async=false;
     s.onload=()=>resolve(!!window.RESANTA_VIP_ACTIONS_V23659);
     s.onerror=()=>resolve(false);
@@ -73,7 +73,7 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 
 window.RESANTA_VIP_ACTIONS_NAV_V23659=Object.freeze({
-  version:'v23.6.73',
+  version:'v23.6.77',
   permanentNav:true,
   managerStandardAllowed:true,
   triovistExcluded:true,
