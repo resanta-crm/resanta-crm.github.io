@@ -2146,10 +2146,10 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 18 ===== */
-// RESANTA CRM v23.6.75 · ЕДИНЫЙ РУЧНОЙ МАРШРУТ РУКОВОДИТЕЛЯ
+// RESANTA CRM v23.6.76 · ЕДИНЫЙ РУЧНОЙ МАРШРУТ РУКОВОДИТЕЛЯ
 (function(){
   'use strict';
-  const VERSION='23.6.75';
+  const VERSION='23.6.76';
   const MAX_POINTS=15;
   const MANAGERS=['Руднев','Ачинович','Шкуран'];
   const state={
@@ -2331,7 +2331,7 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       panel=document.getElementById('manual-route-lite');
       bindPanel();
     }
-    const note=document.getElementById('route-month-note-boss');if(note)note.innerHTML='<b>v23.6.75.</b> Единый ручной маршрут руководителя: источник — все активные Рабочие и Потенциальные карточки clients без ограничений по SKU и ABC. Город — только фильтр. Лимит — 15 ТТ в день.';
+    const note=document.getElementById('route-month-note-boss');if(note)note.innerHTML='<b>v23.6.76.</b> Единый ручной маршрут руководителя: источник — все активные Рабочие и Потенциальные карточки clients без ограничений по SKU и ABC. Город — только фильтр. Лимит — 15 ТТ в день.';
     renderCurrentDay();state.installed=true;
   }
 
@@ -2370,20 +2370,25 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       }
       state.city='';
       document.getElementById('mrl-editor').style.display='block';toggleType();renderCities();renderPoints();renderNetworkPoints();renderSummary();
-      const working=ps.filter(p=>normM(p.primary?.client_status)==='рабочий').length,potential=ps.filter(p=>normM(p.primary?.client_status)==='потенциальный').length;
-      status.textContent='Загружено активных клиентов: '+ps.length+' · Рабочих: '+working+' · Потенциальных: '+potential+' · сетевых точек: '+networkForManager(state.manager).length+'. Ограничений по SKU и ABC нет.';
+      const mine=ps.filter(assignedToSelectedManager),working=mine.filter(p=>normM(p.primary?.client_status)==='рабочий').length,potential=mine.filter(p=>normM(p.primary?.client_status)==='потенциальный').length,cities=new Set(mine.map(pointCity)).size;
+      status.textContent=state.manager+': закреплено клиентов '+mine.length+' · городов '+cities+' · Рабочих '+working+' · Потенциальных '+potential+' · сетевых точек '+networkForManager(state.manager).length+'. Поиск сверху при необходимости ищет по всей активной базе.';
     }catch(e){status.textContent='';alert(e.message||e);}finally{state.loading=false;}
   }
 
+  function assignedToSelectedManager(p){return normM(p?.assigned_manager||p?.primary?.manager_name)===normM(state.manager);}
   function renderCities(){
-    const ps=getPlans(state.manager),counts={};ps.forEach(p=>counts[pointCity(p)]=(counts[pointCity(p)]||0)+1);
-    const all='<button class="mrl-city '+(!state.city?'active':'')+'" data-city="">Все города <span style="float:right;color:var(--sub)">'+ps.length+'</span></button>';
+    const ps=getPlans(state.manager).filter(assignedToSelectedManager),counts={};ps.forEach(p=>counts[pointCity(p)]=(counts[pointCity(p)]||0)+1);
+    const all='<button class="mrl-city '+(!state.city?'active':'')+'" data-city="">Все мои города <span style="float:right;color:var(--sub)">'+ps.length+'</span></button>';
     document.getElementById('mrl-cities').innerHTML=all+Object.keys(counts).sort((a,b)=>a.localeCompare(b,'ru')).map(c=>'<button class="mrl-city '+(c===state.city?'active':'')+'" data-city="'+escM(c)+'">'+escM(c)+' <span style="float:right;color:var(--sub)">'+counts[c]+'</span></button>').join('');
     document.querySelectorAll('#mrl-cities .mrl-city').forEach(b=>b.addEventListener('click',()=>{state.city=b.dataset.city||'';renderCities();renderPoints();}));
   }
   function visiblePlans(){
     const q=normM(state.query),counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date),rank={must:0,due:1,ok:2};
-    return getPlans(state.manager).filter(p=>q||!state.city||pointCity(p)===state.city).filter(p=>!q||normM(p.label+' '+pointAddress(p)+' '+pointCity(p)+' '+(p.assigned_manager||'')+' '+(p.primary?.client_status||'')+' '+(p.category||'')).includes(q)).sort((a,b)=>rank[recommendation(a,counts).level]-rank[recommendation(b,counts).level]||pointCity(a).localeCompare(pointCity(b),'ru')||String(a.label||'').localeCompare(String(b.label||''),'ru'));
+    return getPlans(state.manager)
+      .filter(p=>q?true:assignedToSelectedManager(p))
+      .filter(p=>q||!state.city||pointCity(p)===state.city)
+      .filter(p=>!q||normM(p.label+' '+pointAddress(p)+' '+pointCity(p)+' '+(p.assigned_manager||'')+' '+(p.primary?.client_status||'')+' '+(p.category||'')).includes(q))
+      .sort((a,b)=>rank[recommendation(a,counts).level]-rank[recommendation(b,counts).level]||pointCity(a).localeCompare(pointCity(b),'ru')||String(a.label||'').localeCompare(String(b.label||''),'ru'));
   }
   function renderPoints(){
     const root=document.getElementById('mrl-points');if(!root)return;
@@ -2561,7 +2566,7 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
   window.addEventListener('resanta-network-points-updated',async()=>{state.networkLoaded=false;state.networkPoints=[];await loadNetworkPoints();if(document.getElementById('mrl-editor')?.style.display!=='none'){renderNetworkPoints();renderSummary();}});
 
   setTimeout(()=>{if(document.getElementById('page-routes-boss')?.classList.contains('active'))lightweightBossRender();startManagerUpdates();},0);
-  window.RESANTA_V2252=Object.freeze({version:VERSION,lightweightBossPlanner:true,lazyClientLoad:true,cachedMonthIndex:true,noAutomaticReadiness:true,bossDirectApproval:true,managerReadOnly:true,excludeWorkingUnder15Sku:false,allActiveClients:true,includesWorking:true,includesPotential:true,includesABCAndUncategorized:true,cityIsFilterOnly:true,singleBossRouteEditor:true,maxPoints15:true});
+  window.RESANTA_V2252=Object.freeze({version:VERSION,lightweightBossPlanner:true,lazyClientLoad:true,cachedMonthIndex:true,noAutomaticReadiness:true,bossDirectApproval:true,managerReadOnly:true,excludeWorkingUnder15Sku:false,allActiveClients:true,includesWorking:true,includesPotential:true,includesABCAndUncategorized:true,cityIsFilterOnly:true,citiesScopedToSelectedManager:true,globalBossSearch:true,singleBossRouteEditor:true,maxPoints15:true});
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 19 ===== */
@@ -2576,10 +2581,10 @@ window.addEventListener('pageshow',function(){
 });
 
 /* ===== ORIGINAL INLINE SCRIPT 20 ===== */
-// RESANTA CRM v23.6.75 · КОНТРОЛЬ ЕДИНОГО РУЧНОГО МАРШРУТА И ФАКТИЧЕСКИХ ПОСЕЩЕНИЙ
+// RESANTA CRM v23.6.76 · КОНТРОЛЬ ЕДИНОГО РУЧНОГО МАРШРУТА И ФАКТИЧЕСКИХ ПОСЕЩЕНИЙ
 (function(){
   'use strict';
-  const VERSION='23.6.75';
+  const VERSION='23.6.76';
   const MANAGERS=['Руднев','Ачинович','Шкуран'];
   let liveChannel=null, refreshTimer=null, refreshing=false;
 
@@ -2702,7 +2707,7 @@ window.addEventListener('pageshow',function(){
     document.getElementById('bdc-refresh')?.addEventListener('click',()=>refreshSelectedDate(true));
     document.getElementById('bdc-open-visits')?.addEventListener('click',()=>typeof goPage==='function'&&goPage('visits','История визитов'));
     const note=document.getElementById('route-month-note-boss');
-    if(note)note.innerHTML='<b>v23.6.75.</b> Единый ручной маршрут руководителя: все активные Рабочие и Потенциальные клиенты, A/B/C/без категории, без ограничения по SKU. Физические ТТ и координаты нужны только для навигации. Лимит — 15 точек в день.';
+    if(note)note.innerHTML='<b>v23.6.76.</b> Единый ручной маршрут руководителя: все активные Рабочие и Потенциальные клиенты, A/B/C/без категории, без ограничения по SKU. Физические ТТ и координаты нужны только для навигации. Лимит — 15 точек в день.';
   }
 
   function mergeDayData(date,dayRoutes,dayVisits){
