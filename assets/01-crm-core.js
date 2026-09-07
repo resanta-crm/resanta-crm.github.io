@@ -1971,6 +1971,17 @@ async function startApp() {
   ['nav-my-routes','nav-route'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
   ['bn-my-routes','bn-route'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
 
+  // v23.6.73 · Акции VIP — постоянный пункт меню.
+  // Руководитель и обычные полевые менеджеры видят раздел всегда после загрузки профиля.
+  // Triovist-менеджеры исключены и по-прежнему работают только в своём контуре.
+  {
+    const vipNav=document.getElementById('nav-vip-actions');
+    const vipRole=String(currentProfile?.role||'').toLowerCase();
+    const vipScope=String(currentProfile?.access_scope||'standard').toLowerCase();
+    const vipAllowed=vipRole==='boss'||(vipRole==='manager'&&vipScope!=='triovist');
+    if(vipNav)vipNav.style.display=vipAllowed?'flex':'none';
+  }
+
   if (currentProfile?.role==='boss') {
     document.getElementById('nav-section-boss').style.display='block';
     document.getElementById('nav-managers').style.display='flex';
@@ -10092,4 +10103,13 @@ window.RESANTA_TASK_TRUTH_V23672=Object.freeze({
   phoneCallTimestampField:'done_at',
   noHistoricalDeletes:true,
   noPolling:true
+});
+
+
+window.RESANTA_VIP_ACTIONS_ACCESS_V23673=Object.freeze({
+  version:'v23.6.73',
+  permanentNav:true,
+  boss:true,
+  standardManager:true,
+  triovist:false
 });
