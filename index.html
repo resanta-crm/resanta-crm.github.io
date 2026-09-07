@@ -1279,7 +1279,23 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
          с чем сравнивается его факт. Иначе «выполнено» ставится не глядя. -->
     <div id="td-plan" style="background:var(--bg);border-radius:8px;padding:9px 11px;margin-bottom:12px;font-size:12px;line-height:1.5"></div>
 
-    <div class="form-field"><label class="form-label">Фактический результат (обязательно)</label><textarea class="form-input" id="td-comment" rows="3" placeholder="Что реально получилось: заказ на 1 240 BYN, согласована оплата 15.07, отказ и т.д."></textarea></div>
+    <div id="td-call-fields" style="display:none;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:9px;padding:10px 12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:#1D4ED8;margin-bottom:7px">📞 Подтверждение прозвона</div>
+      <div class="form-field" style="margin:0">
+        <label class="form-label">Факт контакта (обязательно)</label>
+        <select class="form-input" id="td-call-outcome">
+          <option value="">— выберите —</option>
+          <option value="connected">✅ Разговор состоялся</option>
+          <option value="no_answer">📵 Не дозвонился</option>
+          <option value="callback">📅 Клиент попросил перезвонить</option>
+          <option value="refused">⛔ Клиент отказался от разговора</option>
+          <option value="wrong_number">☎️ Неверный / недоступный номер</option>
+        </select>
+      </div>
+      <div style="font-size:11px;color:#475569;margin-top:6px">Дата и точное время закрытия фиксируются CRM автоматически и не вводятся вручную.</div>
+    </div>
+
+    <div class="form-field"><label class="form-label">Фактический результат (обязательно)</label><textarea class="form-input" id="td-comment" rows="3" placeholder="Что реально получилось: что сказал клиент, какая потребность, заказ / отказ / договорённость"></textarea></div>
 
     <div class="form-field"><label class="form-label">Ожидаемый результат достигнут? (обязательно)</label>
       <select class="form-input" id="td-achieved" onchange="tdToggleReason()">
@@ -1294,8 +1310,15 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 
     <div class="form-field" id="td-reason-field" style="display:none"><label class="form-label">Причина невыполнения (обязательно)</label><textarea class="form-input" id="td-reason" rows="2" placeholder="Нет денег до конца месяца / ЛПР в отпуске / зашёл конкурент / затоварен склад"></textarea></div>
     <div class="promo-warning" style="margin-bottom:12px">🟡 Если задача выполнена частично, она закроется и не попадёт в просрочку. Директор филиала получит отдельное напоминание для разбора с менеджером.</div>
-    <input type="hidden" id="td-next"><input type="hidden" id="td-next-date">
 
+    <div class="form-field">
+      <label class="form-label">Следующее действие по клиенту (обязательно)</label>
+      <textarea class="form-input" id="td-next" rows="2" placeholder="Что делаем дальше: отправить предложение / перезвонить / согласовать заказ / визит"></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Дата следующего контакта (обязательно)</label>
+      <input class="form-input" type="date" id="td-next-date">
+    </div>
 
     <div class="task-done-actions"><button class="btn-secondary" onclick="closeModal('modal-task-done')">Отмена</button><button class="btn-primary" onclick="confirmDoneTask()">Сохранить отчёт и закрыть ✓</button></div>
   </div>
