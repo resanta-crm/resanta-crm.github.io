@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.74 · ROUTE COVERAGE
+/* RESANTA CRM v23.6.75 · ROUTE COVERAGE
  * Boss route editor sees every active client: Working + Potential, A/B/C/uncategorized.
  * Daily route stays capped at 15 stops.
  * Monthly coverage truth: each assigned client is either in a physical route or has one monthly call task.
@@ -6,12 +6,12 @@
  */
 (function(){
 'use strict';
-if(window.RESANTA_ROUTE_COVERAGE_V23674)return;
+if(window.RESANTA_ROUTE_COVERAGE_V23675)return;
 
-const V='v23.6.74',MAX_DAY=15;
+const V='v23.6.75',MAX_DAY=15;
 
 function boss(){try{return currentProfile?.role==='boss'}catch(_){return false}}
-function activeClient(c){return !!c&&!c.is_archived}
+function activeClient(c){const s=String(c?.client_status||'').trim().toLowerCase();return !!c&&!c.is_archived&&(s==='рабочий'||s==='потенциальный')}
 function ymNow(){try{return TODAY.slice(0,7)}catch(_){return new Date().toISOString().slice(0,7)}}
 function monthInput(){
   const el=document.getElementById('rb-coverage-month');
@@ -40,14 +40,19 @@ function coverageClients(filterMgr='all'){
 }
 function routeClientIds(ym){
   const ids=new Set();
-  (allRoutePlans||[]).filter(r=>!r.removed&&String(r.visit_date||'').startsWith(ym)).forEach(r=>{
-    try{
-      const c=matchClientByName(r.client_name);
-      if(c&&activeClient(c))ids.add(String(c.id));
-    }catch(_){}
+  (allRoutePlans||[]).filter(r=>!r.removed&&String(r.visit_date||'').startsWith(ym)&&!r.is_network_point).forEach(r=>{
+    const add=v=>{const s=String(v||'').trim();if(s)ids.add(s);};
+    add(r.client_id);
+    let linked=r.linked_client_ids;
+    if(typeof linked==='string'){try{linked=JSON.parse(linked)}catch(_){linked=[]}}
+    if(Array.isArray(linked))linked.forEach(add);
+    if(!r.client_id&&(!Array.isArray(linked)||!linked.length)){
+      try{const c=matchClientByName(r.client_name);if(c&&activeClient(c))add(c.id)}catch(_){}
+    }
   });
   return ids;
 }
+
 function localMonthCalls(ym){
   return (allTasks||[]).filter(t=>String(t.source||'')==='route_call_monthly'&&String(t.due_date||'').startsWith(ym));
 }
@@ -104,7 +109,7 @@ function renderCoverage(){
   }
   html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">'
     +'<div style="font-size:11px;color:var(--sub)">Период: <b>'+esc(monthLabelRu(ym))+'</b> · область расчёта: <b>'+esc(scope)+'</b>. Физический маршрут имеет приоритет над прозвоном.</div>'
-    +'<button '+(s.missing?'':'disabled ')+'onclick="generateRouteCallCoverageV23674()" class="btn-primary" style="font-size:12px;'+(s.missing?'':'opacity:.55;cursor:default')+'">📞 Сформировать прозвон для остальных'+(s.missing?' ('+s.missing+')':'')+'</button>'
+    +'<button '+(s.missing?'':'disabled ')+'onclick="generateRouteCallCoverageV23675()" class="btn-primary" style="font-size:12px;'+(s.missing?'':'opacity:.55;cursor:default')+'">📞 Сформировать прозвон для остальных'+(s.missing?' ('+s.missing+')':'')+'</button>'
     +'</div>';
   out.innerHTML=html;
 }
@@ -131,7 +136,7 @@ async function archiveCoveredCalls(ym){
   const upd={
     review_status:'stale_review',
     review_comment:'Снят с прозвона: клиент включён в физический маршрут на '+ym+'.',
-    reviewed_by:'route_coverage_v23674',
+    reviewed_by:'route_coverage_v23675',
     reviewed_at:new Date().toISOString()
   };
   const {error}=await db.from('tasks').update(upd).in('id',ids);
@@ -169,7 +174,7 @@ async function generateCalls(){
   const toCreate=[];
   missing.forEach(c=>{
     const rows=existingByClient.get(String(c.id))||[];
-    const rest=rows.find(t=>!t.done&&t.review_status==='stale_review'&&t.reviewed_by==='route_coverage_v23674');
+    const rest=rows.find(t=>!t.done&&t.review_status==='stale_review'&&t.reviewed_by==='route_coverage_v23675');
     if(rest){restoreIds.push(rest.id);return;}
     toCreate.push({
       client_id:c.id,
@@ -218,133 +223,23 @@ if(typeof baseRender==='function'){
   window.renderRoutesBoss=wrapped;try{renderRoutesBoss=wrapped}catch(_){}
 }
 
-const baseOpen=window.openBossRouteDayEditor;
-if(typeof baseOpen==='function'){
-  const wrapped=function(date,manager){
-    const st=document.getElementById('erd-status'),cat=document.getElementById('erd-category'),city=document.getElementById('erd-city');
-    if(st)st.value='';if(cat)cat.value='';if(city)city.value='';
-    const out=baseOpen.apply(this,arguments);
-    try{if(city)city.value='';renderBossRouteDayClients()}catch(_){}
-    return out;
-  };
-  window.openBossRouteDayEditor=wrapped;try{openBossRouteDayEditor=wrapped}catch(_){}
-}
+// Редактор маршрута намеренно не перехватываем: единственный рабочий редактор — фиолетовый manual-route-lite из 03-triovist-routes.js.
 
-window.reloadBossRouteDayEditor=function(preserveCity){
-  const citySel=document.getElementById('erd-city');
-  const oldCity=preserveCity?(citySel?.value||''):'';
-  bossRouteEditSelected=new Set();
-  bossRouteEditUnmatched=[];
-  const rows=bossRouteEditorRows();
-  rows.forEach(r=>{
-    const c=matchClientByName(r.client_name);
-    if(c)bossRouteEditSelected.add(String(c.id));
-    else bossRouteEditUnmatched.push(r);
-  });
-  const cities=[...new Set((allClients||[]).filter(activeClient).map(routeCityOfClient).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
-  citySel.innerHTML='<option value="">Все города</option>'+cities.map(city=>'<option value="'+escAttr(city)+'">'+esc(city)+'</option>').join('');
-  citySel.value=(oldCity&&cities.some(c=>routeCityKey(c)===routeCityKey(oldCity)))?oldCity:'';
-  const unmatched=document.getElementById('erd-unmatched');
-  if(bossRouteEditUnmatched.length){
-    unmatched.style.display='block';
-    unmatched.innerHTML='⚠️ В этом дне есть '+bossRouteEditUnmatched.length+' точк(а/и), которые не сопоставлены с карточками клиентов: <b>'+bossRouteEditUnmatched.map(r=>esc(r.client_name)).join(', ')+'</b>. Они будут сохранены и не удалятся автоматически.';
-  }else unmatched.style.display='none';
-  renderBossRouteDayClients();
-};
-try{reloadBossRouteDayEditor=window.reloadBossRouteDayEditor}catch(_){}
-
-window.bossRouteVisibleClients=function(){
-  const city=document.getElementById('erd-city')?.value||'';
-  const status=document.getElementById('erd-status')?.value||'';
-  const category=document.getElementById('erd-category')?.value||'';
-  const q=(document.getElementById('erd-search')?.value||'').trim().toLowerCase();
-  return (allClients||[]).filter(c=>{
-    if(!activeClient(c))return false;
-    if(city&&routeCityKey(routeCityOfClient(c))!==routeCityKey(city))return false;
-    if(status&&String(c.client_status||'')!==status)return false;
-    const cat=String(c.role_type||'').trim().toUpperCase();
-    if(category==='__none__'&&cat)return false;
-    if(category&&category!=='__none__'&&!cat.startsWith(category))return false;
-    if(q){
-      const hay=[c.name,c.address,c.city,c.region,c.manager_name,c.client_status,c.role_type].filter(Boolean).join(' ').toLowerCase();
-      if(!hay.includes(q))return false;
-    }
-    return true;
-  }).sort((a,b)=>{
-    const sa=bossRouteEditSelected.has(String(a.id))?0:1,sb=bossRouteEditSelected.has(String(b.id))?0:1;
-    return sa-sb||String(a.name||'').localeCompare(String(b.name||''),'ru');
-  });
-};
-try{bossRouteVisibleClients=window.bossRouteVisibleClients}catch(_){}
-
-window.renderBossRouteDayClients=function(){
-  const rows=bossRouteVisibleClients(),manager=document.getElementById('erd-manager')?.value||'',out=document.getElementById('erd-results');
-  const count=document.getElementById('erd-selected-count');
-  if(count)count.textContent='В маршруте выбрано: '+bossRouteEditSelected.size+' / '+MAX_DAY;
-  if(!out)return;
-  if(!rows.length){out.innerHTML='<div style="padding:18px;color:var(--sub);font-size:13px">Клиенты не найдены</div>';return;}
-  out.innerHTML=rows.map(c=>{
-    const checked=bossRouteEditSelected.has(String(c.id)),noAddress=!String(c.address||'').trim(),foreign=c.manager_name&&c.manager_name!==manager;
-    const potential=c.client_status==='Потенциальный';
-    return '<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer">'
-      +'<input type="checkbox" '+(checked?'checked ':'')+'onchange="toggleBossRouteClient(\''+c.id+'\',this.checked,this)" style="width:17px;height:17px;margin-top:2px;flex-shrink:0">'
-      +'<span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:600">'+catTag(c.role_type)+' '+esc(c.name)+'</span>'
-      +(potential?'<span class="tag" style="margin-left:6px;background:#F3E8FF;color:#7C3AED">Потенциальный</span>':'<span class="tag tag-m" style="margin-left:6px">Рабочий</span>')
-      +(foreign?'<span class="tag tag-gray" style="margin-left:6px">закреплён: '+esc(c.manager_name)+'</span>':'')
-      +'<span style="display:block;font-size:11px;color:'+(noAddress?'var(--am)':'var(--sub)')+';margin-top:3px">📍 '+esc(c.address||'адрес не указан — добавить можно, навигация появится после заполнения адреса')+' · '+esc(routeCityOfClient(c))+'</span></span></label>';
-  }).join('');
-};
-try{renderBossRouteDayClients=window.renderBossRouteDayClients}catch(_){}
-
-window.toggleBossRouteClient=function(clientId,checked,el){
-  const id=String(clientId);
-  if(checked&&!bossRouteEditSelected.has(id)&&bossRouteEditSelected.size>=MAX_DAY){
-    if(el)el.checked=false;
-    alert('В один день можно поставить максимум '+MAX_DAY+' торговых точек. Остальных клиентов назначьте на другой день или на прозвон.');
-    return;
-  }
-  if(checked)bossRouteEditSelected.add(id);else bossRouteEditSelected.delete(id);
-  const count=document.getElementById('erd-selected-count');if(count)count.textContent='В маршруте выбрано: '+bossRouteEditSelected.size+' / '+MAX_DAY;
-};
-try{toggleBossRouteClient=window.toggleBossRouteClient}catch(_){}
-
-window.selectAllBossRouteCity=function(){
-  let added=0;
-  for(const c of bossRouteVisibleClients()){
-    if(bossRouteEditSelected.has(String(c.id)))continue;
-    if(bossRouteEditSelected.size>=MAX_DAY)break;
-    bossRouteEditSelected.add(String(c.id));added++;
-  }
-  renderBossRouteDayClients();
-  if(bossRouteVisibleClients().some(c=>!bossRouteEditSelected.has(String(c.id))))alert('Выбрано максимум '+MAX_DAY+' точек на день. Остальные остаются доступными для другого дня или прозвона.');
-};
-try{selectAllBossRouteCity=window.selectAllBossRouteCity}catch(_){}
-
-const baseSave=window.saveBossRouteDay;
-if(typeof baseSave==='function'){
-  const wrapped=async function(){
-    if(bossRouteEditSelected.size>MAX_DAY){alert('В маршруте '+bossRouteEditSelected.size+' точек. Максимум на один день — '+MAX_DAY+'.');return;}
-    const date=document.getElementById('erd-date')?.value||'',modal=document.getElementById('modal-edit-route-day'),wasOpen=!!modal?.classList.contains('open');
-    const out=await baseSave.apply(this,arguments);
-    const saved=wasOpen&&!modal?.classList.contains('open');
-    if(saved&&date){
-      try{await archiveCoveredCalls(String(date).slice(0,7))}catch(e){console.warn(V+' archive covered calls',e)}
-      try{renderCoverage()}catch(_){}
-    }
-    return out;
-  };
-  window.saveBossRouteDay=wrapped;try{saveBossRouteDay=wrapped}catch(_){}
-}
-
+window.renderRouteCoverageV23675=renderCoverage;
+window.generateRouteCallCoverageV23675=()=>generateCalls().catch(e=>{console.error(V,e);alert('Не удалось сформировать прозвон: '+(e?.message||e))});
+window.syncRouteCoverageCallsV23675=ym=>archiveCoveredCalls(ym);
+// Совместимость со старым именем v23.6.74 без второго редактора.
 window.renderRouteCoverageV23674=renderCoverage;
-window.generateRouteCallCoverageV23674=()=>generateCalls().catch(e=>{console.error(V,e);alert('Не удалось сформировать прозвон: '+(e?.message||e))});
-window.syncRouteCoverageCallsV23674=ym=>archiveCoveredCalls(ym);
+window.generateRouteCallCoverageV23674=window.generateRouteCallCoverageV23675;
+window.syncRouteCoverageCallsV23674=window.syncRouteCoverageCallsV23675;
 
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(renderCoverage,0),{once:true});
 else setTimeout(renderCoverage,0);
 
-window.RESANTA_ROUTE_COVERAGE_V23674=Object.freeze({
+window.RESANTA_ROUTE_COVERAGE_V23675=Object.freeze({
   version:V,
+  singleBossRouteEditor:true,
+  coverageOnlyModule:true,
   allActiveClientsInBossEditor:true,
   includesPotential:true,
   includesCategoryC:true,
@@ -359,3 +254,4 @@ window.RESANTA_ROUTE_COVERAGE_V23674=Object.freeze({
   noMutationObserver:true
 });
 })();
+window.RESANTA_ROUTE_COVERAGE_V23674=window.RESANTA_ROUTE_COVERAGE_V23675;
