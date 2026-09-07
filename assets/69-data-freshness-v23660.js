@@ -1,8 +1,8 @@
-/* RESANTA CRM v23.6.62 · SALES FRESHNESS ONLY */
+/* RESANTA CRM v23.6.79 · SALES FRESHNESS + VIP SIGNAL */
 (function(){
 'use strict';
 if(window.RESANTA_DATA_FRESHNESS_V23660)return;
-const VERSION='v23.6.62';
+const VERSION='v23.6.79';
 let channel=null,salesFlight=null,triFlight=null;
 
 function page(){return document.getElementById('app')?.dataset?.activePage||'';}
@@ -33,6 +33,7 @@ async function onSales(row){
     try{
       await window.v22722EnsureHistory({force:true,reason:'realtime-v23660'});
       if(page()===p)renderSalesPage(p);
+      try{window.crmVipActionsSourceChangedV23679?.('sales')}catch(_){}
     }catch(e){console.warn(VERSION+' sales realtime refresh',e);}
     finally{salesFlight=null;}
   })();
