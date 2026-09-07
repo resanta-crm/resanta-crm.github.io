@@ -2146,17 +2146,17 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 18 ===== */
-// RESANTA CRM v22.5.2 · ЛЁГКОЕ РУЧНОЕ ПЛАНИРОВАНИЕ МАРШРУТОВ
+// RESANTA CRM v23.6.75 · ЕДИНЫЙ РУЧНОЙ МАРШРУТ РУКОВОДИТЕЛЯ
 (function(){
   'use strict';
-  const VERSION='22.5.2';
+  const VERSION='23.6.75';
   const MAX_POINTS=15;
   const MANAGERS=['Руднев','Ачинович','Шкуран'];
   const state={
     manager:'Руднев',date:'',type:'field',city:'',query:'',
     selected:new Set(),locked:new Set(),networkSelected:new Set(),networkLocked:new Set(),
     networkPoints:[],networkLoaded:false,
-    plansCache:new Map(),planMapCache:new Map(),monthIndexCache:new Map(),rowPointCache:new Map(),
+    plansCache:new Map(),planMapCache:new Map(),monthIndexCache:new Map(),rowPointCache:new Map(),physicalClientMap:null,
     loading:false,installed:false,refreshTimer:null,liveChannel:null
   };
 
@@ -2168,9 +2168,13 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
   const activeRow=r=>r&&!r.removed;
   const isVisited=r=>api()?.isVisitedRouteRow?.(r)||r?.visited===true||String(r?.visited||'').toLowerCase()==='true'||!!r?.linked_visit_id;
   const approvedRow=r=>activeRow(r)&&(r.approved===true||String(r.review_status||'').toLowerCase()==='approved');
-  const pointId=p=>String(p?.point?.id||'');
-  const pointCity=p=>String(p?.point?.city||'').trim()||'Без города';
-  const pointAddress=p=>String(p?.point?.address||'').trim()||'Адрес не указан';
+  const activeClientM=c=>!!c&&!c.is_archived&&['рабочий','потенциальный'].includes(normM(c.client_status));
+  const clientCategory=c=>String(c?.role_type||c?.category||'').trim();
+  const clientCity=c=>String(c?.city||c?.region||'').trim()||'Без города';
+  const clientAddress=c=>String(c?.address||'').trim()||'Адрес не указан';
+  const pointId=p=>String(p?.route_client_id||p?.primary?.id||'');
+  const pointCity=p=>String(p?.route_city||p?.primary?.city||p?.point?.city||p?.primary?.region||p?.point?.region||'').trim()||'Без города';
+  const pointAddress=p=>String(p?.route_address||p?.primary?.address||p?.point?.address||'').trim()||'Адрес не указан';
   const clientSku=c=>Number(c?.sku_count)||0;
   const isPotential=c=>normM(c?.client_status)==='потенциальный';
   const networkId=n=>String(n?.id||'');
@@ -2200,24 +2204,58 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
     `;document.head.appendChild(s);
   }
 
+  function physicalClientMap(){
+    if(state.physicalClientMap)return state.physicalClientMap;
+    const map=new Map();
+    for(const m of MANAGERS){
+      let rows=[];try{rows=api()?.plansForManager?.(m)||[];}catch(_){rows=[];}
+      for(const p of rows){
+        const linked=[...(p.eligible||[]),...(p.linked||[])];
+        if(p.primary)linked.push({client:p.primary});
+        for(const x of linked){
+          const c=x?.client;if(c?.id&&!map.has(String(c.id)))map.set(String(c.id),p);
+        }
+      }
+    }
+    state.physicalClientMap=map;
+    return map;
+  }
   function getPlans(manager){
-    if(state.plansCache.has(manager))return state.plansCache.get(manager);
-    let list=api()?.plansForManager?.(manager)||[];
-    list=list.filter(p=>(p.eligible||[]).some(x=>isPotential(x.client)||clientSku(x.client)>=15));
-    state.plansCache.set(manager,list);
-    state.planMapCache.set(manager,new Map(list.map(p=>[pointId(p),p])));
+    const cacheKey='__all_active_clients__';
+    if(state.plansCache.has(cacheKey))return state.plansCache.get(cacheKey);
+    const physical=physicalClientMap();
+    const list=(allClients||[]).filter(activeClientM).map(c=>{
+      const base=physical.get(String(c.id))||null,p=base?.point||{};
+      const lat=p.lat??c.lat??c.latitude??null,lng=p.lng??c.lng??c.lon??c.longitude??null;
+      return {
+        route_client_id:String(c.id),route_city:clientCity(c),route_address:clientAddress(c),assigned_manager:String(c.manager_name||''),
+        primary:c,eligible:[{client:c}],linked:[{client:c}],names:[c.name],label:c.name,category:clientCategory(c),visits:Math.max(1,Number(base?.visits)||1),
+        point:{...p,city:c.city||p.city||c.region||'',region:c.region||p.region||'',address:c.address||p.address||'',lat,lng},
+        physical_point_id:base?.point?.id||null,physical_point_key:base?.point?.point_key||null
+      };
+    }).sort((a,b)=>pointCity(a).localeCompare(pointCity(b),'ru')||String(a.label||'').localeCompare(String(b.label||''),'ru'));
+    state.plansCache.set(cacheKey,list);
+    state.planMapCache.set(cacheKey,new Map(list.map(p=>[pointId(p),p])));
     return list;
   }
   function clearIndexes(){state.monthIndexCache.clear();state.rowPointCache.clear();}
-  function rowPointId(row,manager){
-    if(row?.is_network_point)return '';
-    if(row?.physical_point_id)return String(row.physical_point_id);
+  function rowClientIds(row,manager){
+    if(row?.is_network_point)return [];
     const key=String(row?.id||'')+'|'+manager;
     if(state.rowPointCache.has(key))return state.rowPointCache.get(key);
-    let pid='';
-    try{pid=String(api()?.pointIdForRouteRow?.(row,getPlans(manager))||'');}catch(_){pid='';}
-    state.rowPointCache.set(key,pid);return pid;
+    const ids=[];
+    const add=v=>{const s=String(v||'').trim();if(s&&!ids.includes(s))ids.push(s);};
+    add(row?.client_id);
+    let linked=row?.linked_client_ids;
+    if(typeof linked==='string'){try{linked=JSON.parse(linked)}catch(_){linked=[];}}
+    if(Array.isArray(linked))linked.forEach(add);
+    if(!ids.length){
+      const byName=(allClients||[]).find(c=>activeClientM(c)&&normM(c.name)===normM(row?.client_name));
+      if(byName)add(byName.id);
+    }
+    state.rowPointCache.set(key,ids);return ids;
   }
+  function rowPointId(row,manager){return rowClientIds(row,manager)[0]||'';}
   function monthIndex(manager,ym){
     const key=manager+'|'+ym;
     if(state.monthIndexCache.has(key))return state.monthIndexCache.get(key);
@@ -2226,16 +2264,18 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       if(r.manager_name!==manager||!String(r.visit_date||'').startsWith(ym)||!activeRow(r))continue;
       if(!idx.dayRows.has(r.visit_date))idx.dayRows.set(r.visit_date,[]);idx.dayRows.get(r.visit_date).push(r);
       if(r.is_network_point)continue;
-      const pid=rowPointId(r,manager);if(!pid)continue;
-      idx.counts.set(pid,(idx.counts.get(pid)||0)+1);
-      if(!idx.dates.has(pid))idx.dates.set(pid,[]);idx.dates.get(pid).push(r.visit_date);
+      const pids=rowClientIds(r,manager);if(!pids.length)continue;
+      for(const pid of pids){
+        idx.counts.set(pid,(idx.counts.get(pid)||0)+1);
+        if(!idx.dates.has(pid))idx.dates.set(pid,[]);idx.dates.get(pid).push(r.visit_date);
+      }
     }
     for(const dates of idx.dates.values())dates.sort();
     state.monthIndexCache.set(key,idx);return idx;
   }
   function countsExcludingDate(manager,ym,date){
     const idx=monthIndex(manager,ym),counts=new Map(idx.counts);
-    for(const r of (idx.dayRows.get(date)||[])){const pid=rowPointId(r,manager);if(pid)counts.set(pid,Math.max(0,(counts.get(pid)||0)-1));}
+    for(const r of (idx.dayRows.get(date)||[]))for(const pid of rowClientIds(r,manager))counts.set(pid,Math.max(0,(counts.get(pid)||0)-1));
     return counts;
   }
   function recommendation(plan,counts){
@@ -2259,7 +2299,7 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
         <label><span class="form-label">Менеджер</span><select id="mrl-manager" class="form-input">${MANAGERS.map(m=>'<option>'+escM(m)+'</option>').join('')}</select></label>
         <label><span class="form-label">Дата</span><input id="mrl-date" class="form-input" type="date"></label>
         <label><span class="form-label">Тип дня</span><select id="mrl-type" class="form-input"><option value="field">Полевой день</option><option value="office">Офисный день 09:00–18:00</option></select></label>
-        <div class="mrl-actions"><button class="btn-primary" id="mrl-load">Показать клиентов</button><button class="btn-secondary" id="mrl-check">Проверить пропуски</button></div>
+        <div class="mrl-actions"><button class="btn-primary" id="mrl-load">Показать клиентов</button><button class="btn-secondary" id="mrl-check">Проверить покрытие месяца</button></div>
       </div>
       <div id="mrl-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
       <div id="mrl-editor" style="display:none">
@@ -2291,7 +2331,7 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       panel=document.getElementById('manual-route-lite');
       bindPanel();
     }
-    const note=document.getElementById('route-month-note-boss');if(note)note.innerHTML='<b>v22.7.1.</b> Ручной маршрут: менеджер → дата → город → физические ТТ. Автоматическое формирование отключено. Рабочие клиенты менее 15 SKU исключены.';
+    const note=document.getElementById('route-month-note-boss');if(note)note.innerHTML='<b>v23.6.75.</b> Единый ручной маршрут руководителя: источник — все активные Рабочие и Потенциальные карточки clients без ограничений по SKU и ABC. Город — только фильтр. Лимит — 15 ТТ в день.';
     renderCurrentDay();state.installed=true;
   }
 
@@ -2324,33 +2364,39 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       state.selected=new Set();state.locked=new Set();state.networkSelected=new Set();state.networkLocked=new Set();
       for(const r of (idx.dayRows.get(state.date)||[])){
         if(r.is_network_point&&r.network_point_id){const nid=String(r.network_point_id);state.networkSelected.add(nid);if(isVisited(r))state.networkLocked.add(nid);continue;}
-        const pid=rowPointId(r,state.manager);if(pid){state.selected.add(pid);if(isVisited(r))state.locked.add(pid);}
+        for(const pid of rowClientIds(r,state.manager)){state.selected.add(pid);if(isVisited(r))state.locked.add(pid);}
       }
-      const cities=[...new Set(ps.map(pointCity))].sort((a,b)=>a.localeCompare(b,'ru'));
-      const firstSelected=ps.find(p=>state.selected.has(pointId(p)));state.city=firstSelected?pointCity(firstSelected):(cities[0]||'');
+      state.city='';
       document.getElementById('mrl-editor').style.display='block';toggleType();renderCities();renderPoints();renderNetworkPoints();renderSummary();
-      status.textContent='Загружено физических ТТ: '+ps.length+' · сетевых точек: '+networkForManager(state.manager).length+'. В список клиентов не входят рабочие клиенты менее 15 SKU.';
+      const working=ps.filter(p=>normM(p.primary?.client_status)==='рабочий').length,potential=ps.filter(p=>normM(p.primary?.client_status)==='потенциальный').length;
+      status.textContent='Загружено активных клиентов: '+ps.length+' · Рабочих: '+working+' · Потенциальных: '+potential+' · сетевых точек: '+networkForManager(state.manager).length+'. Ограничений по SKU и ABC нет.';
     }catch(e){status.textContent='';alert(e.message||e);}finally{state.loading=false;}
   }
 
   function renderCities(){
     const ps=getPlans(state.manager),counts={};ps.forEach(p=>counts[pointCity(p)]=(counts[pointCity(p)]||0)+1);
-    document.getElementById('mrl-cities').innerHTML=Object.keys(counts).sort((a,b)=>a.localeCompare(b,'ru')).map(c=>'<button class="mrl-city '+(c===state.city?'active':'')+'" data-city="'+escM(c)+'">'+escM(c)+' <span style="float:right;color:var(--sub)">'+counts[c]+'</span></button>').join('');
+    const all='<button class="mrl-city '+(!state.city?'active':'')+'" data-city="">Все города <span style="float:right;color:var(--sub)">'+ps.length+'</span></button>';
+    document.getElementById('mrl-cities').innerHTML=all+Object.keys(counts).sort((a,b)=>a.localeCompare(b,'ru')).map(c=>'<button class="mrl-city '+(c===state.city?'active':'')+'" data-city="'+escM(c)+'">'+escM(c)+' <span style="float:right;color:var(--sub)">'+counts[c]+'</span></button>').join('');
     document.querySelectorAll('#mrl-cities .mrl-city').forEach(b=>b.addEventListener('click',()=>{state.city=b.dataset.city||'';renderCities();renderPoints();}));
   }
   function visiblePlans(){
     const q=normM(state.query),counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date),rank={must:0,due:1,ok:2};
-    return getPlans(state.manager).filter(p=>pointCity(p)===state.city).filter(p=>!q||normM(p.label+' '+pointAddress(p)+' '+(p.names||[]).join(' ')).includes(q)).sort((a,b)=>rank[recommendation(a,counts).level]-rank[recommendation(b,counts).level]||pointAddress(a).localeCompare(pointAddress(b),'ru'));
+    return getPlans(state.manager).filter(p=>q||!state.city||pointCity(p)===state.city).filter(p=>!q||normM(p.label+' '+pointAddress(p)+' '+pointCity(p)+' '+(p.assigned_manager||'')+' '+(p.primary?.client_status||'')+' '+(p.category||'')).includes(q)).sort((a,b)=>rank[recommendation(a,counts).level]-rank[recommendation(b,counts).level]||pointCity(a).localeCompare(pointCity(b),'ru')||String(a.label||'').localeCompare(String(b.label||''),'ru'));
   }
   function renderPoints(){
     const root=document.getElementById('mrl-points');if(!root)return;
     const counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date),rows=visiblePlans();
-    if(!rows.length){root.innerHTML='<div style="padding:18px;color:var(--sub)">В этом городе нет подходящих маршрутных ТТ.</div>';return;}
+    if(!rows.length){root.innerHTML='<div style="padding:18px;color:var(--sub)">Клиенты не найдены. Сбросьте город или измените поиск.</div>';return;}
     root.innerHTML=rows.map(p=>{
-      const id=pointId(p),checked=state.selected.has(id),locked=state.locked.has(id),rec=recommendation(p,counts),skuText=(p.eligible||[]).map(x=>x.client.name+': '+clientSku(x.client)+' SKU').join(' · ');
-      return '<label class="mrl-row '+(locked?'locked':'')+'"><input type="checkbox" data-pid="'+escM(id)+'" '+(checked?'checked ':'')+(locked?'disabled ':'')+'style="width:18px;height:18px;margin-top:2px"><span style="flex:1"><b>'+escM(p.label)+'</b><span style="display:block;font-size:11px;color:var(--sub);margin-top:2px">📍 '+escM(pointAddress(p))+'</span><span class="mrl-'+rec.level+'" style="display:block;font-size:11px;margin-top:3px">'+escM(rec.text)+'</span><span style="display:block;font-size:10px;color:var(--sub);margin-top:2px">'+escM(p.category)+' · '+escM(skuText)+'</span></span></label>';
+      const id=pointId(p),c=p.primary||{},checked=state.selected.has(id),locked=state.locked.has(id),rec=recommendation(p,counts),foreign=c.manager_name&&normM(c.manager_name)!==normM(state.manager);
+      const status=isPotential(c)?'🔵 Потенциальный':'🟢 Рабочий',cat=clientCategory(c)||'без категории',geo=(p.physical_point_id||Number.isFinite(Number(p.point?.lat)))?'📍 навигация готова':'⚠ координаты не влияют на добавление';
+      return '<label class="mrl-row '+(locked?'locked':'')+'"><input type="checkbox" data-pid="'+escM(id)+'" '+(checked?'checked ':'')+(locked?'disabled ':'')+'style="width:18px;height:18px;margin-top:2px"><span style="flex:1"><b>'+escM(p.label)+'</b><span style="display:block;font-size:11px;color:var(--sub);margin-top:2px">📍 '+escM(pointCity(p))+' · '+escM(pointAddress(p))+'</span><span class="mrl-'+rec.level+'" style="display:block;font-size:11px;margin-top:3px">'+escM(rec.text)+'</span><span style="display:block;font-size:10px;color:var(--sub);margin-top:2px">'+escM(status)+' · '+escM(cat)+(foreign?' · закреплён: '+escM(c.manager_name):'')+' · '+escM(geo)+'</span></span></label>';
     }).join('');
-    root.querySelectorAll('input[data-pid]').forEach(ch=>ch.addEventListener('change',()=>{const id=String(ch.dataset.pid);if(ch.checked)state.selected.add(id);else state.selected.delete(id);renderSummary();}));
+    root.querySelectorAll('input[data-pid]').forEach(ch=>ch.addEventListener('change',()=>{
+      const id=String(ch.dataset.pid);
+      if(ch.checked&&!state.selected.has(id)&&state.selected.size+state.networkSelected.size>=MAX_POINTS){ch.checked=false;alert('В один день можно поставить максимум '+MAX_POINTS+' торговых точек.');return;}
+      if(ch.checked)state.selected.add(id);else state.selected.delete(id);renderSummary();
+    }));
   }
   function renderNetworkPoints(){
     const root=document.getElementById('mrl-network-points');if(!root)return;
@@ -2360,9 +2406,9 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       const id=networkId(n),checked=state.networkSelected.has(id),locked=state.networkLocked.has(id),geo=(Number.isFinite(Number(n.lat))&&Number.isFinite(Number(n.lng)))?'📍 координаты есть':'⚠ без координат';
       return '<label class="mrl-row '+(locked?'locked':'')+'" style="margin:0;border:1px solid #BFDBFE;border-radius:8px;background:#fff"><input type="checkbox" data-npid="'+escM(id)+'" '+(checked?'checked ':'')+(locked?'disabled ':'')+'style="width:18px;height:18px;margin-top:2px"><span style="flex:1"><b>🏬 '+escM(n.network_name)+' · '+escM(n.city||'')+'</b><span style="display:block;font-size:11px;color:var(--sub);margin-top:2px">'+escM(n.address||'Адрес не указан')+'</span><span style="display:block;font-size:10px;color:'+(geo.startsWith('📍')?'var(--g)':'var(--am)')+';margin-top:3px">AAA · передача · '+geo+'</span></span></label>';
     }).join('');
-    root.querySelectorAll('input[data-npid]').forEach(ch=>ch.addEventListener('change',()=>{const id=String(ch.dataset.npid);if(ch.checked)state.networkSelected.add(id);else state.networkSelected.delete(id);renderSummary();}));
+    root.querySelectorAll('input[data-npid]').forEach(ch=>ch.addEventListener('change',()=>{const id=String(ch.dataset.npid);if(ch.checked&&!state.networkSelected.has(id)&&state.selected.size+state.networkSelected.size>=MAX_POINTS){ch.checked=false;alert('В один день можно поставить максимум '+MAX_POINTS+' торговых точек, включая сетевые.');return;}if(ch.checked)state.networkSelected.add(id);else state.networkSelected.delete(id);renderSummary();}));
   }
-  function addRecommended(){const counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date);for(const p of visiblePlans())if(recommendation(p,counts).level!=='ok')state.selected.add(pointId(p));renderPoints();renderSummary();}
+  function addRecommended(){const counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date);for(const p of visiblePlans()){if(state.selected.size+state.networkSelected.size>=MAX_POINTS)break;if(recommendation(p,counts).level!=='ok')state.selected.add(pointId(p));}renderPoints();renderSummary();}
   function renderSummary(){
     const root=document.getElementById('mrl-summary');if(!root)return;
     const selected=getPlans(state.manager).filter(p=>state.selected.has(pointId(p))).sort((a,b)=>pointCity(a).localeCompare(pointCity(b),'ru')||pointAddress(a).localeCompare(pointAddress(b),'ru'));
@@ -2376,10 +2422,10 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
 
   function showReminder(){
     state.manager=document.getElementById('mrl-manager').value;state.date=document.getElementById('mrl-date').value||defaultDate();
-    const ps=getPlans(state.manager),idx=monthIndex(state.manager,state.date.slice(0,7)),missed=[],under=[];
-    for(const p of ps){const n=idx.counts.get(pointId(p))||0,target=Math.max(1,Number(p.visits)||1);if(n===0)missed.push(p);else if(n<target)under.push({p,left:target-n});}
-    const cities=[...new Set(missed.map(pointCity))];const root=document.getElementById('mrl-reminder');root.style.display='block';
-    root.innerHTML='<b>'+escM(state.manager)+'</b>: обязательных физических ТТ без даты — <b style="color:'+(missed.length?'var(--r)':'var(--g)')+'">'+missed.length+'</b> · повторных визитов не хватает — <b style="color:'+(under.length?'var(--am)':'var(--g)')+'">'+under.reduce((s,x)=>s+x.left,0)+'</b>'+(cities.length?'<div style="font-size:11px;color:var(--sub);margin-top:4px">Города: '+escM(cities.slice(0,15).join(', '))+(cities.length>15?'…':'')+'</div>':'');
+    const ym=state.date.slice(0,7),root=document.getElementById('mrl-reminder');root.style.display='block';
+    try{window.renderRouteCoverageV23675?.();window.renderRouteCoverageV23674?.();}catch(_){}
+    root.innerHTML='<b>Покрытие месяца '+escM(ym)+'</b><div style="font-size:11px;color:var(--sub);margin-top:4px">Контроль теперь единый: клиент либо есть хотя бы в одном маршруте месяца, либо получает задачу «на прозвон». Сводка «Маршрут / Прозвон / Без покрытия» показана выше.</div>';
+    setTimeout(()=>document.getElementById('rb-coverage')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
   }
 
   function renderCurrentDay(){
@@ -2392,11 +2438,11 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
   }
 
   function plannedTimes(count,index){if(!count)return{start:'09:00:00',end:'18:00:00',minutes:540};const slot=Math.max(20,Math.floor(540/count)),start=9*60+slot*index,end=index===count-1?18*60:Math.min(18*60,start+slot);const fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')+':00';return{start:fmt(start),end:fmt(end),minutes:end-start};}
-  function rowFromPlan(plan,manager,date,index,count){const t=plannedTimes(count,index),primary=plan.primary||plan.eligible?.[0]?.client,now=new Date().toISOString();return{
-    client_id:primary?.id||null,manager_name:manager,visit_date:date,client_name:plan.label,city:plan.point.city||'',region:plan.point.region||'',address:plan.point.address||'',category:plan.category||'',
-    approved:true,review_status:'approved',source:'boss_manual_approved',generated_month:date.slice(0,7),removed:false,sort_order:index+1,planned_minutes:t.minutes,planned_start:t.start,planned_end:t.end,is_office_day:false,
-    physical_point_id:plan.point.id,physical_point_key:plan.point.point_key,linked_client_ids:(plan.linked||[]).map(x=>x.client.id),linked_client_names:plan.names||[],route_lat:plan.point.lat||null,route_lng:plan.point.lng||null,
-    route_zone:[plan.point.region,plan.point.city].filter(Boolean).join(' / '),route_version:VERSION,reason:'Маршрут вручную составлен и утверждён руководителем',approved_by:currentProfile?.name||null,approved_at:now,
+  function rowFromPlan(plan,manager,date,index,count){const t=plannedTimes(count,index),primary=plan.primary||plan.eligible?.[0]?.client,now=new Date().toISOString(),point=plan.point||{};return{
+    client_id:primary?.id||null,manager_name:manager,visit_date:date,client_name:primary?.name||plan.label,city:primary?.city||point.city||primary?.region||'',region:primary?.region||point.region||'',address:primary?.address||point.address||'',category:clientCategory(primary)||plan.category||'',
+    approved:true,review_status:'approved',source:'boss_manual_approved_v23675',generated_month:date.slice(0,7),removed:false,sort_order:index+1,planned_minutes:t.minutes,planned_start:t.start,planned_end:t.end,is_office_day:false,
+    physical_point_id:plan.physical_point_id||null,physical_point_key:plan.physical_point_key||null,linked_client_ids:primary?.id?[primary.id]:[],linked_client_names:primary?.name?[primary.name]:[],route_lat:point.lat??null,route_lng:point.lng??null,
+    route_zone:[primary?.region||point.region,primary?.city||point.city].filter(Boolean).join(' / '),route_version:VERSION,reason:'Маршрут вручную составлен из активной карточки clients и утверждён руководителем',approved_by:currentProfile?.name||null,approved_at:now,
     is_network_point:false,network_point_id:null,network_name:null,network_category:null
   };}
   function rowFromNetwork(n,manager,date,index,count){const t=plannedTimes(count,index),now=new Date().toISOString();return{
@@ -2448,7 +2494,10 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       }
       const removeIds=replaceable.filter(r=>!keepIds.has(String(r.id))).map(r=>r.id);if(removeIds.length)await updateRows(removeIds,{removed:true,approved:false,source:'superseded_by_manual_v2271'});
       const dayIds=[...keepIds,...visited.map(r=>String(r.id))];if(dayIds.length)await updateRows(dayIds,{approved:true,review_status:'approved',approved_by:currentProfile?.name||null,approved_at:new Date().toISOString()});
-      await approveWorkflow(state.manager,state.date.slice(0,7));await reloadRoutes();renderCurrentDay();resetEditor();
+      await approveWorkflow(state.manager,state.date.slice(0,7));await reloadRoutes();
+      try{await window.syncRouteCoverageCallsV23675?.(state.date.slice(0,7));}catch(e){console.warn('v23.6.75 coverage sync',e);}
+      try{window.renderRouteCoverageV23675?.();window.renderRouteCoverageV23674?.();}catch(_){}
+      renderCurrentDay();resetEditor();
       alert('Готово. День сразу утверждён и отправлен менеджеру.\n\n'+state.manager+' · '+state.date+'\n'+(office?'Офисный день 09:00–18:00':'Всего ТТ: '+totalSelected+' · клиентских: '+selected.length+' · сетевых: '+selectedNetworks.length));
     }catch(e){alert('Не удалось сохранить маршрут. Посещённые данные не удалялись.\n\n'+(e.message||e));}
     finally{btn.disabled=false;btn.textContent='Сохранить и сразу отправить менеджеру';}
@@ -2500,11 +2549,11 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
   const previousGo=window.goPage;
   window.goPage=function(page,title){const r=previousGo(page,title);if(page==='my-routes')crmSchedulePageHook('my-routes',()=>{stripManagerEditing();startManagerUpdates();},35);return r;};
   const previousLoad=window.loadData;
-  if(typeof previousLoad==='function')window.loadData=async function(){const r=await previousLoad();state.plansCache.clear();state.planMapCache.clear();state.networkLoaded=false;state.networkPoints=[];clearIndexes();if(document.getElementById('page-routes-boss')?.classList.contains('active'))lightweightBossRender();return r;};
+  if(typeof previousLoad==='function')window.loadData=async function(){const r=await previousLoad();state.plansCache.clear();state.planMapCache.clear();state.physicalClientMap=null;state.networkLoaded=false;state.networkPoints=[];clearIndexes();if(document.getElementById('page-routes-boss')?.classList.contains('active'))lightweightBossRender();return r;};
   window.addEventListener('resanta-network-points-updated',async()=>{state.networkLoaded=false;state.networkPoints=[];await loadNetworkPoints();if(document.getElementById('mrl-editor')?.style.display!=='none'){renderNetworkPoints();renderSummary();}});
 
   setTimeout(()=>{if(document.getElementById('page-routes-boss')?.classList.contains('active'))lightweightBossRender();startManagerUpdates();},0);
-  window.RESANTA_V2252=Object.freeze({version:VERSION,lightweightBossPlanner:true,lazyClientLoad:true,cachedMonthIndex:true,noAutomaticReadiness:true,bossDirectApproval:true,managerReadOnly:true,excludeWorkingUnder15Sku:true});
+  window.RESANTA_V2252=Object.freeze({version:VERSION,lightweightBossPlanner:true,lazyClientLoad:true,cachedMonthIndex:true,noAutomaticReadiness:true,bossDirectApproval:true,managerReadOnly:true,excludeWorkingUnder15Sku:false,allActiveClients:true,includesWorking:true,includesPotential:true,includesABCAndUncategorized:true,cityIsFilterOnly:true,singleBossRouteEditor:true,maxPoints15:true});
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 19 ===== */
