@@ -2364,7 +2364,9 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
       state.selected=new Set();state.locked=new Set();state.networkSelected=new Set();state.networkLocked=new Set();
       for(const r of (idx.dayRows.get(state.date)||[])){
         if(r.is_network_point&&r.network_point_id){const nid=String(r.network_point_id);state.networkSelected.add(nid);if(isVisited(r))state.networkLocked.add(nid);continue;}
-        for(const pid of rowClientIds(r,state.manager)){state.selected.add(pid);if(isVisited(r))state.locked.add(pid);}
+        const ids=rowClientIds(r,state.manager);
+        if(isVisited(r)){if(ids[0])state.selected.add(ids[0]);ids.forEach(pid=>state.locked.add(pid));}
+        else ids.forEach(pid=>state.selected.add(pid));
       }
       state.city='';
       document.getElementById('mrl-editor').style.display='block';toggleType();renderCities();renderPoints();renderNetworkPoints();renderSummary();
@@ -2474,6 +2476,8 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
     const btn=document.getElementById('mrl-save');btn.disabled=true;btn.textContent='Сохраняю…';
     try{
       const old=(allRoutePlans||[]).filter(r=>r.manager_name===state.manager&&r.visit_date===state.date&&activeRow(r)),visited=old.filter(isVisited),replaceable=old.filter(r=>!isVisited(r)),keepIds=new Set();
+      const visitedClientIds=new Set();visited.forEach(r=>rowClientIds(r,state.manager).forEach(id=>visitedClientIds.add(id)));
+      const visitedNetworkIds=new Set(visited.filter(r=>r.is_network_point&&r.network_point_id).map(r=>String(r.network_point_id)));
       if(office){
         const row={manager_name:state.manager,visit_date:state.date,client_name:'Офисный день',city:'',region:'',address:'',category:'Офис',approved:true,review_status:'approved',source:'boss_manual_approved',generated_month:state.date.slice(0,7),removed:false,sort_order:0,planned_minutes:540,planned_start:'09:00:00',planned_end:'18:00:00',is_office_day:true,route_version:VERSION,reason:'Офисный день вручную утверждён руководителем',approved_by:currentProfile?.name||null,approved_at:new Date().toISOString(),is_network_point:false,network_point_id:null};
         const existing=old.find(r=>r.is_office_day&&!isVisited(r));if(existing){const {error}=await db.from('route_plans').update(row).eq('id',existing.id);if(error)throw error;keepIds.add(String(existing.id));}else{const {data,error}=await db.from('route_plans').insert(row).select().single();if(error)throw error;if(data)keepIds.add(String(data.id));}
@@ -2482,11 +2486,15 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
         for(let i=0;i<entries.length;i++){
           const e=entries[i];
           if(e.kind==='client'){
-            const p=e.value,pid=pointId(p),patch=rowFromPlan(p,state.manager,state.date,i,entries.length),existing=old.find(r=>!r.is_network_point&&rowPointId(r,state.manager)===pid&&!isVisited(r));
+            const p=e.value,pid=pointId(p);
+            if(visitedClientIds.has(pid)){const vr=visited.find(r=>rowClientIds(r,state.manager).includes(pid));if(vr)keepIds.add(String(vr.id));continue;}
+            const patch=rowFromPlan(p,state.manager,state.date,i,entries.length),existing=old.find(r=>!r.is_network_point&&rowClientIds(r,state.manager).includes(pid)&&!isVisited(r));
             if(existing){const {error}=await db.from('route_plans').update(patch).eq('id',existing.id);if(error)throw error;keepIds.add(String(existing.id));}
             else{const removed=(allRoutePlans||[]).find(r=>r.manager_name===state.manager&&r.visit_date===state.date&&r.removed&&!r.is_network_point&&rowPointId(r,state.manager)===pid);if(removed){const {error}=await db.from('route_plans').update(patch).eq('id',removed.id);if(error)throw error;keepIds.add(String(removed.id));}else{const {data,error}=await db.from('route_plans').insert(patch).select().single();if(error)throw error;if(data)keepIds.add(String(data.id));}}
           }else{
-            const n=e.value,nid=networkId(n),patch=rowFromNetwork(n,state.manager,state.date,i,entries.length),existing=old.find(r=>r.is_network_point&&String(r.network_point_id||'')===nid&&!isVisited(r));
+            const n=e.value,nid=networkId(n);
+            if(visitedNetworkIds.has(nid)){const vr=visited.find(r=>r.is_network_point&&String(r.network_point_id||'')===nid);if(vr)keepIds.add(String(vr.id));continue;}
+            const patch=rowFromNetwork(n,state.manager,state.date,i,entries.length),existing=old.find(r=>r.is_network_point&&String(r.network_point_id||'')===nid&&!isVisited(r));
             if(existing){const {error}=await db.from('route_plans').update(patch).eq('id',existing.id);if(error)throw error;keepIds.add(String(existing.id));}
             else{const removed=(allRoutePlans||[]).find(r=>r.manager_name===state.manager&&r.visit_date===state.date&&r.removed&&r.is_network_point&&String(r.network_point_id||'')===nid);if(removed){const {error}=await db.from('route_plans').update(patch).eq('id',removed.id);if(error)throw error;keepIds.add(String(removed.id));}else{const {data,error}=await db.from('route_plans').insert(patch).select().single();if(error)throw error;if(data)keepIds.add(String(data.id));}}
           }
@@ -2568,10 +2576,10 @@ window.addEventListener('pageshow',function(){
 });
 
 /* ===== ORIGINAL INLINE SCRIPT 20 ===== */
-// RESANTA CRM v22.5.4 · КОНТРОЛЬ РУЧНЫХ МАРШРУТОВ И ФАКТИЧЕСКИХ ПОСЕЩЕНИЙ ДЛЯ РУКОВОДИТЕЛЯ
+// RESANTA CRM v23.6.75 · КОНТРОЛЬ ЕДИНОГО РУЧНОГО МАРШРУТА И ФАКТИЧЕСКИХ ПОСЕЩЕНИЙ
 (function(){
   'use strict';
-  const VERSION='22.5.4';
+  const VERSION='23.6.75';
   const MANAGERS=['Руднев','Ачинович','Шкуран'];
   let liveChannel=null, refreshTimer=null, refreshing=false;
 
@@ -2694,7 +2702,7 @@ window.addEventListener('pageshow',function(){
     document.getElementById('bdc-refresh')?.addEventListener('click',()=>refreshSelectedDate(true));
     document.getElementById('bdc-open-visits')?.addEventListener('click',()=>typeof goPage==='function'&&goPage('visits','История визитов'));
     const note=document.getElementById('route-month-note-boss');
-    if(note)note.innerHTML='<b>v22.5.4.</b> Ручной маршрут руководителя и контроль фактических посещений. ИИ-задачи используют текущий утверждённый маршрут.';
+    if(note)note.innerHTML='<b>v23.6.75.</b> Единый ручной маршрут руководителя: все активные Рабочие и Потенциальные клиенты, A/B/C/без категории, без ограничения по SKU. Физические ТТ и координаты нужны только для навигации. Лимит — 15 точек в день.';
   }
 
   function mergeDayData(date,dayRoutes,dayVisits){
