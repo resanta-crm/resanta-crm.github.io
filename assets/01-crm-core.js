@@ -4451,7 +4451,7 @@ function renderTasks(){
       +'<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleTaskGroup(\''+gid+'\')">'
       +'<div style="font-size:14px;font-weight:600">👤 '+mgr+' <span class="tag tag-gray">'+totalTasks+' задач'+wordEnd+'</span></div>'
       +'<div style="display:flex;align-items:center;gap:8px">'
-      +'<button onclick="event.stopPropagation();bulkRescheduleOverdue(\''+escAttr(mgr)+'\')" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:11px;white-space:nowrap">📅 Перенести просроченные</button>'
+      +(taskFilter==='stale_review'?'':'<button onclick="event.stopPropagation();bulkRescheduleOverdue(\''+escAttr(mgr)+'\')" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:11px;white-space:nowrap">📅 Перенести просроченные</button>')
       +'<span style="font-size:13px;color:var(--sub)" id="'+gid+'_arrow">'+(open?'▲':'▼')+'</span>'
       +'</div>'
       +'</div>'
