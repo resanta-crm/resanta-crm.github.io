@@ -1008,7 +1008,7 @@ function controlPeriodStart(daysBack){
 }
 // Разовый рубеж очистки старого хвоста задач. Задачи со сроком до этой даты,
 // по которым нет отчёта и нет более новой замены, не удаляются: они переходят
-// в отдельную папку руководителя «Старые на разбор» и перестают искажать
+// в отдельную папку руководителя «Архив на проверку» и перестают искажать
 // текущую просрочку менеджеров.
 const TASK_BACKLOG_CUTOFF_DATE = '2026-07-20';
 function isLegacyRoutePlan(r){
@@ -1045,6 +1045,9 @@ function isActiveTask(t){
 // от ручной: она входит в открытые задачи, просрочку, дашборд и сигналы.
 function isTaskOverdue(t){
   if(!isActiveTask(t)||!t.due_date)return false;
+  // Автозадачи — рекомендации системы, а не ручное обязательство менеджера.
+  // Они могут требовать разбора, но не должны создавать ложную просрочку/KPI-минус.
+  if(isAutoTask(t))return false;
   // Если срок попал внутрь официального отсутствия менеджера, задача получает
   // двухдневное окно после возвращения и не превращается в ложную просрочку.
   const grace=taskAbsenceGraceDate(t);
@@ -4343,11 +4346,11 @@ function renderTasks(){
   const renderTaskRow=t=>{
     const d=daysDiff(t.due_date);
     const isStale=isBacklogReviewTask(t);
-    const cls=t.done?'ok':(isStale||d<0)?'bad':d===0?'warn':'ok';
-    const label=t.done?'✅ Выполнено':isStale?'🗂 Старая задача на разбор · была просрочена '+Math.abs(Math.min(d,0))+'д':d<0?'🔴 Просрочено '+Math.abs(d)+'д':d===0?'🟡 Сегодня':'🟢 Через '+d+'д';
+    const cls=t.done?'ok':isStale?'ok':d<0?'bad':d===0?'warn':'ok';
+    const label=t.done?'✅ Выполнено':isStale?'🗂 Архив на проверку · не входит в просрочку':d<0?'🔴 Просрочено '+Math.abs(d)+'д':d===0?'🟡 Сегодня':'🟢 Через '+d+'д';
     const isPending=t.review_status==='pending';
     const autoTag=isStale
-      ?' <span class="tag tag-r">🗂 старый хвост</span>'
+      ?' <span class="tag tag-gray">🗂 архив · не просрочка</span>'
       :isPending
         ?(t.auto_generated?' <span class="tag" style="background:var(--amb);color:var(--am)">🤖 авто · на согласовании</span>':' <span class="tag" style="background:var(--amb);color:var(--am)">📅 перенос · на согласовании</span>')
         :(t.auto_generated?' <span class="tag tag-gray">🤖 авто</span>':'');
@@ -4659,6 +4662,22 @@ async function restoreBacklogTask(id){
 // подтверждается, а если не достигнут — назвать причину и следующий шаг.
 // Раньше хватало одной строки «что сделано» — по такому отчёту невозможно
 // понять, привёз менеджер деньги или просто заехал поговорить.
+function isPhoneCallTask(t){
+  if(!t)return false;
+  const src=String(t.source||'').toLowerCase();
+  const txt=(String(t.title||'')+' '+String(t.text||'')).toLowerCase();
+  return ['route_call','route_call_v224','route_call_monthly','call'].includes(src)
+    || txt.includes('📞') || txt.includes('прозвон') || txt.includes('позвон');
+}
+function taskCallOutcomeLabel(v){
+  return ({
+    connected:'разговор состоялся',
+    no_answer:'не дозвонился',
+    callback:'клиент попросил перезвонить',
+    refused:'клиент отказался от разговора',
+    wrong_number:'неверный / недоступный номер'
+  })[v]||v||'';
+}
 function doneTask(id){
   const t=allTasks.find(x=>x.id===id);
   if(!t)return;
@@ -4676,6 +4695,13 @@ function doneTask(id){
 
   ['td-comment','td-proof','td-reason','td-next'].forEach(k=>{const el=document.getElementById(k);if(el)el.value='';});
   const ach=document.getElementById('td-achieved'); if(ach)ach.value='';
+  // Для задач-прозвонов фиксируем отдельный факт контакта. Время закрытия
+  // записывается автоматически в done_at и не может быть введено задним числом.
+  const callBox=document.getElementById('td-call-fields');
+  const callOutcome=document.getElementById('td-call-outcome');
+  const isCall=isPhoneCallTask(t);
+  if(callBox)callBox.style.display=isCall?'block':'none';
+  if(callOutcome)callOutcome.value='';
   // Дата следующего контакта по умолчанию — через неделю.
   const ndEl=document.getElementById('td-next-date'); if(ndEl)ndEl.value=addLocalDays(TODAY,7);
   tdToggleReason();
@@ -4696,23 +4722,29 @@ function tdToggleReason(){
 
 async function confirmDoneTask(){
   const id=document.getElementById('td-task-id').value;
+  const t=allTasks.find(x=>x.id===id);
+  if(!t)return;
   const g=k=>{const el=document.getElementById(k);return el?String(el.value||'').trim():'';};
   const fact=g('td-comment'), achieved=g('td-achieved'), proof=g('td-proof');
   const reason=g('td-reason'), next=g('td-next'), nextDate=g('td-next-date');
+  const callOutcome=g('td-call-outcome');
+  const isCall=isPhoneCallTask(t);
 
-  if(!fact){alert('Опишите фактический результат — без этого закрыть нельзя.');return;}
+  if(isCall&&!callOutcome){alert('Для прозвона обязательно укажите факт контакта: разговор состоялся / не дозвонились / перезвонить / отказ / неверный номер.');return;}
+  if(!fact){alert(isCall?'Опишите, что произошло при звонке и что сказал клиент.':'Опишите фактический результат — без этого закрыть нельзя.');return;}
   if(!achieved){alert('Укажите, достигнут ли ожидаемый результат.');return;}
-  if(achieved!=='no' && !proof){alert('Укажите, чем подтверждается результат (заказ, оплата, фото, договорённость).');return;}
+  if(achieved!=='no' && !proof){alert(isCall?'Укажите подтверждение договорённости или результата звонка.':'Укажите, чем подтверждается результат (заказ, оплата, фото, договорённость).');return;}
   if((achieved==='no'||achieved==='partial') && !reason){alert('Укажите причину невыполнения — руководитель должен видеть, что помешало.');return;}
   if(!next){alert('Укажите следующее действие по клиенту.');return;}
   if(!nextDate){alert('Укажите дату следующего контакта.');return;}
 
+  const callEvidence=isCall?('📞 Контакт: '+taskCallOutcomeLabel(callOutcome)+(proof?' · '+proof:'')):proof;
   const upd={
     done:true,
     done_comment:fact,                 // оставляем для старых экранов
     fact_result:fact,
     result_achieved:achieved,
-    proof:(achieved==='no'?null:proof),
+    proof:(isCall?callEvidence:(achieved==='no'?null:proof)),
     fail_reason:((achieved==='no'||achieved==='partial')?reason:null),
     next_action:next,
     next_contact_date:nextDate,
@@ -8910,7 +8942,7 @@ function _taskReportStatus(t){
     if(_taskNoNext(t))return 'no_next';
     return 'achieved';
   }
-  if((t.due_date||'')<TODAY)return 'overdue';
+  if(isTaskOverdue(t))return 'overdue';
   return 'active';
 }
 function _taskStatusLabel(t){
@@ -10043,3 +10075,19 @@ function abcClientCardHtml(c){
     return '<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase">🅰️ ABC · ЧТО ПРОДАВАТЬ</div><button onclick="openABCForClient(\''+c.id+'\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--a);color:var(--a);background:none;border-radius:6px;cursor:pointer">Полный ABC</button></div><div class="abc-mini-grid"><div class="cc-stat"><div class="cc-stat-label">Удержать A</div><div style="font-size:13px;font-weight:700;color:var(--g)">'+r.hold.length+'</div><div style="font-size:10px;color:var(--sub);margin-top:3px">'+(hold.map(x=>esc(x.sku!=='—'?x.sku:x.product)).join(', ')||'нет')+'</div></div><div class="cc-stat"><div class="cc-stat-label">Вернуть A</div><div style="font-size:13px;font-weight:700;color:'+(r.lost.length?'var(--r)':'var(--g)')+'">'+r.lost.length+'</div><div style="font-size:10px;color:var(--sub);margin-top:3px">'+(lost.map(x=>esc(x.sku!=='—'?x.sku:x.product)).join(', ')||'потерь нет')+'</div></div><div class="cc-stat"><div class="cc-stat-label">Развить B</div><div style="font-size:13px;font-weight:700;color:var(--w)">'+r.develop.length+'</div></div><div class="cc-stat"><div class="cc-stat-label">Предложить A склада</div><div style="font-size:13px;font-weight:700;color:var(--a)">'+r.potential.length+'</div><div style="font-size:10px;color:var(--sub);margin-top:3px">'+(potential.map(x=>esc(x.sku!=='—'?x.sku:x.product)).join(', ')||'нет')+'</div></div></div><div style="font-size:10px;color:var(--sub);margin-top:6px">Период: текущий месяц и два предыдущих. Суммы — с НДС из 1С.</div></div>';
   }catch(e){console.warn('ABC карточки клиента не рассчитан',e);return '';}
 }
+
+
+/* Resanta CRM v23.6.72 · task truth
+ * Auto-generated recommendations do not count as manager overdue.
+ * stale_review is archive/review only.
+ * Route-call completion records contact outcome + server-side close timestamp
+ * through the normal task update flow; no polling and no data cleanup. */
+window.RESANTA_TASK_TRUTH_V23672=Object.freeze({
+  version:'v23.6.72',
+  autoTasksExcludedFromOverdue:true,
+  staleReviewNotOverdue:true,
+  phoneCallEvidenceRequired:true,
+  phoneCallTimestampField:'done_at',
+  noHistoricalDeletes:true,
+  noPolling:true
+});
