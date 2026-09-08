@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from openpyxl import load_workbook
+import xlrd
 
 IMAP_HOST=os.getenv("IMAP_HOST","imap.gmail.com")
 IMAP_PORT=int(os.getenv("IMAP_PORT","993"))
@@ -103,6 +104,40 @@ def cell(row,m,key,default=None):
     i=m.get(key)
     return row[i] if i is not None and i<len(row) else default
 
+def build_item(row,m,rnum,report_date):
+    article=str(cell(row,m,"article","") or "").strip()
+    name=str(cell(row,m,"nomenclature","") or "").strip()
+    if not article and not name: return None
+    if not article or not name:
+        log(f"⚠️ Строка {rnum} пропущена: нет артикула или номенклатуры")
+        return None
+    doc=str(cell(row,m,"source_document","") or "").strip()
+    serial=str(cell(row,m,"serial_no","") or "").strip()
+    comment=str(cell(row,m,"source_comment","") or "").strip()
+    explicit=str(cell(row,m,"source_key","") or "").strip()
+    if explicit:
+        skey=explicit
+    else:
+        stable="|".join([article,serial,doc,comment])
+        skey="AUTO-"+hashlib.sha1(stable.encode("utf-8")).hexdigest()[:24] if stable.replace("|","") else f"AUTO-{article}-{rnum}"
+    return {
+      "source_key":skey,
+      "article":article,
+      "nomenclature":name,
+      "quantity":max(0,num(cell(row,m,"quantity",1),1)),
+      "base_price":max(0,num(cell(row,m,"base_price",0),0)),
+      "currency":"BYN",
+      "source_type":str(cell(row,m,"source_type","") or "").strip() or None,
+      "source_document":doc or None,
+      "source_date":iso_date(cell(row,m,"source_date"),report_date),
+      "serial_no":serial or None,
+      "source_comment":comment or None,
+      "warranty_active":bool_warranty(cell(row,m,"warranty_active")),
+      "warranty_months":int_or_none(cell(row,m,"warranty_months")),
+      "warranty_note":str(cell(row,m,"warranty_note","") or "").strip() or None
+    }
+
+
 def parse_xlsx(content,report_date,filename):
     wb=load_workbook(io.BytesIO(content),data_only=True,read_only=True)
     ws=wb[wb.sheetnames[0]]
@@ -111,45 +146,37 @@ def parse_xlsx(content,report_date,filename):
     m=colmap(headers)
     rows=[]
     for rnum,row in enumerate(ws.iter_rows(min_row=hr+1,values_only=True),start=hr+1):
-        article=str(cell(row,m,"article","") or "").strip()
-        name=str(cell(row,m,"nomenclature","") or "").strip()
-        if not article and not name: continue
-        if not article or not name:
-            log(f"⚠️ Строка {rnum} пропущена: нет артикула или номенклатуры")
-            continue
-        doc=str(cell(row,m,"source_document","") or "").strip()
-        serial=str(cell(row,m,"serial_no","") or "").strip()
-        comment=str(cell(row,m,"source_comment","") or "").strip()
-        explicit=str(cell(row,m,"source_key","") or "").strip()
-        if explicit:
-            skey=explicit
-        else:
-            stable="|".join([article,serial,doc,comment])
-            if stable.replace("|",""):
-                skey="AUTO-"+hashlib.sha1(stable.encode("utf-8")).hexdigest()[:24]
-            else:
-                skey=f"AUTO-{article}-{rnum}"
-        base=max(0,num(cell(row,m,"base_price",0),0))
-        qty=max(0,num(cell(row,m,"quantity",1),1))
-        item={
-          "source_key":skey,
-          "article":article,
-          "nomenclature":name,
-          "quantity":qty,
-          "base_price":base,
-          "currency":"BYN",
-          "source_type":str(cell(row,m,"source_type","") or "").strip() or None,
-          "source_document":doc or None,
-          "source_date":iso_date(cell(row,m,"source_date"),report_date),
-          "serial_no":serial or None,
-          "source_comment":comment or None,
-          "warranty_active":bool_warranty(cell(row,m,"warranty_active")),
-          "warranty_months":int_or_none(cell(row,m,"warranty_months")),
-          "warranty_note":str(cell(row,m,"warranty_note","") or "").strip() or None
-        }
-        rows.append(item)
+        item=build_item(row,m,rnum,report_date)
+        if item: rows.append(item)
     if not rows: raise RuntimeError("В файле нет строк уценки.")
     return rows
+
+
+def parse_xls(content,report_date,filename):
+    book=xlrd.open_workbook(file_contents=content)
+    sh=book.sheet_by_index(0)
+    alias_terms={norm(x) for vals in ALIASES.values() for x in vals}
+    best=None
+    for r in range(0,min(sh.nrows,20)):
+        vals=[norm(sh.cell_value(r,col)) for col in range(0,min(sh.ncols,50))]
+        score=sum(1 for x in vals if x in alias_terms)
+        if best is None or score>best[0]: best=(score,r,vals)
+    if not best or best[0]<2:
+        raise RuntimeError("Не нашёл строку заголовков в XLS.")
+    hr=best[1]
+    headers=[sh.cell_value(hr,col) for col in range(sh.ncols)]
+    m=colmap(headers)
+    rows=[]
+    for r in range(hr+1,sh.nrows):
+        vals=[sh.cell_value(r,col) for col in range(sh.ncols)]
+        item=build_item(vals,m,r+1,report_date)
+        if item: rows.append(item)
+    if not rows: raise RuntimeError("В файле нет строк уценки.")
+    return rows
+
+
+def parse_excel(content,report_date,filename):
+    return parse_xls(content,report_date,filename) if filename.lower().endswith(".xls") else parse_xlsx(content,report_date,filename)
 
 def rpc(name,payload):
     r=requests.post(
@@ -198,7 +225,7 @@ def find_latest():
         msg=email.message_from_bytes(msgdata[0][1])
         for part in msg.walk():
             fn=decoded(part.get_filename())
-            if not fn or not fn.lower().endswith(".xlsx"): continue
+            if not fn or not fn.lower().endswith((".xlsx",".xls")): continue
             payload=part.get_payload(decode=True)
             if not payload: continue
             candidate=(sent,subject,fn,payload)
@@ -210,12 +237,12 @@ def find_latest():
 def main():
     item=find_latest()
     if not item:
-        log("Нового письма «Уценка для CRM» с XLSX не найдено.")
+        log("Нового письма «Уценка для CRM» с Excel-вложением не найдено.")
         return 0
     sent,subject,filename,content=item
     local_sent=sent.astimezone(MINSK)
     report_date=local_sent.date()
-    rows=parse_xlsx(content,report_date,filename)
+    rows=parse_excel(content,report_date,filename)
     log(f"Найдено: {subject} · {filename} · {len(rows)} строк")
     out=rpc("markdown_import_snapshot_v1",{
       "p_rows":rows,
