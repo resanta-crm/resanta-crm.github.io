@@ -1,0 +1,39 @@
+name: Уценка — импорт из 1С
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'import_markdown.py'
+      - '.github/workflows/import-markdown.yml'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: markdown-1c-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --disable-pip-version-check requests openpyxl
+      - run: python -m py_compile import_markdown.py
+      - name: Импортировать уценку
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MARKDOWN_LOOKBACK_DAYS: '14'
+          MARKDOWN_SUBJECT_KEYS: 'уценк,crm'
+          MARKDOWN_FULL_SNAPSHOT: 'true'
+        run: python import_markdown.py
