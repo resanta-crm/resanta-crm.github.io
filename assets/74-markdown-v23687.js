@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.89 · УЦЕНКА
+/* RESANTA CRM v23.6.91 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
@@ -6,8 +6,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.89';
-const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null};
+const V='v23.6.91';
+const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=v=>esc(v).replace(/"/g,'&quot;');
@@ -67,6 +67,29 @@ function injectStyle(){
  #markdown-modal-v23687 .md-assignment{border-top:1px solid var(--border);padding:8px 0;font-size:11px;line-height:1.5}
  #markdown-image-v23687{display:none;position:fixed;inset:0;z-index:13000;background:rgba(0,0,0,.88);align-items:center;justify-content:center;padding:18px}
  #markdown-image-v23687.open{display:flex}#markdown-image-v23687 img{max-width:96vw;max-height:94vh;object-fit:contain;border-radius:8px}
+ #markdown-sale-modal-v23691,#markdown-control-modal-v23691{display:none;position:fixed;inset:0;z-index:12500;background:rgba(15,23,42,.58);padding:14px;overflow:auto}
+ #markdown-sale-modal-v23691.open,#markdown-control-modal-v23691.open{display:flex;align-items:flex-start;justify-content:center}
+ .md91-dialog{width:min(720px,100%);background:#fff;border-radius:14px;padding:16px;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.28)}
+ #markdown-control-modal-v23691 .md91-dialog{width:min(1100px,100%)}
+ .md91-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px}
+ .md91-close{border:0;background:#F3F4F6;border-radius:8px;width:34px;height:34px;font-size:20px;cursor:pointer}
+ .md91-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .md91-field{display:block;font-size:11px;color:var(--sub)}
+ .md91-field input,.md91-field select,.md91-field textarea{width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff}
+ .md91-field textarea{min-height:78px;resize:vertical}
+ .md91-results{border:1px solid var(--border);border-radius:8px;max-height:180px;overflow:auto;margin-top:6px}
+ .md91-result{display:block;width:100%;border:0;border-bottom:1px solid var(--border);background:#fff;padding:8px 10px;text-align:left;cursor:pointer;font-size:11px}
+ .md91-result:last-child{border-bottom:0}.md91-result:hover{background:#F8FAFC}
+ .md91-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+ .md91-btn{border:1px solid var(--border);background:#fff;border-radius:8px;padding:9px 11px;cursor:pointer;font-size:12px}
+ .md91-btn.primary{background:var(--a);border-color:var(--a);color:#fff}.md91-btn.good{background:#166534;border-color:#166534;color:#fff}.md91-btn.bad{background:#991B1B;border-color:#991B1B;color:#fff}
+ .md91-control-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:3px}
+ .md91-control-card{border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:8px;font-size:11px;line-height:1.5;background:#fff}
+ .md91-control-card.alert{border-color:#FCA5A5;background:#FFF7F7}
+ .md91-control-card.pending{border-color:#FDE68A;background:#FFFCF2}
+ .md91-status{font-size:10px;font-weight:800;padding:3px 7px;border-radius:999px;display:inline-block;background:#F3F4F6}
+ .md91-status.red{background:#FEE2E2;color:#991B1B}.md91-status.green{background:#DCFCE7;color:#166534}.md91-status.amber{background:#FEF3C7;color:#92400E}
+ .md91-sale-note{margin-top:6px;padding:7px 8px;border-radius:8px;background:#F8FAFC;font-size:10px;line-height:1.45}
  @media(max-width:760px){
    #page-markdown .md-grid{grid-template-columns:1fr}
    #page-markdown .md-card{grid-template-columns:78px minmax(0,1fr);padding:10px}.md-thumb{width:78px!important;height:78px!important}
@@ -74,6 +97,7 @@ function injectStyle(){
    #markdown-modal-v23687 .md-sections{grid-template-columns:1fr}
    #markdown-modal-v23687 .md-formgrid{grid-template-columns:1fr}
    #markdown-modal-v23687 .md-btn{min-height:44px;font-size:13px}
+   .md91-grid{grid-template-columns:1fr}.md91-btn{min-height:44px;font-size:13px}
  }`;
  document.head.appendChild(st);
 }
@@ -130,9 +154,9 @@ function card(r){
 }
 function render(){
  const root=$('markdown-root');if(!root)return;
- const tabs=statusTabs();
+ const tabs=statusTabs(),control=S.controlSummary||{};
  root.innerHTML='<div class="md-top"><div><div class="page-title" style="margin-bottom:3px">🏷️ Уценка</div><div style="font-size:12px;color:var(--sub)">Возвраты клиентов и сервиса · фото · гарантия · цена · задачи на продажу</div></div>'
-  +'<button class="btn-secondary" id="md-refresh-v23687">↻ Обновить</button></div>'
+  +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(isPayushin()?'<button class="btn-secondary" id="md-control-v23691">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class="btn-secondary" id="md-refresh-v23687">↻ Обновить</button></div></div>'
   +'<div class="card" style="margin-bottom:10px;padding:11px 13px;font-size:11px;line-height:1.5"><b>🛡 Уценённый товар сохраняет гарантию.</b> Фото и описание состояния видят все сотрудники. '+(isPayushin()?'<b>Скидку и план продажи утверждаете только вы.</b>':'Цена и скидка утверждаются Александром Паюшиным.')+'</div>'
   +'<div class="md-stats">'+tabs.map(x=>'<button class="md-chip '+(S.filter===x[0]?'active':'')+'" data-md-filter="'+x[0]+'">'+x[1]+' <b>'+x[2]+'</b></button>').join('')+'</div>'
   +'<div class="md-tools"><input class="md-search" id="md-search-v23687" value="'+attr(S.search)+'" placeholder="🔍 Поиск по артикулу, номенклатуре, серийному номеру..."><span style="font-size:10px;color:var(--sub)">Найдено: '+S.total+'</span></div>'
@@ -141,7 +165,8 @@ function render(){
  const inp=$('md-search-v23687');let timer;
  if(inp)inp.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{S.search=inp.value.trim();load(true)},280)};
  const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);
- updateNavDot();loadCovers();
+ const ctl=$('md-control-v23691');if(ctl)ctl.onclick=()=>openSalesControl('alerts');
+ updateNavDot();loadCovers();if(isPayushin())loadControlSummary(false);
 }
 function loadCovers(){
  const d=dbx();if(!d)return;
@@ -165,8 +190,28 @@ function loadCovers(){
  }
 }
 function updateNavDot(){
- const count=isPayushin()?n(S.stats?.ready_for_pricing):n(S.stats?.needs_photo);
+ const count=isPayushin()?n(S.stats?.ready_for_pricing)+n(S.controlSummary?.alerts):n(S.stats?.needs_photo);
  ['markdown-alert-dot','bn-markdown-dot'].forEach(id=>{const e=$(id);if(e)e.style.display=count?'inline-block':'none'});
+}
+async function loadControlSummary(force=false){
+ if(!isPayushin())return null;
+ const now=Date.now();
+ if(!force&&S.controlSummary&&now-S.controlSummaryAt<30000)return S.controlSummary;
+ if(S.controlSummaryFlight)return S.controlSummaryFlight;
+ S.controlSummaryFlight=(async()=>{
+  try{
+   const data=await rpc('markdown_sales_summary_v1',{});
+   if(data?.allowed){
+    S.controlSummary=data;S.controlSummaryAt=Date.now();
+    const b=$('md-control-v23691');
+    if(b)b.innerHTML='🛡 Контроль продаж'+(n(data.alerts)?' <b>🔴 '+n(data.alerts)+'</b>':'');
+    updateNavDot();
+   }
+   return data;
+  }catch(e){console.warn(V,'control summary',e);return null}
+  finally{S.controlSummaryFlight=null}
+ })();
+ return S.controlSummaryFlight;
 }
 async function load(force=false){
  ensureDom();
@@ -197,8 +242,15 @@ async function signed(path){
  try{const {data,error}=await dbx().storage.from('markdown-photos').createSignedUrl(path,3600);return error?'':(data?.signedUrl||'')}catch(_){return''}
 }
 function photoTypeLabel(v){return({overall:'Общий вид',defect:'Дефект',label:'Шильдик/артикул',box:'Упаковка',other:'Другое'})[v]||v}
+function saleEventStatus(e){
+ if(!e)return'';
+ if(e.event_type==='sale_claim'&&e.status==='pending')return'<div class="md91-sale-note"><b>⏳ Продажа заявлена — ждёт подтверждения 1С.</b><br>'+qty(e.reported_qty)+' шт. · '+esc(e.client_name||'—')+' · '+money(e.reported_revenue)+'</div>';
+ if(e.event_type==='sale_claim'&&e.status==='discrepancy')return'<div class="md91-sale-note" style="background:#FEF2F2;color:#991B1B"><b>🔴 Расхождение с 1С.</b><br>'+esc(e.discrepancy_reason||'Остаток не подтвердил продажу')+'</div>';
+ if(e.event_type==='sale_claim'&&e.status==='confirmed')return'<div class="md91-sale-note" style="background:#ECFDF5;color:#166534"><b>✅ Продажа подтверждена '+(e.confirmation_source==='manual'?'вручную':'1С')+'.</b><br>'+qty(e.confirmed_qty||e.reported_qty)+' шт. · '+esc(e.client_name||'—')+' · '+money(e.reported_revenue)+'</div>';
+ return'';
+}
 async function detailHtml(data){
- const i=data.item||{},photos=Array.isArray(data.photos)?data.photos:[],assign=Array.isArray(data.assignments)?data.assignments:[];
+ const i=data.item||{},photos=Array.isArray(data.photos)?data.photos:[],assign=Array.isArray(data.assignments)?data.assignments:[],sales=Array.isArray(data.sale_events)?data.sale_events:[];
  const photoUrls=await Promise.all(photos.map(async p=>({...p,signed_url:await signed(p.storage_path)})));
  const stage=i.review_status||'collecting';
  const typeCounts={overall:0,defect:0,label:0};
@@ -218,7 +270,17 @@ async function detailHtml(data){
   const tomorrow=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   assignBox='<div class="md-box"><h4>🎯 Поставить план менеджеру</h4><div class="md-formgrid"><label>Менеджер<select id="md-manager-v23687"><option value="">Выберите</option>'+managers.map(m=>'<option>'+esc(m.name)+'</option>').join('')+'</select></label><label>Срок<input id="md-due-v23687" type="date" value="'+tomorrow+'"></label><label>План, шт.<input id="md-target-v23687" type="number" min="1" step="1" value="1"></label><label>Мотивация за выполнение, BYN<input id="md-bonus-v23687" type="number" min="0" step="1" value="0"></label><label>Демотивация за просрочку, BYN<input id="md-penalty-v23687" type="number" min="0" step="1" value="0"></label><label>Комментарий<input id="md-plan-note-v23687" placeholder="Кому предложить / условия"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownAssignV23687()">Создать/обновить задачу</button></div></div>';
  }
- const assHtml=assign.length?assign.map(a=>'<div class="md-assignment"><b>'+esc(a.manager_name)+'</b> · план '+qty(a.target_qty)+' шт. до '+date(a.due_date)+' · '+(a.overdue?'🔴 просрочено':esc(a.status))+(a.bonus_byn!=null?'<br>💚 мотивация +'+money(a.bonus_byn)+' · 🔻 демотивация '+money(a.penalty_byn):'')+(a.motivation_note?'<br>'+esc(a.motivation_note):'')+((['assigned','in_work'].includes(a.status)&&(data.is_payushin||String(a.manager_name).toLowerCase()===String(data.current_name).toLowerCase()))?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownReportSaleV23687(&quot;'+attr(a.id)+'&quot;,&quot;'+attr(a.target_qty)+'&quot;)">✅ Зафиксировать продажу</button></div>':'')+'</div>').join(''):'<div style="font-size:11px;color:var(--sub)">Задачи менеджерам ещё не поставлены.</div>';
+ const assHtml=assign.length?assign.map(a=>{
+   const ownSales=sales.filter(e=>String(e.assignment_id||'')===String(a.id));
+   const live=ownSales.find(e=>['pending','discrepancy'].includes(e.status))||ownSales.find(e=>e.status==='confirmed');
+   const canReport=['assigned','in_work'].includes(a.status)&&(data.is_payushin||String(a.manager_name).toLowerCase()===String(data.current_name).toLowerCase())&&!ownSales.some(e=>['pending','discrepancy'].includes(e.status));
+   return '<div class="md-assignment"><b>'+esc(a.manager_name)+'</b> · план '+qty(a.target_qty)+' шт. до '+date(a.due_date)+' · '+(a.overdue?'🔴 просрочено':esc(a.status))
+     +(a.bonus_byn!=null?'<br>💚 мотивация +'+money(a.bonus_byn)+' · 🔻 демотивация '+money(a.penalty_byn):'')
+     +(a.motivation_note?'<br>'+esc(a.motivation_note):'')
+     +(live?saleEventStatus(live):'')
+     +(canReport?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownReportSaleV23687(&quot;'+attr(a.id)+'&quot;,&quot;'+attr(a.target_qty)+'&quot;)">🧾 Заявить продажу</button></div>':'')
+     +'</div>';
+  }).join(''):'<div style="font-size:11px;color:var(--sub)">Задачи менеджерам ещё не поставлены.</div>';
  const photosHtml=photoUrls.length?'<div class="md-photo-grid">'+photoUrls.map(p=>'<div class="md-photo">'+(p.signed_url?'<img src="'+attr(p.signed_url)+'" onclick="crmMarkdownZoomV23687(&quot;'+attr(p.signed_url)+'&quot;)">':'<div style="height:120px;display:flex;align-items:center;justify-content:center">📷</div>')+'<div class="md-photo-meta"><b>'+esc(photoTypeLabel(p.photo_type))+'</b><br>'+esc(p.uploaded_by)+' · '+date(p.created_at)+(p.comment?'<br>'+esc(p.comment):'')+(data.is_payushin?'<br><button class="md-btn" style="padding:4px 6px;margin-top:4px" onclick="crmMarkdownDeletePhotoV23687(&quot;'+attr(p.id)+'&quot;,&quot;'+attr(p.storage_path)+'&quot;)">Удалить</button>':'')+'</div></div>').join('')+'</div>':'<div style="font-size:11px;color:#991B1B">Фото ещё нет. Сотруднику нужно сфотографировать общий вид и дефекты.</div>';
  return '<div class="md-head"><div><div style="font-size:18px;font-weight:900">'+esc(i.nomenclature)+'</div><div style="font-size:12px;color:var(--sub)">Артикул <b>'+esc(i.article)+'</b> · '+qty(i.quantity)+' шт. · '+esc(sourceLabel(i.source_type))+'</div></div><button class="md-x" onclick="crmMarkdownCloseV23687()">×</button></div>'
  +'<div class="md-sections"><div>'
@@ -237,8 +299,12 @@ async function openItem(id){
  if(isPayushin()&&!S.managers){try{S.managers=await rpc('markdown_get_managers_v1',{})}catch(e){console.warn(V,e);S.managers=[]}}
  const my=id;
  try{
-  const data=await rpc('markdown_item_detail_v1',{p_item_id:id});
+  const [data,sales]=await Promise.all([
+    rpc('markdown_item_detail_v1',{p_item_id:id}),
+    rpc('markdown_item_sales_v1',{p_item_id:id})
+  ]);
   if(S.current!==my)return;
+  data.sale_events=Array.isArray(sales)?sales:[];
   S.detail=data;body.innerHTML=await detailHtml(data);
  }catch(e){body.innerHTML='<div style="color:#991B1B">Не удалось открыть карточку: '+esc(e?.message||e)+'</div>'}
 }
@@ -271,14 +337,174 @@ async function assign(){
   alert('✅ Задача по уценке поставлена менеджеру');await refreshDetail();await load(true)
  }catch(e){alert('Не удалось поставить задачу: '+(e?.message||e))}
 }
-async function reportSale(id,target){
- const q=prompt('Сколько продано, шт.?',String(target||1));if(q===null)return;
- const rev=prompt('Сумма реализации, BYN (можно оставить пустым):','');if(rev===null)return;
- const comment=prompt('Комментарий по продаже / клиент:','')||'';
+function ensureSaleModal(){
+ let m=$('markdown-sale-modal-v23691');
+ if(!m){
+  m=document.createElement('div');m.id='markdown-sale-modal-v23691';
+  m.innerHTML='<div class="md91-dialog" id="markdown-sale-body-v23691"></div>';
+  m.addEventListener('click',e=>{if(e.target===m)closeSaleModal()});
+  document.body.appendChild(m);
+ }
+ return m;
+}
+function closeSaleModal(){
+ const m=$('markdown-sale-modal-v23691');if(m)m.classList.remove('open');
+ S.saleAssignment=null;S.saleClient=null;
+}
+function renderSaleClientResults(rows){
+ const box=$('md-sale-client-results-v23691');if(!box)return;
+ const list=Array.isArray(rows)?rows:[];
+ box.innerHTML=list.length?list.map(r=>'<button type="button" class="md91-result" data-client-id="'+attr(r.id)+'" data-client-name="'+attr(r.name)+'"><b>'+esc(r.name)+'</b>'+(r.city?' · '+esc(r.city):'')+(r.manager_name?'<br><span style="color:var(--sub)">Менеджер: '+esc(r.manager_name)+'</span>':'')+'</button>').join(''):'<div style="padding:9px;font-size:11px;color:var(--sub)">Клиенты не найдены</div>';
+ box.querySelectorAll('[data-client-id]').forEach(b=>b.onclick=()=>{
+   S.saleClient={id:b.dataset.clientId,name:b.dataset.clientName};
+   const inp=$('md-sale-client-search-v23691');if(inp)inp.value=S.saleClient.name;
+   box.innerHTML='<div style="padding:9px;font-size:11px;color:#166534"><b>✅ Выбран:</b> '+esc(S.saleClient.name)+'</div>';
+ });
+}
+async function searchSaleClients(q){
+ const seq=++S.clientSearchSeq;
+ if(String(q||'').trim().length<2){renderSaleClientResults([]);return}
  try{
-  await rpc('markdown_report_sale_v1',{p_assignment_id:id,p_actual_qty:Number(q),p_actual_revenue:rev===''?null:Number(String(rev).replace(',','.')),p_comment:comment||null});
-  alert('✅ Продажа зафиксирована');await refreshDetail();await load(true)
- }catch(e){alert('Не удалось зафиксировать продажу: '+(e?.message||e))}
+  const rows=await rpc('markdown_search_clients_v1',{p_search:String(q).trim()});
+  if(seq!==S.clientSearchSeq)return;
+  renderSaleClientResults(rows);
+ }catch(e){console.warn(V,'client search',e)}
+}
+function updateSaleChannel(){
+ const ch=$('md-sale-channel-v23691')?.value||'crm_client';
+ const crm=$('md-sale-client-block-v23691'),other=$('md-sale-other-block-v23691');
+ if(crm)crm.style.display=ch==='crm_client'?'block':'none';
+ if(other)other.style.display=ch==='retail_other'?'block':'none';
+}
+function updateSaleTotal(){
+ const q=Math.max(0,Number($('md-sale-qty-v23691')?.value||0));
+ const p=n(S.detail?.item?.final_price);
+ const e=$('md-sale-total-v23691');if(e)e.textContent=money(q*p);
+}
+function reportSale(id,target){
+ const a=(S.detail?.assignments||[]).find(x=>String(x.id)===String(id));
+ const i=S.detail?.item;if(!a||!i)return;
+ S.saleAssignment={id:a.id,target:n(target)||n(a.target_qty)||1};
+ S.saleClient=null;
+ const m=ensureSaleModal(),body=$('markdown-sale-body-v23691');
+ const maxQty=Math.max(1,n(i.quantity)),defaultQty=Math.min(maxQty,Math.max(1,S.saleAssignment.target));
+ body.innerHTML='<div class="md91-head"><div><div style="font-size:18px;font-weight:900">🧾 Заявить продажу</div><div style="font-size:11px;color:var(--sub)">'+esc(i.nomenclature)+' · '+esc(i.article)+'</div></div><button class="md91-close" type="button" id="md-sale-close-v23691">×</button></div>'
+  +'<div class="card" style="padding:10px;margin-bottom:10px;font-size:11px"><b>Утверждённая цена:</b> '+money(i.final_price)+' / шт.<br><b>Текущий остаток 1С:</b> '+qty(i.quantity)+' шт.<br><span style="color:#92400E">Продажа станет окончательной только после уменьшения остатка в следующем отчёте 1С.</span></div>'
+  +'<div class="md91-grid"><label class="md91-field">Количество<input id="md-sale-qty-v23691" type="number" min="1" max="'+attr(maxQty)+'" step="1" value="'+attr(defaultQty)+'"></label><label class="md91-field">Канал продажи<select id="md-sale-channel-v23691"><option value="crm_client">Клиент CRM</option><option value="retail_other">Розница / другой клиент</option></select></label></div>'
+  +'<div id="md-sale-client-block-v23691" style="margin-top:9px"><label class="md91-field">Клиент CRM<input id="md-sale-client-search-v23691" placeholder="Начните вводить название клиента" autocomplete="off"></label><div class="md91-results" id="md-sale-client-results-v23691" style="display:none"></div></div>'
+  +'<div id="md-sale-other-block-v23691" style="margin-top:9px;display:none"><label class="md91-field">Кому продали<input id="md-sale-other-name-v23691" placeholder="Например: розница, физлицо, другой клиент"></label></div>'
+  +'<label class="md91-field" style="margin-top:9px">Комментарий<textarea id="md-sale-comment-v23691" placeholder="Номер заказа/накладной или пояснение. Для розницы/другого клиента обязательно."></textarea></label>'
+  +'<div class="card" style="padding:10px;margin-top:9px;font-size:12px">Сумма по утверждённой цене: <b id="md-sale-total-v23691">'+money(defaultQty*n(i.final_price))+'</b></div>'
+  +'<div class="md91-actions"><button class="md91-btn primary" type="button" id="md-sale-submit-v23691">Заявить продажу и ждать 1С</button><button class="md91-btn" type="button" id="md-sale-cancel-v23691">Отмена</button></div>';
+ m.classList.add('open');
+ $('md-sale-close-v23691').onclick=closeSaleModal;$('md-sale-cancel-v23691').onclick=closeSaleModal;
+ $('md-sale-channel-v23691').onchange=()=>{S.saleClient=null;updateSaleChannel()};
+ $('md-sale-qty-v23691').oninput=updateSaleTotal;
+ const inp=$('md-sale-client-search-v23691'),results=$('md-sale-client-results-v23691');
+ inp.oninput=()=>{S.saleClient=null;clearTimeout(S.clientSearchTimer);if(results)results.style.display='block';S.clientSearchTimer=setTimeout(()=>searchSaleClients(inp.value),250)};
+ $('md-sale-submit-v23691').onclick=submitSaleClaim;
+}
+async function submitSaleClaim(){
+ const a=S.saleAssignment;if(!a)return;
+ const q=Number($('md-sale-qty-v23691')?.value||0),ch=$('md-sale-channel-v23691')?.value||'crm_client',comment=$('md-sale-comment-v23691')?.value||'';
+ const other=$('md-sale-other-name-v23691')?.value||'';
+ if(!Number.isFinite(q)||q<=0){alert('Укажите количество');return}
+ if(ch==='crm_client'&&!S.saleClient){alert('Выберите клиента из найденных клиентов CRM');return}
+ if(ch==='retail_other'&&!comment.trim()){alert('Для розницы/другого клиента обязательно укажите комментарий');return}
+ const btn=$('md-sale-submit-v23691');if(btn){btn.disabled=true;btn.textContent='Сохраняю заявку…'}
+ try{
+  const out=await rpc('markdown_report_sale_v2',{
+    p_assignment_id:a.id,p_actual_qty:q,
+    p_client_id:ch==='crm_client'?S.saleClient.id:null,
+    p_sale_channel:ch,p_client_name:ch==='retail_other'?(other.trim()||'Розница / другой клиент'):null,
+    p_comment:comment.trim()||null
+  });
+  closeSaleModal();
+  alert('⏳ Продажа заявлена. CRM подтвердит её по следующему отчёту 1С.');
+  await refreshDetail();await load(true);await loadControlSummary(true);
+ }catch(e){alert('Не удалось заявить продажу: '+(e?.message||e))}
+ finally{if(btn){btn.disabled=false;btn.textContent='Заявить продажу и ждать 1С'}}
+}
+function ensureControlModal(){
+ let m=$('markdown-control-modal-v23691');
+ if(!m){
+  m=document.createElement('div');m.id='markdown-control-modal-v23691';
+  m.innerHTML='<div class="md91-dialog" id="markdown-control-body-v23691"></div>';
+  m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')});
+  document.body.appendChild(m);
+ }
+ return m;
+}
+function controlStatusHtml(r){
+ if(r.event_type==='sale_claim'&&r.status==='pending')return'<span class="md91-status amber">⏳ Ждёт 1С</span>';
+ if(r.event_type==='sale_claim'&&r.status==='discrepancy')return'<span class="md91-status red">🔴 Расхождение</span>';
+ if(r.event_type==='sale_claim'&&r.status==='confirmed')return'<span class="md91-status green">✅ Подтверждено '+(r.confirmation_source==='manual'?'вручную':'1С')+'</span>';
+ if(r.event_type==='unreported_reduction')return'<span class="md91-status red">🔴 Уменьшилось без заявки</span>';
+ if(r.event_type==='unreported_exit')return'<span class="md91-status red">🔴 Исчезло без заявки</span>';
+ if(r.event_type==='reappeared')return'<span class="md91-status amber">🟠 Снова появилось</span>';
+ if(r.status==='resolved')return'<span class="md91-status">Проверено / закрыто</span>';
+ if(r.status==='cancelled')return'<span class="md91-status">Заявка отменена</span>';
+ return'<span class="md91-status">'+esc(r.status||'')+'</span>';
+}
+function renderSalesControl(data){
+ const body=$('markdown-control-body-v23691');if(!body)return;
+ const rows=Array.isArray(data?.rows)?data.rows:[],st=data?.stats||{};
+ const tabs=[['alerts','Требуют внимания',n(st.alerts)],['pending','Ждут 1С',n(st.pending)],['discrepancy','Расхождения',n(st.discrepancy)],['unreported','Без заявки',n(st.unreported)],['confirmed','Подтверждено',n(st.confirmed)],['resolved','Закрытые',0],['all','Все',0]];
+ body.innerHTML='<div class="md91-head"><div><div style="font-size:19px;font-weight:900">🛡 Контроль продаж уценки</div><div style="font-size:11px;color:var(--sub)">Заявка менеджера ≠ продажа. Финальный факт сверяется с остатком 1С.</div></div><button class="md91-close" id="md-control-close-v23691">×</button></div>'
+  +'<div class="md91-control-tabs">'+tabs.map(x=>'<button class="md-chip '+(S.controlFilter===x[0]?'active':'')+'" data-control-filter="'+x[0]+'">'+x[1]+(x[2]?' <b>'+x[2]+'</b>':'')+'</button>').join('')+'</div>'
+  +(rows.length?rows.map(r=>{
+    const alert=['discrepancy','open'].includes(r.status),pending=r.status==='pending';
+    const stockLine=r.observed_qty_before!=null?'<b>Проверка 1С:</b> '+qty(r.observed_qty_before)+' → '+qty(r.observed_qty_after)+' шт.':('<b>Остаток при заявке:</b> '+qty(r.stock_qty_at_report)+' шт.');
+    const manager=r.manager_name||r.reported_by||'—';
+    const client=r.client_name||'—';
+    let actions='';
+    if(r.event_type==='sale_claim'&&r.status==='discrepancy')actions='<div class="md91-actions"><button class="md91-btn good" data-control-action="confirm_manual" data-event-id="'+attr(r.id)+'">Подтвердить вручную</button><button class="md91-btn bad" data-control-action="cancel_claim" data-event-id="'+attr(r.id)+'">Отменить заявку</button></div>';
+    else if(r.event_type!=='sale_claim'&&r.status==='open')actions='<div class="md91-actions"><button class="md91-btn" data-control-action="resolve_anomaly" data-event-id="'+attr(r.id)+'">Закрыть после проверки</button></div>';
+    return'<div class="md91-control-card '+(alert?'alert':pending?'pending':'')+'">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b style="font-size:13px">'+esc(r.nomenclature)+'</b><br>Артикул: <b>'+esc(r.article)+'</b></div>'+controlStatusHtml(r)+'</div>'
+      +'<div style="margin-top:7px"><b>Количество:</b> '+qty(r.reported_qty)+' шт. · <b>Менеджер:</b> '+esc(manager)+' · <b>Клиент:</b> '+esc(client)+'</div>'
+      +(r.approved_unit_price!=null?'<div><b>Твоя утверждённая цена:</b> '+money(r.approved_unit_price)+' · <b>Сумма:</b> '+money(r.reported_revenue)+'</div>':'')
+      +'<div>'+stockLine+' · <b>Текущий остаток:</b> '+qty(r.current_1c_qty)+' шт.</div>'
+      +'<div><b>Заявлено:</b> '+date(r.reported_at)+(r.confirmed_at?' · <b>Подтверждено:</b> '+date(r.confirmed_at):'')+'</div>'
+      +(r.comment?'<div><b>Комментарий:</b> '+esc(r.comment)+'</div>':'')
+      +(r.discrepancy_reason?'<div style="margin-top:5px;color:#991B1B"><b>'+esc(r.discrepancy_reason)+'</b></div>':'')
+      +(r.confirmation_report_date?'<div style="color:#166534"><b>Отчёт 1С:</b> '+date(r.confirmation_report_date)+'</div>':'')
+      +actions+'</div>';
+  }).join(''):'<div class="card" style="padding:24px;text-align:center;color:var(--sub)">По этому фильтру событий нет.</div>');
+ $('md-control-close-v23691').onclick=()=>ensureControlModal().classList.remove('open');
+ body.querySelectorAll('[data-control-filter]').forEach(b=>b.onclick=()=>{S.controlFilter=b.dataset.controlFilter;loadSalesControl(true)});
+ body.querySelectorAll('[data-control-action]').forEach(b=>b.onclick=()=>resolveSalesControlEvent(b.dataset.eventId,b.dataset.controlAction));
+}
+async function loadSalesControl(force=false){
+ if(!isPayushin())return;
+ if(S.controlFlight)return S.controlFlight;
+ const body=$('markdown-control-body-v23691');if(body&&!S.controlRows.length)body.innerHTML='<div style="padding:30px;text-align:center">Загружаю контроль продаж…</div>';
+ S.controlFlight=(async()=>{
+  try{
+   const data=await rpc('markdown_sales_control_v1',{p_filter:S.controlFilter,p_limit:120,p_offset:0});
+   S.controlRows=Array.isArray(data?.rows)?data.rows:[];renderSalesControl(data);return data;
+  }catch(e){
+   if(body)body.innerHTML='<div style="color:#991B1B;padding:20px">Не удалось загрузить контроль: '+esc(e?.message||e)+'</div>';
+   return null;
+  }finally{S.controlFlight=null}
+ })();
+ return S.controlFlight;
+}
+async function openSalesControl(filter='alerts'){
+ if(!isPayushin())return;
+ S.controlFilter=filter||'alerts';
+ const m=ensureControlModal();m.classList.add('open');
+ await loadSalesControl(true);
+}
+async function resolveSalesControlEvent(id,action){
+ const title=action==='confirm_manual'?'Подтвердить продажу вручную?':action==='cancel_claim'?'Отменить заявку менеджера?':'Закрыть сигнал после проверки?';
+ if(!confirm(title))return;
+ const comment=prompt('Обязательный комментарий решения:','');
+ if(comment===null||!comment.trim()){alert('Комментарий обязателен');return}
+ try{
+  await rpc('markdown_resolve_sale_event_v1',{p_event_id:id,p_action:action,p_comment:comment.trim()});
+  await loadSalesControl(true);await loadControlSummary(true);if(S.current)await refreshDetail();
+ }catch(e){alert('Не удалось сохранить решение: '+(e?.message||e))}
 }
 function camera(){const x=$('markdown-camera-v23687');if(x){x.value='';x.click()}}
 function gallery(){const x=$('markdown-gallery-v23687');if(x){x.value='';x.click()}}
@@ -317,6 +543,7 @@ async function deletePhoto(id,path){
 function zoom(url){const z=$('markdown-image-v23687');if(!z)return;z.querySelector('img').src=url;z.classList.add('open')}
 function boot(){ensureDom();if(active())load(false)}
 window.crmMarkdownOpenV23687=load;
+window.crmMarkdownOpenSalesControlV23691=openSalesControl;
 window.crmMarkdownOpenItemV23687=openItem;
 window.crmMarkdownCloseV23687=closeDetail;
 window.crmMarkdownSaveConditionV23687=saveCondition;
@@ -329,7 +556,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Дилерская с НДС',workflow:'photos->ready_for_pricing->priced',requiredPhotoTypes:['overall','defect','label'],pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,
+ version:V,priceBasis:'Дилерская с НДС',workflow:'photos->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
