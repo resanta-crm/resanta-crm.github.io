@@ -18,6 +18,7 @@ IMAP_PASS="".join(os.environ["IMAP_PASS"].split()).replace("\xa0","")
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
 LOOKBACK_DAYS=int(os.getenv("MARKDOWN_LOOKBACK_DAYS","14"))
+REPORT_SENDER=os.getenv("MARKDOWN_REPORT_SENDER","payushin_ar@resanta.ru").strip()
 SUBJECT_KEYS=[x.strip().lower() for x in os.getenv("MARKDOWN_SUBJECT_KEYS","уценк").split(",") if x.strip()]
 FULL_SNAPSHOT=os.getenv("MARKDOWN_FULL_SNAPSHOT","true").lower() in ("1","true","yes","y")
 MINSK=ZoneInfo("Europe/Minsk")
@@ -218,8 +219,9 @@ def find_latest():
     mail.login(IMAP_USER,IMAP_PASS)
     mail.select("INBOX")
     since=(datetime.now(MINSK)-timedelta(days=LOOKBACK_DAYS)).strftime("%d-%b-%Y")
-    # 1C sends from the same mailbox. Filter by sender on IMAP, then match both "СРМ" and "CRM" locally.
-    typ,data=mail.search(None,"SINCE",since,"FROM",f'"{IMAP_USER}"')
+    # 1C sender is payushin_ar@resanta.ru, while the CRM mailbox itself is resantavitebsc@gmail.com.
+    # Filter by the real 1C sender, then match both "СРМ" and "CRM" locally.
+    typ,data=mail.search(None,"SINCE",since,"FROM",f'"{REPORT_SENDER}"')
     if typ!="OK":
         typ,data=mail.search(None,"SINCE",since)
     if typ!="OK": raise RuntimeError("IMAP search failed")
