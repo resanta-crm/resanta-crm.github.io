@@ -44,7 +44,7 @@ function lockMenus(){
   const allowed=new Set(['nav-payment-registry','nav-markdown']);
   document.querySelectorAll('.nav-item').forEach(el=>{el.style.display=allowed.has(el.id)?'flex':'none'});
   document.querySelectorAll('.nav-section').forEach(el=>el.style.display='none');
-  document.querySelectorAll('.mobile-nav-item,.bottom-nav-item,.bn-item').forEach(el=>{el.style.display=['bn-markdown','nav-payment-registry'].includes(el.id)?'flex':'none'});
+  document.querySelectorAll('.mobile-nav-item,.bottom-nav-item,.bn-item').forEach(el=>{el.style.display=['bn-markdown','bn-payment-registry','nav-payment-registry'].includes(el.id)?'flex':'none'});
   const onMarkdown=!!document.getElementById('page-markdown')?.classList.contains('active');
   const t=document.querySelector('.topbar-title');if(t)t.textContent=onMarkdown?'Уценка':'Безналичные оплаты';
   return true;
