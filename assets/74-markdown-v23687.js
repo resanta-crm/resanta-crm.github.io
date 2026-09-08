@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.87 · УЦЕНКА
+/* RESANTA CRM v23.6.88 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.87';
+const V='v23.6.88';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -212,7 +212,7 @@ async function detailHtml(data){
  +'<div class="md-box"><h4>📦 Состояние и гарантия</h4><div style="font-size:12px;line-height:1.55"><b>🛡 Гарантия: '+(i.warranty_active?'сохраняется':'уточнить')+'</b>'+(i.warranty_months?' · '+i.warranty_months+' мес.':'')+(i.warranty_note?'<br>'+esc(i.warranty_note):'')+(i.source_comment?'<br><br><b>Комментарий 1С:</b> '+esc(i.source_comment):'')+'</div><label style="display:block;margin-top:9px">Фактическое состояние<textarea id="md-condition-v23687" placeholder="Что с товаром: царапины, упаковка, комплектность...">'+esc(i.condition_comment||'')+'</textarea></label><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownSaveConditionV23687()">Сохранить описание</button></div></div>'
  +'<div class="md-box"><h4>📷 Фотографии</h4><div class="md-formgrid"><label>Тип фото<select id="md-photo-type-v23687"><option value="overall">Общий вид</option><option value="defect">Дефект</option><option value="label">Шильдик / артикул</option><option value="box">Упаковка</option><option value="other">Другое</option></select></label><label>Комментарий<input id="md-photo-comment-v23687" placeholder="Что видно на фото"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownCameraV23687()">📷 Снять на телефон</button><button class="md-btn" onclick="crmMarkdownGalleryV23687()">🖼 Выбрать из галереи</button></div><div style="margin-top:9px">'+photosHtml+'</div></div>'
  +'</div><div>'
- +'<div class="md-box"><h4>💵 Цена</h4><div style="font-size:12px">Базовая цена: <b>'+money(i.base_price)+'</b></div><div style="font-size:20px;font-weight:900;color:#166534;margin-top:5px">'+(i.discount_set_at?money(i.final_price):'Цена ещё не утверждена')+'</div>'+(i.discount_set_at?'<div style="font-size:11px;color:var(--sub)">Скидка '+n(i.discount_pct).toFixed(1)+'% · '+esc(i.discount_set_by||'')+'</div>':'')+'</div>'
+ +'<div class="md-box"><h4>💵 Цена</h4><div style="font-size:12px">Дилерская с НДС: <b>'+money(i.base_price)+'</b></div><div style="font-size:20px;font-weight:900;color:#166534;margin-top:5px">'+(i.discount_set_at?money(i.final_price):'Цена ещё не утверждена')+'</div>'+(i.discount_set_at?'<div style="font-size:11px;color:var(--sub)">Скидка '+n(i.discount_pct).toFixed(1)+'% · '+esc(i.discount_set_by||'')+'</div>':'')+'</div>'
  +pricing+assignBox
  +'<div class="md-box"><h4>✅ Задачи и продажи</h4>'+assHtml+'</div>'
  +'</div></div>';
@@ -306,7 +306,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,
+ version:V,priceBasis:'Дилерская с НДС',pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
