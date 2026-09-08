@@ -8,7 +8,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_GPS_AGGREGATED_ROOT_V2360)return;
-const VERSION='v23.6.2';
+const VERSION='v23.6.84';
 let flight=null,reqSeq=0,lastRows=[];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const escAttr=v=>esc(v).replace(/`/g,'&#96;');
@@ -140,7 +140,7 @@ window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPoint
   if(window.RESANTA_GPS_FUEL_LOADER_V23636)return;
   window.RESANTA_GPS_FUEL_LOADER_V23636=true;
   const s=document.createElement('script');
-  s.src='./assets/50-gps-fuel-report-v23636.js?_='+Date.now();
+  s.src='./assets/50-gps-fuel-report-v23636.js?v=23.6.84';
   s.async=true;
   document.head.appendChild(s);
 })();
