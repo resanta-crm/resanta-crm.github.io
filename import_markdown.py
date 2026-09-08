@@ -171,24 +171,35 @@ def find_latest():
     since=(datetime.now(MINSK)-timedelta(days=LOOKBACK_DAYS)).strftime("%d-%b-%Y")
     typ,data=mail.search(None,"SINCE",since)
     if typ!="OK": raise RuntimeError("IMAP search failed")
+
+    ids=list(reversed(data[0].split()[-350:]))
+    matches=[]
+    # First pass is header-only: cheap even on a busy mailbox.
+    for uid in ids:
+        typ,hdata=mail.fetch(uid,"(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])")
+        if typ!="OK" or not hdata or not isinstance(hdata[0],tuple): continue
+        hdr=email.message_from_bytes(hdata[0][1])
+        subject=decoded(hdr.get("Subject"))
+        low=subject.lower()
+        if SUBJECT_KEYS and not all(k in low for k in SUBJECT_KEYS): continue
+        sent=parsedate_to_datetime(hdr.get("Date")) if hdr.get("Date") else datetime.now(timezone.utc)
+        if sent.tzinfo is None: sent=sent.replace(tzinfo=timezone.utc)
+        matches.append((sent,uid,subject))
+        if len(matches)>=12: break
+
     best=None
-    for uid in reversed(data[0].split()[-300:]):
+    for sent,uid,subject in sorted(matches,reverse=True):
         typ,msgdata=mail.fetch(uid,"(RFC822)")
         if typ!="OK" or not msgdata or not isinstance(msgdata[0],tuple): continue
         msg=email.message_from_bytes(msgdata[0][1])
-        subject=decoded(msg.get("Subject"))
-        low=subject.lower()
-        if SUBJECT_KEYS and not all(k in low for k in SUBJECT_KEYS): continue
-        sent=parsedate_to_datetime(msg.get("Date")) if msg.get("Date") else datetime.now(timezone.utc)
-        if sent.tzinfo is None: sent=sent.replace(tzinfo=timezone.utc)
         for part in msg.walk():
             fn=decoded(part.get_filename())
-            if not fn: continue
-            if not fn.lower().endswith(".xlsx"): continue
+            if not fn or not fn.lower().endswith(".xlsx"): continue
             payload=part.get_payload(decode=True)
             if not payload: continue
             candidate=(sent,subject,fn,payload)
             if best is None or sent>best[0]: best=candidate
+        if best: break
     mail.logout()
     return best
 
