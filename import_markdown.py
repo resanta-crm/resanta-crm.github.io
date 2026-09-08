@@ -11,10 +11,11 @@ from openpyxl import load_workbook
 
 IMAP_HOST=os.getenv("IMAP_HOST","imap.gmail.com")
 IMAP_PORT=int(os.getenv("IMAP_PORT","993"))
-IMAP_USER=os.environ["IMAP_USER"]
-IMAP_PASS=os.environ["IMAP_PASS"]
-SUPABASE_URL=os.environ["SUPABASE_URL"].rstrip("/")
-SUPABASE_KEY=os.environ["SUPABASE_KEY"]
+IMAP_USER=os.environ["IMAP_USER"].strip()
+# Google app passwords are often copied with spaces / NBSP. Existing CRM importers normalize them too.
+IMAP_PASS="".join(os.environ["IMAP_PASS"].split()).replace("\xa0","")
+SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
+SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
 LOOKBACK_DAYS=int(os.getenv("MARKDOWN_LOOKBACK_DAYS","14"))
 SUBJECT_KEYS=[x.strip().lower() for x in os.getenv("MARKDOWN_SUBJECT_KEYS","уценк,crm").split(",") if x.strip()]
 FULL_SNAPSHOT=os.getenv("MARKDOWN_FULL_SNAPSHOT","true").lower() in ("1","true","yes","y")
