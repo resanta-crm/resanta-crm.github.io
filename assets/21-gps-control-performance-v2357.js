@@ -8,7 +8,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_GPS_AGGREGATED_ROOT_V2360)return;
-const VERSION='v23.6.84';
+const VERSION='v23.6.85';
 let flight=null,reqSeq=0,lastRows=[];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const escAttr=v=>esc(v).replace(/`/g,'&#96;');
@@ -22,7 +22,7 @@ function km(v){const n=Number(v)||0;return(n/1000).toLocaleString('ru-RU',{minim
 function clock(v){if(!v)return'—';try{return new Date(v).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}catch(_){return'—';}}
 function duration(a,b){const x=new Date(a).getTime(),y=b?new Date(b).getTime():Date.now();if(!Number.isFinite(x)||!Number.isFinite(y))return'';const m=Math.max(0,Math.round((y-x)/60000));return Math.floor(m/60)+' ч '+(m%60)+' мин';}
 function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000?Math.round(n)+' м':(n/1000).toLocaleString('ru-RU',{maximumFractionDigits:1})+' км';}
-function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.2&workday='+encodeURIComponent(String(id||''))+'&_='+Date.now();}
+function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.85&workday='+encodeURIComponent(String(id||''));}
 function openViewer(id){if(!id)return;window.open(viewerUrl(id),'_blank','noopener');}
 window.crmOpenGpsViewerV2360=openViewer;
 
