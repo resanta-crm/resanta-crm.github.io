@@ -1,0 +1,62 @@
+name: Подготовка данных для автозаказа — запрос CRM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'warehouse_order_refresh_worker.py'
+      - '.github/workflows/warehouse-order-refresh.yml'
+  schedule:
+    # Лёгкий worker: если заявки CRM нет — сразу завершается.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: warehouse-order-refresh-worker
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Установить зависимости
+        run: pip install --disable-pip-version-check requests openpyxl
+
+      - name: Проверить worker
+        run: python -m py_compile warehouse_order_refresh_worker.py import_sales.py import_stock.py import_warehouse_cost.py
+
+      - name: Подготовить свежие данные для автозаказа
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+          SALES_LOOKBACK_DAYS: '14'
+          SALES_IMAP_TIMEOUT_SECONDS: '45'
+          SALES_MAX_EMAIL_CANDIDATES: '8'
+
+          STOCK_WAREHOUSE: 'Витебск'
+          STOCK_LOOKBACK_DAYS: '10'
+          STOCK_MAX_AGE_DAYS: '3'
+          STOCK_SUBJECT_KEYS: 'остатк,crm,витебск'
+          STOCK_IMAP_TIMEOUT_SECONDS: '45'
+          STOCK_IMAP_ATTEMPTS: '3'
+          STOCK_IMAP_RETRY_SECONDS: '6'
+          STOCK_IMAP_HEADER_BATCH: '75'
+          STOCK_MAX_EMAIL_CANDIDATES: '30'
+
+          WAREHOUSE_COST_LOOKBACK_DAYS: '10'
+          WAREHOUSE_COST_IMAP_TIMEOUT_SECONDS: '45'
+        run: python warehouse_order_refresh_worker.py
