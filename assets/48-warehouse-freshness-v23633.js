@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.82 · WAREHOUSE ORDER PREPARE + FAST HOT WORKER
+/* RESANTA CRM v23.6.83 · WAREHOUSE ORDER PREPARE + STALE EXPORT
  * - stale 1C/Vitebsk/sales can be requested from CRM with one button;
  * - a lightweight GitHub worker checks the queue every 5 minutes;
  * - while a request is active, only this warehouse page polls status every 15 sec;
@@ -10,7 +10,7 @@
 'use strict';
 if(window.RESANTA_WAREHOUSE_FRESHNESS_V23633)return;
 
-const VERSION='v23.6.82';
+const VERSION='v23.6.83';
 const $=id=>document.getElementById(id);
 let lastFreshness=null,lastRequest=null,lastMeta=null,busy=false,pollTimer=null,readyReloadedId=null,captureInstalled=false;
 
@@ -46,7 +46,7 @@ function requestStatusHtml(){
   const st=String(r.status||'');
   if(['pending','running','waiting'].includes(st)){
     const icon=st==='running'?'⏳':'🟡';
-    const a=Number(r.attempt_count)||0,wait=a===0?'Worker запускается — обычно заявка подхватывается в течение 15 секунд.':'Следующая проверка новых писем — примерно через минуту.';return `<div style="margin-top:10px;padding:9px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:9px;font-size:11px;line-height:1.45"><b>${icon} Подготавливаю заказ</b> · попытка ${a}<br>${esc(r.message||'Проверяю свежие отчёты 1С.')}<div style="color:var(--sub);margin-top:3px">${wait} Повторно нажимать не нужно.</div></div>`
+    const a=Number(r.attempt_count)||0,wait=a===0?'Worker запускается — обычно заявка подхватывается в течение 15 секунд.':'Следующая проверка новых писем — примерно через минуту.',f=lastFreshness||{},known=`Последние доступные: Витебск ${dmy(f.vitebsk_stock_date)} · продажи ${dmy(f.sales_date)}.`;return `<div style="margin-top:10px;padding:9px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:9px;font-size:11px;line-height:1.45"><b>${icon} Подготавливаю заказ</b> · попытка ${a}<br>${esc(r.message||'Проверяю свежие отчёты 1С.')}<div style="color:var(--sub);margin-top:3px">${esc(known)} ${wait}</div></div>`
   }
   if(st==='ready'){
     const newer=!!m.new_data_after_ready;
@@ -76,9 +76,16 @@ function decorate(f){
 function applyOrderGuard(){
   const ex=$('wc-export');if(!ex)return;
   const ok=!!lastFreshness?.auto_sources_fresh;
-  if(ok){ex.disabled=false;ex.style.opacity='';ex.title='';return}
-  ex.disabled=true;ex.style.opacity='.45';
-  ex.title='Сначала нажмите «Обновить данные и подготовить заказ»'
+  ex.disabled=false;ex.style.opacity='';
+  if(ok){
+    ex.textContent='⬇ Excel автозаказ';
+    ex.title='Выгрузить автозаказ по свежим данным';
+    ex.dataset.staleAllowed='0';
+    return
+  }
+  ex.textContent='⬇ Excel по последним данным';
+  ex.title='Свежие отчёты ещё не пришли. Можно выгрузить только после подтверждения дат источников.';
+  ex.dataset.staleAllowed='1'
 }
 async function checkFreshness(){
   try{const f=await rpc('warehouse_control_get_freshness_v1',{});decorate(f);return f}
@@ -210,7 +217,8 @@ window.RESANTA_WAREHOUSE_FRESHNESS_V23633=Object.freeze({
   hotWorkerPollSeconds:15,
   retryNewMailSeconds:60,
   activeRequestPollSeconds:15,
-  blocksStaleOrder:true,
+  blocksStaleOrder:false,
+  staleExportRequiresConfirmation:true,
   autoSources:['warehouse_cost','vitebsk_stock','sales'],
   chekhovManual:true,
   persistentAcrossWarehouseRenders:true,
