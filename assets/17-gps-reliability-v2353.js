@@ -141,8 +141,9 @@ if(baseGpsRender){
   const wrapped=async function(...args){const r=await baseGpsRender.apply(this,args);setTimeout(decorateBossGpsTruth,0);return r;};
   window.v19RenderGpsControl=wrapped;try{v19RenderGpsControl=wrapped;}catch(_){ }
 }
-const mo=new MutationObserver(()=>{if(document.getElementById('page-gps-control')?.classList.contains('active'))decorateBossGpsTruth();});
-setTimeout(()=>{const root=document.getElementById('page-gps-control');if(root)mo.observe(root,{childList:true,subtree:true});decorateBossGpsTruth();},800);
+// v23.6.84: no DOM observer. The render wrapper above is authoritative.
+window.crmDecorateBossGpsTruthV23684=decorateBossGpsTruth;
+setTimeout(decorateBossGpsTruth,800);
 
 window.RESANTA_GPS_RELIABILITY_V2353=Object.freeze({
   version:VERSION,
@@ -155,7 +156,8 @@ window.RESANTA_GPS_RELIABILITY_V2353=Object.freeze({
   truthfulBossStatus:true,
   routesUntouched:true,
   visitsUntouched:true,
-  distanceUntouched:true
+  distanceUntouched:true,
+  noMutationObserver:true
 });
 })();
 
