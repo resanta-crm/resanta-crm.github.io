@@ -45,7 +45,7 @@ def first(table, params):
 def latest_freshness():
     today = datetime.now(MINSK).date().isoformat()
     cost = first("warehouse_cost_import_log", {
-        "select": "report_date,source_email_ts",
+        "select": "report_date,source_email_ts,imported_at",
         "order": "report_date.desc,source_email_ts.desc",
         "limit": "1",
     })
@@ -66,16 +66,35 @@ def latest_freshness():
         "limit": "1",
     })
 
+    sales_msg = sales.get("source_message_at")
+    sales_date = None
+    if sales_msg:
+        try:
+            sales_date = datetime.fromisoformat(
+                str(sales_msg).replace("Z", "+00:00")
+            ).astimezone(MINSK).date().isoformat()
+        except Exception:
+            sales_date = None
+
+    cost_loaded = cost.get("source_email_ts")
+    if cost.get("imported_at"):
+        try:
+            a = datetime.fromisoformat(str(cost_loaded).replace("Z", "+00:00")) if cost_loaded else datetime(1970, 1, 1, tzinfo=timezone.utc)
+            b = datetime.fromisoformat(str(cost.get("imported_at")).replace("Z", "+00:00"))
+            cost_loaded = max(a, b).isoformat()
+        except Exception:
+            cost_loaded = cost.get("imported_at") or cost_loaded
+
     f = {
         "today": today,
         "cost_date": cost.get("report_date"),
-        "cost_loaded_at": cost.get("source_email_ts"),
+        "cost_loaded_at": cost_loaded,
         "vitebsk_stock_date": stock.get("report_date"),
         "vitebsk_stock_loaded_at": stock.get("updated_at"),
-        "sales_date": sales.get("report_date"),
+        "sales_date": sales_date,
         "sales_loaded_at": sales.get("last_success_at"),
         "sales_status": sales.get("status"),
-        "sales_message_at": sales.get("source_message_at"),
+        "sales_message_at": sales_msg,
         "chekhov_date": chekhov.get("snapshot_date"),
         "chekhov_loaded_at": chekhov.get("imported_at"),
     }
