@@ -7,7 +7,7 @@
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
 const V='v23.6.87';
-const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null};
+const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=v=>esc(v).replace(/"/g,'&quot;');
@@ -117,7 +117,7 @@ function card(r){
  const condition=r.condition_comment||r.source_comment||'Состояние ещё не описано';
  const price=priced?'<span class="md-old">'+money(r.base_price)+'</span><span>'+money(r.final_price)+'</span>':money(r.base_price);
  return '<div class="md-card" data-md-id="'+attr(r.id)+'" onclick="crmMarkdownOpenItemV23687(&quot;'+attr(r.id)+'&quot;)">'
-  +'<div class="md-thumb" id="md-thumb-'+attr(r.id)+'">'+(r.cover_path?'📷':'📦')+'</div>'
+  +'<div class="md-thumb" id="md-thumb-'+attr(r.id)+'" data-md-cover="'+attr(r.cover_path||'')+'">'+(r.cover_path?'📷':'📦')+'</div>'
   +'<div><div class="md-name">'+esc(r.nomenclature)+'</div><div class="md-article">Артикул: <b>'+esc(r.article)+'</b> · '+qty(r.quantity)+' шт. · '+esc(sourceLabel(r.source_type))+'</div>'
   +'<div class="md-price">'+price+(priced&&n(r.discount_pct)>0?' <span style="font-size:10px;color:#B91C1C">−'+n(r.discount_pct).toFixed(1)+'%</span>':'')+'</div>'
   +'<div class="md-tags"><span class="md-tag good">🛡 Гарантия'+(r.warranty_months?' '+r.warranty_months+' мес.':'')+'</span>'
@@ -141,16 +141,25 @@ function render(){
  const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);
  updateNavDot();loadCovers();
 }
-async function loadCovers(){
+function loadCovers(){
  const d=dbx();if(!d)return;
- const rows=S.rows.filter(x=>x.cover_path);
- for(const r of rows){
-  const el=$('md-thumb-'+r.id);if(!el||el.dataset.loaded==='1')continue;
-  el.dataset.loaded='1';
-  try{
-   const {data,error}=await d.storage.from('markdown-photos').createSignedUrl(r.cover_path,3600);
-   if(!error&&data?.signedUrl&&el.isConnected)el.innerHTML='<img alt="Фото '+attr(r.article)+'" src="'+attr(data.signedUrl)+'">';
-  }catch(_){}
+ try{S.coverObserver?.disconnect?.()}catch(_){}
+ const loadOne=async el=>{
+   if(!el||el.dataset.loaded==='1'||!el.dataset.mdCover)return;
+   el.dataset.loaded='1';
+   try{
+     const {data,error}=await d.storage.from('markdown-photos').createSignedUrl(el.dataset.mdCover,3600);
+     if(!error&&data?.signedUrl&&el.isConnected)el.innerHTML='<img alt="Фото уценки" src="'+attr(data.signedUrl)+'">';
+   }catch(_){}
+ };
+ const els=[...document.querySelectorAll('#markdown-root .md-thumb[data-md-cover]:not([data-md-cover=""])')];
+ if('IntersectionObserver' in window){
+   S.coverObserver=new IntersectionObserver(entries=>{
+     entries.forEach(e=>{if(e.isIntersecting){S.coverObserver.unobserve(e.target);loadOne(e.target)}});
+   },{rootMargin:'240px 0px'});
+   els.forEach(el=>S.coverObserver.observe(el));
+ }else{
+   els.slice(0,24).forEach(el=>loadOne(el));
  }
 }
 function updateNavDot(){
@@ -167,7 +176,7 @@ async function load(force=false){
  const gen=++S.gen;
  S.flight=(async()=>{
   try{
-   const data=await rpc('markdown_list_v1',{p_search:S.search||null,p_filter:S.filter,p_limit:80,p_offset:0});
+   const data=await rpc('markdown_list_v1',{p_search:S.search||null,p_filter:S.filter,p_limit:60,p_offset:0});
    if(gen!==S.gen)return false;
    S.rows=Array.isArray(data?.rows)?data.rows:[];S.stats=data?.stats||{};S.total=n(data?.total);S.loadedAt=Date.now();
    if(active())render();else updateNavDot();
