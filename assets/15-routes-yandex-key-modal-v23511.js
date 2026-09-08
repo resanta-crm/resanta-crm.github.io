@@ -20,9 +20,17 @@ function saveKey(){const input=document.getElementById(INPUT_ID),value=String(in
 window.resantaSetYandexMapsKeyV2351=openModal;window.resantaOpenYandexKeyModalV23511=openModal;
 document.addEventListener('click',e=>{const btn=e.target?.closest?.('button');if(!btn||!btn.closest('#gps-yandex-status-v2351'))return;const text=String(btn.textContent||'').trim();if(!/(Подключить Яндекс Карты|Ключ Яндекс Карт|Сменить ключ)/i.test(text))return;e.preventDefault();e.stopPropagation();if(typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();openModal();},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById(MODAL_ID)?.style.display==='flex')closeModal();});
-function loadRouteAutoPilotV2352(){if(window.RESANTA_ROUTE_PILOT_V2352||document.querySelector('script[data-route-auto-pilot-v2352]'))return;const s=document.createElement('script');s.src='./assets/16-route-auto-pilot-v2352.js?_='+Date.now();s.async=false;s.dataset.routeAutoPilotV2352='1';s.onerror=()=>console.warn('Route auto pilot v23.5.2 failed to load; manual routes remain untouched.');document.head.appendChild(s);}loadRouteAutoPilotV2352();
-function loadGpsReliabilityV2353(){if(window.RESANTA_GPS_RELIABILITY_V2353||document.querySelector('script[data-gps-reliability-v2353]'))return;const s=document.createElement('script');s.src='./assets/17-gps-reliability-v2353.js?_='+Date.now();s.async=false;s.dataset.gpsReliabilityV2353='1';s.onerror=()=>console.warn('GPS reliability v23.5.3 failed to load; base GPS remains available.');document.head.appendChild(s);}loadGpsReliabilityV2353();
-function loadGpsControlPerformanceV2357(){if(window.RESANTA_GPS_CONTROL_PERFORMANCE_V2357||document.querySelector('script[data-gps-control-performance-v2357]'))return;const s=document.createElement('script');s.src='./assets/21-gps-control-performance-v2357.js?_='+Date.now();s.async=false;s.dataset.gpsControlPerformanceV2357='1';s.onerror=()=>console.warn('GPS-control performance v23.5.7 failed to load; base GPS remains available.');document.head.appendChild(s);}
-function loadVisitGpsTruthV2354(){if(window.RESANTA_VISIT_GPS_TRUTH_V2354){loadGpsControlPerformanceV2357();return;}const existing=document.querySelector('script[data-visit-gps-truth-v2354]');if(existing){existing.addEventListener('load',loadGpsControlPerformanceV2357,{once:true});setTimeout(()=>{if(window.RESANTA_VISIT_GPS_TRUTH_V2354)loadGpsControlPerformanceV2357();},500);return;}const s=document.createElement('script');s.src='./assets/18-visit-gps-truth-v2354.js?_='+Date.now();s.async=false;s.dataset.visitGpsTruthV2354='1';s.onload=loadGpsControlPerformanceV2357;s.onerror=()=>console.warn('Visit GPS truth v23.5.4 failed to load; previous route truth remains available.');document.head.appendChild(s);}loadVisitGpsTruthV2354();
-window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({version:VERSION,modalInput:true,delegatedClick:true,promptRemoved:true,storageKey:KEY_STORAGE,gpsUntouched:true,routeLogicUntouched:true,osmFallbackUntouched:true,routePilot:'v23.5.2',routePilotReadOnly:true,gpsReliability:'v23.5.3',visitGpsTruth:'v23.5.4',gpsControlPerformance:'v23.5.7'});
+// v23.6.84: legacy dependency cascade removed.
+ // This module owns only the Yandex key modal. Route/GPS/visit modules are
+ // loaded explicitly by performance-root for the active page.
+ window.RESANTA_YANDEX_KEY_MODAL_V23511=Object.freeze({
+   version:'v23.6.84',
+   modalInput:true,
+   delegatedClick:true,
+   promptRemoved:true,
+   storageKey:KEY_STORAGE,
+   explicitPageContracts:true,
+   noLegacyCascade:true,
+   noDateNowModuleLoads:true
+ });
 })();
