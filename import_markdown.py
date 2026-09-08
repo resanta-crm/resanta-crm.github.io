@@ -169,10 +169,14 @@ def find_latest():
     mail.login(IMAP_USER,IMAP_PASS)
     mail.select("INBOX")
     since=(datetime.now(MINSK)-timedelta(days=LOOKBACK_DAYS)).strftime("%d-%b-%Y")
-    typ,data=mail.search(None,"SINCE",since)
+    # First reduce the mailbox at IMAP level by the ASCII marker CRM.
+    # Gmail handles this search very quickly; Unicode "уценка" is filtered locally below.
+    typ,data=mail.search(None,"SINCE",since,"SUBJECT",'"CRM"')
+    if typ!="OK":
+        typ,data=mail.search(None,"SINCE",since)
     if typ!="OK": raise RuntimeError("IMAP search failed")
 
-    ids=list(reversed(data[0].split()[-350:]))
+    ids=list(reversed(data[0].split()[-150:]))
     matches=[]
     # First pass is header-only: cheap even on a busy mailbox.
     for uid in ids:
