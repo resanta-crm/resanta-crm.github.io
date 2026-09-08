@@ -89,18 +89,22 @@ def _status_headers():
 
 
 def stock_message_already_loaded(sent):
-    """Do not rewrite 1696 stock rows when Gmail still returns the same stock email."""
+    """Do not rewrite stock rows when Gmail still returns the exact same stock email."""
     try:
         r = requests.get(
-            f"{SUPABASE_URL}/rest/v1/crm_import_status",
+            f"{SUPABASE_URL}/rest/v1/warehouse_stock_import_state",
             headers=_status_headers(),
-            params={"source": "eq.stock", "select": "status,source_message_at", "limit": "1"},
+            params={
+                "warehouse": f"eq.{WAREHOUSE}",
+                "select": "source_message_at",
+                "limit": "1",
+            },
             timeout=20,
         )
         if r.status_code != 200:
             return False
         rows = r.json() or []
-        if not rows or str(rows[0].get("status") or "") != "ok":
+        if not rows:
             return False
         raw = str(rows[0].get("source_message_at") or "").strip()
         if not raw:
@@ -118,23 +122,22 @@ def stock_message_already_loaded(sent):
 def save_stock_import_status(report_date, sent, row_count, filename):
     try:
         payload = {
-            "p_source": "stock",
-            "p_status": "ok",
-            "p_report_period": report_date.replace(day=1).isoformat() if report_date else None,
-            "p_report_date": report_date.isoformat() if report_date else None,
-            "p_source_message_at": sent.astimezone(timezone.utc).isoformat() if sent else None,
-            "p_row_count": row_count,
-            "p_details": f"Витебск; файл {filename}; снимок {report_date.isoformat() if report_date else '—'}",
-            "p_error_text": None,
+            "warehouse": WAREHOUSE,
+            "report_date": report_date.isoformat() if report_date else None,
+            "source_message_at": sent.astimezone(timezone.utc).isoformat() if sent else None,
+            "filename": filename,
+            "row_count": row_count,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        headers = {**_status_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"}
         r = requests.post(
-            f"{SUPABASE_URL}/rest/v1/rpc/crm_set_import_status",
-            headers=_status_headers(), json=payload, timeout=30,
+            f"{SUPABASE_URL}/rest/v1/warehouse_stock_import_state?on_conflict=warehouse",
+            headers=headers, json=payload, timeout=30,
         )
         if r.status_code not in (200,201,204):
-            log(f"  ⚠️ Статус stock не записан: {r.status_code} {r.text[:300]}")
+            log(f"  ⚠️ Состояние stock не записано: {r.status_code} {r.text[:300]}")
     except Exception as exc:
-        log(f"  ⚠️ Статус stock не записан: {exc}")
+        log(f"  ⚠️ Состояние stock не записано: {exc}")
 
 
 def norm(v):
