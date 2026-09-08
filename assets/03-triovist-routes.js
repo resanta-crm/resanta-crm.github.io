@@ -420,12 +420,9 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
     if(!document.hidden)[0,150,700].forEach(ms=>setTimeout(()=>scan(true),ms));
   });
 
-  const observer=new MutationObserver(scheduleScan);
-  observer.observe(document.documentElement,{childList:true,subtree:true});
-
-  // Некоторые менеджеры паролей подставляют email без события input спустя секунды.
-  // Лёгкая периодическая проверка окончательно закрывает этот сценарий.
-  setInterval(()=>scan(true),2000);
+  // v23.6.84: никаких глобальных DOM-observer/polling.
+  // Защита остаётся событийной: focus/input/change + несколько bounded checks
+  // после pageshow/visibility. Это не сканирует всю CRM каждые 2 секунды.
   scan(false);
   window.resantaClearSearchAutofill=scan;
 })();
@@ -451,7 +448,9 @@ window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight
   window.v20FallingPeriod=function(){const mode=document.getElementById('falling-period-mode')?.value||'ytd_full';let end=document.getElementById('falling-end-month')?.value||v20DefaultEndMonth();if(mode==='ytd_full'&&end===TODAY.slice(0,7))end=abcMonthShift(end,-1);let start;if(mode==='month')start=end;else if(mode==='custom')start=document.getElementById('falling-start-month')?.value||end.slice(0,4)+'-01';else start=end.slice(0,4)+'-01';if(start>end){const t=start;start=end;end=t;}const current=v20MonthRange(start,end),previous=current.map(v20MonthMinusYear);return{mode,start,end,current,previous,label:start===end?monthLabel(end):monthLabel(start)+' — '+monthLabel(end),previousLabel:v20MonthMinusYear(start)===v20MonthMinusYear(end)?monthLabel(v20MonthMinusYear(end)):monthLabel(v20MonthMinusYear(start))+' — '+monthLabel(v20MonthMinusYear(end))};};
   async function xlsx(){if(window.XLSX)return window.XLSX;if(typeof window._loadSheetJS==='function')return window._loadSheetJS();throw new Error('Модуль Excel не загрузился');}
   window.v22ExportFallingExcel=async function(){try{const data=v20ComputeFalling(),sev=document.getElementById('falling-severity')?.value||'all',q=abcNorm(document.getElementById('falling-search')?.value||'');const rows=data.rows.filter(x=>(sev==='all'||x.severity===sev)&&(!q||abcNorm(x.client.name+' '+x.client.region+' '+x.client.manager_name).includes(q)));const clients=[],items=[];rows.forEach(x=>{clients.push({'Менеджер':x.client.manager_name,'Клиент':x.client.name,'Регион':x.client.region,'Период, BYN':Number(x.cur.toFixed(2)),'Прошлый год, BYN':Number(x.prev.toFixed(2)),'Потерянный оборот, BYN':Number(x.loss.toFixed(2)),'Падение, %':Number(x.pct.toFixed(1)),'Последняя продажа':x.lastSale||''});x.breakdown.items.forEach(p=>items.push({'Менеджер':x.client.manager_name,'Клиент':x.client.name,'Группа':p.group,'Товар':p.label,'ABC':p.abc||'','Текущий период, BYN':Number(p.cur.toFixed(2)),'Прошлый период, BYN':Number(p.prev.toFixed(2)),'Потеря, BYN':Number(p.loss.toFixed(2)),'Статус':p.cur<=0?'Потерян':'Падает'}));});const X=await xlsx(),wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.json_to_sheet(clients),'Падающие клиенты');X.utils.book_append_sheet(wb,X.utils.json_to_sheet(items),'Падающие товары');X.writeFile(wb,'Падающие_клиенты_'+data.period.start+'_'+data.period.end+'.xlsx');}catch(e){alert('Не удалось сформировать Excel: '+(e.message||e));}};
-  install();const mo=new MutationObserver(install);mo.observe(document.documentElement,{childList:true,subtree:true});
+  // v23.6.84: страница Falling уже существует в DOM и живёт между переходами.
+  // Однократной установки достаточно; глобальный observer удалён.
+  install();
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 13 ===== */
@@ -2858,24 +2857,19 @@ window.addEventListener('pageshow',function(){
     // Яндекс.Браузер/Chrome иногда пытается восстановить поле через несколько
     // секунд после загрузки. До первого реального действия пользователя
     // принудительно держим поле пустым.
-    let ticks=0;
-    const timer=setInterval(()=>{
-      if(myGeneration!==generation){clearInterval(timer);return;}
+    // v23.6.84: вместо 120 проверок за минуту — три bounded checks.
+    // Реальные действия пользователя сразу прекращают очистку.
+    [180,700,1800].forEach(ms=>setTimeout(()=>{
+      if(myGeneration!==generation)return;
       input=document.getElementById('client-search');
-      if(!input){clearInterval(timer);return;}
-      if(input.dataset.crmActivated==='1'){
-        clearInterval(timer);
-        return;
-      }
+      if(!input||input.dataset.crmActivated==='1')return;
       if(input.value||window.__crmClientSearchQuery){
         input.value='';
         input.defaultValue='';
         window.__crmClientSearchQuery='';
         if(typeof renderClients==='function')renderClients();
       }
-      ticks++;
-      if(ticks>=120)clearInterval(timer); // 60 секунд после открытия раздела
-    },500);
+    },ms));
   }
 
   function resetIfClientsActive(){
