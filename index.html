@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-09-08-resanta-crm-v23.6.86';
+const APP_VERSION = '2026-09-08-resanta-crm-v23.6.87';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -52,7 +52,7 @@ const APP_VERSION = '2026-09-08-resanta-crm-v23.6.86';
 <script defer src="./assets/05-performance-core.js?v=23.6.71"></script>
 <script defer src="./assets/06-root-fixes.js?v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
-<script defer src="./assets/66-performance-root-v23657.js?v=23.6.86"></script>
+<script defer src="./assets/66-performance-root-v23657.js?v=23.6.87"></script>
 <script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.79"></script>
 <script defer src="./assets/69-data-freshness-v23660.js?v=23.6.79"></script>
 <script defer src="./assets/70-vip-period-compare-v23662.js?v=23.6.64"></script>
@@ -433,6 +433,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <div class="nav-section">Работа</div>
       <button class="nav-item" id="nav-clients" onclick="goPage('clients','Клиенты')"><span class="icon">🏢</span> Клиенты</button>
       <button class="nav-item" id="nav-tasks" onclick="goPage('tasks','Задачи')"><span class="icon">✅</span> Задачи <span class="alert-dot" id="tasks-alert-dot" style="display:none"></span></button>
+      <button class="nav-item" id="nav-markdown" onclick="goPage('markdown','Уценка')"><span class="icon">🏷️</span> Уценка <span class="alert-dot" id="markdown-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')"><span class="icon">📝</span> Визиты</button>
       <button class="nav-item" id="nav-vip" onclick="goPage('vip','ВИП клиенты')"><span class="icon">💎</span> ВИП клиенты</button>
       <button class="nav-item" id="nav-promotions" onclick="goPage('promotions','Акции')"><span class="icon">🎯</span> Акции <span class="alert-dot" id="promotions-alert-dot" style="display:none"></span></button>
@@ -524,6 +525,12 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
           <button class="chip" id="tf-stockissue" onclick="setTaskFilter('stock_issue',this)">📦 Проблема наличия</button>
         </div>
         <div id="tasks-list"></div>
+      </div>
+      <div class="page" id="page-markdown">
+        <div id="markdown-root">
+          <div class="page-title">🏷️ Уценка</div>
+          <div class="card" style="color:var(--sub)">Раздел загрузится при открытии.</div>
+        </div>
       </div>
       <div class="page" id="page-visits">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -848,6 +855,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     <button class="bn-item" id="bn-route" onclick="goPage('route','Маршрут дня')">🗺️<span>На день</span></button>
     <button class="bn-item" id="bn-workday" style="display:none" onclick="goPage('workday','Рабочий день')">🚗<span>Рабочий день</span></button>
     <button class="bn-item" id="bn-tasks" onclick="goPage('tasks','Задачи')">✅<span>Задачи</span></button>
+    <button class="bn-item" id="bn-markdown" onclick="goPage('markdown','Уценка')">🏷️<span>Уценка</span><span class="alert-dot" id="bn-markdown-dot" style="display:none"></span></button>
     <button class="bn-item" id="bn-visits" onclick="goPage('visits','Визиты')">📝<span>Визиты</span></button>
     <button class="bn-item" id="bn-vip" onclick="goPage('vip','ВИП клиенты')">💎<span>ВИП</span></button>
     <button class="bn-item" id="bn-promotions" onclick="goPage('promotions','Акции')">🎯<span>Акции</span></button>
