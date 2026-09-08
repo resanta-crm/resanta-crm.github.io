@@ -80,6 +80,63 @@ def log(msg):
     print(msg, flush=True)
 
 
+def _status_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def stock_message_already_loaded(sent):
+    """Do not rewrite 1696 stock rows when Gmail still returns the same stock email."""
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/crm_import_status",
+            headers=_status_headers(),
+            params={"source": "eq.stock", "select": "status,source_message_at", "limit": "1"},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return False
+        rows = r.json() or []
+        if not rows or str(rows[0].get("status") or "") != "ok":
+            return False
+        raw = str(rows[0].get("source_message_at") or "").strip()
+        if not raw:
+            return False
+        prev = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if prev.tzinfo is None:
+            prev = prev.replace(tzinfo=timezone.utc)
+        cur = sent if sent.tzinfo else sent.replace(tzinfo=timezone.utc)
+        return abs((prev.astimezone(timezone.utc)-cur.astimezone(timezone.utc)).total_seconds()) < 1
+    except Exception as exc:
+        log(f"  ⚠️ Не удалось проверить дубль остатка: {exc}")
+        return False
+
+
+def save_stock_import_status(report_date, sent, row_count, filename):
+    try:
+        payload = {
+            "p_source": "stock",
+            "p_status": "ok",
+            "p_report_period": report_date.replace(day=1).isoformat() if report_date else None,
+            "p_report_date": report_date.isoformat() if report_date else None,
+            "p_source_message_at": sent.astimezone(timezone.utc).isoformat() if sent else None,
+            "p_row_count": row_count,
+            "p_details": f"Витебск; файл {filename}; снимок {report_date.isoformat() if report_date else '—'}",
+            "p_error_text": None,
+        }
+        r = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/crm_set_import_status",
+            headers=_status_headers(), json=payload, timeout=30,
+        )
+        if r.status_code not in (200,201,204):
+            log(f"  ⚠️ Статус stock не записан: {r.status_code} {r.text[:300]}")
+    except Exception as exc:
+        log(f"  ⚠️ Статус stock не записан: {exc}")
+
+
 def norm(v):
     return re.sub(r"\s+", " ", str(v or "").strip().lower().replace("ё", "е"))
 
@@ -570,12 +627,21 @@ def main():
             raise RuntimeError("Подходящих писем после фильтрации нет. Старый склад НЕ изменён.")
 
         rows, report_date, filename, sent = choose_latest_valid_report(mail, candidates)
+
+        if stock_message_already_loaded(sent):
+            log(
+                f"✅ Письмо с остатком {sent:%d.%m.%Y %H:%M} уже загружено — "
+                "нового отчёта Витебска пока нет, склад не перезаписываю."
+            )
+            return
+
         total_avail = sum(r["qty_avail"] or 0 for r in rows)
         log(f"  Суммарно доступно: {total_avail:,.0f} шт по {len(rows)} SKU")
 
         previous_map, previous_rows = load_previous_stock()
         replace_stock(rows, previous_rows)
         save_first_positive_stock(rows)
+        save_stock_import_status(report_date, sent, len(rows), filename)
         log(
             f"✅ Витебск обновлён: report_date={report_date.isoformat()}, "
             f"письмо={sent:%d.%m.%Y %H:%M}, файл={filename}"
