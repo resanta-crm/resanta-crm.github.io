@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.20 · WAREHOUSE CONTROL
+/* RESANTA CRM v23.6.81 · WAREHOUSE CONTROL
  * Boss-only, lazy: overlimit + deficit + Chekhov auto-order.
  * Reads only warehouse_* RPCs and existing stock/chekhov sources on the server.
  */
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_CONTROL_V23620)return;
-const V='v23.6.20';
+const V='v23.6.81';
 let dash=null,mode='overview',offset=0,limit=100,search='',flight=null,installed=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -71,11 +71,11 @@ async function saveFx(){const b=n($('wc-byn-usd').value),r=n($('wc-rub-usd').val
 async function allOrderRows(){let out=[],off=0;for(let i=0;i<20;i++){const d=await rpc('warehouse_control_get_items_v1',{p_mode:'order',p_search:'',p_limit:500,p_offset:off});const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}return out.filter(r=>n(r.recommended_order_qty)>0)}
 function csvCell(v){const s=String(v??'');return '"'+s.replace(/"/g,'""')+'"'}
 async function exportOrder(){try{const rows=await allOrderRows();if(!rows.length){alert('Сейчас нет позиций для заказа из Чехова.');return}const total=rows.reduce((s,r)=>s+n(r.estimated_order_cost_byn),0);const lines=[['Артикул','Товар','Остаток Витебск','Прогноз месяца','Целевой остаток','Нужно','Остаток Чехов','Мин. упаковка','Заказать','Оценка BYN'].map(csvCell).join(';'),...rows.map(r=>[r.sku,r.product,r.vitebsk_avail,r.forecast_qty,r.target_qty,r.need_qty,r.chekhov_qty,r.box_qty,r.recommended_order_qty,n(r.estimated_order_cost_byn).toFixed(2)].map(csvCell).join(';'))];lines.push(['','','','','','','','','ИТОГО',total.toFixed(2)].map(csvCell).join(';'));const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Автозаказ_Чехов_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){alert('Не удалось сформировать автозаказ: '+(e?.message||e))}}
-async function open(force=false){ensureDom();if(!isBoss())return;if(flight&&!force)return flight;setBusy();flight=(async()=>{try{dash=await rpc('warehouse_control_get_dashboard_v1',{});if(!dash?.has_data){$('wc-v23620').innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert blue"><b>Автоматический отчёт себестоимости уже подключён.</b><br>Жду первый успешный импорт из письма 1С. После него этот экран заполнится сам.</div>';return}renderShell()}catch(e){$('wc-v23620').innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert red"><b>Не удалось открыть складской контроль.</b><br>'+esc(e?.message||e)+'</div>'}finally{flight=null}})();return flight}
+async function open(force=false){ensureDom();if(!isBoss())return;if(flight&&!force)return flight;setBusy();flight=(async()=>{try{dash=await rpc('warehouse_control_get_dashboard_v1',{});if(!dash?.has_data){$('wc-v23620').innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert blue"><b>Автоматический отчёт себестоимости уже подключён.</b><br>Жду первый успешный импорт из письма 1С. После него этот экран заполнится сам.</div>';try{window.crmWarehouseAfterRenderV23681?.()}catch(_){};return}renderShell();try{window.crmWarehouseAfterRenderV23681?.()}catch(_){}}catch(e){$('wc-v23620').innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert red"><b>Не удалось открыть складской контроль.</b><br>'+esc(e?.message||e)+'</div>'}finally{flight=null}})();return flight}
 function install(){ensureDom();if($('page-warehouse-control')?.classList.contains('active')&&isBoss())open(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 [300,800,1600,3000,6000].forEach(ms=>setTimeout(install,ms));
-window.addEventListener('focus',()=>{if($('page-warehouse-control')?.classList.contains('active'))open(false)});
+window.addEventListener('focus',()=>{if(!$('page-warehouse-control')?.classList.contains('active'))return;const api=window.crmWarehouseControlV1;try{if(api?.open&&api.open!==open)api.open(false);else open(false)}catch(_){open(false)}});
 window.crmWarehouseControlV1={open,switchMode};
 window.RESANTA_WAREHOUSE_CONTROL_V23620=Object.freeze({version:V,bossOnly:true,lazy:true,autoOrderChekhov:true,officialOverlimitFormula:true,group900ReturnBlocked:true,fxFormula:'BYN / BYN_USD * RUB_USD'});
 })();
