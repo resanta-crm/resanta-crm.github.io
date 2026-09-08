@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.24 · OFFICE MANAGER = PAYMENTS ONLY
+/* RESANTA CRM v23.6.87 · OFFICE MANAGER = PAYMENTS + MARKDOWN
  * Dedicated lightweight shell for office_manager.
  * No clients, sales, GPS, routes, warehouse or Triovist bootstrap/prefetch.
  * Server-side access is additionally enforced in Supabase.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624)return;
-const V='v23.6.24';
+const V='v23.6.87';
 
 function profile(){
   try{return typeof currentProfile!=='undefined'?currentProfile:(window.currentProfile||null)}catch(_){return window.currentProfile||null}
@@ -41,15 +41,18 @@ if(typeof basePrefetch==='function')window.crmUltraPrefetchPageV22734=function()
 
 function lockMenus(){
   if(!isOM())return false;
-  document.querySelectorAll('.nav-item').forEach(el=>{el.style.display=el.id==='nav-payment-registry'?'flex':'none';el.classList.toggle('active',el.id==='nav-payment-registry')});
+  const allowed=new Set(['nav-payment-registry','nav-markdown']);
+  document.querySelectorAll('.nav-item').forEach(el=>{el.style.display=allowed.has(el.id)?'flex':'none'});
   document.querySelectorAll('.nav-section').forEach(el=>el.style.display='none');
-  document.querySelectorAll('.mobile-nav-item,.bottom-nav-item').forEach(el=>{el.style.display=el.id==='nav-payment-registry'?'flex':'none'});
-  const t=document.querySelector('.topbar-title');if(t)t.textContent='Безналичные оплаты';
+  document.querySelectorAll('.mobile-nav-item,.bottom-nav-item,.bn-item').forEach(el=>{el.style.display=['bn-markdown','nav-payment-registry'].includes(el.id)?'flex':'none'});
+  const onMarkdown=!!document.getElementById('page-markdown')?.classList.contains('active');
+  const t=document.querySelector('.topbar-title');if(t)t.textContent=onMarkdown?'Уценка':'Безналичные оплаты';
   return true;
 }
 function enterPayments(){
   if(!isOM())return false;
   clearHeavyState();lockMenus();
+  if(document.getElementById('page-markdown')?.classList.contains('active'))return true;
   const nav=document.getElementById('nav-payment-registry');
   const page=document.getElementById('page-payment-registry');
   if(nav){nav.style.display='flex';if(!page?.classList.contains('active'))nav.click();else nav.onclick&&setTimeout(()=>{try{nav.onclick()}catch(_){}},0);return true;}
@@ -60,7 +63,7 @@ try{
   if(typeof goPage==='function'){
     const baseGoPage=goPage;
     goPage=function(p,title){
-      if(isOM()&&p!=='payment-registry'){p='payment-registry';title='Безналичные оплаты'}
+      if(isOM()&&!['payment-registry','markdown'].includes(p)){p='payment-registry';title='Безналичные оплаты'}
       const out=baseGoPage.call(this,p,title);
       if(isOM())setTimeout(lockMenus,0);
       return out;
@@ -85,5 +88,5 @@ let tries=0;
 window.addEventListener('pageshow',()=>{if(isOM())setTimeout(enterPayments,0)});
 window.addEventListener('focus',()=>{if(isOM())setTimeout(lockMenus,0)});
 
-window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624=Object.freeze({version:V,paymentsOnly:true,noHeavyBootstrap:true,noPrefetch:true,serverEnforced:true});
+window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624=Object.freeze({version:V,paymentsAndMarkdownOnly:true,markdownVisible:true,noHeavyBootstrap:true,noPrefetch:true,serverEnforced:true});
 })();
