@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.81 · WAREHOUSE CONTROL
+/* RESANTA CRM v23.6.82 · WAREHOUSE CONTROL
  * Boss-only, lazy: overlimit + deficit + Chekhov auto-order.
  * Reads only warehouse_* RPCs and existing stock/chekhov sources on the server.
  */
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_CONTROL_V23620)return;
-const V='v23.6.81';
+const V='v23.6.82';
 let dash=null,mode='overview',offset=0,limit=100,search='',flight=null,installed=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34,7 +34,23 @@ function ensureDom(){
   if(nav)nav.style.display=isBoss()?'flex':'none';
   installed=true;
 }
-function setBusy(text='Загрузка…'){const root=$('wc-v23620');if(root)root.innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="card">'+esc(text)+'</div>'}
+function setBusy(text='Загрузка…'){
+    const root=$('wc-v23620');if(!root)return;
+    const rendered=!!root.querySelector('.wc-head')&&!!dash?.has_data;
+    if(rendered){
+      let note=$('wc-inline-busy-v23682');
+      if(!note){
+        note=document.createElement('div');note.id='wc-inline-busy-v23682';
+        note.style.cssText='font-size:10px;color:var(--sub);padding:5px 8px;margin:0 0 8px;border-radius:7px;background:#F8FAFC;border:1px solid #E5E7EB';
+        root.insertBefore(note,root.firstChild);
+      }
+      note.textContent='↻ '+String(text||'Обновляю данные…');
+      return;
+    }
+    root.innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="card">'+esc(text)+'</div>'
+  }
+  function clearBusy(){const x=$('wc-inline-busy-v23682');if(x)x.remove()}
+  function rpcTimeout(p,ms=12000){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Склад отвечает дольше '+Math.round(ms/1000)+' сек. Повторите обновление.')),ms))])}
 function dateRu(v){if(!v)return'—';try{return new Date(String(v)+'T00:00:00').toLocaleDateString('ru-RU')}catch(_){return String(v)}}
 function kpi(label,val,sub='',cls=''){return `<div class="wc-kpi"><small>${esc(label)}</small><b class="${cls}">${val}</b>${sub?`<div class="sub">${sub}</div>`:''}</div>`}
 function renderShell(){
@@ -71,11 +87,40 @@ async function saveFx(){const b=n($('wc-byn-usd').value),r=n($('wc-rub-usd').val
 async function allOrderRows(){let out=[],off=0;for(let i=0;i<20;i++){const d=await rpc('warehouse_control_get_items_v1',{p_mode:'order',p_search:'',p_limit:500,p_offset:off});const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}return out.filter(r=>n(r.recommended_order_qty)>0)}
 function csvCell(v){const s=String(v??'');return '"'+s.replace(/"/g,'""')+'"'}
 async function exportOrder(){try{const rows=await allOrderRows();if(!rows.length){alert('Сейчас нет позиций для заказа из Чехова.');return}const total=rows.reduce((s,r)=>s+n(r.estimated_order_cost_byn),0);const lines=[['Артикул','Товар','Остаток Витебск','Прогноз месяца','Целевой остаток','Нужно','Остаток Чехов','Мин. упаковка','Заказать','Оценка BYN'].map(csvCell).join(';'),...rows.map(r=>[r.sku,r.product,r.vitebsk_avail,r.forecast_qty,r.target_qty,r.need_qty,r.chekhov_qty,r.box_qty,r.recommended_order_qty,n(r.estimated_order_cost_byn).toFixed(2)].map(csvCell).join(';'))];lines.push(['','','','','','','','','ИТОГО',total.toFixed(2)].map(csvCell).join(';'));const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Автозаказ_Чехов_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){alert('Не удалось сформировать автозаказ: '+(e?.message||e))}}
-async function open(force=false){ensureDom();if(!isBoss())return;if(flight&&!force)return flight;setBusy();flight=(async()=>{try{dash=await rpc('warehouse_control_get_dashboard_v1',{});if(!dash?.has_data){$('wc-v23620').innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert blue"><b>Автоматический отчёт себестоимости уже подключён.</b><br>Жду первый успешный импорт из письма 1С. После него этот экран заполнится сам.</div>';try{window.crmWarehouseAfterRenderV23681?.()}catch(_){};return}renderShell();try{window.crmWarehouseAfterRenderV23681?.()}catch(_){}}catch(e){$('wc-v23620').innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert red"><b>Не удалось открыть складской контроль.</b><br>'+esc(e?.message||e)+'</div>'}finally{flight=null}})();return flight}
+async function open(force=false){
+  ensureDom();if(!isBoss())return;
+  const root=$('wc-v23620'),already=!!dash?.has_data&&!!root?.querySelector('.wc-head');
+  if(flight)return flight;
+  if(already&&!force){try{window.crmWarehouseAfterRenderV23682?.()}catch(_){};return dash}
+  setBusy(already?'Обновляю расчёт…':'Загрузка…');
+  flight=(async()=>{
+    try{
+      const next=await rpcTimeout(rpc('warehouse_control_get_dashboard_v1',{}),12000);
+      dash=next;
+      if(!dash?.has_data){
+        root.innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert blue"><b>Автоматический отчёт себестоимости уже подключён.</b><br>Жду первый успешный импорт из письма 1С. После него этот экран заполнится сам.</div>';
+        try{window.crmWarehouseAfterRenderV23682?.()}catch(_){}
+        return
+      }
+      renderShell();clearBusy();
+      try{window.crmWarehouseAfterRenderV23682?.()}catch(_){}
+    }catch(e){
+      clearBusy();
+      if(already){
+        let warn=$('wc-inline-error-v23682');
+        if(!warn){warn=document.createElement('div');warn.id='wc-inline-error-v23682';warn.className='wc-alert red';root.insertBefore(warn,root.firstChild)}
+        warn.innerHTML='<b>Не удалось обновить склад прямо сейчас.</b> '+esc(e?.message||e)+' Старый расчёт оставлен на экране.';
+      }else{
+        root.innerHTML='<div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="wc-alert red"><b>Не удалось открыть складской контроль.</b><br>'+esc(e?.message||e)+'</div>'
+      }
+    }finally{flight=null}
+  })();
+  return flight
+}
 function install(){ensureDom();if($('page-warehouse-control')?.classList.contains('active')&&isBoss())open(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 [300,800,1600,3000,6000].forEach(ms=>setTimeout(install,ms));
-window.addEventListener('focus',()=>{if(!$('page-warehouse-control')?.classList.contains('active'))return;const api=window.crmWarehouseControlV1;try{if(api?.open&&api.open!==open)api.open(false);else open(false)}catch(_){open(false)}});
+window.addEventListener('focus',()=>{if(!$('page-warehouse-control')?.classList.contains('active'))return;try{window.crmWarehouseAfterRenderV23682?.()}catch(_){}});
 window.crmWarehouseControlV1={open,switchMode};
-window.RESANTA_WAREHOUSE_CONTROL_V23620=Object.freeze({version:V,bossOnly:true,lazy:true,autoOrderChekhov:true,officialOverlimitFormula:true,group900ReturnBlocked:true,fxFormula:'BYN / BYN_USD * RUB_USD'});
+window.RESANTA_WAREHOUSE_CONTROL_V23620=Object.freeze({version:V,bossOnly:true,lazy:true,stableScreenDuringRefresh:true,focusDoesNotReload:true,dashboardTimeoutSeconds:12,autoOrderChekhov:true,officialOverlimitFormula:true,group900ReturnBlocked:true,fxFormula:'BYN / BYN_USD * RUB_USD'});
 })();
