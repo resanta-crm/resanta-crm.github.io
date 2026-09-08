@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.81 · WAREHOUSE ORDER PREPARE + PERSISTENT STATUS
+/* RESANTA CRM v23.6.82 · WAREHOUSE ORDER PREPARE + FAST HOT WORKER
  * - stale 1C/Vitebsk/sales can be requested from CRM with one button;
  * - a lightweight GitHub worker checks the queue every 5 minutes;
  * - while a request is active, only this warehouse page polls status every 15 sec;
@@ -10,7 +10,7 @@
 'use strict';
 if(window.RESANTA_WAREHOUSE_FRESHNESS_V23633)return;
 
-const VERSION='v23.6.81';
+const VERSION='v23.6.82';
 const $=id=>document.getElementById(id);
 let lastFreshness=null,lastRequest=null,lastMeta=null,busy=false,pollTimer=null,readyReloadedId=null,captureInstalled=false;
 
@@ -46,7 +46,7 @@ function requestStatusHtml(){
   const st=String(r.status||'');
   if(['pending','running','waiting'].includes(st)){
     const icon=st==='running'?'⏳':'🟡';
-    return `<div style="margin-top:10px;padding:9px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:9px;font-size:11px;line-height:1.45"><b>${icon} Подготавливаю заказ</b> · попытка ${Number(r.attempt_count)||0}<br>${esc(r.message||'Проверяю свежие отчёты 1С.')}<div style="color:var(--sub);margin-top:3px">Статус обновляется автоматически. Повторно нажимать не нужно.</div></div>`
+    const a=Number(r.attempt_count)||0,wait=a===0?'Worker запускается — обычно заявка подхватывается в течение 15 секунд.':'Следующая проверка новых писем — примерно через минуту.';return `<div style="margin-top:10px;padding:9px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:9px;font-size:11px;line-height:1.45"><b>${icon} Подготавливаю заказ</b> · попытка ${a}<br>${esc(r.message||'Проверяю свежие отчёты 1С.')}<div style="color:var(--sub);margin-top:3px">${wait} Повторно нажимать не нужно.</div></div>`
   }
   if(st==='ready'){
     const newer=!!m.new_data_after_ready;
@@ -197,15 +197,18 @@ function restoreAfterBaseRender(){
     if(active())setTimeout(checkRequestStatus,40)
   }catch(e){console.warn(VERSION+' restore after warehouse render',e)}
 }
+window.crmWarehouseAfterRenderV23682=restoreAfterBaseRender;
 window.crmWarehouseAfterRenderV23681=restoreAfterBaseRender;
 function install(){hook()}
 install();[250,700,1400,2600,5000].forEach(ms=>setTimeout(install,ms));
 window.addEventListener('focus',()=>{if(active()){restoreAfterBaseRender();checkFreshness();checkRequestStatus()}},{passive:true});
+window.crmWarehousePrepareOrderV23682=prepareOrder;
 window.crmWarehousePrepareOrderV23680=prepareOrder;
 window.RESANTA_WAREHOUSE_FRESHNESS_V23633=Object.freeze({
   version:VERSION,
   orderPrepareQueue:true,
-  workerIntervalMinutes:5,
+  hotWorkerPollSeconds:15,
+  retryNewMailSeconds:60,
   activeRequestPollSeconds:15,
   blocksStaleOrder:true,
   autoSources:['warehouse_cost','vitebsk_stock','sales'],
