@@ -56,7 +56,7 @@ details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;m
     </div>
     <div id="mapKeyPanel" class="hide" style="margin:0 0 10px;padding:12px;border:1px solid #BFDBFE;border-radius:10px;background:#EFF6FF">
       <div style="font-weight:800;margin-bottom:6px">🗺 API-ключ Яндекс Карт</div>
-      <div class="muted" style="margin-bottom:8px">Ключ сохраняется только в этом браузере. Нужен JavaScript API Яндекс Карт 2.1 с разрешённым доменом resanta-crm.by.</div>
+      <div class="muted" style="margin-bottom:8px">Ключ сохраняется в CRM для Александра Паюшина и Сидаровича К.Н. и автоматически восстанавливается на их браузерах. Нужен JavaScript API Яндекс Карт 2.1 с разрешённым доменом resanta-crm.by.</div>
       <div class="row">
         <input id="mapKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="Вставьте API-ключ" style="flex:1;min-width:260px;padding:10px 12px;border:1px solid #BFDBFE;border-radius:9px;font-size:14px">
         <button id="saveMapKey" class="btn primary">Сохранить и открыть карту</button>
@@ -108,20 +108,39 @@ function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000
 function validCoord(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));}
 function coord(lat,lng){return validCoord(lat)&&validCoord(lng)?[Number(lat),Number(lng)]:null;}
 function key(){try{return String(localStorage.getItem('resanta_yandex_maps_api_key_v2358')||localStorage.getItem('resanta_yandex_maps_api_key_v2351')||'').trim();}catch(_){return'';}}
+function storeLocalKey(v){try{localStorage.setItem('resanta_yandex_maps_api_key_v2351',v);localStorage.setItem('resanta_yandex_maps_api_key_v2358',v);return true}catch(_){return false}}
+async function hydrateSharedMapKey(){
+  const local=key();
+  try{
+    const {data,error}=await db.rpc('crm_get_yandex_maps_key_v23686',{});
+    if(error)throw error;
+    const shared=String(data||'').trim();
+    if(shared){storeLocalKey(shared);syncKeyButton();return shared}
+    if(local){
+      const {error:saveError}=await db.rpc('crm_set_yandex_maps_key_v23686',{p_api_key:local});
+      if(!saveError)return local;
+    }
+  }catch(e){console.warn('Shared Yandex key v23.6.86',e)}
+  return local;
+}
 function syncKeyButton(){const b=$('setMapKey');if(b)b.textContent=key()?'🔑 Сменить ключ Яндекс Карт':'🗺 Подключить Яндекс Карты';}
 function openKeyPanel(){const p=$('mapKeyPanel'),i=$('mapKeyInput');if(!p)return;p.classList.remove('hide');if(i){i.value=key();setTimeout(()=>{try{i.focus();i.select()}catch(_){}},30)}}
 function closeKeyPanel(){const p=$('mapKeyPanel');if(p)p.classList.add('hide');}
 async function saveMapKey(){
   const i=$('mapKeyInput'),v=String(i?.value||'').trim();
   if(!v){i?.focus();return}
+  const b=$('saveMapKey');if(b){b.disabled=true;b.textContent='Сохраняю для Паюшина и Сидаровича…'}
   try{
-    localStorage.setItem('resanta_yandex_maps_api_key_v2351',v);
-    localStorage.setItem('resanta_yandex_maps_api_key_v2358',v);
+    const {error}=await db.rpc('crm_set_yandex_maps_key_v23686',{p_api_key:v});
+    if(error)throw error;
+    if(!storeLocalKey(v))throw new Error('Браузер не дал сохранить ключ локально');
   }catch(e){
-    $('mapStatus').className='msg bad';$('mapStatus').textContent='Не удалось сохранить ключ: '+(e?.message||e);return
+    if(b){b.disabled=false;b.textContent='Сохранить и открыть карту'}
+    $('mapStatus').className='msg bad';$('mapStatus').textContent='Не удалось сохранить общий ключ CRM: '+(e?.message||e);return
   }
+  if(b){b.disabled=false;b.textContent='Сохранить и открыть карту'}
   closeKeyPanel();syncKeyButton();
-  $('mapStatus').className='msg info';$('mapStatus').textContent='Ключ сохранён. Подключаю Яндекс Карты…';
+  $('mapStatus').className='msg info';$('mapStatus').textContent='Общий ключ сохранён для Паюшина и Сидаровича. Подключаю Яндекс Карты…';
   if(aggregate)drawMap(aggregate).catch(e=>{$('mapStatus').className='msg bad';$('mapStatus').textContent='Карта не открылась: '+(e.message||e);openKeyPanel()});
 }
 async function ensureAuth(){const {data,error}=await db.auth.getSession();if(error)throw error;if(!data?.session)throw new Error('Нет активной сессии CRM. Вернитесь в CRM, войдите и откройте маршрут снова.');}
@@ -259,6 +278,7 @@ async function boot(force=false,quiet=false){
   try{
     if(!quiet)setStatus(force?'Обновляю маршрут и визиты…':'Проверяю маршрут…');
     await ensureAuth();
+    await hydrateSharedMapKey();
     let a=await getAggregate(force);
     if(!force&&stale(a)){if(!quiet)setStatus('Есть новые данные — обновляю маршрут и посещения…');a=await getAggregate(true);}
     render(a);
