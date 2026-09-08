@@ -1,4 +1,5 @@
 name: Подготовка данных для автозаказа — быстрый worker CRM
+# v23.6.83 duplicate-safe stock state
 
 on:
   push:
