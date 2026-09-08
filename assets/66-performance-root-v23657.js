@@ -298,6 +298,8 @@ window.crmModuleContractCheckV23671=function(){
 };
 
 function boot(){
+  // Login safety is global by nature and tiny; everything business-related stays page-scoped.
+  setTimeout(()=>load('assets/40-login-safety-v23625.js','perf-login-safety-v23684','RESANTA_LOGIN_SAFETY_V23625').catch(()=>{}),0);
   setTimeout(()=>loadForPage(activePage(),window.__crmNavEpoch),0);
   setTimeout(maybeLoadPaymentRegistry,120);
   setTimeout(maybeLoadWarehouseShell,180);
@@ -332,6 +334,7 @@ window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
   officeManagerPaymentsOnly:true,
   noPolling:true,
   noMutationObserver:true,
-  noBusinessDataWrites:true
+  noBusinessDataWrites:true,
+  loginSafetyExplicit:true
 });
 })();
