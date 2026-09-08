@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.91',flights=new Map(),contractFlights=new Map();
+const V='23.6.92',flights=new Map(),contractFlights=new Map();
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -206,7 +206,7 @@ async function loadVisits(){
 }
 function paymentEligible(){
   const p=profile(),r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();
-  return r==='boss'||r==='office_manager'||e==='payushin_ar@resanta.ru'||e==='sidarovich_kn@resanta.ru';
+  return r==='boss'||r==='office_manager'||r==='payment_executor'||e==='payushin_ar@resanta.ru'||e==='sidarovich_kn@resanta.ru'||e==='nesterov_py@resanta.ru';
 }
 async function loadPaymentRegistry(){
   if(!paymentEligible())return false;
@@ -215,7 +215,10 @@ async function loadPaymentRegistry(){
   if(r==='office_manager'||String(p?.access_scope||'').toLowerCase()==='payments_only'){
     await load('assets/39-office-manager-payments-only-v23624.js','perf-office-payments-v23671','RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624');
   }
-  await load('assets/42-payment-registry-nav-root-v23627.js','perf-payment-nav-v23671','RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627');
+  if(r==='payment_executor'||String(p?.email||'').toLowerCase()==='nesterov_py@resanta.ru'){
+    await load('assets/76-payment-executor-only-v23692.js','perf-payment-executor-v23692','RESANTA_PAYMENT_EXECUTOR_ONLY_V23692');
+  }
+  await load('assets/42-payment-registry-nav-root-v23627.js','perf-payment-nav-v23692','RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627');
   return true;
 }
 function maybeLoadPaymentRegistry(){if(paymentEligible())loadPaymentRegistry().catch(e=>console.warn('ROOT '+V+' payment registry',e))}
