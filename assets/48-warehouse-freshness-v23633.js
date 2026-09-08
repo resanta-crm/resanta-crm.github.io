@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.80 · WAREHOUSE ORDER PREPARE + FRESHNESS
+/* RESANTA CRM v23.6.81 · WAREHOUSE ORDER PREPARE + PERSISTENT STATUS
  * - stale 1C/Vitebsk/sales can be requested from CRM with one button;
  * - a lightweight GitHub worker checks the queue every 5 minutes;
  * - while a request is active, only this warehouse page polls status every 15 sec;
@@ -10,7 +10,7 @@
 'use strict';
 if(window.RESANTA_WAREHOUSE_FRESHNESS_V23633)return;
 
-const VERSION='v23.6.80';
+const VERSION='v23.6.81';
 const $=id=>document.getElementById(id);
 let lastFreshness=null,lastRequest=null,lastMeta=null,busy=false,pollTimer=null,readyReloadedId=null,captureInstalled=false;
 
@@ -190,9 +190,17 @@ function hook(){
   if(active()){setTimeout(checkFreshness,60);setTimeout(checkRequestStatus,120)}
   return true
 }
+function restoreAfterBaseRender(){
+  try{
+    if(lastFreshness)decorate(lastFreshness);
+    bindRefresh();installCapture();
+    if(active())setTimeout(checkRequestStatus,40)
+  }catch(e){console.warn(VERSION+' restore after warehouse render',e)}
+}
+window.crmWarehouseAfterRenderV23681=restoreAfterBaseRender;
 function install(){hook()}
 install();[250,700,1400,2600,5000].forEach(ms=>setTimeout(install,ms));
-window.addEventListener('focus',()=>{if(active()){checkFreshness();checkRequestStatus()}},{passive:true});
+window.addEventListener('focus',()=>{if(active()){restoreAfterBaseRender();checkFreshness();checkRequestStatus()}},{passive:true});
 window.crmWarehousePrepareOrderV23680=prepareOrder;
 window.RESANTA_WAREHOUSE_FRESHNESS_V23633=Object.freeze({
   version:VERSION,
@@ -202,6 +210,8 @@ window.RESANTA_WAREHOUSE_FRESHNESS_V23633=Object.freeze({
   blocksStaleOrder:true,
   autoSources:['warehouse_cost','vitebsk_stock','sales'],
   chekhovManual:true,
+  persistentAcrossWarehouseRenders:true,
+  focusSafe:true,
   noMutationObserver:true
 });
 console.info('RESANTA warehouse freshness '+VERSION+' installed')
