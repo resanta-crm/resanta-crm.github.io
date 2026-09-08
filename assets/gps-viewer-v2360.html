@@ -48,10 +48,20 @@ details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;m
   <div class="card">
     <div class="row" style="margin-bottom:10px">
       <div id="mapStatus" class="msg info" style="flex:1;margin:0">Подключаю карту…</div>
+      <button id="setMapKey" class="btn">🗺 Подключить Яндекс Карты</button>
       <button id="focusNow" class="btn">📍 Где сейчас</button>
       <button id="focusRoute" class="btn">🛣 Весь маршрут</button>
       <button id="focusPlan" class="btn">🗓 Весь план</button>
       <button id="toggleStops" class="btn">🔧 Диагностика GPS</button>
+    </div>
+    <div id="mapKeyPanel" class="hide" style="margin:0 0 10px;padding:12px;border:1px solid #BFDBFE;border-radius:10px;background:#EFF6FF">
+      <div style="font-weight:800;margin-bottom:6px">🗺 API-ключ Яндекс Карт</div>
+      <div class="muted" style="margin-bottom:8px">Ключ сохраняется только в этом браузере. Нужен JavaScript API Яндекс Карт 2.1 с разрешённым доменом resanta-crm.by.</div>
+      <div class="row">
+        <input id="mapKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="Вставьте API-ключ" style="flex:1;min-width:260px;padding:10px 12px;border:1px solid #BFDBFE;border-radius:9px;font-size:14px">
+        <button id="saveMapKey" class="btn primary">Сохранить и открыть карту</button>
+        <button id="cancelMapKey" class="btn">Отмена</button>
+      </div>
     </div>
     <div id="map"></div>
     <div class="legend">
@@ -98,6 +108,22 @@ function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000
 function validCoord(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));}
 function coord(lat,lng){return validCoord(lat)&&validCoord(lng)?[Number(lat),Number(lng)]:null;}
 function key(){try{return String(localStorage.getItem('resanta_yandex_maps_api_key_v2358')||localStorage.getItem('resanta_yandex_maps_api_key_v2351')||'').trim();}catch(_){return'';}}
+function syncKeyButton(){const b=$('setMapKey');if(b)b.textContent=key()?'🔑 Сменить ключ Яндекс Карт':'🗺 Подключить Яндекс Карты';}
+function openKeyPanel(){const p=$('mapKeyPanel'),i=$('mapKeyInput');if(!p)return;p.classList.remove('hide');if(i){i.value=key();setTimeout(()=>{try{i.focus();i.select()}catch(_){}},30)}}
+function closeKeyPanel(){const p=$('mapKeyPanel');if(p)p.classList.add('hide');}
+async function saveMapKey(){
+  const i=$('mapKeyInput'),v=String(i?.value||'').trim();
+  if(!v){i?.focus();return}
+  try{
+    localStorage.setItem('resanta_yandex_maps_api_key_v2351',v);
+    localStorage.setItem('resanta_yandex_maps_api_key_v2358',v);
+  }catch(e){
+    $('mapStatus').className='msg bad';$('mapStatus').textContent='Не удалось сохранить ключ: '+(e?.message||e);return
+  }
+  closeKeyPanel();syncKeyButton();
+  $('mapStatus').className='msg info';$('mapStatus').textContent='Ключ сохранён. Подключаю Яндекс Карты…';
+  if(aggregate)drawMap(aggregate).catch(e=>{$('mapStatus').className='msg bad';$('mapStatus').textContent='Карта не открылась: '+(e.message||e);openKeyPanel()});
+}
 async function ensureAuth(){const {data,error}=await db.auth.getSession();if(error)throw error;if(!data?.session)throw new Error('Нет активной сессии CRM. Вернитесь в CRM, войдите и откройте маршрут снова.');}
 async function getAggregate(rebuild=false){
   if(!workday)throw new Error('Не указан рабочий день.');
@@ -174,10 +200,11 @@ function render(a){
   $('pf').textContent=(a.visited_count||0)+' / '+(a.planned_count||0);
   $('warnings').textContent=a.gps_warning_count||0;
   renderVisits(a);renderOffplan(a);renderDiagnostics(a);
-  drawMap(a).catch(e=>{$('mapStatus').className='msg bad';$('mapStatus').textContent='Карта не открылась: '+(e.message||e);});
+  syncKeyButton();
+  drawMap(a).catch(e=>{const msg=String(e?.message||e);$('mapStatus').className='msg bad';$('mapStatus').textContent='Карта не открылась: '+msg;if(!key())openKeyPanel();});
   scheduleAuto();
 }
-function loadYandex(){return new Promise((resolve,reject)=>{if(window.ymaps){ymaps.ready(()=>resolve(ymaps));return;}const api=key();if(!api){reject(new Error('API-ключ Яндекс Карт не найден в этом браузере. Откройте GPS-контроль в CRM и подключите Яндекс Карты.'));return;}const s=document.createElement('script');s.src='https://api-maps.yandex.ru/2.1/?apikey='+encodeURIComponent(api)+'&lang=ru_RU';s.async=true;s.onload=()=>window.ymaps?ymaps.ready(()=>resolve(ymaps)):reject(new Error('Яндекс API не инициализирован'));s.onerror=()=>reject(new Error('Не удалось загрузить API Яндекс Карт'));document.head.appendChild(s);});}
+function loadYandex(){return new Promise((resolve,reject)=>{if(window.ymaps){ymaps.ready(()=>resolve(ymaps));return;}const api=key();if(!api){reject(new Error('API-ключ Яндекс Карт не найден. Нажмите «Подключить Яндекс Карты» прямо в этом окне.'));return;}const s=document.createElement('script');s.src='https://api-maps.yandex.ru/2.1/?apikey='+encodeURIComponent(api)+'&lang=ru_RU';s.async=true;s.onload=()=>window.ymaps?ymaps.ready(()=>resolve(ymaps)):reject(new Error('Яндекс API не инициализирован'));s.onerror=()=>reject(new Error('Не удалось загрузить API Яндекс Карт. Проверьте ключ и разрешённый домен.'));document.head.appendChild(s);});}
 function safeBounds(coords){const c=(coords||[]).filter(x=>Array.isArray(x)&&x.length===2&&x.every(Number.isFinite));if(c.length>1){try{map.setBounds(c,{checkZoomRange:true,zoomMargin:45});return true;}catch(_){}}if(c.length===1){map.setCenter(c[0],14);return true;}return false;}
 function focusNow(){if(!mapRouteCoords.length)return;map.setCenter(mapRouteCoords[mapRouteCoords.length-1],14);}
 function focusRoute(){if(!safeBounds(mapRouteCoords))focusNow();}
@@ -242,6 +269,11 @@ async function boot(force=false,quiet=false){
 }
 function scheduleAuto(){clearInterval(autoTimer);if(aggregate?.workday_status==='active'){autoTimer=setInterval(()=>{if(!document.hidden)boot(true,true);},60000);}}
 $('refresh').addEventListener('click',()=>boot(true,false));
+$('setMapKey').addEventListener('click',openKeyPanel);
+$('saveMapKey').addEventListener('click',saveMapKey);
+$('cancelMapKey').addEventListener('click',closeKeyPanel);
+$('mapKeyInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveMapKey()}else if(e.key==='Escape')closeKeyPanel()});
+syncKeyButton();
 $('focusNow').addEventListener('click',focusNow);
 $('focusRoute').addEventListener('click',focusRoute);
 $('focusPlan').addEventListener('click',focusPlan);
