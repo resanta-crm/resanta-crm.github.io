@@ -148,18 +148,17 @@ def patch_request(rid, payload):
     return api("PATCH", "warehouse_order_refresh_requests", params={"id": f"eq.{rid}"}, payload=payload)
 
 
-def main():
+def active_request():
     rows = api("GET", "warehouse_order_refresh_requests", params={
-        "status": "in.(pending,waiting)",
+        "status": "in.(pending,waiting,running)",
         "select": "*",
         "order": "requested_at.asc",
         "limit": "1",
     }) or []
-    if not rows:
-        print("Нет активной заявки CRM на подготовку автозаказа.")
-        return 0
+    return rows[0] if rows else None
 
-    row = rows[0]
+
+def process_request(row):
     rid = row["id"]
     attempt = int(row.get("attempt_count") or 0) + 1
     now = datetime.now(timezone.utc).isoformat()
@@ -184,15 +183,15 @@ def main():
 
     results = {}
     if jobs:
-        print("Запускаю:", ", ".join(jobs))
+        print("Запускаю:", ", ".join(jobs), flush=True)
         with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
             future_map = {pool.submit(run_script, job): job for job in jobs}
             for fut in as_completed(future_map):
                 res = fut.result()
                 results[res["script"]] = res
-                print(json.dumps(res, ensure_ascii=False))
+                print(json.dumps(res, ensure_ascii=False), flush=True)
     else:
-        print("Все автоматические источники уже свежие.")
+        print("Все автоматические источники уже свежие.", flush=True)
 
     time.sleep(2)
     after = latest_freshness()
@@ -220,13 +219,13 @@ def main():
             "worker_results": {"before": before, "after": after, "imports": results},
             "last_error": None,
         })
-        print("✅ Данные готовы:", json.dumps(after, ensure_ascii=False))
-        return 0
+        print("✅ Данные готовы:", json.dumps(after, ensure_ascii=False), flush=True)
+        return "ready"
 
-    if attempt >= 12:
+    if attempt >= 60:
         status = "error"
         message = (
-            "За 12 проверок свежие данные не появились. "
+            "За 60 проверок свежие данные не появились. "
             "Последнее ожидание: " + ", ".join(missing) + "."
         )
     else:
@@ -234,7 +233,7 @@ def main():
         message = (
             "Нового свежего отчёта пока нет: "
             + ", ".join(missing)
-            + ". Повторю проверку автоматически через несколько минут."
+            + ". Проверю ещё раз примерно через минуту."
         )
 
     patch_request(rid, {
@@ -243,8 +242,53 @@ def main():
         "worker_results": {"before": before, "after": after, "imports": results},
         "last_error": error_text,
     })
-    print("⏳", message)
-    return 0
+    print("⏳", message, flush=True)
+    return status
+
+
+def main():
+    watch_seconds = max(0, int(os.getenv("WAREHOUSE_ORDER_WATCH_SECONDS", "0")))
+    poll_seconds = max(5, int(os.getenv("WAREHOUSE_ORDER_POLL_SECONDS", "15")))
+    retry_seconds = max(30, int(os.getenv("WAREHOUSE_ORDER_RETRY_SECONDS", "60")))
+    deadline = time.monotonic() + watch_seconds if watch_seconds else None
+    last_attempt = {}
+
+    print(
+        f"Warehouse order worker: watch={watch_seconds}s, poll={poll_seconds}s, retry={retry_seconds}s",
+        flush=True,
+    )
+
+    while True:
+        row = active_request()
+        if row:
+            rid = row["id"]
+            status = str(row.get("status") or "")
+            last_ts = last_attempt.get(rid, 0.0)
+            due = status == "pending" or (time.monotonic() - last_ts >= retry_seconds)
+
+            if status == "running":
+                # A cancelled GitHub run may leave a request in running.
+                # The new single worker safely reclaims it.
+                due = True
+
+            if due:
+                last_attempt[rid] = time.monotonic()
+                result = process_request(row)
+                if result == "error":
+                    last_attempt.pop(rid, None)
+                elif result == "ready":
+                    last_attempt.pop(rid, None)
+            else:
+                time.sleep(min(poll_seconds, max(1, retry_seconds - (time.monotonic() - last_ts))))
+        else:
+            if not deadline:
+                print("Нет активной заявки CRM на подготовку автозаказа.", flush=True)
+                return 0
+            time.sleep(poll_seconds)
+
+        if deadline and time.monotonic() >= deadline:
+            print("Окно наблюдения worker завершено; следующая смена запустится по расписанию.", flush=True)
+            return 0
 
 
 if __name__ == "__main__":
