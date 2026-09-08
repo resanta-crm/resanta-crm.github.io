@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.27 · PAYMENT REGISTRY NAV ROOT FIX
+/* RESANTA CRM v23.6.92 · PAYMENT REGISTRY NAV ROOT FIX
  * Root cause: payment registry loaded before currentProfile was ready; the module
  * stopped retrying after a short window and left the nav item hidden forever.
  * This lightweight layer only restores visibility after profile readiness.
@@ -7,10 +7,10 @@
 (function(){
 'use strict';
 if(window.RESANTA_PAYMENT_REGISTRY_NAV_ROOT_V23627)return;
-const V='v23.6.27';
+const V='v23.6.92';
 let settled=false,tries=0,timer=null;
 function profile(){try{return typeof currentProfile!=='undefined'?currentProfile:(window.currentProfile||null)}catch(_){return window.currentProfile||null}}
-function allowed(){const p=profile();const r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();return r==='boss'||r==='office_manager'||e==='payushin_ar@resanta.ru'||e==='sidarovich_kn@resanta.ru'}
+function allowed(){const p=profile();const r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();return r==='boss'||r==='office_manager'||r==='payment_executor'||e==='payushin_ar@resanta.ru'||e==='sidarovich_kn@resanta.ru'||e==='nesterov_py@resanta.ru'}
 function ensureVisible(){
   const nav=document.getElementById('nav-payment-registry');
   const p=profile();
