@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.86',flights=new Map(),contractFlights=new Map();
+const V='23.6.87',flights=new Map(),contractFlights=new Map();
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -240,6 +240,11 @@ async function loadForPage(page,epoch){
       return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23671','RESANTA_MANAGER_PLANS_ROOT_V2330');
     }
     if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23671','RESANTA_MANAGER_SALES_YOY_V23634');
+    if(p==='markdown'){
+      const ok=await load('assets/74-markdown-v23687.js','perf-markdown-v23687','RESANTA_MARKDOWN_V23687');
+      if(ok&&activePage()==='markdown')await window.crmMarkdownOpenV23687?.(false);
+      return ok;
+    }
     if(p==='visits')return await loadVisits();
     if(['routes-boss','my-routes','route'].includes(p))return await loadRoutes();
     if(p==='gps-control'){
@@ -335,6 +340,7 @@ window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
   warehouseStack:['37','48','51','54','55'],
   warehouseIndependentOfGps:true,
   pageScopedModules:true,
+  markdownPageScoped:true,markdownNoGlobalPrefetch:true,
   gpsModulesPageScoped:true,
   visitsSafetyExplicit:true,
   deprecatedGpsCascadeDisabled:true,
