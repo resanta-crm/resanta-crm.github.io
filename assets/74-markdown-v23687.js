@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.88 · УЦЕНКА
+/* RESANTA CRM v23.6.89 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.88';
+const V='v23.6.89';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -99,9 +99,11 @@ function ensureDom(){
 function statusTabs(){
  const st=S.stats||{};
  return [
-  ['active','Все в продаже',st.active||0],
+  ['active','Все позиции',st.active||0],
   ['needs_photo','Нужны фото',st.needs_photo||0],
-  ['unpriced','Без цены',st.unpriced||0],
+  ['collecting','Подготовка',st.collecting||0],
+  ['ready_for_pricing',isPayushin()?'Ждут моей цены':'Готово к оценке',st.ready_for_pricing||0],
+  ['priced','В продаже',st.priced||0],
   ['assigned','Назначены',st.assigned||0],
   ['sold','Продано',st.sold||0]
  ];
@@ -163,7 +165,7 @@ function loadCovers(){
  }
 }
 function updateNavDot(){
- const count=n(S.stats?.needs_photo)+n(S.stats?.unpriced);
+ const count=isPayushin()?n(S.stats?.ready_for_pricing):n(S.stats?.needs_photo);
  ['markdown-alert-dot','bn-markdown-dot'].forEach(id=>{const e=$(id);if(e)e.style.display=count?'inline-block':'none'});
 }
 async function load(force=false){
@@ -198,9 +200,20 @@ function photoTypeLabel(v){return({overall:'Общий вид',defect:'Дефе�
 async function detailHtml(data){
  const i=data.item||{},photos=Array.isArray(data.photos)?data.photos:[],assign=Array.isArray(data.assignments)?data.assignments:[];
  const photoUrls=await Promise.all(photos.map(async p=>({...p,signed_url:await signed(p.storage_path)})));
- const pricing=data.is_payushin?'<div class="md-box"><h4>💰 Цена · только Александр Паюшин</h4><div class="md-formgrid"><label>Скидка, %<input id="md-discount-v23687" type="number" min="0" max="90" step="0.1" value="'+(i.discount_pct??'')+'"></label><label>Финальная цена, BYN<input id="md-final-v23687" type="number" min="0" step="0.01" value="'+(i.discount_set_at?i.final_price:'')+'"></label></div><label style="display:block;margin-top:8px">Причина скидки<input id="md-price-reason-v23687" value="'+attr(i.discount_reason||'')+'" placeholder="Например: царапины корпуса, повреждена упаковка"></label><div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSavePriceV23687()">Утвердить цену</button></div></div>':'';
+ const stage=i.review_status||'collecting';
+ const typeCounts={overall:0,defect:0,label:0};
+ photos.forEach(p=>{if(Object.prototype.hasOwnProperty.call(typeCounts,p.photo_type))typeCounts[p.photo_type]++});
+ const hasCondition=!!String(i.condition_comment||'').trim();
+ const prepReady=typeCounts.overall>0&&typeCounts.defect>0&&typeCounts.label>0&&hasCondition;
+ const workflowBox='<div class="md-box"><h4>✅ Подготовка к оценке</h4>'
+  +'<div style="font-size:12px;line-height:1.9">'+(typeCounts.overall?'✅':'❌')+' Общий вид<br>'+(typeCounts.defect?'✅':'❌')+' Дефект / состояние<br>'+(typeCounts.label?'✅':'❌')+' Шильдик / артикул<br>'+(hasCondition?'✅':'❌')+' Описание состояния</div>'
+  +(stage==='priced'?'<div style="margin-top:8px;font-weight:800;color:#166534">✅ Цена утверждена — товар в продаже</div>'
+   :stage==='ready_for_pricing'?'<div style="margin-top:8px;font-weight:800;color:#92400E">⏳ Отправлено Александру Паюшину на оценку'+(i.submitted_for_pricing_by?' · '+esc(i.submitted_for_pricing_by):'')+'</div>'
+   :prepReady?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSubmitPricingV23689()">✅ Готово — отправить Александру на оценку</button></div>'
+   :'<div style="margin-top:8px;color:#991B1B;font-size:11px">Нужны 3 обязательных фото и описание состояния.</div>')+'</div>';
+ const pricing=data.is_payushin&&['ready_for_pricing','priced'].includes(stage)?'<div class="md-box"><h4>💰 Цена · только Александр Паюшин</h4><div class="md-formgrid"><label>Скидка, %<input id="md-discount-v23687" type="number" min="0" max="90" step="0.1" value="'+(i.discount_pct??'')+'"></label><label>Финальная цена, BYN<input id="md-final-v23687" type="number" min="0" step="0.01" value="'+(i.discount_set_at?i.final_price:'')+'"></label></div><label style="display:block;margin-top:8px">Причина скидки<input id="md-price-reason-v23687" value="'+attr(i.discount_reason||'')+'" placeholder="Например: царапины корпуса, повреждена упаковка"></label><div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSavePriceV23687()">Утвердить цену</button></div></div>':'';
  let assignBox='';
- if(data.is_payushin){
+ if(data.is_payushin&&stage==='priced'){
   const managers=Array.isArray(S.managers)?S.managers:[];
   const tomorrow=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   assignBox='<div class="md-box"><h4>🎯 Поставить план менеджеру</h4><div class="md-formgrid"><label>Менеджер<select id="md-manager-v23687"><option value="">Выберите</option>'+managers.map(m=>'<option>'+esc(m.name)+'</option>').join('')+'</select></label><label>Срок<input id="md-due-v23687" type="date" value="'+tomorrow+'"></label><label>План, шт.<input id="md-target-v23687" type="number" min="1" step="1" value="1"></label><label>Мотивация за выполнение, BYN<input id="md-bonus-v23687" type="number" min="0" step="1" value="0"></label><label>Демотивация за просрочку, BYN<input id="md-penalty-v23687" type="number" min="0" step="1" value="0"></label><label>Комментарий<input id="md-plan-note-v23687" placeholder="Кому предложить / условия"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownAssignV23687()">Создать/обновить задачу</button></div></div>';
@@ -210,6 +223,7 @@ async function detailHtml(data){
  return '<div class="md-head"><div><div style="font-size:18px;font-weight:900">'+esc(i.nomenclature)+'</div><div style="font-size:12px;color:var(--sub)">Артикул <b>'+esc(i.article)+'</b> · '+qty(i.quantity)+' шт. · '+esc(sourceLabel(i.source_type))+'</div></div><button class="md-x" onclick="crmMarkdownCloseV23687()">×</button></div>'
  +'<div class="md-sections"><div>'
  +'<div class="md-box"><h4>📦 Состояние и гарантия</h4><div style="font-size:12px;line-height:1.55"><b>🛡 Гарантия: '+(i.warranty_active?'сохраняется':'уточнить')+'</b>'+(i.warranty_months?' · '+i.warranty_months+' мес.':'')+(i.warranty_note?'<br>'+esc(i.warranty_note):'')+(i.source_comment?'<br><br><b>Комментарий 1С:</b> '+esc(i.source_comment):'')+'</div><label style="display:block;margin-top:9px">Фактическое состояние<textarea id="md-condition-v23687" placeholder="Что с товаром: царапины, упаковка, комплектность...">'+esc(i.condition_comment||'')+'</textarea></label><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownSaveConditionV23687()">Сохранить описание</button></div></div>'
+ +workflowBox
  +'<div class="md-box"><h4>📷 Фотографии</h4><div class="md-formgrid"><label>Тип фото<select id="md-photo-type-v23687"><option value="overall">Общий вид</option><option value="defect">Дефект</option><option value="label">Шильдик / артикул</option><option value="box">Упаковка</option><option value="other">Другое</option></select></label><label>Комментарий<input id="md-photo-comment-v23687" placeholder="Что видно на фото"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownCameraV23687()">📷 Снять на телефон</button><button class="md-btn" onclick="crmMarkdownGalleryV23687()">🖼 Выбрать из галереи</button></div><div style="margin-top:9px">'+photosHtml+'</div></div>'
  +'</div><div>'
  +'<div class="md-box"><h4>💵 Цена</h4><div style="font-size:12px">Дилерская с НДС: <b>'+money(i.base_price)+'</b></div><div style="font-size:20px;font-weight:900;color:#166534;margin-top:5px">'+(i.discount_set_at?money(i.final_price):'Цена ещё не утверждена')+'</div>'+(i.discount_set_at?'<div style="font-size:11px;color:var(--sub)">Скидка '+n(i.discount_pct).toFixed(1)+'% · '+esc(i.discount_set_by||'')+'</div>':'')+'</div>'
@@ -232,6 +246,14 @@ async function refreshDetail(){if(S.current)await openItem(S.current)}
 async function saveCondition(){
  if(!S.current)return;const val=$('md-condition-v23687')?.value||'';
  try{await rpc('markdown_update_condition_v1',{p_item_id:S.current,p_comment:val});await refreshDetail();await load(true)}catch(e){alert('Не удалось сохранить: '+(e?.message||e))}
+}
+async function submitPricing(){
+ if(!S.current)return;
+ try{
+  await rpc('markdown_submit_for_pricing_v1',{p_item_id:S.current});
+  alert('✅ Товар отправлен Александру Паюшину на оценку');
+  await refreshDetail();await load(true);
+ }catch(e){alert('Не удалось отправить на оценку: '+(e?.message||e))}
 }
 async function savePrice(){
  if(!S.current)return;
@@ -298,6 +320,7 @@ window.crmMarkdownOpenV23687=load;
 window.crmMarkdownOpenItemV23687=openItem;
 window.crmMarkdownCloseV23687=closeDetail;
 window.crmMarkdownSaveConditionV23687=saveCondition;
+window.crmMarkdownSubmitPricingV23689=submitPricing;
 window.crmMarkdownSavePriceV23687=savePrice;
 window.crmMarkdownAssignV23687=assign;
 window.crmMarkdownReportSaleV23687=reportSale;
@@ -306,7 +329,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Дилерская с НДС',pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,
+ version:V,priceBasis:'Дилерская с НДС',workflow:'photos->ready_for_pricing->priced',requiredPhotoTypes:['overall','defect','label'],pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
