@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.84',flights=new Map(),contractFlights=new Map();
+const V='23.6.85',flights=new Map(),contractFlights=new Map();
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -133,10 +133,15 @@ async function loadPromotions(){
   });
 }
 async function ensurePromotionsReady(epoch){
-  if(promotionsReady&&promotionsGuardsReady())return true;
+  if(promotionsReady&&promotionsGuardsReady()){
+    promoOverlay(false);
+    return true;
+  }
   promoOverlay(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…');
   const ok=await loadPromotions();
   if(!ok)throw new Error('Не весь стек Акций загрузился');
+  promotionsReady=promotionsGuardsReady();
+  if(promotionsReady)promoOverlay(false);
   if(epoch!=null&&window.__crmNavEpoch!=null&&activePage()==='promotions'&&Number(epoch)!==Number(window.__crmNavEpoch))return true;
   return true;
 }
@@ -263,7 +268,10 @@ window.crmUltraPageOpenedV22734=function(page,epoch){
 const baseResponsiveOpen=window.crmResponsivePageOpenedV227325;
 window.crmResponsivePageOpenedV227325=function(page,epoch){
   const p=String(page||'');
-  if(p==='promotions')promoOverlay(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…');
+  if(p==='promotions'){
+    if(promotionsReady&&promotionsGuardsReady())promoOverlay(false);
+    else promoOverlay(true,'Загружаю актуальные акции, бюджеты и продажи из 1С…');
+  }
   const out=typeof baseResponsiveOpen==='function'?baseResponsiveOpen.apply(this,arguments):undefined;
   setTimeout(()=>loadForPage(page,epoch),0);
   return out;
