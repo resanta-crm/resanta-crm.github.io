@@ -18,7 +18,7 @@ IMAP_PASS="".join(os.environ["IMAP_PASS"].split()).replace("\xa0","")
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
 LOOKBACK_DAYS=int(os.getenv("MARKDOWN_LOOKBACK_DAYS","14"))
-SUBJECT_KEYS=[x.strip().lower() for x in os.getenv("MARKDOWN_SUBJECT_KEYS","уценк,crm").split(",") if x.strip()]
+SUBJECT_KEYS=[x.strip().lower() for x in os.getenv("MARKDOWN_SUBJECT_KEYS","уценк").split(",") if x.strip()]
 FULL_SNAPSHOT=os.getenv("MARKDOWN_FULL_SNAPSHOT","true").lower() in ("1","true","yes","y")
 MINSK=ZoneInfo("Europe/Minsk")
 
@@ -27,7 +27,7 @@ ALIASES={
  "article":["артикул","код","код товара","sku","номенклатурный номер"],
  "nomenclature":["номенклатура","товар","наименование","наименование товара"],
  "quantity":["количество","кол-во","остаток","остаток уценки","qty"],
- "base_price":["цена","базовая цена","цена с ндс","розничная цена","цена продажи","price"],
+ "base_price":["дилерская с ндс","цена дилер с ндс","дилер с ндс","цена","базовая цена","цена с ндс","розничная цена","цена продажи","price"],
  "source_type":["причина","тип возврата","источник","откуда","вид уценки"],
  "source_document":["документ","документ возврата","номер документа","документ сервиса"],
  "source_date":["дата","дата возврата","дата документа"],
@@ -48,6 +48,13 @@ def norm(v):
 def decoded(v):
     try:return str(make_header(decode_header(v or "")))
     except:return str(v or "")
+
+def subject_matches(subject):
+    s=norm(subject)
+    if SUBJECT_KEYS and not all(k in s for k in SUBJECT_KEYS):
+        return False
+    return ("срм" in s) or ("crm" in s)
+
 
 def num(v,default=0):
     if v is None or v=="": return default
@@ -109,7 +116,14 @@ def build_item(row,m,rnum,report_date):
     name=str(cell(row,m,"nomenclature","") or "").strip()
     if not article and not name: return None
     if not article or not name:
-        log(f"⚠️ Строка {rnum} пропущена: нет артикула или номенклатуры")
+        return None
+    raw_qty=cell(row,m,"quantity",None)
+    raw_price=cell(row,m,"base_price",None)
+    qty=num(raw_qty,None)
+    dealer_price=num(raw_price,None)
+    # The 1C report contains group totals and rows "Деление на 0".
+    # Only real SKU rows with positive final stock and valid dealer price are imported.
+    if qty is None or qty<=0 or dealer_price is None or dealer_price<=0:
         return None
     doc=str(cell(row,m,"source_document","") or "").strip()
     serial=str(cell(row,m,"serial_no","") or "").strip()
@@ -118,14 +132,14 @@ def build_item(row,m,rnum,report_date):
     if explicit:
         skey=explicit
     else:
-        stable="|".join([article,serial,doc,comment])
-        skey="AUTO-"+hashlib.sha1(stable.encode("utf-8")).hexdigest()[:24] if stable.replace("|","") else f"AUTO-{article}-{rnum}"
+        # This exact 1C report is an SKU stock snapshot; article is the stable identity.
+        skey="SKU-"+hashlib.sha1(article.encode("utf-8")).hexdigest()[:24]
     return {
       "source_key":skey,
       "article":article,
       "nomenclature":name,
-      "quantity":max(0,num(cell(row,m,"quantity",1),1)),
-      "base_price":max(0,num(cell(row,m,"base_price",0),0)),
+      "quantity":qty,
+      "base_price":dealer_price,
       "currency":"BYN",
       "source_type":str(cell(row,m,"source_type","") or "").strip() or None,
       "source_document":doc or None,
@@ -142,7 +156,11 @@ def parse_xlsx(content,report_date,filename):
     wb=load_workbook(io.BytesIO(content),data_only=True,read_only=True)
     ws=wb[wb.sheetnames[0]]
     hr=choose_header(ws)
-    headers=[ws.cell(hr,c).value for c in range(1,ws.max_column+1)]
+    headers=[]
+    for col in range(1,ws.max_column+1):
+        cur=ws.cell(hr,col).value
+        prev=ws.cell(hr-1,col).value if hr>1 else None
+        headers.append(cur if str(cur or "").strip() else prev)
     m=colmap(headers)
     rows=[]
     for rnum,row in enumerate(ws.iter_rows(min_row=hr+1,values_only=True),start=hr+1):
@@ -164,7 +182,11 @@ def parse_xls(content,report_date,filename):
     if not best or best[0]<2:
         raise RuntimeError("Не нашёл строку заголовков в XLS.")
     hr=best[1]
-    headers=[sh.cell_value(hr,col) for col in range(sh.ncols)]
+    headers=[]
+    for col in range(sh.ncols):
+        cur=sh.cell_value(hr,col)
+        prev=sh.cell_value(hr-1,col) if hr>0 else ""
+        headers.append(cur if str(cur or "").strip() else prev)
     m=colmap(headers)
     rows=[]
     for r in range(hr+1,sh.nrows):
@@ -196,9 +218,8 @@ def find_latest():
     mail.login(IMAP_USER,IMAP_PASS)
     mail.select("INBOX")
     since=(datetime.now(MINSK)-timedelta(days=LOOKBACK_DAYS)).strftime("%d-%b-%Y")
-    # First reduce the mailbox at IMAP level by the ASCII marker CRM.
-    # Gmail handles this search very quickly; Unicode "уценка" is filtered locally below.
-    typ,data=mail.search(None,"SINCE",since,"SUBJECT",'"CRM"')
+    # 1C sends from the same mailbox. Filter by sender on IMAP, then match both "СРМ" and "CRM" locally.
+    typ,data=mail.search(None,"SINCE",since,"FROM",f'"{IMAP_USER}"')
     if typ!="OK":
         typ,data=mail.search(None,"SINCE",since)
     if typ!="OK": raise RuntimeError("IMAP search failed")
@@ -211,8 +232,7 @@ def find_latest():
         if typ!="OK" or not hdata or not isinstance(hdata[0],tuple): continue
         hdr=email.message_from_bytes(hdata[0][1])
         subject=decoded(hdr.get("Subject"))
-        low=subject.lower()
-        if SUBJECT_KEYS and not all(k in low for k in SUBJECT_KEYS): continue
+        if not subject_matches(subject): continue
         sent=parsedate_to_datetime(hdr.get("Date")) if hdr.get("Date") else datetime.now(timezone.utc)
         if sent.tzinfo is None: sent=sent.replace(tzinfo=timezone.utc)
         matches.append((sent,uid,subject))
