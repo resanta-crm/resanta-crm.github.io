@@ -1,4 +1,4 @@
-name: Подготовка данных для автозаказа — запрос CRM
+name: Подготовка данных для автозаказа — быстрый worker CRM
 
 on:
   push:
@@ -7,18 +7,19 @@ on:
       - 'warehouse_order_refresh_worker.py'
       - '.github/workflows/warehouse-order-refresh.yml'
   schedule:
-    # Лёгкий worker: если заявки CRM нет — сразу завершается.
-    - cron: '*/5 * * * *'
+    # Длинная смена worker. Новый запуск перекрывает предыдущий,
+    # поэтому CRM-заявка обычно подхватывается за 15 секунд.
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 concurrency:
   group: warehouse-order-refresh-worker
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 200
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
@@ -34,7 +35,7 @@ jobs:
       - name: Проверить worker
         run: python -m py_compile warehouse_order_refresh_worker.py import_sales.py import_stock.py import_warehouse_cost.py
 
-      - name: Подготовить свежие данные для автозаказа
+      - name: Быстро готовить данные для автозаказа
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_PORT: '993'
@@ -42,6 +43,12 @@ jobs:
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+          # Worker остаётся живым чуть больше 3 часов.
+          # Внутри очередь CRM проверяется каждые 15 секунд.
+          WAREHOUSE_ORDER_WATCH_SECONDS: '11400'
+          WAREHOUSE_ORDER_POLL_SECONDS: '15'
+          WAREHOUSE_ORDER_RETRY_SECONDS: '60'
 
           SALES_LOOKBACK_DAYS: '14'
           SALES_IMAP_TIMEOUT_SECONDS: '45'
