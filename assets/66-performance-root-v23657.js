@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.83',flights=new Map(),contractFlights=new Map();
+const V='23.6.84',flights=new Map(),contractFlights=new Map();
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -167,12 +167,37 @@ async function loadTriovist(){
   await load('assets/19-triovist-stock-upload-truth-v23551.js','perf-tri-upload-v23671','RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551');
   await load('assets/20-triovist-partner-forecast-v2356.js','perf-tri-forecast-v23671','RESANTA_TRIOVIST_PARTNER_FORECAST_V2356');
 }
+async function loadVisitSafety(){
+  await load('assets/18-visit-gps-truth-v2354.js','perf-visit-gps-truth-v23684','RESANTA_VISIT_GPS_TRUTH_V2354');
+  await load('assets/43-visits-single-submit-v23628.js','perf-visit-single-submit-v23684','RESANTA_VISITS_SINGLE_SUBMIT_V23628');
+  await load('assets/44-route-visit-evidence-v23629.js','perf-route-visit-evidence-v23684','RESANTA_ROUTE_VISIT_EVIDENCE_V23629');
+  return true;
+}
 async function loadRoutes(){
   await Promise.all([
-    load('assets/14-routes-yandex-ui-v2351.js','perf-routes-yandex-v23671','RESANTA_ROUTES_YANDEX_UI_V2351'),
-    load('assets/15-routes-yandex-key-modal-v23511.js','perf-routes-key-v23671','RESANTA_YANDEX_KEY_MODAL_V23511'),
-    load('assets/33-triovist-shell-guard-v23613.js','perf-route-tabs-v23671','RESANTA_ROUTE_MONTH_TABS_SYNC_V23635')
+    Promise.all([
+      load('assets/14-routes-yandex-ui-v2351.js','perf-routes-yandex-v23684','RESANTA_ROUTES_YANDEX_UI_V2351'),
+      load('assets/15-routes-yandex-key-modal-v23511.js','perf-routes-key-v23684','RESANTA_YANDEX_KEY_MODAL_V23511'),
+      load('assets/33-triovist-shell-guard-v23613.js','perf-route-tabs-v23684','RESANTA_ROUTE_MONTH_TABS_SYNC_V23635')
+    ]),
+    loadVisitSafety()
   ]);
+  return true;
+}
+async function loadGps(){
+  await Promise.all([
+    load('assets/17-gps-reliability-v2353.js','perf-gps-reliability-v23684','RESANTA_GPS_RELIABILITY_V2353'),
+    loadVisitSafety()
+  ]);
+  if(activePage()==='gps-control'){
+    await load('assets/21-gps-control-performance-v2357.js','perf-gps-director-v23684','RESANTA_GPS_CONTROL_PERFORMANCE_V2357');
+  }
+  return true;
+}
+async function loadVisits(){
+  await loadVisitSafety();
+  await load('assets/35-visits-quality-mpp-v23615.js','perf-visits-quality-v23684','RESANTA_VISITS_QUALITY_MPP_V23615');
+  return true;
 }
 function paymentEligible(){
   const p=profile(),r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();
@@ -210,7 +235,14 @@ async function loadForPage(page,epoch){
       return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23671','RESANTA_MANAGER_PLANS_ROOT_V2330');
     }
     if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23671','RESANTA_MANAGER_SALES_YOY_V23634');
-    if(['routes-boss','my-routes','route','gps-control','workday'].includes(p))return await loadRoutes();
+    if(p==='visits')return await loadVisits();
+    if(['routes-boss','my-routes','route'].includes(p))return await loadRoutes();
+    if(p==='gps-control'){
+      await loadGps();
+      if(activePage()==='gps-control')setTimeout(()=>Promise.resolve(window.v19RenderGpsControl?.(false)).catch(e=>console.warn('ROOT '+V+' gps refresh',e)),0);
+      return true;
+    }
+    if(p==='workday')return await loadGps();
   }catch(e){
     if(p==='promotions'){
       promoOverlay(true,'Ошибка загрузки модулей Акций. Повторите открытие раздела.');
@@ -293,6 +325,9 @@ window.RESANTA_PERFORMANCE_ROOT_V23657=Object.freeze({
   warehouseStack:['37','48','51','54','55'],
   warehouseIndependentOfGps:true,
   pageScopedModules:true,
+  gpsModulesPageScoped:true,
+  visitsSafetyExplicit:true,
+  deprecatedGpsCascadeDisabled:true,
   paymentRegistryLazy:true,
   officeManagerPaymentsOnly:true,
   noPolling:true,
