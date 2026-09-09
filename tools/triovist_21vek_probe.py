@@ -152,7 +152,7 @@ def main():
         result["robots"]={"error":str(e)}
     for idx,item in enumerate(data["items"],1):
         print(f"[{idx}/{len(data['items'])}] {item['sku']} {item['url']}", flush=True)
-        save_path=f"probe-html/{item['sku'].replace('/','_')}.html" if idx<=2 else None
+        save_path=f"probe-html/{item['sku'].replace('/','_')}.html"
         x=probe_url(session,item,save_path)
         print(json.dumps({k:x.get(k) for k in ("sku","status","content_length","title","markers","error")},ensure_ascii=False),flush=True)
         result["items"].append(x)
