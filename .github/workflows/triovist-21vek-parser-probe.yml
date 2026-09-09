@@ -37,5 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: triovist-21vek-probe-result
-          path: 21vek-probe-result.json
+          path: |
+            21vek-probe-result.json
+            probe-html/*.html
           retention-days: 3

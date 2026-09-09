@@ -41,7 +41,41 @@ def meta(soup, name=None, prop=None):
     tag = soup.find("meta", attrs={"name":name}) if name else soup.find("meta", attrs={"property":prop})
     return tag.get("content") if tag else None
 
-def probe_url(session, item):
+def walk_matches(obj, path="$", out=None, depth=0):
+    if out is None: out=[]
+    if depth>14 or len(out)>=160: return out
+    terms=("price","review","rating","question","delivery","pickup","warranty","guarantee","description","image","video","stock","avail","sale","discount","city","location")
+    if isinstance(obj,dict):
+        for k,v in obj.items():
+            p=f"{path}.{k}"
+            if any(t in str(k).lower() for t in terms):
+                if isinstance(v,(str,int,float,bool)) or v is None:
+                    out.append({"path":p,"value":safe_text(v,300)})
+                elif isinstance(v,(list,dict)):
+                    out.append({"path":p,"type":type(v).__name__,"size":len(v)})
+            walk_matches(v,p,out,depth+1)
+    elif isinstance(obj,list):
+        for i,v in enumerate(obj[:20]):
+            walk_matches(v,f"{path}[{i}]",out,depth+1)
+    return out
+
+def parse_next_data(soup):
+    if not soup: return {"present":False}
+    tag=soup.find("script",id="__NEXT_DATA__")
+    if not tag: return {"present":False}
+    raw=tag.string or tag.get_text("",strip=False)
+    try:
+        data=json.loads(raw)
+        return {
+            "present":True,
+            "bytes":len(raw.encode("utf-8")),
+            "top_keys":list(data.keys())[:40] if isinstance(data,dict) else [],
+            "matches":walk_matches(data)[:160],
+        }
+    except Exception as e:
+        return {"present":True,"bytes":len(raw.encode("utf-8")),"parse_error":str(e)[:300]}
+
+def probe_url(session, item, save_html_path=None):
     url=item["url"]
     started=time.time()
     try:
@@ -49,6 +83,10 @@ def probe_url(session, item):
     except Exception as e:
         return {**item, "ok":False, "error":str(e), "elapsed_ms":round((time.time()-started)*1000)}
     html=r.text or ""
+    if save_html_path and r.status_code==200:
+        os.makedirs(os.path.dirname(save_html_path),exist_ok=True)
+        with open(save_html_path,"w",encoding="utf-8") as f:
+            f.write(html)
     low=html.lower()
     soup=BeautifulSoup(html, "html.parser") if "html" in (r.headers.get("content-type") or "").lower() else None
     scripts=[]
@@ -88,6 +126,7 @@ def probe_url(session, item):
         "og_description": meta(soup,prop="og:description") if soup else None,
         "og_image": meta(soup,prop="og:image") if soup else None,
         "jsonld": structured,
+        "next_data": parse_next_data(soup),
         "script_count": len(scripts),
         "script_hosts": script_hosts[:30],
         "markers": markers,
@@ -113,7 +152,8 @@ def main():
         result["robots"]={"error":str(e)}
     for idx,item in enumerate(data["items"],1):
         print(f"[{idx}/{len(data['items'])}] {item['sku']} {item['url']}", flush=True)
-        x=probe_url(session,item)
+        save_path=f"probe-html/{item['sku'].replace('/','_')}.html" if idx<=2 else None
+        x=probe_url(session,item,save_path)
         print(json.dumps({k:x.get(k) for k in ("sku","status","content_length","title","markers","error")},ensure_ascii=False),flush=True)
         result["items"].append(x)
         time.sleep(1.0)
