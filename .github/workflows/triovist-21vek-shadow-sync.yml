@@ -1,0 +1,55 @@
+name: Триовист — 21vek · теневой ежедневный сбор
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/triovist_21vek_parser.py'
+      - 'tools/triovist_21vek_shadow_sync.py'
+      - '.github/workflows/triovist-21vek-shadow-sync.yml'
+  schedule:
+    # 06:17 по Минску (UTC+3). Работает вне браузера CRM.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Сколько карточек проверить'
+        required: false
+        default: '2500'
+
+concurrency:
+  group: triovist-21vek-shadow-daily
+  cancel-in-progress: false
+
+jobs:
+  shadow-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install requests beautifulsoup4
+
+      - name: Теневой сбор публичных карточек 21vek
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SHADOW_DELAY_SECONDS: '0.8'
+          SHADOW_HTTP_TIMEOUT: '25'
+          DISPATCH_LIMIT: ${{ inputs.limit }}
+        run: |
+          LIMIT='2500'
+          if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
+            LIMIT='300'
+          elif [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ] && [ -n "$DISPATCH_LIMIT" ]; then
+            LIMIT="$DISPATCH_LIMIT"
+          fi
+          echo "Shadow 21vek limit: $LIMIT"
+          SHADOW_LIMIT="$LIMIT" SHADOW_OFFSET='0' python tools/triovist_21vek_shadow_sync.py
