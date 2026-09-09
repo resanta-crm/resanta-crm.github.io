@@ -1,0 +1,40 @@
+name: Triovist — 21vek shadow sync prototype
+
+on:
+  push:
+    branches:
+      - triovist-21vek-parser-prototype
+    paths:
+      - 'tools/triovist_21vek_parser.py'
+      - 'tools/triovist_21vek_shadow_sync.py'
+      - '.github/workflows/triovist-21vek-shadow-sync.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-21vek-shadow-sync-prototype
+  cancel-in-progress: false
+
+jobs:
+  shadow-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout prototype
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Parse 120 current cards into isolated shadow tables
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SHADOW_LIMIT: '120'
+          SHADOW_DELAY_SECONDS: '0.8'
+          SHADOW_HTTP_TIMEOUT: '25'
+        run: python tools/triovist_21vek_shadow_sync.py
