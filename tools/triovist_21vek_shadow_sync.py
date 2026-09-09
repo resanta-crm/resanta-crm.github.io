@@ -27,8 +27,8 @@ LIMIT=max(1,int(os.environ.get("SHADOW_LIMIT","120")))
 OFFSET=max(0,int(os.environ.get("SHADOW_OFFSET","0")))
 DELAY=max(0.4,float(os.environ.get("SHADOW_DELAY_SECONDS","0.8")))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
-PARSER_VERSION="shadow-v0.3"
-UA="ResantaCRM-21vekShadow/0.3 (+https://resanta-crm.by)"
+PARSER_VERSION="shadow-v0.4"
+UA="ResantaCRM-21vekShadow/0.4 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -59,6 +59,20 @@ def rest_get(table: str, params: dict[str,str], timeout: int=60) -> list[dict]:
     if r.status_code!=200:
         raise RuntimeError(f"GET {table}: {r.status_code} {r.text[:800]}")
     return r.json() or []
+
+def rest_get_all(table: str, params: dict[str,str], page_size: int=900, timeout: int=90) -> list[dict]:
+    out=[]
+    offset=0
+    while True:
+        page_params=dict(params)
+        page_params["limit"]=str(page_size)
+        page_params["offset"]=str(offset)
+        page=rest_get(table,page_params,timeout)
+        out.extend(page)
+        if len(page)<page_size:
+            break
+        offset+=len(page)
+    return out
 
 def rest_post(table: str, rows: list[dict]|dict, *, prefer: str="return=minimal", timeout: int=60) -> Any:
     r=requests.post(
@@ -105,11 +119,10 @@ def current_targets() -> list[dict]:
         "question_count,photo_count,video_count,in_stock,delivery_minsk_days"
     )
     for imp in imports:
-        rows=rest_get("triovist_content_cards",{
+        rows=rest_get_all("triovist_content_cards",{
             "import_id":f"eq.{imp['id']}",
-            "select":select,
-            "limit":"5000"
-        },90)
+            "select":select
+        },page_size=900,timeout=90)
         for x in rows:
             url=str(x.get("product_url") or "").strip()
             if not public_product_url(url):
