@@ -34,7 +34,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SHADOW_LIMIT: '120'
+          SHADOW_LIMIT: '2500'
           SHADOW_DELAY_SECONDS: '0.8'
           SHADOW_HTTP_TIMEOUT: '25'
         run: python tools/triovist_21vek_shadow_sync.py
