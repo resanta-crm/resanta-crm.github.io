@@ -1,151 +1,24 @@
 {
-  "generated_from": "08.09.2026 paid parser reports",
+  "generated_from": "paid parser reports 08.09.2026",
+  "control_count": 24,
   "items": [
     {
       "manager": "krishtal_na@resanta.ru",
-      "case": "out_of_stock",
-      "sku": "70/7/158",
-      "donor_article": "9946746",
-      "name": "Снегоуборщик аккумуляторный Ресанта СЭ 20-2 ЛИ",
-      "url": "https://www.21vek.by/snow_cleaners/202_resanta_9946746.html",
+      "case": "sale",
+      "sku": "61/10/526",
+      "donor_article": "",
+      "subgroup": "Дальномеры",
+      "url": "https://www.21vek.by/rangefinders/40a_resanta.html",
       "old": {
-        "price": 60.62,
+        "price": 88,
         "description_present": true,
         "warranty_present": false,
-        "listing_position": null,
-        "product_rating": 5,
-        "review_count": 2,
-        "question_count": 0,
-        "photo_count": 9,
-        "video_count": 0,
-        "in_stock": false,
-        "delivery_minsk_days": 3
-      }
-    },
-    {
-      "manager": "krishtal_na@resanta.ru",
-      "case": "missing_description",
-      "sku": "61/10/548",
-      "donor_article": "10517529",
-      "name": "Мультиметр цифровой Ресанта М-4000В",
-      "url": "https://www.21vek.by/electrical_measuring_instruments/4000_resanta_10517529.html",
-      "old": {
-        "price": 51,
-        "description_present": false,
-        "warranty_present": false,
-        "listing_position": null,
-        "product_rating": 0,
-        "review_count": 0,
-        "question_count": 0,
-        "photo_count": 9,
-        "video_count": 0,
-        "in_stock": true,
-        "delivery_minsk_days": 1
-      }
-    },
-    {
-      "manager": "krishtal_na@resanta.ru",
-      "case": "reviews_questions",
-      "sku": "70/13/139",
-      "donor_article": "9746606",
-      "name": "Секатор аккумуляторный EUROLUX CP-20Li EA+",
-      "url": "https://www.21vek.by/hedge_trimmers/cp20liea_eurolux__9746606.html",
-      "old": {
-        "price": 153.9,
-        "description_present": true,
-        "warranty_present": false,
-        "listing_position": null,
-        "product_rating": 5,
-        "review_count": 20,
+        "listing_position": 5,
+        "review_count": 14,
         "question_count": 1,
-        "photo_count": 11,
+        "photo_count": 10,
         "video_count": 1,
-        "in_stock": true,
-        "delivery_minsk_days": 2
-      }
-    },
-    {
-      "manager": "krishtal_na@resanta.ru",
-      "case": "listing_over_60",
-      "sku": "63/4/17",
-      "donor_article": "5983922",
-      "name": "Стабилизатор напряжения Ресанта АСН-15000/3-Ц",
-      "url": "https://www.21vek.by/voltage_stabilizers/150003_resanta_01.html",
-      "old": {
-        "price": 2633,
-        "description_present": true,
-        "warranty_present": false,
-        "listing_position": 100,
-        "product_rating": 5,
-        "review_count": 7,
-        "question_count": 1,
-        "photo_count": 11,
-        "video_count": 3,
-        "in_stock": true,
-        "delivery_minsk_days": 3
-      }
-    },
-    {
-      "manager": "aleksandrenko_av@resanta.ru",
-      "case": "out_of_stock",
-      "sku": "68/3/18",
-      "donor_article": "8868739",
-      "name": "Скважинный насос Вихрь СН-45",
-      "url": "https://www.21vek.by/household_pumps/45_vihr_8868739.html",
-      "old": {
-        "price": 52.92,
-        "description_present": true,
-        "warranty_present": false,
-        "listing_position": 9,
-        "product_rating": 5,
-        "review_count": 4,
-        "question_count": 0,
-        "photo_count": 7,
-        "video_count": 0,
-        "in_stock": false,
-        "delivery_minsk_days": 3
-      }
-    },
-    {
-      "manager": "aleksandrenko_av@resanta.ru",
-      "case": "few_photos",
-      "sku": "900/72/18/21",
-      "donor_article": "10111884",
-      "name": "Торцовочная пила Huter ПТ-K1521",
-      "url": "https://www.21vek.by/circular_saws/k1521_huter_10111884.html",
-      "old": {
-        "price": 657,
-        "description_present": false,
-        "warranty_present": false,
-        "listing_position": null,
-        "product_rating": 5,
-        "review_count": 2,
-        "question_count": 0,
-        "photo_count": 2,
-        "video_count": 0,
-        "in_stock": true,
-        "delivery_minsk_days": 4
-      }
-    },
-    {
-      "manager": "aleksandrenko_av@resanta.ru",
-      "case": "question",
-      "sku": "74/3/90",
-      "donor_article": "10286185",
-      "name": "Воздушный компрессор Вихрь КП-195/6",
-      "url": "https://www.21vek.by/air_compressors/1956_vihr_10286185.html",
-      "old": {
-        "price": 623,
-        "description_present": false,
-        "warranty_present": false,
-        "listing_position": 261,
-        "product_rating": 5,
-        "review_count": 3,
-        "question_count": 1,
-        "photo_count": 17,
-        "video_count": 0,
-        "in_stock": true,
-        "delivery_minsk_days": 1
+        "in_stock": true
       }
     },
     {
@@ -153,20 +26,436 @@
       "case": "sale",
       "sku": "64/1/132",
       "donor_article": "9575555",
-      "name": "Бензиновый генератор Huter HT 1.0А",
+      "subgroup": "Генераторы",
       "url": "https://www.21vek.by/generators/ht10_huter_9575555.html",
       "old": {
         "price": 607.75,
         "description_present": true,
         "warranty_present": false,
         "listing_position": 53,
-        "product_rating": 5,
         "review_count": 5,
         "question_count": 0,
         "photo_count": 8,
         "video_count": 0,
-        "in_stock": true,
-        "delivery_minsk_days": 0
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "missing_desc",
+      "sku": "61/10/548",
+      "donor_article": "10517529",
+      "subgroup": "Электроизмерительные приборы",
+      "url": "https://www.21vek.by/electrical_measuring_instruments/4000_resanta_10517529.html",
+      "old": {
+        "price": 51,
+        "description_present": false,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 0,
+        "question_count": 0,
+        "photo_count": 9,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "missing_desc",
+      "sku": "900/68/5/15",
+      "donor_article": "10086875",
+      "subgroup": "Бытовые насосы",
+      "url": "https://www.21vek.by/household_pumps/1518_vihr_10086875.html",
+      "old": {
+        "price": 501,
+        "description_present": false,
+        "warranty_present": false,
+        "listing_position": 70,
+        "review_count": 3,
+        "question_count": 0,
+        "photo_count": 5,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "out_stock",
+      "sku": "70/7/158",
+      "donor_article": "9946746",
+      "subgroup": "Снегоуборщики",
+      "url": "https://www.21vek.by/snow_cleaners/202_resanta_9946746.html",
+      "old": {
+        "price": 60.62,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 2,
+        "question_count": 0,
+        "photo_count": 9,
+        "video_count": 0,
+        "in_stock": false
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "out_stock",
+      "sku": "68/3/18",
+      "donor_article": "8868739",
+      "subgroup": "Бытовые насосы",
+      "url": "https://www.21vek.by/household_pumps/45_vihr_8868739.html",
+      "old": {
+        "price": 52.92,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 9,
+        "review_count": 4,
+        "question_count": 0,
+        "photo_count": 7,
+        "video_count": 0,
+        "in_stock": false
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "video3",
+      "sku": "63/4/17",
+      "donor_article": "5983922",
+      "subgroup": "Стабилизаторы напряжения",
+      "url": "https://www.21vek.by/voltage_stabilizers/150003_resanta_01.html",
+      "old": {
+        "price": 2633,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 100,
+        "review_count": 7,
+        "question_count": 1,
+        "photo_count": 11,
+        "video_count": 3,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "video3",
+      "sku": "75/12/13",
+      "donor_article": "9575660",
+      "subgroup": "Шлифмашины",
+      "url": "https://www.21vek.by/grinders/12520li_resanta_9575660.html",
+      "old": {
+        "price": 519,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 290,
+        "review_count": 6,
+        "question_count": 0,
+        "photo_count": 9,
+        "video_count": 2,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "question",
+      "sku": "70/13/139",
+      "donor_article": "9746606",
+      "subgroup": "Кусторезы, садовые ножницы",
+      "url": "https://www.21vek.by/hedge_trimmers/cp20liea_eurolux__9746606.html",
+      "old": {
+        "price": 153.9,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 20,
+        "question_count": 1,
+        "photo_count": 11,
+        "video_count": 1,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "question",
+      "sku": "74/3/90",
+      "donor_article": "10286185",
+      "subgroup": "Компрессоры",
+      "url": "https://www.21vek.by/air_compressors/1956_vihr_10286185.html",
+      "old": {
+        "price": 623,
+        "description_present": false,
+        "warranty_present": false,
+        "listing_position": 261,
+        "review_count": 3,
+        "question_count": 1,
+        "photo_count": 17,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "listing100",
+      "sku": "71/6/47",
+      "donor_article": "",
+      "subgroup": "Сварочное оборудование",
+      "url": "https://www.21vek.by/welding_equipment/500_resanta_03.html",
+      "old": {
+        "price": 281.89,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 160,
+        "review_count": 5,
+        "question_count": 1,
+        "photo_count": 5,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "listing100",
+      "sku": "74/3/61",
+      "donor_article": "9946710",
+      "subgroup": "Компрессоры",
+      "url": "https://www.21vek.by/air_compressors/38050_vihr_9946710.html",
+      "old": {
+        "price": 911,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 244,
+        "review_count": 8,
+        "question_count": 0,
+        "photo_count": 8,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "top30",
+      "sku": "70/1/67",
+      "donor_article": "9044535",
+      "subgroup": "Триммеры, бензокосы",
+      "url": "https://www.21vek.by/trimmers/get20m2li_huter_9044535.html",
+      "old": {
+        "price": 174.3,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 30,
+        "review_count": 20,
+        "question_count": 3,
+        "photo_count": 18,
+        "video_count": 2,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "top30",
+      "sku": "68/3/27",
+      "donor_article": "9575694",
+      "subgroup": "Бытовые насосы",
+      "url": "https://www.21vek.by/household_pumps/85_vihr_9575694.html",
+      "old": {
+        "price": 553.35,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 22,
+        "review_count": 4,
+        "question_count": 0,
+        "photo_count": 6,
+        "video_count": 1,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "fewphotos",
+      "sku": "70/11/20",
+      "donor_article": "10286180",
+      "subgroup": "Бытовые насосы",
+      "url": "https://www.21vek.by/household_pumps/greymp50_huter_10286180.html",
+      "old": {
+        "price": 686,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 0,
+        "question_count": 0,
+        "photo_count": 1,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "fewphotos",
+      "sku": "900/72/18/21",
+      "donor_article": "10111884",
+      "subgroup": "Циркулярные, сабельные пилы",
+      "url": "https://www.21vek.by/circular_saws/k1521_huter_10111884.html",
+      "old": {
+        "price": 657,
+        "description_present": false,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 2,
+        "question_count": 0,
+        "photo_count": 2,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "noreviews",
+      "sku": "70/14/31",
+      "donor_article": "10230618",
+      "subgroup": "Дровоколы",
+      "url": "https://www.21vek.by/log_splitters/greyhls550052h_huter_10230618.html",
+      "old": {
+        "price": 1521,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 0,
+        "question_count": 0,
+        "photo_count": 9,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "noreviews",
+      "sku": "74/6/20",
+      "donor_article": "10229293",
+      "subgroup": "Виброплиты, глубинные вибраторы",
+      "url": "https://www.21vek.by/compactors/vp60w_huter_10229293.html",
+      "old": {
+        "price": 1714,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 0,
+        "question_count": 0,
+        "photo_count": 11,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "lowrating",
+      "sku": "70/6/77",
+      "donor_article": "10517511",
+      "subgroup": "Цепные пилы",
+      "url": "https://www.21vek.by/chainsaws/grbs2300_huter_10517511.html",
+      "old": {
+        "price": 331,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 0,
+        "question_count": 0,
+        "photo_count": 10,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "aleksandrenko_av@resanta.ru",
+      "case": "lowrating",
+      "sku": "74/3/93",
+      "donor_article": "10286190",
+      "subgroup": "Пневмоинструмент",
+      "url": "https://www.21vek.by/pneumatic/12_vihr_10286190.html",
+      "old": {
+        "price": 30,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 0,
+        "question_count": 0,
+        "photo_count": 6,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "varied",
+      "sku": "70/13/141",
+      "donor_article": "9946782",
+      "subgroup": "Садовые пылесосы, воздуходувки",
+      "url": "https://www.21vek.by/garden_blowers/cb20listea_huter_9946782.html",
+      "old": {
+        "price": 152,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 9,
+        "question_count": 0,
+        "photo_count": 6,
+        "video_count": 1,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "varied",
+      "sku": "70/8/94",
+      "donor_article": "9636421",
+      "subgroup": "Мойки высокого давления",
+      "url": "https://www.21vek.by/pressure_washers/m20li_eurolux__9636421.html",
+      "old": {
+        "price": 126,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 17,
+        "question_count": 2,
+        "photo_count": 7,
+        "video_count": 0,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "varied",
+      "sku": "61/10/546",
+      "donor_article": "9647074",
+      "subgroup": "Нивелиры, лазерные уровни",
+      "url": "https://www.21vek.by/laser_levels/3360green_resanta_9647074.html",
+      "old": {
+        "price": 192,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": 11,
+        "review_count": 10,
+        "question_count": 0,
+        "photo_count": 11,
+        "video_count": 1,
+        "in_stock": true
+      }
+    },
+    {
+      "manager": "krishtal_na@resanta.ru",
+      "case": "varied",
+      "sku": "70/13/164",
+      "donor_article": "10230647",
+      "subgroup": "Садовые опрыскиватели",
+      "url": "https://www.21vek.by/garden_sprayers/greysp10lisfa_huter_10230647.html",
+      "old": {
+        "price": 36.4,
+        "description_present": true,
+        "warranty_present": false,
+        "listing_position": null,
+        "review_count": 6,
+        "question_count": 1,
+        "photo_count": 12,
+        "video_count": 0,
+        "in_stock": false
       }
     }
   ]
