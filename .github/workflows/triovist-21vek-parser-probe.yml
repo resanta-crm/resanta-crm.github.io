@@ -1,0 +1,41 @@
+name: Triovist — 21vek parser prototype probe
+
+on:
+  push:
+    branches:
+      - triovist-21vek-parser-prototype
+    paths:
+      - 'tools/triovist_21vek_probe.py'
+      - 'data/triovist_21vek_probe_urls.json'
+      - '.github/workflows/triovist-21vek-parser-probe.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-21vek-parser-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout prototype branch
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install probe dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Probe public 21vek product pages
+        run: python tools/triovist_21vek_probe.py data/triovist_21vek_probe_urls.json 21vek-probe-result.json
+
+      - name: Upload probe result
+        uses: actions/upload-artifact@v4
+        with:
+          name: triovist-21vek-probe-result
+          path: 21vek-probe-result.json
+          retention-days: 3
