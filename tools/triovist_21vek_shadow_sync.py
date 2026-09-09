@@ -24,10 +24,11 @@ from triovist_21vek_parser import parse_product, public_product_url
 SUPABASE_URL=(os.environ["SUPABASE_URL"] or "").strip().rstrip("/")
 SUPABASE_KEY=(os.environ["SUPABASE_KEY"] or "").strip()
 LIMIT=max(1,int(os.environ.get("SHADOW_LIMIT","120")))
+OFFSET=max(0,int(os.environ.get("SHADOW_OFFSET","0")))
 DELAY=max(0.4,float(os.environ.get("SHADOW_DELAY_SECONDS","0.8")))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
-PARSER_VERSION="shadow-v0.2"
-UA="ResantaCRM-21vekShadow/0.2 (+https://resanta-crm.by)"
+PARSER_VERSION="shadow-v0.3"
+UA="ResantaCRM-21vekShadow/0.3 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -70,6 +71,17 @@ def rest_post(table: str, rows: list[dict]|dict, *, prefer: str="return=minimal"
     if r.status_code==204 or not r.text.strip(): return None
     return r.json()
 
+def rest_upsert(table: str, rows: list[dict], conflict: str, timeout: int=90) -> None:
+    if not rows: return
+    r=requests.post(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=api_headers(True,"resolution=merge-duplicates,return=minimal"),
+        params={"on_conflict":conflict},
+        json=rows,timeout=timeout
+    )
+    if r.status_code not in (200,201,204):
+        raise RuntimeError(f"UPSERT {table}: {r.status_code} {r.text[:1000]}")
+
 def rest_patch(table: str, filt: dict[str,str], values: dict, timeout: int=60) -> None:
     r=requests.patch(
         f"{SUPABASE_URL}/rest/v1/{table}",
@@ -110,7 +122,7 @@ def current_targets() -> list[dict]:
     result.sort(key=lambda x: hashlib.sha256(
         (str(x.get("manager_email"))+"|"+str(x.get("sku"))+"|"+str(x.get("product_url"))).encode("utf-8")
     ).hexdigest())
-    return result[:LIMIT]
+    return result[OFFSET:OFFSET+LIMIT]
 
 def baseline(row: dict) -> dict:
     return {k:row.get(k) for k in BASELINE_FIELDS} | {
@@ -171,24 +183,48 @@ def snapshot_row(run_id: str, source: dict, parsed: dict|None, error: str|None=N
       "unanswered_questions":card.get("unanswered_questions"),
       "delivery_minsk_days":card.get("delivery_minsk_days"),
       "paid_baseline":b,"differences":differences,"changed_fields":changed,
+      # Daily history stays compact. Full public payload is kept separately
+      # as the latest current state per card.
       "parser_payload":{
         "brand":extra.get("brand"),
         "status_raw":extra.get("status_raw"),
+        "parser_sources":extra.get("parser_sources")
+      },
+      "error_text":None
+    }
+
+def raw_current_row(run_id: str, source: dict, parsed: dict) -> dict:
+    card=parsed["card"]; extra=parsed["extra"]
+    return {
+      "manager_email":source.get("manager_email") or "",
+      "card_key":source.get("card_key") or card.get("card_key") or ("url:"+source.get("product_url","")),
+      "run_id":run_id,
+      "sku":source.get("sku") or card.get("sku"),
+      "product_url":source.get("product_url"),
+      "parser_version":PARSER_VERSION,
+      "observed_at":datetime.now(timezone.utc).isoformat(),
+      "parser_payload":{
+        "brand":extra.get("brand"),
+        "status_raw":extra.get("status_raw"),
+        "base_price":extra.get("base_price"),
+        "sale_price":extra.get("sale_price"),
+        "discount":extra.get("discount"),
+        "percent_discount":extra.get("percent_discount"),
+        "warranty":extra.get("warranty"),
         "description_text":extra.get("description_text"),
         "gallery":extra.get("gallery"),
         "reviews":extra.get("reviews"),
         "questions":extra.get("questions"),
         "breadcrumbs":extra.get("breadcrumbs"),
         "parser_sources":extra.get("parser_sources")
-      },
-      "error_text":None
+      }
     }
 
 def insert_run(target_count: int) -> str:
     rows=rest_post("triovist_21vek_shadow_runs",{
       "parser_version":PARSER_VERSION,"status":"running","requested_limit":LIMIT,
       "total_targets":target_count,
-      "notes":{"mode":"shadow","source_registry":"current triovist_content_cards","production_cutover":False}
+      "notes":{"mode":"shadow","source_registry":"current triovist_content_cards","offset":OFFSET,"production_cutover":False}
     },prefer="return=representation")
     if not rows or not rows[0].get("id"):
         raise RuntimeError("Не удалось создать shadow run")
@@ -198,7 +234,7 @@ def main() -> None:
     targets=current_targets()
     run_id=insert_run(len(targets))
     print(f"Shadow run {run_id}: targets={len(targets)} parser={PARSER_VERSION}",flush=True)
-    success=0; errors=0; batch=[]
+    success=0; errors=0; batch=[]; raw_batch=[]
     ses=requests.Session()
     ses.headers.update({"User-Agent":UA,"Accept":"text/html,application/xhtml+xml","Accept-Language":"ru-RU,ru;q=0.9"})
     try:
@@ -218,20 +254,25 @@ def main() -> None:
             except Exception as exc:
                 errors+=1; err=str(exc)
             batch.append(snapshot_row(run_id,target,parsed,err))
+            if parsed is not None:
+                raw_batch.append(raw_current_row(run_id,target,parsed))
             print(f"[{idx}/{len(targets)}] {target.get('sku')} ok={err is None} {err or ''}",flush=True)
             if len(batch)>=25:
                 rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
-                batch=[]
+                rest_upsert("triovist_21vek_shadow_raw_current",raw_batch,"manager_email,card_key",timeout=90)
+                batch=[]; raw_batch=[]
             if idx<len(targets):
                 time.sleep(DELAY)
-        if batch: rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
+        if batch:
+            rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
+            rest_upsert("triovist_21vek_shadow_raw_current",raw_batch,"manager_email,card_key",timeout=90)
         status="complete" if errors==0 else ("partial" if success else "failed")
         rest_patch("triovist_21vek_shadow_runs",{"id":f"eq.{run_id}"},{
           "status":status,"success_count":success,"error_count":errors,
           "finished_at":datetime.now(timezone.utc).isoformat(),
           "notes":{
             "mode":"shadow","source_registry":"current triovist_content_cards",
-            "production_cutover":False,"delay_seconds":DELAY,
+            "offset":OFFSET,"production_cutover":False,"delay_seconds":DELAY,
             "result":"No working CRM tables were modified."
           }
         })
