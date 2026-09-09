@@ -1,0 +1,13 @@
+{
+  "products": [
+    {"label":"delivery_0","sku":"64/10/22","url":"https://www.21vek.by/generators/dn15i_huter_9614885.html"},
+    {"label":"delivery_1","sku":"64/1/15","url":"https://www.21vek.by/generators/dy6500lx_huter.html"},
+    {"label":"delivery_3","sku":"61/10/515","url":"https://www.21vek.by/rangefinders/40_resanta_02.html"},
+    {"label":"delivery_5","sku":"61/10/516","url":"https://www.21vek.by/rangefinders/60_resanta.html"}
+  ],
+  "categories": [
+    {"label":"generators","url":"https://www.21vek.by/generators/"},
+    {"label":"voltage_stabilizers","url":"https://www.21vek.by/voltage_stabilizers/"},
+    {"label":"rangefinders","url":"https://www.21vek.by/rangefinders/"}
+  ]
+}
