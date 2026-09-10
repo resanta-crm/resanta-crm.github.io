@@ -1,0 +1,102 @@
+name: TEMP — fix Triovist manager tabs v23.6.97
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-fix-triovist-tabs-v23697.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-triovist-tabs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Triovist manager menu
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_one(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, got {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          root = 'assets/34-triovist-root-v23614.js'
+          replace_one(root,
+              '/* RESANTA CRM v23.6.96 · TRIOVIST ROOT · manager tabs recovery */',
+              '/* RESANTA CRM v23.6.97 · TRIOVIST ROOT · manager tabs visibility recovery */')
+          replace_one(root,
+              "const V='v23.6.96',STORE='resanta_triovist_root_v23614_tab'",
+              "const V='v23.6.97',STORE='resanta_triovist_root_v23614_tab'")
+          replace_one(root,
+              "function css(){if(document.getElementById('tr14-css'))return;const s=document.createElement('style');s.id='tr14-css';",
+              "function css(){let old=document.getElementById('tr14-css');if(old?.dataset.tr14Version===V)return;if(old)old.remove();const s=document.createElement('style');s.id='tr14-css';s.dataset.tr14Version=V;")
+          replace_one(root,
+              '.tr14-g{display:grid;grid-template-columns:1.45fr 1fr;gap:9px}',
+              '.tr14-g{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:9px}')
+          replace_one(root,
+              '.tr14-row{display:flex;gap:6px;overflow-x:auto}',
+              '.tr14-row{display:flex;flex-wrap:wrap;gap:6px;overflow:visible}')
+          replace_one(root,
+              "function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''));return[...WORK,...COMM].includes(k)?k:'home'}catch(_){return'home'}}\nfunction dom(){const p=page(),h=host();if(!p||!h)return false;if(!shell?.isConnected){",
+              "function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''));return[...WORK,...COMM].includes(k)?k:'home'}catch(_){return'home'}}\nfunction shellComplete(el=shell){if(!el?.isConnected)return false;const need=[...WORK,...COMM],keys=[...el.querySelectorAll('[data-tr14]')].map(b=>b.dataset.tr14),got=new Set(keys);return keys.length===need.length&&need.every(k=>got.has(k))}\nfunction repairShell(){const el=shell?.isConnected?shell:document.getElementById('tr14-shell');if(!el)return false;const orphan=el!==shell;if(orphan||!shellComplete(el)){el.remove();const pp=panel?.isConnected?panel:document.getElementById('tr14-panel');pp?.remove();shell=null;panel=null;return true}return false}\nfunction dom(){const p=page(),h=host();if(!p||!h)return false;repairShell();if(!shell?.isConnected){")
+          replace_one(root,
+              'managerTabRecovery:true});',
+              'managerTabRecovery:true,managerTabVisibilityRecovery:true});')
+
+          loader = 'assets/32-triovist-v23611.js'
+          replace_one(loader,
+              "s.src='./assets/34-triovist-root-v23614.js?v=23.6.96';",
+              "s.src='./assets/34-triovist-root-v23614.js?v=23.6.97';")
+
+          perf = 'assets/66-performance-root-v23657.js'
+          replace_one(perf, "const V='23.6.96'", "const V='23.6.97'")
+
+          index = 'index.html'
+          replace_one(index,
+              "const APP_VERSION = '2026-09-10-resanta-crm-v23.6.96';",
+              "const APP_VERSION = '2026-09-10-resanta-crm-v23.6.97';")
+          replace_one(index,
+              '<script defer src="./assets/66-performance-root-v23657.js?v=23.6.96"></script>',
+              '<script defer src="./assets/66-performance-root-v23657.js?v=23.6.97"></script>')
+          PY
+
+      - name: Validate JavaScript and invariants
+        shell: bash
+        run: |
+          node --check assets/34-triovist-root-v23614.js
+          node --check assets/32-triovist-v23611.js
+          node --check assets/66-performance-root-v23657.js
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('assets/34-triovist-root-v23614.js').read_text(encoding='utf-8')
+          index = Path('index.html').read_text(encoding='utf-8')
+          assert "const V='v23.6.97'" in root
+          assert '.tr14-row{display:flex;flex-wrap:wrap;gap:6px;overflow:visible}' in root
+          assert 'function shellComplete' in root and 'function repairShell' in root
+          assert 'managerTabVisibilityRecovery:true' in root
+          assert "APP_VERSION = '2026-09-10-resanta-crm-v23.6.97'" in index
+          PY
+          git diff --check
+
+      - name: Commit production patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'resanta-crm-bot@users.noreply.github.com'
+          git rm .github/workflows/_tmp-fix-triovist-tabs-v23697.yml
+          git add assets/34-triovist-root-v23614.js assets/32-triovist-v23611.js assets/66-performance-root-v23657.js index.html
+          git commit -m 'Triovist: keep all manager tabs visible (v23.6.97)'
+          git push origin HEAD:main
