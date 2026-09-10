@@ -1,0 +1,92 @@
+name: TEMP — fix markdown mobile search v23.6.95
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-fix-markdown-search-v23695.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch only markdown search UI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          js_path = Path('assets/74-markdown-v23687.js')
+          idx_path = Path('index.html')
+          js = js_path.read_text(encoding='utf-8')
+          idx = idx_path.read_text(encoding='utf-8')
+
+          # Version marker only; no business/data logic changes.
+          js = js.replace('/* RESANTA CRM v23.6.91 · УЦЕНКА', '/* RESANTA CRM v23.6.95 · УЦЕНКА', 1)
+          js = js.replace("const V='v23.6.91';", "const V='v23.6.95';", 1)
+
+          old_css = " #page-markdown .md-search{flex:1;min-width:230px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px}"
+          new_css = old_css + "\n #page-markdown .md-search-go{padding:10px 14px;white-space:nowrap;min-height:40px;font-weight:800}"
+          if old_css not in js:
+              raise SystemExit('Expected markdown search CSS not found')
+          js = js.replace(old_css, new_css, 1)
+
+          old_mobile = "   .md91-grid{grid-template-columns:1fr}.md91-btn{min-height:44px;font-size:13px}"
+          new_mobile = old_mobile + "\n   #page-markdown .md-search{min-width:0}.md-search-go{min-height:44px!important}"
+          if old_mobile not in js:
+              raise SystemExit('Expected markdown mobile CSS anchor not found')
+          js = js.replace(old_mobile, new_mobile, 1)
+
+          old_html = "+'<div class=\"md-tools\"><input class=\"md-search\" id=\"md-search-v23687\" value=\"'+attr(S.search)+'\" placeholder=\"🔍 Поиск по артикулу, номенклатуре, серийному номеру...\"><span style=\"font-size:10px;color:var(--sub)\">Найдено: '+S.total+'</span></div>'"
+          new_html = "+'<div class=\"md-tools\"><input class=\"md-search\" id=\"md-search-v23687\" enterkeyhint=\"search\" value=\"'+attr(S.search)+'\" placeholder=\"🔍 Поиск по артикулу, номенклатуре, серийному номеру...\"><button type=\"button\" class=\"btn-secondary md-search-go\" id=\"md-search-go-v23695\">🔍 Найти</button><span style=\"font-size:10px;color:var(--sub)\">Найдено: '+S.total+'</span></div>'"
+          if old_html not in js:
+              raise SystemExit('Expected markdown search HTML not found')
+          js = js.replace(old_html, new_html, 1)
+
+          old_handler = " const inp=$('md-search-v23687');let timer;\n if(inp)inp.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{S.search=inp.value.trim();load(true)},280)};\n const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);"
+          new_handler = " const inp=$('md-search-v23687');\n const runSearch=async()=>{\n  if(!inp)return;\n  const q=inp.value.trim();\n  S.search=q;\n  await load(true);\n  const next=$('md-search-v23687');\n  if(next){try{next.focus({preventScroll:true});next.setSelectionRange(next.value.length,next.value.length)}catch(_){}}\n };\n if(inp){\n  inp.oninput=null;\n  inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch()}};\n }\n const go=$('md-search-go-v23695');if(go)go.onclick=runSearch;\n const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);"
+          if old_handler not in js:
+              raise SystemExit('Expected 280ms search handler not found')
+          js = js.replace(old_handler, new_handler, 1)
+
+          old_app = "const APP_VERSION = '2026-09-09-resanta-crm-v23.6.94';"
+          new_app = "const APP_VERSION = '2026-09-10-resanta-crm-v23.6.95';"
+          if old_app not in idx:
+              raise SystemExit('Expected APP_VERSION v23.6.94 not found')
+          idx = idx.replace(old_app, new_app, 1)
+
+          # Bump the markdown subresource if it is explicitly referenced in index.
+          idx, count = re.subn(r'assets/74-markdown-v23687\.js\?v=[^\"\']+', 'assets/74-markdown-v23687.js?v=23.6.95', idx)
+          print('Explicit markdown script refs updated:', count)
+
+          # Safety assertions: old per-keystroke debounce must be gone; button must exist once.
+          if "setTimeout(()=>{S.search=inp.value.trim();load(true)},280)" in js:
+              raise SystemExit('Old per-keystroke search handler still present')
+          if js.count('id=\"md-search-go-v23695\"') != 1:
+              raise SystemExit('Unexpected search button count')
+
+          js_path.write_text(js, encoding='utf-8')
+          idx_path.write_text(idx, encoding='utf-8')
+          PY
+
+          node --check assets/74-markdown-v23687.js
+          git diff --check
+
+      - name: Commit target patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git rm .github/workflows/_tmp-fix-markdown-search-v23695.yml
+          git add assets/74-markdown-v23687.js index.html
+          git commit -m 'Уценка: поиск по кнопке и Enter без потери фокуса (v23.6.95)'
+          git push origin HEAD:main
