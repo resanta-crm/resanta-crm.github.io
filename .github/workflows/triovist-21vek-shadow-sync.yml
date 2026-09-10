@@ -6,11 +6,13 @@ on:
     paths:
       - 'tools/triovist_21vek_parser.py'
       - 'tools/triovist_21vek_shadow_sync.py'
+      - 'tools/triovist_21vek_top_shadow.py'
       - '.github/workflows/triovist-21vek-shadow-sync.yml'
   schedule:
-    # Основной запуск: 06:17 по Минску (UTC+3). Работает вне браузера CRM.
+    # Основной объединённый запуск: 06:17 по Минску (UTC+3).
     - cron: '17 3 * * *'
-    # Резерв: 08:17 по Минску. Если основной полный снимок уже готов, скрипт завершится без нового run.
+    # Резерв карточек: 08:17 по Минску. TOP здесь пока не повторяем,
+    # чтобы не делать лишние поисковые запросы в shadow-периоде.
     - cron: '17 5 * * *'
   workflow_dispatch:
     inputs:
@@ -18,6 +20,10 @@ on:
         description: 'Сколько карточек проверить'
         required: false
         default: '2500'
+      top_keyword_limit:
+        description: 'Сколько поисковых фраз проверить для TOP'
+        required: false
+        default: '500'
 
 concurrency:
   group: triovist-21vek-shadow-daily
@@ -56,5 +62,28 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" = 'schedule' ]; then
             SKIP_RECENT='4'
           fi
-          echo "Shadow 21vek limit: $LIMIT; skip recent complete: ${SKIP_RECENT}h"
+          echo "Shadow cards limit: $LIMIT; skip recent complete: ${SKIP_RECENT}h"
           SHADOW_LIMIT="$LIMIT" SHADOW_OFFSET='0' SHADOW_SKIP_RECENT_COMPLETE_HOURS="$SKIP_RECENT" python tools/triovist_21vek_shadow_sync.py
+
+      - name: Теневой поисковый TOP-30 / TOP-60
+        if: github.event_name != 'schedule' || github.event.schedule == '17 3 * * *'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          DISPATCH_TOP_LIMIT: ${{ inputs.top_keyword_limit }}
+        run: |
+          TOP_LIMIT='500'
+          if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
+            TOP_LIMIT='12'
+          elif [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ] && [ -n "$DISPATCH_TOP_LIMIT" ]; then
+            TOP_LIMIT="$DISPATCH_TOP_LIMIT"
+          fi
+          echo "Shadow TOP keyword limit: $TOP_LIMIT"
+          TOP_KEYWORD_LIMIT="$TOP_LIMIT" \
+          TOP_KEYWORD_OFFSET='0' \
+          TOP_DELAY_SECONDS='1.2' \
+          TOP_HTTP_TIMEOUT='30' \
+          TOP_DEEP_EXACT='0' \
+          TOP_DEEP_RADIUS='0' \
+          TOP_MAX_DEEP_PAGES_PER_KEYWORD='0' \
+          python tools/triovist_21vek_top_shadow.py
