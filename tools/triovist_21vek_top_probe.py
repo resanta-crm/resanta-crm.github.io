@@ -4,16 +4,7 @@ import requests
 
 URL='https://gate.21vek.by/search-composer/api/v3/products'
 QUERY='бензиновый генератор'
-UA='ResantaCRM-21vekTopProbe/0.1 (+https://resanta-crm.by)'
-BODY={
-  'query':QUERY,
-  'order':'default',
-  'page':1,
-  'limit':60,
-  'mode':'desktop',
-  'searchId':'',
-  'filters':[]
-}
+UA='ResantaCRM-21vekTopProbe/0.2 (+https://resanta-crm.by)'
 HEADERS={
   'User-Agent':UA,
   'Accept':'application/json, text/plain, */*',
@@ -21,35 +12,48 @@ HEADERS={
   'Origin':'https://www.21vek.by',
   'Referer':'https://www.21vek.by/'
 }
+# Known Resanta/Huter donor ids from the current Triovist registry; old paid positions
+# are included only to compare metric continuity, not as a source for the new result.
+TARGETS={
+  6724891:{'sku':'64/1/56','old_paid_position':34},
+  9575555:{'sku':'64/1/132','old_paid_position':53},
+  10230664:{'sku':'64/1/149','old_paid_position':55},
+  10222117:{'sku':'64/1/148','old_paid_position':160},
+  10230663:{'sku':'64/1/146','old_paid_position':186},
+  10222122:{'sku':'64/1/147','old_paid_position':284}
+}
 
-def pick(x):
-    keys=['id','code','name','fullName','alias','link','url','producerName','producer','status','price']
-    return {k:x.get(k) for k in keys if k in x}
+def body(page,search_id=''):
+    return {'query':QUERY,'order':'default','page':page,'limit':60,'mode':'desktop','searchId':search_id,'filters':[]}
 
 def main(outp):
-    out={'started_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'endpoint':URL,'query':QUERY,'request':BODY}
+    out={'started_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'endpoint':URL,'query':QUERY,'pages':[],'targets':TARGETS}
+    s=requests.Session(); s.headers.update(HEADERS)
+    search_id=''; found={}
     try:
-        r=requests.post(URL,headers=HEADERS,json=BODY,timeout=30,allow_redirects=True)
-        out['status']=r.status_code
-        out['content_type']=r.headers.get('content-type')
-        out['rate_headers']={k:v for k,v in r.headers.items() if 'rate' in k.lower() or 'retry' in k.lower()}
-        if 'json' in (r.headers.get('content-type') or '').lower():
-            data=r.json()
-            out['response_keys']=sorted(data.keys()) if isinstance(data,dict) else None
-            if isinstance(data,dict):
-                products=data.get('products') or []
-                out['total']=data.get('total')
-                out['searchId']=data.get('searchId') or data.get('search_id')
-                out['product_count']=len(products)
-                out['first_product_keys']=sorted(products[0].keys()) if products and isinstance(products[0],dict) else []
-                out['products']=[{'position':i+1,**pick(x)} for i,x in enumerate(products) if isinstance(x,dict)]
-                out['meta']={k:v for k,v in data.items() if k not in ('products','filters','categories') and isinstance(v,(str,int,float,bool,type(None),list,dict))}
-            else:
-                out['response']=data
-        else:
-            out['text']=r.text[:6000]
+        for page in range(1,5):
+            req=body(page,search_id)
+            r=s.post(URL,json=req,timeout=30,allow_redirects=True)
+            item={'page':page,'status':r.status_code,'request':req,'content_type':r.headers.get('content-type')}
+            if r.status_code!=200 or 'json' not in (r.headers.get('content-type') or '').lower():
+                item['text']=r.text[:3000]; out['pages'].append(item); break
+            data=r.json(); products=data.get('products') or []
+            search_id=data.get('searchId') or search_id
+            item.update({'searchId':search_id,'total':data.get('total'),'product_count':len(products)})
+            matches=[]
+            for i,x in enumerate(products):
+                try: pid=int(x.get('id'))
+                except Exception: continue
+                if pid in TARGETS:
+                    pos=(page-1)*60+i+1
+                    found[str(pid)]={'position':pos,'sku':TARGETS[pid]['sku'],'old_paid_position':TARGETS[pid]['old_paid_position'],'name':x.get('name'),'link':x.get('link')}
+                    matches.append(found[str(pid)])
+            item['matches']=matches
+            out['pages'].append(item)
+            if page<4: time.sleep(1.2)
     except Exception as e:
         out['error']=repr(e)
+    out['found']=found
     out['finished_at']=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
     json.dump(out,open(outp,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
 
