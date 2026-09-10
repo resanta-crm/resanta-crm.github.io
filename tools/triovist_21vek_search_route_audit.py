@@ -5,12 +5,13 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE='https://www.21vek.by/'
-UA='ResantaCRM-21vekSearchRouteAudit/0.3 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekSearchRouteAudit/0.4 (+https://resanta-crm.by)'
 HEADERS={'User-Agent':UA,'Accept':'text/html,application/xhtml+xml','Accept-Language':'ru-RU,ru;q=0.9'}
 TIMEOUT=25
 
 NEEDLES=['search-composer','getSearchResultV3Products','getSearchV3Products','getSearchResultProducts','searchResult','searchProductsCalculated','currentPage','searchId','queryId','clientId','API_GATEWAY','apiGateway']
 TARGETS=['getSearchResultV3Products','getSearchResultProducts','getSearchV3Products','searchProductsCalculated','setSearchResultCurrentPage','setSearchResultTerm','setSearchResultSearchId']
+MODULE_MARKERS=['27161:','22092:','56253:','68561:']
 
 def uniq(seq):
     out=[]; seen=set()
@@ -39,13 +40,23 @@ def target_windows(text, radius=3600):
             if i<0: break
             out.append({'needle':needle,'text':text[max(0,i-radius):min(len(text),i+len(n)+radius)]})
             start=i+len(n); count+=1
-    # de-dupe exact windows
     seen=set(); ded=[]
     for x in out:
         k=x['text']
         if k not in seen:
             seen.add(k); ded.append(x)
     return ded[:120]
+
+def module_windows(text, radius=14000):
+    out=[]
+    for marker in MODULE_MARKERS:
+        start=0; count=0
+        while count<4:
+            i=text.find(marker,start)
+            if i<0: break
+            out.append({'marker':marker,'text':text[max(0,i-1000):min(len(text),i+radius)]})
+            start=i+len(marker); count+=1
+    return out
 
 def robots_rules(text):
     allows=[]; disallows=[]; active=False
@@ -80,7 +91,7 @@ def main(out_path):
     out['homepage']['forms']=[{'action':x.get('action'),'method':x.get('method')} for x in soup.find_all('form')]
     out['homepage']['inputs']=[{'name':x.get('name'),'type':x.get('type'),'placeholder':x.get('placeholder'),'autocomplete':x.get('autocomplete')} for x in soup.find_all('input') if x.get('placeholder') or x.get('name')]
 
-    next_data={}; build_id=None
+    build_id=None
     tag=soup.find('script',id='__NEXT_DATA__')
     if tag:
         try:
@@ -130,9 +141,10 @@ def main(out_path):
         if not text: continue
         cs=clips(text)
         tw=target_windows(text)
+        mw=module_windows(text)
         paths=uniq(re.findall(r'(?:search-composer|recommendations-composer|product-adviser|locations)/api/[A-Za-z0-9_./?=&:{}-]+',text,re.I))
-        if cs or tw or paths or '/pages/search-' in u:
-            out['assets'].append({**a,'size':len(text),'service_paths':paths[:180],'clips':cs[:220],'target_windows':tw})
+        if cs or tw or mw or paths or '/pages/search-' in u:
+            out['assets'].append({**a,'size':len(text),'service_paths':paths[:180],'clips':cs[:220],'target_windows':tw,'module_windows':mw})
         time.sleep(.15)
 
     out['finished_at']=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
