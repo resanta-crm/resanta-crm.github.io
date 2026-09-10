@@ -1,0 +1,32 @@
+name: Triovist — 21vek search route audit
+
+on:
+  push:
+    branches:
+      - triovist-21vek-parser-prototype
+    paths:
+      - 'tools/triovist_21vek_search_route_audit.py'
+      - '.github/workflows/triovist-21vek-search-route-audit.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-21vek-search-route-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests beautifulsoup4
+      - name: Audit public frontend routes without executing search
+        run: python tools/triovist_21vek_search_route_audit.py 21vek-search-route-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: triovist-21vek-search-route-audit
+          path: 21vek-search-route-audit.json
+          retention-days: 3
