@@ -29,6 +29,7 @@ LIMIT=max(1,int(os.environ.get("SHADOW_LIMIT","120")))
 OFFSET=max(0,int(os.environ.get("SHADOW_OFFSET","0")))
 DELAY=max(0.4,float(os.environ.get("SHADOW_DELAY_SECONDS","0.8")))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
+SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
 PARSER_VERSION="shadow-v0.5"
 UA="ResantaCRM-21vekShadow/0.5 (+https://resanta-crm.by)"
 
@@ -123,6 +124,34 @@ def rest_patch(table: str, filt: dict[str,str], values: dict, timeout: int=60) -
     )
     if r.status_code not in (200,204):
         raise RuntimeError(f"PATCH {table}: {r.status_code} {r.text[:1000]}")
+
+
+def recent_complete_matches(target_count: int) -> bool:
+    if SKIP_RECENT_HOURS<=0:
+        return False
+    rows=rest_get("triovist_21vek_shadow_runs",{
+        "parser_version":f"eq.{PARSER_VERSION}",
+        "status":"eq.complete",
+        "select":"total_targets,success_count,error_count,finished_at",
+        "order":"finished_at.desc",
+        "limit":"1"
+    })
+    if not rows:
+        return False
+    row=rows[0]
+    if int(row.get("total_targets") or 0)!=int(target_count):
+        return False
+    if int(row.get("success_count") or 0)!=int(target_count) or int(row.get("error_count") or 0)!=0:
+        return False
+    raw=row.get("finished_at")
+    if not raw:
+        return False
+    try:
+        finished=datetime.fromisoformat(str(raw).replace("Z","+00:00"))
+        age=(datetime.now(timezone.utc)-finished.astimezone(timezone.utc)).total_seconds()/3600
+    except Exception:
+        return False
+    return 0<=age<=SKIP_RECENT_HOURS
 
 
 def current_targets() -> list[dict]:
@@ -299,6 +328,9 @@ def insert_run(target_count: int) -> str:
 
 def main() -> None:
     targets=current_targets()
+    if recent_complete_matches(len(targets)):
+        print(f"Shadow skip: fresh complete {PARSER_VERSION} run already covers {len(targets)} targets",flush=True)
+        return
     run_id=insert_run(len(targets))
     print(f"Shadow run {run_id}: targets={len(targets)} parser={PARSER_VERSION}",flush=True)
 
