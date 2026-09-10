@@ -5,15 +5,11 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE='https://www.21vek.by/'
-UA='ResantaCRM-21vekSearchRouteAudit/0.1 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekSearchRouteAudit/0.2 (+https://resanta-crm.by)'
 HEADERS={'User-Agent':UA,'Accept':'text/html,application/xhtml+xml','Accept-Language':'ru-RU,ru;q=0.9'}
 TIMEOUT=25
-MAX_ASSETS=80
-PATTERNS=[
-    r'/search[^"\'\\\s)]*', r'/search_sph[^"\'\\\s)]*', r'/api/[^"\'\\\s)]*',
-    r'graphql[^"\'\\\s)]*', r'listing[^"\'\\\s)]*', r'suggest[^"\'\\\s)]*',
-    r'autocomplete[^"\'\\\s)]*', r'searchQuery', r'queryText', r'searchTerm'
-]
+
+NEEDLES=['search-composer','getSearch','searchResult','searchProducts','searchId','term','queryId','filters','products','API_GATEWAY','apiGateway']
 
 def uniq(seq):
     out=[]; seen=set()
@@ -22,16 +18,15 @@ def uniq(seq):
             seen.add(x); out.append(x)
     return out
 
-def clips(text, needles):
-    out=[]
-    low=text.lower()
+def clips(text, needles=NEEDLES, radius=520, maxn=240):
+    out=[]; low=text.lower()
     for needle in needles:
-        start=0
-        while len(out)<250:
-            i=low.find(needle,start)
+        start=0; n=needle.lower()
+        while len(out)<maxn:
+            i=low.find(n,start)
             if i<0: break
-            out.append(text[max(0,i-180):min(len(text),i+320)])
-            start=i+len(needle)
+            out.append(text[max(0,i-radius):min(len(text),i+len(n)+radius)])
+            start=i+len(n)
     return uniq(out)
 
 def robots_rules(text):
@@ -45,72 +40,81 @@ def robots_rules(text):
         elif active and k=='disallow': disallows.append(v)
     return {'allow':allows,'disallow':disallows}
 
+def fetch_text(s,url):
+    r=s.get(url,timeout=TIMEOUT,allow_redirects=True)
+    return r,r.text if r.status_code==200 else ''
+
 def main(out_path):
     s=requests.Session(); s.headers.update(HEADERS)
-    out={'started_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'homepage':{},'robots':{},'assets':[],'manifest':{}}
+    out={'started_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'robots':{},'homepage':{},'manifest':{},'search_assets':[],'shared_assets':[]}
 
-    rr=s.get(urljoin(BASE,'robots.txt'),timeout=TIMEOUT)
-    out['robots']={'status':rr.status_code,'rules':robots_rules(rr.text),'content':rr.text[:20000]}
+    rr,rt=fetch_text(s,urljoin(BASE,'robots.txt'))
+    out['robots']={'status':rr.status_code,'rules':robots_rules(rt),'content':rt[:22000]}
 
-    r=s.get(BASE,timeout=TIMEOUT)
-    soup=BeautifulSoup(r.text,'html.parser')
+    r,html=fetch_text(s,BASE)
+    soup=BeautifulSoup(html,'html.parser')
     out['homepage']['status']=r.status_code
     out['homepage']['forms']=[{'action':x.get('action'),'method':x.get('method')} for x in soup.find_all('form')]
     out['homepage']['inputs']=[{'name':x.get('name'),'type':x.get('type'),'placeholder':x.get('placeholder'),'autocomplete':x.get('autocomplete')} for x in soup.find_all('input') if x.get('placeholder') or x.get('name')]
-    out['homepage']['search_clips']=clips(r.text,['search','suggest','autocomplete','query'])[:80]
 
-    next_tag=soup.find('script',id='__NEXT_DATA__')
-    build_id=None
-    if next_tag:
+    next_data={}; build_id=None
+    tag=soup.find('script',id='__NEXT_DATA__')
+    if tag:
         try:
-            next_data=json.loads(next_tag.string or next_tag.get_text('',strip=False))
+            next_data=json.loads(tag.string or tag.get_text('',strip=False))
             build_id=next_data.get('buildId')
             out['homepage']['next_build_id']=build_id
             out['homepage']['next_page']=next_data.get('page')
+            out['homepage']['runtimeConfig']=next_data.get('runtimeConfig')
+            out['homepage']['assetPrefix']=next_data.get('assetPrefix')
         except Exception as e:
             out['homepage']['next_error']=str(e)
 
-    scripts=[]
-    for tag in soup.find_all('script',src=True):
-        u=urljoin(BASE,tag.get('src'))
-        p=urlparse(u)
-        if p.netloc.endswith('21vek.by') and '/_next/' in p.path:
-            scripts.append(u)
-    scripts=uniq(scripts)
+    script_urls=uniq([urljoin(BASE,x.get('src')) for x in soup.find_all('script',src=True)])
+    next_scripts=[u for u in script_urls if '/_next/' in u]
+    out['homepage']['script_urls']=next_scripts
+    asset_root='https://cdn21vek.by/desktop'
+    for u in next_scripts:
+        m=re.match(r'^(https?://[^/]+(?:/[^/]+)?)/_next/',u)
+        if m:
+            asset_root=m.group(1); break
+    out['homepage']['asset_root']=asset_root
 
+    manifest_text=''
     if build_id:
-        for suffix in ('_buildManifest.js','_ssgManifest.js'):
-            u=urljoin(BASE,f'/_next/static/{build_id}/{suffix}')
-            try:
-                mr=s.get(u,timeout=TIMEOUT)
-                out['manifest'][suffix]={'url':u,'status':mr.status_code,'size':len(mr.text),'search_clips':clips(mr.text,['search','suggest','autocomplete'])[:120]}
-                if mr.status_code==200:
-                    for m in re.findall(r'"([^"?]+\.js)"',mr.text):
-                        if '/_next/' in m or m.startswith('static/'):
-                            scripts.append(urljoin(BASE,'/_next/'+m.lstrip('/')) if m.startswith('static/') else urljoin(BASE,m))
-            except Exception as e:
-                out['manifest'][suffix]={'url':u,'error':str(e)}
+        mu=f'{asset_root}/_next/static/{build_id}/_buildManifest.js'
+        mr,manifest_text=fetch_text(s,mu)
+        out['manifest']={'url':mu,'status':mr.status_code,'size':len(manifest_text),'search_clips':clips(manifest_text,['/search','search-'],300,80)}
 
-    scripts=uniq(scripts)[:MAX_ASSETS]
-    for idx,u in enumerate(scripts,1):
-        try:
-            a=s.get(u,timeout=TIMEOUT)
-            text=a.text if a.status_code==200 else ''
-            hits=[]
-            for pat in PATTERNS:
-                try:
-                    vals=re.findall(pat,text,re.I)
-                    if vals:
-                        hits.extend(vals[:50])
-                except re.error:
-                    pass
-            c=clips(text,['/search','search_sph','/api/','graphql','suggest','autocomplete','searchquery','querytext','searchterm'])
-            if hits or c:
-                out['assets'].append({'url':u,'status':a.status_code,'size':len(text),'hits':uniq([str(x) for x in hits])[:100],'clips':c[:100]})
-        except Exception as e:
-            out['assets'].append({'url':u,'error':str(e)})
-        if idx%10==0: print('assets',idx,'/',len(scripts),flush=True)
-        time.sleep(0.15)
+    search_chunks=[]
+    if manifest_text:
+        search_chunks += re.findall(r'(static/chunks/pages/search-[A-Za-z0-9_-]+\.js)',manifest_text)
+        # Include chunks listed close to the /search route; this catches shared search-only bundles.
+        p=manifest_text.find('"/search"')
+        if p>=0:
+            near=manifest_text[p:p+2600]
+            search_chunks += re.findall(r'"(static/chunks/[^"?]+\.js)"',near)
+    search_urls=uniq([f'{asset_root}/_next/{x}' for x in search_chunks])
+    out['manifest']['search_asset_urls']=search_urls
+
+    # Always inspect shared app bundles because API models are commonly defined there.
+    shared=[]
+    for u in next_scripts:
+        if '/chunks/pages/_app-' in u or '/chunks/main-' in u:
+            shared.append(u)
+    for u in uniq(shared):
+        a,text=fetch_text(s,u)
+        cs=clips(text)
+        out['shared_assets'].append({'url':u,'status':a.status_code,'size':len(text),'clips':cs[:180]})
+        time.sleep(.2)
+
+    for u in search_urls:
+        a,text=fetch_text(s,u)
+        cs=clips(text)
+        paths=uniq(re.findall(r'(?:(?:search-composer|recommendations-composer|product-adviser|locations)/api/[A-Za-z0-9_./?=&:{}-]+)',text,re.I))
+        literals=uniq(re.findall(r'"([^"\\]{0,180}(?:search-composer|/search\?|searchId|queryId|term=)[^"\\]{0,220})"',text,re.I))
+        out['search_assets'].append({'url':u,'status':a.status_code,'size':len(text),'service_paths':paths[:160],'literals':literals[:160],'clips':cs[:220]})
+        time.sleep(.2)
 
     out['finished_at']=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
     json.dump(out,open(out_path,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
