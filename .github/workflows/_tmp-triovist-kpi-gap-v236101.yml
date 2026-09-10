@@ -19,6 +19,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Allow synchronized legacy duplicates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/_tmp_patch_triovist_v236101.py')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("if count != 1:","if count < 1:")
+          s=s.replace("return text.replace(old, new, 1)","return text.replace(old, new)")
+          p.write_text(s,encoding='utf-8')
+          PY
       - name: Apply focused patch
         run: python .github/_tmp_patch_triovist_v236101.py
       - name: Validate JavaScript and diff
