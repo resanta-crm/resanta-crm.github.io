@@ -8,8 +8,10 @@ on:
       - 'tools/triovist_21vek_shadow_sync.py'
       - '.github/workflows/triovist-21vek-shadow-sync.yml'
   schedule:
-    # 06:17 по Минску (UTC+3). Работает вне браузера CRM.
+    # Основной запуск: 06:17 по Минску (UTC+3). Работает вне браузера CRM.
     - cron: '17 3 * * *'
+    # Резерв: 08:17 по Минску. Если основной полный снимок уже готов, скрипт завершится без нового run.
+    - cron: '17 5 * * *'
   workflow_dispatch:
     inputs:
       limit:
@@ -46,10 +48,13 @@ jobs:
           DISPATCH_LIMIT: ${{ inputs.limit }}
         run: |
           LIMIT='2500'
+          SKIP_RECENT='0'
           if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
             LIMIT='300'
           elif [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ] && [ -n "$DISPATCH_LIMIT" ]; then
             LIMIT="$DISPATCH_LIMIT"
+          elif [ "$GITHUB_EVENT_NAME" = 'schedule' ]; then
+            SKIP_RECENT='4'
           fi
-          echo "Shadow 21vek limit: $LIMIT"
-          SHADOW_LIMIT="$LIMIT" SHADOW_OFFSET='0' python tools/triovist_21vek_shadow_sync.py
+          echo "Shadow 21vek limit: $LIMIT; skip recent complete: ${SKIP_RECENT}h"
+          SHADOW_LIMIT="$LIMIT" SHADOW_OFFSET='0' SHADOW_SKIP_RECENT_COMPLETE_HOURS="$SKIP_RECENT" python tools/triovist_21vek_shadow_sync.py
