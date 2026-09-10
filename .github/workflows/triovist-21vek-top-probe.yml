@@ -1,0 +1,32 @@
+name: Triovist — 21vek keyword TOP probe
+
+on:
+  push:
+    branches:
+      - triovist-21vek-parser-prototype
+    paths:
+      - 'tools/triovist_21vek_top_probe.py'
+      - '.github/workflows/triovist-21vek-top-probe.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-21vek-top-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Make one keyword search request
+        run: python tools/triovist_21vek_top_probe.py 21vek-top-probe.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: triovist-21vek-top-probe
+          path: 21vek-top-probe.json
+          retention-days: 3
