@@ -1,0 +1,52 @@
+name: TEMP — Triovist combined 21vek shadow safety test
+
+on:
+  push:
+    branches: [triovist-21vek-parser-prototype]
+    paths:
+      - '.github/workflows/_tmp-triovist-21vek-combined-shadow-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-21vek-combined-shadow-safety-test
+  cancel-in-progress: false
+
+jobs:
+  combined-shadow-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout prototype branch
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Safety check — card shadow only
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SHADOW_LIMIT: '80'
+          SHADOW_OFFSET: '0'
+          SHADOW_DELAY_SECONDS: '0.8'
+          SHADOW_HTTP_TIMEOUT: '25'
+          SHADOW_SKIP_RECENT_COMPLETE_HOURS: '0'
+        run: python tools/triovist_21vek_shadow_sync.py
+
+      - name: Safety check — keyword TOP shadow only
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TOP_KEYWORD_LIMIT: '12'
+          TOP_KEYWORD_OFFSET: '0'
+          TOP_DELAY_SECONDS: '1.2'
+          TOP_HTTP_TIMEOUT: '30'
+          TOP_DEEP_EXACT: '0'
+          TOP_DEEP_RADIUS: '0'
+          TOP_MAX_DEEP_PAGES_PER_KEYWORD: '0'
+        run: python tools/triovist_21vek_top_shadow.py
