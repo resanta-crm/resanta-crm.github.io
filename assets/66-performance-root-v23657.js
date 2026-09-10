@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.97',flights=new Map(),contractFlights=new Map();
+const V='23.6.99',flights=new Map(),contractFlights=new Map();
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -167,7 +167,8 @@ async function loadTriovist(){
     load('assets/11-triovist-ai-plans-v2348.js','perf-tri-ai-v23671','RESANTA_TRIOVIST_AI_PLANS_V2348'),
     load('assets/13-triovist-seasonal-stock-v2350.js','perf-tri-stock-v23671','RESANTA_TRIOVIST_SEASONAL_STOCK_V2350'),
     load('assets/32-triovist-v23611.js','perf-tri-root-v23671','RESANTA_TRIOVIST_ROOT_V23614'),
-    load('assets/61-triovist-task-month-safe-v23651.js','perf-tri-month-v23671','RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651')
+    load('assets/61-triovist-task-month-safe-v23651.js','perf-tri-month-v23671','RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651'),
+    load('assets/78-triovist-hide-recommendations-v23699.js','perf-tri-hide-recs-v23699','RESANTA_TRIOVIST_RECOMMENDATIONS_HIDDEN_V23699')
   ]);
   await load('assets/19-triovist-stock-upload-truth-v23551.js','perf-tri-upload-v23671','RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551');
   await load('assets/20-triovist-partner-forecast-v2356.js','perf-tri-forecast-v23671','RESANTA_TRIOVIST_PARTNER_FORECAST_V2356');
