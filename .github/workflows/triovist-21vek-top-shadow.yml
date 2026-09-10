@@ -1,0 +1,55 @@
+name: Triovist — 21vek keyword TOP shadow
+
+on:
+  push:
+    branches:
+      - triovist-21vek-parser-prototype
+    paths:
+      - 'tools/triovist_21vek_top_shadow.py'
+      - '.github/workflows/triovist-21vek-top-shadow.yml'
+  workflow_dispatch:
+    inputs:
+      keyword_limit:
+        description: 'Количество ключевых фраз'
+        required: false
+        default: '12'
+      keyword_offset:
+        description: 'Смещение по ключевым фразам'
+        required: false
+        default: '0'
+
+concurrency:
+  group: triovist-21vek-top-shadow
+  cancel-in-progress: false
+
+jobs:
+  top-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Collect keyword TOP into shadow tables only
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          INPUT_LIMIT: ${{ inputs.keyword_limit }}
+          INPUT_OFFSET: ${{ inputs.keyword_offset }}
+        run: |
+          LIMIT='12'
+          OFFSET='0'
+          if [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ]; then
+            [ -n "$INPUT_LIMIT" ] && LIMIT="$INPUT_LIMIT"
+            [ -n "$INPUT_OFFSET" ] && OFFSET="$INPUT_OFFSET"
+          fi
+          echo "TOP shadow keywords: offset=$OFFSET limit=$LIMIT"
+          TOP_KEYWORD_LIMIT="$LIMIT" \
+          TOP_KEYWORD_OFFSET="$OFFSET" \
+          TOP_DELAY_SECONDS='1.2' \
+          TOP_DEEP_EXACT='1' \
+          TOP_DEEP_RADIUS='2' \
+          TOP_MAX_DEEP_PAGES_PER_KEYWORD='10' \
+          python tools/triovist_21vek_top_shadow.py
