@@ -45,7 +45,8 @@ jobs:
           git config user.name 'resanta-crm-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add assets/03-triovist-routes.js assets/11-triovist-ai-plans-v2348.js assets/66-performance-root-v23657.js index.html
-          git rm .github/workflows/_tmp-triovist-kpi-gap-v236101.yml .github/_tmp_patch_triovist_v236101.py
+          git rm .github/workflows/_tmp-triovist-kpi-gap-v236101.yml
+          git rm -f .github/_tmp_patch_triovist_v236101.py
           git commit -m 'Triovist: correct monthly KPI and sales gap sources (v23.6.101)'
           git pull --rebase origin main
           git push origin main
