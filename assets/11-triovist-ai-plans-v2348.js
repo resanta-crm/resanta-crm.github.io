@@ -1,9 +1,9 @@
-/* RESANTA CRM v23.4.8 · TRIOVIST AI PLANS · CACHE-SAFE MANAGER ROOT */
+/* RESANTA CRM v23.6.101 · TRIOVIST AI PLANS · sell-out + replenishment gap truth */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_AI_PLANS_V2348)return;
 
-const V='v23.4.8';
+const V='v23.6.101';
 const A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru',M=[A,K];
 const N={[A]:'Александренко',[K]:'Кришталь'};
 const B=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
@@ -58,51 +58,108 @@ function prices(m){
   rows(sales(),m).forEach(r=>{const k=skuKey(r.sku);if(!k)return;if(!z.has(k))z.set(k,{r:0,q:0});const x=z.get(k);x.r+=n(r.current_revenue)+n(r.previous_revenue);x.q+=n(r.current_qty)+n(r.previous_qty)});
   const out=new Map();z.forEach((x,k)=>{if(x.q>0&&x.r>0)out.set(k,x.r/x.q)});return out;
 }
-function opportunities(m){
+function salesBySku(m){
+  const z=new Map();
+  rows(sales(),m).forEach(r=>{
+    const k=skuKey(r.sku);if(!k)return;
+    if(!z.has(k))z.set(k,{sku:String(r.sku||''),product:String(r.product||''),g:String(r.assigned_group||'Не распределено'),current:0,previous:0});
+    const x=z.get(k);x.current+=n(r.current_revenue);x.previous+=n(r.previous_revenue);if(!x.product&&r.product)x.product=String(r.product);if((!x.g||x.g==='Не распределено')&&r.assigned_group)x.g=String(r.assigned_group);
+  });
+  return z;
+}
+function stockBySku(m){
+  const z=new Map();
+  rows(stocks(),m).forEach(r=>{const k=skuKey(r.sku);if(k)z.set(k,r)});
+  return z;
+}
+function partnerNet(r){
+  if(!r)return 0;
+  if(r.partner_net!=null)return Math.max(0,n(r.partner_net));
+  return Math.max(0,n(r.partner_total)-n(r.partner_orders));
+}
+function selloutOpportunities(m){
+  const sm=salesBySku(m),st=stockBySku(m),a=[];
+  for(const [k,x] of sm){
+    const r=st.get(k),partner=partnerNet(r);if(!(partner>0)||!(x.previous>0))continue;
+    const projected=forecast(x.current,selectedMonth());if(projected==null)continue;
+    const value=Math.max(0,x.previous-n(projected));if(value<=.01)continue;
+    a.push({g:x.g||String(r?.assigned_group||'Не распределено'),sku:x.sku||String(r?.sku||''),product:x.product||String(r?.product||''),partner,current:x.current,previous:x.previous,projected:n(projected),value});
+  }
+  a.sort((x,y)=>y.value-x.value);return{a,total:a.reduce((s,x)=>s+x.value,0)};
+}
+function replenishmentOpportunities(m){
   const p=prices(m),a=[];let noPrice=0;
   rows(stocks(),m).forEach(r=>{
+    if(partnerNet(r)>0)return;
     const k=skuKey(r.sku),u=p.get(k),need=Math.max(0,n(r.recommended)),own=Math.max(0,n(r.own_qty)),ch=Math.max(0,n(r.chekhov_qty)),q=Math.min(need,own+ch);
     if(q<=0)return;if(!(u>0)){noPrice++;return}
     a.push({g:String(r.assigned_group||'Не распределено'),sku:String(r.sku||''),product:String(r.product||''),need,own,ch,q,value:q*u});
   });
   a.sort((x,y)=>y.value-x.value);return{a,total:a.reduce((s,x)=>s+x.value,0),noPrice};
 }
-function allocate(m,gap){
-  const o=opportunities(m),gm=new Map();
-  o.a.forEach(x=>{if(!gm.has(x.g))gm.set(x.g,{g:x.g,total:0,a:[]});const q=gm.get(x.g);q.total+=x.value;q.a.push(x)});
+function allocateRows(items,gap){
+  const gm=new Map();
+  (items||[]).forEach(x=>{if(!gm.has(x.g))gm.set(x.g,{g:x.g,total:0,a:[]});const q=gm.get(x.g);q.total+=x.value;q.a.push(x)});
   let left=Math.max(0,gap),out=[];
   for(const q of [...gm.values()].sort((x,y)=>y.total-x.total)){
     if(left<=.01)break;const use=Math.min(q.total,left);left-=use;let l=use,aa=[];
     for(const x of q.a){if(l<=.01)break;const u=Math.min(x.value,l);l-=u;aa.push({...x,use:u})}
     out.push({...q,use,aa});
   }
-  return{out,covered:Math.max(0,gap-left),left,total:o.total,noPrice:o.noPrice};
+  return{out,covered:Math.max(0,gap-left),left};
+}
+function commercialReserve(m){
+  const sellout=selloutOpportunities(m),replenish=replenishmentOpportunities(m);
+  return{sellout,replenish,total:sellout.total+replenish.total};
+}
+function allocate(m,gap){
+  const reserve=commercialReserve(m),sellout=allocateRows(reserve.sellout.a,gap),replenish=allocateRows(reserve.replenish.a,sellout.left);
+  return{sellout:{...sellout,total:reserve.sellout.total},replenish:{...replenish,total:reserve.replenish.total,noPrice:reserve.replenish.noPrice},covered:sellout.covered+replenish.covered,left:replenish.left,total:reserve.total};
 }
 function stockDates(){const x=meta(),p=x.partner||{},o=x.own||{},c=x.chekhov||{};return `21vek <b>${esc(p.snapshot_date||'нет даты')}</b> · Витебск <b>${esc(o.report_date||'нет даты')}</b> · Чехов <b>${esc(c.snapshot_date||'нет даты')}</b>`}
 function recommendation(m){
   const month=selectedMonth(),f=fact(m),ly=lastYear(m),fc=forecast(f,month),floor30=ly>0?ly*1.30:0;
   if(!(floor30>0)&&!(n(fc)>0))return null;
-  const amount=Math.ceil(Math.max(floor30,n(fc),1)/1000)*1000,stock=opportunities(m);
-  return{month,f,ly,fc,floor30,amount,stock:stock.total,supported:Math.min(amount,Math.ceil((n(fc)+stock.total)/1000)*1000),uncovered:Math.max(0,amount-n(fc)-stock.total)};
+  const amount=Math.ceil(Math.max(floor30,n(fc),1)/1000)*1000,reserve=commercialReserve(m);
+  return{month,f,ly,fc,floor30,amount,stock:reserve.total,supported:Math.min(amount,Math.ceil((n(fc)+reserve.total)/1000)*1000),uncovered:Math.max(0,amount-n(fc)-reserve.total)};
 }
 
 function css(){
   let s=document.getElementById('tri-ai-independent-css-v2348');if(!s){s=document.createElement('style');s.id='tri-ai-independent-css-v2348';document.head.appendChild(s)}
   s.textContent=`#tri-ai-independent-root-v2348{margin-bottom:12px}.tri-ai48-title{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.tri-ai48-note{font-size:10px;color:var(--sub);line-height:1.45}.tri-ai48-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}.tri-ai48-card{border:1px solid #93c5fd;background:#f8fbff;border-radius:12px;padding:13px}.tri-ai48-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.tri-ai48-name{font-size:17px;font-weight:900}.tri-ai48-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:9px}.tri-ai48-kpi{background:#fff;border:1px solid var(--border);border-radius:8px;padding:7px}.tri-ai48-kpi span{display:block;color:var(--sub);font-size:8px;text-transform:uppercase}.tri-ai48-kpi b{display:block;margin-top:3px;font-size:13px}.tri-ai48-box{margin-top:8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:9px;padding:8px}.tri-ai48-row{display:flex;justify-content:space-between;gap:10px;border-top:1px dashed var(--border);padding-top:5px;margin-top:5px;font-size:10px}.tri-ai48-warn{margin-top:7px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:7px;font-size:10px}.tri-ai48-ok{margin-top:7px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:7px;font-size:10px}.tri-ai48-leader{margin-top:9px;background:#fff;border:1px solid #dbeafe;border-radius:9px;padding:9px}.tri-ai48-editor{display:grid;grid-template-columns:minmax(160px,1fr) auto auto;gap:7px;align-items:end}.tri-ai48-editor .form-input{margin:0}.tri-ai48-loading{padding:12px;border:1px dashed #93c5fd;background:#f8fbff;border-radius:10px;color:var(--sub);font-size:11px}@media(max-width:1100px){.tri-ai48-grid{grid-template-columns:1fr}}@media(max-width:800px){.tri-ai48-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.tri-ai48-editor{grid-template-columns:1fr}}`;
 }
+function bucketGroups(pack,type){
+  let s='';
+  (pack.out||[]).forEach(g=>{
+    s+=`<details style="margin-top:5px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:10px"><b>${esc(g.g)}</b><b>+${money(g.use)}</b></summary>`;
+    let shown=0;
+    g.aa.slice(0,8).forEach(q=>{
+      shown+=q.use;
+      const note=type==='sellout'?`21vek ${qty(q.partner)} шт. · прогноз ${money(q.projected)} · аналог ${money(q.previous)}`:`21vek 0 шт. · нужно ${qty(q.need)} · Витебск ${qty(q.own)} · Чехов ${qty(q.ch)}`;
+      s+=`<div class="tri-ai48-row"><span><b>${esc(q.sku)}</b> · ${esc(q.product)}<br>${note}</span><b>+${money(q.use)}</b></div>`;
+    });
+    const rest=g.use-shown;if(rest>.01)s+=`<div class="tri-ai48-row"><span>Остальные позиции</span><b>+${money(rest)}</b></div>`;s+='</details>';
+  });
+  return s;
+}
 function gapHtml(m,gap){
   if(gap<=.01)return `<div class="tri-ai48-ok">✅ Текущий прогноз покрывает утверждённый план.</div><div class="tri-ai48-note">Остатки: ${stockDates()}</div>`;
   if(!stocks().length)return `<div class="tri-ai48-loading">Остатки 21vek / Витебск / Чехов ещё загружаются. Блок «Где взять» появится автоматически.</div>`;
-  const x=allocate(m,gap);let s=`<div class="tri-ai48-box"><b>🎯 Где взять недостающее</b><div class="tri-ai48-note">Разрыв: <b>${money(gap)}</b>. Только позиции, которые нужны 21vek и реально есть на Витебске/Чехове.</div><div style="margin-top:4px"><b>Подтверждено товаром: ${money(x.covered)}</b></div></div><div class="tri-ai48-note" style="margin-top:5px">Остатки: ${stockDates()}</div>`;
-  x.out.forEach(g=>{s+=`<details style="margin-top:5px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:10px"><b>${esc(g.g)}</b><b>+${money(g.use)}</b></summary>`;let shown=0;g.aa.slice(0,8).forEach(q=>{shown+=q.use;s+=`<div class="tri-ai48-row"><span><b>${esc(q.sku)}</b> · ${esc(q.product)}<br>21vek нужно ${qty(q.need)} шт. · Витебск ${qty(q.own)} · Чехов ${qty(q.ch)}</span><b>+${money(q.use)}</b></div>`});const rest=g.use-shown;if(rest>.01)s+=`<div class="tri-ai48-row"><span>Остальные позиции</span><b>+${money(rest)}</b></div>`;s+='</details>'});
-  if(x.left>.01)s+=`<div class="tri-ai48-warn"><b>Пока не найден подтверждённый источник продаж: ${money(x.left)}.</b> Эта сумма не включается в «Где взять».</div>`;
-  if(x.noPrice)s+=`<div class="tri-ai48-note" style="margin-top:5px">Не включено ${x.noPrice} SKU без надёжной цены из истории продаж.</div>`;
+  const x=allocate(m,gap);
+  let s=`<div class="tri-ai48-box"><b>🎯 Где взять недостающее</b><div class="tri-ai48-note">Разрыв по прогнозу к утверждённому плану: <b>${money(gap)}</b>. Источники не дублируются: сначала возвращаем sell-out на товаре, который уже есть у 21vek, затем считаем возможную догрузку.</div></div><div class="tri-ai48-note" style="margin-top:5px">Остатки: ${stockDates()}</div>`;
+  s+=`<div class="tri-ai48-box"><b>1. Вернуть продажи на товаре, который уже есть у 21vek: ${money(x.sellout.covered)}</b><div class="tri-ai48-note">Потенциал возврата = недобор прогноза SKU к аналогичному месяцу прошлого года. Это коммерческий потенциал, а не гарантированная продажа.</div></div>`;
+  s+=bucketGroups(x.sellout,'sellout');
+  s+=`<div class="tri-ai48-box"><b>2. Догрузить отсутствующий на 21vek товар: ${money(x.replenish.covered)}</b><div class="tri-ai48-note">Только SKU с нулевым свободным остатком у 21vek, для которых есть подтверждённая потребность и товар на Витебске/Чехове.</div></div>`;
+  s+=bucketGroups(x.replenish,'replenish');
+  if(x.left>.01)s+=`<div class="tri-ai48-warn"><b>3. Пока не покрыто подтверждёнными источниками: ${money(x.left)}.</b></div>`;
+  else s+=`<div class="tri-ai48-ok"><b>3. Разрыв покрывается найденным коммерческим потенциалом.</b></div>`;
+  if(x.replenish.noPrice)s+=`<div class="tri-ai48-note" style="margin-top:5px">Не включено ${x.replenish.noPrice} SKU для догрузки без надёжной цены из истории продаж.</div>`;
   return s;
 }
 function leaderHtml(m,rec){
   if(!boss()||!rec)return'';
   const current=D.has(m)?n(D.get(m)):n(approvedPlan(m));
-  return `<div class="tri-ai48-leader"><div style="font-weight:900">🤖 Рекомендация ИИ: ${money(rec.amount)}</div><div class="tri-ai48-note">Аналогичный месяц прошлого года ${money(rec.ly)} · минимум +30% = ${money(rec.floor30)} · текущий прогноз ${money(rec.fc)}.<br>Товарный резерв ${money(rec.stock)} · пока не найден подтверждённый источник ${money(rec.uncovered)} · ${stockDates()}</div><div style="margin-top:7px;font-weight:800">✍️ План утверждает руководитель</div><div class="tri-ai48-note">ИИ только рекомендует. Можно поставить свою сумму — до сохранения CRM не меняется.</div><div class="tri-ai48-editor" style="margin-top:7px"><div><label class="form-label">План руководителя, BYN</label><input class="form-input" type="number" min="0" step="0.01" value="${current>0?current.toFixed(2):''}" onchange="triovistAiDraftPlanV2348('${m}',this.value)" placeholder="Введите план"></div><button class="btn-secondary" onclick="triovistAiUseRecommendationV2348('${m}')">Взять рекомендацию</button><button class="btn-primary" onclick="triovistAiSaveLeaderPlanV2348('${m}')">Сохранить мой план</button></div></div>`;
+  return `<div class="tri-ai48-leader"><div style="font-weight:900">🤖 Рекомендация ИИ: ${money(rec.amount)}</div><div class="tri-ai48-note">Аналогичный месяц прошлого года ${money(rec.ly)} · минимум +30% = ${money(rec.floor30)} · текущий прогноз ${money(rec.fc)}.<br>Коммерческий резерв ${money(rec.stock)} · пока не найден подтверждённый источник ${money(rec.uncovered)} · ${stockDates()}</div><div style="margin-top:7px;font-weight:800">✍️ План утверждает руководитель</div><div class="tri-ai48-note">ИИ только рекомендует. Можно поставить свою сумму — до сохранения CRM не меняется.</div><div class="tri-ai48-editor" style="margin-top:7px"><div><label class="form-label">План руководителя, BYN</label><input class="form-input" type="number" min="0" step="0.01" value="${current>0?current.toFixed(2):''}" onchange="triovistAiDraftPlanV2348('${m}',this.value)" placeholder="Введите план"></div><button class="btn-secondary" onclick="triovistAiUseRecommendationV2348('${m}')">Взять рекомендацию</button><button class="btn-primary" onclick="triovistAiSaveLeaderPlanV2348('${m}')">Сохранить мой план</button></div></div>`;
 }
 function managerCardHtml(m){
   const p=workingPlan(m),approved=n(approvedPlan(m)),f=fact(m),fc=forecast(f,selectedMonth()),pr=p>0?f/p:0,gap=p>0?Math.max(0,p-n(fc)):0,rec=recommendation(m),isBoss=boss();

@@ -3841,7 +3841,7 @@ window.addEventListener('pageshow',function(){
     if(!canSee()||loading||(loaded&&!force))return;
     loading=true;injectUi();banner('Загружаю задачи, продажи и остатки…');
     try{
-      const [tasksResult]=await Promise.all([window.TRIOVIST_DATA_HUB_V227315.tasks({p_manager_email:null}),loadCommercial()]);
+      const [tasksResult]=await Promise.all([rpc('triovist_tasks_get_dashboard_month_v23648',{p_manager_email:null,p_month:month+'-01'},60000),loadCommercial()]);
       data=tasksResult||{tasks:[],summary:{},groups:[],managers:[]};data.tasks=(data.tasks||[]).filter(triTaskAllowedV22728);loaded=true;
       await enrichTasks();
       banner('');render();
@@ -4138,7 +4138,9 @@ window.addEventListener('pageshow',function(){
   }
 
   function taskMetrics(manager){
-    const all=(motTasks.tasks||[]).filter(t=>String(t.manager_email||'').toLowerCase()===manager).filter(t=>!['cancelled','not_relevant'].includes(t.status));
+    const selected=selectedMonth();
+    const taskMonth=t=>String(t?.period_month||t?.task_snapshot?.period_month||t?.due_date||'').slice(0,7);
+    const all=(motTasks.tasks||[]).filter(t=>String(t.manager_email||'').toLowerCase()===manager).filter(t=>!['cancelled','not_relevant'].includes(t.status)).filter(t=>taskMonth(t)===selected);
     const salaryEligible=all.filter(t=>t.status!=='pending_approval');
     let denom=0,earned=0,progressDenom=0,progress=0;
     salaryEligible.forEach(t=>{const w=taskWeight(t);denom+=w;earned+=w*salaryTaskRatio(t);});
@@ -4156,7 +4158,8 @@ window.addEventListener('pageshow',function(){
     const planPct=plan>0?s.current/plan*100:0;
     const expected=plan>0?plan*factor:0,pacePct=expected>0?s.current/expected*100:0;
     const forecastSales=factor>0&&factor<1?s.current/factor:s.current,forecastPlanPct=plan>0?forecastSales/plan*100:0;
-    const growthPct=s.previous>0?(s.current-s.previous)/s.previous*100:(s.current>0?100:0);
+    const growthBase=factor>0&&factor<1?forecastSales:s.current;
+    const growthPct=s.previous>0?(growthBase-s.previous)/s.previous*100:(growthBase>0?100:0);
     const tm=taskMetrics(manager);
     const planAdd=rateBy(planPct,motPolicy.plan_thresholds,motPolicy.plan_kpi_max);
     const forecastPlanAdd=rateBy(forecastPlanPct,motPolicy.plan_thresholds,motPolicy.plan_kpi_max);
@@ -4185,7 +4188,7 @@ window.addEventListener('pageshow',function(){
     const forecastLabel=x.teamKnown?rateFmt(x.forecastRate):(rateFmt(x.forecastRate)+'–'+rateFmt(x.forecastRateMax));
     return `<div class="tri-mot-manager ${mine?'me':''}"><div class="tri-mot-manager-head"><div><div style="font-size:17px;font-weight:900">${h(x.name)}${mine?' · мой результат':''}</div><div class="tri-mot-note">База ${rateFmt(motPolicy.base_rate)} · KPI максимум ${rateFmt(motPolicy.max_kpi_rate)}</div></div><div><div class="tri-mot-rate">${currentLabel}</div><div class="tri-mot-subrate">предварительно сейчас<br>прогноз ${forecastLabel}</div></div></div>
       <div class="tri-mot-planline"><div><b>План выполнен на <span class="${progressClass(x.planPct)}">${x.planPct.toFixed(1)}%</span></b><div class="tri-mot-bar"><span style="width:${bar}%"></span></div><div class="tri-mot-note">Темп на сегодня: <span class="tri-mot-pace ${progressClass(x.pacePct)}">${x.pacePct.toFixed(1)}%</span> · прогноз месяца: ${x.forecastPlanPct.toFixed(1)}%</div></div><div style="text-align:right">${showMoney?`<b>${money(x.current)}</b><div class="tri-mot-note">из ${x.plan==null?'план не задан':money(x.plan)}</div>`:`<b>${x.planPct.toFixed(1)}%</b><div class="tri-mot-note">план / факт</div>`}</div></div>
-      <div class="tri-mot-breakdown"><div class="tri-mot-part"><span>План продаж</span><b>${rateFmt(x.planAdd)} / ${rateFmt(motPolicy.plan_kpi_max)}</b><small>факт ${x.planPct.toFixed(1)}%</small></div><div class="tri-mot-part"><span>Рост групп</span><b>${rateFmt(x.growthAdd)} / ${rateFmt(motPolicy.growth_kpi_max)}</b><small>${pctFmt(x.growthPct)} к аналогу</small></div><div class="tri-mot-part"><span>Задачи 21vek</span><b>${rateFmt(x.taskAdd)} / ${rateFmt(motPolicy.task_kpi_max)}</b><small>подтверждено ${x.tm.salaryRate.toFixed(1)}% · ход ${x.tm.progressRate.toFixed(1)}%</small></div><div class="tri-mot-part"><span>Общий Triovist</span><b>${x.teamKnown?rateFmt(x.teamAdd):'до '+rateFmt(motPolicy.team_kpi_max)}</b><small>${x.teamKnown?'общий план и просрочки':'финально по общему результату'}</small></div></div>
+      <div class="tri-mot-breakdown"><div class="tri-mot-part"><span>План продаж</span><b>${rateFmt(x.planAdd)} / ${rateFmt(motPolicy.plan_kpi_max)}</b><small>факт ${x.planPct.toFixed(1)}%</small></div><div class="tri-mot-part"><span>Рост групп</span><b>${rateFmt(x.growthAdd)} / ${rateFmt(motPolicy.growth_kpi_max)}</b><small>${pctFmt(x.growthPct)} · ${monthFactor(selectedMonth())<1?'прогноз к аналогу':'к аналогу'}</small></div><div class="tri-mot-part"><span>Задачи 21vek</span><b>${rateFmt(x.taskAdd)} / ${rateFmt(motPolicy.task_kpi_max)}</b><small>подтверждено ${x.tm.salaryRate.toFixed(1)}% · ход ${x.tm.progressRate.toFixed(1)}%</small></div><div class="tri-mot-part"><span>Общий Triovist</span><b>${x.teamKnown?rateFmt(x.teamAdd):'до '+rateFmt(motPolicy.team_kpi_max)}</b><small>${x.teamKnown?'общий план и просрочки':'финально по общему результату'}</small></div></div>
       <div class="tri-mot-foot"><div><b>Задачи:</b> ${x.tm.total} · подтверждено ${x.tm.verified} · частично ${x.tm.partial} · просрочено ${x.tm.overdue}</div><div>${x.tm.pending?`На согласовании: <b>${x.tm.pending}</b>`:'Все поставленные задачи согласованы'}</div></div>${!x.teamKnown?'<div class="tri-mot-team-unknown">Командные +0,05% показаны как возможный диапазон. Точный командный результат доступен после получения общего плана и факта обоих менеджеров.</div>':''}</div>`;
   }
 
@@ -4204,7 +4207,7 @@ window.addEventListener('pageshow',function(){
       const month=selectedMonth();
       const [policy,tasks,sales]=await Promise.all([
         rpc('triovist_motivation_get_policy',{},30000),
-        window.TRIOVIST_DATA_HUB_V227315.tasks({p_manager_email:null}),
+        rpc('triovist_tasks_get_dashboard_month_v23648',{p_manager_email:null,p_month:month+'-01'},60000),
         window.TRIOVIST_DATA_HUB_V227315.sales({p_end_month:month,p_mode:'month',p_start_month:null})
       ]);
       motPolicy=policy||null;motTasks=tasks||{tasks:[],managers:[]};motSales=sales||{items:[],period_plans:[],selected_month_plans:[]};motLoaded=true;banner('');render();
