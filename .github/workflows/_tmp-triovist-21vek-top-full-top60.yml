@@ -1,0 +1,35 @@
+name: TEMP — Triovist full 21vek TOP60 shadow audit
+
+on:
+  push:
+    branches:
+      - triovist-21vek-parser-prototype
+    paths:
+      - '.github/workflows/_tmp-triovist-21vek-top-full-top60.yml'
+
+concurrency:
+  group: triovist-21vek-top-full-top60-audit
+  cancel-in-progress: false
+
+jobs:
+  full-top60:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Check page 1 for every current Triovist keyword
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TOP_KEYWORD_LIMIT: '10000'
+          TOP_KEYWORD_OFFSET: '0'
+          TOP_DELAY_SECONDS: '1.2'
+          TOP_HTTP_TIMEOUT: '30'
+          TOP_DEEP_EXACT: '0'
+          TOP_DEEP_RADIUS: '0'
+          TOP_MAX_DEEP_PAGES_PER_KEYWORD: '0'
+        run: python tools/triovist_21vek_top_shadow.py
