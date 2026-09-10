@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.91 · УЦЕНКА
+/* RESANTA CRM v23.6.95 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.91';
+const V='v23.6.95';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34,6 +34,7 @@ function injectStyle(){
  #page-markdown .md-chip.active{background:var(--ab);border-color:#93C5FD;color:var(--at);font-weight:800}
  #page-markdown .md-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
  #page-markdown .md-search{flex:1;min-width:230px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px}
+ #page-markdown .md-search-go{padding:10px 14px;white-space:nowrap;min-height:40px;font-weight:800}
  #page-markdown .md-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px}
  #page-markdown .md-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;display:grid;grid-template-columns:92px minmax(0,1fr);gap:11px;cursor:pointer}
  #page-markdown .md-card:hover{border-color:#93C5FD;box-shadow:0 2px 10px rgba(15,23,42,.05)}
@@ -98,6 +99,7 @@ function injectStyle(){
    #markdown-modal-v23687 .md-formgrid{grid-template-columns:1fr}
    #markdown-modal-v23687 .md-btn{min-height:44px;font-size:13px}
    .md91-grid{grid-template-columns:1fr}.md91-btn{min-height:44px;font-size:13px}
+   #page-markdown .md-search{min-width:0}.md-search-go{min-height:44px!important}
  }`;
  document.head.appendChild(st);
 }
@@ -159,11 +161,23 @@ function render(){
   +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(isPayushin()?'<button class="btn-secondary" id="md-control-v23691">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class="btn-secondary" id="md-refresh-v23687">↻ Обновить</button></div></div>'
   +'<div class="card" style="margin-bottom:10px;padding:11px 13px;font-size:11px;line-height:1.5"><b>🛡 Уценённый товар сохраняет гарантию.</b> Фото и описание состояния видят все сотрудники. '+(isPayushin()?'<b>Скидку и план продажи утверждаете только вы.</b>':'Цена и скидка утверждаются Александром Паюшиным.')+'</div>'
   +'<div class="md-stats">'+tabs.map(x=>'<button class="md-chip '+(S.filter===x[0]?'active':'')+'" data-md-filter="'+x[0]+'">'+x[1]+' <b>'+x[2]+'</b></button>').join('')+'</div>'
-  +'<div class="md-tools"><input class="md-search" id="md-search-v23687" value="'+attr(S.search)+'" placeholder="🔍 Поиск по артикулу, номенклатуре, серийному номеру..."><span style="font-size:10px;color:var(--sub)">Найдено: '+S.total+'</span></div>'
+  +'<div class="md-tools"><input class="md-search" id="md-search-v23687" enterkeyhint="search" value="'+attr(S.search)+'" placeholder="🔍 Поиск по артикулу, номенклатуре, серийному номеру..."><button type="button" class="btn-secondary md-search-go" id="md-search-go-v23695">🔍 Найти</button><span style="font-size:10px;color:var(--sub)">Найдено: '+S.total+'</span></div>'
   +(S.rows.length?'<div class="md-grid">'+S.rows.map(card).join('')+'</div>':'<div class="card" style="text-align:center;padding:28px;color:var(--sub)">По выбранному фильтру позиций нет.</div>');
  root.querySelectorAll('[data-md-filter]').forEach(b=>b.onclick=()=>{S.filter=b.dataset.mdFilter;load(true)});
- const inp=$('md-search-v23687');let timer;
- if(inp)inp.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{S.search=inp.value.trim();load(true)},280)};
+ const inp=$('md-search-v23687');
+ const runSearch=async()=>{
+  if(!inp)return;
+  const q=inp.value.trim();
+  S.search=q;
+  await load(true);
+  const next=$('md-search-v23687');
+  if(next){try{next.focus({preventScroll:true});next.setSelectionRange(next.value.length,next.value.length)}catch(_){}}
+ };
+ if(inp){
+  inp.oninput=null;
+  inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch()}};
+ }
+ const go=$('md-search-go-v23695');if(go)go.onclick=runSearch;
  const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);
  const ctl=$('md-control-v23691');if(ctl)ctl.onclick=()=>openSalesControl('alerts');
  updateNavDot();loadCovers();if(isPayushin())loadControlSummary(false);
