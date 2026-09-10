@@ -1,0 +1,227 @@
+name: TEMP — Triovist KPI and gap v23.6.101
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/_tmp-triovist-kpi-gap-v236101.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch v23.6.101
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              return text.replace(old, new, 1)
+
+          # --- Motivation: selected-month tasks + normalized current-month growth ---
+          p = Path('assets/03-triovist-routes.js')
+          s = p.read_text(encoding='utf-8')
+          old = """  function taskMetrics(manager){
+    const all=(motTasks.tasks||[]).filter(t=>String(t.manager_email||'').toLowerCase()===manager).filter(t=>!['cancelled','not_relevant'].includes(t.status));
+    const salaryEligible=all.filter(t=>t.status!=='pending_approval');"""
+          new = """  function taskMetrics(manager){
+    const selected=selectedMonth();
+    const taskMonth=t=>String(t?.period_month||t?.task_snapshot?.period_month||t?.due_date||'').slice(0,7);
+    const all=(motTasks.tasks||[]).filter(t=>String(t.manager_email||'').toLowerCase()===manager).filter(t=>!['cancelled','not_relevant'].includes(t.status)).filter(t=>taskMonth(t)===selected);
+    const salaryEligible=all.filter(t=>t.status!=='pending_approval');"""
+          s = replace_once(s, old, new, 'motivation month task filter')
+
+          old = """    const forecastSales=factor>0&&factor<1?s.current/factor:s.current,forecastPlanPct=plan>0?forecastSales/plan*100:0;
+    const growthPct=s.previous>0?(s.current-s.previous)/s.previous*100:(s.current>0?100:0);"""
+          new = """    const forecastSales=factor>0&&factor<1?s.current/factor:s.current,forecastPlanPct=plan>0?forecastSales/plan*100:0;
+    const growthBase=factor>0&&factor<1?forecastSales:s.current;
+    const growthPct=s.previous>0?(growthBase-s.previous)/s.previous*100:(growthBase>0?100:0);"""
+          s = replace_once(s, old, new, 'motivation normalized growth')
+
+          old = "window.TRIOVIST_DATA_HUB_V227315.tasks({p_manager_email:null}),"
+          new = "rpc('triovist_tasks_get_dashboard_month_v23648',{p_manager_email:null,p_month:month+'-01'},60000),"
+          s = replace_once(s, old, new, 'motivation monthly task rpc')
+
+          old = "<small>${pctFmt(x.growthPct)} к аналогу</small>"
+          new = "<small>${pctFmt(x.growthPct)} · ${monthFactor(selectedMonth())<1?'прогноз к аналогу':'к аналогу'}</small>"
+          s = replace_once(s, old, new, 'motivation growth label')
+          p.write_text(s, encoding='utf-8')
+
+          # --- AI plan: sell-out recovery first, replenishment second, no double count ---
+          p = Path('assets/11-triovist-ai-plans-v2348.js')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(s, '/* RESANTA CRM v23.4.8 · TRIOVIST AI PLANS · CACHE-SAFE MANAGER ROOT */', '/* RESANTA CRM v23.6.101 · TRIOVIST AI PLANS · sell-out + replenishment gap truth */', 'AI header')
+          s = replace_once(s, "const V='v23.4.8';", "const V='v23.6.101';", 'AI version')
+
+          start = s.index('function prices(m){')
+          end = s.index('function stockDates(){', start)
+          block = r'''function prices(m){
+  const z=new Map();
+  rows(sales(),m).forEach(r=>{const k=skuKey(r.sku);if(!k)return;if(!z.has(k))z.set(k,{r:0,q:0});const x=z.get(k);x.r+=n(r.current_revenue)+n(r.previous_revenue);x.q+=n(r.current_qty)+n(r.previous_qty)});
+  const out=new Map();z.forEach((x,k)=>{if(x.q>0&&x.r>0)out.set(k,x.r/x.q)});return out;
+}
+function salesBySku(m){
+  const z=new Map();
+  rows(sales(),m).forEach(r=>{
+    const k=skuKey(r.sku);if(!k)return;
+    if(!z.has(k))z.set(k,{sku:String(r.sku||''),product:String(r.product||''),g:String(r.assigned_group||'Не распределено'),current:0,previous:0});
+    const x=z.get(k);x.current+=n(r.current_revenue);x.previous+=n(r.previous_revenue);if(!x.product&&r.product)x.product=String(r.product);if((!x.g||x.g==='Не распределено')&&r.assigned_group)x.g=String(r.assigned_group);
+  });
+  return z;
+}
+function stockBySku(m){
+  const z=new Map();
+  rows(stocks(),m).forEach(r=>{const k=skuKey(r.sku);if(k)z.set(k,r)});
+  return z;
+}
+function partnerNet(r){
+  if(!r)return 0;
+  if(r.partner_net!=null)return Math.max(0,n(r.partner_net));
+  return Math.max(0,n(r.partner_total)-n(r.partner_orders));
+}
+function selloutOpportunities(m){
+  const sm=salesBySku(m),st=stockBySku(m),a=[];
+  for(const [k,x] of sm){
+    const r=st.get(k),partner=partnerNet(r);if(!(partner>0)||!(x.previous>0))continue;
+    const projected=forecast(x.current,selectedMonth());if(projected==null)continue;
+    const value=Math.max(0,x.previous-n(projected));if(value<=.01)continue;
+    a.push({g:x.g||String(r?.assigned_group||'Не распределено'),sku:x.sku||String(r?.sku||''),product:x.product||String(r?.product||''),partner,current:x.current,previous:x.previous,projected:n(projected),value});
+  }
+  a.sort((x,y)=>y.value-x.value);return{a,total:a.reduce((s,x)=>s+x.value,0)};
+}
+function replenishmentOpportunities(m){
+  const p=prices(m),a=[];let noPrice=0;
+  rows(stocks(),m).forEach(r=>{
+    if(partnerNet(r)>0)return;
+    const k=skuKey(r.sku),u=p.get(k),need=Math.max(0,n(r.recommended)),own=Math.max(0,n(r.own_qty)),ch=Math.max(0,n(r.chekhov_qty)),q=Math.min(need,own+ch);
+    if(q<=0)return;if(!(u>0)){noPrice++;return}
+    a.push({g:String(r.assigned_group||'Не распределено'),sku:String(r.sku||''),product:String(r.product||''),need,own,ch,q,value:q*u});
+  });
+  a.sort((x,y)=>y.value-x.value);return{a,total:a.reduce((s,x)=>s+x.value,0),noPrice};
+}
+function allocateRows(items,gap){
+  const gm=new Map();
+  (items||[]).forEach(x=>{if(!gm.has(x.g))gm.set(x.g,{g:x.g,total:0,a:[]});const q=gm.get(x.g);q.total+=x.value;q.a.push(x)});
+  let left=Math.max(0,gap),out=[];
+  for(const q of [...gm.values()].sort((x,y)=>y.total-x.total)){
+    if(left<=.01)break;const use=Math.min(q.total,left);left-=use;let l=use,aa=[];
+    for(const x of q.a){if(l<=.01)break;const u=Math.min(x.value,l);l-=u;aa.push({...x,use:u})}
+    out.push({...q,use,aa});
+  }
+  return{out,covered:Math.max(0,gap-left),left};
+}
+function commercialReserve(m){
+  const sellout=selloutOpportunities(m),replenish=replenishmentOpportunities(m);
+  return{sellout,replenish,total:sellout.total+replenish.total};
+}
+function allocate(m,gap){
+  const reserve=commercialReserve(m),sellout=allocateRows(reserve.sellout.a,gap),replenish=allocateRows(reserve.replenish.a,sellout.left);
+  return{sellout:{...sellout,total:reserve.sellout.total},replenish:{...replenish,total:reserve.replenish.total,noPrice:reserve.replenish.noPrice},covered:sellout.covered+replenish.covered,left:replenish.left,total:reserve.total};
+}
+'''
+          s = s[:start] + block + s[end:]
+
+          start = s.index('function recommendation(m){')
+          end = s.index('\n\nfunction css(){', start)
+          new_rec = r'''function recommendation(m){
+  const month=selectedMonth(),f=fact(m),ly=lastYear(m),fc=forecast(f,month),floor30=ly>0?ly*1.30:0;
+  if(!(floor30>0)&&!(n(fc)>0))return null;
+  const amount=Math.ceil(Math.max(floor30,n(fc),1)/1000)*1000,reserve=commercialReserve(m);
+  return{month,f,ly,fc,floor30,amount,stock:reserve.total,supported:Math.min(amount,Math.ceil((n(fc)+reserve.total)/1000)*1000),uncovered:Math.max(0,amount-n(fc)-reserve.total)};
+}'''
+          s = s[:start] + new_rec + s[end:]
+
+          start = s.index('function gapHtml(m,gap){')
+          end = s.index('function leaderHtml(m,rec){', start)
+          new_gap = r'''function bucketGroups(pack,type){
+  let s='';
+  (pack.out||[]).forEach(g=>{
+    s+=`<details style="margin-top:5px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:10px"><b>${esc(g.g)}</b><b>+${money(g.use)}</b></summary>`;
+    let shown=0;
+    g.aa.slice(0,8).forEach(q=>{
+      shown+=q.use;
+      const note=type==='sellout'?`21vek ${qty(q.partner)} шт. · прогноз ${money(q.projected)} · аналог ${money(q.previous)}`:`21vek 0 шт. · нужно ${qty(q.need)} · Витебск ${qty(q.own)} · Чехов ${qty(q.ch)}`;
+      s+=`<div class="tri-ai48-row"><span><b>${esc(q.sku)}</b> · ${esc(q.product)}<br>${note}</span><b>+${money(q.use)}</b></div>`;
+    });
+    const rest=g.use-shown;if(rest>.01)s+=`<div class="tri-ai48-row"><span>Остальные позиции</span><b>+${money(rest)}</b></div>`;s+='</details>';
+  });
+  return s;
+}
+function gapHtml(m,gap){
+  if(gap<=.01)return `<div class="tri-ai48-ok">✅ Текущий прогноз покрывает утверждённый план.</div><div class="tri-ai48-note">Остатки: ${stockDates()}</div>`;
+  if(!stocks().length)return `<div class="tri-ai48-loading">Остатки 21vek / Витебск / Чехов ещё загружаются. Блок «Где взять» появится автоматически.</div>`;
+  const x=allocate(m,gap);
+  let s=`<div class="tri-ai48-box"><b>🎯 Где взять недостающее</b><div class="tri-ai48-note">Разрыв по прогнозу к утверждённому плану: <b>${money(gap)}</b>. Источники не дублируются: сначала возвращаем sell-out на товаре, который уже есть у 21vek, затем считаем возможную догрузку.</div></div><div class="tri-ai48-note" style="margin-top:5px">Остатки: ${stockDates()}</div>`;
+  s+=`<div class="tri-ai48-box"><b>1. Вернуть продажи на товаре, который уже есть у 21vek: ${money(x.sellout.covered)}</b><div class="tri-ai48-note">Потенциал возврата = недобор прогноза SKU к аналогичному месяцу прошлого года. Это коммерческий потенциал, а не гарантированная продажа.</div></div>`;
+  s+=bucketGroups(x.sellout,'sellout');
+  s+=`<div class="tri-ai48-box"><b>2. Догрузить отсутствующий на 21vek товар: ${money(x.replenish.covered)}</b><div class="tri-ai48-note">Только SKU с нулевым свободным остатком у 21vek, для которых есть подтверждённая потребность и товар на Витебске/Чехове.</div></div>`;
+  s+=bucketGroups(x.replenish,'replenish');
+  if(x.left>.01)s+=`<div class="tri-ai48-warn"><b>3. Пока не покрыто подтверждёнными источниками: ${money(x.left)}.</b></div>`;
+  else s+=`<div class="tri-ai48-ok"><b>3. Разрыв покрывается найденным коммерческим потенциалом.</b></div>`;
+  if(x.replenish.noPrice)s+=`<div class="tri-ai48-note" style="margin-top:5px">Не включено ${x.replenish.noPrice} SKU для догрузки без надёжной цены из истории продаж.</div>`;
+  return s;
+}
+'''
+          s = s[:start] + new_gap + s[end:]
+          s = replace_once(s, 'Товарный резерв ${money(rec.stock)}', 'Коммерческий резерв ${money(rec.stock)}', 'AI reserve label')
+          p.write_text(s, encoding='utf-8')
+
+          # --- cache/version ---
+          p = Path('assets/66-performance-root-v23657.js')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(s, "const V='23.6.100',flights", "const V='23.6.101',flights", 'performance root version')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(s, "const APP_VERSION = '2026-09-10-resanta-crm-v23.6.100';", "const APP_VERSION = '2026-09-10-resanta-crm-v23.6.101';", 'APP_VERSION')
+          if s.count('./assets/03-triovist-routes.js?v=23.6.84') != 2:
+              raise SystemExit('03 cache query: expected 2 old references')
+          s = s.replace('./assets/03-triovist-routes.js?v=23.6.84','./assets/03-triovist-routes.js?v=23.6.101')
+          s = replace_once(s, './assets/66-performance-root-v23657.js?v=23.6.100', './assets/66-performance-root-v23657.js?v=23.6.101', 'performance root cache query')
+          p.write_text(s, encoding='utf-8')
+
+          # semantic guards
+          checks = {
+            'assets/03-triovist-routes.js': ["triovist_tasks_get_dashboard_month_v23648", "taskMonth(t)===selected", "growthBase=factor>0&&factor<1?forecastSales:s.current"],
+            'assets/11-triovist-ai-plans-v2348.js': ["selloutOpportunities", "if(partnerNet(r)>0)return", "Вернуть продажи на товаре, который уже есть у 21vek", "Пока не покрыто подтверждёнными источниками"],
+            'assets/66-performance-root-v23657.js': ["const V='23.6.101'"],
+            'index.html': ["resanta-crm-v23.6.101", "03-triovist-routes.js?v=23.6.101"]
+          }
+          for path, needles in checks.items():
+              text = Path(path).read_text(encoding='utf-8')
+              for needle in needles:
+                  if needle not in text: raise SystemExit(f'{path}: missing {needle}')
+          print('v23.6.101 semantic patch checks passed')
+          PY
+
+          node --check assets/03-triovist-routes.js
+          node --check assets/11-triovist-ai-plans-v2348.js
+          node --check assets/62-triovist-task-ux-v23653.js
+          node --check assets/66-performance-root-v23657.js
+          git diff --check
+
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets/03-triovist-routes.js assets/11-triovist-ai-plans-v2348.js assets/66-performance-root-v23657.js index.html
+          git rm .github/workflows/_tmp-triovist-kpi-gap-v236101.yml
+          git commit -m 'Triovist: correct monthly KPI and sales gap sources (v23.6.101)'
+          git pull --rebase origin main
+          git push origin main
