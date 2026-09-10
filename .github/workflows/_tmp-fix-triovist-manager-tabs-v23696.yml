@@ -1,0 +1,97 @@
+name: TEMP — fix Triovist manager tabs v23.6.96
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-fix-triovist-manager-tabs-v23696.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Triovist root recovery only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root_p=Path('assets/34-triovist-root-v23614.js')
+          loader_p=Path('assets/32-triovist-v23611.js')
+          perf_p=Path('assets/66-performance-root-v23657.js')
+          index_p=Path('index.html')
+
+          root=root_p.read_text(encoding='utf-8')
+          loader=loader_p.read_text(encoding='utf-8')
+          perf=perf_p.read_text(encoding='utf-8')
+          index=index_p.read_text(encoding='utf-8')
+
+          root=root.replace('/* RESANTA CRM v23.6.94 · TRIOVIST ROOT · refresh button UI patch */','/* RESANTA CRM v23.6.96 · TRIOVIST ROOT · manager tabs recovery */',1)
+          root=root.replace("const V='v23.6.94',STORE=", "const V='v23.6.96',STORE=",1)
+
+          old_local="function localCtx(){let p;try{p=window.currentProfile||window.currentUser}catch(_){}if(!p)return null;const email=String(p.email||'').toLowerCase(),role=String(p.role||'').toLowerCase(),scope=String(p.access_scope||'').toLowerCase(),is_manager=role==='manager'&&scope==='triovist',is_leader=role==='boss'&&LEADERS.has(email);return(is_manager||is_leader)?{email,name:p.name||email,is_manager,is_leader,can_write_expenses:is_leader||email==='krishtal_na@resanta.ru'}:null}"
+          new_local="function localCtx(){let p=null;try{if(typeof currentProfile!=='undefined'&&currentProfile)p=currentProfile;else if(typeof currentUser!=='undefined'&&currentUser)p=currentUser}catch(_){}if(!p){try{p=window.currentProfile||window.currentUser}catch(_){}}if(!p)return null;const email=String(p.email||'').trim().toLowerCase(),role=String(p.role||'').toLowerCase(),scope=String(p.access_scope||'').toLowerCase(),is_manager=role==='manager'&&scope==='triovist',is_leader=role==='boss'&&LEADERS.has(email);return(is_manager||is_leader)?{email,name:p.name||email,is_manager,is_leader,can_write_expenses:is_leader||email==='krishtal_na@resanta.ru'}:null}"
+          if old_local not in root: raise SystemExit('localCtx anchor not found')
+          root=root.replace(old_local,new_local,1)
+
+          old_ensure="async function ensure(){if(busy)return false;busy=true;try{css();if(!ctx){ctx=await context();if(!ctx)return false}return dom()}finally{busy=false}}"
+          new_ensure="async function ensure(){if(busy)return false;busy=true;try{if(!ctx){ctx=await context();if(!ctx)return false}css();return dom()}finally{busy=false}}"
+          if old_ensure not in root: raise SystemExit('ensure anchor not found')
+          root=root.replace(old_ensure,new_ensure,1)
+
+          old_start="async function start(){if(!await ensure())return false;watch();active=remembered();await activate(active);sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}"
+          new_start="async function start(){if(!await ensure())return false;watch();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await work('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}"
+          if old_start not in root: raise SystemExit('start anchor not found')
+          root=root.replace(old_start,new_start,1)
+
+          old_loader="if(window.RESANTA_TRIOVIST_ROOT_V23614||document.querySelector('script[data-triovist-root-v23614]'))return;\nconst s=document.createElement('script');\ns.src='./assets/34-triovist-root-v23614.js?v=23.6.94';\ns.async=false;\ns.dataset.triovistRootV23614='1';"
+          new_loader="if(window.RESANTA_TRIOVIST_ROOT_V23614)return;\nconst stale=document.querySelector('script[data-triovist-root-v23614]');\nif(stale){const age=Date.now()-Number(stale.dataset.triovistStartedAt||0);if(stale.dataset.triovistStartedAt&&age<5000)return;stale.remove();}\nconst s=document.createElement('script');\ns.src='./assets/34-triovist-root-v23614.js?v=23.6.96';\ns.async=false;\ns.dataset.triovistRootV23614='1';\ns.dataset.triovistStartedAt=String(Date.now());"
+          if old_loader not in loader: raise SystemExit('loader anchor not found')
+          loader=loader.replace(old_loader,new_loader,1)
+
+          if "const V='23.6.94',flights=" not in perf: raise SystemExit('performance version anchor not found')
+          perf=perf.replace("const V='23.6.94',flights=", "const V='23.6.96',flights=",1)
+
+          old_app="const APP_VERSION = '2026-09-10-resanta-crm-v23.6.95';"
+          if old_app not in index: raise SystemExit('APP_VERSION anchor not found')
+          index=index.replace(old_app,"const APP_VERSION = '2026-09-10-resanta-crm-v23.6.96';",1)
+          old_perf='assets/66-performance-root-v23657.js?v=23.6.94'
+          if old_perf not in index: raise SystemExit('performance script cache anchor not found')
+          index=index.replace(old_perf,'assets/66-performance-root-v23657.js?v=23.6.96',1)
+
+          # Safety assertions: no data/RPC business names altered; only recovery/cache behavior.
+          assert "managerTabRecovery:true" in root
+          assert "typeof currentProfile!=='undefined'" in root
+          assert "fallback to summary" in root
+          assert "v=23.6.96" in loader
+          assert "const V='23.6.96'" in perf
+          assert "v23.6.96" in index
+
+          root_p.write_text(root,encoding='utf-8')
+          loader_p.write_text(loader,encoding='utf-8')
+          perf_p.write_text(perf,encoding='utf-8')
+          index_p.write_text(index,encoding='utf-8')
+          PY
+
+          node --check assets/34-triovist-root-v23614.js
+          node --check assets/32-triovist-v23611.js
+          node --check assets/66-performance-root-v23657.js
+          git diff --check
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git rm .github/workflows/_tmp-fix-triovist-manager-tabs-v23696.yml
+          git add assets/34-triovist-root-v23614.js assets/32-triovist-v23611.js assets/66-performance-root-v23657.js index.html
+          git commit -m 'Triovist: restore manager tabs safely (v23.6.96)'
+          git push origin HEAD:main
