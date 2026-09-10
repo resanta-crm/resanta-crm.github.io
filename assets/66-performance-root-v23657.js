@@ -8,7 +8,8 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.102',flights=new Map(),contractFlights=new Map();
+const V='23.6.103',flights=new Map(),contractFlights=new Map();
+const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103'});
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -22,7 +23,11 @@ function isBoss(){
   const p=profile(),r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();
   return r==='boss'||e==='payushin_ar@resanta.ru';
 }
-function loaded(guard){return !!(guard&&window[guard])}
+function loaded(guard){
+  if(!(guard&&window[guard]))return false;
+  const expected=VERSIONED_GUARDS[guard];
+  return !expected||String(window[guard]?.version||'')===expected;
+}
 function attrName(marker){return 'data-'+marker}
 function waitGuard(guard,ms=1400){
   if(!guard||loaded(guard))return Promise.resolve(true);
@@ -226,6 +231,7 @@ function maybeLoadPaymentRegistry(){if(paymentEligible())loadPaymentRegistry().c
 function maybeLoadWarehouseShell(){if(isBoss())loadWarehouseShell().catch(e=>console.warn('ROOT '+V+' warehouse shell',e))}
 
 async function loadForPage(page,epoch){
+  checkFrontendVersion(false).catch(()=>{});
   const p=String(page||activePage()||'');
   try{
     if(p==='triovist')return await loadTriovist();
@@ -313,6 +319,30 @@ window.crmModuleContractCheckV23671=function(){
     activePage:activePage()
   };
 };
+
+let lastFrontendVersionCheck=0,frontendReloading=false;
+async function checkFrontendVersion(force=false){
+  if(frontendReloading)return false;
+  const now=Date.now();
+  if(!force&&now-lastFrontendVersionCheck<60000)return false;
+  lastFrontendVersionCheck=now;
+  try{
+    const r=await fetch('./data/app-version.json?ts='+now,{cache:'no-store'});
+    if(!r.ok)return false;
+    const j=await r.json(),remote=String(j?.version||'').replace(/^v/,'');
+    if(remote&&remote!==V){
+      frontendReloading=true;
+      const b=document.getElementById('crm-update-banner');
+      if(b){b.textContent='CRM обновлена. Загружаем новую версию…';b.classList.add('show')}
+      setTimeout(()=>location.reload(),250);
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+window.crmCheckFrontendVersionV236103=checkFrontendVersion;
+window.addEventListener('focus',()=>checkFrontendVersion(false),{passive:true});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkFrontendVersion(false)},{passive:true});
 
 function boot(){
   // Login safety is global by nature and tiny; everything business-related stays page-scoped.

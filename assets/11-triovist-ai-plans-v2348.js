@@ -1,9 +1,13 @@
-/* RESANTA CRM v23.6.102 · TRIOVIST AI PLANS · sell-out + replenishment gap truth */
+/* RESANTA CRM v23.6.103 · TRIOVIST AI PLANS · stale-runtime-safe sell-out + replenishment gap truth */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_AI_PLANS_V2348)return;
-
-const V='v23.6.102';
+const V='v23.6.103';
+const previousModule=window.RESANTA_TRIOVIST_AI_PLANS_V2348;
+if(previousModule&&String(previousModule.version||'')===V)return;
+// A page may stay open across a deploy. An older v23.4.8 module used the same guard,
+// so a boolean guard alone can pin the old UI forever. Release the stale guard and
+// let this bundle take over; the wrapper below is version-aware as well.
+if(previousModule){try{window.RESANTA_TRIOVIST_AI_PLANS_V2348=null}catch(_){}}
 const A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru',M=[A,K];
 const N={[A]:'Александренко',[K]:'Кришталь'};
 const B=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
@@ -214,9 +218,9 @@ function hook(){
   document.getElementById('tri-ai-independent-root-v2347')?.remove();
   document.querySelectorAll('.tri-ai-motivation').forEach(x=>x.remove());
   const baseRender=window.renderTriovist;
-  if(typeof baseRender==='function'&&!baseRender.__ai2348){const w=function(){const out=baseRender.apply(this,arguments);lastSig='';schedule(0);startProbe();return out};w.__ai2348=true;window.renderTriovist=w;try{renderTriovist=w}catch(_){}}
+  if(typeof baseRender==='function'&&baseRender.__ai2348Version!==V){const w=function(){const out=baseRender.apply(this,arguments);lastSig='';schedule(0);startProbe();return out};w.__ai2348=true;w.__ai2348Version=V;window.renderTriovist=w;try{renderTriovist=w}catch(_){}}
   const baseReload=window.triovistReload;
-  if(typeof baseReload==='function'&&!baseReload.__ai2348){const w=async function(){const out=await baseReload.apply(this,arguments);lastSig='';schedule(0);startProbe();return out};w.__ai2348=true;window.triovistReload=w;try{triovistReload=w}catch(_){}}
+  if(typeof baseReload==='function'&&baseReload.__ai2348Version!==V){const w=async function(){const out=await baseReload.apply(this,arguments);lastSig='';schedule(0);startProbe();return out};w.__ai2348=true;w.__ai2348Version=V;window.triovistReload=w;try{triovistReload=w}catch(_){}}
   document.addEventListener('click',e=>{if(e.target?.closest?.('[data-tab="motivation"],#tri-v22728-tab-motivation')){lastSig='';schedule(0);startProbe()}});
   window.addEventListener('focus',()=>{if(document.getElementById('page-triovist')?.classList.contains('active')){lastSig='';schedule(0);startProbe()}});
   if(!motivationHost()){

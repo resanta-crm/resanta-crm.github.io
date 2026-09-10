@@ -1,0 +1,5 @@
+{
+  "version": "23.6.103",
+  "released_at": "2026-09-10",
+  "purpose": "frontend cache/runtime invalidation"
+}
