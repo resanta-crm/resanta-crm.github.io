@@ -1,9 +1,9 @@
-/* RESANTA CRM v23.6.101 · TRIOVIST AI PLANS · sell-out + replenishment gap truth */
+/* RESANTA CRM v23.6.102 · TRIOVIST AI PLANS · sell-out + replenishment gap truth */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_AI_PLANS_V2348)return;
 
-const V='v23.6.101';
+const V='v23.6.102';
 const A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru',M=[A,K];
 const N={[A]:'Александренко',[K]:'Кришталь'};
 const B=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);

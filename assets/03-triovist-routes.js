@@ -3841,7 +3841,7 @@ window.addEventListener('pageshow',function(){
     if(!canSee()||loading||(loaded&&!force))return;
     loading=true;injectUi();banner('Загружаю задачи, продажи и остатки…');
     try{
-      const [tasksResult]=await Promise.all([rpc('triovist_tasks_get_dashboard_month_v23648',{p_manager_email:null,p_month:month+'-01'},60000),loadCommercial()]);
+      const [tasksResult]=await Promise.all([window.TRIOVIST_DATA_HUB_V227315.tasks({p_manager_email:null}),loadCommercial()]);
       data=tasksResult||{tasks:[],summary:{},groups:[],managers:[]};data.tasks=(data.tasks||[]).filter(triTaskAllowedV22728);loaded=true;
       await enrichTasks();
       banner('');render();
