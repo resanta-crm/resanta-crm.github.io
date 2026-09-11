@@ -1,6 +1,6 @@
 {
-  "version": "23.6.107",
+  "version": "23.6.108",
   "released_at": "2026-09-11",
-  "purpose": "Triovist own 21vek parser control center, status and safe manual refresh queue",
-  "deploy_trigger": "2026-09-11T12:08:30Z"
+  "purpose": "Triovist 21vek manager warning: prominent amber/red parser failure highlighting",
+  "deploy_trigger": "2026-09-11T13:20:00Z"
 }
