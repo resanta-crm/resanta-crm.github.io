@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.108 · TRIOVIST OWN 21VEK CONTROL CENTER
+/* RESANTA CRM v23.6.110 · TRIOVIST OWN 21VEK CONTROL CENTER
  * Lightweight status/control UI for the production own 21vek parser.
  * Managers get a prominent warning if data is stale, incomplete or the parser fails.
  * One cached status RPC; no card scans in browser; no MutationObserver.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.108',TTL=30000;
+const VERSION='v23.6.110',TTL=30000;
 let cache=null,cacheAt=0,flight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -90,7 +90,7 @@ function render(d){
       <button class="btn-secondary" type="button" onclick="triovist21vekRefreshStatusV236107()">↻ Статус</button>
       ${can?`<button class="btn-primary" type="button" ${reqActive?'disabled':''} onclick="triovist21vekRequestRefreshV236107()">${btnText}</button>`:''}
     </div></div>
-    ${can?'<div class="tri21ctl-note">Ручной запрос подхватывается сервером максимум примерно за 10 минут. Рабочий снимок меняется только после полного успешного сбора карточек и TOP; при ошибке остаётся последний хороший снимок.</div>':'<div class="tri21ctl-note">Менеджеру ничего запускать вручную не нужно. Контролируйте цвет статуса: зелёный — работаем; оранжевый/красный — сообщить руководителю со скриншотом.</div>'}`;
+    ${can?'<div class="tri21ctl-note">Ручной запрос обычно подхватывается сервером в течение 10–20 минут; при задержке GitHub запуск может начаться позже. Рабочий снимок меняется только после полного успешного сбора карточек и TOP; при ошибке остаётся последний хороший снимок.</div>':'<div class="tri21ctl-note">Менеджеру ничего запускать вручную не нужно. Контролируйте цвет статуса: зелёный — работаем; оранжевый/красный — сообщить руководителю со скриншотом.</div>'}`;
 }
 async function load(force=false){
   const root=ensurePanel();if(!root)return;
