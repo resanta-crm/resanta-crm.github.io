@@ -1,6 +1,6 @@
 {
-  "version": "23.6.105",
+  "version": "23.6.106",
   "released_at": "2026-09-11",
-  "purpose": "Promotion closed-row filter, sales scope truth and explicit over-budget approval",
-  "deploy_trigger": "2026-09-11T09:45:30Z"
+  "purpose": "Falling clients: selected-month task history and duplicate protection",
+  "deploy_trigger": "2026-09-11T10:04:24Z"
 }

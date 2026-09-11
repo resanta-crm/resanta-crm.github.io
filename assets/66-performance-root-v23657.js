@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.105',flights=new Map(),contractFlights=new Map();
+const V='23.6.106',flights=new Map(),contractFlights=new Map();
 const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103'});
 
 function activePage(){
