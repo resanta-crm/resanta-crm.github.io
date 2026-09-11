@@ -1,14 +1,16 @@
-/* RESANTA CRM v23.6.2 · DIRECTOR GPS CONTROL
+/* RESANTA CRM v23.6.104 · DIRECTOR GPS CONTROL
  * Lightweight director screen:
  * - total client visits;
  * - plan fact separated from off-plan visits;
  * - GPS warnings are visible but do not erase a recorded/linked visit;
+ * - background GPS service is treated as alive only while background points are fresh;
  * - no raw GPS points and no maps in the main CRM.
  */
 (function(){
 'use strict';
 if(window.RESANTA_GPS_AGGREGATED_ROOT_V2360)return;
-const VERSION='v23.6.86';
+const VERSION='v23.6.104';
+const GPS_SERVICE_STALE_SEC=300;
 let flight=null,reqSeq=0,lastRows=[];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const escAttr=v=>esc(v).replace(/`/g,'&#96;');
@@ -17,12 +19,20 @@ function dateValue(){return document.getElementById('gps-control-date')?.value||
 function filterValue(id){return document.getElementById(id)?.value||'all';}
 function ageSec(v){const t=v?new Date(v).getTime():NaN;return Number.isFinite(t)?Math.max(0,Math.round((Date.now()-t)/1000)):Infinity;}
 function ageText(v){const s=ageSec(v);if(!Number.isFinite(s))return'нет GPS';if(s<60)return s+' сек назад';if(s<3600)return Math.round(s/60)+' мин назад';return Math.round(s/3600)+' ч назад';}
-function gpsTruth(w){const s=ageSec(w.last_point_at);if(s<=120)return{cls:'ok',text:'● GPS онлайн'};if(s<=600)return{cls:'warn',text:'● GPS задержка'};return{cls:'bad',text:'● GPS не передаёт'};}
+function serviceAgeSec(w){return ageSec(w?.last_point_at||w?.started_at);}
+function gpsTruth(w){
+  if(w?.status!=='active')return{cls:'ok',text:'● рабочий день завершён',serviceBroken:false,age:serviceAgeSec(w)};
+  const s=serviceAgeSec(w);
+  if(w.native_tracking!==true)return{cls:'bad',text:'● фоновая служба не запущена',serviceBroken:true,age:s};
+  if(!Number.isFinite(s)||s>GPS_SERVICE_STALE_SEC)return{cls:'bad',text:'● фоновая служба не работает',serviceBroken:true,age:s};
+  if(s<=120)return{cls:'ok',text:'● GPS онлайн',serviceBroken:false,age:s};
+  return{cls:'warn',text:'● GPS задержка',serviceBroken:false,age:s};
+}
 function km(v){const n=Number(v)||0;return(n/1000).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})+' км';}
 function clock(v){if(!v)return'—';try{return new Date(v).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}catch(_){return'—';}}
 function duration(a,b){const x=new Date(a).getTime(),y=b?new Date(b).getTime():Date.now();if(!Number.isFinite(x)||!Number.isFinite(y))return'';const m=Math.max(0,Math.round((y-x)/60000));return Math.floor(m/60)+' ч '+(m%60)+' мин';}
 function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000?Math.round(n)+' м':(n/1000).toLocaleString('ru-RU',{maximumFractionDigits:1})+' км';}
-function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.86&workday='+encodeURIComponent(String(id||''));}
+function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.104&workday='+encodeURIComponent(String(id||''));}
 function openViewer(id){if(!id)return;window.open(viewerUrl(id),'_blank','noopener');}
 window.crmOpenGpsViewerV2360=openViewer;
 
@@ -52,12 +62,12 @@ function renderKpi(rows){
   const totalVisits=rows.reduce((s,x)=>s+(Number(x.visit_total)||0),0);
   const planVisited=rows.reduce((s,x)=>s+(Number(x.plan_visited_count)||0),0);
   const planTotal=rows.reduce((s,x)=>s+(Number(x.planned_count)||0),0);
-  const warnings=rows.reduce((s,x)=>s+(Number(x.gps_warning_count)||0),0);
+  const serviceBroken=activeRows.filter(x=>gpsTruth(x).serviceBroken).length;
   root.innerHTML=
     '<div class="kpi"><div class="kpi-label">Сейчас в пути</div><div class="kpi-value '+(activeRows.length?'ok':'')+'">'+activeRows.length+'</div></div>'+
     '<div class="kpi"><div class="kpi-label">Клиентов посещено</div><div class="kpi-value">'+totalVisits+'</div></div>'+
     '<div class="kpi"><div class="kpi-label">План выполнен</div><div class="kpi-value">'+planVisited+' / '+planTotal+'</div></div>'+
-    '<div class="kpi"><div class="kpi-label">GPS требует проверки</div><div class="kpi-value '+(warnings?'warn':'ok')+'">'+warnings+'</div></div>';
+    '<div class="kpi"><div class="kpi-label">Фоновая служба не работает</div><div class="kpi-value '+(serviceBroken?'bad':'ok')+'">'+serviceBroken+'</div></div>';
 }
 function currentPlace(w){
   const name=String(w.near_client_name||'').trim(),d=Number(w.near_client_distance_m);
@@ -71,14 +81,18 @@ function renderRows(rows){
     rows.map(w=>{
       const live=w.status==='active',t=gpsTruth(w),planned=Number(w.planned_count)||0,planVisited=Number(w.plan_visited_count)||0;
       const total=Number(w.visit_total)||0,off=Number(w.offplan_count)||0,warn=Number(w.gps_warning_count)||0,pending=Math.max(0,planned-planVisited);
-      let control='<span class="ok" style="font-size:11px;font-weight:700">Без отклонений</span>';
+      let control=t.serviceBroken?'<div class="bad" style="font-size:11px;font-weight:800">⛔ Фоновая служба не работает</div>':'<span class="ok" style="font-size:11px;font-weight:700">Без отклонений</span>';
       if(warn||off){
-        control=(warn?'<div class="warn" style="font-size:11px;font-weight:700">⚠ GPS к проверке: '+warn+'</div>':'')+
+        control+=(warn?'<div class="warn" style="font-size:11px;font-weight:700;margin-top:3px">⚠ GPS визитов к проверке: '+warn+'</div>':'')+
                 (off?'<div style="font-size:11px;color:#1D4ED8;font-weight:700;margin-top:3px">↗ Вне плана: '+off+'</div>':'');
       }
+      const statusBadge=live?(t.serviceBroken?'<span class="tag tag-r">GPS не работает</span>':'<span class="gps-live-pill">в пути · GPS работает</span>'):'<span class="tag tag-m">завершён</span>';
+      const serviceDetail=t.serviceBroken
+        ?'<div class="bad" style="font-size:10px;margin-top:4px;font-weight:800">'+esc(t.text.replace(/^●\s*/,''))+' · фоновая точка '+esc(ageText(w.last_point_at||w.started_at))+'</div>'
+        :'<div class="'+t.cls+'" style="font-size:10px;margin-top:4px;font-weight:700">'+esc(t.text)+'</div>';
       return '<tr>'+
         '<td><b>'+esc(w.manager_name)+'</b></td>'+
-        '<td>'+(live?'<span class="gps-live-pill">в пути</span>':'<span class="tag tag-m">завершён</span>')+'<div class="'+t.cls+'" style="font-size:10px;margin-top:4px;font-weight:700">'+esc(t.text)+'</div></td>'+
+        '<td>'+statusBadge+serviceDetail+'</td>'+
         '<td>'+esc(clock(w.started_at))+' — '+(w.ended_at?esc(clock(w.ended_at)):'сейчас')+'<div style="font-size:10px;color:var(--sub)">'+esc(duration(w.started_at,w.ended_at))+'</div></td>'+
         '<td>'+currentPlace(w)+'</td>'+
         '<td><b>'+esc(km(w.total_distance_m))+'</b></td>'+
@@ -131,8 +145,9 @@ function install(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 setTimeout(install,250);setTimeout(install,900);
-window.RESANTA_GPS_CONTROL_PERFORMANCE_V2357=Object.freeze({version:VERSION,directorView:true});
-window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPointsInMainCrm:false,mapInMainCrm:false,directorRpc:'gps_get_control_workdays_director_v2362',separateViewer:true});
+setInterval(()=>{if(active())load(true);},30000);
+window.RESANTA_GPS_CONTROL_PERFORMANCE_V2357=Object.freeze({version:VERSION,directorView:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
+window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPointsInMainCrm:false,mapInMainCrm:false,directorRpc:'gps_get_control_workdays_director_v2362',separateViewer:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
 })();
 
 // v23.6.36 · lazy GPS fuel report loader
@@ -140,7 +155,7 @@ window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPoint
   if(window.RESANTA_GPS_FUEL_LOADER_V23636)return;
   window.RESANTA_GPS_FUEL_LOADER_V23636=true;
   const s=document.createElement('script');
-  s.src='./assets/50-gps-fuel-report-v23636.js?v=23.6.84';
+  s.src='./assets/50-gps-fuel-report-v23636.js?v=23.6.104';
   s.async=true;
   document.head.appendChild(s);
 })();
