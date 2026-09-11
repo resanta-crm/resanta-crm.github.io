@@ -1,6 +1,6 @@
 {
-  "version": "23.6.108",
+  "version": "23.6.109",
   "released_at": "2026-09-11",
-  "purpose": "Triovist 21vek manager warning: prominent amber/red parser failure highlighting",
-  "deploy_trigger": "2026-09-11T13:21:00Z"
+  "purpose": "Triovist own 21vek: Excel export of current good working snapshot",
+  "deploy_trigger": "2026-09-11T13:25:00Z"
 }
