@@ -1,11 +1,12 @@
-/* RESANTA CRM v23.6.109 · TRIOVIST 21VEK EXCEL EXPORT
+/* RESANTA CRM v23.6.110 · TRIOVIST 21VEK EXCEL EXPORT
  * Exports only the current good production snapshot visible to the signed-in user.
+ * Access is enforced server-side by triovist_content_export_v236110.
  * SheetJS is loaded on demand only when the user clicks Export.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_EXPORT_V236109)return;
-const VERSION='v23.6.109';
+const VERSION='v23.6.110';
 let xlsxFlight=null,exportFlight=null;
 
 function activeTriovist(){return document.getElementById('page-triovist')?.classList.contains('active');}
@@ -28,32 +29,21 @@ function loadXlsx(){
   return xlsxFlight;
 }
 
-async function currentImports(){
-  const r=await db.from('triovist_content_imports')
-    .select('id,manager_email,manager_name,snapshot_date,source_file,loaded_cards')
-    .eq('is_current',true)
-    .eq('status','complete')
-    .order('manager_name',{ascending:true});
-  if(r?.error)throw r.error;
-  return r?.data||[];
-}
-
-async function currentCards(importIds){
-  const all=[];const page=1000;
-  for(let from=0;;from+=page){
-    const r=await db.from('triovist_content_cards')
-      .select('import_id,manager_name,manager_email,sku,donor_article,product_name,category,subgroup,product_url,price,description_present,warranty_present,keyword,listing_position,product_rating,last_review_rating,review_count,photo_count,video_count,in_stock,negative_reviews,unanswered_negative_reviews,latest_review_date,latest_review_text,latest_review_answered')
-      .in('import_id',importIds)
-      .order('manager_name',{ascending:true})
-      .order('category',{ascending:true})
-      .order('subgroup',{ascending:true})
-      .order('product_name',{ascending:true})
-      .range(from,from+page-1);
+async function currentCards(){
+  const all=[];const page=1000;let snapshot=null;
+  for(let offset=0;;offset+=page){
+    const r=await db.rpc('triovist_content_export_v236110',{
+      p_manager_email:null,
+      p_offset:offset,
+      p_limit:page
+    });
     if(r?.error)throw r.error;
-    const rows=r?.data||[];all.push(...rows);
-    if(rows.length<page)break;
+    const d=r?.data||{},rows=Array.isArray(d.rows)?d.rows:[];
+    if(d.snapshot_date)snapshot=d.snapshot_date;
+    all.push(...rows);
+    if(!d.has_more||!rows.length)break;
   }
-  return all;
+  return {cards:all,snapshot};
 }
 
 function rowForExcel(c){
@@ -95,34 +85,39 @@ async function exportExcel(){
     const btn=document.getElementById('tri21-export-xlsx-v236109');
     const old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='⏳ Готовлю Excel…';}
     try{
-      const [XLSX,imports]=await Promise.all([loadXlsx(),currentImports()]);
-      if(!imports.length)throw new Error('Нет доступного рабочего снимка 21vek');
-      const ids=imports.map(x=>x.id);
-      const cards=await currentCards(ids);
-      if(!cards.length)throw new Error('В рабочем снимке нет доступных карточек');
+      const [XLSX,data]=await Promise.all([loadXlsx(),currentCards()]);
+      const cards=data.cards||[];
+      if(!cards.length)throw new Error('Нет доступного рабочего снимка 21vek');
 
       const wb=XLSX.utils.book_new();
-      const snapshot=[...new Set(imports.map(x=>x.snapshot_date).filter(Boolean))].sort().pop()||new Date().toISOString().slice(0,10);
-      const summary=imports.map(x=>({
-        'Менеджер':x.manager_name||x.manager_email||'',
-        'Дата рабочего снимка':x.snapshot_date||'',
-        'Карточек':Number(x.loaded_cards||cards.filter(c=>c.import_id===x.id).length),
-        'Источник':'Собственный парсер 21vek'
-      }));
-      const sws=XLSX.utils.json_to_sheet(summary);sws['!cols']=[width(22),width(22),width(12),width(28)];
+      const snapshot=data.snapshot||new Date().toISOString().slice(0,10);
+      const managers=[...new Set(cards.map(c=>String(c.manager_name||c.manager_email||'Менеджер')))].sort((a,b)=>a.localeCompare(b,'ru'));
+      const summary=managers.map(name=>{
+        const x=cards.filter(c=>String(c.manager_name||c.manager_email||'Менеджер')===name);
+        return {
+          'Менеджер':name,
+          'Дата рабочего снимка':snapshot,
+          'Карточек':x.length,
+          'В наличии':x.filter(c=>c.in_stock===true).length,
+          'TOP-30':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=30).length,
+          'TOP-60':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=60).length,
+          'Источник':'Собственный парсер 21vek'
+        };
+      });
+      const sws=XLSX.utils.json_to_sheet(summary);sws['!cols']=[width(22),width(22),width(12),width(12),width(12),width(12),width(28)];
       XLSX.utils.book_append_sheet(wb,sws,'Сводка');
 
-      for(const imp of imports){
-        const rows=cards.filter(c=>c.import_id===imp.id).map(rowForExcel);
+      for(const name of managers){
+        const rows=cards.filter(c=>String(c.manager_name||c.manager_email||'Менеджер')===name).map(rowForExcel);
         const ws=XLSX.utils.json_to_sheet(rows);formatSheet(ws,rows);
-        XLSX.utils.book_append_sheet(wb,ws,safeSheetName(imp.manager_name||imp.manager_email));
+        XLSX.utils.book_append_sheet(wb,ws,safeSheetName(name));
       }
-      if(imports.length>1){
+      if(managers.length>1){
         const rows=cards.map(rowForExcel);const ws=XLSX.utils.json_to_sheet(rows);formatSheet(ws,rows);
         XLSX.utils.book_append_sheet(wb,ws,'Все карточки');
       }
 
-      const who=imports.length===1?'_'+String(imports[0].manager_name||'manager').replace(/[^0-9A-Za-zА-Яа-я_-]+/g,'_'):'';
+      const who=managers.length===1?'_'+String(managers[0]).replace(/[^0-9A-Za-zА-Яа-я_-]+/g,'_'):'';
       XLSX.writeFile(wb,'Triovist_21vek_'+snapshot+who+'.xlsx',{compression:true});
       if(typeof showToast==='function')showToast('✅ Excel выгружен: '+cards.length.toLocaleString('ru-RU')+' карточек');
     }catch(e){
