@@ -1,15 +1,15 @@
-/* RESANTA CRM v23.6.26 · PROMOTIONS WORK FILTER ROOT FIX
+/* RESANTA CRM v23.6.105 · PROMOTIONS WORK FILTER ROOT FIX
  * Fixes two mismatches in v23.6.8:
- * 1) "В работе" counted approved + in_work, although approved means waiting_manager.
- * 2) Clicking "В работе" switched to active_now, which shows only actions active today.
- * Correct rule: "В работе" = raw status in_work, across planned/current/ended dates.
+ * 1) "В работе" = raw status in_work only.
+ * 2) Leaving the Work view restores the previous status filter instead of
+ *    leaking the technical `all` filter and showing already completed actions.
  * UI-only: no promotion writes, budgets or approval transitions are changed.
  */
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626)return;
-const VERSION='v23.6.26';
-let workMode=false;
+const VERSION='v23.6.105';
+let workMode=false,returnFilter='current';
 function promos(){try{return typeof allPromotions!=='undefined'&&Array.isArray(allPromotions)?allPromotions:(Array.isArray(window.allPromotions)?window.allPromotions:[])}catch(_){return[]}}
 function isBoss(){try{return typeof promoIsBoss==='function'&&promoIsBoss()}catch(_){return false}}
 function isWork(p){return !!p&&String(p.status||'')==='in_work'}
@@ -32,17 +32,36 @@ function applyWorkView(){
   paintTabs();
 }
 function openWork(){
-  if(!isBoss())return;workMode=true;
+  if(!isBoss())return;
+  const f=document.getElementById('promo-status-filter');
+  if(f&&f.value&&f.value!=='all')returnFilter=f.value;
+  workMode=true;
   try{window.promoApprovalStageFilter='all'}catch(_){}
-  const f=document.getElementById('promo-status-filter');if(f)f.value='all';
+  if(f)f.value='all';
   try{renderPromotions()}catch(e){console.warn('Promotions '+VERSION+' render work',e)}
   setTimeout(applyWorkView,0);setTimeout(applyWorkView,70);
 }
-function leaveWork(){if(!workMode)return;workMode=false;document.getElementById('promo-v23626-work-empty')?.remove();setTimeout(paintTabs,0)}
+function leaveWork(restoreFilter=true){
+  if(!workMode)return;
+  workMode=false;
+  document.getElementById('promo-v23626-work-empty')?.remove();
+  if(restoreFilter){const f=document.getElementById('promo-status-filter');if(f&&f.value==='all')f.value=returnFilter||'current';}
+  setTimeout(paintTabs,0);
+}
 function bind(){
-  // Window capture executes before the old v23.6.8 document capture listener.
-  window.addEventListener('click',e=>{const work=e.target?.closest?.('[data-v2368-work]');if(work){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();openWork();return}if(e.target?.closest?.('[data-v2368-open-action]'))leaveWork()},true);
-  window.addEventListener('change',e=>{if(e.target?.id==='promo-status-filter')leaveWork();if(workMode&&e.target?.id==='promo-manager-filter')setTimeout(applyWorkView,0)},true);
+  window.addEventListener('click',e=>{
+    const work=e.target?.closest?.('[data-v2368-work]');
+    if(work){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();openWork();return}
+    if(e.target?.closest?.('[data-v2368-open-action]'))leaveWork(true);
+  },true);
+  window.addEventListener('change',e=>{
+    if(e.target?.id==='promo-status-filter'){
+      const v=String(e.target.value||'current');
+      if(workMode)leaveWork(false);
+      if(v!=='all')returnFilter=v;
+    }
+    if(workMode&&e.target?.id==='promo-manager-filter')setTimeout(applyWorkView,0);
+  },true);
 }
 function install(){
   if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626)return true;
@@ -51,7 +70,7 @@ function install(){
   const wrapped=function(){const r=base.apply(this,arguments);setTimeout(()=>{try{paintTabs();if(workMode)applyWorkView()}catch(e){console.warn('Promotions '+VERSION+' view',e)}},0);if(workMode)setTimeout(applyWorkView,70);return r};
   window.renderPromotions=wrapped;try{renderPromotions=wrapped}catch(_){}
   bind();setTimeout(paintTabs,0);
-  window.RESANTA_PROMOTIONS_WORK_FILTER_V23626=Object.freeze({version:VERSION,rootFix:true,workStatus:'in_work',approvedMeansWaitingManager:true,allWorkDates:true,dbWrites:false,budgetsUntouched:true,approvalFlowUntouched:true});
+  window.RESANTA_PROMOTIONS_WORK_FILTER_V23626=Object.freeze({version:VERSION,rootFix:true,workStatus:'in_work',approvedMeansWaitingManager:true,allWorkDates:true,restoresPreviousFilter:true,dbWrites:false,budgetsUntouched:true,approvalFlowUntouched:true});
   console.info('RESANTA promotions '+VERSION+' work-filter root fix installed');return true;
 }
 if(!install()){let tries=0;const t=setInterval(()=>{tries++;if(install()||tries>=80)clearInterval(t)},150)}
