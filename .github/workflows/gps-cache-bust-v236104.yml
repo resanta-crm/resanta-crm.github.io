@@ -1,0 +1,66 @@
+name: GPS health cache bust v23.6.104
+
+on:
+  push:
+    paths:
+      - '.github/workflows/gps-cache-bust-v236104.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish frontend v23.6.104
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from datetime import datetime, timezone
+
+          index = Path('index.html')
+          text = index.read_text(encoding='utf-8')
+          old_app = "const APP_VERSION = '2026-09-10-resanta-crm-v23.6.103';"
+          new_app = "const APP_VERSION = '2026-09-11-resanta-crm-v23.6.104';"
+          old_root = './assets/66-performance-root-v23657.js?v=23.6.103'
+          new_root = './assets/66-performance-root-v23657.js?v=23.6.104'
+          if old_app not in text:
+              raise SystemExit('Expected APP_VERSION v23.6.103 not found')
+          if old_root not in text:
+              raise SystemExit('Expected performance-root query v23.6.103 not found')
+          text = text.replace(old_app, new_app, 1).replace(old_root, new_root, 1)
+          index.write_text(text, encoding='utf-8')
+
+          root = Path('assets/66-performance-root-v23657.js')
+          text = root.read_text(encoding='utf-8')
+          old_v = "const V='23.6.103',flights=new Map(),contractFlights=new Map();"
+          new_v = "const V='23.6.104',flights=new Map(),contractFlights=new Map();"
+          if old_v not in text:
+              raise SystemExit('Expected performance root V=23.6.103 not found')
+          root.write_text(text.replace(old_v, new_v, 1), encoding='utf-8')
+
+          app_version = Path('data/app-version.json')
+          data = json.loads(app_version.read_text(encoding='utf-8'))
+          data['version'] = '23.6.104'
+          data['released_at'] = '2026-09-11'
+          data['purpose'] = 'GPS background service health control and cache invalidation'
+          data['deploy_trigger'] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+          app_version.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          Path('.github/workflows/gps-cache-bust-v236104.yml').unlink()
+          PY
+
+      - name: Commit published version
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: publish frontend v23.6.104'
+          git push
