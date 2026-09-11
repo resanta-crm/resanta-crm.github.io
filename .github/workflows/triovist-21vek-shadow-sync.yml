@@ -8,12 +8,15 @@ on:
       - 'tools/triovist_21vek_shadow_sync.py'
       - 'tools/triovist_21vek_top_shadow.py'
       - 'tools/triovist_21vek_promote.py'
+      - 'tools/triovist_21vek_refresh_gate.py'
       - '.github/workflows/triovist-21vek-shadow-sync.yml'
   schedule:
     # Основной объединённый запуск: 06:17 по Минску (UTC+3).
     - cron: '17 3 * * *'
     # Резерв карточек: 08:17 по Минску. TOP и production-promote здесь не повторяем.
     - cron: '17 5 * * *'
+    # Лёгкая проверка ручной очереди из CRM. Без запроса дорогой парсер не запускается.
+    - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
       limit:
@@ -37,48 +40,49 @@ jobs:
       - name: Забрать код
         uses: actions/checkout@v4
 
+      - name: Решить, нужен ли полный запуск
+        id: gate
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          REFRESH_GATE_ACTION: claim
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          DISPATCH_LIMIT: ${{ inputs.limit }}
+          DISPATCH_TOP_LIMIT: ${{ inputs.top_keyword_limit }}
+        run: python3 tools/triovist_21vek_refresh_gate.py
+
       - name: Установить Python
+        if: steps.gate.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Установить зависимости
+        if: steps.gate.outputs.run == 'true'
         run: pip install requests beautifulsoup4
 
       - name: Собрать публичные карточки 21vek в безопасный staging
+        if: steps.gate.outputs.run == 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SHADOW_DELAY_SECONDS: '0.8'
           SHADOW_HTTP_TIMEOUT: '25'
-          DISPATCH_LIMIT: ${{ inputs.limit }}
+          RUN_LIMIT: ${{ steps.gate.outputs.limit }}
+          SKIP_RECENT: ${{ steps.gate.outputs.skip_recent }}
         run: |
-          LIMIT='2500'
-          SKIP_RECENT='0'
-          if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
-            LIMIT='300'
-          elif [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ] && [ -n "$DISPATCH_LIMIT" ]; then
-            LIMIT="$DISPATCH_LIMIT"
-          elif [ "$GITHUB_EVENT_NAME" = 'schedule' ]; then
-            SKIP_RECENT='4'
-          fi
-          echo "21vek cards limit: $LIMIT; skip recent complete: ${SKIP_RECENT}h"
-          SHADOW_LIMIT="$LIMIT" SHADOW_OFFSET='0' SHADOW_SKIP_RECENT_COMPLETE_HOURS="$SKIP_RECENT" python tools/triovist_21vek_shadow_sync.py
+          echo "21vek mode=${{ steps.gate.outputs.mode }} cards=$RUN_LIMIT skip_recent=${SKIP_RECENT}h"
+          SHADOW_LIMIT="$RUN_LIMIT" SHADOW_OFFSET='0' SHADOW_SKIP_RECENT_COMPLETE_HOURS="$SKIP_RECENT" python tools/triovist_21vek_shadow_sync.py
 
       - name: Собрать поисковый TOP-30 / TOP-60
-        if: github.event_name != 'schedule' || github.event.schedule == '17 3 * * *'
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.do_top == 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          DISPATCH_TOP_LIMIT: ${{ inputs.top_keyword_limit }}
+          TOP_LIMIT: ${{ steps.gate.outputs.top_limit }}
         run: |
-          TOP_LIMIT='500'
-          if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
-            TOP_LIMIT='12'
-          elif [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ] && [ -n "$DISPATCH_TOP_LIMIT" ]; then
-            TOP_LIMIT="$DISPATCH_TOP_LIMIT"
-          fi
-          echo "21vek TOP keyword limit: $TOP_LIMIT"
+          echo "21vek TOP keywords=$TOP_LIMIT"
           TOP_KEYWORD_LIMIT="$TOP_LIMIT" \
           TOP_KEYWORD_OFFSET='0' \
           TOP_DELAY_SECONDS='1.2' \
@@ -89,8 +93,18 @@ jobs:
           python tools/triovist_21vek_top_shadow.py
 
       - name: Переключить только полностью проверенный снимок в рабочий Triovist
-        if: github.event_name == 'schedule' && github.event.schedule == '17 3 * * *'
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.do_promote == 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python tools/triovist_21vek_promote.py
+
+      - name: Закрыть ручной запрос из CRM
+        if: always() && steps.gate.outputs.request_id != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          REFRESH_GATE_ACTION: finish
+          REQUEST_ID: ${{ steps.gate.outputs.request_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: python3 tools/triovist_21vek_refresh_gate.py
