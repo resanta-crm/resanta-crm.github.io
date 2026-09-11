@@ -1,0 +1,106 @@
+name: Fix promotion over-budget approval v23.6.105
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-promo-overbudget-v236105.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Allow DFS approval with negative client budget
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from datetime import datetime, timezone
+
+          p = Path('assets/45-promotions-budget-truth-v23630.js')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('/* RESANTA CRM v23.6.30 · PROMOTIONS BUDGET SINGLE TRUTH', '/* RESANTA CRM v23.6.105 · PROMOTIONS BUDGET SINGLE TRUTH', 1)
+          text = text.replace("const VERSION='v23.6.30';", "const VERSION='v23.6.105';", 1)
+
+          old = """      const blocked=!s.has_budget||num(s.shortage)>0;
+      btn.dataset.budgetTruthBlocked=blocked?'1':'0';
+      btn.title=blocked?(s.has_budget?'Недостаточно бюджета именно этого клиента':'У этого клиента бюджет не заведён'):'';"""
+          new = """      const blocked=!s.has_budget;
+      btn.dataset.budgetTruthBlocked=blocked?'1':'0';
+      btn.title=blocked?'У этого клиента бюджет не заведён':(num(s.shortage)>0?'Можно согласовать с превышением бюджета: после согласования '+money(s.after_approval):'');"""
+          if old not in text:
+              raise SystemExit('decorateDetail budget block not found')
+          text = text.replace(old, new, 1)
+
+          old = """  if(base.__promoBudgetTruthV23630)return true;"""
+          new = """  if(base.__promoBudgetDfsOverrideV23631)return true;
+  if(base.__promoBudgetTruthV23630)return true;"""
+          if old not in text:
+              raise SystemExit('wrapper guard not found')
+          text = text.replace(old, new, 1)
+
+          old = """      if(num(s.shortage)>0){alert('Нельзя согласовать: бюджет клиента '+(p.client_name||'—')+' — свободно '+money(s.free)+', для акции требуется '+money(s.requested)+'. Не хватает '+money(s.shortage)+'.');await decorateDetail(id);return;}
+      const comment=prompt('Комментарий ДФС к финальному согласованию (можно оставить пустым):')||'';
+      const {data,error}=await db.rpc('crm_promotion_final_approve_v23630',{p_promotion_id:String(id),p_comment:comment});"""
+          new = """      let allowOver=false;
+      if(num(s.shortage)>0){
+        allowOver=confirm('Бюджет клиента '+(p.client_name||'—')+' будет превышен.\\n\\nСвободно: '+money(s.free)+'\\nДля акции требуется: '+money(s.requested)+'\\nПосле согласования: '+money(s.after_approval)+'\\n\\nВсё равно финально согласовать?');
+        if(!allowOver){await decorateDetail(id);return;}
+      }
+      const comment=prompt('Комментарий ДФС к финальному согласованию (можно оставить пустым):')||'';
+      const {data,error}=await db.rpc('crm_promotion_final_approve_v23631',{p_promotion_id:String(id),p_comment:comment,p_allow_over_budget:allowOver});"""
+          if old not in text:
+              raise SystemExit('strict shortage block not found')
+          text = text.replace(old, new, 1)
+
+          old = "window.RESANTA_PROMOTIONS_BUDGET_TRUTH_V23630=Object.freeze({version:VERSION,clientBudgetOnly:true,serverAtomicFinalApproval:true,autoLinkByClient:true,noCrossClientBudget:true,noPolling:true});"
+          new = "window.RESANTA_PROMOTIONS_BUDGET_TRUTH_V23630=Object.freeze({version:VERSION,clientBudgetOnly:true,serverAtomicFinalApproval:true,autoLinkByClient:true,noCrossClientBudget:true,overBudgetApprovalAllowed:true,noPolling:true});"
+          if old not in text:
+              raise SystemExit('budget truth metadata not found')
+          text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+
+          root = Path('assets/66-performance-root-v23657.js')
+          text = root.read_text(encoding='utf-8')
+          old = "const V='23.6.104',flights=new Map(),contractFlights=new Map();"
+          new = "const V='23.6.105',flights=new Map(),contractFlights=new Map();"
+          if old not in text:
+              raise SystemExit('performance root v23.6.104 not found')
+          root.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          index = Path('index.html')
+          text = index.read_text(encoding='utf-8')
+          old_app = "const APP_VERSION = '2026-09-11-resanta-crm-v23.6.104';"
+          new_app = "const APP_VERSION = '2026-09-11-resanta-crm-v23.6.105';"
+          old_root = './assets/66-performance-root-v23657.js?v=23.6.104'
+          new_root = './assets/66-performance-root-v23657.js?v=23.6.105'
+          if old_app not in text or old_root not in text:
+              raise SystemExit('index v23.6.104 markers not found')
+          index.write_text(text.replace(old_app,new_app,1).replace(old_root,new_root,1), encoding='utf-8')
+
+          av = Path('data/app-version.json')
+          data = json.loads(av.read_text(encoding='utf-8'))
+          data['version']='23.6.105'
+          data['released_at']='2026-09-11'
+          data['purpose']='Allow DFS final promotion approval when client budget becomes negative'
+          data['deploy_trigger']=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+          av.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          Path('.github/workflows/fix-promo-overbudget-v236105.yml').unlink()
+          PY
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Promotions: allow DFS approval with negative budget (v23.6.105)'
+          git push
