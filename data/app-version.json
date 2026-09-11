@@ -2,5 +2,5 @@
   "version": "23.6.104",
   "released_at": "2026-09-11",
   "purpose": "GPS background service health control and cache invalidation",
-  "deploy_trigger": "2026-09-11T08:24:34Z"
+  "deploy_trigger": "2026-09-11T08:25:30Z"
 }
