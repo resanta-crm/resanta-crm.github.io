@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'import_markdown.py'
+      - 'import_markdown_runner.py'
       - '.github/workflows/import-markdown.yml'
   schedule:
     - cron: '*/15 * * * *'
@@ -24,7 +25,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install --disable-pip-version-check requests openpyxl xlrd
-      - run: python -m py_compile import_markdown.py
+      - run: python -m py_compile import_markdown.py import_markdown_runner.py
       - name: Импортировать уценку
         env:
           IMAP_HOST: imap.gmail.com
@@ -36,4 +37,4 @@ jobs:
           MARKDOWN_LOOKBACK_DAYS: '14'
           MARKDOWN_SUBJECT_KEYS: 'уценк'
           MARKDOWN_FULL_SNAPSHOT: 'true'
-        run: python import_markdown.py
+        run: python import_markdown_runner.py
