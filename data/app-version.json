@@ -1,6 +1,6 @@
 {
-  "version": "23.6.103",
-  "released_at": "2026-09-10",
-  "purpose": "frontend cache/runtime invalidation",
-  "deploy_trigger": "2026-09-10T14:19:30Z"
+  "version": "23.6.104",
+  "released_at": "2026-09-11",
+  "purpose": "GPS background service health control and cache invalidation",
+  "deploy_trigger": "2026-09-11T08:24:34Z"
 }
