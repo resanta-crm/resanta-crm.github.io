@@ -1,4 +1,4 @@
-name: Триовист — 21vek · теневой ежедневный сбор
+name: Триовист — 21vek · собственный ежедневный сбор
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
       - 'tools/triovist_21vek_parser.py'
       - 'tools/triovist_21vek_shadow_sync.py'
       - 'tools/triovist_21vek_top_shadow.py'
+      - 'tools/triovist_21vek_promote.py'
       - '.github/workflows/triovist-21vek-shadow-sync.yml'
   schedule:
     # Основной объединённый запуск: 06:17 по Минску (UTC+3).
     - cron: '17 3 * * *'
-    # Резерв карточек: 08:17 по Минску. TOP здесь пока не повторяем,
-    # чтобы не делать лишние поисковые запросы в shadow-периоде.
+    # Резерв карточек: 08:17 по Минску. TOP и production-promote здесь не повторяем.
     - cron: '17 5 * * *'
   workflow_dispatch:
     inputs:
@@ -26,7 +26,7 @@ on:
         default: '500'
 
 concurrency:
-  group: triovist-21vek-shadow-daily
+  group: triovist-21vek-own-daily
   cancel-in-progress: false
 
 jobs:
@@ -45,7 +45,7 @@ jobs:
       - name: Установить зависимости
         run: pip install requests beautifulsoup4
 
-      - name: Теневой сбор публичных карточек 21vek
+      - name: Собрать публичные карточки 21vek в безопасный staging
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -62,10 +62,10 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" = 'schedule' ]; then
             SKIP_RECENT='4'
           fi
-          echo "Shadow cards limit: $LIMIT; skip recent complete: ${SKIP_RECENT}h"
+          echo "21vek cards limit: $LIMIT; skip recent complete: ${SKIP_RECENT}h"
           SHADOW_LIMIT="$LIMIT" SHADOW_OFFSET='0' SHADOW_SKIP_RECENT_COMPLETE_HOURS="$SKIP_RECENT" python tools/triovist_21vek_shadow_sync.py
 
-      - name: Теневой поисковый TOP-30 / TOP-60
+      - name: Собрать поисковый TOP-30 / TOP-60
         if: github.event_name != 'schedule' || github.event.schedule == '17 3 * * *'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -78,7 +78,7 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ] && [ -n "$DISPATCH_TOP_LIMIT" ]; then
             TOP_LIMIT="$DISPATCH_TOP_LIMIT"
           fi
-          echo "Shadow TOP keyword limit: $TOP_LIMIT"
+          echo "21vek TOP keyword limit: $TOP_LIMIT"
           TOP_KEYWORD_LIMIT="$TOP_LIMIT" \
           TOP_KEYWORD_OFFSET='0' \
           TOP_DELAY_SECONDS='1.2' \
@@ -87,3 +87,10 @@ jobs:
           TOP_DEEP_RADIUS='0' \
           TOP_MAX_DEEP_PAGES_PER_KEYWORD='0' \
           python tools/triovist_21vek_top_shadow.py
+
+      - name: Переключить только полностью проверенный снимок в рабочий Triovist
+        if: github.event_name == 'schedule' && github.event.schedule == '17 3 * * *'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python tools/triovist_21vek_promote.py
