@@ -1,0 +1,58 @@
+name: Publish secure Triovist 21vek Excel export v23.6.110
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-triovist-21vek-export-v236110.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bump frontend and clarify queue timing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          root=Path('assets/66-performance-root-v23657.js')
+          s=root.read_text(encoding='utf-8')
+          s=re.sub(r"const V='23\.6\.\d+'", "const V='23.6.110'", s, count=1)
+          root.write_text(s,encoding='utf-8')
+
+          ctl=Path('assets/80-triovist-21vek-control-v236107.js')
+          s=ctl.read_text(encoding='utf-8')
+          s=s.replace('RESANTA CRM v23.6.108','RESANTA CRM v23.6.110',1)
+          s=re.sub(r"const VERSION='v23\.6\.\d+'", "const VERSION='v23.6.110'", s, count=1)
+          s=s.replace('Ручной запрос подхватывается сервером максимум примерно за 10 минут.', 'Ручной запрос обычно подхватывается сервером в течение 10–20 минут; при задержке GitHub запуск может начаться позже.', 1)
+          ctl.write_text(s,encoding='utf-8')
+
+          idx=Path('index.html')
+          s=idx.read_text(encoding='utf-8')
+          s=re.sub(r"const APP_VERSION = '2026-09-11-resanta-crm-v23\.6\.\d+';", "const APP_VERSION = '2026-09-11-resanta-crm-v23.6.110';", s, count=1)
+          s=re.sub(r"assets/66-performance-root-v23657\.js\?v=23\.6\.\d+", "assets/66-performance-root-v23657.js?v=23.6.110", s, count=1)
+          idx.write_text(s,encoding='utf-8')
+
+          Path('data/app-version.json').write_text(json.dumps({
+              'version':'23.6.110',
+              'released_at':'2026-09-11',
+              'purpose':'Triovist own 21vek: secure Excel export and clearer manual queue timing',
+              'deploy_trigger':'2026-09-11T13:33:00Z'
+          },ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          Path('.github/workflows/publish-triovist-21vek-export-v236110.yml').unlink()
+          PY
+      - name: Commit publish
+        run: |
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets/66-performance-root-v23657.js assets/80-triovist-21vek-control-v236107.js index.html data/app-version.json .github/workflows/publish-triovist-21vek-export-v236110.yml
+          git commit -m 'Triovist: secure 21vek Excel export v23.6.110'
+          git push
