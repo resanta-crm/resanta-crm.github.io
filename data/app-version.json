@@ -1,6 +1,6 @@
 {
-  "version": "23.6.104",
+  "version": "23.6.105",
   "released_at": "2026-09-11",
-  "purpose": "GPS background service health control and cache invalidation",
-  "deploy_trigger": "2026-09-11T08:25:30Z"
+  "purpose": "Promotion closed-row filter, sales scope truth and explicit over-budget approval",
+  "deploy_trigger": "2026-09-11T09:44:53Z"
 }
