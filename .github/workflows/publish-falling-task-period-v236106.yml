@@ -1,0 +1,70 @@
+name: Publish falling task month fix v23.6.106
+
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-falling-task-period-v236106.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish v23.6.106 frontend markers
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from datetime import datetime, timezone
+
+          idx=Path('index.html')
+          s=idx.read_text(encoding='utf-8')
+          old="const APP_VERSION = '2026-09-11-resanta-crm-v23.6.105';"
+          new="const APP_VERSION = '2026-09-11-resanta-crm-v23.6.106';"
+          if old not in s:
+              raise SystemExit('index APP_VERSION v23.6.105 not found')
+          s=s.replace(old,new,1)
+          anchor='<script defer src="./assets/03-triovist-routes.js?v=23.6.102"></script>'
+          add=anchor+'\n<script defer src="./assets/79-falling-task-period-v236106.js?v=23.6.106"></script>'
+          if '79-falling-task-period-v236106.js' not in s:
+              if anchor not in s: raise SystemExit('03-triovist-routes anchor not found')
+              s=s.replace(anchor,add,1)
+          root_old='./assets/66-performance-root-v23657.js?v=23.6.105'
+          root_new='./assets/66-performance-root-v23657.js?v=23.6.106'
+          if root_old not in s: raise SystemExit('root cache marker v23.6.105 not found')
+          s=s.replace(root_old,root_new,1)
+          idx.write_text(s,encoding='utf-8')
+
+          root=Path('assets/66-performance-root-v23657.js')
+          s=root.read_text(encoding='utf-8')
+          old="const V='23.6.105',flights=new Map(),contractFlights=new Map();"
+          new="const V='23.6.106',flights=new Map(),contractFlights=new Map();"
+          if old not in s: raise SystemExit('performance root v23.6.105 not found')
+          root.write_text(s.replace(old,new,1),encoding='utf-8')
+
+          av=Path('data/app-version.json')
+          d=json.loads(av.read_text(encoding='utf-8'))
+          d['version']='23.6.106'
+          d['released_at']='2026-09-11'
+          d['purpose']='Falling clients: selected-month task history and duplicate protection'
+          d['deploy_trigger']=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+          av.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          Path('.github/workflows/publish-falling-task-period-v236106.yml').unlink()
+          PY
+
+      - name: Commit v23.6.106
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Falling clients: selected-month task truth v23.6.106'
+          git push
