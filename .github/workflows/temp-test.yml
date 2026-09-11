@@ -1,0 +1,12 @@
+name: Temp Test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temp-test.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
