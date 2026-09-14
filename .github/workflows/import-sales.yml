@@ -1,19 +1,20 @@
-name: Продажи всех менеджеров — 6 срезов 1С + почасовая страховка
+name: Продажи всех менеджеров + Triovist — 6 срезов 1С + почасовая страховка
 
 on:
   push:
     branches: [main]
     paths:
       - 'import_sales.py'
+      - 'sync_triovist_sales.py'
+      - 'triovist_import_core.py'
       - '.github/workflows/import-sales.yml'
   schedule:
     # 1С формирует продажи 6 раз в день по Минску:
     # 08:30, 10:30, 12:30, 14:30, 16:30, 18:30.
     # GitHub cron работает в UTC, поэтому проверяем почту через ~10 минут:
-    # 05:40, 07:40, 09:40, 11:40, 13:40, 15:40 UTC.
     - cron: '40 5,7,9,11,13,15 * * *'
     # Почасовая страховка: если письмо 1С или GitHub Actions задержались,
-    # следующий запуск всё равно заберёт свежий срез. Дубли скрипт пропускает.
+    # следующий запуск всё равно заберёт свежий срез. Дубли скрипты пропускают.
     - cron: '17 * * * *'
   workflow_dispatch:
 
@@ -37,7 +38,7 @@ jobs:
       - name: Установить зависимости
         run: pip install --disable-pip-version-check openpyxl requests
 
-      - name: Обновить Руднева, Ачиновича и Шкуран
+      - name: Обновить продажи полевых
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_PORT: '993'
@@ -49,3 +50,15 @@ jobs:
           SALES_IMAP_TIMEOUT_SECONDS: '45'
           SALES_MAX_EMAIL_CANDIDATES: '8'
         run: python import_sales.py
+
+      - name: Обновить и проверить продажи ООО Triovist
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TRIOVIST_SALES_LOOKBACK_DAYS: '21'
+          TRIOVIST_MAX_EMAIL_CANDIDATES: '8'
+        run: python sync_triovist_sales.py
