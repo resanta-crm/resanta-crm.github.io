@@ -1,0 +1,34 @@
+name: TEMP Triovist manager parser v23.6.116
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 patch_tri21_manager_v236116.py
+      - name: Validate JavaScript
+        run: |
+          node --check assets/34-triovist-root-v23614.js
+          node --check assets/32-triovist-v23611.js
+          node --check assets/66-performance-root-v23657.js
+          grep -q "\['parser','🌐 Парсер 21vek'\]" assets/34-triovist-root-v23614.js
+          grep -q "23.6.116" data/app-version.json
+      - name: Commit patch and remove helper
+        run: |
+          rm -f patch_tri21_manager_v236116.py .github/workflows/_tmp-tri21-manager-v236116.yml
+          git config user.name "resanta-crm"
+          git config user.email "resantavitebsc@gmail.com"
+          git add -A
+          git commit -m "fix(triovist): expose 21vek parser to managers v23.6.116"
+          git push
