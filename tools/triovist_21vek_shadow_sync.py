@@ -29,12 +29,12 @@ SUPABASE_URL=(os.environ["SUPABASE_URL"] or "").strip().rstrip("/")
 SUPABASE_KEY=(os.environ["SUPABASE_KEY"] or "").strip()
 LIMIT=max(1,int(os.environ.get("SHADOW_LIMIT","120")))
 OFFSET=max(0,int(os.environ.get("SHADOW_OFFSET","0")))
-DELAY=max(0.05,float(os.environ.get("SHADOW_DELAY_SECONDS","0.14")))
-WORKERS=max(1,min(24,int(os.environ.get("SHADOW_WORKERS","14"))))
+DELAY=max(0.10,float(os.environ.get("SHADOW_DELAY_SECONDS","0.35")))
+WORKERS=max(1,min(16,int(os.environ.get("SHADOW_WORKERS","8"))))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
-PARSER_VERSION="shadow-v0.7"
-UA="ResantaCRM-21vekShadow/0.7 (+https://resanta-crm.by)"
+PARSER_VERSION="shadow-v0.8"
+UA="ResantaCRM-21vekShadow/0.8 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -338,6 +338,7 @@ def insert_run(target_count: int) -> str:
 _thread_state=threading.local()
 _rate_lock=threading.Lock()
 _next_request_at=0.0
+_blocked_until=0.0
 
 
 def worker_session() -> requests.Session:
@@ -357,11 +358,26 @@ def wait_rate_slot() -> None:
     global _next_request_at
     with _rate_lock:
         now=time.monotonic()
-        slot=max(now,_next_request_at)
+        slot=max(now,_next_request_at,_blocked_until)
         _next_request_at=slot+DELAY
     wait=slot-now
     if wait>0:
         time.sleep(wait)
+
+
+def apply_rate_limit_cooldown(response: requests.Response) -> None:
+    """Respect 21vek throttling globally so parallel workers do not avalanche 429s."""
+    global _blocked_until,_next_request_at
+    retry_after=response.headers.get("Retry-After")
+    try:
+        seconds=float(retry_after) if retry_after else 5.0
+    except Exception:
+        seconds=5.0
+    seconds=max(3.0,min(30.0,seconds))
+    with _rate_lock:
+        until=time.monotonic()+seconds
+        _blocked_until=max(_blocked_until,until)
+        _next_request_at=max(_next_request_at,_blocked_until)
 
 
 def fetch_product(session: requests.Session, url: str) -> requests.Response:
@@ -373,6 +389,8 @@ def fetch_product(session: requests.Session, url: str) -> requests.Response:
             if response.status_code==200:
                 return response
             error=RuntimeError(f"HTTP {response.status_code}")
+            if response.status_code==429:
+                apply_rate_limit_cooldown(response)
             if response.status_code<500 and response.status_code not in (408,425,429):
                 raise error
             last_error=error
