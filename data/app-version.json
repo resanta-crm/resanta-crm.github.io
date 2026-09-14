@@ -2,5 +2,5 @@
   "version": "23.6.119",
   "released_at": "2026-09-14",
   "purpose": "Hotfix: устранён бесконечный цикл перезагрузки CRM; версия root теперь берётся из cache-buster URL",
-  "deploy_trigger": "2026-09-14T11:22:00Z"
+  "deploy_trigger": "2026-09-14T11:20:30Z"
 }
