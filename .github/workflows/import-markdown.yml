@@ -8,7 +8,9 @@ on:
       - 'import_markdown_runner.py'
       - '.github/workflows/import-markdown.yml'
   schedule:
-    - cron: '*/15 * * * *'
+    # GitHub Actions cron is best-effort and is commonly delayed on :00/:15/:30/:45.
+    # Keep the same 15-minute cadence, but move it to quieter minute offsets.
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 
 concurrency:
