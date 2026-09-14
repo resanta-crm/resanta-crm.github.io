@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.110 · TRIOVIST 21VEK EXCEL EXPORT
+/* RESANTA CRM v23.6.115 · TRIOVIST 21VEK EXCEL EXPORT
  * Exports only the current good production snapshot visible to the signed-in user.
  * Access is enforced server-side by triovist_content_export_v236110.
  * SheetJS is loaded on demand only when the user clicks Export.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_EXPORT_V236109)return;
-const VERSION='v23.6.110';
+const VERSION='v23.6.115';
 let xlsxFlight=null,exportFlight=null;
 
 function activeTriovist(){return document.getElementById('page-triovist')?.classList.contains('active');}

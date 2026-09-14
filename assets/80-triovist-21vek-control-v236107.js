@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.110 · TRIOVIST OWN 21VEK CONTROL CENTER
+/* RESANTA CRM v23.6.115 · TRIOVIST OWN 21VEK CONTROL CENTER
  * Lightweight status/control UI for the production own 21vek parser.
  * Managers get a prominent warning if data is stale, incomplete or the parser fails.
  * One cached status RPC; no card scans in browser; no MutationObserver.
@@ -6,17 +6,30 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.110',TTL=30000;
+const VERSION='v23.6.115',TTL=15000;
 let cache=null,cacheAt=0,flight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function dt(v){if(!v)return'—';try{return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return String(v);}}
 function n(v){return Number(v||0).toLocaleString('ru-RU');}
+function ageText(v){
+  if(!v)return'время не определено';
+  const ms=Date.now()-new Date(v).getTime();if(!Number.isFinite(ms))return'время не определено';
+  const m=Math.max(0,Math.floor(ms/60000));
+  if(m<1)return'только что';if(m<60)return m+' мин назад';
+  const h=Math.floor(m/60);if(h<24)return h+' ч '+(m%60)+' мин назад';
+  return Math.floor(h/24)+' дн назад';
+}
+function parserError(d){
+  const p=d?.parser||{};
+  if(String(p.status||'')!=='failed'&&Number(p.errors||0)<=0)return'';
+  return String(p.error_explain||p.error_text||'Сбор завершился не полностью. Рабочий снимок не заменён; используются последние проверенные данные.');
+}
 function activeTriovist(){return document.getElementById('page-triovist')?.classList.contains('active');}
 function injectCss(){
   if(document.getElementById('tri21-control-css-v236107'))return;
   const s=document.createElement('style');s.id='tri21-control-css-v236107';s.textContent=`
-  .tri21ctl{margin-bottom:12px;padding:14px 16px;transition:border-color .18s,box-shadow .18s,background .18s}.tri21ctl.state-green{border-color:#BBF7D0}.tri21ctl.state-amber{border:2px solid #F59E0B;background:#FFFBEB;box-shadow:0 0 0 3px rgba(245,158,11,.08)}.tri21ctl.state-red{border:2px solid #DC2626;background:#FFF7F7;box-shadow:0 0 0 3px rgba(220,38,38,.10)}.tri21ctl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.tri21ctl-title{font-size:15px;font-weight:800}.tri21ctl-sub{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.45}.tri21ctl-badge{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 10px;font-size:11px;font-weight:800}.tri21ctl-green{background:#DCFCE7;color:#166534}.tri21ctl-amber,.tri21ctl-queued{background:#FEF3C7;color:#92400E}.tri21ctl-red{background:#FEE2E2;color:#B91C1C}.tri21ctl-running{background:#DBEAFE;color:#1D4ED8}.tri21ctl-alert{margin-top:11px;padding:11px 12px;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}.tri21ctl-alert strong{font-weight:850}.tri21ctl-alert.amber{background:#FEF3C7;border:1px solid #F59E0B;color:#92400E}.tri21ctl-alert.red{background:#FEE2E2;border:1px solid #EF4444;color:#991B1B}.tri21ctl-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:8px;margin-top:12px}.tri21ctl-kpi{background:var(--bg);border-radius:9px;padding:9px 10px}.tri21ctl-kpi b{display:block;font-size:16px}.tri21ctl-kpi span{font-size:9px;color:var(--sub);text-transform:uppercase}.tri21ctl-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)}.tri21ctl-meta{font-size:11px;color:var(--sub);line-height:1.55}.tri21ctl-actions{display:flex;gap:7px;flex-wrap:wrap}.tri21ctl-actions button{white-space:nowrap}.tri21ctl-note{font-size:10px;color:var(--sub);margin-top:6px;max-width:740px}.tri21ctl-error{font-size:12px;color:var(--r);font-weight:700;padding:10px;background:var(--rb);border:1px solid #FECACA;border-radius:8px}
+  .tri21ctl{margin-bottom:12px;padding:14px 16px;transition:border-color .18s,box-shadow .18s,background .18s}.tri21ctl.state-green{border-color:#BBF7D0}.tri21ctl.state-amber{border:2px solid #F59E0B;background:#FFFBEB;box-shadow:0 0 0 3px rgba(245,158,11,.08)}.tri21ctl.state-red{border:2px solid #DC2626;background:#FFF7F7;box-shadow:0 0 0 3px rgba(220,38,38,.10)}.tri21ctl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.tri21ctl-title{font-size:15px;font-weight:800}.tri21ctl-sub{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.45}.tri21ctl-badge{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 10px;font-size:11px;font-weight:800}.tri21ctl-green{background:#DCFCE7;color:#166534}.tri21ctl-amber,.tri21ctl-queued{background:#FEF3C7;color:#92400E}.tri21ctl-red{background:#FEE2E2;color:#B91C1C}.tri21ctl-running{background:#DBEAFE;color:#1D4ED8}.tri21ctl-alert{margin-top:11px;padding:11px 12px;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}.tri21ctl-alert strong{font-weight:850}.tri21ctl-alert.amber{background:#FEF3C7;border:1px solid #F59E0B;color:#92400E}.tri21ctl-alert.red{background:#FEE2E2;border:1px solid #EF4444;color:#991B1B}.tri21ctl-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:8px;margin-top:12px}.tri21ctl-kpi{background:var(--bg);border-radius:9px;padding:9px 10px}.tri21ctl-kpi b{display:block;font-size:16px}.tri21ctl-kpi span{font-size:9px;color:var(--sub);text-transform:uppercase}.tri21ctl-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)}.tri21ctl-meta{font-size:11px;color:var(--sub);line-height:1.55}.tri21ctl-actions{display:flex;gap:7px;flex-wrap:wrap}.tri21ctl-actions button{white-space:nowrap}.tri21ctl-note{font-size:10px;color:var(--sub);margin-top:6px;max-width:900px}.tri21ctl-fresh{margin-top:10px;padding:9px 11px;border-radius:9px;font-size:11px;line-height:1.45}.tri21ctl-fresh.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}.tri21ctl-fresh.warn{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.tri21ctl-error{font-size:12px;color:var(--r);font-weight:700;padding:10px;background:var(--rb);border:1px solid #FECACA;border-radius:8px}
   @media(max-width:900px){.tri21ctl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.tri21ctl-grid{grid-template-columns:1fr 1fr}.tri21ctl-actions{width:100%}.tri21ctl-actions button{flex:1}}
   `;document.head.appendChild(s);
 }
@@ -73,24 +86,32 @@ function render(d){
   const reqActive=rq&&['queued','claimed'].includes(String(rq.status));
   const can=!!d?.can_refresh;
   const btnText=rq?.status==='claimed'?'⏳ Сбор выполняется':rq?.status==='queued'?'⏱ В очереди':'↻ Запустить обновление 21vek';
+  const workingAt=w.completed_at||t.finished_at||g.finished_at||null;
+  const ageH=workingAt?Math.max(0,(Date.now()-new Date(workingAt).getTime())/3600000):999;
+  const freshClass=ageH<=24?'ok':'warn';
+  const freshIcon=ageH<=24?'✅':'⚠️';
+  const errText=parserError(d);
   root.innerHTML=`
     <div class="tri21ctl-head"><div><div class="tri21ctl-title">🌐 21vek · собственный парсер</div><div class="tri21ctl-sub">Источник рабочих карточек: <b>${esc(d?.source_label||'Собственный парсер 21vek')}</b></div></div><span class="tri21ctl-badge ${cls}">${label}</span></div>
     ${warningHtml(d)}
+    <div class="tri21ctl-fresh ${freshClass}">${freshIcon} <b>${workingAt?'Данные CRM обновлены '+dt(workingAt):'Время обновления рабочего снимка не определено'}</b>${workingAt?' · '+ageText(workingAt):''}. Карточки: ${n(g.success||w.cards)}/${n(w.cards)}; TOP: ${t.finished_at?'проверен '+dt(t.finished_at):'нет подтверждённого полного запуска'}.</div>
+    ${errText?`<div class="tri21ctl-alert red">❗ <strong>Что произошло:</strong> ${esc(errText)}<br><span style="font-weight:500">Рабочие данные не заменяются неполным запуском — CRM оставляет последний полностью проверенный снимок.</span></div>`:''}
     <div class="tri21ctl-grid">
       <div class="tri21ctl-kpi"><span>Карточки</span><b>${coverage}</b></div>
       <div class="tri21ctl-kpi"><span>В наличии</span><b>${n(w.in_stock)}</b></div>
       <div class="tri21ctl-kpi"><span>TOP-30</span><b>${n(w.top30)}</b></div>
       <div class="tri21ctl-kpi"><span>TOP-60</span><b>${n(w.top60)}</b></div>
-      <div class="tri21ctl-kpi"><span>Ошибки последнего запуска</span><b>${n(errors)}</b></div>
+      <div class="tri21ctl-kpi"><span>Ошибки текущего/последнего запуска</span><b>${n(errors)}</b></div>
     </div>
     <div class="tri21ctl-foot"><div class="tri21ctl-meta">
       Рабочий снимок: <b>${esc(w.snapshot_date||'—')}</b> · последний полный успешный сбор: <b>${dt(g.finished_at)}</b><br>
       TOP проверен: <b>${dt(t.finished_at)}</b>${rq?` · ручной запрос: <b>${rq.status==='claimed'?'выполняется':'в очереди'}</b>`:''}
     </div><div class="tri21ctl-actions">
-      <button class="btn-secondary" type="button" onclick="triovist21vekRefreshStatusV236107()">↻ Статус</button>
+      <button id="tri21-export-xlsx-v236109" class="btn-secondary" type="button" onclick="window.triovist21vekExportExcelV236109?window.triovist21vekExportExcelV236109():alert('Модуль Excel ещё загружается. Повторите через несколько секунд.')">📥 Выгрузить Excel</button>
+      <button class="btn-secondary" type="button" onclick="triovist21vekRefreshStatusV236107()">↻ Проверить свежесть</button>
       ${can?`<button class="btn-primary" type="button" ${reqActive?'disabled':''} onclick="triovist21vekRequestRefreshV236107()">${btnText}</button>`:''}
     </div></div>
-    ${can?'<div class="tri21ctl-note">Ручной запрос обычно подхватывается сервером в течение 10–20 минут; при задержке GitHub запуск может начаться позже. Рабочий снимок меняется только после полного успешного сбора карточек и TOP; при ошибке остаётся последний хороший снимок.</div>':'<div class="tri21ctl-note">Менеджеру ничего запускать вручную не нужно. Контролируйте цвет статуса: зелёный — работаем; оранжевый/красный — сообщить руководителю со скриншотом.</div>'}`;
+    ${can?'<div class="tri21ctl-note"><b>Как читать блок:</b> «Проверить свежесть» только перечитывает статус и время данных. «Запустить обновление 21vek» запускает новый полный сбор. «Выгрузить Excel» скачивает именно текущий рабочий проверенный снимок. При ошибке новый неполный сбор не подменяет рабочие данные.</div>':'<div class="tri21ctl-note"><b>Как читать блок:</b> зелёный — данные рабочие; время выше показывает, когда CRM получила последний проверенный снимок. «Выгрузить Excel» скачивает доступные вам текущие рабочие карточки. При красном/оранжевом статусе CRM сохраняет последний хороший снимок.</div>'}`;
 }
 async function load(force=false){
   const root=ensurePanel();if(!root)return;
