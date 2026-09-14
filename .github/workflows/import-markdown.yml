@@ -40,3 +40,5 @@ jobs:
           MARKDOWN_SUBJECT_KEYS: 'уценк'
           MARKDOWN_FULL_SNAPSHOT: 'true'
         run: python import_markdown_runner.py
+
+# manual trigger marker: 2026-09-14 price-header-v236113
