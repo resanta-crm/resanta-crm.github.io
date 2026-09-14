@@ -1,4 +1,5 @@
 name: Триовист — 21vek · собственный ежедневный сбор
+# v0.6: mixed-batch normalization + transient network retries.
 
 on:
   push:
