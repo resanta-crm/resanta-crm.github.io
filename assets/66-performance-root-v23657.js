@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V='23.6.117',flights=new Map(),contractFlights=new Map();
+const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.119'}catch(_){return'23.6.119'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
 const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103'});
 
 function activePage(){
@@ -333,12 +333,23 @@ async function checkFrontendVersion(force=false){
     if(!r.ok)return false;
     const j=await r.json(),remote=String(j?.version||'').replace(/^v/,'');
     if(remote&&remote!==V){
+      const reloadKey='crm_frontend_reload_target_v236119';
+      let attempted='';
+      try{attempted=sessionStorage.getItem(reloadKey)||''}catch(_){}
+      if(attempted===remote){
+        console.warn('CRM version mismatch persisted after one reload:',{loaded:V,remote});
+        const b=document.getElementById('crm-update-banner');
+        if(b)b.classList.remove('show');
+        return false;
+      }
+      try{sessionStorage.setItem(reloadKey,remote)}catch(_){}
       frontendReloading=true;
       const b=document.getElementById('crm-update-banner');
       if(b){b.textContent='CRM обновлена. Загружаем новую версию…';b.classList.add('show')}
       setTimeout(()=>location.reload(),250);
       return true;
     }
+    try{sessionStorage.removeItem('crm_frontend_reload_target_v236119')}catch(_){}
   }catch(_){}
   return false;
 }

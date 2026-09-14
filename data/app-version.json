@@ -1,6 +1,6 @@
 {
-  "version": "23.6.117",
+  "version": "23.6.119",
   "released_at": "2026-09-14",
-  "purpose": "Emergency compatibility rollback: frontend root and remote version synchronized to stop reload loop",
-  "deploy_trigger": "2026-09-14T11:18:30Z"
+  "purpose": "Hotfix: устранён бесконечный цикл перезагрузки CRM; версия root теперь берётся из cache-buster URL",
+  "deploy_trigger": "2026-09-14T11:22:00Z"
 }
