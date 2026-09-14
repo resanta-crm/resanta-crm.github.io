@@ -30,8 +30,8 @@ OFFSET=max(0,int(os.environ.get("SHADOW_OFFSET","0")))
 DELAY=max(0.4,float(os.environ.get("SHADOW_DELAY_SECONDS","0.8")))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
-PARSER_VERSION="shadow-v0.5"
-UA="ResantaCRM-21vekShadow/0.5 (+https://resanta-crm.by)"
+PARSER_VERSION="shadow-v0.6"
+UA="ResantaCRM-21vekShadow/0.6 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -87,6 +87,12 @@ def rest_get_all(table: str, params: dict[str,str], page_size: int=900, timeout:
 
 
 def rest_post(table: str, rows: list[dict]|dict, *, prefer: str="return=minimal", timeout: int=60) -> Any:
+    # PostgREST bulk insert requires every object in a JSON array to expose
+    # exactly the same keys. Successful and failed 21vek snapshots contain
+    # different optional fields, so normalize a mixed batch before sending it.
+    if isinstance(rows,list) and rows:
+        keys=set().union(*(row.keys() for row in rows))
+        rows=[{key:row.get(key) for key in keys} for row in rows]
     r=requests.post(
         f"{SUPABASE_URL}/rest/v1/{table}",
         headers=api_headers(True,prefer),
@@ -326,6 +332,28 @@ def insert_run(target_count: int) -> str:
     return rows[0]["id"]
 
 
+def fetch_product(session: requests.Session, url: str) -> requests.Response:
+    """Fetch one 21vek page with short retries for transient network failures."""
+    last_error: Exception|None=None
+    for attempt in range(3):
+        try:
+            response=session.get(url,timeout=TIMEOUT,allow_redirects=True)
+            if response.status_code==200:
+                return response
+            error=RuntimeError(f"HTTP {response.status_code}")
+            # Client errors other than rate limiting/request timeout are not transient.
+            if response.status_code<500 and response.status_code not in (408,425,429):
+                raise error
+            last_error=error
+        except (requests.Timeout,requests.ConnectionError) as exc:
+            last_error=exc
+        if attempt<2:
+            time.sleep(1.5*(attempt+1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("21vek fetch failed")
+
+
 def main() -> None:
     targets=current_targets()
     if recent_complete_matches(len(targets)):
@@ -350,9 +378,7 @@ def main() -> None:
             parsed=None
             err=None
             try:
-                r=ses.get(target["product_url"],timeout=TIMEOUT,allow_redirects=True)
-                if r.status_code!=200:
-                    raise RuntimeError(f"HTTP {r.status_code}")
+                r=fetch_product(ses,target["product_url"])
                 parsed=parse_product(r.text,{
                     "url":target["product_url"],
                     "sku":target.get("sku"),
