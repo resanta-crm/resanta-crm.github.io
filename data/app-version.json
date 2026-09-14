@@ -1,6 +1,6 @@
 {
-  "version": "23.6.118",
+  "version": "23.6.117",
   "released_at": "2026-09-14",
-  "purpose": "Triovist: статус обмена 1С встроен в рабочее меню и больше не перекрывается",
-  "deploy_trigger": "2026-09-14T11:08:30Z"
+  "purpose": "Emergency compatibility rollback: frontend root and remote version synchronized to stop reload loop",
+  "deploy_trigger": "2026-09-14T11:18:30Z"
 }
