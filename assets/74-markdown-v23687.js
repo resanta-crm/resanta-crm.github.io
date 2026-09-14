@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.111 · УЦЕНКА
+/* RESANTA CRM v23.6.114 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.111';
+const V='v23.6.114';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -315,7 +315,7 @@ async function detailHtml(data){
    :stage==='ready_for_pricing'?'<div style="margin-top:8px;font-weight:800;color:#92400E">⏳ Отправлено Александру Паюшину на оценку'+(i.submitted_for_pricing_by?' · '+esc(i.submitted_for_pricing_by):'')+'</div>'
    :prepReady?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSubmitPricingV23689()">✅ Готово — отправить Александру на оценку</button></div>'
    :'<div style="margin-top:8px;color:#991B1B;font-size:11px">Нужны 3 обязательных фото и описание состояния.</div>')+'</div>';
- const pricing=data.is_payushin&&['ready_for_pricing','priced'].includes(stage)?'<div class="md-box"><h4>💰 Цена · только Александр Паюшин</h4><div class="md-formgrid"><label>Скидка, %<input id="md-discount-v23687" type="number" min="0" max="90" step="0.1" value="'+(i.discount_pct??'')+'"></label><label>Финальная цена, BYN<input id="md-final-v23687" type="number" min="0" step="0.01" value="'+(i.discount_set_at?i.final_price:'')+'"></label></div><label style="display:block;margin-top:8px">Причина скидки<input id="md-price-reason-v23687" value="'+attr(i.discount_reason||'')+'" placeholder="Например: царапины корпуса, повреждена упаковка"></label><div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSavePriceV23687()">Утвердить цену</button></div></div>':'';
+ const pricing=data.is_payushin&&['ready_for_pricing','priced'].includes(stage)?'<div class="md-box"><h4>💰 Цена · только Александр Паюшин</h4><div class="md-formgrid"><label>Скидка, %<input id="md-discount-v23687" type="number" min="0" max="90" step="0.1" oninput="crmMarkdownPriceSyncV236114('discount')" value="'+(i.discount_pct??'')+'"></label><label>Финальная цена, BYN<input id="md-final-v23687" type="number" min="0" step="0.01" oninput="crmMarkdownPriceSyncV236114('final')" value="'+(i.discount_set_at?i.final_price:'')+'"></label></div><label style="display:block;margin-top:8px">Причина скидки<input id="md-price-reason-v23687" value="'+attr(i.discount_reason||'')+'" placeholder="Например: царапины корпуса, повреждена упаковка"></label><div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSavePriceV23687()">Утвердить цену</button></div></div>':'';
  let assignBox='';
  if(data.is_payushin&&stage==='priced'){
   const managers=Array.isArray(S.managers)?S.managers:[];
@@ -340,7 +340,7 @@ async function detailHtml(data){
  +workflowBox
  +'<div class="md-box"><h4>📷 Фотографии</h4><div class="md-formgrid"><label>Тип фото<select id="md-photo-type-v23687"><option value="overall">Общий вид</option><option value="defect">Дефект / состояние</option><option value="label">Шильдик / артикул</option><option value="box">Упаковка</option><option value="other">Другое</option></select></label><label>Комментарий<input id="md-photo-comment-v23687" placeholder="Что видно на фото"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownCameraV23687()">📷 Снять на телефон</button><button class="md-btn" onclick="crmMarkdownGalleryV23687()">🖼 Выбрать из галереи</button></div><div style="margin-top:9px">'+photosHtml+'</div></div>'
  +'</div><div>'
- +'<div class="md-box"><h4>💵 Цена</h4><div style="font-size:12px">Дилерская с НДС: <b>'+money(i.base_price)+'</b></div><div style="font-size:20px;font-weight:900;color:#166534;margin-top:5px">'+(i.discount_set_at?money(i.final_price):'Цена ещё не утверждена')+'</div>'+(i.discount_set_at?'<div style="font-size:11px;color:var(--sub)">Скидка '+n(i.discount_pct).toFixed(1)+'% · '+esc(i.discount_set_by||'')+'</div>':'')+'</div>'
+ +'<div class="md-box"><h4>💵 Цена</h4><div style="font-size:12px">Мелкий опт 2 с НДС: <b>'+money(i.base_price)+'</b></div><div style="font-size:20px;font-weight:900;color:#166534;margin-top:5px">'+(i.discount_set_at?money(i.final_price):'Цена ещё не утверждена')+'</div>'+(i.discount_set_at?'<div style="font-size:11px;color:var(--sub)">Скидка '+n(i.discount_pct).toFixed(1)+'% · '+esc(i.discount_set_by||'')+'</div>':'')+'</div>'
  +pricing+assignBox
  +'<div class="md-box"><h4>✅ Задачи и продажи</h4>'+assHtml+'</div>'
  +'</div></div>';
@@ -372,6 +372,20 @@ async function submitPricing(){
   alert('✅ Товар отправлен Александру Паюшину на оценку');
   await refreshDetail();await load(true);
  }catch(e){alert('Не удалось отправить на оценку: '+(e?.message||e))}
+}
+function priceSync(mode){
+ const base=n(S.detail?.item?.base_price),d=$('md-discount-v23687'),f=$('md-final-v23687');
+ if(!base||!d||!f)return;
+ if(mode==='discount'){
+  if(d.value===''){f.value='';return}
+  const pct=Number(d.value);if(!Number.isFinite(pct))return;
+  f.value=Math.max(0,base*(1-pct/100)).toFixed(2);
+ }else{
+  if(f.value===''){d.value='';return}
+  const price=Number(f.value);if(!Number.isFinite(price)||price<0||price>base)return;
+  const pct=(1-price/base)*100;
+  d.value=Math.max(0,Math.min(90,pct)).toFixed(2).replace(/\.?0+$/,'');
+ }
 }
 async function savePrice(){
  if(!S.current)return;
@@ -601,6 +615,7 @@ window.crmMarkdownCloseV23687=closeDetail;
 window.crmMarkdownSaveConditionV23687=saveCondition;
 window.crmMarkdownSubmitPricingV23689=submitPricing;
 window.crmMarkdownSavePriceV23687=savePrice;
+window.crmMarkdownPriceSyncV236114=priceSync;
 window.crmMarkdownAssignV23687=assign;
 window.crmMarkdownReportSaleV23687=reportSale;
 window.crmMarkdownCameraV23687=camera;
@@ -608,7 +623,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Дилерская с НДС',workflow:'photos->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
+ version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
