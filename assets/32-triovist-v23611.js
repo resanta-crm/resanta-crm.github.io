@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.14 compatibility loader.
+/* RESANTA CRM v23.6.116 compatibility loader.
  * The former v23.6.12 workspace is intentionally retired: it fought with
  * legacy Triovist renders. This file remains only because permanent no-cache
  * bootstraps already point here.
@@ -12,7 +12,7 @@ if(window.RESANTA_TRIOVIST_ROOT_V23614)return;
 const stale=document.querySelector('script[data-triovist-root-v23614]');
 if(stale){const age=Date.now()-Number(stale.dataset.triovistStartedAt||0);if(stale.dataset.triovistStartedAt&&age<5000)return;stale.remove();}
 const s=document.createElement('script');
-s.src='./assets/34-triovist-root-v23614.js?v=23.6.97';
+s.src='./assets/34-triovist-root-v23614.js?v=23.6.116';
 s.async=false;
 s.dataset.triovistRootV23614='1';
 s.dataset.triovistStartedAt=String(Date.now());
