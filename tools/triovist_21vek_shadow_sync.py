@@ -3,7 +3,7 @@
 
 Safety contract:
 - reads the current paid-parser snapshot only as a target registry/baseline;
-- fetches canonical public 21vek product pages sequentially;
+- fetches canonical public 21vek product pages with bounded parallelism;
 - writes ONLY to triovist_21vek_shadow_* tables;
 - never writes triovist_content_*, AI tasks, plans, sales, stock, or CRM UI data.
 
@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -27,11 +29,12 @@ SUPABASE_URL=(os.environ["SUPABASE_URL"] or "").strip().rstrip("/")
 SUPABASE_KEY=(os.environ["SUPABASE_KEY"] or "").strip()
 LIMIT=max(1,int(os.environ.get("SHADOW_LIMIT","120")))
 OFFSET=max(0,int(os.environ.get("SHADOW_OFFSET","0")))
-DELAY=max(0.4,float(os.environ.get("SHADOW_DELAY_SECONDS","0.8")))
+DELAY=max(0.05,float(os.environ.get("SHADOW_DELAY_SECONDS","0.14")))
+WORKERS=max(1,min(24,int(os.environ.get("SHADOW_WORKERS","14"))))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
-PARSER_VERSION="shadow-v0.6"
-UA="ResantaCRM-21vekShadow/0.6 (+https://resanta-crm.by)"
+PARSER_VERSION="shadow-v0.7"
+UA="ResantaCRM-21vekShadow/0.7 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -332,26 +335,84 @@ def insert_run(target_count: int) -> str:
     return rows[0]["id"]
 
 
+_thread_state=threading.local()
+_rate_lock=threading.Lock()
+_next_request_at=0.0
+
+
+def worker_session() -> requests.Session:
+    ses=getattr(_thread_state,"session",None)
+    if ses is None:
+        ses=requests.Session()
+        ses.headers.update({
+            "User-Agent":UA,
+            "Accept":"text/html,application/xhtml+xml",
+            "Accept-Language":"ru-RU,ru;q=0.9"
+        })
+        _thread_state.session=ses
+    return ses
+
+
+def wait_rate_slot() -> None:
+    global _next_request_at
+    with _rate_lock:
+        now=time.monotonic()
+        slot=max(now,_next_request_at)
+        _next_request_at=slot+DELAY
+    wait=slot-now
+    if wait>0:
+        time.sleep(wait)
+
+
 def fetch_product(session: requests.Session, url: str) -> requests.Response:
-    """Fetch one 21vek page with short retries for transient network failures."""
     last_error: Exception|None=None
     for attempt in range(3):
+        wait_rate_slot()
         try:
             response=session.get(url,timeout=TIMEOUT,allow_redirects=True)
             if response.status_code==200:
                 return response
             error=RuntimeError(f"HTTP {response.status_code}")
-            # Client errors other than rate limiting/request timeout are not transient.
             if response.status_code<500 and response.status_code not in (408,425,429):
                 raise error
             last_error=error
         except (requests.Timeout,requests.ConnectionError) as exc:
             last_error=exc
         if attempt<2:
-            time.sleep(1.5*(attempt+1))
+            time.sleep(1.0*(attempt+1))
     if last_error is not None:
         raise last_error
     raise RuntimeError("21vek fetch failed")
+
+
+def process_target(index: int, target: dict) -> tuple[int,dict,dict|None,str|None]:
+    parsed=None
+    err=None
+    try:
+        r=fetch_product(worker_session(),target["product_url"])
+        parsed=parse_product(r.text,{
+            "url":target["product_url"],
+            "sku":target.get("sku"),
+            "donor_article":target.get("donor_article"),
+            "name":target.get("product_name"),
+            "category":target.get("category"),
+            "subgroup":target.get("subgroup")
+        })
+    except Exception as exc:
+        err=str(exc)
+    return index,target,parsed,err
+
+
+def flush_batches(batch: list[dict], raw_batch: list[dict]) -> None:
+    if batch:
+        rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
+    if raw_batch:
+        rest_upsert(
+            "triovist_21vek_shadow_raw_current",
+            raw_batch,
+            "manager_email,card_key",
+            timeout=90
+        )
 
 
 def main() -> None:
@@ -360,69 +421,44 @@ def main() -> None:
         print(f"Shadow skip: fresh complete {PARSER_VERSION} run already covers {len(targets)} targets",flush=True)
         return
     run_id=insert_run(len(targets))
-    print(f"Shadow run {run_id}: targets={len(targets)} parser={PARSER_VERSION}",flush=True)
+    print(
+        f"Shadow run {run_id}: targets={len(targets)} parser={PARSER_VERSION} "
+        f"workers={WORKERS} start_interval={DELAY:.2f}s",
+        flush=True
+    )
 
     success=0
     errors=0
+    completed=0
     batch=[]
     raw_batch=[]
-    ses=requests.Session()
-    ses.headers.update({
-        "User-Agent":UA,
-        "Accept":"text/html,application/xhtml+xml",
-        "Accept-Language":"ru-RU,ru;q=0.9"
-    })
 
     try:
-        for idx,target in enumerate(targets,1):
-            parsed=None
-            err=None
-            try:
-                r=fetch_product(ses,target["product_url"])
-                parsed=parse_product(r.text,{
-                    "url":target["product_url"],
-                    "sku":target.get("sku"),
-                    "donor_article":target.get("donor_article"),
-                    "name":target.get("product_name"),
-                    "category":target.get("category"),
-                    "subgroup":target.get("subgroup")
-                })
-                success+=1
-            except Exception as exc:
-                errors+=1
-                err=str(exc)
+        with ThreadPoolExecutor(max_workers=min(WORKERS,max(1,len(targets))),thread_name_prefix="21vek-card") as pool:
+            futures=[pool.submit(process_target,idx,target) for idx,target in enumerate(targets,1)]
+            for future in as_completed(futures):
+                idx,target,parsed,err=future.result()
+                completed+=1
+                if err is None:
+                    success+=1
+                else:
+                    errors+=1
 
-            batch.append(snapshot_row(run_id,target,parsed,err))
-            if parsed is not None:
-                raw_batch.append(raw_current_row(run_id,target,parsed))
+                batch.append(snapshot_row(run_id,target,parsed,err))
+                if parsed is not None:
+                    raw_batch.append(raw_current_row(run_id,target,parsed))
 
-            print(
-                f"[{idx}/{len(targets)}] {target.get('sku')} ok={err is None} {err or ''}",
-                flush=True
-            )
-
-            if len(batch)>=25:
-                rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
-                rest_upsert(
-                    "triovist_21vek_shadow_raw_current",
-                    raw_batch,
-                    "manager_email,card_key",
-                    timeout=90
+                print(
+                    f"[{completed}/{len(targets)}] source#{idx} {target.get('sku')} ok={err is None} {err or ''}",
+                    flush=True
                 )
-                batch=[]
-                raw_batch=[]
 
-            if idx<len(targets):
-                time.sleep(DELAY)
+                if len(batch)>=75:
+                    flush_batches(batch,raw_batch)
+                    batch=[]
+                    raw_batch=[]
 
-        if batch:
-            rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
-            rest_upsert(
-                "triovist_21vek_shadow_raw_current",
-                raw_batch,
-                "manager_email,card_key",
-                timeout=90
-            )
+        flush_batches(batch,raw_batch)
 
         status="complete" if errors==0 else ("partial" if success else "failed")
         rest_patch("triovist_21vek_shadow_runs",{"id":f"eq.{run_id}"},{
@@ -435,24 +471,27 @@ def main() -> None:
             "source_registry":"current triovist_content_cards",
             "offset":OFFSET,
             "production_cutover":False,
-            "delay_seconds":DELAY,
+            "request_start_interval_seconds":DELAY,
+            "workers":WORKERS,
             "approved_scope_version":"2026-09-09-v1",
             "result":"No working CRM tables were modified."
           }
         })
-        print(f"Shadow complete: success={success} errors={errors}",flush=True)
-        if success==0:
-            raise SystemExit(2)
+        print(f"Shadow {status}: success={success} errors={errors}",flush=True)
+        if status!="complete":
+            raise RuntimeError(f"Shadow completeness check failed: success={success} errors={errors}")
 
     except Exception as exc:
         try:
             rest_patch("triovist_21vek_shadow_runs",{"id":f"eq.{run_id}"},{
               "status":"failed",
               "success_count":success,
-              "error_count":errors+1,
+              "error_count":max(errors,1),
               "finished_at":datetime.now(timezone.utc).isoformat(),
               "notes":{
                 "fatal_error":str(exc)[:1500],
+                "workers":WORKERS,
+                "request_start_interval_seconds":DELAY,
                 "production_cutover":False,
                 "approved_scope_version":"2026-09-09-v1"
               }

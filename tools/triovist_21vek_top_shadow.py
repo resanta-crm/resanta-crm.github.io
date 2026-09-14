@@ -17,7 +17,9 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
@@ -28,14 +30,15 @@ SUPABASE_URL=os.environ['SUPABASE_URL'].strip().rstrip('/')
 SUPABASE_KEY=os.environ['SUPABASE_KEY'].strip()
 KEYWORD_LIMIT=max(1,int(os.environ.get('TOP_KEYWORD_LIMIT','500')))
 KEYWORD_OFFSET=max(0,int(os.environ.get('TOP_KEYWORD_OFFSET','0')))
-DELAY=max(0.8,float(os.environ.get('TOP_DELAY_SECONDS','1.2')))
+DELAY=max(0.05,float(os.environ.get('TOP_DELAY_SECONDS','0.18')))
+WORKERS=max(1,min(16,int(os.environ.get('TOP_WORKERS','10'))))
 TIMEOUT=max(10,int(os.environ.get('TOP_HTTP_TIMEOUT','30')))
 DEEP_EXACT=os.environ.get('TOP_DEEP_EXACT','0').strip().lower() not in ('0','false','no')
 DEEP_RADIUS=max(0,min(4,int(os.environ.get('TOP_DEEP_RADIUS','2'))))
 MAX_DEEP_PAGES=max(0,min(20,int(os.environ.get('TOP_MAX_DEEP_PAGES_PER_KEYWORD','10'))))
-PARSER_VERSION='top-shadow-v0.2'
+PARSER_VERSION='top-shadow-v0.3'
 ENDPOINT='https://gate.21vek.by/search-composer/api/v3/products'
-UA='ResantaCRM-21vekTopShadow/0.2 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekTopShadow/0.3 (+https://resanta-crm.by)'
 
 
 def api_headers(json_body: bool=False, prefer: str|None=None) -> dict[str,str]:
@@ -131,37 +134,68 @@ def search_body(keyword: str, page: int, search_id: str='') -> dict:
     return {'query':keyword,'order':'default','page':page,'limit':60,'mode':'desktop','searchId':search_id,'filters':[]}
 
 
-def wait_delay(last_request_at: float|None) -> None:
-    if last_request_at is None:
-        return
-    remaining=DELAY-(time.monotonic()-last_request_at)
-    if remaining>0:
-        time.sleep(remaining)
+_thread_state=threading.local()
+_rate_lock=threading.Lock()
+_next_request_at=0.0
 
 
-def search_page(session: requests.Session, keyword: str, page: int, search_id: str, last_request_at: float|None) -> tuple[dict,float]:
-    wait_delay(last_request_at)
+def top_session() -> requests.Session:
+    ses=getattr(_thread_state,'session',None)
+    if ses is None:
+        ses=requests.Session()
+        ses.headers.update({
+          'User-Agent':UA,'Accept':'application/json, text/plain, */*','Content-Type':'application/json',
+          'Origin':'https://www.21vek.by','Referer':'https://www.21vek.by/'
+        })
+        _thread_state.session=ses
+    return ses
+
+
+def wait_delay() -> None:
+    global _next_request_at
+    with _rate_lock:
+        now=time.monotonic()
+        slot=max(now,_next_request_at)
+        _next_request_at=slot+DELAY
+    wait=slot-now
+    if wait>0:
+        time.sleep(wait)
+
+
+def search_page(session: requests.Session, keyword: str, page: int, search_id: str) -> dict:
     body=search_body(keyword,page,search_id)
-    request_at=time.monotonic()
-    r=session.post(ENDPOINT,json=body,timeout=TIMEOUT,allow_redirects=True)
-    if r.status_code==429:
-        retry=r.headers.get('Retry-After')
+    last_error=None
+    for attempt in range(3):
+        wait_delay()
         try:
-            pause=max(DELAY,min(60.0,float(retry))) if retry else max(5.0,DELAY*4)
-        except Exception:
-            pause=max(5.0,DELAY*4)
-        time.sleep(pause)
-        r=session.post(ENDPOINT,json=body,timeout=TIMEOUT,allow_redirects=True)
-        request_at=time.monotonic()
-    if r.status_code!=200:
-        raise RuntimeError(f'21vek search HTTP {r.status_code}: {r.text[:300]}')
-    try:
-        data=r.json()
-    except Exception as exc:
-        raise RuntimeError('21vek search returned non-JSON') from exc
-    if not isinstance(data,dict) or not isinstance(data.get('products'),list):
-        raise RuntimeError('21vek search response has no products array')
-    return data,request_at
+            r=session.post(ENDPOINT,json=body,timeout=TIMEOUT,allow_redirects=True)
+            if r.status_code==200:
+                try:
+                    data=r.json()
+                except Exception as exc:
+                    raise RuntimeError('21vek search returned non-JSON') from exc
+                if not isinstance(data,dict) or not isinstance(data.get('products'),list):
+                    raise RuntimeError('21vek search response has no products array')
+                return data
+            error=RuntimeError(f'21vek search HTTP {r.status_code}: {r.text[:300]}')
+            if r.status_code<500 and r.status_code not in (408,425,429):
+                raise error
+            last_error=error
+            retry=r.headers.get('Retry-After') if r.status_code==429 else None
+            if retry:
+                try:
+                    time.sleep(max(1.0,min(30.0,float(retry))))
+                except Exception:
+                    time.sleep(2.0*(attempt+1))
+            elif attempt<2:
+                time.sleep(1.0*(attempt+1))
+        except (requests.Timeout,requests.ConnectionError) as exc:
+            last_error=exc
+            if attempt<2:
+                time.sleep(1.0*(attempt+1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError('21vek search failed')
 
 
 def page_positions(products: list[dict], page: int) -> dict[int,int]:
@@ -224,78 +258,98 @@ def insert_run(keyword_count: int, target_count: int) -> str:
     return rows[0]['id']
 
 
+def collect_keyword(run_id: str, keyword: str, targets: list[dict]) -> dict:
+    observed=datetime.now(timezone.utc).isoformat()
+    by_donor: dict[int,list[dict]]=defaultdict(list)
+    for x in targets:
+        by_donor[int(x['donor_article'])].append(x)
+    found: dict[int,int]={}
+    total=None
+    search_id=''
+    keyword_error=None
+    request_count=0
+    try:
+        ses=top_session()
+        data=search_page(ses,keyword,1,'')
+        request_count+=1
+        search_id=str(data.get('searchId') or '')
+        total=int(data.get('total')) if data.get('total') is not None else None
+        found.update({pid:pos for pid,pos in page_positions(data.get('products') or [],1).items() if pid in by_donor})
+
+        unresolved=[x for pid,rows in by_donor.items() if pid not in found for x in rows]
+        if DEEP_EXACT and unresolved and MAX_DEEP_PAGES>0 and total:
+            total_pages=max(1,int(math.ceil(total/60.0)))
+            for page in deep_candidates(unresolved,total_pages):
+                data2=search_page(ses,keyword,page,search_id)
+                request_count+=1
+                search_id=str(data2.get('searchId') or search_id)
+                pp=page_positions(data2.get('products') or [],page)
+                for pid,pos in pp.items():
+                    if pid in by_donor:
+                        found[pid]=pos
+                unresolved=[x for pid,rows in by_donor.items() if pid not in found for x in rows]
+                if not unresolved:
+                    break
+    except Exception as exc:
+        keyword_error=str(exc)
+
+    snapshots=[]
+    current=[]
+    exact_rows=0
+    for pid,rows in by_donor.items():
+        for x in rows:
+            if keyword_error:
+                row=row_for(run_id,x,position=None,exact=False,top30=None,top60=None,total=total,page_found=None,observed=observed,error=keyword_error)
+            elif pid in found:
+                pos=found[pid]
+                exact_rows+=1
+                row=row_for(run_id,x,position=pos,exact=True,top30=pos<=30,top60=pos<=60,total=total,page_found=int(math.ceil(pos/60.0)),observed=observed,error=None)
+            else:
+                row=row_for(run_id,x,position=None,exact=False,top30=False,top60=False,total=total,page_found=None,observed=observed,error=None)
+            snapshots.append(row)
+            current.append(current_row(row))
+    return {
+      'keyword':keyword,'targets':len(targets),'snapshots':snapshots,'current':current,
+      'request_count':request_count,'keyword_error':keyword_error,'exact_rows':exact_rows,'total':total
+    }
+
+
 def main() -> None:
     all_targets=current_targets()
     groups=grouped_targets(all_targets)
     selected=[x for _,xs in groups for x in xs]
     run_id=insert_run(len(groups),len(selected))
-    print(f'TOP shadow {run_id}: keywords={len(groups)} targets={len(selected)}',flush=True)
+    print(
+        f'TOP shadow {run_id}: keywords={len(groups)} targets={len(selected)} '
+        f'workers={WORKERS} start_interval={DELAY:.2f}s',flush=True
+    )
 
-    ses=requests.Session()
-    ses.headers.update({
-      'User-Agent':UA,'Accept':'application/json, text/plain, */*','Content-Type':'application/json',
-      'Origin':'https://www.21vek.by','Referer':'https://www.21vek.by/'
-    })
     requests_count=0
     errors=0
-    last_request_at=None
     snapshots=[]
     current=[]
+    completed=0
     try:
-        for ki,(keyword,targets) in enumerate(groups,1):
-            observed=datetime.now(timezone.utc).isoformat()
-            by_donor: dict[int,list[dict]]=defaultdict(list)
-            for x in targets:
-                by_donor[int(x['donor_article'])].append(x)
-            found: dict[int,int]={}
-            total=None
-            search_id=''
-            keyword_error=None
-            try:
-                data,last_request_at=search_page(ses,keyword,1,'',last_request_at)
-                requests_count+=1
-                search_id=str(data.get('searchId') or '')
-                total=int(data.get('total')) if data.get('total') is not None else None
-                found.update({pid:pos for pid,pos in page_positions(data.get('products') or [],1).items() if pid in by_donor})
-
-                unresolved=[x for pid,rows in by_donor.items() if pid not in found for x in rows]
-                if DEEP_EXACT and unresolved and MAX_DEEP_PAGES>0 and total:
-                    total_pages=max(1,int(math.ceil(total/60.0)))
-                    for page in deep_candidates(unresolved,total_pages):
-                        data2,last_request_at=search_page(ses,keyword,page,search_id,last_request_at)
-                        requests_count+=1
-                        search_id=str(data2.get('searchId') or search_id)
-                        pp=page_positions(data2.get('products') or [],page)
-                        for pid,pos in pp.items():
-                            if pid in by_donor:
-                                found[pid]=pos
-                        unresolved=[x for pid,rows in by_donor.items() if pid not in found for x in rows]
-                        if not unresolved:
-                            break
-            except Exception as exc:
-                keyword_error=str(exc)
-                errors+=1
-
-            exact_rows=0
-            for pid,rows in by_donor.items():
-                for x in rows:
-                    if keyword_error:
-                        s=row_for(run_id,x,position=None,exact=False,top30=None,top60=None,total=total,page_found=None,observed=observed,error=keyword_error)
-                    elif pid in found:
-                        pos=found[pid]
-                        exact_rows+=1
-                        s=row_for(run_id,x,position=pos,exact=True,top30=pos<=30,top60=pos<=60,total=total,page_found=int(math.ceil(pos/60.0)),observed=observed,error=None)
-                    else:
-                        s=row_for(run_id,x,position=None,exact=False,top30=False,top60=False,total=total,page_found=None,observed=observed,error=None)
-                    snapshots.append(s)
-                    current.append(current_row(s))
-
-            print(f'[{ki}/{len(groups)}] {keyword!r}: targets={len(targets)} exact_rows={exact_rows} total={total} error={keyword_error or "-"}',flush=True)
-            if len(snapshots)>=250:
-                rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
-                rest_upsert('triovist_21vek_top_current',current,'manager_email,card_key',timeout=90)
-                snapshots=[]
-                current=[]
+        with ThreadPoolExecutor(max_workers=min(WORKERS,max(1,len(groups))),thread_name_prefix='21vek-top') as pool:
+            futures=[pool.submit(collect_keyword,run_id,keyword,targets) for keyword,targets in groups]
+            for future in as_completed(futures):
+                result=future.result()
+                completed+=1
+                requests_count+=int(result['request_count'])
+                if result['keyword_error']:
+                    errors+=1
+                snapshots.extend(result['snapshots'])
+                current.extend(result['current'])
+                print(
+                    f"[{completed}/{len(groups)}] {result['keyword']!r}: targets={result['targets']} "
+                    f"exact_rows={result['exact_rows']} total={result['total']} error={result['keyword_error'] or '-'}",
+                    flush=True
+                )
+                if len(snapshots)>=250:
+                    rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
+                    rest_upsert('triovist_21vek_top_current',current,'manager_email,card_key',timeout=90)
+                    snapshots=[]
+                    current=[]
 
         if snapshots:
             rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
@@ -313,7 +367,8 @@ def main() -> None:
           'status':status,'requests_count':requests_count,'found_exact_count':found_exact,'top30_count':top30,
           'top60_count':top60,'error_count':errors+row_errors,'finished_at':datetime.now(timezone.utc).isoformat(),
           'notes':{'mode':'shadow','endpoint':'search-composer/api/v3/products','page_size':60,'production_cutover':False,
-                   'expected_rows':len(selected),'stored_rows':len(stats),'deep_exact':DEEP_EXACT}
+                   'expected_rows':len(selected),'stored_rows':len(stats),'deep_exact':DEEP_EXACT,
+                   'workers':WORKERS,'request_start_interval_seconds':DELAY}
         })
         print(f'DONE {status}: requests={requests_count} rows={len(stats)}/{len(selected)} exact={found_exact} top30={top30} top60={top60} errors={errors+row_errors}',flush=True)
         if status!='complete':
@@ -321,11 +376,13 @@ def main() -> None:
     except Exception as fatal:
         try:
             rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
-              'status':'failed','requests_count':requests_count,'error_count':errors+1,
-              'finished_at':datetime.now(timezone.utc).isoformat(),'notes':{'fatal_error':str(fatal),'production_cutover':False}
+              'status':'failed','requests_count':requests_count,'error_count':max(errors,1),
+              'finished_at':datetime.now(timezone.utc).isoformat(),
+              'notes':{'fatal_error':str(fatal),'production_cutover':False,'workers':WORKERS,'request_start_interval_seconds':DELAY}
             })
         finally:
             raise
+
 
 if __name__=='__main__':
     main()
