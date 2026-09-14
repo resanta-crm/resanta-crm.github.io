@@ -1,0 +1,34 @@
+name: TEMP accelerate 21vek v0.7
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-accelerate-21vek-v07.yml'
+      - 'tools/_tmp_accelerate_21vek_v07.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply acceleration patch
+        run: python tools/_tmp_accelerate_21vek_v07.py
+      - name: Validate collectors
+        run: |
+          python -m py_compile tools/triovist_21vek_shadow_sync.py tools/triovist_21vek_top_shadow.py
+          grep -q "SHADOW_WORKERS: '14'" .github/workflows/triovist-21vek-shadow-sync.yml
+          grep -q "TOP_WORKERS='10'" .github/workflows/triovist-21vek-shadow-sync.yml
+      - name: Commit result
+        run: |
+          rm -f tools/_tmp_accelerate_21vek_v07.py .github/workflows/_tmp-accelerate-21vek-v07.yml
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git add tools/triovist_21vek_shadow_sync.py tools/triovist_21vek_top_shadow.py .github/workflows/triovist-21vek-shadow-sync.yml tools/_tmp_accelerate_21vek_v07.py .github/workflows/_tmp-accelerate-21vek-v07.yml
+          git commit -m 'perf(21vek): parallelize card and TOP collectors'
+          git push
