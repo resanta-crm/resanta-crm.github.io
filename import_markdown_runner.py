@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# RESANTA CRM · robust runner for markdown/discounted goods import
+# RESANTA CRM · robust runner for markdown/discounted goods import · health check 2026-09-14
 # Fixes fragile mailbox selection/sender filtering without duplicating parser/DB logic.
 
 import email
