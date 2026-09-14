@@ -1,0 +1,59 @@
+name: TEMP fix 21vek parser v0.6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-fix-21vek-parser-v06.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch 21vek parser
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('tools/triovist_21vek_shadow_sync.py')
+          s=p.read_text(encoding='utf-8')
+
+          s=s.replace('PARSER_VERSION="shadow-v0.5"','PARSER_VERSION="shadow-v0.6"',1)
+          s=s.replace('UA="ResantaCRM-21vekShadow/0.5 (+https://resanta-crm.by)"','UA="ResantaCRM-21vekShadow/0.6 (+https://resanta-crm.by)"',1)
+
+          old='''def rest_post(table: str, rows: list[dict]|dict, *, prefer: str="return=minimal", timeout: int=60) -> Any:\n    r=requests.post(\n'''
+          new='''def rest_post(table: str, rows: list[dict]|dict, *, prefer: str="return=minimal", timeout: int=60) -> Any:\n    # PostgREST bulk insert requires every object in a JSON array to expose\n    # exactly the same keys. Successful and failed 21vek snapshots contain\n    # different optional fields, so normalize a mixed batch before sending it.\n    if isinstance(rows,list) and rows:\n        keys=set().union(*(row.keys() for row in rows))\n        rows=[{key:row.get(key) for key in keys} for row in rows]\n    r=requests.post(\n'''
+          if old not in s:
+              raise SystemExit('rest_post marker not found')
+          s=s.replace(old,new,1)
+
+          marker='''\ndef main() -> None:\n'''
+          helper='''\ndef fetch_product(session: requests.Session, url: str) -> requests.Response:\n    """Fetch one 21vek page with short retries for transient network failures."""\n    last_error: Exception|None=None\n    for attempt in range(3):\n        try:\n            response=session.get(url,timeout=TIMEOUT,allow_redirects=True)\n            if response.status_code==200:\n                return response\n            error=RuntimeError(f"HTTP {response.status_code}")\n            # Client errors other than rate limiting/request timeout are not transient.\n            if response.status_code<500 and response.status_code not in (408,425,429):\n                raise error\n            last_error=error\n        except (requests.Timeout,requests.ConnectionError) as exc:\n            last_error=exc\n        if attempt<2:\n            time.sleep(1.5*(attempt+1))\n    if last_error is not None:\n        raise last_error\n    raise RuntimeError("21vek fetch failed")\n\n\ndef main() -> None:\n'''
+          if marker not in s:
+              raise SystemExit('main marker not found')
+          s=s.replace(marker,helper,1)
+
+          old_get='''                r=ses.get(target["product_url"],timeout=TIMEOUT,allow_redirects=True)\n                if r.status_code!=200:\n                    raise RuntimeError(f"HTTP {r.status_code}")\n'''
+          new_get='''                r=fetch_product(ses,target["product_url"])\n'''
+          if old_get not in s:
+              raise SystemExit('fetch block not found')
+          s=s.replace(old_get,new_get,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Validate Python
+        run: python3 -m py_compile tools/triovist_21vek_shadow_sync.py
+      - name: Commit fix
+        run: |
+          rm -f .github/workflows/_tmp-fix-21vek-parser-v06.yml
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git add tools/triovist_21vek_shadow_sync.py .github/workflows/_tmp-fix-21vek-parser-v06.yml
+          git commit -m 'fix(21vek): normalize mixed batches and retry transient fetches'
+          git push
