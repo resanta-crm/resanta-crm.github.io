@@ -1,0 +1,40 @@
+name: TEMP publish frontend v23.6.117
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-publish-v236117.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch version references
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text(encoding='utf-8')
+          s=s.replace("2026-09-14-resanta-crm-v23.6.116","2026-09-14-resanta-crm-v23.6.117")
+          s=s.replace("assets/66-performance-root-v23657.js?v=23.6.116","assets/66-performance-root-v23657.js?v=23.6.117")
+          s=s.replace("assets/77-sales-freshness-alert-v23698.js?v=23.6.98","assets/77-sales-freshness-alert-v23698.js?v=23.6.117")
+          p.write_text(s,encoding='utf-8')
+          p=Path('assets/66-performance-root-v23657.js'); s=p.read_text(encoding='utf-8')
+          s=s.replace("const V='23.6.116'","const V='23.6.117'")
+          p.write_text(s,encoding='utf-8')
+          PY
+          rm -f .github/workflows/_tmp-publish-v236117.yml
+          grep -q "resanta-crm-v23.6.117" index.html
+          grep -q "77-sales-freshness-alert-v23698.js?v=23.6.117" index.html
+          grep -q "const V='23.6.117'" assets/66-performance-root-v23657.js
+      - name: Commit
+        run: |
+          git config user.name 'resanta-crm-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html assets/66-performance-root-v23657.js .github/workflows/_tmp-publish-v236117.yml
+          git commit -m 'chore: publish frontend v23.6.117'
+          git push
