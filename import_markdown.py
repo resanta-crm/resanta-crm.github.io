@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# RESANTA CRM v23.6.87 · import markdown/discounted goods from 1C email
+# RESANTA CRM v23.6.113 · import markdown/discounted goods from 1C email
 import os, re, json, io, imaplib, email, hashlib
 from datetime import datetime, timezone, timedelta, date
 from email.header import decode_header, make_header
@@ -28,7 +28,7 @@ ALIASES={
  "article":["артикул","код","код товара","sku","номенклатурный номер"],
  "nomenclature":["номенклатура","товар","наименование","наименование товара"],
  "quantity":["количество","кол-во","остаток","остаток уценки","qty"],
- "base_price":["дилерская с ндс","цена дилер с ндс","дилер с ндс","цена","базовая цена","цена с ндс","розничная цена","цена продажи","price"],
+ "base_price":["дилерская с ндс","цена дилер с ндс","дилер с ндс","мелкий опт 2 с ндс","мелкий опт с ндс","мелкий опт 2","мелкий опт","отпускная с ндс","отпускная","цена","базовая цена","цена с ндс","розничная цена","цена продажи","price"],
  "source_type":["причина","тип возврата","источник","откуда","вид уценки"],
  "source_document":["документ","документ возврата","номер документа","документ сервиса"],
  "source_date":["дата","дата возврата","дата документа"],
@@ -104,8 +104,22 @@ def colmap(headers):
             if norm(h) in aset:
                 m[key]=idx
                 break
+    if "base_price" not in m:
+        # 1C can rename the selected price type while preserving the same report layout.
+        # Accept a VAT/wholesale price column instead of silently importing zero rows.
+        candidates=[]
+        for idx,h in enumerate(headers):
+            nh=norm(h)
+            if ("ндс" in nh and any(k in nh for k in ("опт","дилер","цена","отпуск"))) or "мелкий опт" in nh:
+                candidates.append(idx)
+        if len(candidates)==1:
+            m["base_price"]=candidates[0]
+        elif len(candidates)>1:
+            m["base_price"]=candidates[-1]
     if "article" not in m or "nomenclature" not in m:
         raise RuntimeError("В файле обязательны колонки «Артикул» и «Номенклатура».")
+    if "base_price" not in m:
+        raise RuntimeError("Не найдена колонка цены 1С. Проверьте вид цены в отчёте.")
     return m
 
 def cell(row,m,key,default=None):
