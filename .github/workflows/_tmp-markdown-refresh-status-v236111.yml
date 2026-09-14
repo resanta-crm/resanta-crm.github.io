@@ -1,0 +1,157 @@
+name: TEMP — markdown refresh status v23.6.111
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-markdown-refresh-status-v236111.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch markdown refresh and import freshness UI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          js_path = Path('assets/74-markdown-v23687.js')
+          idx_path = Path('index.html')
+          root_path = Path('assets/66-performance-root-v23657.js')
+          ver_path = Path('data/app-version.json')
+
+          js = js_path.read_text(encoding='utf-8')
+          idx = idx_path.read_text(encoding='utf-8')
+          root = root_path.read_text(encoding='utf-8')
+
+          js = js.replace('/* RESANTA CRM v23.6.95 · УЦЕНКА', '/* RESANTA CRM v23.6.111 · УЦЕНКА', 1)
+          js = js.replace("const V='v23.6.95';", "const V='v23.6.111';", 1)
+
+          old_state = "const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0};"
+          new_state = "const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null};"
+          if old_state not in js:
+              raise SystemExit('Markdown state anchor not found')
+          js = js.replace(old_state, new_state, 1)
+
+          date_anchor = "const date=v=>{if(!v)return'—';const s=String(v).slice(0,10).split('-');return s.length===3?s.reverse().join('.'):String(v)};"
+          helper = r'''
+const fmtImportTs=v=>{
+ if(!v)return'—';
+ try{return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(v))}
+ catch(_){return String(v)}
+};
+function importStatusHtml(){
+ const s=S.importStatus;
+ if(!s)return '<div style="font-size:10px;color:var(--sub);margin-top:4px">1С: проверяю последний импорт…</div>';
+ if(!s.has_import)return '<div style="font-size:10px;color:#92400E;margin-top:4px">⚠️ 1С: импорт ещё не зафиксирован</div>';
+ const ok=String(s.status||'').toLowerCase()==='ok'&&!s.error_text;
+ const tone=ok?'#166534':'#991B1B';
+ const extra=ok?'':' · '+esc(s.error_text||s.status||'ошибка импорта');
+ return '<div style="font-size:10px;color:'+tone+';margin-top:4px;line-height:1.45">'+(ok?'✅':'⚠️')+' <b>1С:</b> отчёт '+esc(fmtImportTs(s.source_message_at))+' · в CRM '+esc(fmtImportTs(s.imported_at))+' · <b>'+n(s.sku_count)+' SKU / '+qty(s.total_qty)+' шт.</b>'+extra+' · автоимпорт каждые 15 мин</div>';
+}
+async function loadImportStatus(force=false){
+ const now=Date.now();
+ if(!force&&S.importStatus&&now-S.importStatusAt<30000)return S.importStatus;
+ if(S.importStatusFlight)return S.importStatusFlight;
+ S.importStatusFlight=(async()=>{
+  try{
+   const data=await rpc('markdown_import_status_v1',{});
+   S.importStatus=data;S.importStatusAt=Date.now();return data;
+  }catch(e){console.warn(V,'import status',e);return S.importStatus}
+  finally{S.importStatusFlight=null}
+ })();
+ return S.importStatusFlight;
+}
+'''.strip('\n')
+          if date_anchor not in js:
+              raise SystemExit('Date helper anchor not found')
+          js = js.replace(date_anchor, date_anchor + '\n' + helper, 1)
+
+          render_old = "root.innerHTML='<div class=\"md-top\"><div><div class=\"page-title\" style=\"margin-bottom:3px\">🏷️ Уценка</div><div style=\"font-size:12px;color:var(--sub)\">Возвраты клиентов и сервиса · фото · гарантия · цена · задачи на продажу</div></div>'\n  +'<div style=\"display:flex;gap:7px;flex-wrap:wrap\">'+(isPayushin()?'<button class=\"btn-secondary\" id=\"md-control-v23691\">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class=\"btn-secondary\" id=\"md-refresh-v23687\">↻ Обновить</button></div></div>'"
+          render_new = "root.innerHTML='<div class=\"md-top\"><div><div class=\"page-title\" style=\"margin-bottom:3px\">🏷️ Уценка</div><div style=\"font-size:12px;color:var(--sub)\">Возвраты клиентов и сервиса · фото · гарантия · цена · задачи на продажу</div>'+importStatusHtml()+'</div>'\n  +'<div style=\"display:flex;gap:7px;flex-wrap:wrap\">'+(isPayushin()?'<button class=\"btn-secondary\" id=\"md-control-v23691\">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class=\"btn-secondary\" id=\"md-refresh-v23687\" title=\"Перечитать CRM и проверить последний импорт из 1С\">↻ Обновить</button></div></div>'"
+          if render_old not in js:
+              raise SystemExit('Render header anchor not found')
+          js = js.replace(render_old, render_new, 1)
+
+          refresh_old = " const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);"
+          refresh_new = r''' const ref=$('md-refresh-v23687');if(ref)ref.onclick=async()=>{
+  ref.disabled=true;ref.textContent='↻ Обновляю…';
+  await loadImportStatus(true);
+  S.loadedAt=0;
+  const ok=await load(true);
+  if(isPayushin())await loadControlSummary(true);
+  const next=$('md-refresh-v23687');
+  if(next){
+   next.disabled=false;next.textContent=ok?'✓ Обновлено':'⚠ Ошибка';
+   setTimeout(()=>{const b=$('md-refresh-v23687');if(b)b.textContent='↻ Обновить'},1400);
+  }
+ };'''
+          if refresh_old not in js:
+              raise SystemExit('Refresh handler anchor not found')
+          js = js.replace(refresh_old, refresh_new, 1)
+
+          load_old = "   const data=await rpc('markdown_list_v1',{p_search:S.search||null,p_filter:S.filter,p_limit:60,p_offset:0});"
+          load_new = "   const [data]=await Promise.all([rpc('markdown_list_v1',{p_search:S.search||null,p_filter:S.filter,p_limit:60,p_offset:0}),loadImportStatus(false)]);"
+          if load_old not in js:
+              raise SystemExit('Load RPC anchor not found')
+          js = js.replace(load_old, load_new, 1)
+
+          # Cache/version bump.
+          idx, n_app = re.subn(r"const APP_VERSION = '[^']+';", "const APP_VERSION = '2026-09-14-resanta-crm-v23.6.111';", idx, count=1)
+          idx, n_md = re.subn(r"assets/74-markdown-v23687\.js\?v=[^\"']+", "assets/74-markdown-v23687.js?v=23.6.111", idx)
+          idx, n_root = re.subn(r"assets/66-performance-root-v23657\.js\?v=[^\"']+", "assets/66-performance-root-v23657.js?v=23.6.111", idx)
+          if n_app != 1:
+              raise SystemExit(f'APP_VERSION replacements={n_app}')
+          if n_md < 1:
+              raise SystemExit('Markdown script reference not found in index')
+          if n_root < 1:
+              raise SystemExit('Performance root reference not found in index')
+
+          if "const V='23.6.110'" not in root:
+              raise SystemExit('Performance root version anchor not found')
+          root = root.replace("const V='23.6.110'", "const V='23.6.111'", 1)
+
+          ver = json.loads(ver_path.read_text(encoding='utf-8'))
+          ver['version'] = '23.6.111'
+          ver['released_at'] = '2026-09-14'
+          ver['purpose'] = 'Уценка: рабочее обновление и видимый статус последнего импорта из 1С'
+          ver['deploy_trigger'] = '2026-09-14T08:20:00Z'
+
+          # Safety checks.
+          if js.count("markdown_import_status_v1") != 1:
+              raise SystemExit('Unexpected import-status RPC count')
+          if "↻ Обновляю…" not in js or "✓ Обновлено" not in js:
+              raise SystemExit('Refresh feedback missing')
+          if "v23.6.111" not in js:
+              raise SystemExit('Markdown version bump missing')
+
+          js_path.write_text(js, encoding='utf-8')
+          idx_path.write_text(idx, encoding='utf-8')
+          root_path.write_text(root, encoding='utf-8')
+          ver_path.write_text(json.dumps(ver, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+          PY
+
+          node --check assets/74-markdown-v23687.js
+          node --check assets/66-performance-root-v23657.js
+          python -m json.tool data/app-version.json >/dev/null
+          git diff --check
+
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git rm .github/workflows/_tmp-markdown-refresh-status-v236111.yml
+          git add assets/74-markdown-v23687.js assets/66-performance-root-v23657.js index.html data/app-version.json
+          git commit -m 'fix(markdown): refresh data and show 1C import status v23.6.111'
+          git push origin HEAD:main
