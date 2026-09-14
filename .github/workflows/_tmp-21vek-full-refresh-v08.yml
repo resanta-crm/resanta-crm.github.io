@@ -1,0 +1,50 @@
+name: TEMP 21vek full optimized refresh v0.8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-21vek-full-refresh-v08.yml'
+
+jobs:
+  full-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencies
+        run: pip install requests beautifulsoup4
+      - name: Full 21vek card collection
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SHADOW_LIMIT: '2500'
+          SHADOW_OFFSET: '0'
+          SHADOW_SKIP_RECENT_COMPLETE_HOURS: '0'
+          SHADOW_DELAY_SECONDS: '0.35'
+          SHADOW_WORKERS: '8'
+          SHADOW_HTTP_TIMEOUT: '25'
+        run: python tools/triovist_21vek_shadow_sync.py
+      - name: Full TOP collection
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TOP_KEYWORD_LIMIT: '500'
+          TOP_KEYWORD_OFFSET: '0'
+          TOP_DELAY_SECONDS: '0.18'
+          TOP_WORKERS: '10'
+          TOP_HTTP_TIMEOUT: '30'
+          TOP_DEEP_EXACT: '0'
+          TOP_DEEP_RADIUS: '0'
+          TOP_MAX_DEEP_PAGES_PER_KEYWORD: '0'
+        run: python tools/triovist_21vek_top_shadow.py
+      - name: Promote only complete safe snapshot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python tools/triovist_21vek_promote.py
