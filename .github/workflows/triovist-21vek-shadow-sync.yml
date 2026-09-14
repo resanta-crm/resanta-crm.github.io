@@ -1,5 +1,5 @@
 name: Триовист — 21vek · собственный ежедневный сбор
-# v0.6: mixed-batch normalization + transient network retries.
+# v0.7: bounded parallel card/TOP collection with safe global rate limits.
 
 on:
   push:
@@ -68,7 +68,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SHADOW_DELAY_SECONDS: '0.8'
+          SHADOW_DELAY_SECONDS: '0.14'
+          SHADOW_WORKERS: '14'
           SHADOW_HTTP_TIMEOUT: '25'
           RUN_LIMIT: ${{ steps.gate.outputs.limit }}
           SKIP_RECENT: ${{ steps.gate.outputs.skip_recent }}
@@ -86,7 +87,8 @@ jobs:
           echo "21vek TOP keywords=$TOP_LIMIT"
           TOP_KEYWORD_LIMIT="$TOP_LIMIT" \
           TOP_KEYWORD_OFFSET='0' \
-          TOP_DELAY_SECONDS='1.2' \
+          TOP_DELAY_SECONDS='0.18' \
+          TOP_WORKERS='10' \
           TOP_HTTP_TIMEOUT='30' \
           TOP_DEEP_EXACT='0' \
           TOP_DEEP_RADIUS='0' \
