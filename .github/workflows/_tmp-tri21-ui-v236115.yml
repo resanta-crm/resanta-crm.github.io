@@ -1,0 +1,37 @@
+name: TEMP Triovist 21vek UI v23.6.115
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-tri21-ui-v236115.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply patch
+        run: python tools/_tmp_tri21_ui_v236115.py
+      - name: Validate
+        run: |
+          node --check assets/80-triovist-21vek-control-v236107.js
+          node --check assets/81-triovist-21vek-export-v236109.js
+          node --check assets/66-performance-root-v23657.js
+          grep -q "23.6.115" data/app-version.json
+          grep -q "resanta-crm-v23.6.115" index.html
+          grep -q "📥 Выгрузить Excel" assets/80-triovist-21vek-control-v236107.js
+          grep -q "Данные CRM обновлены" assets/80-triovist-21vek-control-v236107.js
+      - name: Commit and clean helper
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git rm tools/_tmp_tri21_ui_v236115.py .github/workflows/_tmp-tri21-ui-v236115.yml
+          git add assets/80-triovist-21vek-control-v236107.js assets/81-triovist-21vek-export-v236109.js assets/66-performance-root-v23657.js index.html data/app-version.json
+          git commit -m 'fix(triovist): restore 21vek Excel export and clarify freshness v23.6.115'
+          git push
