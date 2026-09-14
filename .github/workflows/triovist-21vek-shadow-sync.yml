@@ -1,5 +1,5 @@
 name: Триовист — 21vek · собственный ежедневный сбор
-# v0.7: bounded parallel card/TOP collection with safe global rate limits.
+# v0.8: bounded parallel card/TOP collection with adaptive 429 cooldown.
 
 on:
   push:
@@ -68,8 +68,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SHADOW_DELAY_SECONDS: '0.14'
-          SHADOW_WORKERS: '14'
+          SHADOW_DELAY_SECONDS: '0.35'
+          SHADOW_WORKERS: '8'
           SHADOW_HTTP_TIMEOUT: '25'
           RUN_LIMIT: ${{ steps.gate.outputs.limit }}
           SKIP_RECENT: ${{ steps.gate.outputs.skip_recent }}
