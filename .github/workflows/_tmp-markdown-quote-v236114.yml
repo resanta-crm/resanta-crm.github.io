@@ -1,0 +1,29 @@
+name: TEMP Markdown quote fix 23.6.114
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/_tmp-markdown-quote-v236114.yml
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python patch_markdown_quote_v236114.py
+      - name: Check JavaScript
+        run: node --check assets/74-markdown-v23687.js
+      - name: Commit result
+        run: |
+          rm -f .github/workflows/_tmp-markdown-quote-v236114.yml
+          rm -f patch_markdown_quote_v236114.py
+          git config user.name resanta-crm
+          git config user.email resantavitebsc@gmail.com
+          git add -A
+          git commit -m "fix(markdown): valid price sync handlers v23.6.114"
+          git push
