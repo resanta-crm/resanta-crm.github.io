@@ -1,6 +1,6 @@
 {
-  "version": "23.6.110",
-  "released_at": "2026-09-11",
-  "purpose": "Triovist own 21vek: secure Excel export and clearer manual queue timing",
-  "deploy_trigger": "2026-09-11T13:33:30Z"
+  "version": "23.6.111",
+  "released_at": "2026-09-14",
+  "purpose": "Уценка: рабочее обновление и видимый статус последнего импорта из 1С",
+  "deploy_trigger": "2026-09-14T08:20:00Z"
 }

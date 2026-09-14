@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.95 · УЦЕНКА
+/* RESANTA CRM v23.6.111 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
@@ -6,8 +6,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.95';
-const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0};
+const V='v23.6.111';
+const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=v=>esc(v).replace(/"/g,'&quot;');
@@ -15,6 +15,33 @@ const n=v=>Number(v)||0;
 const money=v=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
 const date=v=>{if(!v)return'—';const s=String(v).slice(0,10).split('-');return s.length===3?s.reverse().join('.'):String(v)};
+const fmtImportTs=v=>{
+ if(!v)return'—';
+ try{return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(v))}
+ catch(_){return String(v)}
+};
+function importStatusHtml(){
+ const s=S.importStatus;
+ if(!s)return '<div style="font-size:10px;color:var(--sub);margin-top:4px">1С: проверяю последний импорт…</div>';
+ if(!s.has_import)return '<div style="font-size:10px;color:#92400E;margin-top:4px">⚠️ 1С: импорт ещё не зафиксирован</div>';
+ const ok=String(s.status||'').toLowerCase()==='ok'&&!s.error_text;
+ const tone=ok?'#166534':'#991B1B';
+ const extra=ok?'':' · '+esc(s.error_text||s.status||'ошибка импорта');
+ return '<div style="font-size:10px;color:'+tone+';margin-top:4px;line-height:1.45">'+(ok?'✅':'⚠️')+' <b>1С:</b> отчёт '+esc(fmtImportTs(s.source_message_at))+' · в CRM '+esc(fmtImportTs(s.imported_at))+' · <b>'+n(s.sku_count)+' SKU / '+qty(s.total_qty)+' шт.</b>'+extra+' · автоимпорт каждые 15 мин</div>';
+}
+async function loadImportStatus(force=false){
+ const now=Date.now();
+ if(!force&&S.importStatus&&now-S.importStatusAt<30000)return S.importStatus;
+ if(S.importStatusFlight)return S.importStatusFlight;
+ S.importStatusFlight=(async()=>{
+  try{
+   const data=await rpc('markdown_import_status_v1',{});
+   S.importStatus=data;S.importStatusAt=Date.now();return data;
+  }catch(e){console.warn(V,'import status',e);return S.importStatus}
+  finally{S.importStatusFlight=null}
+ })();
+ return S.importStatusFlight;
+}
 const profile=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:(window.currentProfile||null)}catch(_){return window.currentProfile||null}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage()==='markdown':$('page-markdown')?.classList.contains('active')}catch(_){return false}};
@@ -157,8 +184,8 @@ function card(r){
 function render(){
  const root=$('markdown-root');if(!root)return;
  const tabs=statusTabs(),control=S.controlSummary||{};
- root.innerHTML='<div class="md-top"><div><div class="page-title" style="margin-bottom:3px">🏷️ Уценка</div><div style="font-size:12px;color:var(--sub)">Возвраты клиентов и сервиса · фото · гарантия · цена · задачи на продажу</div></div>'
-  +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(isPayushin()?'<button class="btn-secondary" id="md-control-v23691">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class="btn-secondary" id="md-refresh-v23687">↻ Обновить</button></div></div>'
+ root.innerHTML='<div class="md-top"><div><div class="page-title" style="margin-bottom:3px">🏷️ Уценка</div><div style="font-size:12px;color:var(--sub)">Возвраты клиентов и сервиса · фото · гарантия · цена · задачи на продажу</div>'+importStatusHtml()+'</div>'
+  +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(isPayushin()?'<button class="btn-secondary" id="md-control-v23691">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class="btn-secondary" id="md-refresh-v23687" title="Перечитать CRM и проверить последний импорт из 1С">↻ Обновить</button></div></div>'
   +'<div class="card" style="margin-bottom:10px;padding:11px 13px;font-size:11px;line-height:1.5"><b>🛡 Уценённый товар сохраняет гарантию.</b> Фото и описание состояния видят все сотрудники. '+(isPayushin()?'<b>Скидку и план продажи утверждаете только вы.</b>':'Цена и скидка утверждаются Александром Паюшиным.')+'</div>'
   +'<div class="md-stats">'+tabs.map(x=>'<button class="md-chip '+(S.filter===x[0]?'active':'')+'" data-md-filter="'+x[0]+'">'+x[1]+' <b>'+x[2]+'</b></button>').join('')+'</div>'
   +'<div class="md-tools"><input class="md-search" id="md-search-v23687" enterkeyhint="search" value="'+attr(S.search)+'" placeholder="🔍 Поиск по артикулу, номенклатуре, серийному номеру..."><button type="button" class="btn-secondary md-search-go" id="md-search-go-v23695">🔍 Найти</button><span style="font-size:10px;color:var(--sub)">Найдено: '+S.total+'</span></div>'
@@ -178,7 +205,18 @@ function render(){
   inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch()}};
  }
  const go=$('md-search-go-v23695');if(go)go.onclick=runSearch;
- const ref=$('md-refresh-v23687');if(ref)ref.onclick=()=>load(true);
+ const ref=$('md-refresh-v23687');if(ref)ref.onclick=async()=>{
+  ref.disabled=true;ref.textContent='↻ Обновляю…';
+  await loadImportStatus(true);
+  S.loadedAt=0;
+  const ok=await load(true);
+  if(isPayushin())await loadControlSummary(true);
+  const next=$('md-refresh-v23687');
+  if(next){
+   next.disabled=false;next.textContent=ok?'✓ Обновлено':'⚠ Ошибка';
+   setTimeout(()=>{const b=$('md-refresh-v23687');if(b)b.textContent='↻ Обновить'},1400);
+  }
+ };
  const ctl=$('md-control-v23691');if(ctl)ctl.onclick=()=>openSalesControl('alerts');
  updateNavDot();loadCovers();if(isPayushin())loadControlSummary(false);
 }
@@ -237,7 +275,7 @@ async function load(force=false){
  const gen=++S.gen;
  S.flight=(async()=>{
   try{
-   const data=await rpc('markdown_list_v1',{p_search:S.search||null,p_filter:S.filter,p_limit:60,p_offset:0});
+   const [data]=await Promise.all([rpc('markdown_list_v1',{p_search:S.search||null,p_filter:S.filter,p_limit:60,p_offset:0}),loadImportStatus(false)]);
    if(gen!==S.gen)return false;
    S.rows=Array.isArray(data?.rows)?data.rows:[];S.stats=data?.stats||{};S.total=n(data?.total);S.loadedAt=Date.now();
    if(active())render();else updateNavDot();
