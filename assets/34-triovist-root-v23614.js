@@ -1,8 +1,8 @@
-/* RESANTA CRM v23.6.121 · TRIOVIST ROOT · groups dynamics isolated analytics tab */
+/* RESANTA CRM v23.6.122 · TRIOVIST ROOT · groups dynamics isolated analytics tab */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_ROOT_V23614)return;
-const V='v23.6.121',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.122',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser'],COMM=['anp','si','budget','price'];
 let ctx=null,shell=null,panel=null,active='home',busy=false,refreshBusy=false,mo=null,price={q:'',only:false,offset:0,limit:50,last:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
