@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.119'}catch(_){return'23.6.119'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
+const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.120'}catch(_){return'23.6.120'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
 const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103'});
 
 function activePage(){
@@ -175,7 +175,8 @@ async function loadTriovist(){
     load('assets/61-triovist-task-month-safe-v23651.js','perf-tri-month-v23671','RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651'),
     load('assets/78-triovist-hide-recommendations-v23699.js','perf-tri-hide-recs-v23699','RESANTA_TRIOVIST_RECOMMENDATIONS_HIDDEN_V23699'),
     load('assets/80-triovist-21vek-control-v236107.js','perf-tri-21vek-control-v236107','RESANTA_TRIOVIST_21VEK_CONTROL_V236107'),
-    load('assets/81-triovist-21vek-export-v236109.js','perf-tri-21vek-export-v236109','RESANTA_TRIOVIST_21VEK_EXPORT_V236109')
+    load('assets/81-triovist-21vek-export-v236109.js','perf-tri-21vek-export-v236109','RESANTA_TRIOVIST_21VEK_EXPORT_V236109'),
+    load('assets/82-triovist-group-dynamics-v236120.js','perf-tri-groups-v236120','RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120')
   ]);
   await load('assets/19-triovist-stock-upload-truth-v23551.js','perf-tri-upload-v23671','RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551');
   await load('assets/20-triovist-partner-forecast-v2356.js','perf-tri-forecast-v23671','RESANTA_TRIOVIST_PARTNER_FORECAST_V2356');
