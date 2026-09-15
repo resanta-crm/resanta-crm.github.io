@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.121 compatibility loader.
+/* RESANTA CRM v23.6.122 compatibility loader.
  * The former v23.6.12 workspace is intentionally retired: it fought with
  * legacy Triovist renders. This file remains only because permanent no-cache
  * bootstraps already point here.
@@ -8,13 +8,22 @@
 const compat=Object.freeze({version:'v23.6.14',retired:true,delegatesTo:'v23.6.14'});
 window.RESANTA_TRIOVIST_SINGLE_V23612=window.RESANTA_TRIOVIST_SINGLE_V23612||compat;
 window.RESANTA_TRIOVIST_SINGLE_V23611=window.RESANTA_TRIOVIST_SINGLE_V23611||compat;
-const cv=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.121'}catch(_){return'23.6.121'}})().replace(/^v/,'');
+const cv=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.122'}catch(_){return'23.6.122'}})().replace(/^v/,'');
+function loadRefreshGuard(){
+  if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_REFRESH_V236122||document.querySelector('script[data-trgd-refresh-v236122]'))return;
+  const g=document.createElement('script');
+  g.src='./assets/84-triovist-group-dynamics-refresh-v236122.js?v='+encodeURIComponent(cv);
+  g.async=false;g.dataset.trgdRefreshV236122='1';
+  g.onerror=()=>console.error('Triovist group dynamics refresh guard v23.6.122 failed to load; base analytics remains available.');
+  document.head.appendChild(g);
+}
 function loadGroupFix(){
-  if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_FIXES_V236121||document.querySelector('script[data-trgd-fix-v236121]'))return;
+  if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_FIXES_V236121||document.querySelector('script[data-trgd-fix-v236121]')){loadRefreshGuard();return;}
   const f=document.createElement('script');
   f.src='./assets/83-triovist-group-dynamics-fixes-v236121.js?v='+encodeURIComponent(cv);
   f.async=false;f.dataset.trgdFixV236121='1';
-  f.onerror=()=>console.error('Triovist group dynamics fixes v23.6.121 failed to load; base analytics remains available.');
+  f.onload=loadRefreshGuard;
+  f.onerror=()=>{console.error('Triovist group dynamics fixes v23.6.121 failed to load; base analytics remains available.');loadRefreshGuard();};
   document.head.appendChild(f);
 }
 if(window.RESANTA_TRIOVIST_ROOT_V23614){loadGroupFix();return;}
