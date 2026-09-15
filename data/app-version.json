@@ -1,6 +1,6 @@
 {
-  "version": "23.6.120",
+  "version": "23.6.121",
   "released_at": "2026-09-15",
-  "purpose": "Triovist: новый read-only раздел Группы и динамика",
-  "deploy_trigger": "2026-09-15T08:41:00Z"
+  "purpose": "Triovist Группы и динамика: сохранять фильтры при обновлении + Excel + доступ менеджеров",
+  "deploy_trigger": "2026-09-15T09:20:00Z"
 }

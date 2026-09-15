@@ -8,7 +8,7 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
-const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.120'}catch(_){return'23.6.120'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
+const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.121'}catch(_){return'23.6.121'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
 const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103'});
 
 function activePage(){
