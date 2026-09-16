@@ -2,6 +2,7 @@
  * Акции VIP больше не являются отдельным пользовательским контуром.
  * Данные и старый модуль 67 не удаляются: это только безопасное скрытие навигации.
  * Обычный раздел «Акции» и его согласование не меняются.
+ * v23.6.131: hard CSS + legacy guard; production publish marker.
  * No data writes. No polling. No MutationObserver.
  */
 (function(){
