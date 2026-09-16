@@ -295,7 +295,7 @@ document.head.appendChild(s);
 if(window.RESANTA_PROMOTIONS_TELEGRAM_CONNECT_V236128)return;
 if([...document.scripts].some(s=>String(s.src||'').includes('/87-promotions-telegram-connect-v236128.js')))return;
 const s=document.createElement('script');
-s.src='./assets/87-promotions-telegram-connect-v236128.js?v=23.6.128';
+s.src='./assets/87-promotions-telegram-connect-v236128.js?v=23.6.129';
 s.async=false;
 s.onerror=()=>console.warn('Не загрузилось подключение Telegram Акций');
 document.head.appendChild(s);
