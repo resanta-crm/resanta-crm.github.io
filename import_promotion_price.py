@@ -165,8 +165,11 @@ def find_latest():
     typ,data=mail.search(None,"SINCE",since)
     if typ!="OK":
         mail.logout(); raise RuntimeError("IMAP search failed")
-    ids=list(reversed(data[0].split()[-500:]))
-    matches=[]
+
+    # Newest-first and return immediately on the first matching MO2 message.
+    # There may be only 1-2 MO2 messages, so collecting dozens of matches would
+    # waste time scanning hundreds of unrelated messages.
+    ids=list(reversed(data[0].split()[-250:]))
     for uid in ids:
         typ,hdata=mail.fetch(uid,"(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE FROM)])")
         if typ!="OK" or not hdata or not isinstance(hdata[0],tuple): continue
@@ -176,10 +179,7 @@ def find_latest():
         try: sent=parsedate_to_datetime(hdr.get("Date")) if hdr.get("Date") else datetime.now(timezone.utc)
         except Exception: sent=datetime.now(timezone.utc)
         if sent.tzinfo is None: sent=sent.replace(tzinfo=timezone.utc)
-        matches.append((sent,uid,subject))
-        if len(matches)>=30: break
-    best=None
-    for sent,uid,subject in sorted(matches,reverse=True):
+
         typ,msgdata=mail.fetch(uid,"(RFC822)")
         if typ!="OK" or not msgdata or not isinstance(msgdata[0],tuple): continue
         msg=email.message_from_bytes(msgdata[0][1])
@@ -188,10 +188,10 @@ def find_latest():
             if not fn or not fn.lower().endswith((".xlsx",".xls")): continue
             payload=part.get_payload(decode=True)
             if payload:
-                best=(sent,subject,fn,payload); break
-        if best: break
+                mail.logout()
+                return (sent,subject,fn,payload)
     mail.logout()
-    return best
+    return None
 
 def rpc(rows,report_date,sent,subject,filename):
     r=requests.post(
