@@ -1,0 +1,2 @@
+Resanta CRM production release marker v23.6.133
+Promotions boss dashboard.
