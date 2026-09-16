@@ -102,7 +102,7 @@ async function load(force=false){
   if(!active())return null;
   if(!force&&S.loaded&&Date.now()-S.at<TTL){patchAll();return S.rows}
   if(S.flight)return S.flight;
-  S.flight=(async()=>{const d=typeof db!=='undefined'?db:window.db;if(!d)return null;const {data,error}=await d.rpc('crm_promotions_effectiveness_v236132');if(error)throw error;S.rows.clear();(Array.isArray(data)?data:[]).forEach(x=>S.rows.set(safe(x.promotion_id),x));S.loaded=true;S.at=Date.now();patchAll();return S.rows})().catch(e=>console.warn(V+' effectiveness RPC',e)).finally(()=>{S.flight=null});
+  S.flight=(async()=>{const d=typeof db!=='undefined'?db:window.db;if(!d)return null;const {data,error}=await d.rpc('crm_promotions_effectiveness_v236132');if(error)throw error;S.rows.clear();(Array.isArray(data)?data:[]).forEach(x=>S.rows.set(safe(x.promotion_id),x));S.loaded=true;S.at=Date.now();patchAll();try{window.dispatchEvent(new CustomEvent('resanta:promotions-effectiveness',{detail:{version:V}}))}catch(_){}return S.rows})().catch(e=>console.warn(V+' effectiveness RPC',e)).finally(()=>{S.flight=null});
   return S.flight;
 }
 function installHooks(){
@@ -113,5 +113,5 @@ function installHooks(){
   if(typeof od==='function'&&!od.__promoEffectivenessV236132){const base=od,fn=function(id){const out=base.apply(this,arguments);setTimeout(()=>{patchDetail(id);load(false)},0);return out};fn.__promoEffectivenessV236132=true;fn.__base=base;window.openPromotionDetail=fn;try{openPromotionDetail=fn}catch(_){}}
 }
 installHooks();[100,400,1000,2500].forEach(ms=>setTimeout(()=>{installHooks();if(active())load(false)},ms));
-window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132=Object.freeze({version:V,server:true,exactNewSku:true,legacySafe:true,noPolling:true,refresh:()=>load(true),repaint:patchAll});
+window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132=Object.freeze({version:V,server:true,exactNewSku:true,legacySafe:true,noPolling:true,ensure:()=>load(false),getRows:()=>S.rows,getRow:id=>S.rows.get(safe(id))||null,refresh:()=>load(true),repaint:patchAll});
 })();
