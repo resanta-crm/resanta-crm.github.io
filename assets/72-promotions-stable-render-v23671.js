@@ -261,3 +261,16 @@ s.async=false;
 s.onerror=()=>console.warn('Не загрузился блок контроля Акций');
 document.head.appendChild(s);
 })();
+
+
+/* v23.6.126 · sync overall assessment with control severity. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_CONTROL_ASSESSMENT_SYNC_V236126)return;
+if([...document.scripts].some(s=>String(s.src||'').includes('/85-promotions-control-assessment-sync-v236126.js')))return;
+const s=document.createElement('script');
+s.src='./assets/85-promotions-control-assessment-sync-v236126.js?v=23.6.126';
+s.async=false;
+s.onerror=()=>console.warn('Не загрузилась синхронизация оценки Акций');
+document.head.appendChild(s);
+})();
