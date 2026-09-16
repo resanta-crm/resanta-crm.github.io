@@ -1,0 +1,48 @@
+name: TMP — Promotions close summary v23.6.130
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-promotions-close-v236130.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wire close summary and bump frontend
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          changes=[
+            ("const APP_VERSION = '2026-09-16-resanta-crm-v23.6.129';", "const APP_VERSION = '2026-09-16-resanta-crm-v23.6.130';"),
+            ('<script defer src="./assets/66-performance-root-v23657.js?v=23.6.129"></script>', '<script defer src="./assets/66-performance-root-v23657.js?v=23.6.130"></script>'),
+          ]
+          for old,new in changes:
+              if s.count(old)!=1: raise SystemExit(f'index guard failed: {old} matches={s.count(old)}')
+              s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+
+          p=Path('assets/72-promotions-stable-render-v23671.js')
+          s=p.read_text(encoding='utf-8')
+          marker='/* v23.6.130 · promotion closing summary. */'
+          if marker not in s:
+              s += '''\n\n/* v23.6.130 · promotion closing summary. */\n(function(){\n'use strict';\nif(window.RESANTA_PROMOTIONS_CLOSE_SUMMARY_V236130)return;\nif([...document.scripts].some(s=>String(s.src||'').includes('/88-promotions-close-summary-v236130.js')))return;\nconst s=document.createElement('script');\ns.src='./assets/88-promotions-close-summary-v236130.js?v=23.6.130';\ns.async=false;\ns.onerror=()=>console.warn('Не загрузился итог закрытия Акций');\ndocument.head.appendChild(s);\n})();\n'''
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git add index.html assets/72-promotions-stable-render-v23671.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Wire promotion close summary v23.6.130'
+          git push
