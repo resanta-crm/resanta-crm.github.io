@@ -98,17 +98,40 @@ def parse_xlsx(content):
         headers.append(cur if str(cur or "").strip() else prev)
     m=map_headers(headers)
     rows=[]
-    for row in ws.iter_rows(min_row=hr+1,values_only=True):
-        sku=str(row[m["sku"]] or "").strip()
-        name=str(row[m["product_name"]] or "").strip()
-        qty=num(row[m["quantity"]],None)
-        price=num(row[m["price_vat"]],None)
+    current_category=None
+    current_subgroup=None
+    for cells in ws.iter_rows(min_row=hr+1):
+        values=[c.value for c in cells]
+        sku=str(values[m["sku"]] or "").strip()
+        name=str(values[m["product_name"]] or "").strip()
+        name_cell=cells[m["product_name"]]
+        alignment=getattr(name_cell,"alignment",None)
+        indent=float((getattr(alignment,"indent",0) if alignment else 0) or 0)
+
+        # 1C hierarchy is encoded by indentation:
+        # category ≈ indent 4, subgroup ≈ indent 6, SKU ≈ indent 8.
+        if not sku and name:
+            if 0 < indent <= 4.5:
+                current_category=name
+                current_subgroup=None
+            elif 4.5 < indent <= 6.5:
+                current_subgroup=name
+            continue
+
+        qty=num(values[m["quantity"]],None)
+        price=num(values[m["price_vat"]],None)
         if not sku or not name: continue
         # Business rule: MO2 is offered only for stock currently available in Vitebsk.
         # Rows with no stock have "Деление на 0" in 1C and become active automatically
         # on a future snapshot as soon as stock and a valid price appear.
         if qty is None or qty<=0 or price is None or price<=0: continue
-        rows.append({"sku":sku,"product_name":name,"price_vat":round(price,2)})
+        rows.append({
+            "sku":sku,
+            "product_name":name,
+            "category":current_category,
+            "subgroup":current_subgroup,
+            "price_vat":round(price,2)
+        })
     rows=dedupe(rows)
     if not rows: raise RuntimeError("В файле нет доступных SKU с корректной ценой МО2.")
     return rows
@@ -139,7 +162,7 @@ def parse_xls(content):
         price=num(vals[m["price_vat"]],None)
         if not sku or not name: continue
         if qty is None or qty<=0 or price is None or price<=0: continue
-        rows.append({"sku":sku,"product_name":name,"price_vat":round(price,2)})
+        rows.append({"sku":sku,"product_name":name,"category":None,"subgroup":None,"price_vat":round(price,2)})
     rows=dedupe(rows)
     if not rows: raise RuntimeError("В файле нет доступных SKU с корректной ценой МО2.")
     return rows
