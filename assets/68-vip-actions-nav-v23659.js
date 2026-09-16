@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.129 · VIP ACTIONS HIDDEN
+/* RESANTA CRM v23.6.130 · VIP ACTIONS HIDDEN
  * Акции VIP больше не являются отдельным пользовательским контуром.
  * Данные и старый модуль 67 не удаляются: это только безопасное скрытие навигации.
  * Обычный раздел «Акции» и его согласование не меняются.
@@ -46,7 +46,7 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 
 window.RESANTA_VIP_ACTIONS_NAV_V23659=Object.freeze({
-  version:'v23.6.129',
+  version:'v23.6.130',
   hidden:true,
   dataPreserved:true,
   legacyModuleNotLoaded:true,
