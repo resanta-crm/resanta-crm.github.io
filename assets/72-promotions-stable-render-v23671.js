@@ -300,3 +300,16 @@ s.async=false;
 s.onerror=()=>console.warn('Не загрузилось подключение Telegram Акций');
 document.head.appendChild(s);
 })();
+
+
+/* v23.6.130 · promotion closing summary. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_CLOSE_SUMMARY_V236130)return;
+if([...document.scripts].some(s=>String(s.src||'').includes('/88-promotions-close-summary-v236130.js')))return;
+const s=document.createElement('script');
+s.src='./assets/88-promotions-close-summary-v236130.js?v=23.6.130';
+s.async=false;
+s.onerror=()=>console.warn('Не загрузился итог закрытия Акций');
+document.head.appendChild(s);
+})();
