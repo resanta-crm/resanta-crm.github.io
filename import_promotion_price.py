@@ -190,8 +190,6 @@ def find_latest():
         mail.logout(); raise RuntimeError("IMAP search failed")
 
     # Newest-first and return immediately on the first matching MO2 message.
-    # There may be only 1-2 MO2 messages, so collecting dozens of matches would
-    # waste time scanning hundreds of unrelated messages.
     ids=list(reversed(data[0].split()[-250:]))
     for uid in ids:
         typ,hdata=mail.fetch(uid,"(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE FROM)])")
@@ -216,6 +214,22 @@ def find_latest():
     mail.logout()
     return None
 
+def already_imported(sent,filename):
+    stamp=sent.astimezone(timezone.utc).isoformat()
+    r=requests.get(
+        f"{SUPABASE_URL}/rest/v1/promotion_price_import_audit",
+        headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"},
+        params={
+            "select":"id",
+            "source_message_at":"eq."+stamp,
+            "filename":"eq."+filename,
+            "limit":"1"
+        },timeout=30)
+    if r.status_code>=300:
+        raise RuntimeError(f"Не удалось проверить журнал импорта: {r.status_code} {r.text[:500]}")
+    try:return bool(r.json())
+    except Exception:return False
+
 def rpc(rows,report_date,sent,subject,filename):
     r=requests.post(
         f"{SUPABASE_URL}/rest/v1/rpc/promotion_price_import_snapshot_v1",
@@ -238,6 +252,9 @@ def main():
         log("Нового письма «Прайс МО2» с Excel-вложением не найдено.")
         return 0
     sent,subject,filename,content=item
+    if already_imported(sent,filename):
+        log(f"⏭ Уже импортировано: {subject} · {filename}. Новых записей нет.")
+        return 0
     report_date=sent.astimezone(MINSK).date()
     rows=parse_excel(content,filename)
     log(f"Найдено: {subject} · {filename} · {len(rows)} активных SKU")
