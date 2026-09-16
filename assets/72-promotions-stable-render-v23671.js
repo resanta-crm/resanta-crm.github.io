@@ -248,3 +248,16 @@ s.async=false;
 s.onerror=()=>console.warn('Не загрузился выбор товаров Прайс МО2');
 document.head.appendChild(s);
 })();
+
+
+/* v23.6.125 · read-only control block after the complete Promotions stack. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_CONTROL_V236125)return;
+if([...document.scripts].some(s=>String(s.src||'').includes('/84-promotions-control-v236125.js')))return;
+const s=document.createElement('script');
+s.src='./assets/84-promotions-control-v236125.js?v=23.6.125';
+s.async=false;
+s.onerror=()=>console.warn('Не загрузился блок контроля Акций');
+document.head.appendChild(s);
+})();
