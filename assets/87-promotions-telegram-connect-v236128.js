@@ -1,14 +1,15 @@
-/* RESANTA CRM v23.6.128 · TELEGRAM CONNECT UI
+/* RESANTA CRM v23.6.129 · TELEGRAM CONNECT UI
  * Safe CRM -> Telegram account binding.
  * - one-time link code from authenticated RPC;
  * - boss configures Telegram webhook through authenticated Edge Function call;
  * - no bot token in browser or repository;
+ * - no blank popup on failed setup;
  * - no polling / MutationObserver.
  */
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_TELEGRAM_CONNECT_V236128)return;
-const V='v23.6.128';
+const V='v23.6.129';
 const BOT='ResantaCRMActionsBot';
 let busy=false,lastStatus=null,lastAt=0,patched=false;
 const safe=v=>String(v??'');
@@ -22,7 +23,7 @@ function host(){let h=document.getElementById('promo-tg-connect-v236128');if(h)r
 function render(){const h=host();if(!h)return;const x=lastStatus||{connected:false};const who=x.telegram_username?('@'+x.telegram_username):(x.telegram_first_name||'');h.innerHTML='<div class="promo-tg-main"><span class="promo-tg-dot-v236128 '+(x.connected?'ok':'')+'"></span><div><div class="promo-tg-title-v236128">Telegram · Акции</div><div class="promo-tg-sub-v236128">'+(x.connected?'Подключён'+(who?' · '+who:''):'Подключите личные уведомления по своим акциям и согласованиям')+'</div></div></div><div class="promo-tg-actions-v236128">'+(x.connected?'<button type="button" class="btn-secondary" data-tg-refresh>Проверить</button>':'<button type="button" class="btn-secondary" data-tg-connect>Подключить Telegram</button>')+'</div>'}
 async function refresh(force){const d=dbc();if(!d)return;if(!force&&Date.now()-lastAt<10000&&lastStatus){render();return}try{const {data,error}=await d.rpc('crm_telegram_binding_status');if(error)throw error;lastStatus=data&&typeof data==='object'?data:{connected:false};lastAt=Date.now()}catch(e){console.warn(V+' status',e)}render()}
 async function setupWebhook(){if(!isBoss())return true;const d=dbc();const {data:sess,error}=await d.auth.getSession();if(error)throw error;const token=sess?.session?.access_token;if(!token)throw Error('Нет активной сессии CRM');const base=typeof SUPABASE_URL!=='undefined'?SUPABASE_URL:'https://baqchjtvtmcfzwjjluhs.supabase.co';const r=await fetch(base+'/functions/v1/crm-promotions-telegram?setup=1',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:'{}'});const j=await r.json().catch(()=>({}));if(!r.ok||!j?.ok)throw Error(j?.error||'Не удалось настроить Telegram webhook');return true}
-async function connect(){if(busy)return;busy=true;const h=host(),btn=h?.querySelector('[data-tg-connect]');if(btn){btn.disabled=true;btn.textContent='Подключаю…'}const w=window.open('about:blank','_blank');try{await setupWebhook();const {data:code,error}=await dbc().rpc('crm_create_telegram_link_code');if(error)throw error;if(!code)throw Error('Не удалось создать одноразовую ссылку');const url='https://t.me/'+BOT+'?start='+encodeURIComponent(code);if(w)w.location.href=url;else window.location.href=url;lastStatus=null;lastAt=0}catch(e){try{w?.close()}catch(_){}alert('Не удалось подключить Telegram: '+(e?.message||e));}finally{busy=false;if(btn){btn.disabled=false;btn.textContent='Подключить Telegram'}}}
+async function connect(){if(busy)return;busy=true;const h=host(),btn=h?.querySelector('[data-tg-connect]');if(btn){btn.disabled=true;btn.textContent='Подключаю…'}try{await setupWebhook();const {data:code,error}=await dbc().rpc('crm_create_telegram_link_code');if(error)throw error;if(!code)throw Error('Не удалось создать одноразовую ссылку');const url='https://t.me/'+BOT+'?start='+encodeURIComponent(code);const w=window.open(url,'_blank');if(!w)window.location.href=url;lastStatus=null;lastAt=0}catch(e){alert('Не удалось подключить Telegram: '+(e?.message||e));}finally{busy=false;if(btn){btn.disabled=false;btn.textContent='Подключить Telegram'}}}
 function click(e){const b=e.target.closest('button');if(!b)return;if(b.hasAttribute('data-tg-connect')){connect();return}if(b.hasAttribute('data-tg-refresh')){lastStatus=null;lastAt=0;refresh(true)}}
 function patch(){if(patched)return;style();const r=window.renderPromotions;if(typeof r==='function'&&!r.__promoTelegramConnectV236128){const base=r;const wrapped=function(){const out=base.apply(this,arguments);try{render();refresh(false)}catch(e){console.warn(V,e)}return out};wrapped.__promoTelegramConnectV236128=true;wrapped.__base=base;window.renderPromotions=wrapped;try{renderPromotions=wrapped}catch(_){} }patched=true;try{render();refresh(false)}catch(_){}}
 patch();
