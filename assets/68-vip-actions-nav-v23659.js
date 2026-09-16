@@ -57,21 +57,3 @@ window.RESANTA_VIP_ACTIONS_NAV_V23659=Object.freeze({
   noMutationObserver:true
 });
 })();
-
-/* Акции 2.0: отдельный модуль Прайс МО2. Загрузка изолирована от core и старых акций. */
-(function(){
-'use strict';
-if(window.RESANTA_PROMOTION_MO2_LOADER_V236123)return;
-window.RESANTA_PROMOTION_MO2_LOADER_V236123=true;
-function load(){
-  if(window.RESANTA_PROMOTION_MO2_V236123)return;
-  if(document.querySelector('script[data-resanta-promotion-mo2]'))return;
-  const s=document.createElement('script');
-  s.src='./assets/80-promotion-mo2-v236123.js?v=23.6.123.1';
-  s.defer=true;
-  s.dataset.resantaPromotionMo2='1';
-  s.onerror=()=>console.error('Не удалось загрузить модуль Акции 2.0 / Прайс МО2');
-  document.head.appendChild(s);
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',load,{once:true});else load();
-})();
