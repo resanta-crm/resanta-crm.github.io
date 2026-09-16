@@ -1,4 +1,4 @@
-name: TMP — Promotions finance clarity v23.6.131
+name: TMP Promotions finance clarity v23.6.131
 
 on:
   push:
@@ -16,12 +16,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Fix reserve clarity and hard-hide VIP actions
+      - name: Patch promotions finance and VIP nav
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          # 1) Closing finance: reserve is a hold, expenses consume that hold.
           p=Path('assets/65-promotions-close-v23656.js')
           s=p.read_text(encoding='utf-8')
           reps=[
@@ -44,38 +43,34 @@ jobs:
               if old not in s:
                   raise SystemExit('65 guard failed: '+old[:90])
               s=s.replace(old,new,1)
-          # Show explicitly how much of the reserve has already been consumed; overrun only if it exists.
           marker="+'<div class=\"promo56-cell\"><div class=\"promo56-label\">Уже списано из бюджета</div><div class=\"promo56-value\">'+fmtSafe(spent)+' BYN</div><div class=\"promo56-sub\">расходы по акции автоматически уменьшают её остаток резерва</div></div>'"
-          if marker not in s: raise SystemExit('65 spent cell marker failed')
+          if marker not in s:
+              raise SystemExit('65 spent cell marker failed')
           repl=marker+"\n  +'<div class=\"promo56-cell\"><div class=\"promo56-label\">Из резерва уже использовано</div><div class=\"promo56-value\">'+fmtSafe(usedFromReserve)+' BYN</div><div class=\"promo56-sub\">'+(overReserve>0?'сверх резерва: '+fmtSafe(overReserve)+' BYN':'в пределах согласованного резерва')+'</div></div>'"
           s=s.replace(marker,repl,1)
           p.write_text(s,encoding='utf-8')
 
-          # 2) VIP actions: old module may redraw the nav after our normal hide.
           p=Path('assets/68-vip-actions-nav-v23659.js')
           s=p.read_text(encoding='utf-8')
           s=s.replace('/* RESANTA CRM v23.6.130 · VIP ACTIONS HIDDEN','/* RESANTA CRM v23.6.131 · VIP ACTIONS HIDDEN',1)
           old="if(window.RESANTA_VIP_ACTIONS_NAV_V23659)return;\n\nfunction hide(){"
-          new="""if(window.RESANTA_VIP_ACTIONS_NAV_V23659)return;
-
-function hardCss(){
-  if(document.getElementById('vip-actions-hard-hidden-v236131'))return;
-  const s=document.createElement('style');
-  s.id='vip-actions-hard-hidden-v236131';
-  s.textContent='#nav-vip-actions,#nav-vip-actions-bootstrap,#page-vip-actions{display:none!important;visibility:hidden!important;pointer-events:none!important}';
-  document.head.appendChild(s);
-}
-// If the legacy VIP module is injected later, make its top-level guard already satisfied.
-if(!window.RESANTA_VIP_ACTIONS_V23659)window.RESANTA_VIP_ACTIONS_V23659=Object.freeze({version:'disabled-v23.6.131',disabled:true});
-
-function hide(){"""
-          if old not in s: raise SystemExit('68 guard failed')
+          new=("if(window.RESANTA_VIP_ACTIONS_NAV_V23659)return;\n\n"
+               "function hardCss(){\n"
+               "  if(document.getElementById('vip-actions-hard-hidden-v236131'))return;\n"
+               "  const s=document.createElement('style');\n"
+               "  s.id='vip-actions-hard-hidden-v236131';\n"
+               "  s.textContent='#nav-vip-actions,#nav-vip-actions-bootstrap,#page-vip-actions{display:none!important;visibility:hidden!important;pointer-events:none!important}';\n"
+               "  document.head.appendChild(s);\n"
+               "}\n"
+               "if(!window.RESANTA_VIP_ACTIONS_V23659)window.RESANTA_VIP_ACTIONS_V23659=Object.freeze({version:'disabled-v23.6.131',disabled:true});\n\n"
+               "function hide(){")
+          if old not in s:
+              raise SystemExit('68 guard failed')
           s=s.replace(old,new,1)
           s=s.replace("function boot(){\n  hide();", "function boot(){\n  hardCss();\n  hide();",1)
           s=s.replace("version:'v23.6.130'", "version:'v23.6.131'",1)
           p.write_text(s,encoding='utf-8')
 
-          # 3) Force fresh root + fresh VIP guard in browsers.
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
           changes=[
@@ -84,7 +79,8 @@ function hide(){"""
             ('<script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.124"></script>', '<script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.131"></script>'),
           ]
           for old,new in changes:
-              if s.count(old)!=1: raise SystemExit(f'index guard failed: {old} matches={s.count(old)}')
+              if s.count(old)!=1:
+                  raise SystemExit(f'index guard failed: {old} matches={s.count(old)}')
               s=s.replace(old,new,1)
           p.write_text(s,encoding='utf-8')
           PY
