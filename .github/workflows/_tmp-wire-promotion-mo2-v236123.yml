@@ -1,0 +1,52 @@
+name: TMP — wire Акции 2.0 МО2 v23.6.123
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-wire-promotion-mo2-v236123.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-wire-promotion-mo2-v236123
+  cancel-in-progress: true
+
+jobs:
+  patch-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index with strict guards
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old_ver="const APP_VERSION = '2026-09-15-resanta-crm-v23.6.122';"
+          new_ver="const APP_VERSION = '2026-09-16-resanta-crm-v23.6.123';"
+          old_68='<script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.79"></script>'
+          new_68='<script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.123"></script>'
+          mod='<script defer src="./assets/80-promotion-mo2-v236123.js?v=23.6.123.1"></script>'
+          if s.count(old_ver)!=1:
+              raise SystemExit(f'Guard failed: APP_VERSION matches={s.count(old_ver)}')
+          if mod not in s and s.count(old_68)!=1:
+              raise SystemExit(f'Guard failed: 68 script matches={s.count(old_68)}')
+          s=s.replace(old_ver,new_ver,1)
+          if mod not in s:
+              s=s.replace(old_68,new_68+'\n'+mod,1)
+          else:
+              s=s.replace(old_68,new_68,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit cache-safe wiring
+        run: |
+          git config user.name 'resanta-crm'
+          git config user.email 'resantavitebsc@gmail.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Release Акции 2.0 MO2 picker v23.6.123'
+          git push
