@@ -287,3 +287,16 @@ s.async=false;
 s.onerror=()=>console.warn('Не загрузилась механика новых Акций');
 document.head.appendChild(s);
 })();
+
+
+/* v23.6.128 · secure Telegram account binding. */
+(function(){
+'use strict';
+if(window.RESANTA_PROMOTIONS_TELEGRAM_CONNECT_V236128)return;
+if([...document.scripts].some(s=>String(s.src||'').includes('/87-promotions-telegram-connect-v236128.js')))return;
+const s=document.createElement('script');
+s.src='./assets/87-promotions-telegram-connect-v236128.js?v=23.6.128';
+s.async=false;
+s.onerror=()=>console.warn('Не загрузилось подключение Telegram Акций');
+document.head.appendChild(s);
+})();
