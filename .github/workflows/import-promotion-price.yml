@@ -1,0 +1,39 @@
+name: Акции — импорт Прайс МО2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'import_promotion_price.py'
+      - '.github/workflows/import-promotion-price.yml'
+  schedule:
+    # Отдельный оффсет, чтобы не конкурировать с импортом Уценки.
+    - cron: '11,26,41,56 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: promotion-price-mo2-import
+  cancel-in-progress: true
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --disable-pip-version-check requests openpyxl xlrd
+      - run: python -m py_compile import_promotion_price.py
+      - name: Импортировать Прайс МО2 с НДС
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MO2_LOOKBACK_DAYS: '7'
+          MO2_SUBJECT_KEYS: 'прайс мо2'
+        run: python import_promotion_price.py
