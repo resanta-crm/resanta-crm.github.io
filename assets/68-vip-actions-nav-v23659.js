@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.130 · VIP ACTIONS HIDDEN
+/* RESANTA CRM v23.6.131 · VIP ACTIONS HIDDEN
  * Акции VIP больше не являются отдельным пользовательским контуром.
  * Данные и старый модуль 67 не удаляются: это только безопасное скрытие навигации.
  * Обычный раздел «Акции» и его согласование не меняются.
@@ -7,6 +7,15 @@
 (function(){
 'use strict';
 if(window.RESANTA_VIP_ACTIONS_NAV_V23659)return;
+
+function hardCss(){
+  if(document.getElementById('vip-actions-hard-hidden-v236131'))return;
+  const s=document.createElement('style');
+  s.id='vip-actions-hard-hidden-v236131';
+  s.textContent='#nav-vip-actions,#nav-vip-actions-bootstrap,#page-vip-actions{display:none!important;visibility:hidden!important;pointer-events:none!important}';
+  document.head.appendChild(s);
+}
+if(!window.RESANTA_VIP_ACTIONS_V23659)window.RESANTA_VIP_ACTIONS_V23659=Object.freeze({version:'disabled-v23.6.131',disabled:true});
 
 function hide(){
   const n=document.getElementById('nav-vip-actions');
@@ -35,6 +44,7 @@ window.crmVipActionsNavOpenV23673=function(){
 };
 
 function boot(){
+  hardCss();
   hide();
   window.addEventListener('pageshow',hide,{passive:true});
   window.addEventListener('focus',hide,{passive:true});
@@ -46,7 +56,7 @@ function boot(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 
 window.RESANTA_VIP_ACTIONS_NAV_V23659=Object.freeze({
-  version:'v23.6.130',
+  version:'v23.6.131',
   hidden:true,
   dataPreserved:true,
   legacyModuleNotLoaded:true,
