@@ -22,3 +22,9 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+# Security: never commit operational exports into the public CRM repository
+data/*.xlsx
+data/*.xls
+data/*.csv
+data/*.sql
+data/*.zip
