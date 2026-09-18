@@ -62,11 +62,29 @@ jobs:
             fi
           done
 
-          for dir in assets data icons; do
+          # Публично выкладываем только код/иконки.
+          # data/ больше НИКОГДА не копируется целиком: там могут быть рабочие выгрузки.
+          for dir in assets icons; do
             if [ -d "$dir" ]; then
               cp -R "$dir" "_site/$dir"
             fi
           done
+
+          # Жёсткий allowlist публичных data-файлов.
+          mkdir -p _site/data
+          for file in app-version.json triovist_seasonality.json; do
+            if [ -f "data/$file" ]; then
+              cp "data/$file" "_site/data/$file"
+            fi
+          done
+
+          # Аварийная защита: коммерческие выгрузки не должны попасть в Pages
+          # даже если кто-то случайно добавит их в data/ позже.
+          if find _site -type f \( -iname '*.xlsx' -o -iname '*.xls' -o -iname '*.csv' -o -iname '*.sql' -o -iname '*.zip' \) -print -quit | grep -q .; then
+            echo '::error::Sensitive export file detected in public Pages artifact'
+            find _site -type f \( -iname '*.xlsx' -o -iname '*.xls' -o -iname '*.csv' -o -iname '*.sql' -o -iname '*.zip' \) -print
+            exit 1
+          fi
 
           touch _site/.nojekyll
 
