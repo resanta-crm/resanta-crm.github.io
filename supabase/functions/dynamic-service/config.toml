@@ -1,0 +1,2 @@
+[functions.dynamic-service]
+verify_jwt = true
