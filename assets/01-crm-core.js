@@ -198,16 +198,29 @@ async function openAIAnalysis(clientId){
     +'Пиши по-русски, коротко, по делу. Без воды.';
 
   try {
+    const {data:sessionData,error:sessionError}=await db.auth.getSession();
+    const accessToken=sessionData?.session?.access_token;
+    if(sessionError||!accessToken) throw new Error('Сессия истекла. Войдите в CRM заново.');
+
     const res = await fetch('https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/dynamic-service', {
       method: 'POST',
-      headers: {'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY},
+      headers: {
+        'Content-Type':'application/json',
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+accessToken
+      },
       body: JSON.stringify({prompt, system})
     });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
-    const text = data.text||'';
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok||data.error) throw new Error(data.error||('HTTP '+res.status));
+    const text = String(data.text||'');
 
-    document.getElementById('ai-result').innerHTML = text
+    // SECURITY: ответ ИИ всегда считаем недоверенным текстом.
+    // Сначала экранируем HTML, только затем добавляем наши фиксированные заголовки.
+    const safeText=text.replace(/[&<>"']/g,ch=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[ch]));
+    document.getElementById('ai-result').innerHTML = safeText
       .replace(/🔴 КРИТИЧЕСКИЕ ЗАДАЧИ/g,'<div style="color:var(--r);font-weight:700;font-size:14px;margin:16px 0 6px">🔴 КРИТИЧЕСКИЕ ЗАДАЧИ</div>')
       .replace(/💰 ГДЕ ДЕНЬГИ.*?\n/g,'<div style="color:var(--g);font-weight:700;font-size:15px;margin:18px 0 6px">💰 ГДЕ ДЕНЬГИ</div>')
       .replace(/🎯 РЕКОМЕНДАЦИЯ ПО АКЦИИ/g,'<div style="color:var(--a);font-weight:700;font-size:14px;margin:16px 0 6px">🎯 РЕКОМЕНДАЦИЯ ПО АКЦИИ</div>')
@@ -221,7 +234,8 @@ async function openAIAnalysis(clientId){
     const hint = /quota|billing/i.test(e.message||'')
       ? '<div style="font-size:12px;margin-top:8px;color:var(--sub)">Закончился баланс OpenAI. Пополните его на platform.openai.com → Billing.</div>'
       : '';
-    document.getElementById('ai-result').innerHTML = '<div style="background:var(--rb);border-radius:10px;padding:16px;color:var(--r)"><b>Ошибка:</b> '+e.message+hint+'</div>';
+    const safeErr=String(e?.message||'Ошибка').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    document.getElementById('ai-result').innerHTML = '<div style="background:var(--rb);border-radius:10px;padding:16px;color:var(--r)"><b>Ошибка:</b> '+safeErr+hint+'</div>';
   }
 }
 
