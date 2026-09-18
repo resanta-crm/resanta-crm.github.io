@@ -1,3 +1,4 @@
+# hotfix 2026-09-18: force worker restart after missed scheduled shift
 #!/usr/bin/env python3
 import json
 import os
