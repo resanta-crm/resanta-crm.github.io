@@ -1,0 +1,2 @@
+[functions.crm-promotions-telegram]
+verify_jwt = false
