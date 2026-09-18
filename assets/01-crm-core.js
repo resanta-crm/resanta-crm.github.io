@@ -1952,12 +1952,32 @@ async function doLogout() {
 
 async function loadProfileAndStart() {
   try {
-    const {data:profile} = await db.from('users').select('*').eq('email',currentUser.email).single();
-    currentProfile = profile || {name:currentUser.email,role:'manager',region:'Витебск',email:currentUser.email};
+    const email=String(currentUser?.email||'').trim().toLowerCase();
+    const {data:profile,error} = await db.from('users').select('*').eq('email',email).maybeSingle();
+    if(error) throw error;
+    if(!profile){
+      // SECURITY: Auth-пользователь без активного CRM-профиля не получает
+      // никакого fallback-доступа. Удалённый/отключённый сотрудник должен быть
+      // немедленно остановлен на входе.
+      await db.auth.signOut().catch(()=>{});
+      currentUser=null;currentProfile=null;
+      document.getElementById('login-wrap').style.display='flex';
+      document.getElementById('app').style.display='none';
+      const err=document.getElementById('login-error');
+      if(err){err.textContent='Доступ к CRM отключён. Обратитесь к руководителю.';err.style.display='block';}
+      return;
+    }
+    currentProfile=profile;
+    startApp();
   } catch(e) {
-    currentProfile = {name:currentUser.email,role:'manager',region:'Витебск',email:currentUser.email};
+    console.error('Profile load failed',e);
+    await db.auth.signOut().catch(()=>{});
+    currentUser=null;currentProfile=null;
+    document.getElementById('login-wrap').style.display='flex';
+    document.getElementById('app').style.display='none';
+    const err=document.getElementById('login-error');
+    if(err){err.textContent='Не удалось проверить права доступа. Войдите снова.';err.style.display='block';}
   }
-  startApp();
 }
 
 function clearRestoredMainSearches(){
@@ -2257,18 +2277,20 @@ async function saveManagerPassword(){
 
 function renderUsers() {
   if (!allUsers.length){document.getElementById('users-list').innerHTML='<div style="color:var(--sub);font-size:14px;padding:20px;text-align:center">Пользователей пока нет</div>';return;}
-  document.getElementById('users-list').innerHTML = allUsers.map(u=>'<div class="user-row"><div class="user-info"><div class="user-email-text">'+esc(u.name||'—')+'<span class="user-role-badge '+(u.role==='boss'?'role-boss':'role-manager')+'">'+(u.role==='boss'?'👑 Руководитель':'👤 Менеджер')+'</span></div><div class="user-meta">'+esc(u.email)+' · '+esc(u.region||'—')+(u.access_scope==='triovist'?' · Триовист':'')+'</div></div><div style="display:flex;gap:4px;align-items:center"><button onclick="openSetPassword(&quot;'+escAttr(u.email)+'&quot;,&quot;'+escAttr(u.name||'')+'&quot;)" style="border:1px solid var(--border);background:#fff;color:var(--a);cursor:pointer;font-size:12px;padding:7px 10px;border-radius:7px" title="Установить новый пароль без email">🔑 Пароль</button><button onclick="deleteUserProfile(&quot;'+u.id+'&quot;,&quot;'+escAttr(u.email)+'&quot;)" style="border:none;background:none;color:var(--r);cursor:pointer;font-size:12px;padding:6px 10px" title="Удалить только профиль в CRM (не сам логин в Supabase Auth)">🗑</button></div></div>').join('');
+  document.getElementById('users-list').innerHTML = allUsers.map(u=>'<div class="user-row"><div class="user-info"><div class="user-email-text">'+esc(u.name||'—')+'<span class="user-role-badge '+(u.role==='boss'?'role-boss':'role-manager')+'">'+(u.role==='boss'?'👑 Руководитель':'👤 Менеджер')+'</span></div><div class="user-meta">'+esc(u.email)+' · '+esc(u.region||'—')+(u.access_scope==='triovist'?' · Триовист':'')+'</div></div><div style="display:flex;gap:4px;align-items:center"><button onclick="openSetPassword(&quot;'+escAttr(u.email)+'&quot;,&quot;'+escAttr(u.name||'')+'&quot;)" style="border:1px solid var(--border);background:#fff;color:var(--a);cursor:pointer;font-size:12px;padding:7px 10px;border-radius:7px" title="Установить новый пароль без email">🔑 Пароль</button><button onclick="deleteUserAccess(&quot;'+escAttr(u.email)+'&quot;)" style="border:none;background:none;color:var(--r);cursor:pointer;font-size:12px;padding:6px 10px" title="Полностью отключить доступ: Auth + профиль CRM">🗑</button></div></div>').join('');
 }
 
-// Удаляет запись в нашей таблице users (имя/роль/регион) — НЕ трогает сам логин
-// в Supabase Auth. Полезно для "осиротевших" профилей: если логин уже удалили
-// через Authentication → Users, а тут запись осталась и продолжает отображаться,
-// как будто человек всё ещё может зайти.
-async function deleteUserProfile(id,email){
-  if(!confirm('Удалить профиль «'+email+'» из списка пользователей CRM?\n\nЭто не удаляет сам логин в Supabase Auth (если он ещё существует) — только карточку в этом списке. Если логин ещё активен и нужно закрыть доступ полностью — это отдельно, через Authentication → Users → Delete/Ban.'))return;
-  await db.from('users').delete().eq('id',id);
-  allUsers=allUsers.filter(u=>u.id!==id);
-  renderUsers();
+// Полное отключение доступа выполняется только сервером:
+// Auth-пользователь + профиль CRM удаляются одной операцией руководителя.
+async function deleteUserAccess(email){
+  if(!confirm('Полностью отключить доступ «'+email+'»?\n\nБудет удалён логин Supabase Auth и профиль CRM. Пользователь больше не сможет войти.'))return;
+  try{
+    await callCrmUserAdmin({action:'delete_user',email});
+    allUsers=allUsers.filter(u=>String(u.email||'').toLowerCase()!==String(email||'').toLowerCase());
+    renderUsers();
+  }catch(e){
+    alert(authAdminMessage(e,'Не удалось отключить доступ пользователя'));
+  }
 }
 
 // Supabase по умолчанию отдаёт максимум 1000 строк на один select() —
