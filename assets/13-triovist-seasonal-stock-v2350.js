@@ -14,7 +14,6 @@
 if(window.RESANTA_TRIOVIST_SEASONAL_STOCK_V2350?.truthVersion==='v23.5.5')return;
 
 const VERSION='v23.5.5';
-const PROFILE_URL='./data/triovist_seasonality.json?v=23.5.0';
 const PROFILE_VERSION='v23.5.0';
 const SOURCE_MARK='[truth-v23.5.5]';
 const CHEKHOV_RESERVE=50;
@@ -45,9 +44,15 @@ function referenceDate(state){
 }
 async function ensureProfile(){
   if(profile)return profile;if(profilePromise)return profilePromise;
-  profilePromise=fetch(PROFILE_URL,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Профиль сезонности HTTP '+r.status);return r.json();}).then(p=>{
-    if(!p||p.version!==PROFILE_VERSION||!p.levels)throw new Error('Некорректный профиль сезонности');profile=p;return p;
-  }).finally(()=>{profilePromise=null;});
+  profilePromise=(async()=>{
+    const d=(typeof db!=='undefined'?db:window.db);
+    if(!d)throw new Error('База ещё не готова');
+    const {data,error}=await d.from('triovist_seasonality_profiles').select('profile').eq('version',PROFILE_VERSION).single();
+    if(error)throw error;
+    const p=data?.profile;
+    if(!p||p.version!==PROFILE_VERSION||!p.levels)throw new Error('Некорректный профиль сезонности');
+    profile=p;return p;
+  })().finally(()=>{profilePromise=null;});
   return profilePromise;
 }
 
