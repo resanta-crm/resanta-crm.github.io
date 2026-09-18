@@ -1,5 +1,5 @@
 name: Подготовка данных для автозаказа — быстрый worker CRM
-# v23.6.83 duplicate-safe stock state
+# v23.6.136 resilient 15-minute worker shifts
 
 on:
   push:
@@ -8,19 +8,19 @@ on:
       - 'warehouse_order_refresh_worker.py'
       - '.github/workflows/warehouse-order-refresh.yml'
   schedule:
-    # Длинная смена worker. Новый запуск перекрывает предыдущий,
-    # поэтому CRM-заявка обычно подхватывается за 15 секунд.
-    - cron: '0 */3 * * *'
+    # Короткая смена каждые 15 минут. Каждая живёт 13 минут:
+    # почти непрерывное покрытие без зависимости от одной 3-часовой смены.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 concurrency:
   group: warehouse-order-refresh-worker
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    timeout-minutes: 18
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
@@ -45,9 +45,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
-          # Worker остаётся живым чуть больше 3 часов.
+          # Worker живёт 13 минут; следующая смена стартует каждые 15 минут.
           # Внутри очередь CRM проверяется каждые 15 секунд.
-          WAREHOUSE_ORDER_WATCH_SECONDS: '11400'
+          WAREHOUSE_ORDER_WATCH_SECONDS: '780'
           WAREHOUSE_ORDER_POLL_SECONDS: '15'
           WAREHOUSE_ORDER_RETRY_SECONDS: '60'
 
