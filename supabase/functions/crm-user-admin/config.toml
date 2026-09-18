@@ -1,0 +1,2 @@
+[functions.crm-user-admin]
+verify_jwt = true
