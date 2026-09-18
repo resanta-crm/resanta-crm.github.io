@@ -1,49 +1,16 @@
-name: Build Triovist seasonality profile
+name: Build Triovist seasonality profile — disabled public builder
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'build_triovist_seasonality.py'
-      - 'data/triovist_history_2023-02_to_2026-07.xlsx'
-      - '.github/triovist-seasonality-trigger-v2350'
 
 permissions:
-  contents: write
-
-concurrency:
-  group: triovist-seasonality-build
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  build:
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Dependencies
-        run: pip install openpyxl
-
-      - name: Build seasonality profile
-        run: python build_triovist_seasonality.py
-
-      - name: Commit profile if changed
+      - name: Notice
         run: |
-          if git diff --quiet -- data/triovist_seasonality.json && git ls-files --error-unmatch data/triovist_seasonality.json >/dev/null 2>&1; then
-            echo "Seasonality profile unchanged"
-            exit 0
-          fi
-          git config user.name "resanta-crm-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add data/triovist_seasonality.json
-          git commit -m "Build Triovist seasonality profile v23.5.0"
-          git push
+          echo "Public seasonality builder is disabled for security."
+          echo "Triovist seasonality is stored in authenticated Supabase now."
