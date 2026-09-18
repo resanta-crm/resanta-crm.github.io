@@ -378,7 +378,7 @@ function renderRoutesBoss(){
         +'<td style="color:var(--sub)">'+(i+1)+'</td>'
         +'<td><span class="tag tag-gray">'+r.manager_name+'</span></td>'
         +'<td style="font-weight:500"><span style="cursor:pointer" '+(mc?'onclick="openClient(\''+mc.id+'\')"':'')+'>'+r.client_name+clientTag+'</span>'+renameBtn+movePointBtn+skuBtnBoss+promoteBtn+reasonLine+'</td>'
-        +'<td>'+(r.city||'—')+'</td>'
+        +'<td>'+esc(r.city||'—')+'</td>'
         +'<td style="font-size:11px;color:var(--sub)">'+(r.region||'—')+'</td>'
         +'<td style="font-size:11px;color:var(--sub)">'+(r.address||'—')+'</td>'
         +'<td>'+catTag(r.category)+'</td>'
@@ -869,7 +869,7 @@ function renderMyRoutes(){
         :((!r.visited&&matchedClient)?'<button onclick="event.stopPropagation();openQuickVisit(\''+matchedClient.id+'\',\''+date+'\',\''+r.id+'\')" style="padding:6px 10px;background:var(--a);color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">Визит ✍️</button>':'');
       const gpsBtn=(!isNetwork&&matchedClient)?'<button onclick="event.stopPropagation();checkinHere(\''+matchedClient.id+'\',this,\'my-routes\')" style="padding:6px 9px;background:#fff;color:var(--g);border:1px solid var(--g);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">📍 На точке</button>':'';
       const cityNow=(r.city||'—').trim()||'—';
-      const cityHeader=cityNow!==lastCity?'<div style="font-size:11px;font-weight:600;color:var(--at);margin:'+(lastCity===null?'0':'8px')+' 0 4px">📍 '+cityNow+'</div>':'';
+      const cityHeader=cityNow!==lastCity?'<div style="font-size:11px;font-weight:600;color:var(--at);margin:'+(lastCity===null?'0':'8px')+' 0 4px">📍 '+esc(cityNow)+'</div>':'';
       lastCity=cityNow;
       const clickAttr=matchedClient?' onclick="openClient(\''+matchedClient.id+'\')" class="my-route-stop-info" style="cursor:pointer"':' class="my-route-stop-info"';
       const actionButtons='<div class="route-actions">'+visitBtn+gpsBtn+'</div>';
@@ -898,7 +898,7 @@ function filterRouteStopAdd(){
   const already=allRoutePlans.filter(r=>r.manager_name===myName&&r.visit_date===routeStopAddDate).map(r=>r.client_name);
   const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)&&!already.some(an=>nameLooseMatch(an,c.name))).slice(0,10);
   res.style.display=filtered.length?'block':'none';
-  res.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="addRouteStop(\''+c.id+'\')">'+c.name+'<div style="font-size:11px;color:var(--sub)">📍 '+(c.address||'адрес не указан')+'</div></div>').join('');
+  res.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="addRouteStop(\''+c.id+'\')">'+esc(c.name)+'<div style="font-size:11px;color:var(--sub)">📍 '+esc(c.address||'адрес не указан')+'</div></div>').join('');
 }
 
 async function addRouteStop(clientId){
@@ -2826,7 +2826,7 @@ function renderClients(){
     const key=String(c.id),lv=latestVisitByClient.get(key),ctCount=activeTaskCountByClient.get(key)||0;const ds=lv?Math.abs(daysDiff(lv.date||lv.created_at?.split('T')[0])):null;
     const vb=ds===null?'<span class="tag tag-r">Нет визитов</span>':ds>30?'<span class="tag tag-r">⚠️ '+ds+'д</span>':ds>14?'<span class="tag" style="background:var(--amb);color:var(--am)">'+ds+'д назад</span>':'<span class="tag tag-m">'+ds+'д назад</span>';
     const isUnassigned=!c.manager_name||c.manager_name==='Не разобрано';
-    const mgrTag=isUnassigned?'<span class="tag" style="background:var(--rb);color:var(--r)">⚠️ Не разобрано</span>':'<span class="tag tag-gray">👤 '+c.manager_name+'</span>';
+    const mgrTag=isUnassigned?'<span class="tag" style="background:var(--rb);color:var(--r)">⚠️ Не разобрано</span>':'<span class="tag tag-gray">👤 '+esc(c.manager_name)+'</span>';
     const statusBadge=c.client_status==='Рабочий'?'<span class="tag tag-m">🟢 Рабочий</span>':c.client_status==='Потенциальный'?'<span class="tag" style="background:#EFF6FF;color:#1D4ED8">🔵 Потенциальный</span>':'';
     // Автосозданная карточка: клиент покупает, но данных по нему нет. Помечаем
     // прямо в плитке — иначе он потеряется в общем списке.
@@ -2841,7 +2841,7 @@ function renderClients(){
         +'<button onclick="finishNew1CClient(\''+c.id+'\',event)" style="margin-top:6px;width:100%;padding:7px;font-size:12px;border:1px solid var(--g);color:var(--g);background:#fff;border-radius:8px;cursor:pointer">✓ Карточка разобрана</button>'
       +'</div>'
       :(isUnassigned?(isBoss?assignSelect:'<button onclick="claimClient(\''+c.id+'\',event)" style="margin-top:8px;width:100%;padding:7px;font-size:12px;border:1px solid var(--a);color:var(--a);background:none;border-radius:8px;cursor:pointer">Взять себе</button>'):'');
-    return'<div class="client-card" onclick="openClient(\''+c.id+'\')"><div class="cc-name">'+c.name+'</div><div class="cc-meta">'+regionTag(c.region)+(c.code?'<span class="tag tag-gray">#'+c.code+'</span>':'')+mgrTag+statusBadge+newBadge+(ctCount?'<span class="tag tag-v">'+ctCount+' задач</span>':'')+'</div><div class="cc-stats"><div class="cc-stat"><div class="cc-stat-label">Оборот</div><div class="cc-stat-value">'+fmt(c.revenue_total)+'</div></div><div class="cc-stat"><div class="cc-stat-label">Визиты</div><div class="cc-stat-value">'+vb+'</div></div></div>'+new1cControl+'</div>';
+    return'<div class="client-card" onclick="openClient(\''+c.id+'\')"><div class="cc-name">'+esc(c.name)+'</div><div class="cc-meta">'+regionTag(c.region)+(c.code?'<span class="tag tag-gray">#'+c.code+'</span>':'')+mgrTag+statusBadge+newBadge+(ctCount?'<span class="tag tag-v">'+ctCount+' задач</span>':'')+'</div><div class="cc-stats"><div class="cc-stat"><div class="cc-stat-label">Оборот</div><div class="cc-stat-value">'+fmt(c.revenue_total)+'</div></div><div class="cc-stat"><div class="cc-stat-label">Визиты</div><div class="cc-stat-value">'+vb+'</div></div></div>'+new1cControl+'</div>';
   }).join('')||'<div style="color:var(--sub);font-size:14px;padding:20px">Клиенты не найдены</div>';
 }
 
@@ -3041,7 +3041,7 @@ function filterMergeClients(){
   if(!q){list.style.display='none';return;}
   const filtered=allClients.filter(c=>c.id!==sourceId&&c.name.toLowerCase().includes(q)).slice(0,10);
   list.style.display=filtered.length?'block':'none';
-  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="selectMergeTarget(\''+c.id+'\',\''+escAttr(c.name)+'\')">'+c.name+' <span style="color:var(--sub);font-size:11px">· '+(c.region||'—')+' · '+(c.manager_name||'—')+'</span></div>').join('');
+  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="selectMergeTarget(\''+c.id+'\',\''+escAttr(c.name)+'\')">'+esc(c.name)+' <span style="color:var(--sub);font-size:11px">· '+esc(c.region||'—')+' · '+esc(c.manager_name||'—')+'</span></div>').join('');
 }
 
 function selectMergeTarget(id,name){
@@ -3403,10 +3403,10 @@ async function openClient(id){
   const ct=canonicalActiveTasks(clientTasks);
   const completedTasks=clientTasks.filter(t=>t.done).slice().sort((a,b)=>String(b.done_at||b.due_date||'').localeCompare(String(a.done_at||a.due_date||''))).slice(0,10);
   const isUnassigned=!c.manager_name||c.manager_name==='Не разобрано';
-  const mgrTag=isUnassigned?'<span class="tag" style="background:var(--rb);color:var(--r)">⚠️ Не разобрано</span>':'<span class="tag tag-gray">👤 '+c.manager_name+'</span>';
+  const mgrTag=isUnassigned?'<span class="tag" style="background:var(--rb);color:var(--r)">⚠️ Не разобрано</span>':'<span class="tag tag-gray">👤 '+esc(c.manager_name)+'</span>';
   const claimBtn=isUnassigned?'<button class="btn-primary" style="width:100%;margin-top:10px" onclick="claimClient(\''+id+'\')">Взять себе</button>':'';
   const addrFull=fullAddr(c);
-  const addrBlock=c.address?'<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:12px"><div style="font-size:11px;color:var(--sub);margin-bottom:6px;font-weight:600;text-transform:uppercase">📍 Адрес</div><div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:10px">'+c.address+'</div><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="https://yandex.by/maps/?text='+encodeURIComponent(addrFull)+'" target="_blank" class="btn-map btn-yandex">🗺 Яндекс Карты</a><a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addrFull)+'" target="_blank" class="btn-map btn-google">🌐 Google Maps</a><button onclick="addToRoute(\''+id+'\')" style="padding:8px 14px;border:1px solid var(--a);color:var(--a);background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">+ В маршрут</button><button onclick="checkinHere(\''+id+'\',this,\'client\')" id="checkin-btn" style="padding:8px 14px;border:1px solid var(--g);color:var(--g);background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">📍 Я на точке</button></div>'+gpsBlock(c)+'</div>':'';
+  const addrBlock=c.address?'<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:12px"><div style="font-size:11px;color:var(--sub);margin-bottom:6px;font-weight:600;text-transform:uppercase">📍 Адрес</div><div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:10px">'+esc(c.address)+'</div><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="https://yandex.by/maps/?text='+encodeURIComponent(addrFull)+'" target="_blank" class="btn-map btn-yandex">🗺 Яндекс Карты</a><a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addrFull)+'" target="_blank" class="btn-map btn-google">🌐 Google Maps</a><button onclick="addToRoute(\''+id+'\')" style="padding:8px 14px;border:1px solid var(--a);color:var(--a);background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">+ В маршрут</button><button onclick="checkinHere(\''+id+'\',this,\'client\')" id="checkin-btn" style="padding:8px 14px;border:1px solid var(--g);color:var(--g);background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">📍 Я на точке</button></div>'+gpsBlock(c)+'</div>':'';
   // История переговоров — точное совпадение по имени И менеджеру
   const cNames = clientNameVariants(c);
   const cMgr = (c.manager_name||'').trim().toLowerCase();
@@ -3480,8 +3480,8 @@ async function openClient(id){
     +'</div>'
     +'<div style="background:var(--bg);border-radius:10px;padding:12px 14px">'
     +(_asrt.cats.length
-      ? _asrt.cats.map(cat=>'<span class="tag" style="background:var(--ab);color:var(--at);margin:2px 4px 2px 0;display:inline-block">'+cat+'</span>').join('')
-        +(_asrt.note?'<div style="font-size:12px;color:var(--sub);margin-top:8px">📝 '+_asrt.note+'</div>':'')
+      ? _asrt.cats.map(cat=>'<span class="tag" style="background:var(--ab);color:var(--at);margin:2px 4px 2px 0;display:inline-block">'+esc(cat)+'</span>').join('')
+        +(_asrt.note?'<div style="font-size:12px;color:var(--sub);margin-top:8px">📝 '+esc(_asrt.note)+'</div>':'')
       : '<span style="font-size:12px;color:var(--sub)">'+(_canEditAsrt?'Не заполнено — нажмите «Изменить», чтобы отметить разделы':'Не заполнено')+'</span>')
     +'</div></div>';
 
@@ -3572,7 +3572,7 @@ async function openClient(id){
 
   document.getElementById('modal-client-content').innerHTML=
     '<div class="modal-head"><div>'
-      +'<div class="modal-title">'+c.name+(isBoss?' <span style="cursor:pointer;font-size:14px" onclick="event.stopPropagation();openEditClientName(\''+id+'\')" title="Переименовать">✏️</span>':'')+'</div>'
+      +'<div class="modal-title">'+esc(c.name)+(isBoss?' <span style="cursor:pointer;font-size:14px" onclick="event.stopPropagation();openEditClientName(\''+id+'\')" title="Переименовать">✏️</span>':'')+'</div>'
       +'<div style="margin-top:4px">'+regionTag(c.region)+(c.code?' <span class="tag tag-gray">#'+c.code+'</span>':'')+' '+mgrTag
         +(c.client_status?'<span class="tag '+(c.client_status==='Рабочий'?'tag-m':'tag-gray')+'">'+c.client_status+'</span>':'')
       +'</div></div>'
@@ -3637,7 +3637,7 @@ function catTag(cat){
   if(c==='А'||c==='A')return'<span class="tag tag-r">А</span>';
   if(c==='B'||c==='В')return'<span class="tag tag-v">B</span>';
   if(c==='C'||c==='С')return'<span class="tag tag-m">C</span>';
-  return'<span class="tag tag-gray">'+cat+'</span>';
+  return'<span class="tag tag-gray">'+esc(cat)+'</span>';
 }
 
 function nextVisitDate(cat){
@@ -3808,7 +3808,7 @@ function filterRouteClients(){
   if(!q){res.style.display='none';return;}
   const filtered=allClients.filter(c=>c.address&&c.name.toLowerCase().includes(q)&&!routeClients.find(r=>r.id===c.id)).slice(0,10);
   res.style.display=filtered.length?'block':'none';
-  res.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="addToRoute(\''+c.id+'\')"><div style="font-weight:500">'+catTag(c.role_type)+' '+c.name+'</div><div style="font-size:11px;color:var(--sub);margin-top:2px">📍 '+c.address+'</div></div>').join('');
+  res.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="addToRoute(\''+c.id+'\')"><div style="font-weight:500">'+catTag(c.role_type)+' '+esc(c.name)+'</div><div style="font-size:11px;color:var(--sub);margin-top:2px">📍 '+esc(c.address||'')+'</div></div>').join('');
 }
 
 function addToRoute(id){
@@ -3948,8 +3948,8 @@ function renderRoute(){
     return cityHeader+'<div class="route-client" style="'+(visited?'opacity:0.6;':'')+(overdue?'border-left:3px solid var(--r);':'')+(isNetwork?'border-left:3px solid #1D4ED8;':'')+'">'
       +'<div class="route-num" style="'+(visited?'background:#27500A':'')+'">'+(visited?'✓':i+1)+'</div>'
       +'<div class="route-info"'+infoClick+'>'
-        +'<div class="route-name">'+(isNetwork?'🏬 <span class="tag" style="background:#DBEAFE;color:#1D4ED8">AAA · передача</span> ':catTag(c.role_type)+' ')+c.name+'</div>'
-        +'<div class="route-addr">📍 '+c.address+'</div>'
+        +'<div class="route-name">'+(isNetwork?'🏬 <span class="tag" style="background:#DBEAFE;color:#1D4ED8">AAA · передача</span> ':catTag(c.role_type)+' ')+esc(c.name)+'</div>'
+        +'<div class="route-addr">📍 '+esc(c.address||'')+'</div>'
         +'<div style="font-size:11px;margin-top:3px;color:'+(overdue?'var(--r)':isNetwork?'#1D4ED8':'var(--sub)')+'">'+sinceLabel+(overdue?' ⚠️':'')+'</div>'
         +taskLine
       +'</div>'
@@ -4489,7 +4489,7 @@ function renderTasks(){
     const bodyHtml=groups.map(tasks=>{
       const c=clientById.get(String(tasks[0].client_id));
       const cat=catLabel(c?.role_type);
-      const catHeader=cat!==lastCat?'<div style="font-size:11px;font-weight:600;color:var(--at);margin:'+(lastCat===null?'0':'14px')+' 0 6px;text-transform:uppercase">'+cat+'</div>':'';
+      const catHeader=cat!==lastCat?'<div style="font-size:11px;font-weight:600;color:var(--at);margin:'+(lastCat===null?'0':'14px')+' 0 6px;text-transform:uppercase">'+esc(cat)+'</div>':'';
       lastCat=cat;
       return catHeader+renderClientCard(tasks);
     }).join('');
@@ -5072,7 +5072,7 @@ function filterVisitClients(){
   if(!q){list.style.display='none';return;}
   const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
   list.style.display=filtered.length?'block':'none';
-  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectVisitClient(\''+c.id+'\',\''+escAttr(c.name)+'\')" >'+c.name+'</div>').join('');
+  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectVisitClient(\''+c.id+'\',\''+escAttr(c.name)+'\')" >'+esc(c.name)+'</div>').join('');
 }
 
 function selectVisitClient(id,name){
@@ -6866,8 +6866,8 @@ function findDuplicates(){
         const tasks=allTasks.filter(t=>t.client_id===c.id).length;
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)">'
           +'<div style="flex:1;min-width:0">'
-            +'<div style="font-size:13px;font-weight:600;cursor:pointer" onclick="openClient(\''+c.id+'\')">'+c.name+'</div>'
-            +'<div style="font-size:11px;color:var(--sub)">'+(c.region||'—')+' · '+(c.manager_name||'без менеджера')
+            +'<div style="font-size:13px;font-weight:600;cursor:pointer" onclick="openClient(\''+c.id+'\')">'+esc(c.name)+'</div>'
+            +'<div style="font-size:11px;color:var(--sub)">'+esc(c.region||'—')+' · '+esc(c.manager_name||'без менеджера')
             +' · оборот '+fmt(c.revenue_total||0)+' · визитов '+visits+' · задач '+tasks+'</div>'
           +'</div>'
           +'<button onclick="openMergeClient(\''+c.id+'\')" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:11px;white-space:nowrap">Объединить</button>'
@@ -9551,7 +9551,7 @@ function renderManagers(){
     const uo=ut.filter(isTaskOverdue);
     const uc=allClients.filter(c=>c.manager_name===u.name);
     const kpi=managerKpiBreakdown(u.name);
-    return '<tr><td><strong>'+u.name+'</strong></td><td>'+u.region+'</td><td>'+uv.length+'</td><td>'+ut.length+'</td><td>'+(uo.length?'<span class="tag tag-r">'+uo.length+'</span>':'<span class="tag tag-m">0</span>')+'</td><td>'+uc.length+'</td><td>'+kpiCatCell(kpi,'akb','akbNorm')+'</td><td>'+kpiCatCell(kpi,'shelf','shelfNorm')+'</td></tr>';
+    return '<tr><td><strong>'+esc(u.name)+'</strong></td><td>'+esc(u.region||'—')+'</td><td>'+uv.length+'</td><td>'+ut.length+'</td><td>'+(uo.length?'<span class="tag tag-r">'+uo.length+'</span>':'<span class="tag tag-m">0</span>')+'</td><td>'+uc.length+'</td><td>'+kpiCatCell(kpi,'akb','akbNorm')+'</td><td>'+kpiCatCell(kpi,'shelf','shelfNorm')+'</td></tr>';
   }).join('');
   document.getElementById('managers-table').innerHTML=rows||'<tr><td colspan="8" style="color:var(--sub);text-align:center">Нет данных</td></tr>';
 }
@@ -9580,7 +9580,7 @@ function renderSales(){
 
   // v22.7.32.2.9: regions use the same filtered 1C history as the chart below.
   renderSalesRegions227329();
-  document.getElementById('sales-top').innerHTML=myClients.slice(0,15).map((c,i)=>'<tr class="tbl-tap" onclick="openClient(\''+c.id+'\')"><td>'+(i+1)+'</td><td>'+c.name+'</td><td>'+regionTag(c.region)+'</td><td style="font-weight:600">'+fmt(c.revenue_total)+'</td></tr>').join('');
+  document.getElementById('sales-top').innerHTML=myClients.slice(0,15).map((c,i)=>'<tr class="tbl-tap" onclick="openClient(\''+c.id+'\')"><td>'+(i+1)+'</td><td>'+esc(c.name)+'</td><td>'+regionTag(c.region)+'</td><td style="font-weight:600">'+fmt(c.revenue_total)+'</td></tr>').join('');
   renderSalesHistory();
 }
 
@@ -9708,7 +9708,7 @@ function renderSalesHistory(){
   const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const maxC=Math.max(1,...cats.map(c=>c[1]));
   document.getElementById('sh-categories').innerHTML=cats.map(([cat,v])=>{
-    return '<div class="bar-row"><div class="bar-head"><span>'+cat+'</span><span style="font-weight:600">'+fmt(v)+' BYN</span></div><div class="bar-bg"><div class="bar-fill" style="width:'+Math.round(v/maxC*100)+'%"></div></div></div>';
+    return '<div class="bar-row"><div class="bar-head"><span>'+esc(cat)+'</span><span style="font-weight:600">'+fmt(v)+' BYN</span></div><div class="bar-bg"><div class="bar-fill" style="width:'+Math.round(v/maxC*100)+'%"></div></div></div>';
   }).join('');
 }
 
@@ -9718,7 +9718,7 @@ function filterTaskClients(){
   if(!q){list.style.display='none';return;}
   const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
   list.style.display=filtered.length?'block':'none';
-  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectTaskClient(\''+c.id+'\',\''+escAttr(c.name)+'\')">'+c.name+'</div>').join('');
+  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectTaskClient(\''+c.id+'\',\''+escAttr(c.name)+'\')">'+esc(c.name)+'</div>').join('');
 }
 
 function selectTaskClient(id,name){
