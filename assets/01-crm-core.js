@@ -377,7 +377,7 @@ function renderRoutesBoss(){
         +'<td>'+pickBox+'</td>'
         +'<td style="color:var(--sub)">'+(i+1)+'</td>'
         +'<td><span class="tag tag-gray">'+r.manager_name+'</span></td>'
-        +'<td style="font-weight:500"><span style="cursor:pointer" '+(mc?'onclick="openClient(\''+mc.id+'\')"':'')+'>'+r.client_name+clientTag+'</span>'+renameBtn+movePointBtn+skuBtnBoss+promoteBtn+reasonLine+'</td>'
+        +'<td style="font-weight:500"><span style="cursor:pointer" '+(mc?'onclick="openClient(\''+mc.id+'\')"':'')+'>'+esc(r.client_name)+clientTag+'</span>'+renameBtn+movePointBtn+skuBtnBoss+promoteBtn+reasonLine+'</td>'
         +'<td>'+esc(r.city||'—')+'</td>'
         +'<td style="font-size:11px;color:var(--sub)">'+(r.region||'—')+'</td>'
         +'<td style="font-size:11px;color:var(--sub)">'+(r.address||'—')+'</td>'
@@ -2690,7 +2690,7 @@ function buildDashboard() {
       const c=kind==='never'?x:x.c;
       const act=latestActivity(c), plan=nextPlan(c);
       const last=kind==='never'?'не зафиксирован':x.last+' · '+Math.abs(daysDiff(x.last))+' дн.';
-      return '<tr class="tbl-tap" onclick="openClient(\''+c.id+'\')"><td>'+c.name+'</td><td>'+esc(c.manager_name||'—')+'</td><td>'+last+'</td><td>'+(act?act.d+' · '+act.label:'нет')+'</td><td>'+(plan?plan.visit_date:'не запланирован')+'</td><td>'+fmt(c.revenue_total)+' BYN</td></tr>';
+      return '<tr class="tbl-tap" onclick="openClient(\''+c.id+'\')"><td>'+esc(c.name)+'</td><td>'+esc(c.manager_name||'—')+'</td><td>'+last+'</td><td>'+(act?act.d+' · '+act.label:'нет')+'</td><td>'+(plan?plan.visit_date:'не запланирован')+'</td><td>'+fmt(c.revenue_total)+' BYN</td></tr>';
     }).join('');
     let html='<div style="font-size:12px;color:var(--sub);margin-bottom:10px">Задача или запись переговоров не считается визитом. Фактический визит появляется только после «Записать визит».</div>';
     html+='<div style="font-size:12px;font-weight:700;margin:10px 0 6px">Не было ни одного фактического визита после '+CRM_WORK_START_DATE.split('-').reverse().join('.')+' · '+never.length+'</div>';
@@ -3368,7 +3368,7 @@ function openEditAssortment(clientId){
   document.getElementById('ea-note').value=cur.note;
   document.getElementById('ea-checks').innerHTML=ASSORTMENT_CATEGORIES.map((cat,i)=>{
     const checked=cur.cats.includes(cat)?'checked':'';
-    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:4px 0"><input type="checkbox" class="ea-cat" value="'+escAttr(cat)+'" '+checked+' style="width:16px;height:16px;cursor:pointer">'+cat+'</label>';
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:4px 0"><input type="checkbox" class="ea-cat" value="'+escAttr(cat)+'" '+checked+' style="width:16px;height:16px;cursor:pointer">'+esc(cat)+'</label>';
   }).join('');
   document.getElementById('modal-edit-assortment').classList.add('open');
 }
@@ -6831,7 +6831,7 @@ function vipCurrentSalesBlock(clientName){
     +'<span style="font-size:14px;font-weight:700;color:var(--g)">'+fmtMoney(total)+' BYN</span>'
     +'</div>'
     +cats.map(cat=>'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">'
-      +'<span style="color:var(--text)">'+cat+'</span>'
+      +'<span style="color:var(--text)">'+esc(cat)+'</span>'
       +'<span style="color:var(--sub)">'+fmtMoney(byCat[cat])+'</span></div>').join('')
     +'</div>';
 }
