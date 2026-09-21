@@ -1,28 +1,25 @@
-name: Продажи всех менеджеров + Triovist — 6 срезов 1С + почасовая страховка
+name: Продажи полевых — независимый импорт 1С каждые 15 минут
 
 on:
   push:
     branches: [main]
     paths:
       - 'import_sales.py'
-      - 'sync_triovist_sales.py'
-      - 'triovist_import_core.py'
       - '.github/workflows/import-sales.yml'
   schedule:
-    # Надёжная схема: каждые 15 минут проверяем самое свежее письмо 1С.
-    # Дубли import_sales.py пропускает по source_message_at, поэтому лишних
-    # перезаписей purchase_history нет.
-    - cron: '*/15 * * * *'
+    # Отдельный импорт полевых. Минуты смещены от :00/:15/:30/:45,
+    # где GitHub Actions чаще задерживает cron под нагрузкой.
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 
 concurrency:
-  group: all-sales-write
+  group: field-sales-write
   cancel-in-progress: false
 
 jobs:
-  import:
+  import-sales:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
@@ -47,15 +44,3 @@ jobs:
           SALES_IMAP_TIMEOUT_SECONDS: '45'
           SALES_MAX_EMAIL_CANDIDATES: '8'
         run: python import_sales.py
-
-      - name: Обновить и проверить продажи ООО Triovist
-        env:
-          IMAP_HOST: imap.gmail.com
-          IMAP_PORT: '993'
-          IMAP_USER: ${{ secrets.IMAP_USER }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TRIOVIST_SALES_LOOKBACK_DAYS: '21'
-          TRIOVIST_MAX_EMAIL_CANDIDATES: '8'
-        run: python sync_triovist_sales.py
