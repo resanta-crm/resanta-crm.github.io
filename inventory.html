@@ -5,6 +5,24 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
+<script>
+const INVENTORY_APP_VERSION='2026-09-21-v23.6.142';
+(function(){
+  try{
+    const k='resanta_inventory_app_version';
+    const old=localStorage.getItem(k);
+    if(old!==INVENTORY_APP_VERSION){
+      localStorage.setItem(k,INVENTORY_APP_VERSION);
+      if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(keys.filter(x=>x.startsWith('resanta-inventory-')).map(x=>caches.delete(x)))).catch(()=>{});
+      if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
+      if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
+        sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
+        location.replace('/inventory.html?v=23.6.142');
+      }
+    }
+  }catch(_){}
+})();
+</script>
 <title>Resanta Склад · ТСД</title>
 <link rel="manifest" href="/inventory-manifest.webmanifest">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
@@ -28,7 +46,7 @@ label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5p
   <div class="card">
     <h1>📦 Resanta Склад</h1>
     <div class="sub" style="text-align:center;margin-bottom:16px">Защищённый вход в инвентаризацию ТСД · выделенная учётная запись Витебска</div>
-    <label>Email ТСД</label><input id="login-email" class="inp" type="email" autocomplete="username" value="vitebsk@resanta.ru">
+    <label>Email ТСД</label><input id="login-email" class="inp" type="email" autocomplete="username" value="vitebsk@resanta.ru" readonly aria-readonly="true">
     <label>Пароль</label><input id="login-pass" class="inp" type="password" autocomplete="current-password">
     <button id="login-btn" class="btn primary" style="width:100%;margin-top:14px">Войти</button>
     <div id="login-error" class="status red hidden" style="margin-top:10px"></div>
@@ -86,13 +104,15 @@ const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_inventory_queue_v1';
+const DEDICATED_EMAIL='vitebsk@resanta.ru';
 let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
 const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function saveSession(s){session=s||null;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
-function loadSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(_){return null}}
+function tokenEmail(s){try{const p=JSON.parse(atob(String(s?.access_token||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return String(p?.email||'').toLowerCase()}catch(_){return''}}
+function loadSession(){try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(s&&tokenEmail(s)!==DEDICATED_EMAIL){localStorage.removeItem(SESSION_KEY);return null}return s}catch(_){return null}}
 function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');return Array.isArray(q)?q:[]}catch(_){return[]}}
 function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueueKpi()}
 function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
@@ -119,7 +139,7 @@ async function rpc(name,args={},retry=true){
 async function login(){
  $('login-btn').disabled=true;show('login-error',false);
  try{
-  const s=await authToken($('login-email').value.trim(),$('login-pass').value);
+  const s=await authToken(DEDICATED_EMAIL,$('login-pass').value);
   saveSession(s);$('login-pass').value='';await bootAuthed()
  }catch(e){text('login-error',e?.message||e);show('login-error',true)}
  finally{$('login-btn').disabled=false}
@@ -224,6 +244,7 @@ async function flushQueue(){
 }
 function net(msg){const e=$('net');if(!msg){e.style.display='none';return}e.textContent=msg;e.style.display='block'}
 async function init(){
+ $('login-email').value=DEDICATED_EMAIL;
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
@@ -234,7 +255,7 @@ async function init(){
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
  $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js').catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.142',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
