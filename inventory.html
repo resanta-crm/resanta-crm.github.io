@@ -287,12 +287,16 @@ async function init(){
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
  const codeEl=$('code');
  codeEl.onkeydown=e=>{unlockAudio();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
- codeEl.addEventListener('input',()=>{
+ const maybeAutoSubmit=()=>{
    scannerDiag('ТСД передаёт код в поле…');
    clearTimeout(inputAutoTimer);
    const v=codeEl.value.trim();
    if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},140);
- });
+ };
+ codeEl.addEventListener('input',maybeAutoSubmit);
+ codeEl.addEventListener('keyup',maybeAutoSubmit);
+ codeEl.addEventListener('paste',()=>setTimeout(maybeAutoSubmit,0));
+ codeEl.addEventListener('textInput',()=>setTimeout(maybeAutoSubmit,0));
  document.addEventListener('keydown',e=>{
    unlockAudio();
    if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
@@ -308,6 +312,23 @@ async function init(){
    }
    if(e.key&&e.key.length===1){
      scannerBuffer+=e.key;
+     clearTimeout(scannerTimer);
+     scannerTimer=setTimeout(()=>{
+       const v=scannerBuffer.trim();scannerBuffer='';
+       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
+     },160);
+   }
+ },true);
+ document.addEventListener('keypress',e=>{
+   if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
+   const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
+   if(editable)return;
+   const code=Number(e.which||e.keyCode||0);
+   if(code>=32&&code<=126){
+     const ch=String.fromCharCode(code);
+     const now=Date.now();
+     if(now-scannerLastKeyAt>120)scannerBuffer='';
+     scannerLastKeyAt=now;scannerBuffer+=ch;
      clearTimeout(scannerTimer);
      scannerTimer=setTimeout(()=>{
        const v=scannerBuffer.trim();scannerBuffer='';
