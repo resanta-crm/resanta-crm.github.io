@@ -70,7 +70,7 @@ label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5p
         <div class="kpi"><b id="kpi-queue">0</b><span>Ждут отправки</span></div>
       </div>
       <div id="scan-status" class="status blue" style="margin-top:10px">Готов. Нажмите кнопку сканера ТСД и наведите на штрихкод.</div>
-      <div id="scanner-diag" class="sub" style="margin:-2px 0 8px">Аппаратный сканер: ожидаю код · звук после успешного чтения включён.</div>
+      <div style="display:flex;gap:8px;align-items:center;margin:-2px 0 8px"><div id="scanner-diag" class="sub" style="flex:1">Аппаратный сканер: ожидаю код · звук после успешного чтения включён.</div><button id="sound-test-btn" class="btn secondary" style="min-height:34px;padding:5px 9px;font-size:11px">🔊 Тест</button></div>
       <label>Штрихкод / артикул</label>
       <input id="code" class="inp scan" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
       <div class="sub" style="margin-top:6px">Ручной ввод артикула тоже работает. Остаток 1С на ТСД специально не показывается — пересчёт слепой.</div>
@@ -108,7 +108,7 @@ const SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_inventory_queue_v1';
 const DEDICATED_EMAIL='vitebsk@resanta.ru';
 let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
-let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null;
+let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
 const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
@@ -192,6 +192,15 @@ async function reloadActive(){
  text('kpi-sku',active.counted_sku||0);text('kpi-events',active.event_count||0);updateQueueKpi();await loadHistory();focusCode()
 }
 function focusCode(){setTimeout(()=>{const e=$('code');if(e&&!document.hidden)e.focus()},60)}
+async function previewManualCode(code){
+ code=String(code||'').trim();
+ if(!active?.id||!code||/^\d{8,32}$/.test(code))return;
+ try{
+  const r=await rpc('warehouse_inventory_lookup_v1',{p_session_id:active.id,p_code:code});
+  if(r?.ok)scannerDiag('Товар найден: '+(r.product||r.sku)+' · '+r.sku+' · физический остаток 1С скрыт до окончания пересчёта.');
+  else scannerDiag('Такого артикула нет в контрольном снимке инвентаризации.');
+ }catch(_){}
+}
 async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
  code=String(code||'').trim();const q=Number(qtyVal);
  if(code&&recentlySubmitted(code))return;
@@ -285,13 +294,15 @@ async function init(){
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
+ $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.')};
  const codeEl=$('code');
  codeEl.onkeydown=e=>{unlockAudio();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
  const maybeAutoSubmit=()=>{
    scannerDiag('ТСД передаёт код в поле…');
-   clearTimeout(inputAutoTimer);
+   clearTimeout(inputAutoTimer);clearTimeout(lookupTimer);
    const v=codeEl.value.trim();
    if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},140);
+   else if(v.length>=4)lookupTimer=setTimeout(()=>previewManualCode(v),320);
  };
  codeEl.addEventListener('input',maybeAutoSubmit);
  codeEl.addEventListener('keyup',maybeAutoSubmit);
