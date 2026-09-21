@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script>
-const INVENTORY_APP_VERSION='2026-09-21-v23.6.142';
+const INVENTORY_APP_VERSION='2026-09-21-v23.6.144';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -17,7 +17,7 @@ const INVENTORY_APP_VERSION='2026-09-21-v23.6.142';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.142');
+        location.replace('/inventory.html?v=23.6.144');
       }
     }
   }catch(_){}
@@ -69,9 +69,11 @@ label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5p
         <div class="kpi"><b id="kpi-events">0</b><span>Сканов</span></div>
         <div class="kpi"><b id="kpi-queue">0</b><span>Ждут отправки</span></div>
       </div>
-      <div id="scan-status" class="status blue" style="margin-top:10px">Готов. Сканируйте штрихкод или введите артикул.</div>
+      <div id="scan-status" class="status blue" style="margin-top:10px">Готов. Нажмите кнопку сканера ТСД и наведите на штрихкод.</div>
+      <div id="scanner-diag" class="sub" style="margin:-2px 0 8px">Аппаратный сканер: ожидаю код · звук после успешного чтения включён.</div>
       <label>Штрихкод / артикул</label>
       <input id="code" class="inp scan" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
+      <div class="sub" style="margin-top:6px">Ручной ввод артикула тоже работает. Остаток 1С на ТСД специально не показывается — пересчёт слепой.</div>
       <div class="row">
         <div style="flex:1"><label>Количество</label><input id="scan-qty" class="inp" type="number" min="0.01" step="1" value="1"></div>
         <button id="send-btn" class="btn primary" style="align-self:flex-end;flex:1">Добавить</button>
@@ -106,6 +108,7 @@ const SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_inventory_queue_v1';
 const DEDICATED_EMAIL='vitebsk@resanta.ru';
 let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
+let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
 const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
@@ -117,6 +120,28 @@ function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');r
 function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueueKpi()}
 function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
 function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
+function scannerDiag(msg){text('scanner-diag',msg)}
+function unlockAudio(){
+ try{
+  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+ }catch(_){}
+}
+function beep(ok=true){
+ try{
+  unlockAudio();if(!audioCtx)return;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type='sine';o.frequency.value=ok?1050:260;g.gain.value=.12;
+  o.connect(g);g.connect(audioCtx.destination);
+  const t=audioCtx.currentTime;o.start(t);o.stop(t+(ok?.09:.20));
+ }catch(_){}
+ if(navigator.vibrate)try{navigator.vibrate(ok?45:[90,40,90])}catch(_){}
+}
+function recentlySubmitted(code){
+ const now=Date.now(),same=code===lastSubmittedCode&&now-lastSubmittedAt<900;
+ if(!same){lastSubmittedCode=code;lastSubmittedAt=now}
+ return same
+}
 async function authToken(email,password){
  const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({email,password})});
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j?.msg||j?.error_description||'Неверный логин или пароль');return j
@@ -169,6 +194,8 @@ async function reloadActive(){
 function focusCode(){setTimeout(()=>{const e=$('code');if(e&&!document.hidden)e.focus()},60)}
 async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
  code=String(code||'').trim();const q=Number(qtyVal);
+ if(code&&recentlySubmitted(code))return;
+ unlockAudio();
  if(!active?.id)return status('Инвентаризация не запущена.','red');
  if(!code)return focusCode();
  if(!Number.isFinite(q)||q<=0)return status('Количество должно быть больше 0.','red');
@@ -177,20 +204,30 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
  try{
   const r=await rpc('warehouse_inventory_scan_v1',{p_session_id:active.id,p_code:code,p_qty:q,p_input_mode:mode,p_client_event_id:eventId});
   if(!r?.ok){
-   if(r?.reason==='not_found'){lastUnknown=code;show('bind-box',true);text('bind-sku','');status('Штрихкод '+code+' не найден. Введите артикул ниже.','amber');$('bind-sku').focus();return}
+   if(r?.reason==='not_found'||r?.reason==='not_in_snapshot'){
+    lastUnknown=/^[0-9]{6,32}$/.test(code)?code:'';
+    show('bind-box',!!lastUnknown);text('bind-sku','');
+    status(lastUnknown?'Штрихкод '+code+' не найден в текущем снимке. Введите артикул для привязки.':'Артикул '+code+' не найден в контрольном снимке инвентаризации.','amber');
+    scannerDiag('Код получен ТСД, но товар не найден в снимке.');
+    beep(false);
+    if(lastUnknown)$('bind-sku').focus();else focusCode();
+    return
+   }
    throw new Error(r?.reason||'Не удалось записать скан')
   }
   show('bind-box',false);lastUnknown='';
-  text('last-sku',r.sku||'');text('last-product',r.product||'');text('last-count',r.counted_qty||0);show('last-card',true);
-  $('code').value='';$('scan-qty').value='1';status('✓ '+(r.sku||'')+' · добавлено '+q,'green');
-  if(navigator.vibrate)navigator.vibrate(35);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
+  text('last-sku',r.sku||'');text('last-product',r.product||'Товар без названия');text('last-count',r.counted_qty||0);show('last-card',true);
+  $('code').value='';$('scan-qty').value='1';
+  status('✓ '+(r.sku||'')+' · '+(r.product||'товар найден')+' · добавлено '+q,'green');
+  scannerDiag('Аппаратный/ручной код принят CRM: '+code);
+  beep(true);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
   await reloadActive()
  }catch(e){
   if(e?.network||!navigator.onLine){
    const ql=queue();ql.push({id:eventId,session_id:active.id,code,qty:q,queued_at:new Date().toISOString()});saveQueue(ql);
    $('code').value='';$('scan-qty').value='1';status('Нет связи. Скан сохранён на ТСД и отправится автоматически.','amber');focusCode();return
   }
-  status('Ошибка: '+(e?.message||e),'red');focusCode()
+  status('Ошибка: '+(e?.message||e),'red');scannerDiag('Код был получен, но сервер вернул ошибку.');beep(false);focusCode()
  }
 }
 async function bindUnknown(){
@@ -248,14 +285,44 @@ async function init(){
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
- $('code').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sendScan($('code').value,$('scan-qty').value,'scan')}};
+ const codeEl=$('code');
+ codeEl.onkeydown=e=>{unlockAudio();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
+ codeEl.addEventListener('input',()=>{
+   scannerDiag('ТСД передаёт код в поле…');
+   clearTimeout(inputAutoTimer);
+   const v=codeEl.value.trim();
+   if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},140);
+ });
+ document.addEventListener('keydown',e=>{
+   unlockAudio();
+   if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
+   const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
+   if(editable)return;
+   const now=Date.now();
+   if(now-scannerLastKeyAt>120)scannerBuffer='';
+   scannerLastKeyAt=now;
+   if(e.key==='Enter'||e.key==='Tab'){
+     const v=scannerBuffer.trim();scannerBuffer='';
+     if(v.length>=4){e.preventDefault();scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
+     return;
+   }
+   if(e.key&&e.key.length===1){
+     scannerBuffer+=e.key;
+     clearTimeout(scannerTimer);
+     scannerTimer=setTimeout(()=>{
+       const v=scannerBuffer.trim();scannerBuffer='';
+       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
+     },160);
+   }
+ },true);
+ document.addEventListener('touchstart',unlockAudio,{passive:true,once:false});
  $('undo-btn').onclick=undo;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
  window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
  $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.142',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.144',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
