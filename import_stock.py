@@ -128,6 +128,7 @@ def save_stock_import_status(report_date, sent, row_count, filename):
             "filename": filename,
             "row_count": row_count,
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(timezone.utc).isoformat(),
         }
         headers = {**_status_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"}
         r = requests.post(
@@ -632,9 +633,12 @@ def main():
         rows, report_date, filename, sent = choose_latest_valid_report(mail, candidates)
 
         if stock_message_already_loaded(sent):
+            # Для инвентаризации важно знать точное время последней проверки почты,
+            # даже если нового файла 1С не появилось. Сам склад при этом не переписываем.
+            save_stock_import_status(report_date, sent, len(rows), filename)
             log(
                 f"✅ Письмо с остатком {sent:%d.%m.%Y %H:%M} уже загружено — "
-                "нового отчёта Витебска пока нет, склад не перезаписываю."
+                "нового отчёта Витебска пока нет, склад не перезаписываю; время проверки обновлено."
             )
             return
 
