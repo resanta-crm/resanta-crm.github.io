@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script>
-const INVENTORY_APP_VERSION='2026-09-21-v23.6.144';
+const INVENTORY_APP_VERSION='2026-09-21-v23.6.145';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -17,7 +17,7 @@ const INVENTORY_APP_VERSION='2026-09-21-v23.6.144';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.144');
+        location.replace('/inventory.html?v=23.6.145');
       }
     }
   }catch(_){}
@@ -71,6 +71,7 @@ label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5p
       </div>
       <div id="scan-status" class="status blue" style="margin-top:10px">Готов. Нажмите кнопку сканера ТСД и наведите на штрихкод.</div>
       <div style="display:flex;gap:8px;align-items:center;margin:-2px 0 8px"><div id="scanner-diag" class="sub" style="flex:1">Аппаратный сканер: ожидаю код · звук после успешного чтения включён.</div><button id="sound-test-btn" class="btn secondary" style="min-height:34px;padding:5px 9px;font-size:11px">🔊 Тест</button></div>
+      <div id="scanner-hw-warning" class="status amber hidden" style="margin-bottom:8px"><b>ТСД не передаёт данные сканера в браузер.</b><br>CRM и ручной ввод работают. На самом терминале нужно включить вывод сканера как клавиатуру: <b>Keyboard Wedge / Keystroke / Output mode = Keyboard</b> и суффикс <b>Enter</b>.</div>
       <label>Штрихкод / артикул</label>
       <input id="code" class="inp scan" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
       <div class="sub" style="margin-top:6px">Ручной ввод артикула тоже работает. Остаток 1С на ТСД специально не показывается — пересчёт слепой.</div>
@@ -108,7 +109,7 @@ const SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_inventory_queue_v1';
 const DEDICATED_EMAIL='vitebsk@resanta.ru';
 let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
-let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null;
+let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
 const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
@@ -121,6 +122,22 @@ function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQu
 function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
 function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
 function scannerDiag(msg){text('scanner-diag',msg)}
+function browserInputSeen(){
+ lastBrowserInputAt=Date.now();
+ show('scanner-hw-warning',false);
+}
+function armScannerWatchdog(){
+ clearTimeout(scannerWatchdog);
+ const armedAt=Date.now();
+ scannerDiag('Жду аппаратный скан… Нажмите курок и наведите на штрихкод.');
+ scannerWatchdog=setTimeout(()=>{
+   if(lastBrowserInputAt<armedAt){
+     show('scanner-hw-warning',true);
+     scannerDiag('Курок нажат, но браузер не получил ни одного символа от сканера.');
+     beep(false);
+   }
+ },2200);
+}
 function unlockAudio(){
  try{
   if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -294,10 +311,11 @@ async function init(){
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
- $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.')};
+ $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);show('scanner-hw-warning',false);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.');focusCode();armScannerWatchdog()};
  const codeEl=$('code');
- codeEl.onkeydown=e=>{unlockAudio();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
+ codeEl.onkeydown=e=>{unlockAudio();browserInputSeen();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
  const maybeAutoSubmit=()=>{
+   browserInputSeen();
    scannerDiag('ТСД передаёт код в поле…');
    clearTimeout(inputAutoTimer);clearTimeout(lookupTimer);
    const v=codeEl.value.trim();
@@ -309,7 +327,7 @@ async function init(){
  codeEl.addEventListener('paste',()=>setTimeout(maybeAutoSubmit,0));
  codeEl.addEventListener('textInput',()=>setTimeout(maybeAutoSubmit,0));
  document.addEventListener('keydown',e=>{
-   unlockAudio();
+   unlockAudio();browserInputSeen();
    if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
    const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
    if(editable)return;
@@ -331,6 +349,7 @@ async function init(){
    }
  },true);
  document.addEventListener('keypress',e=>{
+   browserInputSeen();
    if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
    const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
    if(editable)return;
@@ -347,14 +366,18 @@ async function init(){
      },160);
    }
  },true);
+ document.addEventListener('beforeinput',browserInputSeen,true);
+ document.addEventListener('compositionend',browserInputSeen,true);
  document.addEventListener('touchstart',unlockAudio,{passive:true,once:false});
+ $('code').addEventListener('focus',()=>scannerDiag('Поле готово. Нажмите курок сканера.'));
+ $('code').addEventListener('click',armScannerWatchdog);
  $('undo-btn').onclick=undo;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
  window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
  $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.144',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.145',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
