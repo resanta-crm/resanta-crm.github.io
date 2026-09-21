@@ -1,0 +1,14 @@
+{
+  "name":"Resanta Склад",
+  "short_name":"Склад",
+  "description":"ТСД-инвентаризация склада Resanta CRM",
+  "start_url":"/inventory.html",
+  "scope":"/",
+  "display":"standalone",
+  "background_color":"#f9fafb",
+  "theme_color":"#185FA5",
+  "lang":"ru",
+  "icons":[
+    {"src":"/inventory-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
