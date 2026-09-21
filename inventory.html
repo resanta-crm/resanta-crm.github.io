@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#185FA5">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Resanta Склад · ТСД</title>
+<link rel="manifest" href="/inventory-manifest.webmanifest">
+<link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827;min-height:100dvh}
+button,input{font:inherit}.hidden{display:none!important}.wrap{max-width:620px;margin:0 auto;padding:14px 14px 96px}.top{display:flex;align-items:center;gap:10px;margin-bottom:12px}.logo{width:46px;height:46px;border-radius:12px;background:#185FA5;color:#fff;display:grid;place-items:center;font-size:24px}.grow{flex:1}.title{font-weight:800;font-size:18px}.sub{font-size:11px;color:#6B7280;line-height:1.4}.card{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.035)}
+label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5px;text-transform:uppercase}.inp{width:100%;border:2px solid #D1D5DB;border-radius:12px;padding:14px 13px;font-size:18px;background:#fff;outline:none}.inp:focus{border-color:#185FA5}.scan{font-size:24px;font-weight:800;text-align:center;letter-spacing:.5px}
+.row{display:flex;gap:8px}.row>*{min-width:0}.btn{border:0;border-radius:11px;padding:13px 14px;font-weight:800;cursor:pointer;min-height:48px}.primary{background:#185FA5;color:#fff}.secondary{background:#fff;border:1px solid #D1D5DB;color:#374151}.danger{background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B}.btn:disabled{opacity:.5}
+.status{padding:12px;border-radius:11px;font-size:13px;line-height:1.45;margin-bottom:10px}.blue{background:#EFF6FF;color:#1E3A8A;border:1px solid #BFDBFE}.green{background:#ECFDF5;color:#166534;border:1px solid #A7F3D0}.red{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}.amber{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}
+.product{font-size:16px;font-weight:800;margin-top:5px}.sku{font-size:13px;color:#185FA5;font-weight:800}.count{font-size:42px;font-weight:900;line-height:1;text-align:center;margin:12px 0}.count small{display:block;font-size:11px;color:#6B7280;font-weight:700;margin-bottom:7px;text-transform:uppercase}
+.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.kpi{background:#F8FAFC;border-radius:10px;padding:9px;text-align:center}.kpi b{display:block;font-size:17px}.kpi span{font-size:9px;color:#6B7280;text-transform:uppercase}
+.history{display:grid;gap:6px}.ev{border-top:1px solid #E5E7EB;padding:8px 0}.ev:first-child{border-top:0}.ev b{font-size:12px}.ev span{font-size:10px;color:#6B7280}
+.net{position:fixed;left:10px;right:10px;bottom:10px;max-width:600px;margin:auto;padding:10px 12px;border-radius:10px;background:#111827;color:#fff;font-size:11px;z-index:20;display:none}
+.login{max-width:430px;margin:8vh auto 0}.login h1{text-align:center;color:#185FA5}.install{white-space:nowrap;padding:8px 10px;min-height:auto;font-size:11px}
+.bind{margin-top:10px;padding-top:10px;border-top:1px solid #E5E7EB}
+@media(max-width:420px){.wrap{padding:10px 10px 88px}.kpis{grid-template-columns:1fr 1fr}.kpis .kpi:last-child{grid-column:1/-1}.scan{font-size:21px}}
+</style>
+</head>
+<body>
+<div id="login-view" class="wrap login hidden">
+  <div class="card">
+    <h1>📦 Resanta Склад</h1>
+    <div class="sub" style="text-align:center;margin-bottom:16px">Защищённый вход в инвентаризацию ТСД</div>
+    <label>Email CRM</label><input id="login-email" class="inp" type="email" autocomplete="username">
+    <label>Пароль</label><input id="login-pass" class="inp" type="password" autocomplete="current-password">
+    <button id="login-btn" class="btn primary" style="width:100%;margin-top:14px">Войти</button>
+    <div id="login-error" class="status red hidden" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div id="app-view" class="wrap hidden">
+  <div class="top">
+    <div class="logo">📦</div>
+    <div class="grow"><div class="title">Resanta Склад</div><div id="user-line" class="sub"></div></div>
+    <button id="install-btn" class="btn secondary install hidden">Установить</button>
+    <button id="logout-btn" class="btn secondary install">Выйти</button>
+  </div>
+  <div id="access-error" class="status red hidden"></div>
+  <div id="no-session" class="status blue hidden"><b>Инвентаризация не запущена.</b><br>Руководитель должен открыть CRM → Склад → Инвентаризация и нажать «Начать».</div>
+  <div id="scanner" class="hidden">
+    <div class="card">
+      <div class="kpis">
+        <div class="kpi"><b id="kpi-sku">0</b><span>SKU пересчитано</span></div>
+        <div class="kpi"><b id="kpi-events">0</b><span>Сканов</span></div>
+        <div class="kpi"><b id="kpi-queue">0</b><span>Ждут отправки</span></div>
+      </div>
+      <div id="scan-status" class="status blue" style="margin-top:10px">Готов. Сканируйте штрихкод или введите артикул.</div>
+      <label>Штрихкод / артикул</label>
+      <input id="code" class="inp scan" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
+      <div class="row">
+        <div style="flex:1"><label>Количество</label><input id="scan-qty" class="inp" type="number" min="0.01" step="1" value="1"></div>
+        <button id="send-btn" class="btn primary" style="align-self:flex-end;flex:1">Добавить</button>
+      </div>
+      <div id="last-card" class="hidden" style="margin-top:12px">
+        <div id="last-sku" class="sku"></div><div id="last-product" class="product"></div>
+        <div class="count"><small>Насчитано по этому SKU</small><span id="last-count">0</span></div>
+      </div>
+      <div id="bind-box" class="bind hidden">
+        <div class="status amber"><b>Штрихкод не найден.</b> Если товар есть в текущей инвентаризации, введите его артикул — связь сохранится для следующих сканов.</div>
+        <label>Артикул товара</label><input id="bind-sku" class="inp" type="text" autocomplete="off" placeholder="Например 70/10/3">
+        <button id="bind-btn" class="btn primary" style="width:100%;margin-top:8px">Привязать штрихкод и добавить</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="undo-btn" class="btn secondary" style="flex:1">↶ Отменить последнее</button>
+        <button id="refresh-btn" class="btn secondary">↻</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;font-weight:800;margin-bottom:7px">Последние действия</div>
+      <div id="history" class="history"><div class="sub">Пока нет сканов.</div></div>
+    </div>
+  </div>
+</div>
+<div id="net" class="net"></div>
+<script>
+(()=>{
+'use strict';
+const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
+const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
+const SESSION_KEY='resanta_inventory_session_v1';
+const QUEUE_KEY='resanta_inventory_queue_v1';
+let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
+const $=id=>document.getElementById(id);
+const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
+const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
+function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
+function saveSession(s){session=s||null;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
+function loadSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(_){return null}}
+function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');return Array.isArray(q)?q:[]}catch(_){return[]}}
+function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueueKpi()}
+function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
+function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
+async function authToken(email,password){
+ const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({email,password})});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j?.msg||j?.error_description||'Неверный логин или пароль');return j
+}
+async function refresh(){
+ if(!session?.refresh_token)throw new Error('Сессия истекла');
+ const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error('Нужно войти заново');saveSession(j);return j
+}
+async function rpc(name,args={},retry=true){
+ if(!session?.access_token)throw new Error('AUTH_REQUIRED');
+ let r;
+ try{
+  r=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+session.access_token,'content-type':'application/json','cache-control':'no-store'},body:JSON.stringify(args)});
+ }catch(e){e.network=true;throw e}
+ if(r.status===401&&retry){await refresh();return rpc(name,args,false)}
+ const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
+ if(!r.ok)throw new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));return j
+}
+async function login(){
+ $('login-btn').disabled=true;show('login-error',false);
+ try{
+  const s=await authToken($('login-email').value.trim(),$('login-pass').value);
+  saveSession(s);$('login-pass').value='';await bootAuthed()
+ }catch(e){text('login-error',e?.message||e);show('login-error',true)}
+ finally{$('login-btn').disabled=false}
+}
+async function logout(){
+ try{if(session?.access_token)await fetch(SUPABASE_URL+'/auth/v1/logout',{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+session.access_token}})}catch(_){}
+ saveSession(null);session=null;active=null;show('app-view',false);show('login-view',true)
+}
+async function bootAuthed(){
+ show('login-view',false);show('app-view',true);show('access-error',false);
+ try{
+  access=await rpc('warehouse_inventory_get_access_v1',{});
+  text('user-line',(access?.name||access?.email||'')+' · инвентаризация');
+  if(!access?.can_count){show('access-error',true);text('access-error','Для этой учётной записи доступ к инвентаризации не выдан.');show('scanner',false);show('no-session',false);return}
+  await reloadActive();await flushQueue()
+ }catch(e){
+  if(/JWT|AUTH|войти заново|expired/i.test(String(e?.message||e))){saveSession(null);show('app-view',false);show('login-view',true);return}
+  show('access-error',true);text('access-error','Не удалось проверить доступ: '+(e?.message||e))
+ }
+}
+async function reloadActive(){
+ active=await rpc('warehouse_inventory_get_active_v1',{p_warehouse:'Витебск'});
+ if(!active?.active){active=null;show('scanner',false);show('no-session',true);return}
+ show('no-session',false);show('scanner',true);
+ text('kpi-sku',active.counted_sku||0);text('kpi-events',active.event_count||0);updateQueueKpi();await loadHistory();focusCode()
+}
+function focusCode(){setTimeout(()=>{const e=$('code');if(e&&!document.hidden)e.focus()},60)}
+async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
+ code=String(code||'').trim();const q=Number(qtyVal);
+ if(!active?.id)return status('Инвентаризация не запущена.','red');
+ if(!code)return focusCode();
+ if(!Number.isFinite(q)||q<=0)return status('Количество должно быть больше 0.','red');
+ const eventId=clientId||uuid();
+ status('Отправляю…','blue');
+ try{
+  const r=await rpc('warehouse_inventory_scan_v1',{p_session_id:active.id,p_code:code,p_qty:q,p_input_mode:mode,p_client_event_id:eventId});
+  if(!r?.ok){
+   if(r?.reason==='not_found'){lastUnknown=code;show('bind-box',true);text('bind-sku','');status('Штрихкод '+code+' не найден. Введите артикул ниже.','amber');$('bind-sku').focus();return}
+   throw new Error(r?.reason||'Не удалось записать скан')
+  }
+  show('bind-box',false);lastUnknown='';
+  text('last-sku',r.sku||'');text('last-product',r.product||'');text('last-count',r.counted_qty||0);show('last-card',true);
+  $('code').value='';$('scan-qty').value='1';status('✓ '+(r.sku||'')+' · добавлено '+q,'green');
+  if(navigator.vibrate)navigator.vibrate(35);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
+  await reloadActive()
+ }catch(e){
+  if(e?.network||!navigator.onLine){
+   const ql=queue();ql.push({id:eventId,session_id:active.id,code,qty:q,queued_at:new Date().toISOString()});saveQueue(ql);
+   $('code').value='';$('scan-qty').value='1';status('Нет связи. Скан сохранён на ТСД и отправится автоматически.','amber');focusCode();return
+  }
+  status('Ошибка: '+(e?.message||e),'red');focusCode()
+ }
+}
+async function bindUnknown(){
+ const sku=$('bind-sku').value.trim();if(!lastUnknown||!sku)return;
+ $('bind-btn').disabled=true;
+ try{
+  const r=await rpc('warehouse_inventory_bind_barcode_v1',{p_session_id:active.id,p_barcode:lastUnknown,p_sku:sku});
+  if(!r?.ok)throw new Error(r?.reason||'Не удалось привязать');
+  const code=lastUnknown;show('bind-box',false);lastUnknown='';await sendScan(code,Number($('scan-qty').value)||1,'scan')
+ }catch(e){status('Привязка: '+(e?.message||e),'red')}
+ finally{$('bind-btn').disabled=false;focusCode()}
+}
+async function undo(){
+ const ql=queue(),idx=[...ql].map((x,i)=>({x,i})).reverse().find(o=>active&&o.x.session_id===active.id)?.i;
+ if(idx!=null){const x=ql.splice(idx,1)[0];saveQueue(ql);status('Отложенный скан '+x.code+' удалён.','amber');focusCode();return}
+ try{
+  const r=await rpc('warehouse_inventory_undo_last_v1',{p_session_id:active.id});
+  if(!r?.ok){status('Нечего отменять.','amber');return}
+  text('last-sku',r.sku||'');text('last-product',r.product||'');text('last-count',r.counted_qty||0);show('last-card',true);
+  status('↶ Отменено: '+(r.sku||'')+' −'+(r.removed_qty||0),'amber');await reloadActive()
+ }catch(e){status('Ошибка отмены: '+(e?.message||e),'red')}
+}
+async function loadHistory(){
+ if(!active?.id)return;try{
+  const rows=await rpc('warehouse_inventory_recent_events_v1',{p_session_id:active.id,p_limit:12});
+  const box=$('history');box.replaceChildren();
+  if(!rows?.length){const d=document.createElement('div');d.className='sub';d.textContent='Пока нет сканов.';box.appendChild(d);return}
+  for(const r of rows){
+   const d=document.createElement('div');d.className='ev';
+   const b=document.createElement('b');b.textContent=(Number(r.delta)>0?'+':'')+r.delta+' · '+r.sku+' · '+(r.product||'');
+   const s=document.createElement('span');s.textContent=(r.actor_name||'')+' · '+new Date(r.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+   d.append(b,document.createElement('br'),s);box.appendChild(d)
+  }
+ }catch(_){}
+}
+async function flushQueue(){
+ if(flushing||!navigator.onLine||!active?.id)return;flushing=true;
+ try{
+  let ql=queue(),changed=false;
+  for(let i=0;i<ql.length;){
+   const x=ql[i];if(x.session_id!==active.id){i++;continue}
+   try{
+    const r=await rpc('warehouse_inventory_scan_v1',{p_session_id:x.session_id,p_code:x.code,p_qty:x.qty,p_input_mode:'offline_replay',p_client_event_id:x.id});
+    if(r?.ok){ql.splice(i,1);changed=true;continue}
+    if(r?.reason==='session_not_active'){i++;continue}
+    i++
+   }catch(e){if(e?.network||!navigator.onLine)break;i++}
+  }
+  if(changed){saveQueue(ql);await reloadActive();status('Отложенные сканы синхронизированы.','green')}
+ }finally{flushing=false;updateQueueKpi()}
+}
+function net(msg){const e=$('net');if(!msg){e.style.display='none';return}e.textContent=msg;e.style.display='block'}
+async function init(){
+ session=loadSession();
+ $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
+ $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
+ $('code').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sendScan($('code').value,$('scan-qty').value,'scan')}};
+ $('undo-btn').onclick=undo;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
+ window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
+ window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
+ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
+ $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js').catch(()=>{});
+ if(session)await bootAuthed();else show('login-view',true)
+}
+init();
+})();
+</script>
+</body>
+</html>
