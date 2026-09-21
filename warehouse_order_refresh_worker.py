@@ -247,6 +247,89 @@ def process_request(row):
     return status
 
 
+
+def inventory_stock_state():
+    return first("warehouse_stock_import_state", {
+        "warehouse": "eq.Витебск",
+        "select": "warehouse,report_date,source_message_at,filename,row_count,updated_at,checked_at",
+        "limit": "1",
+    })
+
+
+def patch_inventory_request(rid, payload):
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    return api(
+        "PATCH",
+        "warehouse_inventory_refresh_requests",
+        params={"id": f"eq.{rid}"},
+        payload=payload,
+    )
+
+
+def active_inventory_request():
+    rows = api("GET", "warehouse_inventory_refresh_requests", params={
+        "status": "in.(pending,waiting,running)",
+        "select": "*",
+        "order": "requested_at.asc",
+        "limit": "1",
+    }) or []
+    return rows[0] if rows else None
+
+
+def process_inventory_request(row):
+    rid = row["id"]
+    attempt = int(row.get("attempt_count") or 0) + 1
+    now = datetime.now(timezone.utc).isoformat()
+    before = inventory_stock_state()
+
+    patch_inventory_request(rid, {
+        "status": "running",
+        "started_at": row.get("started_at") or now,
+        "attempt_count": attempt,
+        "message": f"Попытка {attempt}: проверяю самый свежий остаток Витебска в почте 1С.",
+        "last_error": None,
+        "before_state": before or {},
+    })
+
+    result = run_script("import_stock.py")
+    time.sleep(1)
+    after = inventory_stock_state()
+    checked_at = (after or {}).get("checked_at")
+    source_at = (after or {}).get("source_message_at")
+
+    if result.get("ok") and checked_at:
+        patch_inventory_request(rid, {
+            "status": "ready",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "message": (
+                "Остаток Витебска проверен. "
+                f"Последний отчёт 1С: {source_at or '—'}; проверено CRM: {checked_at}."
+            ),
+            "after_state": after or {},
+            "worker_result": result,
+            "last_error": None,
+        })
+        print("✅ Инвентаризация: остаток проверен:", json.dumps(after, ensure_ascii=False), flush=True)
+        return "ready"
+
+    error_text = str(result.get("tail") or "Не удалось проверить остаток")[-2500:]
+    if attempt >= 10:
+        status = "error"
+        message = "Не удалось получить свежую проверку остатка после 10 попыток."
+    else:
+        status = "waiting"
+        message = "Проверка остатка не завершена. Повторю примерно через минуту."
+
+    patch_inventory_request(rid, {
+        "status": status,
+        "message": message,
+        "after_state": after or {},
+        "worker_result": result,
+        "last_error": error_text,
+    })
+    print("⏳ Инвентаризация:", message, flush=True)
+    return status
+
 def main():
     watch_seconds = max(0, int(os.getenv("WAREHOUSE_ORDER_WATCH_SECONDS", "0")))
     poll_seconds = max(5, int(os.getenv("WAREHOUSE_ORDER_POLL_SECONDS", "15")))
@@ -260,6 +343,26 @@ def main():
     )
 
     while True:
+        inv = active_inventory_request()
+        if inv:
+            rid = "inventory:" + str(inv["id"])
+            status = str(inv.get("status") or "")
+            last_ts = last_attempt.get(rid, 0.0)
+            due = status == "pending" or (time.monotonic() - last_ts >= retry_seconds)
+            if status == "running":
+                due = True
+            if due:
+                last_attempt[rid] = time.monotonic()
+                result = process_inventory_request(inv)
+                if result in {"ready", "error"}:
+                    last_attempt.pop(rid, None)
+            else:
+                time.sleep(min(poll_seconds, max(1, retry_seconds - (time.monotonic() - last_ts))))
+            if deadline and time.monotonic() >= deadline:
+                print("Окно наблюдения worker завершено; следующая смена запустится по расписанию.", flush=True)
+                return 0
+            continue
+
         row = active_request()
         if row:
             rid = row["id"]
