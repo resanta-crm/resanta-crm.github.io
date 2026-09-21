@@ -5,15 +5,17 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.139';
-let root=null,summary=null,mode='all',search='',offset=0,limit=100,busy=false;
+const V='v23.6.140';
+let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=v=>Number(v)||0;
 const qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
 async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const {data,error}=await d.rpc(name,args);if(error)throw error;return data}
-function dateRu(v){if(!v)return'—';try{return new Date(String(v).length===10?String(v)+'T00:00:00':String(v)).toLocaleString('ru-RU')}catch(_){return String(v)}}
+function dateRu(v){if(!v)return'—';try{return new Date(String(v).length===10?String(v)+'T00:00:00':String(v)).toLocaleDateString('ru-RU',{timeZone:'Europe/Minsk'})}catch(_){return String(v)}}
+function stampRu(v){if(!v)return'—';try{return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(v)).replace(',','')}catch(_){return String(v)}}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function css(){
  if($('inventory-v236139-css'))return;
  const s=document.createElement('style');s.id='inventory-v236139-css';
@@ -23,13 +25,48 @@ function css(){
 function kpi(label,value,sub=''){return '<div class="iv-kpi"><small>'+esc(label)+'</small><b>'+esc(value)+'</b>'+(sub?'<div class="iv-muted">'+esc(sub)+'</div>':'')+'</div>'}
 async function load(){
  if(busy)return;busy=true;
- try{summary=await rpc('warehouse_inventory_summary_v1',{p_session_id:null,p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});render()}
+ try{
+  summary=await rpc('warehouse_inventory_summary_v1',{p_session_id:null,p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});
+  if(!summary?.has_session){try{refreshState=await rpc('warehouse_inventory_refresh_status_v1',{})}catch(_){refreshState=null}}
+  render()
+ }
  catch(e){if(root)root.innerHTML='<div class="iv-alert iv-red"><b>Не удалось открыть инвентаризацию.</b><br>'+esc(e?.message||e)+'</div>'}
  finally{busy=false}
 }
+function refreshProgress(state){
+ const r=state?.request||{},s=state?.stock||{};
+ const st=r.status||'pending';
+ const msg=r.message||'Проверяю самый свежий остаток Витебска…';
+ if(root)root.innerHTML='<div class="iv-alert iv-blue"><b>↻ Перед стартом обновляю остаток отдельно от автозаказа.</b><br>'+esc(msg)+'</div>'+
+  '<div class="iv-card" style="margin-bottom:10px"><b>Источник остатка</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(s.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(s.imported_at))+'</b><br>Последняя проверка почты CRM: <b>'+esc(stampRu(s.checked_at))+'</b><br>Статус: <b>'+esc(st)+'</b></div></div>';
+}
+async function waitFreshStock(requestId){
+ const deadline=Date.now()+180000;
+ while(Date.now()<deadline){
+  const state=await rpc('warehouse_inventory_refresh_status_v1',{});
+  refreshState=state;refreshProgress(state);
+  const r=state?.request||{};
+  if(r.id===requestId&&r.status==='ready')return state;
+  if(r.id===requestId&&r.status==='error')throw new Error(r.last_error||r.message||'Не удалось обновить остаток');
+  await sleep(3000);
+ }
+ throw new Error('Проверка свежего остатка заняла больше 3 минут. Повторите запуск.');
+}
 async function start(){
- if(!confirm('Начать новую инвентаризацию?\n\nCRM зафиксирует текущий остаток Витебска как контрольный снимок. На время пересчёта желательно остановить движения по складу.'))return;
- busy=true;try{await rpc('warehouse_inventory_start_v1',{p_warehouse:'Витебск',p_note:'Инвентаризация из CRM'});offset=0;mode='all';search='';await load()}catch(e){alert('Не удалось начать: '+(e?.message||e))}finally{busy=false}
+ if(!confirm('Начать новую инвентаризацию?\n\nСначала CRM отдельно от автозаказа проверит самый свежий остаток Витебска, покажет точное время до секунды и только потом зафиксирует снимок.'))return;
+ let ok=false;busy=true;
+ try{
+  const req=await rpc('warehouse_inventory_refresh_request_v1',{});
+  refreshState=req;refreshProgress(req);
+  const requestId=req?.request?.id;
+  if(!requestId)throw new Error('Не создан запрос обновления остатка');
+  await waitFreshStock(requestId);
+  const started=await rpc('warehouse_inventory_start_v1',{p_warehouse:'Витебск',p_note:'Инвентаризация из CRM после свежей проверки остатка'});
+  if(started?.ok===false)throw new Error(started?.message||started?.reason||'Не удалось зафиксировать снимок');
+  offset=0;mode='all';search='';ok=true;
+ }catch(e){alert('Не удалось начать: '+(e?.message||e))}
+ finally{busy=false}
+ if(ok)await load();
 }
 async function finish(){
  const u=n(summary?.kpi?.uncounted_sku);
@@ -61,7 +98,10 @@ function render(){
  if(!root)return;
  const has=!!summary?.has_session;
  if(!has){
-  root.innerHTML='<div class="iv-alert iv-blue"><b>Инвентаризация сейчас не запущена.</b><br>При старте CRM зафиксирует последний остаток Витебска и создаст слепой пересчёт для ТСД.</div><button class="iv-btn primary" id="iv-start">▶ Начать инвентаризацию</button><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Начать» — остаток фиксируется снимком.<br>3. Начальник склада считает через ТСД. Учётное количество на ТСД скрыто.<br>4. Руководитель видит расхождения здесь.<br>5. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
+  const st=refreshState?.stock||{};
+  root.innerHTML='<div class="iv-alert iv-blue"><b>Инвентаризация сейчас не запущена.</b><br>Инвентаризация работает отдельно от автозаказа. При старте CRM сначала заново проверит почту 1С, затем зафиксирует самый свежий доступный остаток Витебска.</div>'+
+  '<div class="iv-card" style="margin-bottom:10px"><b>Последний доступный остаток</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(st.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(st.imported_at))+'</b><br>Проверен CRM: <b>'+esc(stampRu(st.checked_at))+'</b></div></div>'+
+  '<button class="iv-btn primary" id="iv-start">↻ Обновить остаток и начать инвентаризацию</button><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Обновить остаток и начать» — CRM отдельно проверяет свежий файл 1С и показывает время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД считает вслепую, руководитель видит расхождения здесь.<br>5. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
   $('iv-start').onclick=start;renderAccessSoon();return;
  }
  const s=summary.session,k=summary.kpi||{},rows=Array.isArray(summary.rows)?summary.rows:[];
@@ -70,7 +110,7 @@ function render(){
   const d=n(r.difference),dc=d<0?'iv-diff-neg':d>0?'iv-diff-pos':'iv-ok';
   return '<tr><td><b>'+esc(r.sku)+'</b><div class="iv-muted">'+esc(r.product||'')+'</div></td><td>'+qty(r.system_qty_onhand)+'</td><td>'+qty(r.system_qty_shipping)+'</td><td>'+qty(r.system_qty_reserve)+'</td><td>'+qty(r.system_qty_avail)+'</td><td><b>'+qty(r.counted_qty)+'</b></td><td class="'+dc+'">'+(r.last_counted_at?((d>0?'+':'')+qty(d)):'не считали')+'</td><td>'+esc(dateRu(r.last_counted_at))+'</td></tr>'
  }).join('')||'<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--sub)">Нет строк по фильтру.</td></tr>';
- root.innerHTML='<div class="iv-head"><div><div style="font-size:15px;font-weight:800">📋 Инвентаризация Витебск '+status+'</div><div class="iv-muted">Снимок 1С: '+esc(String(s.stock_report_date||''))+' · старт: '+esc(dateRu(s.started_at))+' · '+esc(s.started_by_name||'')+'</div></div><div style="display:flex;gap:7px"><button class="iv-btn" id="iv-refresh">↻ Обновить</button>'+(s.status==='active'?'<button class="iv-btn primary" id="iv-finish">✓ Завершить</button>':'')+'</div></div>'+
+ root.innerHTML='<div class="iv-head"><div><div style="font-size:15px;font-weight:800">📋 Инвентаризация Витебск '+status+'</div><div class="iv-muted">Отчёт 1С: '+esc(stampRu(s.stock_source_message_at))+' · проверен CRM: '+esc(stampRu(s.stock_checked_at))+' · старт пересчёта: '+esc(stampRu(s.started_at))+' · '+esc(s.started_by_name||'')+'</div></div><div style="display:flex;gap:7px"><button class="iv-btn" id="iv-refresh">↻ Обновить</button>'+(s.status==='active'?'<button class="iv-btn primary" id="iv-finish">✓ Завершить</button>':'')+'</div></div>'+
  '<div class="iv-kpis">'+kpi('SKU по снимку',String(s.stock_sku_count||0),'В наличии > 0')+kpi('Пересчитано SKU',String(k.counted_sku||0),'Осталось '+String(k.uncounted_sku||0))+kpi('Расхождений',String(k.diff_sku||0),'Только уже пересчитанные')+kpi('Учёт, шт.',qty(k.system_qty),'Снимок на старт')+kpi('Факт, шт.',qty(k.fact_qty),'Разница '+((n(k.difference_qty)>0?'+':'')+qty(k.difference_qty)))+'</div>'+
  '<div class="iv-grid"><div><div class="iv-tools"><button class="iv-btn iv-filter" data-mode="all">Все</button><button class="iv-btn iv-filter" data-mode="diff">Расхождения</button><button class="iv-btn iv-filter" data-mode="uncounted">Не пересчитано</button><button class="iv-btn iv-filter" data-mode="counted">Пересчитано</button><input id="iv-search" placeholder="Артикул или товар" value="'+esc(search)+'"><button class="iv-btn" id="iv-find">Найти</button></div><div class="iv-table"><table><thead><tr><th>Артикул / товар</th><th>В наличии</th><th>Отгружается</th><th>Резерв</th><th>Доступно</th><th>Факт</th><th>Разница</th><th>Последний счёт</th></tr></thead><tbody>'+body+'</tbody></table></div><div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px"><span class="iv-muted">Показано '+rows.length+' из '+String(summary.total||0)+'</span><div><button class="iv-btn" id="iv-prev" '+(offset<=0?'disabled':'')+'>←</button> <button class="iv-btn" id="iv-next" '+(offset+limit>=n(summary.total)?'disabled':'')+'>→</button></div></div></div>'+scannerCard()+'</div>';
  document.querySelectorAll('#wc-inventory-v236139 [data-mode]').forEach(b=>{b.classList.toggle('active',b.dataset.mode===mode);b.onclick=()=>{mode=b.dataset.mode;offset=0;load()}});
@@ -80,7 +120,7 @@ function render(){
  renderAccessSoon();
 }
 function scannerCard(){
- return '<div class="iv-card"><div style="font-weight:800;margin-bottom:6px">📱 ТСД · Resanta Склад</div><div class="iv-muted">Откройте камерой QR-код на любом из двух ТСД. QR содержит только адрес приложения — логинов, ключей и данных в нём нет.</div><img class="iv-qr" src="./inventory-qr.svg" alt="QR для ТСД"><div style="display:grid;gap:7px"><a class="iv-btn primary" style="text-align:center;text-decoration:none" href="./inventory.html" target="_blank" rel="noopener">Открыть приложение ТСД</a><div style="font-size:10px;color:var(--sub);word-break:break-all;text-align:center">https://resanta-crm.by/inventory.html</div></div><hr style="border:0;border-top:1px solid var(--border);margin:13px 0"><div style="font-weight:700;font-size:12px;margin-bottom:6px">Кому разрешён пересчёт</div><div style="display:flex;gap:6px"><select id="iv-access-user" style="min-width:0;flex:1;padding:8px;border:1px solid var(--border);border-radius:8px"><option value="">Выберите сотрудника…</option>'+userOptions()+'</select><button class="iv-btn" id="iv-grant">Разрешить</button></div><div id="iv-access-list" style="margin-top:8px"></div></div>'
+ return '<div class="iv-card"><div style="font-weight:800;margin-bottom:6px">📱 ТСД · Resanta Склад</div><div class="iv-muted">Откройте камерой QR-код на любом из двух ТСД. QR содержит только адрес приложения — логинов, ключей и данных в нём нет.</div><img class="iv-qr" src="./inventory-qr.svg" alt="QR для ТСД"><div style="display:grid;gap:7px"><a class="iv-btn primary" style="text-align:center;text-decoration:none" href="./inventory.html" target="_blank" rel="noopener">Открыть приложение ТСД</a><div style="font-size:10px;color:var(--sub);word-break:break-all;text-align:center">https://resanta-crm.by/inventory.html</div></div><hr style="border:0;border-top:1px solid var(--border);margin:13px 0"><div class="iv-alert iv-green" style="margin:10px 0"><b>ТСД:</b> вход под <b>vitebsk@resanta.ru</b>. Ваша личная учётка CRM остаётся отдельно на компьютере.</div><div style="font-weight:700;font-size:12px;margin-bottom:6px">Кому разрешён пересчёт</div><div style="display:flex;gap:6px"><select id="iv-access-user" style="min-width:0;flex:1;padding:8px;border:1px solid var(--border);border-radius:8px"><option value="">Выберите сотрудника…</option>'+userOptions()+'</select><button class="iv-btn" id="iv-grant">Разрешить</button></div><div id="iv-access-list" style="margin-top:8px"></div></div>'
 }
 function renderAccessSoon(){setTimeout(()=>{const b=$('iv-grant');if(b)b.onclick=grant;renderAccess()},20)}
 async function open(target){
