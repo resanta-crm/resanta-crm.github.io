@@ -104,7 +104,8 @@ const CONTRACT={
     {path:'assets/48-warehouse-freshness-v23633.js',marker:'perf-warehouse-fresh-v23671',guard:'RESANTA_WAREHOUSE_FRESHNESS_V23633'},
     {path:'assets/51-warehouse-compact-days-v23637.js',marker:'perf-warehouse-compact-v23671',guard:'RESANTA_WAREHOUSE_COMPACT_V23637'},
     {path:'assets/54-warehouse-stock-truth-v23641.js',marker:'perf-warehouse-stock-truth-v23671',guard:'RESANTA_WAREHOUSE_STOCK_TRUTH_V23641'},
-    {path:'assets/55-warehouse-smart-excess-v23642.js',marker:'perf-warehouse-smart-v23671',guard:'RESANTA_WAREHOUSE_SMART_EXCESS_V23645'}
+    {path:'assets/55-warehouse-smart-excess-v23642.js',marker:'perf-warehouse-smart-v23671',guard:'RESANTA_WAREHOUSE_SMART_EXCESS_V23645'},
+    {path:'assets/92-warehouse-inventory-v236139.js',marker:'perf-warehouse-inventory-v236139',guard:'RESANTA_WAREHOUSE_INVENTORY_V236139'}
   ]
 };
 
