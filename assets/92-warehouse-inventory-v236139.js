@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.140';
+const V='v23.6.143';
 let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -41,7 +41,7 @@ function refreshProgress(state){
   '<div class="iv-card" style="margin-bottom:10px"><b>Источник остатка</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(s.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(s.imported_at))+'</b><br>Последняя проверка почты CRM: <b>'+esc(stampRu(s.checked_at))+'</b><br>Статус: <b>'+esc(st)+'</b></div></div>';
 }
 async function waitFreshStock(requestId){
- const deadline=Date.now()+180000;
+ const deadline=Date.now()+600000;
  while(Date.now()<deadline){
   const state=await rpc('warehouse_inventory_refresh_status_v1',{});
   refreshState=state;refreshProgress(state);
@@ -50,7 +50,7 @@ async function waitFreshStock(requestId){
   if(r.id===requestId&&r.status==='error')throw new Error(r.last_error||r.message||'Не удалось обновить остаток');
   await sleep(3000);
  }
- throw new Error('Проверка свежего остатка заняла больше 3 минут. Повторите запуск.');
+ throw new Error('Проверка свежего остатка не завершилась за 10 минут. Текущий запрос сохранён — нажмите кнопку ещё раз, CRM продолжит с него.');
 }
 async function start(){
  if(!confirm('Начать новую инвентаризацию?\n\nСначала CRM отдельно от автозаказа проверит самый свежий остаток Витебска, покажет точное время до секунды и только потом зафиксирует снимок.'))return;
