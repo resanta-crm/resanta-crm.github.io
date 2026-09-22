@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script>
-const INVENTORY_APP_VERSION='2026-09-22-v23.6.147-stock-zero-visible';
+const INVENTORY_APP_VERSION='2026-09-22-v23.6.150-two-tsd-readable';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -17,7 +17,7 @@ const INVENTORY_APP_VERSION='2026-09-22-v23.6.147-stock-zero-visible';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.147');
+        location.replace('/inventory.html?v=23.6.150');
       }
     }
   }catch(_){}
@@ -28,25 +28,29 @@ const INVENTORY_APP_VERSION='2026-09-22-v23.6.147-stock-zero-visible';
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827;min-height:100dvh}
-button,input{font:inherit}.hidden{display:none!important}.wrap{max-width:620px;margin:0 auto;padding:14px 14px 96px}.top{display:flex;align-items:center;gap:10px;margin-bottom:12px}.logo{width:46px;height:46px;border-radius:12px;background:#185FA5;color:#fff;display:grid;place-items:center;font-size:24px}.grow{flex:1}.title{font-weight:800;font-size:18px}.sub{font-size:11px;color:#6B7280;line-height:1.4}.card{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.035)}
-label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5px;text-transform:uppercase}.inp{width:100%;border:2px solid #D1D5DB;border-radius:12px;padding:14px 13px;font-size:18px;background:#fff;outline:none}.inp:focus{border-color:#185FA5}.scan{font-size:24px;font-weight:800;text-align:center;letter-spacing:.5px}
-.row{display:flex;gap:8px}.row>*{min-width:0}.btn{border:0;border-radius:11px;padding:13px 14px;font-weight:800;cursor:pointer;min-height:48px}.primary{background:#185FA5;color:#fff}.secondary{background:#fff;border:1px solid #D1D5DB;color:#374151}.danger{background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B}.btn:disabled{opacity:.5}
-.status{padding:12px;border-radius:11px;font-size:13px;line-height:1.45;margin-bottom:10px}.blue{background:#EFF6FF;color:#1E3A8A;border:1px solid #BFDBFE}.green{background:#ECFDF5;color:#166534;border:1px solid #A7F3D0}.red{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}.amber{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}
-.product{font-size:16px;font-weight:800;margin-top:5px}.sku{font-size:13px;color:#185FA5;font-weight:800}.count{font-size:42px;font-weight:900;line-height:1;text-align:center;margin:12px 0}.count small{display:block;font-size:11px;color:#6B7280;font-weight:700;margin-bottom:7px;text-transform:uppercase}
-.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.kpi{background:#F8FAFC;border-radius:10px;padding:9px;text-align:center}.kpi b{display:block;font-size:17px}.kpi span{font-size:9px;color:#6B7280;text-transform:uppercase}
-.history{display:grid;gap:6px}.ev{border-top:1px solid #E5E7EB;padding:8px 0}.ev:first-child{border-top:0}.ev b{font-size:12px}.ev span{font-size:10px;color:#6B7280}
+button,input,select{font:inherit}.hidden{display:none!important}.wrap{max-width:760px;margin:0 auto;padding:18px 18px 110px}.top{display:flex;align-items:center;gap:12px;margin-bottom:16px}.logo{width:54px;height:54px;border-radius:14px;background:#185FA5;color:#fff;display:grid;place-items:center;font-size:28px}.grow{flex:1}.title{font-weight:900;font-size:23px}.sub{font-size:13px;color:#4B5563;line-height:1.5}.card{background:#fff;border:1px solid #D1D5DB;border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.035)}
+label{display:block;font-size:13px;color:#6B7280;font-weight:700;margin:9px 0 5px;text-transform:uppercase}.inp{width:100%;border:2px solid #D1D5DB;border-radius:12px;padding:16px 14px;font-size:22px;background:#fff;outline:none}.inp:focus{border-color:#185FA5}.scan{font-size:30px;font-weight:900;text-align:center;letter-spacing:.5px}
+.row{display:flex;gap:8px}.row>*{min-width:0}.btn{border:0;border-radius:11px;padding:15px 16px;font-size:16px;font-weight:900;cursor:pointer;min-height:54px}.primary{background:#185FA5;color:#fff}.secondary{background:#fff;border:1px solid #D1D5DB;color:#374151}.danger{background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B}.btn:disabled{opacity:.5}
+.status{padding:14px;border-radius:12px;font-size:16px;line-height:1.45;margin-bottom:10px}.blue{background:#EFF6FF;color:#1E3A8A;border:1px solid #BFDBFE}.green{background:#ECFDF5;color:#166534;border:1px solid #A7F3D0}.red{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}.amber{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}
+.product{font-size:20px;font-weight:900;margin-top:5px}.sku{font-size:16px;color:#185FA5;font-weight:900}.count{font-size:42px;font-weight:900;line-height:1;text-align:center;margin:12px 0}.count small{display:block;font-size:11px;color:#6B7280;font-weight:700;margin-bottom:7px;text-transform:uppercase}
+.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.kpi{background:#F8FAFC;border:1px solid #E5E7EB;border-radius:12px;padding:12px 8px;text-align:center}.kpi b{display:block;font-size:24px}.kpi span{font-size:11px;color:#6B7280;text-transform:uppercase}
+.history{display:grid;gap:6px}.ev{border-top:1px solid #E5E7EB;padding:8px 0}.ev:first-child{border-top:0}.ev b{font-size:15px}.ev span{font-size:12px;color:#6B7280}
 .net{position:fixed;left:10px;right:10px;bottom:10px;max-width:600px;margin:auto;padding:10px 12px;border-radius:10px;background:#111827;color:#fff;font-size:11px;z-index:20;display:none}
-.login{max-width:430px;margin:8vh auto 0}.login h1{text-align:center;color:#185FA5}.install{white-space:nowrap;padding:8px 10px;min-height:auto;font-size:11px}
+.login{max-width:520px;margin:5vh auto 0}.login h1{text-align:center;color:#185FA5}.install{white-space:nowrap;padding:8px 10px;min-height:auto;font-size:11px}
 .bind{margin-top:10px;padding-top:10px;border-top:1px solid #E5E7EB}
-@media(max-width:420px){.wrap{padding:10px 10px 88px}.kpis{grid-template-columns:1fr 1fr}.kpis .kpi:last-child{grid-column:1/-1}.scan{font-size:21px}}
+@media(max-width:420px){.wrap{padding:12px 10px 96px}.title{font-size:20px}.sub{font-size:12px}.card{padding:14px}.kpis{grid-template-columns:1fr 1fr}.kpis .kpi:last-child{grid-column:1/-1}.scan{font-size:26px}.btn{font-size:15px}.status{font-size:14px}}
 </style>
 </head>
 <body>
 <div id="login-view" class="wrap login hidden">
   <div class="card">
     <h1>📦 Resanta Склад</h1>
-    <div class="sub" style="text-align:center;margin-bottom:16px">Защищённый вход в инвентаризацию ТСД · выделенная учётная запись Витебска</div>
-    <label>Email ТСД</label><input id="login-email" class="inp" type="email" autocomplete="username" value="vitebsk@resanta.ru" readonly aria-readonly="true">
+    <div class="sub" style="text-align:center;margin-bottom:16px">Выберите, кто работает на этом терминале. CRM будет сохранять каждый скан с сотрудником и ТСД.</div>
+    <label>Кто работает на ТСД</label>
+    <select id="login-email" class="inp" autocomplete="username">
+      <option value="vitebsk@resanta.ru">ТСД-1 · Начальник склада · vitebsk@resanta.ru</option>
+      <option value="sidarovich_kn@resanta.ru">ТСД-2 · Кладовщик · sidarovich_kn@resanta.ru</option>
+    </select>
     <label>Пароль</label><input id="login-pass" class="inp" type="password" autocomplete="current-password">
     <button id="login-btn" class="btn primary" style="width:100%;margin-top:14px">Войти</button>
     <div id="login-error" class="status red hidden" style="margin-top:10px"></div>
@@ -113,7 +117,14 @@ const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_inventory_queue_v1';
-const DEDICATED_EMAIL='vitebsk@resanta.ru';
+const ALLOWED_EMAILS=['vitebsk@resanta.ru','sidarovich_kn@resanta.ru'];
+const LOGIN_EMAIL_KEY='resanta_inventory_login_email_v2';
+function tsdLabel(email){
+ email=String(email||'').toLowerCase();
+ if(email==='vitebsk@resanta.ru')return 'ТСД-1 · Начальник склада';
+ if(email==='sidarovich_kn@resanta.ru')return 'ТСД-2 · Кладовщик';
+ return 'ТСД';
+}
 let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
 let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
 const $=id=>document.getElementById(id);
@@ -122,7 +133,7 @@ const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function saveSession(s){session=s||null;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
 function tokenEmail(s){try{const p=JSON.parse(atob(String(s?.access_token||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return String(p?.email||'').toLowerCase()}catch(_){return''}}
-function loadSession(){try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(s&&tokenEmail(s)!==DEDICATED_EMAIL){localStorage.removeItem(SESSION_KEY);return null}return s}catch(_){return null}}
+function loadSession(){try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(s&&!ALLOWED_EMAILS.includes(tokenEmail(s))){localStorage.removeItem(SESSION_KEY);return null}return s}catch(_){return null}}
 function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');return Array.isArray(q)?q:[]}catch(_){return[]}}
 function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueueKpi()}
 function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
@@ -203,7 +214,7 @@ async function rpc(name,args={},retry=true){
 async function login(){
  $('login-btn').disabled=true;show('login-error',false);
  try{
-  const s=await authToken(DEDICATED_EMAIL,$('login-pass').value);
+  const email=String($('login-email').value||'').toLowerCase();if(!ALLOWED_EMAILS.includes(email))throw new Error('Эта почта не разрешена для ТСД');localStorage.setItem(LOGIN_EMAIL_KEY,email);const s=await authToken(email,$('login-pass').value);
   saveSession(s);$('login-pass').value='';await bootAuthed()
  }catch(e){text('login-error',e?.message||e);show('login-error',true)}
  finally{$('login-btn').disabled=false}
@@ -216,7 +227,7 @@ async function bootAuthed(){
  show('login-view',false);show('app-view',true);show('access-error',false);
  try{
   access=await rpc('warehouse_inventory_get_access_v1',{});
-  text('user-line',(access?.name||access?.email||'')+' · инвентаризация');
+  text('user-line',tsdLabel(access?.email)+' · '+(access?.name||access?.email||''));
   if(!access?.can_count){show('access-error',true);text('access-error','Для этой учётной записи доступ к инвентаризации не выдан.');show('scanner',false);show('no-session',false);return}
   await reloadActive();await flushQueue()
  }catch(e){
@@ -324,7 +335,7 @@ async function loadHistory(){
   for(const r of rows){
    const d=document.createElement('div');d.className='ev';
    const b=document.createElement('b');b.textContent=(Number(r.delta)>0?'+':'')+r.delta+' · '+r.sku+' · '+(r.product||'');
-   const s=document.createElement('span');s.textContent=(r.actor_name||'')+' · '+new Date(r.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+   const s=document.createElement('span');s.textContent=(r.actor_name||r.actor_email||'')+' · '+(r.device_label||tsdLabel(r.actor_email))+' · '+new Date(r.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
    d.append(b,document.createElement('br'),s);box.appendChild(d)
   }
  }catch(_){}
@@ -347,7 +358,7 @@ async function flushQueue(){
 }
 function net(msg){const e=$('net');if(!msg){e.style.display='none';return}e.textContent=msg;e.style.display='block'}
 async function init(){
- $('login-email').value=DEDICATED_EMAIL;
+ const savedEmail=String(localStorage.getItem(LOGIN_EMAIL_KEY)||'vitebsk@resanta.ru').toLowerCase();$('login-email').value=ALLOWED_EMAILS.includes(savedEmail)?savedEmail:'vitebsk@resanta.ru';
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');$('zero-btn').onclick=markZero;
@@ -417,7 +428,7 @@ async function init(){
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
  $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.147',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.150',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
