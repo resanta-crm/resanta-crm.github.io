@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.151';
+const V='v23.6.152';
 let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -70,9 +70,22 @@ async function start(){
 }
 async function finish(){
  const u=n(summary?.kpi?.uncounted_sku);
- if(u>0){alert('Нельзя завершить: ещё не пересчитано '+u+' SKU. Сначала откройте фильтр «Не пересчитано» и проверьте остаток.');return}
- if(!confirm('Завершить инвентаризацию?\n\nCRM зафиксирует итог. Остатки 1С автоматически НЕ изменяются.'))return;
- try{const r=await rpc('warehouse_inventory_finish_v1',{p_session_id:summary.session.id,p_note:'Завершено из CRM'});if(!r?.ok)throw new Error(r?.reason||'Не удалось завершить');await load()}catch(e){alert('Ошибка завершения: '+(e?.message||e))}
+ try{
+  let r;
+  if(u>0){
+   if(!confirm('Осталось непересчитано '+u+' SKU.\n\nТолько Александр Паюшин может принудительно закрыть такую инвентаризацию. Непересчитанные позиции НЕ будут автоматически превращены в ноль — в итогах останется отметка, что они не пересчитаны.\n\nЗакрыть инвентаризацию?'))return;
+   r=await rpc('warehouse_inventory_finish_override_v1',{p_session_id:summary.session.id,p_note:'Принудительное завершение из CRM с непересчитанными SKU'});
+  }else{
+   if(!confirm('Завершить инвентаризацию?\n\nCRM зафиксирует итог. Остатки 1С автоматически НЕ изменяются.'))return;
+   r=await rpc('warehouse_inventory_finish_v1',{p_session_id:summary.session.id,p_note:'Завершено из CRM'});
+  }
+  if(!r?.ok)throw new Error(r?.reason||'Не удалось завершить');
+  await load();
+ }catch(e){
+  const m=String(e?.message||e);
+  if(/FORCE_FINISH_DENIED/i.test(m))alert('Принудительно закрыть инвентаризацию с непересчитанными SKU может только Александр Паюшин.');
+  else alert('Ошибка завершения: '+m);
+ }
 }
 async function cancelSession(){
  if(!summary?.session?.id)return;
