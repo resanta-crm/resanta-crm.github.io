@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.152';
+const V='v23.6.153';
 let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -99,18 +99,44 @@ async function cancelSession(){
 }
 async function ensureXlsx(){
  if(window.XLSX)return window.XLSX;
- await new Promise((resolve,reject)=>{
+ return await new Promise(resolve=>{
+  let done=false;
+  const finish=()=>{if(done)return;done=true;resolve(window.XLSX||null)};
   const old=document.getElementById('iv-sheetjs');
-  if(old){old.addEventListener('load',resolve,{once:true});old.addEventListener('error',()=>reject(new Error('Не загрузился модуль Excel')),{once:true});return}
-  const s=document.createElement('script');s.id='iv-sheetjs';s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=resolve;s.onerror=()=>reject(new Error('Не загрузился модуль Excel'));document.head.appendChild(s);
+  if(old){
+   old.addEventListener('load',finish,{once:true});
+   old.addEventListener('error',finish,{once:true});
+  }else{
+   const s=document.createElement('script');
+   s.id='iv-sheetjs';
+   s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+   s.onload=finish;s.onerror=finish;
+   document.head.appendChild(s);
+  }
+  setTimeout(finish,3500);
  });
- if(!window.XLSX)throw new Error('Модуль Excel недоступен');
- return window.XLSX;
+}
+function excelHtmlCell(v,cls=''){
+ return '<td'+(cls?' class="'+cls+'"':'')+'>'+esc(v==null?'':v)+'</td>';
+}
+function downloadExcelFallback(data,name){
+ const head=['Артикул','Товар','Остаток 1С','Факт','Разница','Статус','Последний счёт','Кто считал','ТСД'];
+ const html='<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:11pt}th,td{border:1px solid #bbb;padding:5px 7px;vertical-align:top}th{font-weight:700;background:#eef2f7}.txt{mso-number-format:"\\@"}</style></head><body><table><thead><tr>'+
+  head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+
+  data.map(r=>'<tr>'+excelHtmlCell(r['Артикул'],'txt')+excelHtmlCell(r['Товар'])+excelHtmlCell(r['Остаток 1С'])+excelHtmlCell(r['Факт'])+excelHtmlCell(r['Разница'])+excelHtmlCell(r['Статус'])+excelHtmlCell(r['Последний счёт'])+excelHtmlCell(r['Кто считал'])+excelHtmlCell(r['ТСД'])+'</tr>').join('')+
+  '</tbody></table></body></html>';
+ const blob=new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');a.href=url;a.download=name.replace(/\.xlsx$/i,'.xls');
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 async function exportExcel(sessionId=null){
  const id=sessionId||summary?.session?.id||summary?.last_completed_id;
  if(!id)return alert('Нет инвентаризации для выгрузки');
- const btn=$('iv-export')||$('iv-export-last');if(btn)btn.disabled=true;
+ const btn=$('iv-export')||$('iv-export-last');
+ const oldText=btn?.textContent||'';
+ if(btn){btn.disabled=true;btn.textContent='Готовлю Excel…'}
  try{
   const rows=[];let off=0;
   for(let i=0;i<20;i++){
@@ -119,7 +145,7 @@ async function exportExcel(sessionId=null){
    rows.push(...part);off+=part.length;
    if(part.length<500||off>=n(d?.total))break;
   }
-  const XLSX=await ensureXlsx();
+  if(!rows.length)throw new Error('В инвентаризации нет строк для выгрузки');
   const data=rows.map(r=>({
    'Артикул':r.sku||'',
    'Товар':r.product||'',
@@ -131,14 +157,19 @@ async function exportExcel(sessionId=null){
    'Кто считал':r.last_actor_name||r.last_actor_email||'',
    'ТСД':r.last_device_label||''
   }));
-  const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:18},{wch:55},{wch:13},{wch:10},{wch:10},{wch:18},{wch:22},{wch:24},{wch:28}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Инвентаризация');
   const d=new Date(),pad=x=>String(x).padStart(2,'0');
-  const name='Инвентаризация_Витебск_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+'.xlsx';
-  XLSX.writeFile(wb,name);
+  const base='Инвентаризация_Витебск_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes());
+  const XLSX=await ensureXlsx();
+  if(XLSX){
+   const ws=XLSX.utils.json_to_sheet(data);
+   ws['!cols']=[{wch:18},{wch:55},{wch:13},{wch:10},{wch:10},{wch:18},{wch:22},{wch:24},{wch:28}];
+   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Инвентаризация');
+   XLSX.writeFile(wb,base+'.xlsx');
+  }else{
+   downloadExcelFallback(data,base+'.xlsx');
+  }
  }catch(e){alert('Не удалось выгрузить Excel: '+(e?.message||e))}
- finally{if(btn)btn.disabled=false}
+ finally{if(btn){btn.disabled=false;btn.textContent=oldText||'⬇ Excel'}}
 }
 
 async function renderAudit(){
