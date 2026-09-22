@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -279,16 +279,20 @@ def active_inventory_request():
 def process_inventory_request(row):
     rid = row["id"]
     attempt = int(row.get("attempt_count") or 0) + 1
-    now = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
     before = inventory_stock_state()
 
     patch_inventory_request(rid, {
         "status": "running",
         "started_at": row.get("started_at") or now,
         "attempt_count": attempt,
-        "message": f"Попытка {attempt}: проверяю самый свежий остаток Витебска в почте 1С.",
+        "message": (
+            f"Попытка {attempt}: проверяю почту. Для старта нужен новый отчёт 1С, "
+            "сформированный после запроса инвентаризации."
+        ),
         "last_error": None,
-        "before_state": before or {},
+        "before_state": row.get("before_state") or before or {},
     })
 
     result = run_script("import_stock.py")
@@ -297,28 +301,72 @@ def process_inventory_request(row):
     checked_at = (after or {}).get("checked_at")
     source_at = (after or {}).get("source_message_at")
 
-    if result.get("ok") and checked_at:
+    def parse_dt(value):
+        if not value:
+            return None
+        try:
+            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            return None
+
+    requested_dt = parse_dt(row.get("requested_at"))
+    source_dt = parse_dt(source_at)
+    # Allow a tiny clock skew between 1C/mail and GitHub/Supabase.
+    fresh_for_request = bool(
+        requested_dt and source_dt
+        and source_dt >= requested_dt - timedelta(minutes=2)
+    )
+
+    if result.get("ok") and checked_at and fresh_for_request:
         patch_inventory_request(rid, {
             "status": "ready",
             "completed_at": datetime.now(timezone.utc).isoformat(),
             "message": (
-                "Остаток Витебска проверен. "
-                f"Последний отчёт 1С: {source_at or '—'}; проверено CRM: {checked_at}."
+                "Получен свежий отчёт 1С для этой инвентаризации. "
+                f"Отчёт: {source_at}; проверено CRM: {checked_at}. "
+                "Можно фиксировать снимок и начинать пересчёт."
             ),
             "after_state": after or {},
             "worker_result": result,
             "last_error": None,
         })
-        print("✅ Инвентаризация: остаток проверен:", json.dumps(after, ensure_ascii=False), flush=True)
+        print("✅ Инвентаризация: получен новый остаток:", json.dumps(after, ensure_ascii=False), flush=True)
         return "ready"
+
+    if result.get("ok") and checked_at:
+        last_report = source_at or "—"
+        if attempt >= 30:
+            status = "error"
+            message = (
+                "Новый отчёт 1С после запуска инвентаризации не появился за 30 проверок. "
+                f"Последний доступный отчёт: {last_report}. Со старым остатком старт заблокирован."
+            )
+        else:
+            status = "waiting"
+            message = (
+                f"Почта проверена, но нового отчёта 1С ещё нет. Последний отчёт: {last_report}. "
+                "Жду новый файл и проверю снова примерно через минуту."
+            )
+        patch_inventory_request(rid, {
+            "status": status,
+            "message": message,
+            "after_state": after or {},
+            "worker_result": result,
+            "last_error": None,
+        })
+        print("⏳ Инвентаризация:", message, flush=True)
+        return status
 
     error_text = str(result.get("tail") or "Не удалось проверить остаток")[-2500:]
     if attempt >= 10:
         status = "error"
-        message = "Не удалось получить свежую проверку остатка после 10 попыток."
+        message = "Не удалось проверить почту/остаток после 10 попыток."
     else:
         status = "waiting"
-        message = "Проверка остатка не завершена. Повторю примерно через минуту."
+        message = "Проверка почты не завершена. Повторю примерно через минуту."
 
     patch_inventory_request(rid, {
         "status": status,
