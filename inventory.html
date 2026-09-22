@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script>
-const INVENTORY_APP_VERSION='2026-09-21-v23.6.145';
+const INVENTORY_APP_VERSION='2026-09-22-v23.6.146-stock-visible';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -17,7 +17,7 @@ const INVENTORY_APP_VERSION='2026-09-21-v23.6.145';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.145');
+        location.replace('/inventory.html?v=23.6.146');
       }
     }
   }catch(_){}
@@ -74,17 +74,22 @@ label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5p
       <div id="scanner-hw-warning" class="status amber hidden" style="margin-bottom:8px"><b>ТСД не передаёт данные сканера в браузер.</b><br>CRM и ручной ввод работают. На самом терминале нужно включить вывод сканера как клавиатуру: <b>Keyboard Wedge / Keystroke / Output mode = Keyboard</b> и суффикс <b>Enter</b>.</div>
       <label>Штрихкод / артикул</label>
       <input id="code" class="inp scan" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
-      <div class="sub" style="margin-top:6px">Ручной ввод артикула тоже работает. Остаток 1С на ТСД специально не показывается — пересчёт слепой.</div>
+      <div class="sub" style="margin-top:6px">Ручной ввод артикула тоже работает. После распознавания ТСД показывает остаток 1С и общий уже насчитанный факт по этому SKU.</div>
       <div class="row">
         <div style="flex:1"><label>Количество</label><input id="scan-qty" class="inp" type="number" min="0.01" step="1" value="1"></div>
         <button id="send-btn" class="btn primary" style="align-self:flex-end;flex:1">Добавить</button>
       </div>
       <div id="last-card" class="hidden" style="margin-top:12px">
         <div id="last-sku" class="sku"></div><div id="last-product" class="product"></div>
-        <div class="count"><small>Насчитано по этому SKU</small><span id="last-count">0</span></div>
+        <div class="kpis" style="margin-top:12px">
+          <div class="kpi"><b id="last-system">0</b><span>Остаток 1С</span></div>
+          <div class="kpi"><b id="last-count">0</b><span>Насчитано</span></div>
+          <div class="kpi"><b id="last-diff">0</b><span>Разница</span></div>
+        </div>
+        <div id="last-balance" class="status blue" style="margin-top:10px;margin-bottom:0">Сравнение появится после скана.</div>
       </div>
       <div id="bind-box" class="bind hidden">
-        <div class="status amber"><b>Штрихкод не найден.</b> Если товар есть в текущей инвентаризации, введите его артикул — связь сохранится для следующих сканов.</div>
+        <div class="status amber"><b>Штрихкод не найден.</b> Введите артикул товара — связь сохранится для следующих сканов. Если в снимке 1С было 0 или SKU отсутствовал, найденный товар будет записан как излишек / возможный пересорт.</div>
         <label>Артикул товара</label><input id="bind-sku" class="inp" type="text" autocomplete="off" placeholder="Например 70/10/3">
         <button id="bind-btn" class="btn primary" style="width:100%;margin-top:8px">Привязать штрихкод и добавить</button>
       </div>
@@ -121,6 +126,21 @@ function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');r
 function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueueKpi()}
 function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
 function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
+function showLast(r){
+ const system=Number(r?.system_qty_onhand||0),counted=Number(r?.counted_qty||0),diff=counted-system;
+ text('last-sku',r?.sku||'');text('last-product',r?.product||'Товар без названия');
+ text('last-system',system.toLocaleString('ru-RU',{maximumFractionDigits:2}));
+ text('last-count',counted.toLocaleString('ru-RU',{maximumFractionDigits:2}));
+ text('last-diff',(diff>0?'+':'')+diff.toLocaleString('ru-RU',{maximumFractionDigits:2}));
+ const e=$('last-balance');
+ if(e){
+   if(r?.surplus_candidate||system===0&&counted>0){e.className='status amber';e.textContent='⚠ В учёте 1С было 0. Физически найдено '+counted+' — излишек / возможный пересорт.'}
+   else if(diff>0){e.className='status amber';e.textContent='⚠ Насчитано выше учёта на '+diff+'. Проверьте, не задвоили ли скан. Если товар реально лишний — оставляем как излишек.'}
+   else if(diff===0){e.className='status green';e.textContent='✓ Совпало с остатком 1С. По этому SKU всё пересчитано.'}
+   else{e.className='status blue';e.textContent='По 1С '+system+' · насчитано '+counted+' · осталось проверить '+Math.abs(diff)+'.'}
+ }
+ show('last-card',true);
+}
 function scannerDiag(msg){text('scanner-diag',msg)}
 function browserInputSeen(){
  lastBrowserInputAt=Date.now();
@@ -214,8 +234,8 @@ async function previewManualCode(code){
  if(!active?.id||!code||/^\d{8,32}$/.test(code))return;
  try{
   const r=await rpc('warehouse_inventory_lookup_v1',{p_session_id:active.id,p_code:code});
-  if(r?.ok)scannerDiag('Товар найден: '+(r.product||r.sku)+' · '+r.sku+' · физический остаток 1С скрыт до окончания пересчёта.');
-  else scannerDiag('Такого артикула нет в контрольном снимке инвентаризации.');
+  if(r?.ok)scannerDiag('Товар найден: '+(r.product||r.sku)+' · '+r.sku+' · остаток 1С '+Number(r.system_qty_onhand||0)+' · уже насчитано '+Number(r.counted_qty||0)+(r.surplus_candidate?' · в стартовом снимке отсутствовал':''));
+  else scannerDiag('Артикул не найден ни в текущем снимке, ни в справочниках CRM.');
  }catch(_){}
 }
 async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
@@ -233,8 +253,8 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
    if(r?.reason==='not_found'||r?.reason==='not_in_snapshot'){
     lastUnknown=/^[0-9]{6,32}$/.test(code)?code:'';
     show('bind-box',!!lastUnknown);text('bind-sku','');
-    status(lastUnknown?'Штрихкод '+code+' не найден в текущем снимке. Введите артикул для привязки.':'Артикул '+code+' не найден в контрольном снимке инвентаризации.','amber');
-    scannerDiag('Код получен ТСД, но товар не найден в снимке.');
+    status(lastUnknown?'Штрихкод '+code+' не найден в справочнике. Введите артикул — если товар физически найден, CRM сможет записать его как излишек.':'Артикул '+code+' не найден в справочниках CRM.','amber');
+    scannerDiag('Код получен ТСД, но товар не найден в справочниках CRM.');
     beep(false);
     if(lastUnknown)$('bind-sku').focus();else focusCode();
     return
@@ -242,11 +262,12 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
    throw new Error(r?.reason||'Не удалось записать скан')
   }
   show('bind-box',false);lastUnknown='';
-  text('last-sku',r.sku||'');text('last-product',r.product||'Товар без названия');text('last-count',r.counted_qty||0);show('last-card',true);
+  showLast(r);
   $('code').value='';$('scan-qty').value='1';
-  status('✓ '+(r.sku||'')+' · '+(r.product||'товар найден')+' · добавлено '+q,'green');
-  scannerDiag('Аппаратный/ручной код принят CRM: '+code);
-  beep(true);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
+  const diff=Number(r.difference_qty||0);
+  status((diff>0?'⚠ ':'✓ ')+(r.sku||'')+' · '+(r.product||'товар найден')+' · добавлено '+q+(diff>0?' · выше учёта на '+diff:''),diff>0?'amber':'green');
+  scannerDiag('Код принят CRM: '+code+' · остаток 1С '+Number(r.system_qty_onhand||0)+' · факт '+Number(r.counted_qty||0));
+  beep(diff<=0);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
   await reloadActive()
  }catch(e){
   if(e?.network||!navigator.onLine){
@@ -262,7 +283,7 @@ async function bindUnknown(){
  try{
   const r=await rpc('warehouse_inventory_bind_barcode_v1',{p_session_id:active.id,p_barcode:lastUnknown,p_sku:sku});
   if(!r?.ok)throw new Error(r?.reason||'Не удалось привязать');
-  const code=lastUnknown;show('bind-box',false);lastUnknown='';await sendScan(code,Number($('scan-qty').value)||1,'scan')
+  const code=lastUnknown;show('bind-box',false);lastUnknown='';lastSubmittedCode='';lastSubmittedAt=0;await sendScan(code,Number($('scan-qty').value)||1,'scan')
  }catch(e){status('Привязка: '+(e?.message||e),'red')}
  finally{$('bind-btn').disabled=false;focusCode()}
 }
@@ -272,7 +293,7 @@ async function undo(){
  try{
   const r=await rpc('warehouse_inventory_undo_last_v1',{p_session_id:active.id});
   if(!r?.ok){status('Нечего отменять.','amber');return}
-  text('last-sku',r.sku||'');text('last-product',r.product||'');text('last-count',r.counted_qty||0);show('last-card',true);
+  showLast(r);
   status('↶ Отменено: '+(r.sku||'')+' −'+(r.removed_qty||0),'amber');await reloadActive()
  }catch(e){status('Ошибка отмены: '+(e?.message||e),'red')}
 }
@@ -377,7 +398,7 @@ async function init(){
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
  $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.145',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.146',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
