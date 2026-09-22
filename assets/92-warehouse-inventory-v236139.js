@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.149';
+const V='v23.6.151';
 let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -36,8 +36,8 @@ async function load(){
 function refreshProgress(state){
  const r=state?.request||{},s=state?.stock||{};
  const st=r.status||'pending';
- const msg=r.message||'Проверяю самый свежий остаток Витебска…';
- if(root)root.innerHTML='<div class="iv-alert iv-blue"><b>↻ Перед стартом обновляю остаток отдельно от автозаказа.</b><br>'+esc(msg)+'</div>'+
+ const msg=r.message||'Проверяю почту и жду новый отчёт 1С, сформированный после запуска…';
+ if(root)root.innerHTML='<div class="iv-alert iv-blue"><b>↻ Жду новый остаток 1С для этой инвентаризации.</b><br>'+esc(msg)+'</div>'+
   '<div class="iv-card" style="margin-bottom:10px"><b>Источник остатка</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(s.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(s.imported_at))+'</b><br>Последняя проверка почты CRM: <b>'+esc(stampRu(s.checked_at))+'</b><br>Статус: <b>'+esc(st)+'</b></div></div>';
 }
 async function waitFreshStock(requestId){
@@ -53,7 +53,7 @@ async function waitFreshStock(requestId){
  throw new Error('Проверка свежего остатка не завершилась за 10 минут. Текущий запрос сохранён — нажмите кнопку ещё раз, CRM продолжит с него.');
 }
 async function start(){
- if(!confirm('Начать новую инвентаризацию?\n\nСначала CRM отдельно от автозаказа проверит самый свежий остаток Витебска, покажет точное время до секунды и только потом зафиксирует снимок.'))return;
+ if(!confirm('Начать новую инвентаризацию?\n\nСначала CRM запросит НОВЫЙ отчёт 1С для этой инвентаризации. Старый отчёт, который был получен до нажатия кнопки, использовать нельзя. Как только новый файл появится в почте, CRM загрузит его, покажет точное время до секунды и только потом зафиксирует снимок.'))return;
  let ok=false;busy=true;
  try{
   const req=await rpc('warehouse_inventory_refresh_request_v1',{});
@@ -164,18 +164,20 @@ function render(){
  const has=!!summary?.has_session;
  if(!has){
   const st=refreshState?.stock||{};
-  root.innerHTML='<div class="iv-alert iv-blue"><b>Инвентаризация сейчас не запущена.</b><br>Инвентаризация работает отдельно от автозаказа. При старте CRM сначала заново проверит почту 1С, затем зафиксирует самый свежий доступный остаток Витебска.</div>'+
+  root.innerHTML='<div class="iv-alert iv-blue"><b>Инвентаризация сейчас не запущена.</b><br>Инвентаризация работает отдельно от автозаказа. При старте CRM не возьмёт старый остаток: она дождётся нового отчёта 1С, сформированного после вашего запроса, и только его зафиксирует как контрольный снимок.</div>'+
   '<div class="iv-card" style="margin-bottom:10px"><b>Последний доступный остаток</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(st.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(st.imported_at))+'</b><br>Проверен CRM: <b>'+esc(stampRu(st.checked_at))+'</b></div></div>'+
-  '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="iv-btn primary" id="iv-start">↻ Обновить остаток и начать инвентаризацию</button>'+(summary?.last_completed_id?'<button class="iv-btn" id="iv-export-last">⬇ Excel последней завершённой</button>':'')+'</div><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Обновить остаток и начать» — CRM отдельно проверяет свежий файл 1С и показывает время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД показывает остаток 1С и уже насчитанное количество, чтобы два терминала работали по одному общему факту.<br>5. Если по 1С товар есть, а физически его нет — на ТСД фиксируем «Факт 0». Если по 1С было 0, а товар найден — он попадёт в излишек / возможный пересорт.<br>6. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
+  '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="iv-btn primary" id="iv-start">↻ Получить свежий остаток 1С и начать</button>'+(summary?.last_completed_id?'<button class="iv-btn" id="iv-export-last">⬇ Excel последней завершённой</button>':'')+'</div><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Получить свежий остаток 1С и начать» — CRM ждёт новый файл 1С, пришедший после нажатия, и показывает его время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД показывает остаток 1С и уже насчитанное количество, чтобы два терминала работали по одному общему факту.<br>5. Если по 1С товар есть, а физически его нет — на ТСД фиксируем «Факт 0». Если по 1С было 0, а товар найден — он попадёт в излишек / возможный пересорт.<br>6. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
   $('iv-start').onclick=start;if($('iv-export-last'))$('iv-export-last').onclick=()=>exportExcel(summary.last_completed_id);renderAccessSoon();return;
  }
  const s=summary.session,k=summary.kpi||{},rows=Array.isArray(summary.rows)?summary.rows:[];
+ const sourceAgeMin=(new Date(s.started_at).getTime()-new Date(s.stock_source_message_at).getTime())/60000;
+ const staleRunWarning=sourceAgeMin>5?'<div class="iv-alert iv-red"><b>⚠ Этот пересчёт запущен по более старому отчёту 1С.</b><br>Отчёт: '+esc(stampRu(s.stock_source_message_at))+' · старт: '+esc(stampRu(s.started_at))+'. Для точного пересчёта отмените его и запустите заново — новая логика дождётся свежего отчёта 1С после нажатия.</div>':'';
  const status=s.status==='active'?'<span class="tag tag-m">идёт пересчёт</span>':'<span class="tag tag-gray">'+esc(s.status)+'</span>';
  const body=rows.map(r=>{
   const d=n(r.difference),dc=d<0?'iv-diff-neg':d>0?'iv-diff-pos':'iv-ok';
   return '<tr><td style="width:38%"><b>'+esc(r.sku)+'</b><div class="iv-muted">'+esc(r.product||'')+'</div></td><td style="width:10%"><b>'+qty(r.system_qty_onhand)+'</b></td><td style="width:10%"><b>'+qty(r.counted_qty)+'</b></td><td style="width:10%" class="'+dc+'">'+(r.last_counted_at?((d>0?'+':'')+qty(d)):'не считали')+'</td><td style="width:17%">'+esc(stampRu(r.last_counted_at))+'</td><td style="width:15%">'+(r.last_counted_at?'<b>'+esc(r.last_actor_name||r.last_actor_email||'—')+'</b><div class="iv-muted">'+esc(r.last_device_label||'')+'</div>':'—')+'</td></tr>'
  }).join('')||'<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--sub)">Нет строк по фильтру.</td></tr>';
- root.innerHTML='<div class="iv-head"><div><div style="font-size:15px;font-weight:800">📋 Инвентаризация Витебск '+status+'</div><div class="iv-muted">Отчёт 1С: '+esc(stampRu(s.stock_source_message_at))+' · проверен CRM: '+esc(stampRu(s.stock_checked_at))+' · старт пересчёта: '+esc(stampRu(s.started_at))+' · '+esc(s.started_by_name||'')+'</div><div class="iv-muted" style="margin-top:3px">Для инвентаризации используем только физическое наличие товара по 1С на момент старта. Резерв и отгрузки здесь не участвуют.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap"><button class="iv-btn" id="iv-refresh">↻ Обновить</button><button class="iv-btn" id="iv-export">⬇ Excel</button>'+(s.status==='active'?'<button class="iv-btn danger" id="iv-cancel">✕ Отменить пересчёт</button><button class="iv-btn primary" id="iv-finish">✓ Завершить</button>':'')+'</div></div>'+
+ root.innerHTML=staleRunWarning+'<div class="iv-head"><div><div style="font-size:15px;font-weight:800">📋 Инвентаризация Витебск '+status+'</div><div class="iv-muted">Отчёт 1С: '+esc(stampRu(s.stock_source_message_at))+' · проверен CRM: '+esc(stampRu(s.stock_checked_at))+' · старт пересчёта: '+esc(stampRu(s.started_at))+' · '+esc(s.started_by_name||'')+'</div><div class="iv-muted" style="margin-top:3px">Для инвентаризации используем только физическое наличие товара по 1С на момент старта. Резерв и отгрузки здесь не участвуют.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap"><button class="iv-btn" id="iv-refresh">↻ Обновить</button><button class="iv-btn" id="iv-export">⬇ Excel</button>'+(s.status==='active'?'<button class="iv-btn danger" id="iv-cancel">✕ Отменить пересчёт</button><button class="iv-btn primary" id="iv-finish">✓ Завершить</button>':'')+'</div></div>'+
  '<div class="iv-kpis">'+kpi('SKU по снимку',String(s.stock_sku_count||0),'Контрольный снимок 1С')+kpi('Пересчитано SKU',String(k.counted_sku||0),'Осталось '+String(k.uncounted_sku||0))+kpi('Расхождений',String(k.diff_sku||0),'Только уже пересчитанные')+kpi('Учёт, шт.',qty(k.system_qty),'Снимок на старт')+kpi('Факт, шт.',qty(k.fact_qty),'Разница '+((n(k.difference_qty)>0?'+':'')+qty(k.difference_qty)))+'</div>'+
  '<div class="iv-grid"><div><div class="iv-tools"><button class="iv-btn iv-filter" data-mode="all">Все</button><button class="iv-btn iv-filter" data-mode="diff">Расхождения</button><button class="iv-btn iv-filter" data-mode="uncounted">Не пересчитано</button><button class="iv-btn iv-filter" data-mode="counted">Пересчитано</button><input id="iv-search" placeholder="Артикул или товар" value="'+esc(search)+'"><button class="iv-btn" id="iv-find">Найти</button></div><div class="iv-table"><table><thead><tr><th>Артикул / товар</th><th>Остаток 1С</th><th>Факт</th><th>Разница</th><th>Последний счёт</th><th>Кто / ТСД</th></tr></thead><tbody>'+body+'</tbody></table></div><div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px"><span class="iv-muted">Показано '+rows.length+' из '+String(summary.total||0)+'</span><div><button class="iv-btn" id="iv-prev" '+(offset<=0?'disabled':'')+'>←</button> <button class="iv-btn" id="iv-next" '+(offset+limit>=n(summary.total)?'disabled':'')+'>→</button></div></div></div><div class="iv-card"><div style="font-size:14px;font-weight:800;margin-bottom:8px">История ТСД · кто и где пикал</div><div id="iv-audit"><div class="iv-muted">Загружаю историю…</div></div></div>'+scannerCard()+'</div>';
  document.querySelectorAll('#wc-inventory-v236139 [data-mode]').forEach(b=>{b.classList.toggle('active',b.dataset.mode===mode);b.onclick=()=>{mode=b.dataset.mode;offset=0;load()}});
