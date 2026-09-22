@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.147';
+const V='v23.6.148';
 let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -94,13 +94,14 @@ async function ensureXlsx(){
  if(!window.XLSX)throw new Error('Модуль Excel недоступен');
  return window.XLSX;
 }
-async function exportExcel(){
- if(!summary?.session?.id)return alert('Нет активной инвентаризации');
- const btn=$('iv-export');if(btn)btn.disabled=true;
+async function exportExcel(sessionId=null){
+ const id=sessionId||summary?.session?.id||summary?.last_completed_id;
+ if(!id)return alert('Нет инвентаризации для выгрузки');
+ const btn=$('iv-export')||$('iv-export-last');if(btn)btn.disabled=true;
  try{
   const rows=[];let off=0;
   for(let i=0;i<20;i++){
-   const d=await rpc('warehouse_inventory_summary_v1',{p_session_id:summary.session.id,p_mode:'all',p_search:'',p_limit:500,p_offset:off});
+   const d=await rpc('warehouse_inventory_summary_v1',{p_session_id:id,p_mode:'all',p_search:'',p_limit:500,p_offset:off});
    const part=Array.isArray(d?.rows)?d.rows:[];
    rows.push(...part);off+=part.length;
    if(part.length<500||off>=n(d?.total))break;
@@ -152,8 +153,8 @@ function render(){
   const st=refreshState?.stock||{};
   root.innerHTML='<div class="iv-alert iv-blue"><b>Инвентаризация сейчас не запущена.</b><br>Инвентаризация работает отдельно от автозаказа. При старте CRM сначала заново проверит почту 1С, затем зафиксирует самый свежий доступный остаток Витебска.</div>'+
   '<div class="iv-card" style="margin-bottom:10px"><b>Последний доступный остаток</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(st.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(st.imported_at))+'</b><br>Проверен CRM: <b>'+esc(stampRu(st.checked_at))+'</b></div></div>'+
-  '<button class="iv-btn primary" id="iv-start">↻ Обновить остаток и начать инвентаризацию</button><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Обновить остаток и начать» — CRM отдельно проверяет свежий файл 1С и показывает время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД показывает остаток 1С и уже насчитанное количество, чтобы два терминала работали по одному общему факту.<br>5. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
-  $('iv-start').onclick=start;renderAccessSoon();return;
+  '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="iv-btn primary" id="iv-start">↻ Обновить остаток и начать инвентаризацию</button>'+(summary?.last_completed_id?'<button class="iv-btn" id="iv-export-last">⬇ Excel последней завершённой</button>':'')+'</div><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Обновить остаток и начать» — CRM отдельно проверяет свежий файл 1С и показывает время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД показывает остаток 1С и уже насчитанное количество, чтобы два терминала работали по одному общему факту.<br>5. Если по 1С товар есть, а физически его нет — на ТСД фиксируем «Факт 0». Если по 1С было 0, а товар найден — он попадёт в излишек / возможный пересорт.<br>6. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
+  $('iv-start').onclick=start;if($('iv-export-last'))$('iv-export-last').onclick=()=>exportExcel(summary.last_completed_id);renderAccessSoon();return;
  }
  const s=summary.session,k=summary.kpi||{},rows=Array.isArray(summary.rows)?summary.rows:[];
  const status=s.status==='active'?'<span class="tag tag-m">идёт пересчёт</span>':'<span class="tag tag-gray">'+esc(s.status)+'</span>';
