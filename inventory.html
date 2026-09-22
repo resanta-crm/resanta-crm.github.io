@@ -79,6 +79,7 @@ label{display:block;font-size:11px;color:#6B7280;font-weight:700;margin:9px 0 5p
         <div style="flex:1"><label>Количество</label><input id="scan-qty" class="inp" type="number" min="0.01" step="1" value="1"></div>
         <button id="send-btn" class="btn primary" style="align-self:flex-end;flex:1">Добавить</button>
       </div>
+      <button id="zero-btn" class="btn secondary" style="width:100%;margin-top:8px">Нет товара на складе · зафиксировать факт 0</button>
       <div id="last-card" class="hidden" style="margin-top:12px">
         <div id="last-sku" class="sku"></div><div id="last-product" class="product"></div>
         <div class="kpis" style="margin-top:12px">
@@ -134,7 +135,8 @@ function showLast(r){
  text('last-diff',(diff>0?'+':'')+diff.toLocaleString('ru-RU',{maximumFractionDigits:2}));
  const e=$('last-balance');
  if(e){
-   if(r?.surplus_candidate||system===0&&counted>0){e.className='status amber';e.textContent='⚠ В учёте 1С было 0. Физически найдено '+counted+' — излишек / возможный пересорт.'}
+   if(r?.marked_zero&&system>0){e.className='status red';e.textContent='Факт 0 зафиксирован. По 1С '+system+' шт. — недостача '+system+' шт.'}
+   else if(r?.surplus_candidate||system===0&&counted>0){e.className='status amber';e.textContent='⚠ В учёте 1С было 0. Физически найдено '+counted+' — излишек / возможный пересорт.'}
    else if(diff>0){e.className='status amber';e.textContent='⚠ Насчитано выше учёта на '+diff+'. Проверьте, не задвоили ли скан. Если товар реально лишний — оставляем как излишек.'}
    else if(diff===0){e.className='status green';e.textContent='✓ Совпало с остатком 1С. По этому SKU всё пересчитано.'}
    else{e.className='status blue';e.textContent='По 1С '+system+' · насчитано '+counted+' · осталось проверить '+Math.abs(diff)+'.'}
@@ -277,6 +279,23 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
   status('Ошибка: '+(e?.message||e),'red');scannerDiag('Код был получен, но сервер вернул ошибку.');beep(false);focusCode()
  }
 }
+async function markZero(){
+ const code=String($('code')?.value||'').trim();
+ if(!active?.id)return status('Инвентаризация не запущена.','red');
+ if(!code){status('Введите артикул или отсканируйте товар, который хотите зафиксировать как 0.','amber');focusCode();return}
+ if(!confirm('Зафиксировать ФАКТ 0 по коду '+code+'?\n\nИспользуйте это, когда по 1С товар числится, но физически на складе его нет.'))return;
+ $('zero-btn').disabled=true;unlockAudio();
+ try{
+  const r=await rpc('warehouse_inventory_mark_zero_v1',{p_session_id:active.id,p_code:code,p_client_event_id:uuid()});
+  if(!r?.ok)throw new Error(r?.reason||'Не удалось зафиксировать 0');
+  show('bind-box',false);lastUnknown='';showLast(r);
+  $('code').value='';$('scan-qty').value='1';
+  status('Факт 0: '+(r.sku||code)+' · по 1С '+Number(r.system_qty_onhand||0)+' шт.','amber');
+  scannerDiag('Факт 0 сохранён: '+(r.sku||code));
+  beep(false);await reloadActive();
+ }catch(e){status('Факт 0: '+(e?.message||e),'red');beep(false)}
+ finally{$('zero-btn').disabled=false;focusCode()}
+}
 async function bindUnknown(){
  const sku=$('bind-sku').value.trim();if(!lastUnknown||!sku)return;
  $('bind-btn').disabled=true;
@@ -331,7 +350,7 @@ async function init(){
  $('login-email').value=DEDICATED_EMAIL;
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
- $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');
+ $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');$('zero-btn').onclick=markZero;
  $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);show('scanner-hw-warning',false);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.');focusCode();armScannerWatchdog()};
  const codeEl=$('code');
  codeEl.onkeydown=e=>{unlockAudio();browserInputSeen();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
