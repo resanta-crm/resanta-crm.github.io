@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script>
-const INVENTORY_APP_VERSION='2026-09-22-v23.6.146-stock-visible';
+const INVENTORY_APP_VERSION='2026-09-22-v23.6.147-stock-zero-visible';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -17,7 +17,7 @@ const INVENTORY_APP_VERSION='2026-09-22-v23.6.146-stock-visible';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.146');
+        location.replace('/inventory.html?v=23.6.147');
       }
     }
   }catch(_){}
@@ -417,7 +417,7 @@ async function init(){
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
  $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.146',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.147',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
