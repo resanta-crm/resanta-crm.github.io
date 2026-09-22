@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_INVENTORY_V236139)return;
-const V='v23.6.144';
+const V='v23.6.146';
 let root=null,summary=null,refreshState=null,mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -74,6 +74,57 @@ async function finish(){
  if(!confirm('Завершить инвентаризацию?\n\nCRM зафиксирует итог. Остатки 1С автоматически НЕ изменяются.'))return;
  try{const r=await rpc('warehouse_inventory_finish_v1',{p_session_id:summary.session.id,p_note:'Завершено из CRM'});if(!r?.ok)throw new Error(r?.reason||'Не удалось завершить');await load()}catch(e){alert('Ошибка завершения: '+(e?.message||e))}
 }
+async function cancelSession(){
+ if(!summary?.session?.id)return;
+ if(!confirm('Отменить текущий пересчёт?\n\nИспользуйте это для тестовой или ошибочно запущенной инвентаризации. Результат будет помечен как отменённый и не попадёт в завершённые.'))return;
+ try{
+  const r=await rpc('warehouse_inventory_cancel_v1',{p_session_id:summary.session.id,p_note:'Пересчёт отменён руководителем из CRM'});
+  if(!r?.ok)throw new Error(r?.reason||'Не удалось отменить');
+  summary=null;offset=0;mode='all';search='';
+  await load();
+ }catch(e){alert('Ошибка отмены: '+(e?.message||e))}
+}
+async function ensureXlsx(){
+ if(window.XLSX)return window.XLSX;
+ await new Promise((resolve,reject)=>{
+  const old=document.getElementById('iv-sheetjs');
+  if(old){old.addEventListener('load',resolve,{once:true});old.addEventListener('error',()=>reject(new Error('Не загрузился модуль Excel')),{once:true});return}
+  const s=document.createElement('script');s.id='iv-sheetjs';s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=resolve;s.onerror=()=>reject(new Error('Не загрузился модуль Excel'));document.head.appendChild(s);
+ });
+ if(!window.XLSX)throw new Error('Модуль Excel недоступен');
+ return window.XLSX;
+}
+async function exportExcel(){
+ if(!summary?.session?.id)return alert('Нет активной инвентаризации');
+ const btn=$('iv-export');if(btn)btn.disabled=true;
+ try{
+  const rows=[];let off=0;
+  for(let i=0;i<20;i++){
+   const d=await rpc('warehouse_inventory_summary_v1',{p_session_id:summary.session.id,p_mode:'all',p_search:'',p_limit:500,p_offset:off});
+   const part=Array.isArray(d?.rows)?d.rows:[];
+   rows.push(...part);off+=part.length;
+   if(part.length<500||off>=n(d?.total))break;
+  }
+  const XLSX=await ensureXlsx();
+  const data=rows.map(r=>({
+   'Артикул':r.sku||'',
+   'Товар':r.product||'',
+   'Остаток 1С':n(r.system_qty_onhand),
+   'Факт':r.last_counted_at?n(r.counted_qty):'',
+   'Разница':r.last_counted_at?n(r.difference):'',
+   'Статус':r.last_counted_at?'Пересчитано':'Не пересчитано',
+   'Последний счёт':r.last_counted_at?stampRu(r.last_counted_at):''
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  ws['!cols']=[{wch:18},{wch:55},{wch:13},{wch:10},{wch:10},{wch:18},{wch:22}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Инвентаризация');
+  const d=new Date(),pad=x=>String(x).padStart(2,'0');
+  const name='Инвентаризация_Витебск_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+'.xlsx';
+  XLSX.writeFile(wb,name);
+ }catch(e){alert('Не удалось выгрузить Excel: '+(e?.message||e))}
+ finally{if(btn)btn.disabled=false}
+}
+
 async function grant(){
  const sel=$('iv-access-user');if(!sel||!sel.value)return alert('Выберите сотрудника');
  try{await rpc('warehouse_inventory_set_access_v1',{p_email:sel.value,p_can_count:true,p_can_manage:false,p_active:true});alert('Доступ к ТСД выдан: '+sel.value);await renderAccess()}catch(e){alert('Не удалось выдать доступ: '+(e?.message||e))}
@@ -101,26 +152,26 @@ function render(){
   const st=refreshState?.stock||{};
   root.innerHTML='<div class="iv-alert iv-blue"><b>Инвентаризация сейчас не запущена.</b><br>Инвентаризация работает отдельно от автозаказа. При старте CRM сначала заново проверит почту 1С, затем зафиксирует самый свежий доступный остаток Витебска.</div>'+
   '<div class="iv-card" style="margin-bottom:10px"><b>Последний доступный остаток</b><div style="font-size:12px;line-height:1.7;margin-top:7px">Отчёт 1С: <b>'+esc(stampRu(st.source_message_at))+'</b><br>Загружен в CRM: <b>'+esc(stampRu(st.imported_at))+'</b><br>Проверен CRM: <b>'+esc(stampRu(st.checked_at))+'</b></div></div>'+
-  '<button class="iv-btn primary" id="iv-start">↻ Обновить остаток и начать инвентаризацию</button><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Обновить остаток и начать» — CRM отдельно проверяет свежий файл 1С и показывает время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД считает вслепую, руководитель видит расхождения здесь.<br>5. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
+  '<button class="iv-btn primary" id="iv-start">↻ Обновить остаток и начать инвентаризацию</button><div style="margin-top:14px" class="iv-grid"><div class="iv-card"><b>Как работаем</b><div style="font-size:12px;line-height:1.65;margin-top:7px">1. Останавливаем движения по складу на время пересчёта.<br>2. Нажимаем «Обновить остаток и начать» — CRM отдельно проверяет свежий файл 1С и показывает время до секунды.<br>3. После проверки фиксируется контрольный снимок.<br>4. ТСД показывает остаток 1С и уже насчитанное количество, чтобы два терминала работали по одному общему факту.<br>5. После проверки завершаем. CRM сама 1С не корректирует.</div></div>'+scannerCard()+'</div>';
   $('iv-start').onclick=start;renderAccessSoon();return;
  }
  const s=summary.session,k=summary.kpi||{},rows=Array.isArray(summary.rows)?summary.rows:[];
  const status=s.status==='active'?'<span class="tag tag-m">идёт пересчёт</span>':'<span class="tag tag-gray">'+esc(s.status)+'</span>';
  const body=rows.map(r=>{
   const d=n(r.difference),dc=d<0?'iv-diff-neg':d>0?'iv-diff-pos':'iv-ok';
-  return '<tr><td><b>'+esc(r.sku)+'</b><div class="iv-muted">'+esc(r.product||'')+'</div></td><td>'+qty(r.system_qty_onhand)+'</td><td>'+qty(r.system_qty_shipping)+'</td><td>'+qty(r.system_qty_reserve)+'</td><td>'+qty(r.system_qty_avail)+'</td><td><b>'+qty(r.counted_qty)+'</b></td><td class="'+dc+'">'+(r.last_counted_at?((d>0?'+':'')+qty(d)):'не считали')+'</td><td>'+esc(dateRu(r.last_counted_at))+'</td></tr>'
+  return '<tr><td><b>'+esc(r.sku)+'</b><div class="iv-muted">'+esc(r.product||'')+'</div></td><td><b>'+qty(r.system_qty_onhand)+'</b></td><td><b>'+qty(r.counted_qty)+'</b></td><td class="'+dc+'">'+(r.last_counted_at?((d>0?'+':'')+qty(d)):'не считали')+'</td><td>'+esc(stampRu(r.last_counted_at))+'</td></tr>'
  }).join('')||'<tr><td colspan="8" style="text-align:center;padding:18px;color:var(--sub)">Нет строк по фильтру.</td></tr>';
- root.innerHTML='<div class="iv-head"><div><div style="font-size:15px;font-weight:800">📋 Инвентаризация Витебск '+status+'</div><div class="iv-muted">Отчёт 1С: '+esc(stampRu(s.stock_source_message_at))+' · проверен CRM: '+esc(stampRu(s.stock_checked_at))+' · старт пересчёта: '+esc(stampRu(s.started_at))+' · '+esc(s.started_by_name||'')+'</div><div class="iv-muted" style="margin-top:3px">Физический остаток ≠ доступно к продаже: резерв может дать «доступно 0», хотя товар физически есть на складе.</div></div><div style="display:flex;gap:7px"><button class="iv-btn" id="iv-refresh">↻ Обновить</button>'+(s.status==='active'?'<button class="iv-btn primary" id="iv-finish">✓ Завершить</button>':'')+'</div></div>'+
+ root.innerHTML='<div class="iv-head"><div><div style="font-size:15px;font-weight:800">📋 Инвентаризация Витебск '+status+'</div><div class="iv-muted">Отчёт 1С: '+esc(stampRu(s.stock_source_message_at))+' · проверен CRM: '+esc(stampRu(s.stock_checked_at))+' · старт пересчёта: '+esc(stampRu(s.started_at))+' · '+esc(s.started_by_name||'')+'</div><div class="iv-muted" style="margin-top:3px">Для инвентаризации используем только физическое наличие товара по 1С на момент старта. Резерв и отгрузки здесь не участвуют.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap"><button class="iv-btn" id="iv-refresh">↻ Обновить</button><button class="iv-btn" id="iv-export">⬇ Excel</button>'+(s.status==='active'?'<button class="iv-btn danger" id="iv-cancel">✕ Отменить пересчёт</button><button class="iv-btn primary" id="iv-finish">✓ Завершить</button>':'')+'</div></div>'+
  '<div class="iv-kpis">'+kpi('SKU по снимку',String(s.stock_sku_count||0),'В наличии > 0')+kpi('Пересчитано SKU',String(k.counted_sku||0),'Осталось '+String(k.uncounted_sku||0))+kpi('Расхождений',String(k.diff_sku||0),'Только уже пересчитанные')+kpi('Учёт, шт.',qty(k.system_qty),'Снимок на старт')+kpi('Факт, шт.',qty(k.fact_qty),'Разница '+((n(k.difference_qty)>0?'+':'')+qty(k.difference_qty)))+'</div>'+
- '<div class="iv-grid"><div><div class="iv-tools"><button class="iv-btn iv-filter" data-mode="all">Все</button><button class="iv-btn iv-filter" data-mode="diff">Расхождения</button><button class="iv-btn iv-filter" data-mode="uncounted">Не пересчитано</button><button class="iv-btn iv-filter" data-mode="counted">Пересчитано</button><input id="iv-search" placeholder="Артикул или товар" value="'+esc(search)+'"><button class="iv-btn" id="iv-find">Найти</button></div><div class="iv-table"><table><thead><tr><th>Артикул / товар</th><th>Физ. остаток 1С</th><th>Отгружается</th><th>Резерв</th><th>Доступно к продаже</th><th>Факт</th><th>Разница</th><th>Последний счёт</th></tr></thead><tbody>'+body+'</tbody></table></div><div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px"><span class="iv-muted">Показано '+rows.length+' из '+String(summary.total||0)+'</span><div><button class="iv-btn" id="iv-prev" '+(offset<=0?'disabled':'')+'>←</button> <button class="iv-btn" id="iv-next" '+(offset+limit>=n(summary.total)?'disabled':'')+'>→</button></div></div></div>'+scannerCard()+'</div>';
+ '<div class="iv-grid"><div><div class="iv-tools"><button class="iv-btn iv-filter" data-mode="all">Все</button><button class="iv-btn iv-filter" data-mode="diff">Расхождения</button><button class="iv-btn iv-filter" data-mode="uncounted">Не пересчитано</button><button class="iv-btn iv-filter" data-mode="counted">Пересчитано</button><input id="iv-search" placeholder="Артикул или товар" value="'+esc(search)+'"><button class="iv-btn" id="iv-find">Найти</button></div><div class="iv-table"><table><thead><tr><th>Артикул / товар</th><th>Остаток 1С</th><th>Факт</th><th>Разница</th><th>Последний счёт</th></tr></thead><tbody>'+body+'</tbody></table></div><div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px"><span class="iv-muted">Показано '+rows.length+' из '+String(summary.total||0)+'</span><div><button class="iv-btn" id="iv-prev" '+(offset<=0?'disabled':'')+'>←</button> <button class="iv-btn" id="iv-next" '+(offset+limit>=n(summary.total)?'disabled':'')+'>→</button></div></div></div>'+scannerCard()+'</div>';
  document.querySelectorAll('#wc-inventory-v236139 [data-mode]').forEach(b=>{b.classList.toggle('active',b.dataset.mode===mode);b.onclick=()=>{mode=b.dataset.mode;offset=0;load()}});
- $('iv-refresh').onclick=load;if($('iv-finish'))$('iv-finish').onclick=finish;
+ $('iv-refresh').onclick=load;if($('iv-export'))$('iv-export').onclick=exportExcel;if($('iv-cancel'))$('iv-cancel').onclick=cancelSession;if($('iv-finish'))$('iv-finish').onclick=finish;
  $('iv-find').onclick=()=>{search=$('iv-search').value.trim();offset=0;load()};$('iv-search').onkeydown=e=>{if(e.key==='Enter')$('iv-find').click()};
  $('iv-prev').onclick=()=>{offset=Math.max(0,offset-limit);load()};$('iv-next').onclick=()=>{offset+=limit;load()};
  renderAccessSoon();
 }
 function scannerCard(){
- return '<div class="iv-card"><div style="font-weight:800;margin-bottom:6px">📱 ТСД · Resanta Склад</div><div class="iv-muted">Откройте камерой QR-код на любом из двух ТСД. QR содержит только адрес приложения — логинов, ключей и данных в нём нет.</div><img class="iv-qr" src="./inventory-qr.svg" alt="QR для ТСД"><div style="display:grid;gap:7px"><a class="iv-btn primary" style="text-align:center;text-decoration:none" href="./inventory.html" target="_blank" rel="noopener">Открыть приложение ТСД</a><div style="font-size:10px;color:var(--sub);word-break:break-all;text-align:center">https://resanta-crm.by/inventory.html</div></div><hr style="border:0;border-top:1px solid var(--border);margin:13px 0"><div class="iv-alert iv-green" style="margin:10px 0"><b>ТСД:</b> вход под <b>vitebsk@resanta.ru</b>. Ваша личная учётка CRM остаётся отдельно на компьютере.</div><div style="font-weight:700;font-size:12px;margin-bottom:6px">Кому разрешён пересчёт</div><div style="display:flex;gap:6px"><select id="iv-access-user" style="min-width:0;flex:1;padding:8px;border:1px solid var(--border);border-radius:8px"><option value="">Выберите сотрудника…</option>'+userOptions()+'</select><button class="iv-btn" id="iv-grant">Разрешить</button></div><div id="iv-access-list" style="margin-top:8px"></div></div>'
+ return '<div class="iv-card"><div style="font-weight:800;margin-bottom:6px">📱 ТСД · Resanta Склад</div><div class="iv-muted">Оба ТСД работают с одной инвентаризацией. После каждого скана они видят остаток 1С и общий уже насчитанный факт; если факт выше учёта, ТСД покажет предупреждение.</div><img class="iv-qr" src="./inventory-qr.svg" alt="QR для ТСД"><div style="display:grid;gap:7px"><a class="iv-btn primary" style="text-align:center;text-decoration:none" href="./inventory.html" target="_blank" rel="noopener">Открыть приложение ТСД</a><div style="font-size:10px;color:var(--sub);word-break:break-all;text-align:center">https://resanta-crm.by/inventory.html</div></div><hr style="border:0;border-top:1px solid var(--border);margin:13px 0"><div class="iv-alert iv-green" style="margin:10px 0"><b>ТСД:</b> вход под <b>vitebsk@resanta.ru</b>. Ваша личная учётка CRM остаётся отдельно на компьютере.</div><div style="font-weight:700;font-size:12px;margin-bottom:6px">Кому разрешён пересчёт</div><div style="display:flex;gap:6px"><select id="iv-access-user" style="min-width:0;flex:1;padding:8px;border:1px solid var(--border);border-radius:8px"><option value="">Выберите сотрудника…</option>'+userOptions()+'</select><button class="iv-btn" id="iv-grant">Разрешить</button></div><div id="iv-access-list" style="margin-top:8px"></div></div>'
 }
 function renderAccessSoon(){setTimeout(()=>{const b=$('iv-grant');if(b)b.onclick=grant;renderAccess()},20)}
 async function open(target){
@@ -129,5 +180,5 @@ async function open(target){
  root=$('wc-inventory-v236139');await load();
 }
 window.crmWarehouseInventoryV236139={open,refresh:load};
-window.RESANTA_WAREHOUSE_INVENTORY_V236139=Object.freeze({version:V,blindScanner:true,serverRpcOnly:true,noDirectTables:true,noPublicDataFiles:true});
+window.RESANTA_WAREHOUSE_INVENTORY_V236139=Object.freeze({version:V,blindScanner:false,serverRpcOnly:true,noDirectTables:true,noPublicDataFiles:true,showsSystemStockOnTsd:true,excelExport:true,cancellableRun:true});
 })();
