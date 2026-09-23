@@ -11,6 +11,7 @@ on:
       - manifest.json
       - service-worker.js
       - inventory.html
+      - receiving.html
       - inventory-manifest.webmanifest
       - inventory-sw.js
       - inventory-icon.svg
@@ -61,7 +62,7 @@ jobs:
           test -s index.html
           cp index.html _site/index.html
 
-          for file in CNAME robots.txt manifest.json service-worker.js inventory.html inventory-manifest.webmanifest inventory-sw.js inventory-icon.svg inventory-qr.svg; do
+          for file in CNAME robots.txt manifest.json service-worker.js inventory.html receiving.html inventory-manifest.webmanifest inventory-sw.js inventory-icon.svg inventory-qr.svg; do
             if [ -f "$file" ]; then
               cp "$file" "_site/$file"
             fi
