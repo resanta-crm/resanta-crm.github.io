@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script>
-const RECEIVING_APP_VERSION='2026-09-23-v23.6.154';
+const RECEIVING_APP_VERSION='2026-09-23-v23.6.155-login-fix';
 (function(){
  try{
   const k='resanta_receiving_app_version',old=localStorage.getItem(k);
@@ -14,7 +14,7 @@ const RECEIVING_APP_VERSION='2026-09-23-v23.6.154';
    localStorage.setItem(k,RECEIVING_APP_VERSION);
    if(old!==null&&!sessionStorage.getItem('receiving_reload_'+RECEIVING_APP_VERSION)){
     sessionStorage.setItem('receiving_reload_'+RECEIVING_APP_VERSION,'1');
-    location.replace('/receiving.html?v=23.6.154');
+    location.replace('/receiving.html?v=23.6.155');
    }
   }
  }catch(_){}
@@ -109,6 +109,7 @@ label{display:block;font-size:12px;color:#6B7280;font-weight:700;margin:9px 0 5p
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_receiving_session_v1';
+const INVENTORY_SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_receiving_queue_v1';
 const LOGIN_EMAIL_KEY='resanta_receiving_login_email_v1';
 const ALLOWED_EMAILS=['vitebsk@resanta.ru','sidarovich_kn@resanta.ru','payushin_ar@resanta.ru'];
@@ -123,7 +124,18 @@ function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+
 function tsdLabel(email){email=String(email||'').toLowerCase();if(email==='vitebsk@resanta.ru')return'ТСД-1 · Начальник склада';if(email==='sidarovich_kn@resanta.ru')return'ТСД-2 · Кладовщик';return'CRM · Александр Паюшин'}
 function tokenEmail(s){try{const p=JSON.parse(atob(String(s?.access_token||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return String(p?.email||'').toLowerCase()}catch(_){return''}}
 function saveSession(s){session=s||null;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
-function loadSession(){try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(s&&!ALLOWED_EMAILS.includes(tokenEmail(s))){localStorage.removeItem(SESSION_KEY);return null}return s}catch(_){return null}}
+function loadSession(){
+ try{
+  for(const key of [SESSION_KEY,INVENTORY_SESSION_KEY]){
+   const s=JSON.parse(localStorage.getItem(key)||'null');
+   if(!s)continue;
+   if(!ALLOWED_EMAILS.includes(tokenEmail(s))){if(key===SESSION_KEY)localStorage.removeItem(key);continue}
+   if(key!==SESSION_KEY)localStorage.setItem(SESSION_KEY,JSON.stringify(s));
+   return s;
+  }
+  return null;
+ }catch(_){return null}
+}
 function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');return Array.isArray(q)?q:[]}catch(_){return[]}}
 function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueue()}
 function updateQueue(){text('kpi-queue',queue().filter(x=>active&&x.session_id===active.id).length)}
@@ -183,7 +195,15 @@ async function bootAuthed(){
   access=await rpc('warehouse_receiving_access_v1',{});
   text('user-line',tsdLabel(access?.email)+' · '+(access?.name||access?.email||''));
   await reloadActive();await flushQueue()
- }catch(e){text('access-error',e?.message||e);show('access-error',true);show('scanner',false)}
+ }catch(e){
+  const raw=String(e?.message||e);
+  const msg=/ACCESS_DENIED/i.test(raw)
+    ?'Эта учётная запись не имеет доступа к приёмке товара.'
+    :(/Could not find the function|schema cache|PGRST202/i.test(raw)
+      ?'Модуль приёмки обновляется на сервере. Нажмите «Выйти», войдите снова и повторите.'
+      :raw);
+  text('access-error',msg);show('access-error',true);show('scanner',false)
+ }
 }
 async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
  code=String(code||'').trim();const q=num(qtyVal);if(code&&recentlySubmitted(code))return;
@@ -255,7 +275,9 @@ async function flushQueue(){
 }
 function init(){
  const saved=String(localStorage.getItem(LOGIN_EMAIL_KEY)||'vitebsk@resanta.ru').toLowerCase();$('login-email').value=ALLOWED_EMAILS.includes(saved)?saved:'vitebsk@resanta.ru';
- session=loadSession();$('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};$('logout-btn').onclick=logout;
+ session=loadSession();
+ if(session){const e=tokenEmail(session);if(ALLOWED_EMAILS.includes(e)){localStorage.setItem(LOGIN_EMAIL_KEY,e);$('login-email').value=e}}
+ $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};$('logout-btn').onclick=logout;
  $('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');$('undo-btn').onclick=undo;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
  const code=$('code');code.onkeydown=e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=code.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
  const auto=()=>{clearTimeout(inputAutoTimer);const v=code.value.trim();if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(code.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},150)};
