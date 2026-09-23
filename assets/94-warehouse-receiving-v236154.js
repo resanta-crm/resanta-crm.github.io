@@ -21,7 +21,7 @@ function css(){
  const s=document.createElement('style');s.id='wr-v236154-css';s.textContent=`
 #wr-v236154 .wr-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}
 #wr-v236154 .wr-card{background:#fff;border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:12px}
-#wr-v236154 .wr-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#wr-v236154 .wr-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px}
 #wr-v236154 .wr-kpis{display:grid;grid-template-columns:repeat(5,minmax(135px,1fr));gap:9px;margin-bottom:12px}
 #wr-v236154 .wr-kpi{background:#fff;border:1px solid var(--border);border-radius:10px;padding:11px}
 #wr-v236154 .wr-kpi small{display:block;font-size:10px;color:var(--sub);font-weight:700;text-transform:uppercase}
@@ -109,7 +109,9 @@ async function createReceipt(){
    p_items:preview.items
   });
   if(!r?.ok)throw new Error(r?.reason||'Не удалось создать приёмку');
+  const ignored=n(r.ignored_unknown_sku_count);const ignoredRows=Array.isArray(r.ignored_unknown)?r.ignored_unknown:[];
   preview=null;mode='all';search='';offset=0;await loadAll(r.session_id);
+  if(ignored>0)alert('Приёмка создана, но '+ignored+' строк УПД не совпали с нашими артикулами и НЕ добавлены.\n\n'+ignoredRows.slice(0,12).map(x=>(x.sku||'—')+' · '+(x.product||'')).join('\n'));
  }catch(e){alert('Не удалось создать приёмку: '+(e?.message||e))}
  finally{if(btn)btn.disabled=false}
 }
