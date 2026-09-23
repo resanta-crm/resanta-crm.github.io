@@ -9,7 +9,7 @@
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
 const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.122'}catch(_){return'23.6.122'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
-const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.141',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.144'});
+const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.141',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.154',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.154'});
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -22,6 +22,10 @@ function profile(){
 function isBoss(){
   const p=profile(),r=String(p?.role||'').toLowerCase(),e=String(p?.email||'').toLowerCase();
   return r==='boss'||e==='payushin_ar@resanta.ru';
+}
+function canWarehouseReceiving(){
+  const e=String(profile()?.email||'').toLowerCase();
+  return ['payushin_ar@resanta.ru','vitebsk@resanta.ru','sidarovich_kn@resanta.ru'].includes(e);
 }
 function loaded(guard){
   if(!(guard&&window[guard]))return false;
@@ -97,7 +101,8 @@ const CONTRACT={
     {path:'assets/72-promotions-stable-render-v23671.js',marker:'perf-promo-stable-render-v23671',guard:'RESANTA_PROMOTIONS_STABLE_RENDER_V23671'}
   ],
   warehouseShell:[
-    {path:'assets/36-warehouse-control-v23620.js',marker:'perf-warehouse-shell-v23671',guard:'RESANTA_WAREHOUSE_CONTROL_V23620'}
+    {path:'assets/36-warehouse-control-v23620.js',marker:'perf-warehouse-shell-v23671',guard:'RESANTA_WAREHOUSE_CONTROL_V23620'},
+    {path:'assets/94-warehouse-receiving-v236154.js',marker:'perf-warehouse-receiving-v236154',guard:'RESANTA_WAREHOUSE_RECEIVING_V236154'}
   ],
   warehouse:[
     {path:'assets/37-warehouse-weekly-v23621.js',marker:'perf-warehouse-weekly-v23671',guard:'RESANTA_WAREHOUSE_WEEKLY_V23622'},
@@ -156,7 +161,7 @@ window.crmEnsurePromotionsReadyV23671=ensurePromotionsReady;
 window.crmPromotionGateOverlayV23671=promoOverlay;
 
 async function loadWarehouseShell(){
-  if(!isBoss())return false;
+  if(!(isBoss()||canWarehouseReceiving()))return false;
   return onceContract('warehouse-shell',()=>serial(CONTRACT.warehouseShell));
 }
 async function loadWarehouse(){
@@ -232,7 +237,7 @@ async function loadPaymentRegistry(){
   return true;
 }
 function maybeLoadPaymentRegistry(){if(paymentEligible())loadPaymentRegistry().catch(e=>console.warn('ROOT '+V+' payment registry',e))}
-function maybeLoadWarehouseShell(){if(isBoss())loadWarehouseShell().catch(e=>console.warn('ROOT '+V+' warehouse shell',e))}
+function maybeLoadWarehouseShell(){if(isBoss()||canWarehouseReceiving())loadWarehouseShell().catch(e=>console.warn('ROOT '+V+' warehouse shell',e))}
 
 async function loadForPage(page,epoch){
   checkFrontendVersion(false).catch(()=>{});
@@ -242,7 +247,7 @@ async function loadForPage(page,epoch){
     if(p==='promotions')return await ensurePromotionsReady(epoch);
     if(p==='budgets')return await loadPromotions();
     if(p==='warehouse-control'){
-      await loadWarehouse();
+      if(isBoss())await loadWarehouse();else await loadWarehouseShell();
       if(activePage()==='warehouse-control')await window.crmWarehouseControlV1?.open?.(false);
       return true;
     }
