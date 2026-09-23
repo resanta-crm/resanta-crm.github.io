@@ -9,7 +9,7 @@
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
 const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.122'}catch(_){return'23.6.122'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
-const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.141',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.154',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.154'});
+const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.141',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.154',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.155'});
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
