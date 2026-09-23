@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_RECEIVING_V236154)return;
-const V='v23.6.154';
+const V='v23.6.155';
 let root=null,access=null,sessions=[],selectedId=null,summary=null,coverage=null,preview=null;
 let mode='all',search='',offset=0,limit=100,busy=false;
 const $=id=>document.getElementById(id);
@@ -87,15 +87,40 @@ function fileToBase64(file){
 }
 async function parseUpd(){
  const inp=$('wr-file'),file=inp?.files?.[0];if(!file)return alert('Выберите УПД .xls или .xlsx');
- const btn=$('wr-parse');btn.disabled=true;btn.textContent='Разбираю УПД…';
+ const btn=$('wr-parse'),errBox=$('wr-upload-error');
+ if(btn){btn.disabled=true;btn.textContent='Разбираю УПД…'}
+ if(errBox){errBox.className='wr-alert blue';errBox.textContent='Читаю файл '+file.name+'…';errBox.style.display='block'}
  try{
-  const d=dbx();if(!d?.functions?.invoke)throw new Error('Модуль загрузки файлов ещё не готов');
+  if(!/\.(xls|xlsx)$/i.test(file.name))throw new Error('Нужен файл .xls или .xlsx');
+  if(file.size>9*1024*1024)throw new Error('Файл слишком большой. Максимум 9 МБ.');
+  const d=dbx();if(!d?.auth?.getSession)throw new Error('Авторизация CRM ещё не готова. Обновите страницу.');
+  const {data:sess,error:sessErr}=await d.auth.getSession();if(sessErr)throw sessErr;
+  const token=sess?.session?.access_token;if(!token)throw new Error('Сессия CRM истекла. Войдите в CRM заново.');
   const base64=await fileToBase64(file);
-  const {data,error}=await d.functions.invoke('warehouse-receiving-import-upd',{body:{filename:file.name,base64}});
-  if(error)throw error;if(!data?.ok)throw new Error(data?.message||data?.error||'УПД не распознан');
-  preview=data;render();
- }catch(e){alert('Не удалось разобрать УПД: '+(e?.message||e))}
- finally{if($('wr-parse')){$('wr-parse').disabled=false;$('wr-parse').textContent='Проверить УПД'}}
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),30000);
+  let r;
+  try{
+    r=await fetch('https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/warehouse-receiving-import-upd',{
+      method:'POST',
+      headers:{
+        apikey:'sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd',
+        Authorization:'Bearer '+token,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({filename:file.name,base64}),
+      signal:ctrl.signal,
+      cache:'no-store'
+    });
+  }finally{clearTimeout(timer)}
+  const raw=await r.text();let data=null;try{data=raw?JSON.parse(raw):null}catch(_){data={message:raw}}
+  if(!r.ok||!data?.ok)throw new Error(data?.message||data?.error||('Ошибка загрузки HTTP '+r.status));
+  preview=data;
+  render();
+ }catch(e){
+  const msg=e?.name==='AbortError'?'Сервер разбирал УПД дольше 30 секунд. Повторите один раз.':String(e?.message||e);
+  if(errBox){errBox.className='wr-alert red';errBox.innerHTML='<b>УПД не загрузился.</b><br>'+esc(msg);errBox.style.display='block'}
+  else alert('Не удалось разобрать УПД: '+msg);
+ }finally{if($('wr-parse')){$('wr-parse').disabled=false;$('wr-parse').textContent='Проверить УПД'}}
 }
 async function createReceipt(){
  if(!preview?.items?.length)return;
@@ -176,7 +201,7 @@ function render(){
  if(!root)return;
  const can=!!access?.can_manage;
  root.innerHTML='<div class="wr-head"><div><div style="font-size:19px;font-weight:800">📥 Приёмка товара · Витебск</div><div class="wr-muted">УПД → артикулы → штрихкоды → приёмка двумя ТСД. Все сканы записываются с сотрудником и временем.</div></div></div>'+
-   (can?'<div class="wr-card wr-upload"><b>Загрузить новый УПД</b><div class="wr-muted">Поддерживаются .xls и .xlsx. Система возьмёт артикул, товар и количество, затем свяжет их с нашим справочником штрихкодов.</div><input id="wr-file" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><button class="wr-btn primary" id="wr-parse">Проверить УПД</button></div>':'')+
+   (can?'<div class="wr-card wr-upload"><b>Загрузить новый УПД</b><div class="wr-muted">Поддерживаются .xls и .xlsx. Система возьмёт артикул, товар и количество, затем свяжет их с нашим справочником штрихкодов.</div><input id="wr-file" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><div id="wr-upload-error" class="wr-alert blue" style="display:none;margin-top:8px"></div><button class="wr-btn primary" id="wr-parse">Проверить УПД</button></div>':'')+
    renderPreview()+
    '<div class="wr-grid"><div class="wr-card"><b>Документы приёмки</b><div style="margin-top:8px">'+renderSessions()+'</div></div><div><div id="wr-selected">'+renderSummary()+'</div></div></div>';
  if(can&&$('wr-parse'))$('wr-parse').onclick=parseUpd;
