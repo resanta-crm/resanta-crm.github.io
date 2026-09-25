@@ -5,8 +5,8 @@
  */
 (function(){
 'use strict';
-if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.161')return;
-const V='v23.6.161';
+if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.162')return;
+const V='v23.6.162';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -185,7 +185,7 @@ function render(){
  const root=$('markdown-root');if(!root)return;
  const tabs=statusTabs(),control=S.controlSummary||{};
  root.innerHTML='<div class="md-top"><div><div class="page-title" style="margin-bottom:3px">🏷️ Уценка</div><div style="font-size:12px;color:var(--sub)">Возвраты клиентов и сервиса · фото · гарантия · цена · задачи на продажу</div>'+importStatusHtml()+'</div>'
-  +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(isPayushin()?'<button class="btn-secondary" id="md-control-v23691">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class="btn-secondary" id="md-export-v236159" title="Сформировать свежий Excel только по товару, который сейчас в продаже">⬇ Excel · В продаже</button><button class="btn-secondary" id="md-refresh-v23687" title="Перечитать CRM и проверить последний импорт из 1С">↻ Обновить</button></div></div>'
+  +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(isPayushin()?'<button class="btn-secondary" id="md-control-v23691">🛡 Контроль продаж'+(n(control.alerts)?' <b>🔴 '+n(control.alerts)+'</b>':'')+'</button>':'')+'<button class="btn-secondary" id="md-export-v236159" title="Сформировать свежий Excel только по товару, который сейчас в продаже">⬇ Свежий Excel · В продаже</button><button class="btn-secondary" id="md-refresh-v23687" title="Перечитать CRM и проверить последний импорт из 1С">↻ Обновить</button></div></div>'
   +'<div class="card" style="margin-bottom:10px;padding:11px 13px;font-size:11px;line-height:1.5"><b>🛡 Уценённый товар сохраняет гарантию.</b> Фото и описание состояния видят все сотрудники. '+(isPayushin()?'<b>Скидку и план продажи утверждаете только вы.</b>':'Цена и скидка утверждаются Александром Паюшиным.')+'</div>'
   +'<div class="md-stats">'+tabs.map(x=>'<button class="md-chip '+(S.filter===x[0]?'active':'')+'" data-md-filter="'+x[0]+'">'+x[1]+' <b>'+x[2]+'</b></button>').join('')+'</div>'
   +'<div class="md-tools"><input class="md-search" id="md-search-v23687" enterkeyhint="search" value="'+attr(S.search)+'" placeholder="🔍 Поиск по артикулу, номенклатуре, серийному номеру..."><button type="button" class="btn-secondary md-search-go" id="md-search-go-v23695">🔍 Найти</button><span style="font-size:10px;color:var(--sub)">Найдено: '+S.total+'</span></div>'
@@ -595,8 +595,8 @@ function photoUnit(unit){
  const v=Math.max(1,Number(unit)||1);S.photoUnit=v;refreshDetail();
 }
 async function exportExcel(){
- const btn=$('md-export-v236159'),old=btn?.textContent||'⬇ Excel · В продаже';
- if(btn){btn.disabled=true;btn.textContent='⏳ Готовлю Excel…'}
+ const btn=$('md-export-v236159'),old=btn?.textContent||'⬇ Свежий Excel · В продаже';
+ if(btn){btn.disabled=true;btn.textContent='⏳ Формирую свежий Excel…'}
  try{
   const d=dbx();
   if(!d?.auth?.getSession)throw new Error('Авторизация CRM ещё не готова');
@@ -630,14 +630,14 @@ async function exportExcel(){
   // Нативное скачивание вместо загрузки тяжёлого XLSX в память браузера.
   // Это стабильно работает и на мобильных/старых браузерах.
   window.location.assign(out.download_url);
-  setTimeout(()=>{const b=$('md-export-v236159');if(b){b.disabled=false;b.textContent='⬇ Excel · В продаже'}},1800);
+  setTimeout(()=>{const b=$('md-export-v236159');if(b){b.disabled=false;b.textContent='⬇ Свежий Excel · В продаже'}},1800);
   return;
  }catch(e){
   const msg=e?.name==='AbortError'?'Выгрузка заняла больше 90 секунд. Повторите ещё раз.':String(e?.message||e);
   alert('Не удалось выгрузить Excel: '+msg);
  }finally{
   const b=$('md-export-v236159');
-  if(b&&b.textContent==='⏳ Готовлю Excel…'){b.disabled=false;b.textContent=old}
+  if(b&&b.textContent==='⏳ Формирую свежий Excel…'){b.disabled=false;b.textContent=old}
  }
 }
 
@@ -696,7 +696,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,excelExportForAll:true,excelEmbeddedPhotos:true,nativeSignedDownload:true,freshPricedOnlyExport:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
+ version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,excelExportForAll:true,excelEmbeddedPhotos:true,nativeSignedDownload:true,freshPricedOnlyExport:true,parallelPhotoExport:true,oldExportCleanup:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
