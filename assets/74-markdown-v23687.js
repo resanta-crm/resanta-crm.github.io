@@ -5,8 +5,8 @@
  */
 (function(){
 'use strict';
-if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.159')return;
-const V='v23.6.159';
+if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.160')return;
+const V='v23.6.160';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -604,7 +604,7 @@ async function exportExcel(){
   if(error)throw error;
   const token=data?.session?.access_token;
   if(!token)throw new Error('Сессия CRM истекла. Войдите в CRM заново.');
-  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),120000);
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),90000);
   let r;
   try{
    r=await fetch('https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/markdown-export-xlsx',{
@@ -619,29 +619,28 @@ async function exportExcel(){
     cache:'no-store'
    });
   }finally{clearTimeout(timer)}
-  if(!r.ok){
-   const raw=await r.text();let msg=raw;
-   try{const j=JSON.parse(raw);msg=j?.message||j?.error||raw}catch(_){}
-   throw new Error(msg||('HTTP '+r.status));
+  const raw=await r.text();
+  let out=null;
+  try{out=raw?JSON.parse(raw):null}catch(_){}
+  if(!r.ok||!out?.ok){
+   throw new Error(out?.message||out?.error||raw||('HTTP '+r.status));
   }
-  const blob=await r.blob();
-  if(!blob.size)throw new Error('Сервер вернул пустой файл');
-  const cd=r.headers.get('content-disposition')||'';
-  const m=cd.match(/filename\*=UTF-8''([^;]+)/i);
-  const pad=x=>String(x).padStart(2,'0'),dt=new Date();
-  let name='Уценка_Resanta_'+dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate())+'.xlsx';
-  if(m){try{name=decodeURIComponent(m[1])}catch(_){}}
-  const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),3000);
-  if(btn){btn.textContent='✅ Excel готов';setTimeout(()=>{const b=$('md-export-v236159');if(b)b.textContent='⬇ Excel с фото'},1600)}
+  if(!out.download_url)throw new Error('Сервер не вернул ссылку на Excel');
+  if(btn)btn.textContent='✅ Excel готов';
+  // Нативное скачивание вместо загрузки тяжёлого XLSX в память браузера.
+  // Это стабильно работает и на мобильных/старых браузерах.
+  window.location.assign(out.download_url);
+  setTimeout(()=>{const b=$('md-export-v236159');if(b){b.disabled=false;b.textContent='⬇ Excel с фото'}},1800);
+  return;
  }catch(e){
-  const msg=e?.name==='AbortError'?'Выгрузка заняла больше 2 минут. Повторите ещё раз.':String(e?.message||e);
+  const msg=e?.name==='AbortError'?'Выгрузка заняла больше 90 секунд. Повторите ещё раз.':String(e?.message||e);
   alert('Не удалось выгрузить Excel: '+msg);
  }finally{
-  const b=$('md-export-v236159');if(b){b.disabled=false;if(b.textContent==='⏳ Готовлю Excel…')b.textContent=old}
+  const b=$('md-export-v236159');
+  if(b&&b.textContent==='⏳ Готовлю Excel…'){b.disabled=false;b.textContent=old}
  }
 }
+
 function camera(){const x=$('markdown-camera-v23687');if(x){x.value='';x.click()}}
 function gallery(){const x=$('markdown-gallery-v23687');if(x){x.value='';x.click()}}
 async function compress(file){
@@ -697,7 +696,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,excelExportForAll:true,excelEmbeddedPhotos:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
+ version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,excelExportForAll:true,excelEmbeddedPhotos:true,nativeSignedDownload:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
