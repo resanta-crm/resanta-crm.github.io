@@ -5,7 +5,7 @@
  */
 (function(){
 'use strict';
-if(window.RESANTA_MARKDOWN_V23687)return;
+if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.158')return;
 const V='v23.6.158';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0};
 const $=id=>document.getElementById(id);
