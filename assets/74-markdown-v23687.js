@@ -5,8 +5,8 @@
  */
 (function(){
 'use strict';
-if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.162')return;
-const V='v23.6.162';
+if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.163')return;
+const V='v23.6.163';
 const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -696,7 +696,7 @@ window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,excelExportForAll:true,excelEmbeddedPhotos:true,nativeSignedDownload:true,freshPricedOnlyExport:true,parallelPhotoExport:true,oldExportCleanup:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
+ version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,excelExportForAll:true,excelEmbeddedPhotos:true,nativeSignedDownload:true,freshPricedOnlyExport:true,parallelPhotoExport:true,oldExportCleanup:true,asciiStorageKey:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
