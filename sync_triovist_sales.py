@@ -117,25 +117,41 @@ def fetch_message_headers_batch(mail: imaplib.IMAP4_SSL, message_ids: list[bytes
 
 
 def recent_subject_candidates(mail: imaplib.IMAP4_SSL, message_ids: list[bytes]) -> list[dict]:
+    """Ищем свежие письма с конца ящика и останавливаемся сразу, когда их достаточно.
+
+    Раньше каждый почасовой запуск перечитывал заголовки всех писем за 21 день.
+    На большом ящике это занимало минуты и GitHub-run не успевал быстро забрать
+    новый срез 1С. Теперь читаем только самые новые письма — источник истины тот же,
+    но задержка импорта резко меньше.
+    """
     candidates: list[dict] = []
     started = time.monotonic()
-    total_batches = max(1, (len(message_ids) + HEADER_BATCH_SIZE - 1) // HEADER_BATCH_SIZE)
-    for batch_no, start in enumerate(range(0, len(message_ids), HEADER_BATCH_SIZE), 1):
+    newest_first = list(reversed(message_ids))
+    total_batches = max(1, (len(newest_first) + HEADER_BATCH_SIZE - 1) // HEADER_BATCH_SIZE)
+    for batch_no, start in enumerate(range(0, len(newest_first), HEADER_BATCH_SIZE), 1):
         if time.monotonic() - started > HEADER_SCAN_DEADLINE:
+            if candidates:
+                log(
+                    f"⚠️ Лимит сканирования заголовков {HEADER_SCAN_DEADLINE} сек.; "
+                    f"использую уже найденные свежие письма: {len(candidates)}."
+                )
+                break
             raise RuntimeError(
                 f"Почта слишком долго отдаёт заголовки: превышен лимит {HEADER_SCAN_DEADLINE} сек. "
                 "Данные CRM не изменены."
             )
-        batch = message_ids[start:start + HEADER_BATCH_SIZE]
-        log(f"  Заголовки {batch_no}/{total_batches}: {len(batch)} писем...")
+        batch = newest_first[start:start + HEADER_BATCH_SIZE]
+        log(f"  Свежие заголовки {batch_no}/{total_batches}: {len(batch)} писем...")
         for meta in fetch_message_headers_batch(mail, batch):
             if SUBJECT_MARKER.lower() in meta["subject"].lower():
                 candidates.append(meta)
+        if len(candidates) >= MAX_FULL_MESSAGES:
+            break
+
     candidates.sort(key=lambda x: x["sent"], reverse=True)
-    log(f"Найдено писем по маркеру «{SUBJECT_MARKER}»: {len(candidates)}.")
-    if len(candidates) > MAX_FULL_MESSAGES:
-        log(f"Полностью проверю {MAX_FULL_MESSAGES} самых свежих писем.")
-    return candidates[:MAX_FULL_MESSAGES]
+    candidates = candidates[:MAX_FULL_MESSAGES]
+    log(f"Найдено свежих писем по маркеру «{SUBJECT_MARKER}»: {len(candidates)}.")
+    return candidates
 
 
 def xlsx_attachment(msg) -> tuple[str | None, bytes | None]:
