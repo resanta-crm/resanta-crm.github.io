@@ -6,8 +6,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_MARKDOWN_V23687)return;
-const V='v23.6.114';
-const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null};
+const V='v23.6.158';
+const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=v=>esc(v).replace(/"/g,'&quot;');
@@ -303,18 +303,34 @@ function saleEventStatus(e){
 }
 async function detailHtml(data){
  const i=data.item||{},photos=Array.isArray(data.photos)?data.photos:[],assign=Array.isArray(data.assignments)?data.assignments:[],sales=Array.isArray(data.sale_events)?data.sale_events:[];
- const photoUrls=await Promise.all(photos.map(async p=>({...p,signed_url:await signed(p.storage_path)})));
+ const photoUrls=await Promise.all(photos.map(async p=>({...p,unit_no:Math.max(1,Number(p.unit_no)||1),signed_url:await signed(p.storage_path)})));
  const stage=i.review_status||'collecting';
- const typeCounts={overall:0,defect:0,label:0};
- photos.forEach(p=>{if(Object.prototype.hasOwnProperty.call(typeCounts,p.photo_type))typeCounts[p.photo_type]++});
+ const unitCount=Math.max(1,Math.ceil(n(i.quantity)||1));
+ const progress=Array.from({length:unitCount},(_,idx)=>{
+   const unitNo=idx+1,pp=photos.filter(p=>(Math.max(1,Number(p.unit_no)||1)===unitNo));
+   const counts={overall:0,defect:0,label:0};
+   pp.forEach(p=>{if(Object.prototype.hasOwnProperty.call(counts,p.photo_type))counts[p.photo_type]++});
+   return {unit_no:unitNo,counts,complete:counts.overall>0&&counts.defect>0&&counts.label>0,photo_count:pp.length};
+ });
+ const firstIncomplete=progress.find(x=>!x.complete);
+ if(!S.photoUnit||S.photoUnit<1||S.photoUnit>unitCount)S.photoUnit=firstIncomplete?.unit_no||1;
+ const selectedUnit=Math.max(1,Math.min(unitCount,Number(S.photoUnit)||1));
+ const selectedProgress=progress[selectedUnit-1]||progress[0];
+ const typeCounts=selectedProgress.counts;
+ const completeUnits=progress.filter(x=>x.complete).length;
+ const allPhotosReady=completeUnits===unitCount;
  const hasCondition=!!String(i.condition_comment||'').trim();
- const prepReady=typeCounts.overall>0&&typeCounts.defect>0&&typeCounts.label>0&&hasCondition;
+ const prepReady=allPhotosReady&&hasCondition;
+ const unitStatus=unitCount>1
+  ?'<div style="margin:7px 0;font-size:11px"><b>Экземпляры:</b> '+completeUnits+' из '+unitCount+' полностью сфотографированы</div><div class="md-tags">'+progress.map(x=>'<span class="md-tag '+(x.complete?'good':'bad')+'">№'+x.unit_no+' '+(x.complete?'✅':'❌')+'</span>').join('')+'</div>'
+  :'';
  const workflowBox='<div class="md-box"><h4>✅ Подготовка к оценке</h4>'
-  +'<div style="font-size:12px;line-height:1.9">'+(typeCounts.overall?'✅':'❌')+' Общий вид<br>'+(typeCounts.defect?'✅':'❌')+' Дефект / состояние<br>'+(typeCounts.label?'✅':'❌')+' Шильдик / артикул<br>'+(hasCondition?'✅':'❌')+' Описание состояния</div>'
+  +unitStatus
+  +'<div style="font-size:12px;line-height:1.9;margin-top:6px"><b>Экземпляр №'+selectedUnit+':</b><br>'+(typeCounts.overall?'✅':'❌')+' Общий вид<br>'+(typeCounts.defect?'✅':'❌')+' Дефект / состояние<br>'+(typeCounts.label?'✅':'❌')+' Шильдик / артикул<br>'+(hasCondition?'✅':'❌')+' Общее описание состояния</div>'
   +(stage==='priced'?'<div style="margin-top:8px;font-weight:800;color:#166534">✅ Цена утверждена — товар в продаже</div>'
-   :stage==='ready_for_pricing'?'<div style="margin-top:8px;font-weight:800;color:#92400E">⏳ Отправлено Александру Паюшину на оценку'+(i.submitted_for_pricing_by?' · '+esc(i.submitted_for_pricing_by):'')+'</div>'
+   :stage==='ready_for_pricing'&&allPhotosReady?'<div style="margin-top:8px;font-weight:800;color:#92400E">⏳ Отправлено Александру Паюшину на оценку'+(i.submitted_for_pricing_by?' · '+esc(i.submitted_for_pricing_by):'')+'</div>'
    :prepReady?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSubmitPricingV23689()">✅ Готово — отправить Александру на оценку</button></div>'
-   :'<div style="margin-top:8px;color:#991B1B;font-size:11px">Нужны 3 обязательных фото и описание состояния.</div>')+'</div>';
+   :'<div style="margin-top:8px;color:#991B1B;font-size:11px">Для каждого экземпляра нужны: общий вид, дефект/состояние и шильдик/артикул, плюс описание состояния.</div>')+'</div>';
  const pricing=data.is_payushin&&['ready_for_pricing','priced'].includes(stage)?'<div class="md-box"><h4>💰 Цена · только Александр Паюшин</h4><div class="md-formgrid"><label>Скидка, %<input id="md-discount-v23687" type="number" min="0" max="90" step="0.1" oninput="crmMarkdownPriceSyncV236114(&quot;discount&quot;)" value="'+(i.discount_pct??'')+'"></label><label>Финальная цена, BYN<input id="md-final-v23687" type="number" min="0" step="0.01" oninput="crmMarkdownPriceSyncV236114(&quot;final&quot;)" value="'+(i.discount_set_at?i.final_price:'')+'"></label></div><label style="display:block;margin-top:8px">Причина скидки<input id="md-price-reason-v23687" value="'+attr(i.discount_reason||'')+'" placeholder="Например: царапины корпуса, повреждена упаковка"></label><div class="md-actions"><button class="md-btn green" onclick="crmMarkdownSavePriceV23687()">Утвердить цену</button></div></div>':'';
  let assignBox='';
  if(data.is_payushin&&stage==='priced'){
@@ -333,12 +349,14 @@ async function detailHtml(data){
      +(canReport?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownReportSaleV23687(&quot;'+attr(a.id)+'&quot;,&quot;'+attr(a.target_qty)+'&quot;)">🧾 Заявить продажу</button></div>':'')
      +'</div>';
   }).join(''):'<div style="font-size:11px;color:var(--sub)">Задачи менеджерам ещё не поставлены.</div>';
- const photosHtml=photoUrls.length?'<div class="md-photo-grid">'+photoUrls.map(p=>'<div class="md-photo">'+(p.signed_url?'<img src="'+attr(p.signed_url)+'" onclick="crmMarkdownZoomV23687(&quot;'+attr(p.signed_url)+'&quot;)">':'<div style="height:120px;display:flex;align-items:center;justify-content:center">📷</div>')+'<div class="md-photo-meta"><b>'+esc(photoTypeLabel(p.photo_type))+'</b><br>'+esc(p.uploaded_by)+' · '+date(p.created_at)+(p.comment?'<br>'+esc(p.comment):'')+(data.is_payushin?'<br><button class="md-btn" style="padding:4px 6px;margin-top:4px" onclick="crmMarkdownDeletePhotoV23687(&quot;'+attr(p.id)+'&quot;,&quot;'+attr(p.storage_path)+'&quot;)">Удалить</button>':'')+'</div></div>').join('')+'</div>':'<div style="font-size:11px;color:#991B1B">Фото ещё нет. Сотруднику нужно сфотографировать общий вид и дефекты.</div>';
+ const selectedPhotos=photoUrls.filter(p=>p.unit_no===selectedUnit);
+ const photosHtml=selectedPhotos.length?'<div class="md-photo-grid">'+selectedPhotos.map(p=>'<div class="md-photo">'+(p.signed_url?'<img src="'+attr(p.signed_url)+'" onclick="crmMarkdownZoomV23687(&quot;'+attr(p.signed_url)+'&quot;)">':'<div style="height:120px;display:flex;align-items:center;justify-content:center">📷</div>')+'<div class="md-photo-meta"><b>Экземпляр №'+selectedUnit+' · '+esc(photoTypeLabel(p.photo_type))+'</b><br>'+esc(p.uploaded_by)+' · '+date(p.created_at)+(p.comment?'<br>'+esc(p.comment):'')+(data.is_payushin?'<br><button class="md-btn" style="padding:4px 6px;margin-top:4px" onclick="crmMarkdownDeletePhotoV23687(&quot;'+attr(p.id)+'&quot;,&quot;'+attr(p.storage_path)+'&quot;)">Удалить</button>':'')+'</div></div>').join('')+'</div>':'<div style="font-size:11px;color:#991B1B">У экземпляра №'+selectedUnit+' фото ещё нет.</div>';
+ const unitSelect=unitCount>1?'<label>Экземпляр товара<select id="md-photo-unit-v236158" onchange="crmMarkdownPhotoUnitV236158(this.value)">'+progress.map(x=>'<option value="'+x.unit_no+'" '+(x.unit_no===selectedUnit?'selected':'')+'>Экземпляр №'+x.unit_no+' из '+unitCount+(x.complete?' · готов ✅':' · нужны фото')+'</option>').join('')+'</select></label>':'<input type="hidden" id="md-photo-unit-v236158" value="1">';
  return '<div class="md-head"><div><div style="font-size:18px;font-weight:900">'+esc(i.nomenclature)+'</div><div style="font-size:12px;color:var(--sub)">Артикул <b>'+esc(i.article)+'</b> · '+qty(i.quantity)+' шт. · '+esc(sourceLabel(i.source_type))+'</div></div><button class="md-x" onclick="crmMarkdownCloseV23687()">×</button></div>'
  +'<div class="md-sections"><div>'
  +'<div class="md-box"><h4>📦 Состояние и гарантия</h4><div style="font-size:12px;line-height:1.55"><b>🛡 Гарантия: '+(i.warranty_active?'сохраняется':'уточнить')+'</b>'+(i.warranty_months?' · '+i.warranty_months+' мес.':'')+(i.warranty_note?'<br>'+esc(i.warranty_note):'')+(i.source_comment?'<br><br><b>Комментарий 1С:</b> '+esc(i.source_comment):'')+'</div><label style="display:block;margin-top:9px">Фактическое состояние<textarea id="md-condition-v23687" placeholder="Что с товаром: царапины, упаковка, комплектность...">'+esc(i.condition_comment||'')+'</textarea></label><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownSaveConditionV23687()">Сохранить описание</button></div></div>'
  +workflowBox
- +'<div class="md-box"><h4>📷 Фотографии</h4><div class="md-formgrid"><label>Тип фото<select id="md-photo-type-v23687"><option value="overall">Общий вид</option><option value="defect">Дефект / состояние</option><option value="label">Шильдик / артикул</option><option value="box">Упаковка</option><option value="other">Другое</option></select></label><label>Комментарий<input id="md-photo-comment-v23687" placeholder="Что видно на фото"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownCameraV23687()">📷 Снять на телефон</button><button class="md-btn" onclick="crmMarkdownGalleryV23687()">🖼 Выбрать из галереи</button></div><div style="margin-top:9px">'+photosHtml+'</div></div>'
+ +'<div class="md-box"><h4>📷 Фотографии</h4>'+(unitCount>1?'<div class="md-note" style="display:block;margin-bottom:8px"><b>Важно:</b> '+unitCount+' шт. одного артикула считаются отдельными экземплярами. Фото каждого экземпляра хранятся отдельно.</div>':'')+'<div class="md-formgrid">'+unitSelect+'<label>Тип фото<select id="md-photo-type-v23687"><option value="overall">Общий вид</option><option value="defect">Дефект / состояние</option><option value="label">Шильдик / артикул</option><option value="box">Упаковка</option><option value="other">Другое</option></select></label><label>Комментарий<input id="md-photo-comment-v23687" placeholder="Что видно на фото"></label></div><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownCameraV23687()">📷 Снять на телефон</button><button class="md-btn" onclick="crmMarkdownGalleryV23687()">🖼 Выбрать из галереи</button></div><div style="margin-top:9px">'+photosHtml+'</div></div>'
  +'</div><div>'
  +'<div class="md-box"><h4>💵 Цена</h4><div style="font-size:12px">Мелкий опт 2 с НДС: <b>'+money(i.base_price)+'</b></div><div style="font-size:20px;font-weight:900;color:#166534;margin-top:5px">'+(i.discount_set_at?money(i.final_price):'Цена ещё не утверждена')+'</div>'+(i.discount_set_at?'<div style="font-size:11px;color:var(--sub)">Скидка '+n(i.discount_pct).toFixed(1)+'% · '+esc(i.discount_set_by||'')+'</div>':'')+'</div>'
  +pricing+assignBox
@@ -346,7 +364,7 @@ async function detailHtml(data){
  +'</div></div>';
 }
 async function openItem(id){
- ensureDom();S.current=id;
+ ensureDom();if(S.current!==id)S.photoUnit=0;S.current=id;
  const modal=$('markdown-modal-v23687'),body=$('markdown-detail-v23687');modal.classList.add('open');body.innerHTML='<div style="padding:30px;text-align:center">Загружаю карточку…</div>';
  if(isPayushin()&&!S.managers){try{S.managers=await rpc('markdown_get_managers_v1',{})}catch(e){console.warn(V,e);S.managers=[]}}
  const my=id;
@@ -572,6 +590,9 @@ async function resolveSalesControlEvent(id,action){
   await loadSalesControl(true);await loadControlSummary(true);if(S.current)await refreshDetail();
  }catch(e){alert('Не удалось сохранить решение: '+(e?.message||e))}
 }
+function photoUnit(unit){
+ const v=Math.max(1,Number(unit)||1);S.photoUnit=v;refreshDetail();
+}
 function camera(){const x=$('markdown-camera-v23687');if(x){x.value='';x.click()}}
 function gallery(){const x=$('markdown-gallery-v23687');if(x){x.value='';x.click()}}
 async function compress(file){
@@ -586,17 +607,19 @@ async function compress(file){
 async function uploadFiles(list){
  if(!S.current||!list?.length)return;
  const files=[...list].slice(0,8),type=$('md-photo-type-v23687')?.value||'overall',comment=$('md-photo-comment-v23687')?.value||'',d=dbx();
+ const unitNo=Math.max(1,Number($('md-photo-unit-v236158')?.value||S.photoUnit||1));
+ S.photoUnit=unitNo;
  if(!d)return;
  let ok=0;
  for(const f of files){
   try{
-   const body=await compress(f),ext=(body===f?(f.name.split('.').pop()||'jpg'):'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg',path=S.current+'/'+Date.now()+'_'+Math.random().toString(36).slice(2)+'.'+ext;
+   const body=await compress(f),ext=(body===f?(f.name.split('.').pop()||'jpg'):'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg',path=S.current+'/unit-'+unitNo+'/'+Date.now()+'_'+Math.random().toString(36).slice(2)+'.'+ext;
    const {error}=await d.storage.from('markdown-photos').upload(path,body,{upsert:false,contentType:body.type||f.type||'image/jpeg'});
    if(error)throw error;
-   await rpc('markdown_add_photo_v1',{p_item_id:S.current,p_storage_path:path,p_photo_type:type,p_comment:comment||null});ok++;
+   await rpc('markdown_add_photo_v2',{p_item_id:S.current,p_storage_path:path,p_photo_type:type,p_comment:comment||null,p_unit_no:unitNo});ok++;
   }catch(e){alert('Фото '+esc(f.name)+' не загрузилось: '+(e?.message||e));break}
  }
- if(ok){alert('✅ Загружено фото: '+ok);await refreshDetail();await load(true)}
+ if(ok){alert('✅ Экземпляр №'+unitNo+': загружено фото '+ok);await refreshDetail();await load(true)}
 }
 async function deletePhoto(id,path){
  if(!confirm('Удалить это фото?'))return;
@@ -618,12 +641,13 @@ window.crmMarkdownSavePriceV23687=savePrice;
 window.crmMarkdownPriceSyncV236114=priceSync;
 window.crmMarkdownAssignV23687=assign;
 window.crmMarkdownReportSaleV23687=reportSale;
+window.crmMarkdownPhotoUnitV236158=photoUnit;
 window.crmMarkdownCameraV23687=camera;
 window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
- version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
+ version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
  mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
