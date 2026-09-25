@@ -8,10 +8,10 @@ on:
       - 'triovist_import_core.py'
       - '.github/workflows/import-triovist-sales.yml'
   schedule:
-    # Проверяем продажи каждый час через 10 минут после начала часа.
-    # Если 1С прислала новый отчёт «Продажи для CRM», он будет подхвачен автоматически.
-    # Без нового письма данные не перезаписываются.
-    - cron: '10 * * * *'
+    # GitHub schedule иногда запускается с задержкой, поэтому ставим две независимые
+    # проверки в каждом часу. Повтор безопасен: уже загруженное письмо не перезаписывается.
+    # После письма 1С в :00 ближайшая проверка — :07, страховочная — :37.
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -42,6 +42,9 @@ jobs:
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TRIOVIST_SALES_LOOKBACK_DAYS: '21'
-          TRIOVIST_MAX_EMAIL_CANDIDATES: '20'
+          TRIOVIST_SALES_LOOKBACK_DAYS: '4'
+          TRIOVIST_MAX_EMAIL_CANDIDATES: '8'
+          TRIOVIST_IMAP_TIMEOUT_SECONDS: '30'
+          TRIOVIST_IMAP_HEADER_BATCH: '50'
+          TRIOVIST_HEADER_SCAN_DEADLINE_SECONDS: '45'
         run: python sync_triovist_sales.py
