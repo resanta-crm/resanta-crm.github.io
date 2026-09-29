@@ -134,26 +134,45 @@ def is_target_slice(meta: dict) -> bool:
     return local.hour in TARGET_HOURS
 
 
+def slice_key(value: datetime) -> tuple[str, int]:
+    local = normalize_dt(value).astimezone(MINSK)
+    return local.date().isoformat(), local.hour
+
+
 def choose_pending_slice(headers: list[dict], statuses: dict[str, dict]) -> dict | None:
     eligible = sorted((x for x in headers if is_target_slice(x)), key=lambda x: x["sent"])
     if not eligible:
         return None
+
+    # В пределах одного часа 1С может повторно отправить письмо. Для CRM это всё
+    # равно один логический срез; выбираем самое свежее письмо данного часа.
+    by_slice: dict[tuple[str, int], dict] = {}
+    for meta in eligible:
+        key = slice_key(meta["sent"])
+        if key not in by_slice or normalize_dt(meta["sent"]) > normalize_dt(by_slice[key]["sent"]):
+            by_slice[key] = meta
+    slices = sorted(by_slice.items(), key=lambda item: item[0])
 
     sales_stamp = status_stamp(statuses.get("sales"))
     tri_stamp = status_stamp(statuses.get("triovist_sales"))
     stamps = [x for x in (sales_stamp, tri_stamp) if x is not None]
 
     if sales_stamp is not None and tri_stamp is not None and same_stamp(sales_stamp, tri_stamp):
-        baseline = max(stamps)
-        pending = [x for x in eligible if normalize_dt(x["sent"]) > baseline + timedelta(seconds=1)]
+        baseline_key = slice_key(max(stamps))
+        pending = [meta for key, meta in slices if key > baseline_key]
         return pending[0] if pending else None
 
+    # Переход со старой раздельной схемы: синхронизируем обе части на логическом
+    # срезе, которого уже достигла более свежая цепочка, а не перескакиваем дальше.
     if stamps:
-        baseline = max(stamps)
-        candidates = [x for x in eligible if normalize_dt(x["sent"]) >= baseline - timedelta(seconds=1)]
-        return candidates[0] if candidates else None
+        baseline_key = slice_key(max(stamps))
+        same = [meta for key, meta in slices if key == baseline_key]
+        if same:
+            return same[-1]
+        pending = [meta for key, meta in slices if key > baseline_key]
+        return pending[0] if pending else None
 
-    return eligible[-1]
+    return slices[-1][1]
 
 
 def fetch_full_message(mail, meta: dict) -> tuple[str, bytes]:
