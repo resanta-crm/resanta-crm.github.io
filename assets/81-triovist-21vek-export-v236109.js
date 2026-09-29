@@ -6,13 +6,29 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_EXPORT_V236109)return;
-const VERSION='v23.6.115';
+const VERSION='v23.6.169';
 let xlsxFlight=null,exportFlight=null;
 
 function activeTriovist(){return document.getElementById('page-triovist')?.classList.contains('active');}
 function safeSheetName(v){return String(v||'21vek').replace(/[\\/?*\[\]:]/g,' ').trim().slice(0,31)||'21vek';}
 function toBool(v){return v===true?'Да':v===false?'Нет':'—';}
-function topLabel(pos){const n=Number(pos||0);if(n>0&&n<=30)return'TOP-30';if(n>30&&n<=60)return'TOP-60';if(n>60)return String(n);return'—';}
+function topLabel(c){
+  if(c?.top_error)return'Ошибка';
+  if(c?.top30===true)return'TOP-30';
+  if(c?.top60===true)return'TOP-60';
+  if(c?.top60===false)return'Вне TOP-60';
+  const n=Number(c?.listing_position||0);
+  if(n>0&&n<=30)return'TOP-30';
+  if(n>30&&n<=60)return'TOP-60';
+  if(n>60)return'Вне TOP-60';
+  return'Не проверено';
+}
+function topPosition(c){
+  const n=Number(c?.top_position||c?.listing_position||0);
+  if(n>0)return n;
+  if(c?.top60===false)return'>60';
+  return'';
+}
 function width(n){return {wch:n};}
 
 function loadXlsx(){
@@ -47,7 +63,6 @@ async function currentCards(){
 }
 
 function rowForExcel(c){
-  const pos=Number(c.listing_position||0)||null;
   return {
     'Менеджер':c.manager_name||'',
     'Артикул / SKU':c.sku||c.donor_article||'',
@@ -57,8 +72,8 @@ function rowForExcel(c){
     'Цена, BYN':c.price==null?'':Number(c.price),
     'В наличии':toBool(c.in_stock),
     'Поисковая фраза':c.keyword||'',
-    'Позиция':pos||'',
-    'TOP':topLabel(pos),
+    'Позиция':topPosition(c),
+    'TOP':topLabel(c),
     'Рейтинг':c.product_rating==null?'':Number(c.product_rating),
     'Отзывы':Number(c.review_count||0),
     'Негативные отзывы':Number(c.negative_reviews||0),
@@ -99,8 +114,8 @@ async function exportExcel(){
           'Дата рабочего снимка':snapshot,
           'Карточек':x.length,
           'В наличии':x.filter(c=>c.in_stock===true).length,
-          'TOP-30':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=30).length,
-          'TOP-60':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=60).length,
+          'TOP-30':x.filter(c=>c.top30===true||(c.top30==null&&Number(c.listing_position||0)>0&&Number(c.listing_position)<=30)).length,
+          'TOP-60':x.filter(c=>c.top60===true||(c.top60==null&&Number(c.listing_position||0)>0&&Number(c.listing_position)<=60)).length,
           'Источник':'Собственный парсер 21vek'
         };
       });
