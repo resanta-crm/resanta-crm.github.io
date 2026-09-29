@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-09-27-resanta-crm-v23.6.165-markdown-instance-accounting';
+const APP_VERSION = '2026-09-29-resanta-crm-v23.6.166-auth-refresh';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -41,7 +41,7 @@ const APP_VERSION = '2026-09-27-resanta-crm-v23.6.165-markdown-instance-accounti
 })();
 </script>
 <title>Ресанта CRM</title>
-<link rel="preload" href="./assets/01-crm-core.js?v=23.6.136-security" as="script">
+<link rel="preload" href="./assets/01-crm-core.js?v=23.6.166" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=23.6.102" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="./assets/01-crm-core.js?v=23.6.136-security"></script>
