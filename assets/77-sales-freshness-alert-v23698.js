@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SALES_FRESHNESS_ALERT_V23698)return;
-const VERSION='v23.6.118',TZ='Europe/Minsk',SOURCES=['sales','triovist_sales'];
+const VERSION='v23.6.167',TZ='Europe/Minsk',SOURCES=['sales','triovist_sales'];
 let channel=null,rows=new Map(),flight=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
@@ -20,12 +20,18 @@ function parts(d=new Date()){
 function getGlobal(){try{for(const r of(allImportStatus||[])){const s=String(r?.source||'').toLowerCase();if(SOURCES.includes(s))rows.set(s,r)}}catch(_){}}
 function put(r){const s=String(r?.source||'').toLowerCase();if(SOURCES.includes(s))rows.set(s,r)}
 function state(source){
-  const r=rows.get(source);if(!r)return{level:'bad',today:false,last:'—',day:'—',time:'—'};
-  const raw=r.source_message_at||r.updated_at||'',d=raw?new Date(raw):null;if(!d||Number.isNaN(d.getTime()))return{level:'bad',today:false,last:'—',day:'—',time:'—'};
-  const now=new Date(),np=parts(now),lp=parts(d),age=(now-d)/3600000,today=lp.date===np.date;
-  if(!today)return{level:'bad',today,last:lp.full,day:lp.day,time:lp.time};
-  if(age>3&&np.hour>=9&&np.hour<21)return{level:'warn',today,last:lp.full,day:lp.day,time:lp.time};
-  return{level:'ok',today,last:lp.full,day:lp.day,time:lp.time};
+  const r=rows.get(source);
+  if(!r)return{level:'bad',today:false,last:'—',day:'—',time:'—',updated:'—'};
+  const raw=r.source_message_at||'',d=raw?new Date(raw):null;
+  const updRaw=r.updated_at||r.last_success_at||'',u=updRaw?new Date(updRaw):null;
+  if(!d||Number.isNaN(d.getTime()))return{level:'bad',today:false,last:'—',day:'—',time:'—',updated:u&&!Number.isNaN(u.getTime())?parts(u).time:'—'};
+  const now=new Date(),np=parts(now),lp=parts(d),up=u&&!Number.isNaN(u.getTime())?parts(u):null;
+  const age=(now-d)/3600000,today=lp.date===np.date;
+  let level='ok';
+  if(String(r.status||'')!=='ok')level='warn';
+  else if(!today)level='bad';
+  else if(age>3&&np.hour>=9&&np.hour<21)level='warn';
+  return{level,today,last:lp.full,day:lp.day,time:lp.time,updated:up?.time||'—'};
 }
 function ensureSales(){
   const p=document.getElementById('page-sales');if(!p)return null;
@@ -49,32 +55,27 @@ function ensureTriovistBadge(){
   return el;
 }
 function paintBanner(el,level,html){
-  const cfg=level==='warn'?['#FDE68A','#FFFBEB','#92400E']:['#FCA5A5','#FEF2F2','#991B1B'];
+  const cfg=level==='ok'?['#86EFAC','#F0FDF4','#166534']:level==='warn'?['#FDE68A','#FFFBEB','#92400E']:['#FCA5A5','#FEF2F2','#991B1B'];
   el.style.cssText=`display:inline-flex;max-width:100%;align-items:center;gap:6px;margin:0 0 10px;padding:6px 9px;border-radius:8px;border:1px solid ${cfg[0]};background:${cfg[1]};color:${cfg[2]};font-size:11px;line-height:1.35;flex-wrap:wrap`;
   el.innerHTML=html;
 }
 function paintBadge(el,level,text,title){
   const cfg=level==='ok'?['#86EFAC','#F0FDF4','#166534']:level==='warn'?['#FCD34D','#FFFBEB','#92400E']:['#FCA5A5','#FEF2F2','#991B1B'];
-  el.style.cssText=`display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;margin:0 8px 0 10px;padding:6px 10px;border-radius:999px;border:1px solid ${cfg[0]};background:${cfg[1]};color:${cfg[2]};font-size:12px;font-weight:700;line-height:1.2;box-sizing:border-box`;
+  el.style.cssText=`display:inline-flex;align-items:center;justify-content:center;white-space:normal;max-width:430px;margin:0 8px 0 10px;padding:6px 10px;border-radius:999px;border:1px solid ${cfg[0]};background:${cfg[1]};color:${cfg[2]};font-size:12px;font-weight:700;line-height:1.2;box-sizing:border-box`;
   el.textContent=text;el.title=title;el.setAttribute('aria-label',title);
 }
+function line(s){return s.time==='—'?'1С: подтверждённого среза нет':`1С: срез ${s.day}, ${s.time} · CRM обновлена ${s.updated}`}
+function hint(s,section){return s.time==='—'?`${section}: подтверждённого среза 1С ещё нет.`:`${section}: подтверждённый срез 1С ${s.last}; CRM обновлена в ${s.updated}.`}
 function renderSales(){
-  const s=state('sales'),old=document.getElementById('sales-fresh-sales-v23698');
-  if(s.level==='ok'){old?.remove();return}
-  const el=ensureSales();if(!el)return;
-  paintBanner(el,s.level,`${s.level==='bad'?'🔴':'⚠️'} <b>Продажи 1С:</b> последний срез ${esc(s.last)}. Показаны последние подтверждённые данные.`);
+  const s=state('sales'),el=ensureSales();if(!el)return;
+  const icon=s.level==='ok'?'🟢':s.level==='warn'?'🟡':'🔴';
+  paintBanner(el,s.level,`${icon} <b>${esc(line(s))}</b>`);
+  el.title=hint(s,'Продажи');
 }
 function renderTriovist(){
-  const legacy=document.getElementById('sales-fresh-triovist_sales-v23698');
-  const el=ensureTriovistBadge();if(!el){legacy?.remove();return}
-  const tri=state('triovist_sales'),all=state('sales');
-  if(tri.level==='ok'){
-    paintBadge(el,'ok',`🟢 1С ${tri.time}`,`Triovist: свежий срез 1С — ${tri.last}`);return;
-  }
-  if(all.today){
-    paintBadge(el,'warn',`🟡 1С задержка ${tri.time}`,`Общий обмен 1С работает. Triovist задержан: последний срез ${tri.last}. CRM показывает последний проверенный факт.`);return;
-  }
-  paintBadge(el,'bad','🔴 1С нет сегодня',`Продажи Triovist сегодня не обновлялись. Последний срез: ${tri.last}. Последние подтверждённые данные сохранены.`);
+  const el=ensureTriovistBadge();if(!el)return;
+  const s=state('triovist_sales'),icon=s.level==='ok'?'🟢':s.level==='warn'?'🟡':'🔴';
+  paintBadge(el,s.level,`${icon} ${line(s)}`,hint(s,'Triovist'));
 }
 function render(){getGlobal();renderSales();renderTriovist()}
 async function load(){if(flight)return flight;flight=(async()=>{getGlobal();const d=dbx();if(d){try{const q=await d.from('crm_import_status').select('source,status,source_message_at,updated_at,row_count,details,error_text').in('source',SOURCES);if(!q.error)(q.data||[]).forEach(put)}catch(_){}}render()})().finally(()=>flight=null);return flight}
