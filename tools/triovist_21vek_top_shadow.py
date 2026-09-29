@@ -37,9 +37,9 @@ TIMEOUT=max(10,int(os.environ.get('TOP_HTTP_TIMEOUT','30')))
 DEEP_EXACT=os.environ.get('TOP_DEEP_EXACT','0').strip().lower() not in ('0','false','no')
 DEEP_RADIUS=max(0,min(4,int(os.environ.get('TOP_DEEP_RADIUS','2'))))
 MAX_DEEP_PAGES=max(0,min(20,int(os.environ.get('TOP_MAX_DEEP_PAGES_PER_KEYWORD','10'))))
-PARSER_VERSION='top-shadow-v0.4'
+PARSER_VERSION='top-shadow-v0.5'
 ENDPOINT='https://gate.21vek.by/search-composer/api/v3/products'
-UA='ResantaCRM-21vekTopShadow/0.4 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekTopShadow/0.5 (+https://resanta-crm.by)'
 
 
 def api_headers(json_body: bool=False, prefer: str|None=None) -> dict[str,str]:
@@ -136,13 +136,16 @@ def derive_keyword(row: dict) -> str:
     # Generic future fallback: the subgroup is preferable to a branded/model-specific
     # query because TOP should measure a commercial category query, not an exact SKU.
     if subgroup:
-        return subgroup.strip(" ,.;:-")
+        phrase=re.sub(r"\\s+"," ",subgroup).strip(" ,.;:-")
+        if phrase:
+            return phrase
 
     clean=re.sub(r"\\([^)]*\\)"," ",name)
     clean=re.sub(r"\\b(?:ресанта|huter|вихрь|eurolux)\\b"," ",clean,flags=re.I)
     clean=re.sub(r"\\b\\d+(?:[/.-]\\d+)+\\b"," ",clean)
     clean=re.sub(r"\\s+"," ",clean).strip(" ,.;:-")
-    return " ".join(clean.split()[:6])
+    phrase=" ".join(clean.split()[:6]).strip()
+    return phrase or "товар"
 
 
 def current_targets() -> list[dict]:
@@ -156,9 +159,11 @@ def current_targets() -> list[dict]:
     for imp in imports:
         rows=rest_get_all('triovist_content_cards',{'import_id':f"eq.{imp['id']}",'select':select})
         for x in rows:
-            source_kw=str(x.get('keyword') or '').strip()
-            x['keyword']=source_kw or derive_keyword(x)
+            source_kw=re.sub(r"\\s+"," ",str(x.get('keyword') or '')).strip(" ,.;:-")
+            derived=derive_keyword(x)
+            x['keyword']=source_kw or derived
             x['_keyword_generated']=not bool(source_kw)
+            x['_keyword_source']='source' if source_kw else 'generated'
             x['_baseline_snapshot_date']=imp.get('snapshot_date')
             out.append(x)
     return out
@@ -372,6 +377,8 @@ def main() -> None:
     groups=grouped_targets(valid)
     selected=[x for _,xs in groups for x in xs]
     generated=sum(1 for x in all_targets if x.get('_keyword_generated'))
+    if any(not str(x.get('keyword') or '').strip() for x in all_targets):
+        raise RuntimeError('TOP coverage contract violated: at least one card has no search phrase')
     run_id=insert_run(len(groups),len(all_targets))
     print(
         f'TOP shadow {run_id}: keywords={len(groups)} targets={len(all_targets)} '
