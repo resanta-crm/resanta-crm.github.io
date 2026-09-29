@@ -58,7 +58,19 @@ def claim():
     }
 
     if event=="push":
-        result.update(run=True,mode="push_test",do_top=True,limit="300",top_limit="12")
+        # If a boss already requested a real refresh from CRM, do not make it wait
+        # for GitHub cron after deploying parser fixes: claim it immediately and
+        # run the same full safe pipeline. Without a pending request, keep the
+        # lightweight push validation.
+        claimed=rpc("triovist_21vek_claim_refresh_v236107",{})
+        if claimed.get("claimed"):
+            result.update(
+                run=True,mode="crm_manual_after_push",
+                request_id=str(claimed.get("request_id") or ""),
+                do_top=True,do_promote=True,limit="2500",top_limit="500",skip_recent="0"
+            )
+        else:
+            result.update(run=True,mode="push_test",do_top=True,limit="300",top_limit="500")
     elif event=="workflow_dispatch":
         limit=(os.environ.get("DISPATCH_LIMIT") or "2500").strip() or "2500"
         top=(os.environ.get("DISPATCH_TOP_LIMIT") or "500").strip() or "500"
