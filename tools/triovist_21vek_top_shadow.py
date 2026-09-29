@@ -103,27 +103,31 @@ def norm_text(value: object) -> str:
 
 
 def derive_keyword(row: dict) -> str:
-    """Build a human category-level search phrase only when the source has none."""
+    """Build a human commercial search phrase when the source has none."""
     name=norm_text(row.get("product_name"))
     subgroup=norm_text(row.get("subgroup"))
 
     rules=[
-        (r"соединител\\w* для шланг", "соединитель для шланга"),
-        (r"насосн\\w* станц", "насосная станция"),
-        (r"инверторн\\w* генератор", "инверторный генератор"),
-        (r"воздушн\\w* компрессор|компрессор", "компрессор"),
+        (r"соединител\w* для шланг", "соединитель для шланга"),
+        (r"насосн\w* станц", "насосная станция"),
+        (r"инверторн\w* генератор", "инверторный генератор"),
+        (r"воздушн\w* компрессор|компрессор", "компрессор"),
         (r"мотоблок", "мотоблок"),
-        (r"набор\\w* инструмент", "набор инструментов"),
-        (r"отрезн\\w* диск", "круг отрезной"),
+        (r"набор\w* инструмент", "набор инструментов"),
+        (r"отрезн\w* диск", "круг отрезной"),
         (r"пылесос", "строительный пылесос"),
         (r"ножовк", "ножовка"),
-        (r"горелк\\w* газов|газов\\w* горелк", "горелка газовая"),
-        (r"полуавтомат\\w* свароч|свароч\\w* полуавтомат", "сварочный полуавтомат"),
-        (r"\\bбур\\b", "бур по бетону"),
-        (r"теплов\\w* пушк.*электр|электр.*теплов\\w* пушк", "электрическая тепловая пушка"),
-        (r"торцовочн\\w* пил", "торцовочная пила"),
-        (r"катушк\\w* для шланг", "катушка для шланга"),
-        (r"колес\\w* для мотоблок", "колесо для мотоблока"),
+        (r"горелк\w* газов|газов\w* горелк", "горелка газовая"),
+        (r"полуавтомат\w* свароч|свароч\w* полуавтомат", "сварочный полуавтомат"),
+        (r"сварочн\w* аппарат", "сварочный аппарат"),
+        (r"электрод", "электроды сварочные"),
+        (r"\bбур\b", "бур по бетону"),
+        (r"теплов\w* пушк.*электр|электр.*теплов\w* пушк", "электрическая тепловая пушка"),
+        (r"торцовочн\w* пил", "торцовочная пила"),
+        (r"циркулярн\w* пил", "циркулярная пила"),
+        (r"сабельн\w* пил", "сабельная пила"),
+        (r"катушк\w* для шланг", "катушка для шланга"),
+        (r"колес\w* для мотоблок", "колесо для мотоблока"),
         (r"газонокосилк.*электр|электр.*газонокосилк", "газонокосилка электрическая"),
         (r"диффузор.*плазморез", "диффузор для плазмореза"),
         (r"снегоуборщик.*аккумулятор|аккумулятор.*снегоуборщик", "аккумуляторный снегоуборщик"),
@@ -133,20 +137,18 @@ def derive_keyword(row: dict) -> str:
         if re.search(pattern,name,re.I):
             return phrase
 
-    # Generic future fallback: the subgroup is preferable to a branded/model-specific
-    # query because TOP should measure a commercial category query, not an exact SKU.
+    # Generic fallback: use the unbranded subgroup. Every card must have a phrase.
     if subgroup:
-        phrase=re.sub(r"\\s+"," ",subgroup).strip(" ,.;:-")
+        phrase=re.sub(r"\s+"," ",subgroup).strip(" ,.;:-")
         if phrase:
             return phrase
 
-    clean=re.sub(r"\\([^)]*\\)"," ",name)
-    clean=re.sub(r"\\b(?:ресанта|huter|вихрь|eurolux)\\b"," ",clean,flags=re.I)
-    clean=re.sub(r"\\b\\d+(?:[/.-]\\d+)+\\b"," ",clean)
-    clean=re.sub(r"\\s+"," ",clean).strip(" ,.;:-")
+    clean=re.sub(r"\([^)]*\)"," ",name)
+    clean=re.sub(r"\b(?:ресанта|huter|вихрь|eurolux)\b"," ",clean,flags=re.I)
+    clean=re.sub(r"\b\d+(?:[/.-]\d+)+\b"," ",clean)
+    clean=re.sub(r"\s+"," ",clean).strip(" ,.;:-")
     phrase=" ".join(clean.split()[:6]).strip()
     return phrase or "товар"
-
 
 def current_targets() -> list[dict]:
     imports=rest_get('triovist_content_imports',{
