@@ -1,6 +1,6 @@
 {
-  "version": "23.6.169",
+  "version": "23.6.171",
   "released_at": "2026-09-29",
-  "purpose": "21vek: стабильная запись raw_current, TOP по всем карточкам, автопоисковые фразы и ускоренный KPI новых клиентов",
-  "deploy_trigger": "2026-09-29T12:55:00Z"
+  "purpose": "Triovist budget: show exact last save date, time and author; preserve existing budget logic",
+  "deploy_trigger": "2026-09-29T13:25:00Z"
 }
