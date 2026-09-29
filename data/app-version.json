@@ -1,6 +1,6 @@
 {
-  "version": "23.6.173",
+  "version": "23.6.174",
   "released_at": "2026-09-29",
-  "purpose": "Triovist budget: show remaining available balance = 1.5% accrual minus entered usage",
-  "deploy_trigger": "2026-09-29T14:05:00Z"
+  "purpose": "Triovist budget: total available = opening balance from prior period + current month 1.5% accrual",
+  "deploy_trigger": "2026-09-29T14:10:00Z"
 }
