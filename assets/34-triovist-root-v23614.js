@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_ROOT_V23614)return;
-const V='v23.6.174',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.175',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser'],COMM=['anp','si','budget','price'];
 let ctx=null,shell=null,panel=null,active='home',busy=false,refreshBusy=false,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -68,51 +68,57 @@ async function budget(m){
   const d=await getMonth(m),
         gross=Number(d.sales_revenue||0),
         net=Number(d.sales_revenue_ex_vat||gross/1.2),
-        accrual=Math.round(net*.015*100)/100,
-        opening=Number(d.budget_amount||0),
-        total=Math.round((opening+accrual)*100)/100,
+        accrual=Number(d.budget_month_accrual??(Math.round(net*.015*100)/100)),
+        opening=Number(d.budget_opening_balance??d.budget_amount??0),
+        total=Number(d.budget_available_total??(Math.round((opening+accrual)*100)/100)),
         who=d.budget_updated_name||d.budget_updated_by||'—',
+        carried=!!d.budget_is_carried,
+        anchorMonth=String(d.budget_anchor_month||'').slice(0,7),
+        anchorLabel=anchorMonth?new Date(anchorMonth+'-01T00:00:00Z').toLocaleDateString('ru-RU',{timeZone:'UTC',month:'long',year:'numeric'}):'прошлого периода',
         audit=d.budget_exists
-          ?`<div class="tr14-info">🕒 <b>Последнее изменение остатка:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`
-          :`<div class="tr14-warn">⚠️ <b>Остаток/бюджет с прошлого периода ещё не внесён.</b></div>`;
+          ?(carried
+            ?`<div class="tr14-info">↪️ <b>Остаток перенесён автоматически.</b> База: ${money(Number(d.budget_anchor_amount||0))} с ${esc(anchorLabel)}; последнее изменение базы: ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`
+            :`<div class="tr14-info">🕒 <b>Последнее изменение базового остатка:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`)
+          :`<div class="tr14-warn">⚠️ <b>Базовый остаток бюджета ещё не задан.</b></div>`;
 
   panel.innerHTML=`
     <div class="tr14-sec">
       <div>
         <h3>💼 Бюджет Triovist</h3>
-        <div class="tr14-note">Итого на бюджете = остаток с прошлого периода + начисление 1,5% за выбранный месяц.</div>
+        <div class="tr14-note">Остаток автоматически переносится из прошлого месяца. Начисление 1,5% добавляется по текущим продажам без НДС.</div>
       </div>
       ${monthInput('budget',d.month)}
     </div>
 
-    <div class="tr14-info" style="font-size:17px;padding:14px 16px">
-      <b>💰 ИТОГО РЕАЛЬНО НА БЮДЖЕТЕ: ${money(total)}</b><br>
-      <span>${money(opening)} остаток с прошлого периода + ${money(accrual)} начислено за текущий месяц</span>
+    <div class="tr14-info" style="font-size:20px;padding:16px 18px;border-width:2px">
+      <b>💰 РЕАЛЬНО ДОСТУПНО НА БЮДЖЕТЕ: ${money(total)}</b><br>
+      <span style="font-size:13px">${money(opening)} перенесено с прошлого периода + ${money(accrual)} начислено за текущий месяц</span>
     </div>
 
     <div class="tr14-k">
-      <div><span>Итого на бюджете</span><b>${money(total)}</b></div>
-      <div><span>Остаток с прошлого периода</span><b>${money(opening)}</b></div>
+      <div><span>Реально доступно сейчас</span><b>${money(total)}</b></div>
+      <div><span>Перенесено с прошлого месяца</span><b>${money(opening)}</b></div>
       <div><span>Начислено за месяц 1,5%</span><b>${money(accrual)}</b></div>
       <div><span>Продажи без НДС</span><b>${money(net)}</b></div>
     </div>
 
     ${audit}
 
-    <div class="tr14-info"><b>Комментарий руководителя:</b><br>${esc(d.budget_comment||'—')}</div>
+    <div class="tr14-info"><b>Комментарий к базовому остатку:</b><br>${esc(d.budget_comment||'—')}</div>
 
-    ${d.is_leader?`
+    ${d.is_leader&&!carried?`
       <div class="tr14-form" style="grid-template-columns:220px 1fr auto">
         <div>
-          <label class="form-label">Остаток с прошлого периода, BYN</label>
-          <input id="tr14-budget-amount" class="form-input" type="number" value="${opening.toFixed(2)}">
+          <label class="form-label">Базовый остаток, BYN</label>
+          <input id="tr14-budget-amount" class="form-input" type="number" value="${Number(d.budget_anchor_amount??opening).toFixed(2)}">
         </div>
         <div>
           <label class="form-label">Комментарий</label>
           <input id="tr14-budget-comment" class="form-input" value="${esc(d.budget_comment||'')}">
         </div>
-        <button class="btn-primary" data-tr14-budget-save>Сохранить</button>
-      </div>`:''}
+        <button class="btn-primary" data-tr14-budget-save>Сохранить базу</button>
+      </div>`:d.is_leader&&carried?`
+      <div class="tr14-note" style="margin-top:10px"><b>Ручной перенос не требуется:</b> CRM уже перенесла остаток автоматически.</div>`:''}
   `;
 }
 const range=d=>Number(d.total_filtered||0)?`${Number(d.offset||0)+1}–${Number(d.offset||0)+(d.items||[]).length} из ${Number(d.total_filtered)}`:'0 из 0';
