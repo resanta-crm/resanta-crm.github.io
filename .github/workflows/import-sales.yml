@@ -1,19 +1,10 @@
-name: Продажи полевых — независимый импорт 1С каждые 15 минут
+name: Продажи полевых — legacy ручной запуск
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'import_sales.py'
-      - '.github/workflows/import-sales.yml'
-  schedule:
-    # Отдельный импорт полевых. Минуты смещены от :00/:15/:30/:45,
-    # где GitHub Actions чаще задерживает cron под нагрузкой.
-    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 
 concurrency:
-  group: field-sales-write
+  group: sales-1c-unified-write
   cancel-in-progress: false
 
 jobs:
@@ -23,16 +14,13 @@ jobs:
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
-
       - name: Установить Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Установить зависимости
         run: pip install --disable-pip-version-check openpyxl requests
-
-      - name: Обновить продажи полевых
+      - name: Ручной legacy-импорт полевых
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_PORT: '993'
