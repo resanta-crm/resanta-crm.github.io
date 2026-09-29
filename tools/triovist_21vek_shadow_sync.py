@@ -33,8 +33,10 @@ DELAY=max(0.10,float(os.environ.get("SHADOW_DELAY_SECONDS","0.35")))
 WORKERS=max(1,min(16,int(os.environ.get("SHADOW_WORKERS","8"))))
 TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
-PARSER_VERSION="shadow-v0.8"
-UA="ResantaCRM-21vekShadow/0.8 (+https://resanta-crm.by)"
+SNAPSHOT_BATCH_SIZE=max(10,int(os.environ.get("SHADOW_SNAPSHOT_BATCH_SIZE","75")))
+RAW_BATCH_SIZE=max(5,int(os.environ.get("SHADOW_RAW_BATCH_SIZE","15")))
+PARSER_VERSION="shadow-v0.9"
+UA="ResantaCRM-21vekShadow/0.9 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -122,6 +124,48 @@ def rest_upsert(table: str, rows: list[dict], conflict: str, timeout: int=90) ->
     if r.status_code not in (200,201,204):
         raise RuntimeError(f"UPSERT {table}: {r.status_code} {r.text[:1000]}")
 
+
+def retryable_upsert_error(exc: Exception) -> bool:
+    msg=str(exc).lower()
+    return (
+        isinstance(exc,(requests.Timeout,requests.ConnectionError))
+        or "57014" in msg
+        or "statement timeout" in msg
+        or " 500 " in msg
+        or " 502 " in msg
+        or " 503 " in msg
+        or " 504 " in msg
+    )
+
+
+def rest_upsert_resilient(table: str, rows: list[dict], conflict: str, timeout: int=90, depth: int=0) -> None:
+    """Retry transient DB writes and split a heavy JSON batch instead of failing the whole 21vek run."""
+    if not rows:
+        return
+    last_error=None
+    for attempt in range(2):
+        try:
+            rest_upsert(table,rows,conflict,timeout=timeout)
+            return
+        except Exception as exc:
+            if not retryable_upsert_error(exc):
+                raise
+            last_error=exc
+            if attempt==0:
+                time.sleep(1.0+depth*0.5)
+
+    if len(rows)<=1:
+        raise last_error or RuntimeError(f"UPSERT {table} failed")
+
+    mid=max(1,len(rows)//2)
+    left,right=rows[:mid],rows[mid:]
+    print(
+        f"⚠️ UPSERT {table}: transient timeout on {len(rows)} rows; "
+        f"splitting into {len(left)} + {len(right)}",
+        flush=True
+    )
+    rest_upsert_resilient(table,left,conflict,timeout=timeout,depth=depth+1)
+    rest_upsert_resilient(table,right,conflict,timeout=timeout,depth=depth+1)
 
 def rest_patch(table: str, filt: dict[str,str], values: dict, timeout: int=60) -> None:
     r=requests.patch(
@@ -421,17 +465,19 @@ def process_target(index: int, target: dict) -> tuple[int,dict,dict|None,str|Non
     return index,target,parsed,err
 
 
-def flush_batches(batch: list[dict], raw_batch: list[dict]) -> None:
+def flush_snapshot_batch(batch: list[dict]) -> None:
     if batch:
         rest_post("triovist_21vek_shadow_snapshots",batch,timeout=90)
+
+
+def flush_raw_batch(raw_batch: list[dict]) -> None:
     if raw_batch:
-        rest_upsert(
+        rest_upsert_resilient(
             "triovist_21vek_shadow_raw_current",
             raw_batch,
             "manager_email,card_key",
             timeout=90
         )
-
 
 def main() -> None:
     targets=current_targets()
@@ -471,12 +517,15 @@ def main() -> None:
                     flush=True
                 )
 
-                if len(batch)>=75:
-                    flush_batches(batch,raw_batch)
+                if len(batch)>=SNAPSHOT_BATCH_SIZE:
+                    flush_snapshot_batch(batch)
                     batch=[]
+                if len(raw_batch)>=RAW_BATCH_SIZE:
+                    flush_raw_batch(raw_batch)
                     raw_batch=[]
 
-        flush_batches(batch,raw_batch)
+        flush_snapshot_batch(batch)
+        flush_raw_batch(raw_batch)
 
         status="complete" if errors==0 else ("partial" if success else "failed")
         rest_patch("triovist_21vek_shadow_runs",{"id":f"eq.{run_id}"},{
