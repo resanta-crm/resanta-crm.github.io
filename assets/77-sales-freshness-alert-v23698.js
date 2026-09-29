@@ -23,7 +23,7 @@ function state(source){
   const r=rows.get(source);
   if(!r)return{level:'bad',today:false,last:'—',day:'—',time:'—',updated:'—'};
   const raw=r.source_message_at||'',d=raw?new Date(raw):null;
-  const updRaw=r.updated_at||r.last_success_at||'',u=updRaw?new Date(updRaw):null;
+  const updRaw=String(r.status||'')==='ok'?(r.updated_at||r.last_success_at||''):(r.last_success_at||r.updated_at||''),u=updRaw?new Date(updRaw):null;
   if(!d||Number.isNaN(d.getTime()))return{level:'bad',today:false,last:'—',day:'—',time:'—',updated:u&&!Number.isNaN(u.getTime())?parts(u).time:'—'};
   const now=new Date(),np=parts(now),lp=parts(d),up=u&&!Number.isNaN(u.getTime())?parts(u):null;
   const age=(now-d)/3600000,today=lp.date===np.date;
