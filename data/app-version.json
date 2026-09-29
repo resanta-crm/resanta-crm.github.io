@@ -1,6 +1,6 @@
 {
-  "version": "23.6.171",
+  "version": "23.6.172",
   "released_at": "2026-09-29",
-  "purpose": "Triovist budget: show exact last save date, time and author; preserve existing budget logic",
-  "deploy_trigger": "2026-09-29T13:25:00Z"
+  "purpose": "Triovist budget: clearly separate approved budget from 1.5% reference norm and remove duplicate audit line",
+  "deploy_trigger": "2026-09-29T14:00:00Z"
 }
