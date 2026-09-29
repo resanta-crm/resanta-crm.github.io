@@ -7,8 +7,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_MANAGER_NEW_CLIENTS_V236135)return;
-const V='v23.6.135',ID='manager-new-clients-v236135';
-let flight=null,lastSig='',lastData=null,wrapped=false;
+const V='v23.6.169',ID='manager-new-clients-v236135';
+let flight=null,lastSig='',lastData=null,lastAt=0,wrapped=false;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -45,14 +45,14 @@ function render(data){
 }
 async function load(force=false){
   if(!active())return;const m=selectedMonth(),sig=m+'|'+String(currentProfile?.id||currentProfile?.name||'');
-  if(!force&&lastSig===sig&&lastData){render(lastData);return}
+  if(!force&&lastSig===sig&&lastData&&Date.now()-lastAt<60000){render(lastData);return}
   if(flight)return flight;style();const r=root();if(r)r.innerHTML='<div class="mnc-load">Загружаю новых и возвращённых клиентов…</div>';
-  flight=(async()=>{const d=dbc();if(!d)throw Error('Нет подключения к базе');const {data,error}=await d.rpc('crm_manager_new_clients_detail_v236135',{p_month:m,p_manager:null});if(error)throw error;lastSig=sig;lastData=data||{month:m,rows:[]};render(lastData);return lastData})().catch(e=>{console.warn(V,e);const x=root();if(x)x.innerHTML='<div class="mnc-empty">Не удалось загрузить детализацию новых клиентов: '+esc(e?.message||e)+'</div>';return null}).finally(()=>flight=null);
+  flight=(async()=>{const d=dbc();if(!d)throw Error('Нет подключения к базе');const {data,error}=await d.rpc('crm_manager_new_clients_detail_v236135',{p_month:m,p_manager:null});if(error)throw error;lastSig=sig;lastData=data||{month:m,rows:[]};lastAt=Date.now();render(lastData);return lastData})().catch(e=>{console.warn(V,e);const x=root();if(x)x.innerHTML='<div class="mnc-empty">Не удалось загрузить детализацию новых клиентов: '+esc(e?.message||e)+'</div>';return null}).finally(()=>flight=null);
   return flight;
 }
 function install(){
   style();
-  if(typeof window.renderManagers==='function'&&!window.renderManagers.__mnc135){const base=window.renderManagers;const fn=function(){const out=base.apply(this,arguments);Promise.resolve(out).finally(()=>setTimeout(()=>load(true),0));return out};fn.__mnc135=true;fn.__base=base;window.renderManagers=fn;try{renderManagers=fn}catch(_){}}
+  if(typeof window.renderManagers==='function'&&!window.renderManagers.__mnc135){const base=window.renderManagers;const fn=function(){const out=base.apply(this,arguments);Promise.resolve(out).finally(()=>setTimeout(()=>load(false),0));return out};fn.__mnc135=true;fn.__base=base;window.renderManagers=fn;try{renderManagers=fn}catch(_){}}
   if(!wrapped&&typeof window.goPage==='function'){const base=window.goPage;const fn=function(p){const out=base.apply(this,arguments);if(String(p)==='managers')setTimeout(()=>load(false),80);return out};fn.__mnc135=true;window.goPage=fn;wrapped=true}
   const inp=document.getElementById('manager-kpi-month');if(inp&&!inp.dataset.mnc135){inp.dataset.mnc135='1';inp.addEventListener('change',()=>setTimeout(()=>load(true),50));}
   if(active())setTimeout(()=>load(false),0);
