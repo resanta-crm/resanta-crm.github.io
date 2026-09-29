@@ -1,21 +1,10 @@
-name: Триовист — продажи · каждый час
+name: Триовист — legacy ручной запуск
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'sync_triovist_sales.py'
-      - 'triovist_import_core.py'
-      - '.github/workflows/import-triovist-sales.yml'
-  schedule:
-    # GitHub schedule иногда запускается с задержкой, поэтому ставим две независимые
-    # проверки в каждом часу. Повтор безопасен: уже загруженное письмо не перезаписывается.
-    # После письма 1С в :00 ближайшая проверка — :07, страховочная — :37.
-    - cron: '7,37 * * * *'
   workflow_dispatch:
 
 concurrency:
-  group: triovist-sales-write
+  group: sales-1c-unified-write
   cancel-in-progress: false
 
 jobs:
@@ -25,16 +14,13 @@ jobs:
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
-
       - name: Установить Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Установить зависимости
         run: pip install openpyxl requests
-
-      - name: Обновить и проверить продажи ООО Триовист
+      - name: Ручной legacy-импорт Triovist
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_PORT: '993'
