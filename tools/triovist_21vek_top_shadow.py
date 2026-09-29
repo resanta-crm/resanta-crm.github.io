@@ -171,7 +171,9 @@ def grouped_targets(rows: list[dict]) -> list[tuple[str,list[dict]]]:
         groups[k].append(x)
         canonical.setdefault(k,x['keyword'])
     keys=sorted(groups,key=lambda k:hashlib.sha256(k.encode('utf-8')).hexdigest())
-    keys=keys[KEYWORD_OFFSET:KEYWORD_OFFSET+KEYWORD_LIMIT]
+    # TOP is a coverage contract: never silently omit cards because of a diagnostic
+    # keyword limit. Offset remains available for emergency diagnostics only.
+    keys=keys[KEYWORD_OFFSET:]
     return [(canonical[k],groups[k]) for k in keys]
 
 
