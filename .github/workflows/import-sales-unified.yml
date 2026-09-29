@@ -1,0 +1,54 @@
+name: Продажи 1С — единый импорт 09/13/17
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sync_sales_unified.py'
+      - 'import_sales.py'
+      - 'triovist_import_core.py'
+      - '.github/workflows/import-sales-unified.yml'
+  schedule:
+    # Минск = UTC+3. Для каждого нужного среза делаем четыре короткие попытки.
+    # Сам скрипт принимает только письма 09:xx / 13:xx / 17:xx и игнорирует 11/15.
+    - cron: '5,20,35,50 6,10,14 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sales-1c-unified-write
+  cancel-in-progress: false
+
+jobs:
+  import-sales-unified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install --disable-pip-version-check openpyxl requests
+
+      - name: Единообразно обновить полевых и Triovist
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SALES_LOOKBACK_DAYS: '4'
+          SALES_IMAP_TIMEOUT_SECONDS: '35'
+          SALES_MAX_EMAIL_CANDIDATES: '20'
+          SALES_IMAP_HEADER_BATCH_SIZE: '50'
+          SALES_IMAP_HEADER_SCAN_DEADLINE_SECONDS: '60'
+          UNIFIED_SALES_LOOKBACK_DAYS: '4'
+          UNIFIED_MAX_EMAIL_CANDIDATES: '20'
+          UNIFIED_IMAP_HEADER_BATCH: '50'
+          UNIFIED_HEADER_SCAN_DEADLINE_SECONDS: '60'
+        run: python sync_sales_unified.py
