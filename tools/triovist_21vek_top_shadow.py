@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import os
 import threading
 import time
@@ -36,9 +37,9 @@ TIMEOUT=max(10,int(os.environ.get('TOP_HTTP_TIMEOUT','30')))
 DEEP_EXACT=os.environ.get('TOP_DEEP_EXACT','0').strip().lower() not in ('0','false','no')
 DEEP_RADIUS=max(0,min(4,int(os.environ.get('TOP_DEEP_RADIUS','2'))))
 MAX_DEEP_PAGES=max(0,min(20,int(os.environ.get('TOP_MAX_DEEP_PAGES_PER_KEYWORD','10'))))
-PARSER_VERSION='top-shadow-v0.3'
+PARSER_VERSION='top-shadow-v0.4'
 ENDPOINT='https://gate.21vek.by/search-composer/api/v3/products'
-UA='ResantaCRM-21vekTopShadow/0.3 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekTopShadow/0.4 (+https://resanta-crm.by)'
 
 
 def api_headers(json_body: bool=False, prefer: str|None=None) -> dict[str,str]:
@@ -97,6 +98,53 @@ def rest_patch(table: str, filt: dict[str,str], values: dict, timeout: int=60) -
         raise RuntimeError(f'PATCH {table}: {r.status_code} {r.text[:1000]}')
 
 
+def norm_text(value: object) -> str:
+    return re.sub(r"\\s+"," ",str(value or "").strip().lower().replace("ё","е"))
+
+
+def derive_keyword(row: dict) -> str:
+    """Build a human category-level search phrase only when the source has none."""
+    name=norm_text(row.get("product_name"))
+    subgroup=norm_text(row.get("subgroup"))
+
+    rules=[
+        (r"соединител\\w* для шланг", "соединитель для шланга"),
+        (r"насосн\\w* станц", "насосная станция"),
+        (r"инверторн\\w* генератор", "инверторный генератор"),
+        (r"воздушн\\w* компрессор|компрессор", "компрессор"),
+        (r"мотоблок", "мотоблок"),
+        (r"набор\\w* инструмент", "набор инструментов"),
+        (r"отрезн\\w* диск", "круг отрезной"),
+        (r"пылесос", "строительный пылесос"),
+        (r"ножовк", "ножовка"),
+        (r"горелк\\w* газов|газов\\w* горелк", "горелка газовая"),
+        (r"полуавтомат\\w* свароч|свароч\\w* полуавтомат", "сварочный полуавтомат"),
+        (r"\\bбур\\b", "бур по бетону"),
+        (r"теплов\\w* пушк.*электр|электр.*теплов\\w* пушк", "электрическая тепловая пушка"),
+        (r"торцовочн\\w* пил", "торцовочная пила"),
+        (r"катушк\\w* для шланг", "катушка для шланга"),
+        (r"колес\\w* для мотоблок", "колесо для мотоблока"),
+        (r"газонокосилк.*электр|электр.*газонокосилк", "газонокосилка электрическая"),
+        (r"диффузор.*плазморез", "диффузор для плазмореза"),
+        (r"снегоуборщик.*аккумулятор|аккумулятор.*снегоуборщик", "аккумуляторный снегоуборщик"),
+        (r"шланг", "шланг поливочный"),
+    ]
+    for pattern,phrase in rules:
+        if re.search(pattern,name,re.I):
+            return phrase
+
+    # Generic future fallback: the subgroup is preferable to a branded/model-specific
+    # query because TOP should measure a commercial category query, not an exact SKU.
+    if subgroup:
+        return subgroup.strip(" ,.;:-")
+
+    clean=re.sub(r"\\([^)]*\\)"," ",name)
+    clean=re.sub(r"\\b(?:ресанта|huter|вихрь|eurolux)\\b"," ",clean,flags=re.I)
+    clean=re.sub(r"\\b\\d+(?:[/.-]\\d+)+\\b"," ",clean)
+    clean=re.sub(r"\\s+"," ",clean).strip(" ,.;:-")
+    return " ".join(clean.split()[:6])
+
+
 def current_targets() -> list[dict]:
     imports=rest_get('triovist_content_imports',{
         'is_current':'eq.true','status':'eq.complete','select':'id,manager_email,manager_name,snapshot_date'
@@ -104,19 +152,16 @@ def current_targets() -> list[dict]:
     if not imports:
         raise RuntimeError('Current Triovist content imports not found')
     out=[]
-    select='manager_email,manager_name,card_key,sku,donor_article,product_name,product_url,keyword,listing_position'
+    select='manager_email,manager_name,card_key,sku,donor_article,product_name,category,subgroup,product_url,keyword,listing_position'
     for imp in imports:
         rows=rest_get_all('triovist_content_cards',{'import_id':f"eq.{imp['id']}",'select':select})
         for x in rows:
-            kw=str(x.get('keyword') or '').strip()
-            donor=str(x.get('donor_article') or '').strip()
-            if not kw or not donor.isdigit():
-                continue
-            x['keyword']=kw
+            source_kw=str(x.get('keyword') or '').strip()
+            x['keyword']=source_kw or derive_keyword(x)
+            x['_keyword_generated']=not bool(source_kw)
             x['_baseline_snapshot_date']=imp.get('snapshot_date')
             out.append(x)
     return out
-
 
 def grouped_targets(rows: list[dict]) -> list[tuple[str,list[dict]]]:
     groups: dict[str,list[dict]]=defaultdict(list)
@@ -316,19 +361,46 @@ def collect_keyword(run_id: str, keyword: str, targets: list[dict]) -> dict:
 
 def main() -> None:
     all_targets=current_targets()
-    groups=grouped_targets(all_targets)
+    invalid=[
+        x for x in all_targets
+        if not str(x.get('keyword') or '').strip()
+        or not str(x.get('donor_article') or '').strip().isdigit()
+    ]
+    valid=[x for x in all_targets if x not in invalid]
+    groups=grouped_targets(valid)
     selected=[x for _,xs in groups for x in xs]
-    run_id=insert_run(len(groups),len(selected))
+    generated=sum(1 for x in all_targets if x.get('_keyword_generated'))
+    run_id=insert_run(len(groups),len(all_targets))
     print(
-        f'TOP shadow {run_id}: keywords={len(groups)} targets={len(selected)} '
-        f'workers={WORKERS} start_interval={DELAY:.2f}s',flush=True
+        f'TOP shadow {run_id}: keywords={len(groups)} targets={len(all_targets)} '
+        f'generated_keywords={generated} workers={WORKERS} start_interval={DELAY:.2f}s',flush=True
     )
 
     requests_count=0
-    errors=0
+    errors=len(invalid)
     snapshots=[]
     current=[]
     completed=0
+
+    observed=datetime.now(timezone.utc).isoformat()
+    for x in invalid:
+        reason='missing keyword' if not str(x.get('keyword') or '').strip() else 'invalid donor_article'
+        row=row_for(
+            run_id,x,position=None,exact=False,top30=None,top60=None,total=None,
+            page_found=None,observed=observed,error=reason
+        )
+        snapshots.append(row)
+        current.append(current_row(row))
+
+    # If a future registry grows beyond the configured keyword limit, fail closed
+    # instead of silently declaring uncovered cards to be outside TOP-60.
+    if len(selected)+len(invalid) != len(all_targets):
+        uncovered=len(all_targets)-len(selected)-len(invalid)
+        raise RuntimeError(
+            f'TOP keyword limit leaves {uncovered} cards unchecked; '
+            f'increase TOP_KEYWORD_LIMIT before promotion'
+        )
+
     try:
         with ThreadPoolExecutor(max_workers=min(WORKERS,max(1,len(groups))),thread_name_prefix='21vek-top') as pool:
             futures=[pool.submit(collect_keyword,run_id,keyword,targets) for keyword,targets in groups]
@@ -361,16 +433,22 @@ def main() -> None:
         found_exact=sum(1 for x in stats if x.get('position_exact'))
         top30=sum(1 for x in stats if x.get('top30') is True)
         top60=sum(1 for x in stats if x.get('top60') is True)
+        outside60=sum(1 for x in stats if x.get('top60') is False and not x.get('error_text'))
         row_errors=sum(1 for x in stats if x.get('error_text'))
-        status='complete' if errors==0 and row_errors==0 and len(stats)==len(selected) else 'partial'
+        status='complete' if errors==0 and row_errors==0 and len(stats)==len(all_targets) else 'partial'
         rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
           'status':status,'requests_count':requests_count,'found_exact_count':found_exact,'top30_count':top30,
           'top60_count':top60,'error_count':errors+row_errors,'finished_at':datetime.now(timezone.utc).isoformat(),
           'notes':{'mode':'shadow','endpoint':'search-composer/api/v3/products','page_size':60,'production_cutover':False,
-                   'expected_rows':len(selected),'stored_rows':len(stats),'deep_exact':DEEP_EXACT,
+                   'expected_rows':len(all_targets),'stored_rows':len(stats),'generated_keywords':generated,
+                   'outside_top60':outside60,'deep_exact':DEEP_EXACT,
                    'workers':WORKERS,'request_start_interval_seconds':DELAY}
         })
-        print(f'DONE {status}: requests={requests_count} rows={len(stats)}/{len(selected)} exact={found_exact} top30={top30} top60={top60} errors={errors+row_errors}',flush=True)
+        print(
+            f'DONE {status}: requests={requests_count} rows={len(stats)}/{len(all_targets)} '
+            f'exact={found_exact} top30={top30} top60={top60} outside60={outside60} '
+            f'generated_keywords={generated} errors={errors+row_errors}',flush=True
+        )
         if status!='complete':
             raise RuntimeError('TOP shadow completeness check failed')
     except Exception as fatal:
@@ -378,7 +456,8 @@ def main() -> None:
             rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
               'status':'failed','requests_count':requests_count,'error_count':max(errors,1),
               'finished_at':datetime.now(timezone.utc).isoformat(),
-              'notes':{'fatal_error':str(fatal),'production_cutover':False,'workers':WORKERS,'request_start_interval_seconds':DELAY}
+              'notes':{'fatal_error':str(fatal),'production_cutover':False,'workers':WORKERS,
+                       'generated_keywords':generated,'request_start_interval_seconds':DELAY}
             })
         finally:
             raise
