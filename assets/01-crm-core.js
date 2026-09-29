@@ -8,7 +8,56 @@
 const SUPABASE_URL = 'https://baqchjtvtmcfzwjjluhs.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+const db = createClient(SUPABASE_URL, SUPABASE_KEY,{
+  auth:{
+    persistSession:true,
+    autoRefreshToken:true,
+    detectSessionInUrl:true
+  }
+});
+
+// v23.6.166: единый самовосстанавливающийся auth-слой.
+// После сна ноутбука/телефона access JWT может уже истечь в момент первого запроса.
+// Раньше тяжёлая purchase_history трижды повторяла запрос тем же просроченным JWT
+// и показывала "JWT expired". Теперь один refresh-token восстанавливает сессию,
+// после чего исходный запрос повторяется автоматически.
+let crmAuthRefreshFlightV236166=null;
+function crmJwtExpiredV236166(err){
+  const msg=String(err?.message||err?.error_description||err?.details||err||'');
+  const code=String(err?.code||'');
+  const status=Number(err?.status||err?.statusCode||0);
+  return /jwt\s*expired|token\s*expired|expired\s*jwt/i.test(msg)
+    || code==='PGRST303'
+    || (status===401&&/jwt|token/i.test(msg));
+}
+async function crmEnsureFreshSessionV236166(force=false){
+  if(crmAuthRefreshFlightV236166)return crmAuthRefreshFlightV236166;
+  crmAuthRefreshFlightV236166=(async()=>{
+    const {data,error}=await db.auth.getSession();
+    if(error)throw error;
+    const session=data?.session;
+    if(!session)throw new Error('Сессия CRM завершена. Войдите снова.');
+    const now=Math.floor(Date.now()/1000),exp=Number(session.expires_at||0);
+    if(!force&&exp>now+90)return session;
+    const refreshed=await db.auth.refreshSession();
+    if(refreshed.error||!refreshed.data?.session){
+      throw refreshed.error||new Error('Не удалось обновить сессию CRM');
+    }
+    currentUser=refreshed.data.session.user||currentUser;
+    return refreshed.data.session;
+  })().finally(()=>{crmAuthRefreshFlightV236166=null});
+  return crmAuthRefreshFlightV236166;
+}
+async function crmAuthRetryV236166(factory){
+  let result=await factory();
+  if(result?.error&&crmJwtExpiredV236166(result.error)){
+    await crmEnsureFreshSessionV236166(true);
+    result=await factory();
+  }
+  return result;
+}
+window.crmEnsureFreshSessionV236166=crmEnsureFreshSessionV236166;
+window.crmAuthRetryV236166=crmAuthRetryV236166;
 
 let currentUser = null, currentProfile = null;
 let allClients = [], allClientAliases = [], allTasks = [], allVisits = [], allVisitQualityReviews = [], allVisitRouteReviews = [], allTaskPartialReviews = [], allManagerKpiPlans = [], allUsers = [], allRoutePlans = [], allNegotiations = [], allPurchases = [], allPurchaseItems = [], allPurchaseHistory = [], allClientPhotos = [], allVipSales = [], allVipPromotions = [], allPromotions = [], allPromotionBudgets = [], allPromotionBudgetMovements = [], allPromotionPhotos = [], allPromotionBudgetAudit = [], allClientDebt = [], allStock = [], allPrice = [], allDebtComments = [], allImportStatus = [];
@@ -1738,7 +1787,7 @@ async function _fetchHistoryForOneName(clientName){
   for(let attempt=0;attempt<3;attempt++){
     try{
       const {data,error}=await withTimeout(
-        db.from('purchase_history').select('*').ilike('client_name','%'+core+'%'),
+        crmAuthRetryV236166(()=>db.from('purchase_history').select('*').ilike('client_name','%'+core+'%')),
         15000, 'история закупок клиента'
       );
       if(error)throw error;
@@ -1761,7 +1810,7 @@ async function fetchClientHistory(clientOrName){
   if(c&&c.id){
     try{
       const {data,error}=await withTimeout(
-        db.from('purchase_history').select('*').eq('client_id',c.id),
+        crmAuthRetryV236166(()=>db.from('purchase_history').select('*').eq('client_id',c.id)),
         15000,'история закупок по client_id'
       );
       if(!error&&(data||[]).length){
@@ -2310,18 +2359,19 @@ async function loadAllRows(table){
     let data=null,lastErr=null;
     for(let attempt=0;attempt<3;attempt++){
       try{
-        // Таймаут на каждую страницу: без него зависший запрос (частое явление
-        // на мобильном интернете) вешал загрузку навсегда — экран "Входим..."
-        // крутился бесконечно. Теперь через 20 сек считаем попытку неудачной
-        // и пробуем снова.
+        // v23.6.166: запрос строится заново после автоматического refreshSession,
+        // если access JWT протух, пока вкладка была открыта/устройство спало.
         const res=await withTimeout(
-          db.from(table).select('*').range(from,from+pageSize-1),
+          crmAuthRetryV236166(()=>db.from(table).select('*').range(from,from+pageSize-1)),
           20000, 'таблица '+table
         );
         if(res.error){lastErr=res.error;await new Promise(r=>setTimeout(r,600*(attempt+1)));continue;}
         data=res.data;lastErr=null;break;
       }catch(e){
         lastErr=e;
+        // Если refresh token тоже уже недействителен, бессмысленно ещё два раза
+        // повторять тяжёлый запрос: покажем понятную ошибку входа сразу.
+        if(/Сессия CRM завершена|Не удалось обновить сессию CRM|refresh token/i.test(String(e?.message||e)))break;
         await new Promise(r=>setTimeout(r,600*(attempt+1)));
       }
     }
@@ -9863,6 +9913,11 @@ async function initAuth(){
   }
   document.getElementById('login-wrap').style.display='flex';
 }
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')crmEnsureFreshSessionV236166(false).catch(e=>console.warn('CRM auth resume',e));
+});
+window.addEventListener('focus',()=>crmEnsureFreshSessionV236166(false).catch(e=>console.warn('CRM auth focus',e)));
 
 db.auth.onAuthStateChange(async(event,session)=>{
   if(event==='PASSWORD_RECOVERY'){
