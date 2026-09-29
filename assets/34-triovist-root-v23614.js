@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_ROOT_V23614)return;
-const V='v23.6.173',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.174',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser'],COMM=['anp','si','budget','price'];
 let ctx=null,shell=null,panel=null,active='home',busy=false,refreshBusy=false,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -68,46 +68,47 @@ async function budget(m){
   const d=await getMonth(m),
         gross=Number(d.sales_revenue||0),
         net=Number(d.sales_revenue_ex_vat||gross/1.2),
-        norm=Math.round(net*.015*100)/100,
-        used=Number(d.budget_amount||0),
-        balance=Math.round((norm-used)*100)/100,
+        accrual=Math.round(net*.015*100)/100,
+        opening=Number(d.budget_amount||0),
+        total=Math.round((opening+accrual)*100)/100,
         who=d.budget_updated_name||d.budget_updated_by||'—',
         audit=d.budget_exists
-          ?`<div class="tr14-info">🕒 <b>Последнее внесение:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`
-          :`<div class="tr14-warn">⚠️ <b>За выбранный месяц расходы из бюджета ещё не вносились.</b></div>`,
-        balanceBox=balance>=0
-          ?`<div class="tr14-info" style="font-size:15px"><b>💰 РЕАЛЬНО ОСТАЛОСЬ НА БЮДЖЕТЕ: ${money(balance)}</b><br><span>Начислено по нормативу: ${money(norm)} − уже внесено: ${money(used)}</span></div>`
-          :`<div class="tr14-warn" style="font-size:15px"><b>🔴 ПЕРЕРАСХОД БЮДЖЕТА: ${money(Math.abs(balance))}</b><br><span>Начислено по нормативу: ${money(norm)} − уже внесено: ${money(used)}</span></div>`;
+          ?`<div class="tr14-info">🕒 <b>Последнее изменение остатка:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`
+          :`<div class="tr14-warn">⚠️ <b>Остаток/бюджет с прошлого периода ещё не внесён.</b></div>`;
 
   panel.innerHTML=`
     <div class="tr14-sec">
       <div>
         <h3>💼 Бюджет Triovist</h3>
-        <div class="tr14-note">Бюджет начисляется по нормативу 1,5% от продаж без НДС. В поле ниже вносится уже использованная сумма.</div>
+        <div class="tr14-note">Итого на бюджете = остаток с прошлого периода + начисление 1,5% за выбранный месяц.</div>
       </div>
       ${monthInput('budget',d.month)}
     </div>
 
+    <div class="tr14-info" style="font-size:17px;padding:14px 16px">
+      <b>💰 ИТОГО РЕАЛЬНО НА БЮДЖЕТЕ: ${money(total)}</b><br>
+      <span>${money(opening)} остаток с прошлого периода + ${money(accrual)} начислено за текущий месяц</span>
+    </div>
+
     <div class="tr14-k">
-      <div><span>Реальный остаток бюджета</span><b>${money(balance)}</b></div>
-      <div><span>Начислено по нормативу 1,5%</span><b>${money(norm)}</b></div>
-      <div><span>Уже использовано / внесено</span><b>${money(used)}</b></div>
+      <div><span>Итого на бюджете</span><b>${money(total)}</b></div>
+      <div><span>Остаток с прошлого периода</span><b>${money(opening)}</b></div>
+      <div><span>Начислено за месяц 1,5%</span><b>${money(accrual)}</b></div>
       <div><span>Продажи без НДС</span><b>${money(net)}</b></div>
     </div>
 
-    ${balanceBox}
     ${audit}
 
     <div class="tr14-info"><b>Комментарий руководителя:</b><br>${esc(d.budget_comment||'—')}</div>
 
     ${d.is_leader?`
-      <div class="tr14-form" style="grid-template-columns:190px 1fr auto">
+      <div class="tr14-form" style="grid-template-columns:220px 1fr auto">
         <div>
-          <label class="form-label">Использовано из бюджета, BYN</label>
-          <input id="tr14-budget-amount" class="form-input" type="number" value="${used.toFixed(2)}">
+          <label class="form-label">Остаток с прошлого периода, BYN</label>
+          <input id="tr14-budget-amount" class="form-input" type="number" value="${opening.toFixed(2)}">
         </div>
         <div>
-          <label class="form-label">Комментарий / на что потрачено</label>
+          <label class="form-label">Комментарий</label>
           <input id="tr14-budget-comment" class="form-input" value="${esc(d.budget_comment||'')}">
         </div>
         <button class="btn-primary" data-tr14-budget-save>Сохранить</button>
