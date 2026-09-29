@@ -36,7 +36,6 @@ MAIL_TIMEOUT = int(os.environ.get("TRIOVIST_IMAP_TIMEOUT_SECONDS", "45"))
 MAX_FULL_MESSAGES = max(8, int(os.environ.get("TRIOVIST_MAX_EMAIL_CANDIDATES", "20")))
 HEADER_BATCH_SIZE = max(20, int(os.environ.get("TRIOVIST_IMAP_HEADER_BATCH", "75")))
 HEADER_SCAN_DEADLINE = max(30, int(os.environ.get("TRIOVIST_HEADER_SCAN_DEADLINE_SECONDS", "120")))
-ALLOW_REGRESSION = (os.environ.get("TRIOVIST_ALLOW_REGRESSION") or "false").lower() in {"1", "true", "yes", "on"}
 
 
 def decode_text(value: str | None) -> str:
@@ -392,16 +391,6 @@ def main() -> None:
         before_revenue: Decimal = before_state["revenue"]
         before_qty: Decimal = before_state["qty"]
         log(f"CRM ДО: {before_state['items']} SKU · {before_qty} шт. · {before_revenue} BYN")
-
-        if month == current_month and revenue < before_revenue - Decimal("0.01") and not ALLOW_REGRESSION:
-            msg = (
-                f"Регрессивный снимок заблокирован: источник {revenue} BYN < CRM {before_revenue} BYN. "
-                "Данные не изменены. Если уменьшение действительно корректно из-за возвратов, нужен осознанный ручной запуск с TRIOVIST_ALLOW_REGRESSION=true."
-            )
-            log(f"⚠️ {msg}")
-            audit("regression_blocked", month=month, sent=sent, filename=filename, subject=selected["subject"],
-                  rows=len(rows), qty=qty, revenue=revenue, before=before_revenue, after=before_revenue, details=msg)
-            return
 
         if revenue == before_revenue and qty == before_qty:
             msg = "Свежий пригодный отчёт найден, но сумма и количество уже совпадают с CRM — перезапись не нужна."
