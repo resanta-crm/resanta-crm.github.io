@@ -1,6 +1,6 @@
 {
-  "version": "23.6.174",
+  "version": "23.6.175",
   "released_at": "2026-09-29",
-  "purpose": "Triovist budget: total available = opening balance from prior period + current month 1.5% accrual",
-  "deploy_trigger": "2026-09-29T14:10:00Z"
+  "purpose": "Triovist budget: remove mistaken September manual entry, carry prior balance automatically, highlight real available budget",
+  "deploy_trigger": "2026-09-29T14:20:00Z"
 }
