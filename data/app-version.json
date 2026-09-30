@@ -1,6 +1,6 @@
 {
-  "version": "23.6.176",
+  "version": "23.6.177",
   "released_at": "2026-09-30",
-  "purpose": "Triovist budget: auditable expense entries and cancellations, cumulative month-to-month balance, no double deduction of existing ANP/SI",
-  "deploy_trigger": "2026-09-30T10:00:00Z"
+  "purpose": "Private Orders: secure office preview and draft upload, segregated finance, no warehouse notifications yet",
+  "deploy_trigger": "2026-09-30T15:00:00Z"
 }
