@@ -1,6 +1,6 @@
 {
-  "version": "23.6.180",
+  "version": "23.6.181",
   "released_at": "2026-09-30",
-  "purpose": "Orders: auto-check invoice after file selection, show progress/errors, bounded Excel and draft saving, duplicate-safe guidance",
-  "deploy_trigger": "2026-09-30T16:00:00Z"
+  "purpose": "Orders: parse real 1C invoices on absolute A1-anchored grid, safely read merged buyer header and preserve private tax ID",
+  "deploy_trigger": "2026-09-30T16:15:00Z"
 }
