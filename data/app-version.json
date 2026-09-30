@@ -1,6 +1,6 @@
 {
-  "version": "23.6.178",
+  "version": "23.6.179",
   "released_at": "2026-09-30",
-  "purpose": "Warehouse: Office Manager sees Orders and Receiving as first-class tabs; private finance unchanged",
-  "deploy_trigger": "2026-09-30T15:35:00Z"
+  "purpose": "Warehouse Orders: automatically preview selected XLSX with visible progress and bounded Excel library loading",
+  "deploy_trigger": "2026-09-30T15:55:00Z"
 }
