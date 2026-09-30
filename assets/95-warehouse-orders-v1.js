@@ -1,12 +1,12 @@
-/* RESANTA CRM v23.6.177 · Orders: isolated office invoice import.
+/* RESANTA CRM v23.6.179 · Orders: isolated office invoice import.
  * Warehouse never receives prices, totals, VAT, UNP or the original Excel.
  * Phase 2 intentionally creates PRIVATE DRAFT only: no TSD dispatch or Telegram yet.
  */
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.177',BUCKET='warehouse-order-sources-v1';
-let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false;
+const V='v23.6.179',BUCKET='warehouse-order-sources-v1';
+let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const n=v=>{const s=String(v??'').replace(/[\s\u00a0]/g,'').replace(',','.').replace(/BYN/ig,'');return s===''?NaN:Number(s)};
@@ -65,25 +65,83 @@ function parseInvoice(grid){
    throw Error('Суммы позиций не совпадают с ИТОГО и Суммой НДС счёта. Импорт заблокирован.');
  return {document_no:doc.number,document_date:doc.date,customer_display:customer,buyer_unp:unp,items,total:lineTotal,vat:lineVat};
 }
+function status(message,kind='mut'){
+ uploadStatus=String(message||'');uploadStatusKind=kind;
+ const box=$('wp1-upload-status');if(box){
+   box.className=kind==='error'?'wp1-error':kind==='ok'?'wp1-good':'wp1-mut';
+   box.textContent=uploadStatus;box.style.display=uploadStatus?'block':'none';
+ }
+ const btn=$('wp1-check');
+ if(btn){btn.disabled=checking||working;btn.textContent=checking?'Проверяю…':'Проверить счёт';}
+}
+async function loadSheetSource(url,waitMs){
+ return await new Promise((resolve,reject)=>{
+  if(window.XLSX)return resolve(window.XLSX);
+  const s=document.createElement('script');let settled=false;
+  const finish=(err)=>{if(settled)return;settled=true;clearTimeout(timer);
+    s.onload=null;s.onerror=null;
+    if(err)reject(err);else if(window.XLSX)resolve(window.XLSX);
+    else reject(Error('Библиотека Excel не инициализировалась'));
+  };
+  const timer=setTimeout(()=>{s.remove();finish(Error('Истекло время загрузки библиотеки Excel'));},waitMs);
+  s.src=url;s.async=true;s.crossOrigin='anonymous';
+  s.onload=()=>finish(null);s.onerror=()=>finish(Error('Сервер библиотеки Excel недоступен'));
+  document.head.appendChild(s);
+ });
+}
 async function sheetjs(){
  if(window.XLSX)return window.XLSX;
- if(typeof window._loadSheetJS==='function')return window._loadSheetJS();
- return new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>window.XLSX?ok(window.XLSX):no(Error('Модуль Excel не загрузился'));s.onerror=()=>no(Error('Не удалось открыть библиотеку Excel'));document.head.appendChild(s)});
+ const sources=[
+  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+ ];
+ for(let i=0;i<sources.length;i++){
+   if(window.XLSX)return window.XLSX;
+   status(i?'Первый источник Excel недоступен. Пробую резервный…':'Загружаю модуль чтения Excel…');
+   try{return await loadSheetSource(sources[i],8000)}catch(e){
+      if(window.XLSX)return window.XLSX;
+      if(i===sources.length-1)throw Error('Не удалось загрузить модуль Excel. Проверьте доступ к CDN или передайте скрин руководителю. '+String(e.message||e));
+   }
+ }
+ throw Error('Не удалось запустить модуль Excel');
 }
 async function hashHex(buf){
+ if(!window.crypto?.subtle)throw Error('Браузер не поддерживает безопасную проверку документа SHA-256. Откройте CRM по HTTPS.');
  const b=await crypto.subtle.digest('SHA-256',buf);
  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
 }
-async function readPreview(){
- const input=$('wp1-file'),file=input?.files?.[0];if(!file)throw Error('Выберите Excel-файл счёта.');
- if(!/\.xlsx$/i.test(file.name)||file.size<100||file.size>10*1024*1024)throw Error('Принимается .xlsx до 10 МБ.');
- const buf=await file.arrayBuffer(),sha=await hashHex(buf),X=await sheetjs(),book=X.read(buf,{type:'array'});
- if(!book.SheetNames?.length)throw Error('Excel не содержит листа');
- const sheet=X.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,raw:false,defval:'',blankrows:false});
- const parsed=parseInvoice(sheet);
- const dupe=await rpc('warehouse_pick_duplicate_check_v1',{p_document_no:parsed.document_no,p_document_date:parsed.document_date,p_original_sha256:sha});
- if(dupe?.duplicate)throw Error('Такой счёт уже зарегистрирован (ID '+dupe.order_id+'). Повторный заказ не создан.');
- preview={...parsed,file,sha};render();
+async function readPreview(file=selectedFile||$('wp1-file')?.files?.[0]){
+ if(checking||working)return;
+ if(!file){status('Сначала выберите Excel-файл счёта.','error');return;}
+ selectedFile=file;preview=null;checking=true;
+ status('Читаю выбранный файл '+file.name+'…');
+ try{
+  if(!/\.xlsx$/i.test(file.name)||file.size<100||file.size>10*1024*1024)
+    throw Error('Нужен счёт в формате .xlsx размером до 10 МБ.');
+  const buf=await file.arrayBuffer();
+  status('Проверяю контрольную сумму оригинала…');
+  const sha=await hashHex(buf);
+  const X=await sheetjs();
+  status('Разбираю номер счёта, товары, количество и суммы…');
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  const book=X.read(buf,{type:'array'});
+  if(!book.SheetNames?.length)throw Error('Excel не содержит листа');
+  const grid=X.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,raw:false,defval:'',blankrows:false});
+  const parsed=parseInvoice(grid);
+  status('Проверяю, не загружен ли этот счёт ранее…');
+  const dupe=await rpc('warehouse_pick_duplicate_check_v1',{
+    p_document_no:parsed.document_no,p_document_date:parsed.document_date,p_original_sha256:sha
+  });
+  if(dupe?.duplicate)throw Error('Этот счёт уже зарегистрирован (ID '+dupe.order_id+'). Повторная запись не создаётся.');
+  preview={...parsed,file,sha};
+  uploadStatus='Счёт №'+parsed.document_no+' проверен: '+parsed.items.length+' позиций, '+parsed.items.reduce((s,x)=>s+x.qty,0)+' шт. Проверьте предпросмотр и подтвердите черновик.';
+  uploadStatusKind='ok';
+ }catch(e){
+  preview=null;uploadStatus='Проверка счёта не завершена: '+String(e?.message||e);
+  uploadStatusKind='error';
+ }finally{
+  checking=false;render();
+ }
 }
 async function confirmImport(){
  if(!preview||working)return;
@@ -104,7 +162,7 @@ async function confirmImport(){
     p_report_vat:preview.vat,p_items:preview.items
   });
   if(!created?.ok)throw Error('Не удалось создать заказ.');
-  preview=null;selected=null;selectedFinance=null;
+  preview=null;selectedFile=null;uploadStatus='Закрытый черновик создан, повторно выбирать этот файл не нужно.';uploadStatusKind='ok';selected=null;selectedFinance=null;
   await loadList(created.order_id);
   alert('Закрытый черновик счёта создан. На склад НЕ передан. Передачу и Telegram добавим отдельным этапом.');
  }finally{working=false;render();}
@@ -125,7 +183,7 @@ async function openOrder(id){
 function render(){
  if(!mount)return;
  const finAllowed=['office','supervisor'].includes(role);
- const upload=finAllowed?'<section class="wp1-box"><h3>🔒 Загрузка счёта офис-менеджером</h3><p class="wp1-mut">Оригинал и финансы сохраняются в закрытой части. Склад их не видит. Сейчас создаётся только черновик — без запуска сборки.</p><input id="wp1-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"> <button id="wp1-check" type="button" '+(working?'disabled':'')+'>Проверить счёт</button></section>':'';
+ const upload=finAllowed?'<section class="wp1-box"><h3>🔒 Загрузка счёта офис-менеджером</h3><p class="wp1-mut">После выбора файла проверка запускается автоматически. Оригинал и финансы доступны только ОМ и руководителю; пока создаётся лишь черновик.</p><input id="wp1-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"> <button id="wp1-check" type="button" '+(checking||working?'disabled':'')+'>'+(checking?'Проверяю…':'Проверить счёт')+'</button><div id="wp1-upload-status" role="status" aria-live="polite" class="'+(uploadStatusKind==='error'?'wp1-error':uploadStatusKind==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:10px;'+(uploadStatus?'':'display:none;')+'">'+esc(uploadStatus)+'</div></section>':'';
  const pr=preview&&finAllowed?'<section class="wp1-box"><div class="wp1-finance"><b>Предпросмотр для ОМ / руководителя</b><br>Счёт №'+esc(preview.document_no)+' от '+esc(preview.document_date)+' · '+esc(preview.customer_display)+'<br>УНП: '+esc(preview.buyer_unp||'—')+' · Итого с НДС: <b>'+money(preview.total)+'</b> · НДС: '+money(preview.vat)+'</div><div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Кол.</th><th>Всего с НДС</th></tr></thead><tbody>'+preview.items.map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.qty)+'</td><td>'+money(x.total_with_vat)+'</td></tr>').join('')+'</tbody></table></div><button type="button" class="wp1-primary" id="wp1-confirm" '+(working?'disabled':'')+'>Создать закрытый черновик</button></section>':'';
  const list='<section class="wp1-box"><h3>Заказы</h3><div class="wp1-list">'+(orders.length?orders.map(x=>'<button data-wp1-id="'+esc(x.id)+'" type="button" class="'+(selected?.id===x.id?'active':'')+'"><b>№'+esc(x.document_no)+'</b> · '+esc(x.document_date)+' · '+esc(x.customer_display)+'<br><span class="wp1-mut">'+esc(statusText(x.status))+' · '+esc(x.line_count)+' поз. / '+esc(x.total_qty)+' шт.</span></button>').join(''):'<div class="wp1-mut">Заказов пока нет.</div>')+'</div></section>';
  let detail='';
@@ -136,6 +194,7 @@ function render(){
  }
  mount.innerHTML='<div id="wp1"><div class="wp1-head"><div><h3>📦 Заказы · защищённый контур</h3><div class="wp1-mut">Склад не получает цены, НДС, суммы, УНП или оригинальный Excel.</div></div><button type="button" id="wp1-refresh">↻ Обновить</button></div>'+upload+pr+'<div class="wp1-grid">'+list+detail+'</div></div>';
  mount.querySelector('#wp1-refresh')?.addEventListener('click',()=>loadList().catch(showError));
+ mount.querySelector('#wp1-file')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(file){selectedFile=file;readPreview(file).catch(showError)}});
  mount.querySelector('#wp1-check')?.addEventListener('click',()=>readPreview().catch(showError));
  mount.querySelector('#wp1-confirm')?.addEventListener('click',()=>confirmImport().catch(showError));
  mount.querySelectorAll('[data-wp1-id]').forEach(b=>b.addEventListener('click',()=>openOrder(b.dataset.wp1Id).catch(showError)));
@@ -147,10 +206,10 @@ async function open(target){
  mount.innerHTML='<div class="wp1-box">Проверяю доступ к разделу «Заказы»…</div>';
  try{
    const r=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
-   role=r.role;orders=r.rows||[];selected=null;selectedFinance=null;preview=null;
+   role=r.role;orders=r.rows||[];selected=null;selectedFinance=null;preview=null;selectedFile=null;uploadStatus='';uploadStatusKind='mut';checking=false;
    if(orders.length)await openOrder(orders[0].id);else render();
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,draftOnly:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,draftOnly:true,autoCheck:true,excelLoadTimeout:true});
 })();
