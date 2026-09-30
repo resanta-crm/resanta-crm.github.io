@@ -1,12 +1,13 @@
-/* RESANTA CRM v23.6.181 · Orders: isolated office invoice import.
+/* RESANTA CRM v23.6.182 · Orders: isolated office invoice import.
  * Warehouse never receives prices, totals, VAT, UNP or the original Excel.
  * Phase 2 intentionally creates PRIVATE DRAFT only: no TSD dispatch or Telegram yet.
  */
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.181',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.182',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
+let staff=[],staffError='',notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const n=v=>{const s=String(v??'').replace(/[\s\u00a0]/g,'').replace(',','.').replace(/BYN/ig,'');return s===''?NaN:Number(s)};
@@ -240,9 +241,65 @@ async function confirmImport(){
   status('Не удалось завершить сохранение: '+reason+(uncertain?' Если ожидание закончилось, сначала нажмите «Обновить» и проверьте список заказов; не отправляйте счёт повторно вслепую.':''),'error');
  }finally{working=false;render();}
 }
+
+async function loadStaff(){
+ if(!['office','supervisor'].includes(role)){staff=[];staffError='';return;}
+ try{const x=await bounded(rpc('warehouse_pick_staff_v1'),12000,'Не удалось получить список сотрудников склада за 12 секунд');
+  staff=Array.isArray(x?.rows)?x.rows:[];staffError='';
+ }catch(e){staff=[];staffError=String(e?.message||e)}
+}
+async function grantWarehouse(){
+ if(busyAction||role!=='supervisor')return;
+ const email=String($('wp1-warehouse-email')?.value||'').trim().toLowerCase();
+ if(!email||!confirm('Выдать сотруднику CRM доступ к НАЗНАЧЕННЫМ заказам склада? '+email))return;
+ busyAction=true;actionMessage='Назначаю доступ…';actionTone='mut';render();
+ try{const r=await bounded(rpc('warehouse_pick_grant_warehouse_v1',{p_email:email}),15000,'Сервер не ответил за 15 секунд');
+  if(!r?.ok)throw Error('Выдача доступа не подтверждена');
+  await loadStaff();actionMessage='Складской доступ выдан: '+email+'. Цены и УНП недоступны.';actionTone='ok';
+ }catch(e){actionMessage='Доступ не изменён: '+String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;render()}
+}
+async function deliverTelegram(id){
+ const d=dbx();if(!d?.functions?.invoke)throw Error('Служба Telegram недоступна в этом клиенте CRM');
+ const {data,error}=await bounded(d.functions.invoke('crm-warehouse-pick-telegram',{body:{order_id:id}}),22000,'Нет подтверждения Telegram за 22 секунды');
+ if(error)throw error;
+ notificationStatus=String(data?.notification_status||'pending');
+ if(notificationStatus==='sent')return true;
+ const causes={
+  WAREHOUSE_TELEGRAM_NOT_CONNECTED:'У сотрудника не привязан Telegram. После подключения повторите отправку.',
+  TELEGRAM_BOT_NOT_CONFIGURED:'Telegram-бот пока не настроен; уведомление остаётся в очереди.',
+  ALREADY_PROCESSING_OR_RATE_LIMITED:'Отправка уже выполняется либо временно ограничена. Проверьте статус позже.'
+ };
+ throw Error(causes[data?.error]||'Telegram не подтвердил доставку: '+String(data?.error||notificationStatus));
+}
+async function dispatchOrder(){
+ if(busyAction||!selected||selected.status!=='draft'||!['office','supervisor'].includes(role))return;
+ const assignee=String($('wp1-assignee')?.value||'').trim().toLowerCase();
+ if(!staff.some(x=>x.email===assignee))throw Error('Выберите допущенного работника склада');
+ const id=selected.id,no=selected.document_no;
+ if(!confirm('Передать счёт №'+no+' работнику '+assignee+' для сборки? Передача выполняется один раз. Финансовые данные склад не увидит.'))return;
+ busyAction=true;actionMessage='Передаю заказ…';actionTone='mut';render();
+ try{
+  const x=await bounded(rpc('warehouse_pick_dispatch_v1',{p_order_id:id,p_assignee_email:assignee}),20000,'Сервер не подтвердил передачу за 20 секунд');
+  if(!x?.ok||x.status!=='waiting_pick')throw Error('Передача не подтверждена');
+  notificationStatus='pending';
+  try{await deliverTelegram(id);actionMessage='Заказ передан, Telegram подтвердил доставку.';actionTone='ok'}
+  catch(e){actionMessage='Заказ передан на склад. '+String(e?.message||e);actionTone='error'}
+ }catch(e){actionMessage='Проверьте текущий статус заказа перед повторной попыткой: '+String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;try{await loadList(id)}catch(_){render()}}
+}
+async function retryTelegram(){
+ if(busyAction||selected?.status!=='waiting_pick')return;
+ const id=selected.id;busyAction=true;actionMessage='Проверяю Telegram…';actionTone='mut';render();
+ try{await deliverTelegram(id);actionMessage='✅ Telegram подтвердил доставку.';actionTone='ok'}
+ catch(e){actionMessage=String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;try{await openOrder(id)}catch(_){render()}}
+}
+
 async function loadList(prefer=null){
  const x=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
  role=x?.role||null;orders=Array.isArray(x?.rows)?x.rows:[];
+ await loadStaff();
  if(prefer)await openOrder(prefer);
  else if(!selected&&orders.length)await openOrder(orders[0].id);
  else render();
@@ -251,6 +308,7 @@ async function openOrder(id){
  selected=await rpc('warehouse_pick_detail_v1',{p_order_id:id});
  selectedFinance=null;
  if(['office','supervisor'].includes(role))selectedFinance=await rpc('warehouse_pick_finance_v1',{p_order_id:id});
+ try{notificationStatus=(await rpc('warehouse_pick_notification_status_v1',{p_order_id:id}))?.notification_status||null}catch(_){notificationStatus=null}
  render();
 }
 function render(){
@@ -262,14 +320,33 @@ function render(){
  let detail='';
  if(selected){
   let f='';
+  let extra='';
+  const note=actionMessage?'<div role="status" class="'+(actionTone==='error'?'wp1-error':actionTone==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:10px">'+esc(actionMessage)+'</div>':'';
+  if(finAllowed&&selected.status==='draft'){
+   const options=staff.map(x=>'<option value="'+esc(x.email)+'">'+esc(x.name||x.email)+' · '+esc(x.email)+(x.telegram_connected?' · Telegram подключён':' · Telegram не подключён')+'</option>').join('');
+   extra='<div class="wp1-box"><h4>📨 Передать на склад</h4><p class="wp1-mut">Выбери допущенного сотрудника. Отправляются только артикулы, названия, штрихкоды и количество.</p>'+
+     (staffError?'<p class="wp1-error">'+esc(staffError)+'</p>':'')+
+     (staff.length?'<select id="wp1-assignee" style="max-width:100%;padding:8px;border:1px solid #cbd5e1">'+options+'</select> <button type="button" class="wp1-primary" id="wp1-dispatch" '+(busyAction?'disabled':'')+'>Передать на склад</button>':'<p class="wp1-mut">Допущенных сотрудников пока нет. Руководитель должен назначить сотрудника ниже.</p>')+
+     (role==='supervisor'?'<div style="margin-top:10px">Выдать складской доступ сотруднику CRM: <input id="wp1-warehouse-email" type="email" placeholder="employee@resanta.ru" style="padding:8px;border:1px solid #cbd5e1;max-width:100%"> <button type="button" id="wp1-grant" '+(busyAction?'disabled':'')+'>Назначить</button></div>':'')+note+'</div>';
+  }else if(finAllowed&&selected.status==='waiting_pick'){
+   const delivered=notificationStatus==='sent';
+   extra='<div class="wp1-box"><h4>📦 Заказ передан на склад</h4><p>Исполнитель: '+esc(selected.assignee_email||'—')+'</p><p class="'+(delivered?'wp1-good':'wp1-mut')+'">'+(delivered?'✅ Доставка Telegram подтверждена.':'⏳ Telegram: '+esc(notificationStatus||'статус уточняется'))+'</p>'+
+      (delivered?'':'<button type="button" id="wp1-retry-telegram" '+(busyAction?'disabled':'')+'>Проверить / повторить Telegram</button>')+note+'</div>';
+  }else if(role==='warehouse'&&selected.status==='waiting_pick'){
+   extra='<p class="wp1-good">Назначенный вам заказ ожидает сборки. Сканирование ТСД будет следующим этапом.</p>';
+  }
+
   if(finAllowed&&selectedFinance)f='<div class="wp1-finance">🔒 Только ОМ и руководитель · УНП '+esc(selectedFinance.buyer_unp||'—')+' · Сумма с НДС '+money(selectedFinance.total_with_vat)+' · НДС '+money(selectedFinance.vat_total)+'</div>';
-  detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div><p class="wp1-mut">Этап 2: только защищённая загрузка. Запуск сборки, ТСД и Telegram подключаются после следующей проверки.</p></section>';
+  detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div>'+extra+'</section>';
  }
  mount.innerHTML='<div id="wp1"><div class="wp1-head"><div><h3>📦 Заказы · защищённый контур</h3><div class="wp1-mut">Склад не получает цены, НДС, суммы, УНП или оригинальный Excel.</div></div><button type="button" id="wp1-refresh">↻ Обновить</button></div>'+upload+pr+'<div class="wp1-grid">'+list+detail+'</div></div>';
  mount.querySelector('#wp1-refresh')?.addEventListener('click',()=>loadList().catch(showError));
  mount.querySelector('#wp1-file')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(file){selectedFile=file;readPreview(file).catch(showError)}});
  mount.querySelector('#wp1-check')?.addEventListener('click',()=>readPreview().catch(showError));
  mount.querySelector('#wp1-confirm')?.addEventListener('click',()=>confirmImport().catch(showError));
+ mount.querySelector('#wp1-grant')?.addEventListener('click',()=>grantWarehouse().catch(showError));
+ mount.querySelector('#wp1-dispatch')?.addEventListener('click',()=>dispatchOrder().catch(showError));
+ mount.querySelector('#wp1-retry-telegram')?.addEventListener('click',()=>retryTelegram().catch(showError));
  mount.querySelectorAll('[data-wp1-id]').forEach(b=>b.addEventListener('click',()=>openOrder(b.dataset.wp1Id).catch(showError)));
 }
 function showError(e){alert('Заказы: '+String(e?.message||e));}
@@ -280,9 +357,10 @@ async function open(target){
  try{
    const r=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
    role=r.role;orders=r.rows||[];selected=null;selectedFinance=null;preview=null;selectedFile=null;uploadStatus='';uploadStatusKind='mut';checking=false;
+   await loadStaff();
    if(orders.length)await openOrder(orders[0].id);else render();
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,draftOnly:true,autoCheck:true,excelLoadTimeout:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,manualDispatch:true,telegramStatus:true,autoCheck:true,excelLoadTimeout:true});
 })();
