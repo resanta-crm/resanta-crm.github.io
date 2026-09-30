@@ -32,8 +32,8 @@ function parseInvoice(grid){
  const doc=dateParts(title);
  const customerRow=grid.find(r=>String(r?.[1]||'').trim().toLowerCase().startsWith('покупатель'));
  const buyer=String(customerRow?.[5]||'').trim();
- const customer=buyer.split(/,\s*УНП\b/i)[0].trim();
- const unp=buyer.match(/\bУНП\s*(\d{8,12})\b/i)?.[1]||'';
+ const customer=buyer.split(/[,;]\s*УНП\s*\d{8,12}(?=$|[,;\s])/i)[0].trim();
+ const unp=buyer.match(/(?:^|[,;\s])УНП\s*(\d{8,12})(?=$|[,;\s])/i)?.[1]||'';
  if(!customer)throw Error('Покупатель не найден в строке счёта.');
  const h=grid.findIndex(r=>String(r?.[3]||'').includes('Артикул')&&String(r?.[78]||'').includes('Штрихкод'));
  if(h<0)throw Error('Не найдена таблица счёта (Артикул / Штрихкод). Нужен согласованный формат.');
