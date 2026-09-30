@@ -83,64 +83,64 @@ async function budget(m){
         canAdd=!!d.is_leader&&!!d.budget_exists&&dayForInput<=todayMinsk,
         audit=d.budget_exists
           ?(carried
-            ?\`<div class="tr14-info">↪️ <b>Базовый остаток перенесён автоматически.</b> База: \${money(Number(d.budget_anchor_amount||0))} с \${esc(anchorLabel)}; последнее изменение: \${esc(budgetDt(d.budget_updated_at))} · \${esc(who)}\${spentBefore>0?'<br>Ранее внесённые списания бюджета: '+money(spentBefore)+'.':''}</div>\`
-            :\`<div class="tr14-info">🕒 <b>Последнее изменение базового остатка:</b> \${esc(budgetDt(d.budget_updated_at))} · \${esc(who)}</div>\`)
-          :\`<div class="tr14-warn">⚠️ <b>Базовый остаток бюджета ещё не задан.</b></div>\`;
+            ?`<div class="tr14-info">↪️ <b>Базовый остаток перенесён автоматически.</b> База: ${money(Number(d.budget_anchor_amount||0))} с ${esc(anchorLabel)}; последнее изменение: ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}${spentBefore>0?'<br>Ранее внесённые списания бюджета: '+money(spentBefore)+'.':''}</div>`
+            :`<div class="tr14-info">🕒 <b>Последнее изменение базового остатка:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`)
+          :`<div class="tr14-warn">⚠️ <b>Базовый остаток бюджета ещё не задан.</b></div>`;
   const rowsHtml=rows.map(r=>{
     const cancelled=!!r.voided_at;
-    return \`<tr\${cancelled?' style="opacity:.65"':''}>
-      <td>\${esc(r.expense_date)}</td>
-      <td><b>\${money(r.amount)}</b></td>
-      <td>\${esc(r.description||'—')}</td>
-      <td>\${esc(r.created_by_name||r.created_by||'—')}<br><span class="tr14-note">\${esc(budgetDt(r.created_at))}</span></td>
-      <td>\${cancelled?'<b>Отменён</b><br><span class="tr14-note">'+esc(r.void_reason||'')+'</span>':d.is_leader?'<button class="btn-secondary" type="button" data-tr14-budget-void="'+esc(r.id)+'">Отменить</button>':'Учтён'}</td>
-    </tr>\`;
+    return `<tr${cancelled?' style="opacity:.65"':''}>
+      <td>${esc(r.expense_date)}</td>
+      <td><b>${money(r.amount)}</b></td>
+      <td>${esc(r.description||'—')}</td>
+      <td>${esc(r.created_by_name||r.created_by||'—')}<br><span class="tr14-note">${esc(budgetDt(r.created_at))}</span></td>
+      <td>${cancelled?'<b>Отменён</b><br><span class="tr14-note">'+esc(r.void_reason||'')+'</span>':d.is_leader?'<button class="btn-secondary" type="button" data-tr14-budget-void="'+esc(r.id)+'">Отменить</button>':'Учтён'}</td>
+    </tr>`;
   }).join('');
 
-  panel.innerHTML=\`
+  panel.innerHTML=`
     <div class="tr14-sec">
       <div>
         <h3>💼 Бюджет Triovist</h3>
         <div class="tr14-note">Остаток переносится автоматически. Новые списания из этого раздела уменьшают доступный бюджет.</div>
       </div>
-      \${monthInput('budget',d.month)}
+      ${monthInput('budget',d.month)}
     </div>
-    <div class="\${total<0?'tr14-warn':'tr14-info'}" style="font-size:19px;padding:16px 18px;border-width:2px">
-      <b>\${total<0?'🔴 ПЕРЕРАСХОД БЮДЖЕТА: '+money(Math.abs(total)):'💰 РЕАЛЬНО ОСТАЛОСЬ НА БЮДЖЕТЕ: '+money(total)}</b><br>
-      <span style="font-size:13px">\${money(opening)} перенесено + \${money(accrual)} начислено (1,5%) − \${money(spent)} списано в этом месяце</span>
+    <div class="${total<0?'tr14-warn':'tr14-info'}" style="font-size:19px;padding:16px 18px;border-width:2px">
+      <b>${total<0?'🔴 ПЕРЕРАСХОД БЮДЖЕТА: '+money(Math.abs(total)):'💰 РЕАЛЬНО ОСТАЛОСЬ НА БЮДЖЕТЕ: '+money(total)}</b><br>
+      <span style="font-size:13px">${money(opening)} перенесено + ${money(accrual)} начислено (1,5%) − ${money(spent)} списано в этом месяце</span>
     </div>
     <div class="tr14-k">
-      <div><span>Доступный остаток</span><b>\${money(total)}</b></div>
-      <div><span>Перенесено с прошлого месяца</span><b>\${money(opening)}</b></div>
-      <div><span>Начислено за месяц 1,5%</span><b>\${money(accrual)}</b></div>
-      <div><span>Затраты за этот месяц</span><b>\${money(spent)}</b></div>
+      <div><span>Доступный остаток</span><b>${money(total)}</b></div>
+      <div><span>Перенесено с прошлого месяца</span><b>${money(opening)}</b></div>
+      <div><span>Начислено за месяц 1,5%</span><b>${money(accrual)}</b></div>
+      <div><span>Затраты за этот месяц</span><b>${money(spent)}</b></div>
     </div>
-    \${audit}
-    <div class="tr14-info"><b>Комментарий к базовому остатку:</b><br>\${esc(d.budget_comment||'—')}</div>
-    \${d.is_leader&&!carried?\`
+    ${audit}
+    <div class="tr14-info"><b>Комментарий к базовому остатку:</b><br>${esc(d.budget_comment||'—')}</div>
+    ${d.is_leader&&!carried?`
       <div class="tr14-form" style="grid-template-columns:220px 1fr auto">
-        <div><label class="form-label">Базовый остаток, BYN</label><input id="tr14-budget-amount" class="form-input" type="number" min="0" step="0.01" value="\${Number(d.budget_anchor_amount??opening).toFixed(2)}"></div>
-        <div><label class="form-label">Комментарий</label><input id="tr14-budget-comment" class="form-input" value="\${esc(d.budget_comment||'')}"></div>
+        <div><label class="form-label">Базовый остаток, BYN</label><input id="tr14-budget-amount" class="form-input" type="number" min="0" step="0.01" value="${Number(d.budget_anchor_amount??opening).toFixed(2)}"></div>
+        <div><label class="form-label">Комментарий</label><input id="tr14-budget-comment" class="form-input" value="${esc(d.budget_comment||'')}"></div>
         <button class="btn-primary" data-tr14-budget-save>Сохранить базу</button>
-      </div>\`:d.is_leader&&carried?\`<div class="tr14-note" style="margin:8px 0"><b>Ручной перенос не требуется:</b> CRM уже перенесла остаток автоматически.</div>\`:''}
+      </div>`:d.is_leader&&carried?`<div class="tr14-note" style="margin:8px 0"><b>Ручной перенос не требуется:</b> CRM уже перенесла остаток автоматически.</div>`:''}
     <div style="margin-top:17px;border-top:1px solid #e5e7eb;padding-top:13px">
-      <h3 style="margin-bottom:5px">📋 Затраты из бюджета · \${esc(ym)}</h3>
+      <h3 style="margin-bottom:5px">📋 Затраты из бюджета · ${esc(ym)}</h3>
       <div class="tr14-note">Это отдельный журнал списаний. Ранее учтённые в базовых 54 420 BYN расходы и записи в АНП/СИ не списываются повторно автоматически.</div>
-      \${canAdd?\`
+      ${canAdd?`
         <div class="tr14-form" style="grid-template-columns:155px 180px minmax(230px,1fr) auto">
-          <div><label class="form-label">Дата расхода</label><input class="form-input" id="tr14-budget-expense-date" type="date" min="\${esc(ym)}-01" max="\${esc(todayMinsk)}" value="\${esc(dayForInput)}"></div>
+          <div><label class="form-label">Дата расхода</label><input class="form-input" id="tr14-budget-expense-date" type="date" min="${esc(ym)}-01" max="${esc(todayMinsk)}" value="${esc(dayForInput)}"></div>
           <div><label class="form-label">Сумма, BYN</label><input class="form-input" id="tr14-budget-expense-amount" type="number" step="0.01" min="0.01" placeholder="0,00"></div>
           <div><label class="form-label">На что потратили</label><input class="form-input" id="tr14-budget-expense-description" maxlength="1000" placeholder="Например, подарок клиенту или акция"></div>
           <button class="btn-primary" type="button" data-tr14-budget-expense-save>− Внести затрату</button>
-        </div>\`:
-        d.is_leader?\`<div class="tr14-note" style="margin-top:9px">Для списания выберите месяц с действующим базовым остатком, не позже текущего.</div>\`:''}
+        </div>`:
+        d.is_leader?`<div class="tr14-note" style="margin-top:9px">Для списания выберите месяц с действующим базовым остатком, не позже текущего.</div>`:''}
       <div class="tri-table-wrap" style="overflow-x:auto;margin-top:12px">
         <table class="tr14-table"><thead><tr><th>Дата</th><th>Сумма</th><th>Назначение</th><th>Кто и когда внёс</th><th>Действие</th></tr></thead>
-          <tbody>\${rowsHtml||'<tr><td colspan="5" class="tr14-note">Затрат по бюджету за выбранный месяц ещё нет.</td></tr>'}</tbody>
+          <tbody>${rowsHtml||'<tr><td colspan="5" class="tr14-note">Затрат по бюджету за выбранный месяц ещё нет.</td></tr>'}</tbody>
         </table>
       </div>
     </div>
-  \`;
+  `;
 }
 const range=d=>Number(d.total_filtered||0)?`${Number(d.offset||0)+1}–${Number(d.offset||0)+(d.items||[]).length} из ${Number(d.total_filtered)}`:'0 из 0';
 async function prices(){const d=await rpc('triovist_price_search_v23612',{p_query:price.q,p_only_suspect:price.only,p_offset:price.offset,p_limit:price.limit});price.last=d;price.offset=Number(d.offset||0);price.limit=Number(d.limit||price.limit);const rows=d.items||[],prev=price.offset>0,next=price.offset+rows.length<Number(d.total_filtered||0);panel.innerHTML=`<div class="tr14-sec"><div><h3>🧮 Расчёт цены Triovist</h3><div class="tr14-note">1С «Мелкий опт 2 с НДС», скидка Triovist 5%. Доступно ${Number(d.total_all||0)} SKU.</div></div></div><div class="tr14-form" style="grid-template-columns:1fr auto"><input id="tr14-q" class="form-input" placeholder="Артикул или товар" value="${esc(price.q)}"><button class="btn-primary" data-tr14-search>Найти</button></div><div class="tr14-tools"><button class="hot ${price.only?'on':''}" data-tr14-only>⚠ Только сильные отклонения (${Number(d.suspect_count||0)})</button><select data-tr14-limit><option value="50" ${price.limit===50?'selected':''}>50</option><option value="100" ${price.limit===100?'selected':''}>100</option><option value="500" ${price.limit>=500?'selected':''}>Все</option></select><button data-tr14-prev ${!prev?'disabled':''}>←</button><span class="tr14-note"><b>${range(d)}</b></span><button data-tr14-next ${!next?'disabled':''}>→</button></div><div style="overflow:auto"><table class="tr14-table"><thead><tr><th>Артикул</th><th>Товар</th><th>Мелкий опт 2 с НДС</th><th>Triovist −5%</th><th>Цена 21vek</th></tr></thead><tbody>${rows.map(r=>`<tr data-tr14-sku="${esc(r.sku)}"><td><b>${esc(r.sku)}</b></td><td>${esc(r.product)}</td><td><b>${money(r.list_price)}</b></td><td>${money(r.triovist_price)}</td><td class="${r.price_21vek_suspect?'tr14-bad':''}">${r.price_21vek==null?'—':(r.price_21vek_suspect?'⚠ ':'')+money(r.price_21vek)}${r.price_21vek_suspect&&r.price_21vek_previous!=null?`<div class="tr14-note">ранее ${money(r.price_21vek_previous)}</div>`:''}</td></tr>`).join('')}</tbody></table></div><div id="tr14-detail"></div>`}
