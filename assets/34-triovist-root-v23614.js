@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_ROOT_V23614)return;
-const V='v23.6.175',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.176',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser'],COMM=['anp','si','budget','price'];
 let ctx=null,shell=null,panel=null,active='home',busy=false,refreshBusy=false,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -66,60 +66,81 @@ function docs(r,write){const x=(r.documents||[]).map(d=>`<button class="btn-seco
 async function expense(kind,m){const d=await getMonth(m),rows=(d.expenses||[]).filter(x=>x.expense_type===kind),sum=rows.reduce((s,x)=>s+Number(x.amount||0),0),write=!!d.can_write_expenses;panel.innerHTML=`<div class="tr14-sec"><div><h3>${kind==='anp'?'🧾 АНП':'🛠 Компенсация СИ'}</h3><div class="tr14-note">${write?'Внесение расходов и документов.':'Просмотр.'}</div></div>${monthInput(kind,d.month)}</div><div class="tr14-k"><div><span>${kind==='anp'?'АНП':'СИ'} за месяц</span><b>${money(sum)}</b></div><div><span>АНП + СИ факт</span><b>${money(d.expenses_total)}</b></div><div><span>Документов</span><b>${Number(d.documents_count||0)}</b></div><div><span>Доступ</span><b>${write?'Внесение':'Просмотр'}</b></div></div>${write?`<div class="tr14-form"><div><label class="form-label">Дата</label><input id="tr14-date" class="form-input" type="date" value="${esc(String(d.month).slice(0,7)+'-01')}"></div><div><label class="form-label">Сумма, BYN</label><input id="tr14-amount" class="form-input" type="number" min="0" step="0.01"></div><div><label class="form-label">Комментарий</label><input id="tr14-comment" class="form-input"></div><button class="btn-primary" data-tr14-save="${kind}">Сохранить</button></div>`:'<div class="tr14-info">Без права изменения.</div>'}<div style="overflow:auto"><table class="tr14-table"><thead><tr><th>Дата</th><th>Сумма</th><th>Комментарий</th><th>Кто внёс</th><th>Документы</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr><td>${esc(r.expense_date)}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.comment||'—')}</td><td>${esc(r.created_by||'—')}</td><td>${docs(r,write)}</td></tr>`).join(''):'<tr><td colspan="5">За выбранный месяц расходов нет.</td></tr>'}</tbody></table></div>`}
 async function budget(m){
   const d=await getMonth(m),
-        gross=Number(d.sales_revenue||0),
-        net=Number(d.sales_revenue_ex_vat||gross/1.2),
+        net=Number(d.sales_revenue_ex_vat||Number(d.sales_revenue||0)/1.2),
         accrual=Number(d.budget_month_accrual??(Math.round(net*.015*100)/100)),
         opening=Number(d.budget_opening_balance??d.budget_amount??0),
-        total=Number(d.budget_available_total??(Math.round((opening+accrual)*100)/100)),
+        spent=Number(d.budget_expenses_month_total||0),
+        spentBefore=Number(d.budget_expenses_previous_total||0),
+        total=Number(d.budget_available_total??(Math.round((opening+accrual-spent)*100)/100)),
         who=d.budget_updated_name||d.budget_updated_by||'—',
         carried=!!d.budget_is_carried,
+        rows=Array.isArray(d.budget_expense_rows)?d.budget_expense_rows:[],
         anchorMonth=String(d.budget_anchor_month||'').slice(0,7),
         anchorLabel=anchorMonth?new Date(anchorMonth+'-01T00:00:00Z').toLocaleDateString('ru-RU',{timeZone:'UTC',month:'long',year:'numeric'}):'прошлого периода',
+        ym=String(d.month||m).slice(0,7),
+        todayMinsk=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Minsk'}),
+        dayForInput=todayMinsk.slice(0,7)===ym?todayMinsk:new Date(Date.UTC(Number(ym.slice(0,4)),Number(ym.slice(5,7)),0)).toISOString().slice(0,10),
+        canAdd=!!d.is_leader&&!!d.budget_exists&&dayForInput<=todayMinsk,
         audit=d.budget_exists
           ?(carried
-            ?`<div class="tr14-info">↪️ <b>Остаток перенесён автоматически.</b> База: ${money(Number(d.budget_anchor_amount||0))} с ${esc(anchorLabel)}; последнее изменение базы: ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`
-            :`<div class="tr14-info">🕒 <b>Последнее изменение базового остатка:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`)
-          :`<div class="tr14-warn">⚠️ <b>Базовый остаток бюджета ещё не задан.</b></div>`;
+            ?\`<div class="tr14-info">↪️ <b>Базовый остаток перенесён автоматически.</b> База: \${money(Number(d.budget_anchor_amount||0))} с \${esc(anchorLabel)}; последнее изменение: \${esc(budgetDt(d.budget_updated_at))} · \${esc(who)}\${spentBefore>0?'<br>Ранее внесённые списания бюджета: '+money(spentBefore)+'.':''}</div>\`
+            :\`<div class="tr14-info">🕒 <b>Последнее изменение базового остатка:</b> \${esc(budgetDt(d.budget_updated_at))} · \${esc(who)}</div>\`)
+          :\`<div class="tr14-warn">⚠️ <b>Базовый остаток бюджета ещё не задан.</b></div>\`;
+  const rowsHtml=rows.map(r=>{
+    const cancelled=!!r.voided_at;
+    return \`<tr\${cancelled?' style="opacity:.65"':''}>
+      <td>\${esc(r.expense_date)}</td>
+      <td><b>\${money(r.amount)}</b></td>
+      <td>\${esc(r.description||'—')}</td>
+      <td>\${esc(r.created_by_name||r.created_by||'—')}<br><span class="tr14-note">\${esc(budgetDt(r.created_at))}</span></td>
+      <td>\${cancelled?'<b>Отменён</b><br><span class="tr14-note">'+esc(r.void_reason||'')+'</span>':d.is_leader?'<button class="btn-secondary" type="button" data-tr14-budget-void="'+esc(r.id)+'">Отменить</button>':'Учтён'}</td>
+    </tr>\`;
+  }).join('');
 
-  panel.innerHTML=`
+  panel.innerHTML=\`
     <div class="tr14-sec">
       <div>
         <h3>💼 Бюджет Triovist</h3>
-        <div class="tr14-note">Остаток автоматически переносится из прошлого месяца. Начисление 1,5% добавляется по текущим продажам без НДС.</div>
+        <div class="tr14-note">Остаток переносится автоматически. Новые списания из этого раздела уменьшают доступный бюджет.</div>
       </div>
-      ${monthInput('budget',d.month)}
+      \${monthInput('budget',d.month)}
     </div>
-
-    <div class="tr14-info" style="font-size:20px;padding:16px 18px;border-width:2px">
-      <b>💰 РЕАЛЬНО ДОСТУПНО НА БЮДЖЕТЕ: ${money(total)}</b><br>
-      <span style="font-size:13px">${money(opening)} перенесено с прошлого периода + ${money(accrual)} начислено за текущий месяц</span>
+    <div class="\${total<0?'tr14-warn':'tr14-info'}" style="font-size:19px;padding:16px 18px;border-width:2px">
+      <b>\${total<0?'🔴 ПЕРЕРАСХОД БЮДЖЕТА: '+money(Math.abs(total)):'💰 РЕАЛЬНО ОСТАЛОСЬ НА БЮДЖЕТЕ: '+money(total)}</b><br>
+      <span style="font-size:13px">\${money(opening)} перенесено + \${money(accrual)} начислено (1,5%) − \${money(spent)} списано в этом месяце</span>
     </div>
-
     <div class="tr14-k">
-      <div><span>Реально доступно сейчас</span><b>${money(total)}</b></div>
-      <div><span>Перенесено с прошлого месяца</span><b>${money(opening)}</b></div>
-      <div><span>Начислено за месяц 1,5%</span><b>${money(accrual)}</b></div>
-      <div><span>Продажи без НДС</span><b>${money(net)}</b></div>
+      <div><span>Доступный остаток</span><b>\${money(total)}</b></div>
+      <div><span>Перенесено с прошлого месяца</span><b>\${money(opening)}</b></div>
+      <div><span>Начислено за месяц 1,5%</span><b>\${money(accrual)}</b></div>
+      <div><span>Затраты за этот месяц</span><b>\${money(spent)}</b></div>
     </div>
-
-    ${audit}
-
-    <div class="tr14-info"><b>Комментарий к базовому остатку:</b><br>${esc(d.budget_comment||'—')}</div>
-
-    ${d.is_leader&&!carried?`
+    \${audit}
+    <div class="tr14-info"><b>Комментарий к базовому остатку:</b><br>\${esc(d.budget_comment||'—')}</div>
+    \${d.is_leader&&!carried?\`
       <div class="tr14-form" style="grid-template-columns:220px 1fr auto">
-        <div>
-          <label class="form-label">Базовый остаток, BYN</label>
-          <input id="tr14-budget-amount" class="form-input" type="number" value="${Number(d.budget_anchor_amount??opening).toFixed(2)}">
-        </div>
-        <div>
-          <label class="form-label">Комментарий</label>
-          <input id="tr14-budget-comment" class="form-input" value="${esc(d.budget_comment||'')}">
-        </div>
+        <div><label class="form-label">Базовый остаток, BYN</label><input id="tr14-budget-amount" class="form-input" type="number" min="0" step="0.01" value="\${Number(d.budget_anchor_amount??opening).toFixed(2)}"></div>
+        <div><label class="form-label">Комментарий</label><input id="tr14-budget-comment" class="form-input" value="\${esc(d.budget_comment||'')}"></div>
         <button class="btn-primary" data-tr14-budget-save>Сохранить базу</button>
-      </div>`:d.is_leader&&carried?`
-      <div class="tr14-note" style="margin-top:10px"><b>Ручной перенос не требуется:</b> CRM уже перенесла остаток автоматически.</div>`:''}
-  `;
+      </div>\`:d.is_leader&&carried?\`<div class="tr14-note" style="margin:8px 0"><b>Ручной перенос не требуется:</b> CRM уже перенесла остаток автоматически.</div>\`:''}
+    <div style="margin-top:17px;border-top:1px solid #e5e7eb;padding-top:13px">
+      <h3 style="margin-bottom:5px">📋 Затраты из бюджета · \${esc(ym)}</h3>
+      <div class="tr14-note">Это отдельный журнал списаний. Ранее учтённые в базовых 54 420 BYN расходы и записи в АНП/СИ не списываются повторно автоматически.</div>
+      \${canAdd?\`
+        <div class="tr14-form" style="grid-template-columns:155px 180px minmax(230px,1fr) auto">
+          <div><label class="form-label">Дата расхода</label><input class="form-input" id="tr14-budget-expense-date" type="date" min="\${esc(ym)}-01" max="\${esc(todayMinsk)}" value="\${esc(dayForInput)}"></div>
+          <div><label class="form-label">Сумма, BYN</label><input class="form-input" id="tr14-budget-expense-amount" type="number" step="0.01" min="0.01" placeholder="0,00"></div>
+          <div><label class="form-label">На что потратили</label><input class="form-input" id="tr14-budget-expense-description" maxlength="1000" placeholder="Например, подарок клиенту или акция"></div>
+          <button class="btn-primary" type="button" data-tr14-budget-expense-save>− Внести затрату</button>
+        </div>\`:
+        d.is_leader?\`<div class="tr14-note" style="margin-top:9px">Для списания выберите месяц с действующим базовым остатком, не позже текущего.</div>\`:''}
+      <div class="tri-table-wrap" style="overflow-x:auto;margin-top:12px">
+        <table class="tr14-table"><thead><tr><th>Дата</th><th>Сумма</th><th>Назначение</th><th>Кто и когда внёс</th><th>Действие</th></tr></thead>
+          <tbody>\${rowsHtml||'<tr><td colspan="5" class="tr14-note">Затрат по бюджету за выбранный месяц ещё нет.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  \`;
 }
 const range=d=>Number(d.total_filtered||0)?`${Number(d.offset||0)+1}–${Number(d.offset||0)+(d.items||[]).length} из ${Number(d.total_filtered)}`:'0 из 0';
 async function prices(){const d=await rpc('triovist_price_search_v23612',{p_query:price.q,p_only_suspect:price.only,p_offset:price.offset,p_limit:price.limit});price.last=d;price.offset=Number(d.offset||0);price.limit=Number(d.limit||price.limit);const rows=d.items||[],prev=price.offset>0,next=price.offset+rows.length<Number(d.total_filtered||0);panel.innerHTML=`<div class="tr14-sec"><div><h3>🧮 Расчёт цены Triovist</h3><div class="tr14-note">1С «Мелкий опт 2 с НДС», скидка Triovist 5%. Доступно ${Number(d.total_all||0)} SKU.</div></div></div><div class="tr14-form" style="grid-template-columns:1fr auto"><input id="tr14-q" class="form-input" placeholder="Артикул или товар" value="${esc(price.q)}"><button class="btn-primary" data-tr14-search>Найти</button></div><div class="tr14-tools"><button class="hot ${price.only?'on':''}" data-tr14-only>⚠ Только сильные отклонения (${Number(d.suspect_count||0)})</button><select data-tr14-limit><option value="50" ${price.limit===50?'selected':''}>50</option><option value="100" ${price.limit===100?'selected':''}>100</option><option value="500" ${price.limit>=500?'selected':''}>Все</option></select><button data-tr14-prev ${!prev?'disabled':''}>←</button><span class="tr14-note"><b>${range(d)}</b></span><button data-tr14-next ${!next?'disabled':''}>→</button></div><div style="overflow:auto"><table class="tr14-table"><thead><tr><th>Артикул</th><th>Товар</th><th>Мелкий опт 2 с НДС</th><th>Triovist −5%</th><th>Цена 21vek</th></tr></thead><tbody>${rows.map(r=>`<tr data-tr14-sku="${esc(r.sku)}"><td><b>${esc(r.sku)}</b></td><td>${esc(r.product)}</td><td><b>${money(r.list_price)}</b></td><td>${money(r.triovist_price)}</td><td class="${r.price_21vek_suspect?'tr14-bad':''}">${r.price_21vek==null?'—':(r.price_21vek_suspect?'⚠ ':'')+money(r.price_21vek)}${r.price_21vek_suspect&&r.price_21vek_previous!=null?`<div class="tr14-note">ранее ${money(r.price_21vek_previous)}</div>`:''}</td></tr>`).join('')}</tbody></table></div><div id="tr14-detail"></div>`}
@@ -128,9 +149,41 @@ async function saveExpense(kind){const d=document.getElementById('tr14-date')?.v
 function storagePath(id,f){let ext=(String(f.name||'').toLowerCase().match(/\.([a-z0-9]{1,10})$/)||[])[1];if(!ext)ext=({'application/pdf':'pdf','image/jpeg':'jpg','image/png':'png','image/webp':'webp','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx','application/vnd.ms-excel':'xls','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx','application/msword':'doc'}[f.type]||'bin');return `${id}/${Date.now()}_${Math.random().toString(36).slice(2,9)}_document.${ext}`}
 async function attach(id,input){const f=input.files?.[0];if(!f)return;if(f.size>25*1024*1024)throw Error('Файл больше 25 МБ');const d=dbx(),path=storagePath(id,f),up=await d.storage.from('triovist-expense-docs').upload(path,f,{upsert:false,contentType:f.type||'application/octet-stream'});if(up.error)throw up.error;try{await rpc('triovist_commercial_attach_document',{p_expense_id:id,p_storage_path:path,p_file_name:f.name||'document',p_mime_type:f.type||null,p_size_bytes:f.size})}catch(e){try{await d.storage.from('triovist-expense-docs').remove([path])}catch(_){}throw e}await expense(active,document.querySelector(`[data-tr14-month="${active}"]`)?.value||month())}
 async function openDoc(path){const r=await dbx().storage.from('triovist-expense-docs').createSignedUrl(path,900);if(r.error)throw r.error;if(!r.data?.signedUrl)throw Error('Ссылка не создана');window.open(r.data.signedUrl,'_blank','noopener')}
+let budgetExpenseBusy=false;
+async function addBudgetExpense(){
+ if(budgetExpenseBusy)return;
+ const dateInput=document.getElementById('tr14-budget-expense-date');
+ const amountInput=document.getElementById('tr14-budget-expense-amount');
+ const descriptionInput=document.getElementById('tr14-budget-expense-description');
+ const b=document.querySelector('[data-tr14-budget-expense-save]');
+ const date=dateInput?.value||'',raw=String(amountInput?.value||'').replace(',','.'),amount=Number(raw),description=String(descriptionInput?.value||'').trim();
+ const m=document.querySelector('[data-tr14-month="budget"]')?.value||month();
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date.slice(0,7)!==m)throw Error('Проверьте дату расхода и выбранный месяц');
+ if(!raw||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100)throw Error('Введите положительную сумму в BYN с точностью до копеек');
+ if(description.length<2)throw Error('Укажите, на что потрачены деньги');
+ if(!window.crypto?.randomUUID)throw Error('Не удалось создать защищённый идентификатор операции. Обновите страницу.');
+ const key=b?.dataset.requestId||(b.dataset.requestId=window.crypto.randomUUID());
+ budgetExpenseBusy=true;if(b)b.disabled=true;
+ try{
+  await rpc('triovist_budget_add_expense',{p_request_id:key,p_expense_date:date,p_amount:amount,p_description:description});
+  await budget(m);
+ }finally{budgetExpenseBusy=false;if(b?.isConnected)b.disabled=false}
+}
+async function voidBudgetExpense(id){
+ if(budgetExpenseBusy)return;
+ const reason=window.prompt('Укажите причину отмены затратной записи (сама запись останется в истории):');
+ if(reason===null)return;
+ if(reason.trim().length<3)throw Error('Укажите причину отмены (не менее 3 символов)');
+ const m=document.querySelector('[data-tr14-month="budget"]')?.value||month();
+ budgetExpenseBusy=true;
+ try{
+  await rpc('triovist_budget_void_expense',{p_expense_id:id,p_reason:reason.trim()});
+  await budget(m);
+ }finally{budgetExpenseBusy=false}
+}
 async function saveBudget(){const a=Number(document.getElementById('tr14-budget-amount')?.value),c=document.getElementById('tr14-budget-comment')?.value||'',m=document.querySelector('[data-tr14-month="budget"]')?.value||month();if(!(a>=0))throw Error('Проверьте сумму');await rpc('triovist_commercial_set_budget',{p_month:first(m),p_amount:a,p_comment:c});await budget(m)}
 async function zero(sku){const z=Number(document.getElementById('tr14-zero')?.value);if(!(z>0))throw Error('Укажите Точку 0');await rpc('triovist_price_set_point_zero',{p_sku:sku,p_point_zero:z});await detail(sku)}
-function bind(){if(panel.dataset.bound)return;panel.dataset.bound='1';panel.addEventListener('change',async e=>{try{const m=e.target.closest('[data-tr14-month]');if(m){m.dataset.tr14Month==='budget'?await budget(m.value):await expense(m.dataset.tr14Month,m.value);return}const a=e.target.closest('[data-tr14-attach]');if(a){await attach(a.dataset.tr14Attach,a);a.value='';return}const l=e.target.closest('[data-tr14-limit]');if(l){price.limit=Number(l.value);price.offset=0;await prices()}}catch(x){alert(x.message||x)}});panel.addEventListener('click',async e=>{try{const s=e.target.closest('[data-tr14-save]');if(s){await saveExpense(s.dataset.tr14Save);return}const d=e.target.closest('[data-tr14-doc]');if(d){await openDoc(d.dataset.tr14Doc);return}if(e.target.closest('[data-tr14-budget-save]')){await saveBudget();return}if(e.target.closest('[data-tr14-search]')){price.q=document.getElementById('tr14-q')?.value||'';price.offset=0;await prices();return}if(e.target.closest('[data-tr14-only]')){price.only=!price.only;price.offset=0;await prices();return}if(e.target.closest('[data-tr14-prev]')){price.offset=Math.max(0,price.offset-price.limit);await prices();return}if(e.target.closest('[data-tr14-next]')){price.offset+=price.limit;await prices();return}const r=e.target.closest('[data-tr14-sku]');if(r){await detail(r.dataset.tr14Sku);return}const z=e.target.closest('[data-tr14-zero]');if(z)await zero(z.dataset.tr14Zero)}catch(x){alert(x.message||x)}})}
+function bind(){if(panel.dataset.bound)return;panel.dataset.bound='1';panel.addEventListener('change',async e=>{try{const m=e.target.closest('[data-tr14-month]');if(m){m.dataset.tr14Month==='budget'?await budget(m.value):await expense(m.dataset.tr14Month,m.value);return}const a=e.target.closest('[data-tr14-attach]');if(a){await attach(a.dataset.tr14Attach,a);a.value='';return}const l=e.target.closest('[data-tr14-limit]');if(l){price.limit=Number(l.value);price.offset=0;await prices()}}catch(x){alert(x.message||x)}});panel.addEventListener('click',async e=>{try{const s=e.target.closest('[data-tr14-save]');if(s){await saveExpense(s.dataset.tr14Save);return}const d=e.target.closest('[data-tr14-doc]');if(d){await openDoc(d.dataset.tr14Doc);return}if(e.target.closest('[data-tr14-budget-expense-save]')){await addBudgetExpense();return}const vb=e.target.closest('[data-tr14-budget-void]');if(vb){await voidBudgetExpense(vb.dataset.tr14BudgetVoid);return}if(e.target.closest('[data-tr14-budget-save]')){await saveBudget();return}if(e.target.closest('[data-tr14-search]')){price.q=document.getElementById('tr14-q')?.value||'';price.offset=0;await prices();return}if(e.target.closest('[data-tr14-only]')){price.only=!price.only;price.offset=0;await prices();return}if(e.target.closest('[data-tr14-prev]')){price.offset=Math.max(0,price.offset-price.limit);await prices();return}if(e.target.closest('[data-tr14-next]')){price.offset+=price.limit;await prices();return}const r=e.target.closest('[data-tr14-sku]');if(r){await detail(r.dataset.tr14Sku);return}const z=e.target.closest('[data-tr14-zero]');if(z)await zero(z.dataset.tr14Zero)}catch(x){alert(x.message||x)}})}
 async function ensure(){if(busy)return false;busy=true;try{if(!ctx){ctx=await context();if(!ctx)return false}css();return dom()}finally{busy=false}}
 function watch(){if(mo)return;mo=new MutationObserver(()=>{if(page())ensure().then(async()=>{sync();if(pendingSalesRefresh&&page()?.classList.contains('active')){pendingSalesRefresh=false;await refreshCurrent()}}).catch(()=>{})});mo.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});window.addEventListener('pageshow',()=>setTimeout(()=>ensure().then(async()=>{sync();subscribeSalesImport();if(pendingSalesRefresh&&page()?.classList.contains('active')){pendingSalesRefresh=false;await refreshCurrent()}}),80));document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(()=>ensure().then(async()=>{sync();subscribeSalesImport();if(pendingSalesRefresh&&page()?.classList.contains('active')){pendingSalesRefresh=false;await refreshCurrent()}}),50)})}
 async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await work('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,salesRealtimeRefresh:true,noSalesPolling:true});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
