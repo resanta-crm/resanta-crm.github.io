@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.180 · Orders: isolated office invoice import.
+/* RESANTA CRM v23.6.181 · Orders: isolated office invoice import.
  * Warehouse never receives prices, totals, VAT, UNP or the original Excel.
  * Phase 2 intentionally creates PRIVATE DRAFT only: no TSD dispatch or Telegram yet.
  */
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.180',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.181',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -27,14 +27,54 @@ function dateParts(txt){
  if(!m||!months[m[3].toLowerCase()])throw Error('Не удалось прочитать номер/дату счёта. Поддерживается формат приложенного образца.');
  return{number:m[1],date:m[4]+'-'+months[m[3].toLowerCase()]+'-'+m[2].padStart(2,'0')};
 }
+function findBuyerText(grid){
+ // The supplier and buyer can be in merged cells. Locate the label in the
+ // header, then read the first actual value to its right, regardless of column.
+ const matches=[];
+ for(const row of grid.slice(0,Math.min(grid.length,80))){
+   if(!Array.isArray(row))continue;
+   for(let j=0;j<row.length;j++){
+     const label=String(row[j]??'').replace(/\s+/g,' ').trim();
+     const m=/^покупатель\s*(?::\s*(.*))?$/i.exec(label);
+     if(!m)continue;
+     let value=String(m[1]||'').trim();
+     if(!value){
+       for(let k=j+1;k<row.length;k++){
+         const candidate=String(row[k]??'').trim();
+         if(candidate){value=candidate;break}
+       }
+     }
+     if(value)matches.push(value);
+   }
+ }
+ const unique=[...new Set(matches)];
+ if(unique.length!==1)throw Error(unique.length?'В шапке обнаружено несколько разных покупателей. Проверьте исходный Excel.':'Покупатель не найден: проверьте строку «Покупатель» и соседнюю ячейку с названием организации.');
+ return unique[0];
+}
+function absoluteInvoiceGrid(X,sheet){
+ // SheetJS may expose a sheet range starting at B1 rather than A1. Explicitly
+ // rebuild it from A1 so index 1 always means B, 5 means F and 78 means CA.
+ const cells=Object.keys(sheet||{}).filter(k=>/^[A-Z]{1,3}[1-9]\d{0,6}$/i.test(k));
+ if(!cells.length)throw Error('Excel не содержит заполненных ячеек счёта.');
+ let maxR=0,maxC=0;
+ for(const addr of cells){
+   const p=X.utils.decode_cell(addr);
+   if(p.r>2000||p.c>180)throw Error('Лист счёта слишком велик для безопасной проверки.');
+   maxR=Math.max(maxR,p.r);maxC=Math.max(maxC,p.c);
+ }
+ const absRange=X.utils.encode_range({s:{r:0,c:0},e:{r:maxR,c:maxC}});
+ return X.utils.sheet_to_json(sheet,{
+   header:1,raw:true,defval:'',blankrows:true,range:absRange
+ });
+}
 function parseInvoice(grid){
  const title=grid.flatMap(r=>(r||[]).slice(0,4)).map(x=>String(x||'')).find(x=>/сч[её]т\s+на\s+оплату\s*№/i.test(x));
  const doc=dateParts(title);
- const customerRow=grid.find(r=>String(r?.[1]||'').trim().toLowerCase().startsWith('покупатель'));
- const buyer=String(customerRow?.[5]||'').trim();
- const customer=buyer.split(/[,;]\s*УНП\s*\d{8,12}(?=$|[,;\s])/i)[0].trim();
- const unp=buyer.match(/(?:^|[,;\s])УНП\s*(\d{8,12})(?=$|[,;\s])/i)?.[1]||'';
- if(!customer)throw Error('Покупатель не найден в строке счёта.');
+ const buyer=findBuyerText(grid);
+ const customer=buyer.split(/[,;]?\s*(?:УНП|ИНН)\s*[:№]?\s*\d{8,12}\b/i)[0].replace(/[,;\s]+$/g,'').trim();
+ const unp=buyer.match(/(?:^|[,;\s])УНП\s*[:№]?\s*(\d{8,12})\b/i)?.[1]||'';
+ if(!customer||/\b(?:УНП|ИНН)\b/i.test(customer)||/\d{9,12}/.test(customer))
+   throw Error('Не удалось безопасно отделить название покупателя от УНП. Счёт не сохранён.');
  const h=grid.findIndex(r=>String(r?.[3]||'').includes('Артикул')&&String(r?.[78]||'').includes('Штрихкод'));
  if(h<0)throw Error('Не найдена таблица счёта (Артикул / Штрихкод). Нужен согласованный формат.');
  const items=[];
@@ -126,7 +166,7 @@ async function readPreview(file=selectedFile||$('wp1-file')?.files?.[0]){
   await new Promise(resolve=>requestAnimationFrame(resolve));
   const book=X.read(buf,{type:'array'});
   if(!book.SheetNames?.length)throw Error('Excel не содержит листа');
-  const grid=X.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,raw:false,defval:'',blankrows:false});
+  const grid=absoluteInvoiceGrid(X,book.Sheets[book.SheetNames[0]]);
   const parsed=parseInvoice(grid);
   status('Проверяю, не загружен ли этот счёт ранее…');
   const dupe=await bounded(rpc('warehouse_pick_duplicate_check_v1',{
