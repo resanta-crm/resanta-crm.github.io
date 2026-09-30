@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.179 · Orders: isolated office invoice import.
+/* RESANTA CRM v23.6.180 · Orders: isolated office invoice import.
  * Warehouse never receives prices, totals, VAT, UNP or the original Excel.
  * Phase 2 intentionally creates PRIVATE DRAFT only: no TSD dispatch or Telegram yet.
  */
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.179',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.180',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
