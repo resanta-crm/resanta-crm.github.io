@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_CONTROL_V23620)return;
-const V='v23.6.178';
+const V='v23.6.182';
 let dash=null,mode='overview',offset=0,limit=100,search='',flight=null,installed=false;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -16,6 +16,7 @@ function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return w
 function isBoss(){try{return String(currentProfile?.role||'').toLowerCase()==='boss'}catch(_){return false}}
 function currentEmail(){try{return String(currentProfile?.email||currentUser?.email||'').trim().toLowerCase()}catch(_){return''}}
 function canReceiving(){return ['payushin_ar@resanta.ru','vitebsk@resanta.ru','sidarovich_kn@resanta.ru'].includes(currentEmail())}
+function canPicking(){const x=window.RESANTA_WAREHOUSE_PICKER_SESSION_V1;return x?.role==='warehouse'&&x?.email===currentEmail()}
 async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('Соединение с базой ещё не готово');const {data,error}=await d.rpc(name,args);if(error)throw error;return data;}
 function ensureCss(){if($('warehouse-v23620-css'))return;const s=document.createElement('style');s.id='warehouse-v23620-css';s.textContent=`
 #wc-v23620 .wc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -33,7 +34,7 @@ function ensureDom(){
   if(!nav){nav=document.createElement('button');nav.className='nav-item';nav.id='nav-warehouse-control';nav.style.display='none';nav.innerHTML='<span class="icon">🏭</span> Склад · перелимит';nav.onclick=()=>{try{goPage('warehouse-control','Склад · перелимит и автозаказ')}catch(_){}setTimeout(open,0)};const anchor=$('nav-gps-control')||$('nav-control');anchor?.insertAdjacentElement('afterend',nav)}
   let page=$('page-warehouse-control');
   if(!page){page=document.createElement('div');page.className='page';page.id='page-warehouse-control';page.innerHTML='<div id="wc-v23620"><div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="card">Загрузка…</div></div>';($('main-content')||document.querySelector('.main'))?.appendChild(page)}
-  if(nav){nav.style.display=(isBoss()||canReceiving())?'flex':'none';nav.innerHTML=isBoss()?'<span class="icon">🏭</span> Склад · перелимит':'<span class="icon">📥</span> Склад · приёмка'}
+  if(nav){nav.style.display=(isBoss()||canReceiving()||canPicking())?'flex':'none';nav.innerHTML=isBoss()?'<span class="icon">🏭</span> Склад · перелимит':canPicking()&&!canReceiving()?'<span class="icon">📦</span> Склад · заказы':'<span class="icon">📥</span> Склад · приёмка'}
   installed=true;
 }
 function setBusy(text='Загрузка…'){
@@ -68,7 +69,7 @@ function renderShell(){
   switchMode(mode,true);
 }
 function renderOverview(){const d=dash;$('wc-body').innerHTML=`<div class="wc-grid"><div class="wc-card"><h3>📐 Официальная формула</h3><div style="font-size:12px;line-height:1.6"><b>SN = OT − VF × NO</b><br>OT — остаток на начало месяца по себестоимости.<br>VF — расход/выручка месяца по себестоимости.<br>NO — норма Витебска: 1,0; ноябрь/декабрь/март 1,25; январь/февраль 1,5.<br><b>Текущий SN:</b> ${money(d.current_overlimit_byn)} / ${money(d.current_overlimit_rub,'RUB')}.</div></div><div class="wc-card"><h3>📦 Источники</h3><div style="font-size:12px;line-height:1.6">Себестоимость: ${dateRu(d.report_date)} (${d.rows||0} SKU)<br>Остаток Витебск: ${dateRu(d.vitebsk_stock_date)}<br>Остаток Чехов: ${dateRu(d.chekhov_stock_date)}<br>Все тяжёлые расчёты выполняются только при открытии этого раздела.</div></div></div>`}
-async function switchMode(m,skip=false){if(m==='orders'&&!isBoss()&&currentEmail()!=='vitebsk@resanta.ru')return;if(m==='receiving'&&!isBoss()&&!canReceiving())return;mode=m;offset=0;document.querySelectorAll('#wc-v23620 [data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));if(mode==='overview'){renderOverview();return}if(mode==='inventory'){const body=$('wc-body');if(window.crmWarehouseInventoryV236139?.open){await window.crmWarehouseInventoryV236139.open(body)}else if(body){body.innerHTML='<div class="card">Загружаю модуль инвентаризации…</div>';setTimeout(()=>{if(mode==='inventory'&&window.crmWarehouseInventoryV236139?.open)window.crmWarehouseInventoryV236139.open(body)},400)}return}if(mode==='receiving'){const body=$('wc-body');if(window.crmWarehouseReceivingV236154?.open){await window.crmWarehouseReceivingV236154.open(body)}else if(body){body.innerHTML='<div class="card">Загружаю модуль приёмки…</div>';setTimeout(()=>{if(mode==='receiving'&&window.crmWarehouseReceivingV236154?.open)window.crmWarehouseReceivingV236154.open(body)},400)}return}if(mode==='orders'){const body=$('wc-body');if(!body)return;if(window.crmWarehouseOrdersV1?.open){await window.crmWarehouseOrdersV1.open(body)}else{body.innerHTML='<div class="wc-alert blue">Модуль заказов загружается. Повторите открытие вкладки через секунду.</div>'}return}await loadItems()}
+async function switchMode(m,skip=false){if(m==='orders'&&!isBoss()&&currentEmail()!=='vitebsk@resanta.ru'&&!canPicking())return;if(canPicking()&&!isBoss()&&!canReceiving()&&m!=='orders')return;if(m==='receiving'&&!isBoss()&&!canReceiving())return;mode=m;offset=0;document.querySelectorAll('#wc-v23620 [data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));if(mode==='overview'){renderOverview();return}if(mode==='inventory'){const body=$('wc-body');if(window.crmWarehouseInventoryV236139?.open){await window.crmWarehouseInventoryV236139.open(body)}else if(body){body.innerHTML='<div class="card">Загружаю модуль инвентаризации…</div>';setTimeout(()=>{if(mode==='inventory'&&window.crmWarehouseInventoryV236139?.open)window.crmWarehouseInventoryV236139.open(body)},400)}return}if(mode==='receiving'){const body=$('wc-body');if(window.crmWarehouseReceivingV236154?.open){await window.crmWarehouseReceivingV236154.open(body)}else if(body){body.innerHTML='<div class="card">Загружаю модуль приёмки…</div>';setTimeout(()=>{if(mode==='receiving'&&window.crmWarehouseReceivingV236154?.open)window.crmWarehouseReceivingV236154.open(body)},400)}return}if(mode==='orders'){const body=$('wc-body');if(!body)return;if(window.crmWarehouseOrdersV1?.open){await window.crmWarehouseOrdersV1.open(body)}else{body.innerHTML='<div class="wc-alert blue">Модуль заказов загружается. Повторите открытие вкладки через секунду.</div>'}return}await loadItems()}
 function modeTitle(){return mode==='excess'?'Перелимит и кандидаты на возврат':mode==='stockout'?'Нет товара / критический дефицит':mode==='order'?'Автозаказ на Чехов':'Все SKU'}
 async function loadItems(){const body=$('wc-body');if(!body)return;body.innerHTML='<div class="card">Загрузка списка…</div>';try{const data=await rpc('warehouse_control_get_items_v1',{p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});renderItems(data)}catch(e){body.innerHTML='<div class="wc-alert red"><b>Не удалось загрузить список.</b><br>'+esc(e?.message||e)+'</div>'}}
 function renderItems(data){
@@ -98,6 +99,13 @@ function renderReceivingOnlyShell(){
   root.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>switchMode(b.dataset.mode));
   switchMode(keep,true);
 }
+function renderPickerOnlyShell(){
+ const root=$('wc-v23620');if(!root||!canPicking())return;
+ root.innerHTML='<div class="wc-head" data-wc-picker="'+currentEmail()+'"><div><div class="page-title" style="margin-bottom:4px">📦 Склад · мои заказы</div><div style="font-size:11px;color:var(--sub)">Только назначенные сборки. Финансовые данные и оригиналы счетов закрыты.</div></div></div><div class="wc-tabs"><button class="wc-tab" data-mode="orders">📦 Заказы</button></div><div id="wc-body"></div>';
+ mode='orders';
+ root.querySelector('[data-mode="orders"]').onclick=()=>switchMode('orders');
+ switchMode('orders',true);
+}
 async function open(force=false){
   ensureDom();
   if(!isBoss()){
@@ -106,6 +114,9 @@ async function open(force=false){
       // Keep the selected file and preview intact during profile/nav reinitialization.
       if(!force&&!r?.querySelector('.wc-head[data-wc-restricted="'+currentEmail()+'"]'))renderReceivingOnlyShell();
       else if(force||!r?.querySelector('#wc-body'))renderReceivingOnlyShell();
+    }else if(canPicking()){
+      const r=$('wc-v23620');
+      if(force||!r?.querySelector('.wc-head[data-wc-picker="'+currentEmail()+'"]')||!r?.querySelector('#wc-body'))renderPickerOnlyShell();
     }
     return;
   }
@@ -137,7 +148,7 @@ async function open(force=false){
   })();
   return flight
 }
-function install(){ensureDom();if($('page-warehouse-control')?.classList.contains('active')&&(isBoss()||canReceiving()))open(false)}
+function install(){ensureDom();if($('page-warehouse-control')?.classList.contains('active')&&(isBoss()||canReceiving()||canPicking()))open(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 [300,800,1600,3000,6000].forEach(ms=>setTimeout(install,ms));
 window.addEventListener('focus',()=>{if(!$('page-warehouse-control')?.classList.contains('active'))return;try{window.crmWarehouseAfterRenderV23682?.()}catch(_){}});
