@@ -1,6 +1,6 @@
 {
-  "version": "23.6.183",
+  "version": "23.6.184",
   "released_at": "2026-09-30",
-  "purpose": "Office Manager directly assigns orders to existing TSD-1/TSD-2 slots, no employee email; unconnected terminals display NOT DELIVERED; Telegram explicitly off",
-  "deploy_trigger": "2026-09-30T16:55:00Z"
+  "purpose": "Office Manager assigns orders to fixed TSD-1/2 without personal emails; disconnected TSD is explicitly NOT DELIVERED and assignment can be undone. Telegram is not connected.",
+  "deploy_trigger": "2026-09-30T17:05:00Z"
 }
