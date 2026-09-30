@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624)return;
-const V='v23.6.87';
+const V='v23.6.178';
 
 function profile(){
   try{return typeof currentProfile!=='undefined'?currentProfile:(window.currentProfile||null)}catch(_){return window.currentProfile||null}
@@ -15,6 +15,7 @@ function isOM(){
   const p=profile();
   return String(p?.role||'').toLowerCase()==='office_manager'||String(p?.access_scope||'').toLowerCase()==='payments_only';
 }
+function canOfficeWarehouse(){return isOM()&&String(profile()?.email||'').trim().toLowerCase()==='vitebsk@resanta.ru'}
 function clearHeavyState(){
   try{allClients=[]}catch(_){} try{allTasks=[]}catch(_){} try{allVisits=[]}catch(_){}
   try{allRoutePlans=[]}catch(_){} try{allNegotiations=[]}catch(_){} try{allPurchases=[]}catch(_){}
@@ -42,17 +43,19 @@ if(typeof basePrefetch==='function')window.crmUltraPrefetchPageV22734=function()
 function lockMenus(){
   if(!isOM())return false;
   const allowed=new Set(['nav-payment-registry','nav-markdown']);
+  if(canOfficeWarehouse())allowed.add('nav-warehouse-control');
   document.querySelectorAll('.nav-item').forEach(el=>{el.style.display=allowed.has(el.id)?'flex':'none'});
   document.querySelectorAll('.nav-section').forEach(el=>el.style.display='none');
   document.querySelectorAll('.mobile-nav-item,.bottom-nav-item,.bn-item').forEach(el=>{el.style.display=['bn-markdown','bn-payment-registry','nav-payment-registry'].includes(el.id)?'flex':'none'});
   const onMarkdown=!!document.getElementById('page-markdown')?.classList.contains('active');
-  const t=document.querySelector('.topbar-title');if(t)t.textContent=onMarkdown?'Уценка':'Безналичные оплаты';
+  const onWarehouse=canOfficeWarehouse()&&!!document.getElementById('page-warehouse-control')?.classList.contains('active');
+  const t=document.querySelector('.topbar-title');if(t)t.textContent=onWarehouse?'Склад · Приёмка и заказы':onMarkdown?'Уценка':'Безналичные оплаты';
   return true;
 }
 function enterPayments(){
   if(!isOM())return false;
   clearHeavyState();lockMenus();
-  if(document.getElementById('page-markdown')?.classList.contains('active'))return true;
+  if(document.getElementById('page-markdown')?.classList.contains('active')||(canOfficeWarehouse()&&document.getElementById('page-warehouse-control')?.classList.contains('active')))return true;
   const nav=document.getElementById('nav-payment-registry');
   const page=document.getElementById('page-payment-registry');
   if(nav){nav.style.display='flex';if(!page?.classList.contains('active'))nav.click();else nav.onclick&&setTimeout(()=>{try{nav.onclick()}catch(_){}},0);return true;}
@@ -63,7 +66,7 @@ try{
   if(typeof goPage==='function'){
     const baseGoPage=goPage;
     goPage=function(p,title){
-      if(isOM()&&!['payment-registry','markdown'].includes(p)){p='payment-registry';title='Безналичные оплаты'}
+      if(isOM()&&!(['payment-registry','markdown'].includes(p)||(canOfficeWarehouse()&&p==='warehouse-control'))){p='payment-registry';title='Безналичные оплаты'}
       const out=baseGoPage.call(this,p,title);
       if(isOM())setTimeout(lockMenus,0);
       return out;
@@ -88,5 +91,5 @@ let tries=0;
 window.addEventListener('pageshow',()=>{if(isOM())setTimeout(enterPayments,0)});
 window.addEventListener('focus',()=>{if(isOM())setTimeout(lockMenus,0)});
 
-window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624=Object.freeze({version:V,paymentsAndMarkdownOnly:true,markdownVisible:true,noHeavyBootstrap:true,noPrefetch:true,serverEnforced:true});
+window.RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624=Object.freeze({version:V,paymentsAndMarkdownOnly:false,markdownVisible:true,warehouseForVitebskOnly:true,noHeavyBootstrap:true,noPrefetch:true,serverEnforced:true});
 })();
