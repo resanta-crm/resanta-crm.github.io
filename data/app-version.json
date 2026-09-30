@@ -1,6 +1,6 @@
 {
-  "version": "23.6.182",
+  "version": "23.6.183",
   "released_at": "2026-09-30",
-  "purpose": "Warehouse Orders stage 3: supervisor approves picker account; office manually dispatches; only assigned safe order visible; authenticated Telegram delivery without finance",
-  "deploy_trigger": "2026-09-30T16:30:00Z"
+  "purpose": "Office Manager directly assigns orders to existing TSD-1/TSD-2 slots, no employee email; unconnected terminals display NOT DELIVERED; Telegram explicitly off",
+  "deploy_trigger": "2026-09-30T16:55:00Z"
 }
