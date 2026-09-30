@@ -152,4 +152,5 @@ async function open(target){
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,draftOnly:true});
 })();
