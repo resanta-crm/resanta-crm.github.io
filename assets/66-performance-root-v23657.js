@@ -184,7 +184,7 @@ async function loadWarehouseShell(){
  const picker=!normal&&await ensureWarehousePickerRole();
  if(!normal&&!picker)return false;
  // Picker accounts load only the safe order screen, never inventory dashboards.
- const items=picker?CONTRACT.warehouseShell.filter(x=>/assets\/(?:36-warehouse-control|95-warehouse-orders-v1)\.js/.test(x.path)):CONTRACT.warehouseShell;
+ const items=picker?CONTRACT.warehouseShell.filter(x=>x.path.startsWith('assets/36-warehouse-control-')||x.path==='assets/95-warehouse-orders-v1.js'):CONTRACT.warehouseShell;
  return onceContract(picker?'warehouse-shell-picker':'warehouse-shell',()=>serial(items));
 }
 async function loadWarehouse(){
