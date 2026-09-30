@@ -159,7 +159,7 @@ async function addBudgetExpense(){
  const date=dateInput?.value||'',raw=String(amountInput?.value||'').replace(',','.'),amount=Number(raw),description=String(descriptionInput?.value||'').trim();
  const m=document.querySelector('[data-tr14-month="budget"]')?.value||month();
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date.slice(0,7)!==m)throw Error('Проверьте дату расхода и выбранный месяц');
- if(!raw||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100)throw Error('Введите положительную сумму в BYN с точностью до копеек');
+ if(!raw||!Number.isFinite(amount)||amount<=0||Math.abs(Math.round(amount*100)-amount*100)>1e-6)throw Error('Введите положительную сумму в BYN с точностью до копеек');
  if(description.length<2)throw Error('Укажите, на что потрачены деньги');
  if(!window.crypto?.randomUUID)throw Error('Не удалось создать защищённый идентификатор операции. Обновите страницу.');
  const key=b?.dataset.requestId||(b.dataset.requestId=window.crypto.randomUUID());
