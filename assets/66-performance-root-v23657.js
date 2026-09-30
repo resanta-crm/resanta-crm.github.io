@@ -311,6 +311,7 @@ try{
   if(typeof baseStartApp==='function'&&!baseStartApp.__moduleContractV23668){
     const wrappedStartApp=function(){
       setTimeout(maybeLoadWarehouseShell,0);
+      [600,1500,3200,5800].forEach(ms=>setTimeout(maybeLoadWarehouseShell,ms));
       setTimeout(maybeLoadPaymentRegistry,0);
       return baseStartApp.apply(this,arguments);
     };
@@ -371,6 +372,8 @@ function boot(){
   setTimeout(()=>loadForPage(activePage(),window.__crmNavEpoch),0);
   setTimeout(maybeLoadPaymentRegistry,120);
   setTimeout(maybeLoadWarehouseShell,180);
+  // Profile may resolve after the auth event; bounded checks avoid a permanently hidden Office Manager warehouse nav.
+  [850,1900,3800,6500].forEach(ms=>setTimeout(maybeLoadWarehouseShell,ms));
   try{
     const d=typeof db!=='undefined'?db:window.db;
     d?.auth?.onAuthStateChange?.(()=>{
