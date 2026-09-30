@@ -1,6 +1,6 @@
 {
-  "version": "23.6.177",
+  "version": "23.6.178",
   "released_at": "2026-09-30",
-  "purpose": "Private Orders: secure office preview and draft upload, segregated finance, no warehouse notifications yet",
-  "deploy_trigger": "2026-09-30T15:00:00Z"
+  "purpose": "Warehouse: Office Manager sees Orders and Receiving as first-class tabs; private finance unchanged",
+  "deploy_trigger": "2026-09-30T15:35:00Z"
 }
