@@ -1,6 +1,6 @@
 {
-  "version": "23.6.181",
+  "version": "23.6.182",
   "released_at": "2026-09-30",
-  "purpose": "Orders: parse real 1C invoices on absolute A1-anchored grid, safely read merged buyer header and preserve private tax ID",
-  "deploy_trigger": "2026-09-30T16:15:00Z"
+  "purpose": "Warehouse Orders stage 3: supervisor approves picker account; office manually dispatches; only assigned safe order visible; authenticated Telegram delivery without finance",
+  "deploy_trigger": "2026-09-30T16:30:00Z"
 }
