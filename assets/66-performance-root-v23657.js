@@ -9,7 +9,7 @@
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
 const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.122'}catch(_){return'23.6.122'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
-const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.141',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.178',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.155',RESANTA_WAREHOUSE_ORDERS_V1:'v23.6.181',RESANTA_WAREHOUSE_ORDERS_TAB_V1:'v23.6.177',RESANTA_MARKDOWN_V23687:'v23.6.165',RESANTA_TRIOVIST_21VEK_EXPORT_V236109:'v23.6.169'});
+const VERSIONED_GUARDS=Object.freeze({RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.141',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.182',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.155',RESANTA_WAREHOUSE_ORDERS_V1:'v23.6.182',RESANTA_WAREHOUSE_ORDERS_TAB_V1:'v23.6.177',RESANTA_MARKDOWN_V23687:'v23.6.165',RESANTA_TRIOVIST_21VEK_EXPORT_V236109:'v23.6.169'});
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -161,9 +161,31 @@ window.crmPromotionsReadyV23671=()=>promotionsReady&&promotionsGuardsReady();
 window.crmEnsurePromotionsReadyV23671=ensurePromotionsReady;
 window.crmPromotionGateOverlayV23671=promoOverlay;
 
+let warehousePickRoleFlight=null;
+async function ensureWarehousePickerRole(){
+ const p=profile(),email=String(p?.email||'').trim().toLowerCase(),r=String(p?.role||'').toLowerCase();
+ if(!email||!['warehouse','warehouse_manager','storekeeper','inventory'].includes(r))return false;
+ if(window.RESANTA_WAREHOUSE_PICKER_SESSION_V1?.email===email&&window.RESANTA_WAREHOUSE_PICKER_SESSION_V1?.role==='warehouse')return true;
+ if(warehousePickRoleFlight)return warehousePickRoleFlight;
+ warehousePickRoleFlight=(async()=>{
+   try{
+    const d=typeof db!=='undefined'?db:window.db;
+    if(!d?.rpc)return false;
+    const {data,error}=await d.rpc('warehouse_pick_role_v1');
+    if(error||data!=='warehouse')return false;
+    window.RESANTA_WAREHOUSE_PICKER_SESSION_V1=Object.freeze({role:'warehouse',email});
+    return true;
+   }catch(_){return false}
+ })().finally(()=>warehousePickRoleFlight=null);
+ return warehousePickRoleFlight;
+}
 async function loadWarehouseShell(){
-  if(!(isBoss()||canWarehouseReceiving()))return false;
-  return onceContract('warehouse-shell',()=>serial(CONTRACT.warehouseShell));
+ const normal=isBoss()||canWarehouseReceiving();
+ const picker=!normal&&await ensureWarehousePickerRole();
+ if(!normal&&!picker)return false;
+ // Picker accounts load only the safe order screen, never inventory dashboards.
+ const items=picker?CONTRACT.warehouseShell.filter(x=>/assets\/(?:36-warehouse-control|95-warehouse-orders-v1)\.js/.test(x.path)):CONTRACT.warehouseShell;
+ return onceContract(picker?'warehouse-shell-picker':'warehouse-shell',()=>serial(items));
 }
 async function loadWarehouse(){
   if(!isBoss())return false;
@@ -239,7 +261,11 @@ async function loadPaymentRegistry(){
   return true;
 }
 function maybeLoadPaymentRegistry(){if(paymentEligible())loadPaymentRegistry().catch(e=>console.warn('ROOT '+V+' payment registry',e))}
-function maybeLoadWarehouseShell(){if(isBoss()||canWarehouseReceiving())loadWarehouseShell().catch(e=>console.warn('ROOT '+V+' warehouse shell',e))}
+function maybeLoadWarehouseShell(){
+ const role=String(profile()?.role||'').toLowerCase();
+ if(isBoss()||canWarehouseReceiving()||['warehouse','warehouse_manager','storekeeper','inventory'].includes(role))
+   loadWarehouseShell().catch(e=>console.warn('ROOT '+V+' warehouse shell',e));
+}
 
 async function loadForPage(page,epoch){
   checkFrontendVersion(false).catch(()=>{});
