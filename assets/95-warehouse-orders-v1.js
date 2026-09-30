@@ -129,9 +129,9 @@ async function readPreview(file=selectedFile||$('wp1-file')?.files?.[0]){
   const grid=X.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,raw:false,defval:'',blankrows:false});
   const parsed=parseInvoice(grid);
   status('Проверяю, не загружен ли этот счёт ранее…');
-  const dupe=await rpc('warehouse_pick_duplicate_check_v1',{
+  const dupe=await bounded(rpc('warehouse_pick_duplicate_check_v1',{
     p_document_no:parsed.document_no,p_document_date:parsed.document_date,p_original_sha256:sha
-  });
+  }),15000,'Проверка дубля на сервере заняла более 15 секунд. Повторите проверку файла.');
   if(dupe?.duplicate)throw Error('Этот счёт уже зарегистрирован (ID '+dupe.order_id+'). Повторная запись не создаётся.');
   preview={...parsed,file,sha};
   uploadStatus='Счёт №'+parsed.document_no+' проверен: '+parsed.items.length+' позиций, '+parsed.items.reduce((s,x)=>s+x.qty,0)+' шт. Проверьте предпросмотр и подтвердите черновик.';
@@ -143,28 +143,61 @@ async function readPreview(file=selectedFile||$('wp1-file')?.files?.[0]){
   checking=false;render();
  }
 }
+async function bounded(promise,ms,message){
+ let timer;
+ try{return await Promise.race([
+   Promise.resolve(promise),
+   new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(message)),ms)})
+ ])}finally{clearTimeout(timer)}
+}
 async function confirmImport(){
- if(!preview||working)return;
+ if(!preview||working||checking)return;
  if(!confirm('Создать ЗАКРЫТЫЙ черновик счёта №'+preview.document_no+'?\nНа склад пока НЕ передаётся, Telegram НЕ отправляется.'))return;
- const d=dbx(),{data:{user}={},error:e}=await d.auth.getUser();if(e||!user?.id)throw Error('Авторизация истекла.');
- if(!crypto?.randomUUID)throw Error('Не удалось создать ID оригинала.');
- working=true;render();
+ working=true;
+ let createdId=null,step='auth';
+ status('Проверяю авторизацию офис-менеджера…');render();
  try{
-  const dupe=await rpc('warehouse_pick_duplicate_check_v1',{p_document_no:preview.document_no,p_document_date:preview.document_date,p_original_sha256:preview.sha});
-  if(dupe?.duplicate)throw Error('Счёт уже был загружен. ID '+dupe.order_id);
+  const d=dbx();if(!d?.auth?.getUser)throw Error('Сессия CRM недоступна. Обновите страницу.');
+  const response=await bounded(d.auth.getUser(),12000,'Проверка авторизации заняла более 12 секунд');
+  const user=response?.data?.user;
+  if(response?.error||!user?.id)throw Error('Авторизация истекла. Войдите в CRM заново.');
+  if(!window.crypto?.randomUUID)throw Error('Браузер не поддерживает создание защищённого ID файла.');
+  step='duplicate';
+  status('Проверяю, не создан ли этот счёт ранее…');
+  const dupe=await bounded(rpc('warehouse_pick_duplicate_check_v1',{
+    p_document_no:preview.document_no,p_document_date:preview.document_date,p_original_sha256:preview.sha
+  }),15000,'Сервер не ответил при проверке повторной загрузки за 15 секунд');
+  if(dupe?.duplicate)throw Error('Этот счёт уже был загружен. ID: '+dupe.order_id+'. Повторно сохранять не нужно.');
+  step='storage';
   const path=user.id+'/'+crypto.randomUUID()+'.xlsx';
-  const uploaded=await d.storage.from(BUCKET).upload(path,preview.file,{contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',upsert:false,cacheControl:'0'});
-  if(uploaded.error)throw Error('Оригинал не загружен в закрытое хранилище: '+uploaded.error.message);
-  const created=await rpc('warehouse_pick_create_draft_v1',{
+  status('Сохраняю оригинальный Excel в закрытое хранилище…');
+  const uploaded=await bounded(d.storage.from(BUCKET).upload(path,preview.file,{
+    contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    upsert:false,cacheControl:'0'
+  }),35000,'Хранилище не подтвердило загрузку за 35 секунд');
+  if(uploaded?.error)throw Error('Закрытое хранилище отклонило файл: '+uploaded.error.message);
+  step='create';
+  status('Создаю закрытый черновик и проверяю артикулы/штрихкоды…');
+  const created=await bounded(rpc('warehouse_pick_create_draft_v1',{
     p_document_no:preview.document_no,p_document_date:preview.document_date,
     p_customer_display:preview.customer_display,p_buyer_unp:preview.buyer_unp,
     p_original_path:path,p_original_sha256:preview.sha,p_report_total:preview.total,
     p_report_vat:preview.vat,p_items:preview.items
-  });
-  if(!created?.ok)throw Error('Не удалось создать заказ.');
-  preview=null;selectedFile=null;uploadStatus='Закрытый черновик создан, повторно выбирать этот файл не нужно.';uploadStatusKind='ok';selected=null;selectedFinance=null;
-  await loadList(created.order_id);
-  alert('Закрытый черновик счёта создан. На склад НЕ передан. Передачу и Telegram добавим отдельным этапом.');
+  }),25000,'Сервер не подтвердил создание черновика за 25 секунд');
+  if(!created?.ok||!created?.order_id)throw Error('Создание черновика не подтверждено.');
+  createdId=created.order_id;
+  preview=null;selectedFile=null;selected=null;selectedFinance=null;
+  status('Черновик создан (ID '+createdId+'). Обновляю список заказов…','ok');
+  try{
+    await bounded(loadList(createdId),15000,'Список заказов не обновился за 15 секунд');
+    status('Готово: закрытый черновик создан. Он НЕ отправлен складу. Счёт не нужно загружать повторно.','ok');
+  }catch(e){
+    status('Черновик создан (ID '+createdId+'), но список не обновился: '+String(e?.message||e)+'. Нажмите «Обновить». Не загружайте счёт повторно.','ok');
+  }
+ }catch(e){
+  const reason=String(e?.message||e);
+  const uncertain=step==='storage'||step==='create';
+  status('Не удалось завершить сохранение: '+reason+(uncertain?' Если ожидание закончилось, сначала нажмите «Обновить» и проверьте список заказов; не отправляйте счёт повторно вслепую.':''),'error');
  }finally{working=false;render();}
 }
 async function loadList(prefer=null){
@@ -183,7 +216,7 @@ async function openOrder(id){
 function render(){
  if(!mount)return;
  const finAllowed=['office','supervisor'].includes(role);
- const upload=finAllowed?'<section class="wp1-box"><h3>🔒 Загрузка счёта офис-менеджером</h3><p class="wp1-mut">После выбора файла проверка запускается автоматически. Оригинал и финансы доступны только ОМ и руководителю; пока создаётся лишь черновик.</p><input id="wp1-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"> <button id="wp1-check" type="button" '+(checking||working?'disabled':'')+'>'+(checking?'Проверяю…':'Проверить счёт')+'</button><div id="wp1-upload-status" role="status" aria-live="polite" class="'+(uploadStatusKind==='error'?'wp1-error':uploadStatusKind==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:10px;'+(uploadStatus?'':'display:none;')+'">'+esc(uploadStatus)+'</div></section>':'';
+ const upload=finAllowed?'<section class="wp1-box"><h3>🔒 Загрузка счёта офис-менеджером</h3><p class="wp1-mut">После выбора файла проверка запускается автоматически. Оригинал и финансы доступны только ОМ и руководителю; пока создаётся лишь черновик.</p><input id="wp1-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"> '+(selectedFile?'<div class="wp1-mut" style="margin:5px 0">Выбранный файл: '+esc(selectedFile.name)+'</div>':'')+' <button id="wp1-check" type="button" '+(checking||working?'disabled':'')+'>'+(checking?'Проверяю…':'Проверить счёт')+'</button><div id="wp1-upload-status" role="status" aria-live="polite" class="'+(uploadStatusKind==='error'?'wp1-error':uploadStatusKind==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:10px;'+(uploadStatus?'':'display:none;')+'">'+esc(uploadStatus)+'</div></section>':'';
  const pr=preview&&finAllowed?'<section class="wp1-box"><div class="wp1-finance"><b>Предпросмотр для ОМ / руководителя</b><br>Счёт №'+esc(preview.document_no)+' от '+esc(preview.document_date)+' · '+esc(preview.customer_display)+'<br>УНП: '+esc(preview.buyer_unp||'—')+' · Итого с НДС: <b>'+money(preview.total)+'</b> · НДС: '+money(preview.vat)+'</div><div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Кол.</th><th>Всего с НДС</th></tr></thead><tbody>'+preview.items.map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.qty)+'</td><td>'+money(x.total_with_vat)+'</td></tr>').join('')+'</tbody></table></div><button type="button" class="wp1-primary" id="wp1-confirm" '+(working?'disabled':'')+'>Создать закрытый черновик</button></section>':'';
  const list='<section class="wp1-box"><h3>Заказы</h3><div class="wp1-list">'+(orders.length?orders.map(x=>'<button data-wp1-id="'+esc(x.id)+'" type="button" class="'+(selected?.id===x.id?'active':'')+'"><b>№'+esc(x.document_no)+'</b> · '+esc(x.document_date)+' · '+esc(x.customer_display)+'<br><span class="wp1-mut">'+esc(statusText(x.status))+' · '+esc(x.line_count)+' поз. / '+esc(x.total_qty)+' шт.</span></button>').join(''):'<div class="wp1-mut">Заказов пока нет.</div>')+'</div></section>';
  let detail='';
