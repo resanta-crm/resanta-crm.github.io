@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.183 · Orders: isolated office invoice import.
+/* RESANTA CRM v23.6.184 · Orders: isolated office invoice import.
  * Warehouse never receives prices, totals, VAT, UNP or the original Excel.
  * Phase 2 intentionally creates PRIVATE DRAFT only: no TSD dispatch or Telegram yet.
  */
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.183',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.184',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 let devices=[],devicesError='',notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
@@ -279,6 +279,17 @@ async function assignDevice(){
   try{await loadList(id)}catch(_){render()}
  }
 }
+async function unassignPending(){
+ if(busyAction||selected?.status!=='device_setup_pending'||!['office','supervisor'].includes(role))return;
+ if(!confirm('Отменить назначение заказа №'+selected.document_no+' на ТСД и вернуть в черновик? Заказ ещё НЕ доставлен терминалу.'))return;
+ const id=selected.id;busyAction=true;actionMessage='Отменяю недоставленное назначение…';actionTone='mut';render();
+ try{
+  const x=await bounded(rpc('warehouse_pick_unassign_pending_v1',{p_order_id:id}),15000,'Нет ответа сервера за 15 секунд');
+  if(!x?.ok||x.status!=='draft')throw Error('Отмена не подтверждена');
+  actionMessage='Назначение отменено. Заказ снова черновик. ОМ может выбрать нужный ТСД.';actionTone='ok';
+ }catch(e){actionMessage='Не удалось подтвердить отмену: '+String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;try{await loadList(id)}catch(_){render()}}
+}
 async function loadList(prefer=null){
  const x=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
  role=x?.role||null;orders=Array.isArray(x?.rows)?x.rows:[];
@@ -316,7 +327,7 @@ function render(){
    const label=devices.find(x=>x.key===selected.device_key)?.label||selected.device_key||'—';
    const isPending=selected.status==='device_setup_pending';
    extra='<div class="wp1-box"><h4>📦 Назначение заказа</h4><p><b>'+esc(label)+'</b></p>'+
-     (isPending?'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div>':
+     (isPending?'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div><button type="button" id="wp1-unassign-pending" '+(busyAction?'disabled':'')+'>Отменить недоставленное назначение</button>':
        '<div class="wp1-good">Заказ находится в рабочем списке назначенного ТСД. Статус: '+esc(statusText(selected.status))+'.</div>')+
       '<p class="wp1-mut">Telegram: не подключён. Уведомления «отправлено» нет.</p>'+note+'</div>';
   }else if(role==='warehouse'){
@@ -332,6 +343,7 @@ function render(){
  mount.querySelector('#wp1-check')?.addEventListener('click',()=>readPreview().catch(showError));
  mount.querySelector('#wp1-confirm')?.addEventListener('click',()=>confirmImport().catch(showError));
  mount.querySelector('#wp1-assign-device')?.addEventListener('click',()=>assignDevice().catch(showError));
+ mount.querySelector('#wp1-unassign-pending')?.addEventListener('click',()=>unassignPending().catch(showError));
  mount.querySelectorAll('[data-wp1-id]').forEach(b=>b.addEventListener('click',()=>openOrder(b.dataset.wp1Id).catch(showError)));
 }
 function showError(e){alert('Заказы: '+String(e?.message||e));}
@@ -347,5 +359,5 @@ async function open(target){
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,telegramConnected:false,autoCheck:true,excelLoadTimeout:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,undoUndelivered:true,telegramConnected:false,autoCheck:true,excelLoadTimeout:true});
 })();
