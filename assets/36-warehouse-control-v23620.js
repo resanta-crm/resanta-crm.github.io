@@ -93,7 +93,7 @@ function renderReceivingOnlyShell(){
   const root=$('wc-v23620');if(!root)return;
   const office=currentEmail()==='vitebsk@resanta.ru';
   const keep=office&&mode==='orders'?'orders':'receiving';
-  root.innerHTML='<div class="wc-head"><div><div class="page-title" style="margin-bottom:4px">📦 Склад · рабочие операции</div><div style="font-size:11px;color:var(--sub)">Для ОМ доступны только приёмка и защищённые заказы. Цены и УНП в складском доступе не отображаются.</div></div></div><div class="wc-tabs"><button class="wc-tab" data-mode="receiving">📥 Приёмка товара</button>'+(office?'<button class="wc-tab" data-mode="orders">📦 Заказы</button>':'')+'</div><div id="wc-body"></div>';
+  root.innerHTML='<div class="wc-head" data-wc-restricted="'+currentEmail()+'"><div><div class="page-title" style="margin-bottom:4px">📦 Склад · рабочие операции</div><div style="font-size:11px;color:var(--sub)">Для ОМ доступны только приёмка и защищённые заказы. Цены и УНП в складском доступе не отображаются.</div></div></div><div class="wc-tabs"><button class="wc-tab" data-mode="receiving">📥 Приёмка товара</button>'+(office?'<button class="wc-tab" data-mode="orders">📦 Заказы</button>':'')+'</div><div id="wc-body"></div>';
   mode=keep;
   root.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>switchMode(b.dataset.mode));
   switchMode(keep,true);
@@ -101,7 +101,12 @@ function renderReceivingOnlyShell(){
 async function open(force=false){
   ensureDom();
   if(!isBoss()){
-    if(canReceiving())renderReceivingOnlyShell();
+    if(canReceiving()){
+      const r=$('wc-v23620');
+      // Keep the selected file and preview intact during profile/nav reinitialization.
+      if(!force&&!r?.querySelector('.wc-head[data-wc-restricted="'+currentEmail()+'"]'))renderReceivingOnlyShell();
+      else if(force||!r?.querySelector('#wc-body'))renderReceivingOnlyShell();
+    }
     return;
   }
   const root=$('wc-v23620'),already=!!dash?.has_data&&!!root?.querySelector('.wc-head');
