@@ -230,6 +230,7 @@ async function loadPaymentRegistry(){
   await load('assets/38-payment-registry-v23623.js','perf-payment-registry-v23671','RESANTA_PAYMENT_REGISTRY_V23623');
   if(r==='office_manager'||String(p?.access_scope||'').toLowerCase()==='payments_only'){
     await load('assets/39-office-manager-payments-only-v23624.js','perf-office-payments-v23671','RESANTA_OFFICE_MANAGER_PAYMENTS_ONLY_V23624');
+    if(String(p?.email||'').trim().toLowerCase()==='vitebsk@resanta.ru')loadWarehouseShell().catch(e=>console.warn('ROOT '+V+' office warehouse',e));
   }
   if(r==='payment_executor'||String(p?.email||'').toLowerCase()==='nesterov_py@resanta.ru'){
     await load('assets/76-payment-executor-only-v23692.js','perf-payment-executor-v23692','RESANTA_PAYMENT_EXECUTOR_ONLY_V23692');
