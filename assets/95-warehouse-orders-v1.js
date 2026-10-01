@@ -1,13 +1,13 @@
-/* RESANTA CRM v23.6.184 · Orders: isolated office invoice import.
+/* RESANTA CRM v23.6.185 · Orders: isolated office invoice import.
  * Warehouse never receives prices, totals, VAT, UNP or the original Excel.
  * Phase 2 intentionally creates PRIVATE DRAFT only: no TSD dispatch or Telegram yet.
  */
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.184',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.185',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
-let devices=[],devicesError='',notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
+let devices=[],devicesError='',pairing=null,notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const n=v=>{const s=String(v??'').replace(/[\s\u00a0]/g,'').replace(',','.').replace(/BYN/ig,'');return s===''?NaN:Number(s)};
@@ -249,6 +249,19 @@ async function loadDevices(){
   devices=Array.isArray(x?.rows)?x.rows:[];devicesError='';
  }catch(e){devices=[];devicesError=String(e?.message||e)}
 }
+async function startPairing(key){
+ if(busyAction||!['office','supervisor'].includes(role))return;
+ const device=devices.find(x=>x.key===key);
+ if(!device)throw Error('ТСД не найден');
+ if(!confirm((device.ready?'Создать новый код переподключения для ':'Подключить ')+device.label+'?\nСтарое подключение отключится только после успешного ввода нового кода на ТСД.'))return;
+ busyAction=true;actionMessage='Создаю временный код для '+device.label+'…';actionTone='mut';render();
+ try{
+  const x=await bounded(rpc('warehouse_pick_pair_start_v1',{p_device_key:key}),12000,'Сервер не выдал код за 12 секунд');
+  if(!x?.ok||!x.pair_code)throw Error('Код подключения не получен');
+  pairing=x;actionMessage='Код создан. Введите его на соответствующем ТСД в течение 10 минут.';actionTone='ok';
+ }catch(e){pairing=null;actionMessage='Код не создан: '+String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;render()}
+}
 async function assignDevice(){
  if(busyAction||selected?.status!=='draft'||!['office','supervisor'].includes(role))return;
  const key=String($('wp1-device')?.value||'');
@@ -308,6 +321,12 @@ async function openOrder(id){
 function render(){
  if(!mount)return;
  const finAllowed=['office','supervisor'].includes(role);
+ let devicePanel='';
+ if(finAllowed){
+  const cards=devices.map(d=>'<div class="wp1-box" style="margin:0"><b>'+esc(d.label)+'</b><div class="'+(d.ready?'wp1-good':'wp1-error')+'" style="margin:8px 0">'+(d.ready?'✅ Подключён к безопасной сборке':'⚠ Не подключён')+'</div><div class="wp1-mut">'+(d.last_seen_at?'Последняя связь: '+esc(new Date(d.last_seen_at).toLocaleString('ru-RU')):'Терминал ещё не выходил на связь')+'</div><button type="button" data-wp1-pair="'+esc(d.key)+'" '+(busyAction?'disabled':'')+' style="margin-top:8px">'+(d.ready?'Новый код / переподключить':'Получить код подключения')+'</button></div>').join('');
+  const pair=pairing?'<div class="wp1-good" style="margin-top:12px"><b>'+esc(pairing.label)+'</b><br>Код подключения: <span style="font-size:24px;font-weight:900;letter-spacing:2px">'+esc(pairing.pair_code)+'</span><br><span class="wp1-mut">Действует '+esc(pairing.expires_in_minutes)+' мин. На ТСД откройте <b>/picking.html</b>, выберите нужный терминал и введите этот код.</span></div>':'';
+  devicePanel='<section class="wp1-box"><h3>📱 ТСД для сборки</h3><p class="wp1-mut">ОМ сама распределяет заказы между двумя терминалами. Почта и пароль сотрудника не нужны. Telegram по заказам пока не подключён.</p>'+(devicesError?'<div class="wp1-error">'+esc(devicesError)+'</div>':'')+'<div class="wp1-grid">'+cards+'</div>'+pair+'</section>';
+ }
  const upload=finAllowed?'<section class="wp1-box"><h3>🔒 Загрузка счёта офис-менеджером</h3><p class="wp1-mut">После выбора файла проверка запускается автоматически. Оригинал и финансы доступны только ОМ и руководителю; пока создаётся лишь черновик.</p><input id="wp1-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"> '+(selectedFile?'<div class="wp1-mut" style="margin:5px 0">Выбранный файл: '+esc(selectedFile.name)+'</div>':'')+' <button id="wp1-check" type="button" '+(checking||working?'disabled':'')+'>'+(checking?'Проверяю…':'Проверить счёт')+'</button><div id="wp1-upload-status" role="status" aria-live="polite" class="'+(uploadStatusKind==='error'?'wp1-error':uploadStatusKind==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:10px;'+(uploadStatus?'':'display:none;')+'">'+esc(uploadStatus)+'</div></section>':'';
  const pr=preview&&finAllowed?'<section class="wp1-box"><div class="wp1-finance"><b>Предпросмотр для ОМ / руководителя</b><br>Счёт №'+esc(preview.document_no)+' от '+esc(preview.document_date)+' · '+esc(preview.customer_display)+'<br>УНП: '+esc(preview.buyer_unp||'—')+' · Итого с НДС: <b>'+money(preview.total)+'</b> · НДС: '+money(preview.vat)+'</div><div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Кол.</th><th>Всего с НДС</th></tr></thead><tbody>'+preview.items.map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.qty)+'</td><td>'+money(x.total_with_vat)+'</td></tr>').join('')+'</tbody></table></div><button type="button" class="wp1-primary" id="wp1-confirm" '+(working?'disabled':'')+'>Создать закрытый черновик</button></section>':'';
  const list='<section class="wp1-box"><h3>Заказы</h3><div class="wp1-list">'+(orders.length?orders.map(x=>'<button data-wp1-id="'+esc(x.id)+'" type="button" class="'+(selected?.id===x.id?'active':'')+'"><b>№'+esc(x.document_no)+'</b> · '+esc(x.document_date)+' · '+esc(x.customer_display)+'<br><span class="wp1-mut">'+esc(statusText(x.status))+' · '+esc(x.line_count)+' поз. / '+esc(x.total_qty)+' шт.</span></button>').join(''):'<div class="wp1-mut">Заказов пока нет.</div>')+'</div></section>';
@@ -337,8 +356,9 @@ function render(){
   if(finAllowed&&selectedFinance)f='<div class="wp1-finance">🔒 Только ОМ и руководитель · УНП '+esc(selectedFinance.buyer_unp||'—')+' · Сумма с НДС '+money(selectedFinance.total_with_vat)+' · НДС '+money(selectedFinance.vat_total)+'</div>';
   detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div>'+extra+'</section>';
  }
- mount.innerHTML='<div id="wp1"><div class="wp1-head"><div><h3>📦 Заказы · защищённый контур</h3><div class="wp1-mut">Склад не получает цены, НДС, суммы, УНП или оригинальный Excel.</div></div><button type="button" id="wp1-refresh">↻ Обновить</button></div>'+upload+pr+'<div class="wp1-grid">'+list+detail+'</div></div>';
- mount.querySelector('#wp1-refresh')?.addEventListener('click',()=>loadList().catch(showError));
+ mount.innerHTML='<div id="wp1"><div class="wp1-head"><div><h3>📦 Заказы · защищённый контур</h3><div class="wp1-mut">Склад не получает цены, НДС, суммы, УНП или оригинальный Excel.</div></div><button type="button" id="wp1-refresh">↻ Обновить</button></div>'+devicePanel+upload+pr+'<div class="wp1-grid">'+list+detail+'</div></div>';
+ mount.querySelector('#wp1-refresh')?.addEventListener('click',()=>{pairing=null;loadList().catch(showError)});
+ mount.querySelectorAll('[data-wp1-pair]').forEach(b=>b.addEventListener('click',()=>startPairing(b.dataset.wp1Pair).catch(showError)));
  mount.querySelector('#wp1-file')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(file){selectedFile=file;readPreview(file).catch(showError)}});
  mount.querySelector('#wp1-check')?.addEventListener('click',()=>readPreview().catch(showError));
  mount.querySelector('#wp1-confirm')?.addEventListener('click',()=>confirmImport().catch(showError));
@@ -354,10 +374,10 @@ async function open(target){
  try{
    const r=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
    role=r.role;orders=r.rows||[];selected=null;selectedFinance=null;preview=null;selectedFile=null;uploadStatus='';uploadStatusKind='mut';checking=false;
-   await loadStaff();
+   await loadDevices();
    if(orders.length)await openOrder(orders[0].id);else render();
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,undoUndelivered:true,telegramConnected:false,autoCheck:true,excelLoadTimeout:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:false,autoCheck:true,excelLoadTimeout:true});
 })();
