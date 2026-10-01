@@ -430,12 +430,15 @@ function render(){
      (devices.length?'<select id="wp1-device" style="max-width:100%;padding:8px;border:1px solid #cbd5e1">'+opts+'</select> <button type="button" class="wp1-primary" id="wp1-assign-device" '+(busyAction?'disabled':'')+'>Назначить на ТСД</button>':
       '<p class="wp1-error">Список терминалов временно недоступен — назначение не выполнено.</p>')+note+'</div>';
   }else if(finAllowed&&['device_setup_pending','waiting_pick','picking','shortage','ready'].includes(selected.status)){
-   const label=devices.find(x=>x.key===selected.device_key)?.label||selected.device_key||'—';
+   const isSplit=selected.assignment_mode==='split';
+   const label=isSplit?'ТСД-1 + ТСД-2':(devices.find(x=>x.key===selected.device_key)?.label||selected.device_key||'—');
    const isPending=selected.status==='device_setup_pending';
    extra='<div class="wp1-box"><h4>📦 Назначение заказа</h4><p><b>'+esc(label)+'</b></p>'+
-     (isPending?'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div><button type="button" class="wp1-primary" id="wp1-pair-selected" '+(busyAction?'disabled':'')+'>Получить код именно для '+esc(label)+'</button> <button type="button" id="wp1-unassign-pending" '+(busyAction?'disabled':'')+'>Отменить недоставленное назначение</button>':
-       '<div class="wp1-good">Заказ находится в рабочем списке назначенного ТСД. Статус: '+esc(statusText(selected.status))+'.</div>')+
-      '<p class="wp1-mut">Telegram: не подключён. Уведомления «отправлено» нет.</p>'+note+'</div>';
+     (isPending?(isSplit
+       ?'<div class="wp1-error">Заказ разделён между двумя ТСД, но один из терминалов ещё не подключён. Получите код нужного ТСД в блоке выше. Сборка откроется автоматически после подключения обоих.</div>'
+       :'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div><button type="button" class="wp1-primary" id="wp1-pair-selected" '+(busyAction?'disabled':'')+'>Получить код именно для '+esc(label)+'</button> <button type="button" id="wp1-unassign-pending" '+(busyAction?'disabled':'')+'>Отменить недоставленное назначение</button>')
+       :'<div class="wp1-good">'+(isSplit?'Заказ распределён между двумя ТСД.':'Заказ находится в рабочем списке назначенного ТСД.')+' Статус: '+esc(statusText(selected.status))+'.</div>')+
+      '<p class="wp1-mut">Telegram склада подключим отдельным новым чатом.</p>'+note+'</div>';
   }else if(role==='warehouse'){
    extra='<p class="wp1-good">Это назначенный вашему терминалу заказ. Цены и УНП недоступны.</p>';
   }
