@@ -6297,7 +6297,7 @@ function promoScopeLabel(p){const f=promoFilters(p),x=[];if(f.categories.length)
 function promoBaselineLabel(p){return promoUsesPreviousYear(p)?'аналогичный период прошлого года':p.baseline_method==='manual'?'задана руководителем':'предыдущий такой же период';}
 
 function renderPromotions(){
-  const boss=promoIsBoss();document.getElementById('promo-budget-btn').style.display=boss?'inline-flex':'none';
+  const boss=promoIsBoss(),budgetBtn=document.getElementById('promo-budget-btn');if(budgetBtn)budgetBtn.style.display=window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203?'none':(boss?'inline-flex':'none');
   const createBtn=document.getElementById('promo-create-btn');if(createBtn)createBtn.style.display=boss?'none':'inline-flex';
   const mgrSel=document.getElementById('promo-manager-filter');if(mgrSel&&mgrSel.options.length<=1){[...new Set(allPromotions.map(p=>p.manager_name).filter(Boolean))].sort().forEach(n=>mgrSel.insertAdjacentHTML('beforeend','<option value="'+escAttr(n)+'">'+esc(n)+'</option>'));}
   const fresh=document.getElementById('promo-sales-freshness');if(fresh)fresh.innerHTML=salesFreshnessBanner();
