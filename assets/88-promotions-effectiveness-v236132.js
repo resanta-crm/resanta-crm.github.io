@@ -48,7 +48,7 @@ function financeInfo(e){
 function style(){if(document.getElementById('promo-eff-style-v236132'))return;const s=document.createElement('style');s.id='promo-eff-style-v236132';s.textContent=`
 .promo-eff-v236132{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:10px;color:var(--sub)}
 .promo-eff-chip-v236132{border:1px solid var(--border);background:#fff;border-radius:999px;padding:4px 7px;white-space:nowrap}
-.promo-eff-chip-v236132.good{color:var(--g);border-color:#bbf7d0;background:#f0fdf4}.promo-eff-chip-v236132.bad{color:var(--r);border-color:#fecaca;background:#fef2f2}.promo-eff-chip-v236132.muted{color:var(--sub);background:#f8fafc}
+.promo-eff-chip-v236132.good{color:var(--g);border-color:#bbf7d0;background:#f0fdf4}.promo-eff-chip-v236132.bad{color:var(--r);border-color:#fecaca;background:#fef2f2}.promo-eff-chip-v236132.warn{color:var(--am);border-color:#fde68a;background:#fffbeb}.promo-eff-chip-v236132.muted{color:var(--sub);background:#f8fafc}
 .promo-eff-detail-v236132{margin-top:12px;border:1px solid #dbe7f3;background:#fbfdff;border-radius:11px;padding:11px}.promo-eff-detail-grid-v236132{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:8px}.promo-eff-detail-cell-v236132{background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px}.promo-eff-detail-cell-v236132 small{display:block;color:var(--sub);font-size:9px;text-transform:uppercase}.promo-eff-detail-cell-v236132 b{display:block;margin-top:3px;font-size:13px}.promo-eff-table-v236132{width:100%;border-collapse:collapse;margin-top:9px;font-size:10px}.promo-eff-table-v236132 th,.promo-eff-table-v236132 td{padding:6px;border-top:1px solid var(--border);text-align:left;vertical-align:top}.promo-eff-note-v236132{font-size:10px;color:var(--sub);line-height:1.4;margin-top:7px}
 @media(max-width:700px){.promo-eff-detail-grid-v236132{grid-template-columns:1fr}.promo-eff-table-v236132{font-size:9px}}
 `;document.head.appendChild(s)}
@@ -67,7 +67,7 @@ function patchBridges(){
   }catch(_){}
   try{
     const old=window.RESANTA_PROMOTIONS_MANAGEMENT_V23654;
-    if(old&&!old.serverEffectivenessV236132){const baseTruth=old.salesTruth;const truth=function(p){const e=row(p);if(!e)return typeof baseTruth==='function'?baseTruth(p):null;if(confirmed(p))return{kind:'confirmed',sales:num(p.confirmed_sales),label:'подтверждено руководителем',exact:true};return{kind:e.period_partial?'preliminary':'server',sales:num(e.current_sales_1c),label:safe(e.sales_label),exact:!e.period_partial}};window.RESANTA_PROMOTIONS_MANAGEMENT_V23654=Object.freeze({...old,salesTruth:truth,serverEffectivenessV236132:true});}
+    if(old&&!old.serverEffectivenessV236132){const baseTruth=old.salesTruth;const truth=function(p){const e=row(p);if(!e)return typeof baseTruth==='function'?baseTruth(p):null;if(confirmed(p))return{kind:'confirmed',sales:num(p.confirmed_sales),label:'подтверждено руководителем',exact:true};const exact=['exact_closed_month','exact_snapshots'].includes(safe(e.data_quality));return{kind:exact?'server_exact':'server_preliminary',sales:num(e.current_sales_1c),label:safe(e.sales_label),exact}};window.RESANTA_PROMOTIONS_MANAGEMENT_V23654=Object.freeze({...old,salesTruth:truth,serverEffectivenessV236132:true});}
   }catch(_){}
 }
 function patchCard(card,p,e){
