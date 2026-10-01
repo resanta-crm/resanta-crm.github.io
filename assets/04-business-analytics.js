@@ -1338,7 +1338,7 @@ window.RESANTA_V22717=Object.freeze({version:VERSION,universalLegalEntityKey:tru
 'use strict';
 const VERSION='v22.7.22';
 const state={historyPromise:null,ready:false,loadedStamp:'',statusCheckedAt:0,remotePromise:null};
-const ANALYTICS=new Set(['vip','falling','abc','sales']);
+const ANALYTICS=new Set(['vip','falling','abc','sales','managers']);
 
 function salesRow(){try{return typeof crmImportStatus==='function'?crmImportStatus('sales'):null;}catch(_){return null;}}
 function repairRow(){try{return (allImportStatus||[]).find(r=>String(r.source||'').toLowerCase()==='sales_history_repair')||null;}catch(_){return null;}}
@@ -1429,6 +1429,7 @@ guardRender('renderVip','vip');
 guardRender('renderFallingClients','falling');
 guardRender('renderSales','sales');
 guardRender('renderABC','abc');
+guardRender('renderManagers','managers');
 
 // Старая проверка «Падающих» теперь читает только маленькую строку статуса.
 // При новом импорте история помечается устаревшей, но не скачивается на Дашборде.
