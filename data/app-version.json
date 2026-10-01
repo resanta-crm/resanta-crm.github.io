@@ -1,6 +1,6 @@
 {
-  "version": "23.6.197",
+  "version": "23.6.198",
   "released_at": "2026-10-01",
-  "purpose": "Fix month-boundary unified sales import, restore final September field/Triovist sales, refresh Manager KPI from current 1C history, carry approved unpaid payments into current month",
-  "deploy_trigger": "2026-10-01T12:45:00+03:00"
-}
+  "purpose": "Approved VIP month filter, global Sales month filter, PDZ daily snapshot history, September-only payment carryover",
+  "deploy_trigger": "2026-10-01T13:05:00+03:00"
+}\n
