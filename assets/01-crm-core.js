@@ -8787,6 +8787,159 @@ function _potentialAuditHtml(p){
     +'</div>';
 }
 
+
+let _aiMarkdownClientRowsV236206=new Map();
+let _aiMarkdownClientChoiceV236206=new Map();
+let _aiMarkdownClientKeyV236206='';
+let _aiMarkdownClientFlightV236206=null;
+let _aiMarkdownClientLoadErrorV236206='';
+const _aiMarkdownClientApproveFlightV236206=new Set();
+
+function _aiMarkdownMoneyV236206(v){
+  const n=Number(v||0);
+  return n.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
+}
+function _aiMarkdownShortV236206(v,n=240){
+  const s=String(v||'').replace(/\s+/g,' ').trim();
+  return s.length>n?s.slice(0,n)+'…':s;
+}
+function _aiMarkdownExistingTaskV236206(clientId){
+  return allTasks.find(t=>String(t.client_id||'')===String(clientId||'')&&t.source==='markdown_sale'&&!t.done);
+}
+function _aiMarkdownClientHtmlV236206(clientRow,mgr,date,mode){
+  if(!clientRow?.id)return '';
+  const cid=String(clientRow.id);
+  const existing=_aiMarkdownExistingTaskV236206(cid);
+  if(existing){
+    return '<div style="margin-top:8px;padding:10px 11px;border:1px solid #93C5FD;background:#EFF6FF;border-radius:9px;font-size:11px;line-height:1.5;color:#1E3A8A">'
+      +'<div style="font-weight:800">♻️ Уценка · уже в работе</div>'
+      +'<div style="margin-top:3px">'+esc(String(existing.title||existing.text||'Задача по Уценке уже поставлена'))+'</div>'
+      +'</div>';
+  }
+  if(_aiMarkdownClientLoadErrorV236206){
+    return '<div style="margin-top:8px;padding:10px 11px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:9px;font-size:11px;line-height:1.5;color:#92400E">'
+      +'<div style="font-weight:800">♻️ Уценка · не удалось проверить</div>'
+      +'<div style="margin-top:3px">'+esc(_aiMarkdownClientLoadErrorV236206)+'</div>'
+      +'</div>';
+  }
+  if(!_aiMarkdownClientRowsV236206.has(cid)){
+    return '<div style="margin-top:8px;padding:10px 11px;border:1px solid #D1FAE5;background:#F0FDF4;border-radius:9px;font-size:11px;line-height:1.5;color:#166534">'
+      +'<div style="font-weight:800">♻️ Уценка · проверяю по этому клиенту…</div>'
+      +'<div style="margin-top:3px">Сопоставляю маст-лист, историю закупок и готовые экземпляры с утверждённой ценой и фото.</div>'
+      +'</div>';
+  }
+  const row=_aiMarkdownClientRowsV236206.get(cid)||{};
+  const candidates=Array.isArray(row.candidates)?row.candidates:[];
+  if(!candidates.length){
+    return '<div style="margin-top:8px;padding:10px 11px;border:1px solid #E5E7EB;background:#F8FAFC;border-radius:9px;font-size:11px;line-height:1.5;color:#64748B">'
+      +'<div style="font-weight:800;color:#334155">♻️ Уценка · подходящей позиции сейчас нет</div>'
+      +'<div style="margin-top:3px">Готовые экземпляры есть, но под маст-лист / историю именно этого клиента релевантная позиция не подтверждена.</div>'
+      +'</div>';
+  }
+  let idx=Number(_aiMarkdownClientChoiceV236206.get(cid)||0);
+  if(idx<0||idx>=candidates.length)idx=0;
+  const x=candidates[idx]||candidates[0];
+  const busy=_aiMarkdownClientApproveFlightV236206.has(cid);
+  return '<div style="margin-top:8px;padding:10px 11px;border:1px solid #86EFAC;background:#F0FDF4;border-radius:9px;font-size:11px;line-height:1.5;color:#166534">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:220px">'
+        +'<div style="font-weight:800">♻️ Уценка · рекомендация по клиенту</div>'
+        +'<div style="margin-top:3px"><b>'+esc(x.article||'—')+'</b> · '+esc(x.nomenclature||'—')+' · <b>1 шт.</b></div>'
+        +'<div style="margin-top:2px">Цена: <b>'+_aiMarkdownMoneyV236206(x.final_price)+'</b>'
+          +(Number(x.discount_pct||0)>0?' · скидка <b>'+Number(x.discount_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%</b>':'')
+          +' · фото <b>'+Number(x.photo_count||0)+'</b></div>'
+        +'<div style="margin-top:2px"><b>Почему подходит:</b> '+esc(x.match_reason||'Совпадает с ассортиментом клиента')+'</div>'
+        +(x.condition_comment?'<div style="margin-top:3px"><b>Состояние:</b> '+esc(_aiMarkdownShortV236206(x.condition_comment))+'</div>':'')
+        +'<div style="margin-top:4px;color:#15803D">Отдельная SMART-рекомендация внутри карточки этого клиента. Руководитель решает, ставить её в работу или нет.</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:5px;flex-wrap:wrap">'
+        +'<button '+(busy?'disabled ':'')+'onclick="approveAIMarkdownClientV236206(\''+escAttr(cid)+'\',\''+escAttr(String(x.item_id||''))+'\',\''+escAttr(mgr)+'\',\''+escAttr(date||'')+'\',\''+escAttr(mode||'')+'\')" style="padding:6px 10px;background:var(--g);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;opacity:'+(busy?'.55':'1')+'">'+(busy?'⏳ Ставлю…':'✓ Уценку в работу')+'</button>'
+        +(candidates.length>1?'<button onclick="nextAIMarkdownClientV236206(\''+escAttr(cid)+'\',\''+escAttr(mgr)+'\',\''+escAttr(date||'')+'\',\''+escAttr(mode||'')+'\')" style="padding:6px 9px;background:#fff;border:1px solid #86EFAC;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap">↻ Другая</button>':'')
+      +'</div>'
+    +'</div>'
+  +'</div>';
+}
+async function _ensureAIMarkdownClientV236206(mgr,date,mode){
+  if(currentProfile?.role!=='boss')return;
+  const clients=[];
+  const seen=new Set();
+  (_aiWeekProposals||[]).forEach(p=>{
+    const cr=_aiClientForProposal(p);
+    if(cr?.id&&!seen.has(String(cr.id))){seen.add(String(cr.id));clients.push(cr);}
+  });
+  const ids=clients.map(x=>String(x.id));
+  const key=ids.slice().sort().join('|');
+  if(!ids.length)return;
+  if(key===_aiMarkdownClientKeyV236206&&_aiMarkdownClientRowsV236206.size)return;
+  if(_aiMarkdownClientFlightV236206&&key===_aiMarkdownClientKeyV236206)return _aiMarkdownClientFlightV236206;
+  _aiMarkdownClientKeyV236206=key;
+  _aiMarkdownClientRowsV236206=new Map();
+  _aiMarkdownClientChoiceV236206=new Map();
+  _aiMarkdownClientLoadErrorV236206='';
+  const call=()=>db.rpc('markdown_ai_client_recommendations_v236206',{p_client_ids:ids});
+  _aiMarkdownClientFlightV236206=(async()=>{
+    const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();
+    if(out?.error)throw out.error;
+    const rows=Array.isArray(out?.data?.rows)?out.data.rows:[];
+    const byId=new Map(rows.map(r=>[String(r.client_id),r]));
+    const used=new Set();
+    clients.forEach(cr=>{
+      const cid=String(cr.id),row=byId.get(cid)||{client_id:cid,client_name:cr.name,candidates:[]};
+      const list=Array.isArray(row.candidates)?row.candidates:[];
+      let pick=0;
+      if(list.length){
+        const free=list.findIndex(x=>!used.has(String(x.item_id)));
+        pick=free>=0?free:0;
+        if(list[pick]?.item_id)used.add(String(list[pick].item_id));
+      }
+      _aiMarkdownClientRowsV236206.set(cid,row);
+      _aiMarkdownClientChoiceV236206.set(cid,pick);
+    });
+  })().catch(e=>{
+    _aiMarkdownClientLoadErrorV236206=String(e?.message||e||'Ошибка загрузки Уценки');
+  }).finally(()=>{
+    _aiMarkdownClientFlightV236206=null;
+    if(document.getElementById('modal-ai-week')?.classList.contains('open')){
+      renderAIWeekProposals(mgr,date,mode);
+    }
+  });
+  return _aiMarkdownClientFlightV236206;
+}
+function nextAIMarkdownClientV236206(clientId,mgr,date,mode){
+  const row=_aiMarkdownClientRowsV236206.get(String(clientId))||{};
+  const list=Array.isArray(row.candidates)?row.candidates:[];
+  if(list.length<2)return;
+  const cur=Number(_aiMarkdownClientChoiceV236206.get(String(clientId))||0);
+  _aiMarkdownClientChoiceV236206.set(String(clientId),(cur+1)%list.length);
+  renderAIWeekProposals(mgr,date,mode);
+}
+async function approveAIMarkdownClientV236206(clientId,itemId,mgr,date,mode){
+  const cid=String(clientId||'');
+  if(!cid||!itemId||_aiMarkdownClientApproveFlightV236206.has(cid))return;
+  const due=(mode==='call')?monthEndDate(TODAY):(date||TODAY);
+  _aiMarkdownClientApproveFlightV236206.add(cid);
+  renderAIWeekProposals(mgr,date,mode);
+  try{
+    const call=()=>db.rpc('markdown_ai_assign_client_v236206',{p_client_id:cid,p_item_id:itemId,p_due_date:due});
+    const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();
+    if(out?.error)throw out.error;
+    const data=out?.data||{};
+    if(!data.ok)throw new Error(data.reason||'Не удалось поставить Уценку');
+    if(data.task&&!allTasks.some(t=>String(t.id)===String(data.task.id)))allTasks.unshift(data.task);
+    _aiMarkdownClientRowsV236206.delete(cid);
+    _aiMarkdownClientChoiceV236206.delete(cid);
+    try{renderTasks();buildDashboard();updateTasksAlertDot();}catch(_){}
+  }catch(e){
+    alert('Не удалось поставить Уценку по клиенту: '+(e?.message||e));
+    _aiMarkdownClientKeyV236206='';
+  }finally{
+    _aiMarkdownClientApproveFlightV236206.delete(cid);
+    renderAIWeekProposals(mgr,date,mode);
+  }
+}
+window.approveAIMarkdownClientV236206=approveAIMarkdownClientV236206;
+window.nextAIMarkdownClientV236206=nextAIMarkdownClientV236206;
+
 function renderAIWeekProposals(mgr, date, mode){
   const list=_aiWeekProposals;
   const isCall = mode==='call';
@@ -8807,7 +8960,7 @@ function renderAIWeekProposals(mgr, date, mode){
       +'<pre id="aiweek-brief" style="display:none;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;line-height:1.45;white-space:pre-wrap;max-height:260px;overflow:auto">'+esc(_aiLastBlock)+'</pre></div>':'')
     +(pending?'<div style="margin-bottom:12px"><button onclick="approveAllAIWeek(\''+escAttr(mgr)+'\',\''+(date||'')+'\',\''+(mode||'')+'\')" style="padding:8px 14px;background:var(--g);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✅ Утвердить все ('+pending+')</button></div>':'')
     +list.map((p,i)=>{
-      if(p._done)return '<div class="card" style="margin-bottom:8px;padding:10px 12px;opacity:0.5"><div style="font-size:13px">✅ '+p.client+' — задача поставлена</div></div>';
+      if(p._done){const doneClient=_aiClientForProposal(p);return '<div class="card" style="margin-bottom:8px;padding:10px 12px;opacity:0.75"><div style="font-size:13px">✅ '+p.client+' — основная задача поставлена</div>'+_aiMarkdownClientHtmlV236206(doneClient,mgr,date,mode)+'</div>';}
       const hi=(p.priority||'').toLowerCase().includes('высок');
       const clientRow=_aiClientForProposal(p);
       const clientStatus=(clientRow&&clientRow.client_status)||'Не указан';
@@ -8833,6 +8986,7 @@ function renderAIWeekProposals(mgr, date, mode){
               +'</div>'
             +(p.title?'<div style="font-size:13px;font-weight:600;margin-top:4px;color:var(--a)">🎯 Цель: '+esc(String(p.title))+'</div>':'')
             +(clientStatus==='Потенциальный'?_potentialAuditHtml(p):clientStatus==='Рабочий'?_workingAuditHtml(p):'')
+            +_aiMarkdownClientHtmlV236206(clientRow,mgr,date,mode)
             +'<div style="font-size:13px;margin-top:5px;line-height:1.5"><span style="color:var(--sub)">🛠 Действия:</span> '+esc(String(p.task||''))+'</div>'
             +((p.items&&p.items.length)?'<div style="font-size:12px;margin-top:5px;line-height:1.5"><span style="color:var(--sub)">📦 Товары к согласованию · основной ≥70% / допродажа ≤30%:</span><br>'+esc(_proposalItemsText(p)).replace(/\n/g,'<br>')+'</div>':'')
             +((p._stockErrors&&p._stockErrors.length)?'<div style="margin-top:7px;padding:7px 9px;border-radius:7px;background:#FEF2F2;color:#B91C1C;font-size:11px;line-height:1.4">⛔ '+p._stockErrors.map(esc).join('<br>⛔ ')+'</div>':'')
@@ -8850,6 +9004,7 @@ function renderAIWeekProposals(mgr, date, mode){
       +'</div>';
     }).join('');
   document.getElementById('aiweek-result').innerHTML=html;
+  _ensureAIMarkdownClientV236206(mgr,date,mode).catch(()=>{});
 }
 
 // Правка предложения ДО постановки. Главный принцип ТЗ: ИИ предлагает —
