@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_MO2_SELECTOR_V236123)return;
-const V='v23.6.123',NOG='__none__';
+const V='v23.6.200',NOG='__none__';
 let prices=null,flight=null,chosen=new Map(),legacy=false,used=false,patched=false;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
@@ -12,7 +12,25 @@ function dbc(){try{return typeof db!=='undefined'?db:window.db}catch(_){return w
 function promos(){try{return typeof allPromotions!=='undefined'?allPromotions:(window.allPromotions||[])}catch(_){return window.allPromotions||[]}}
 async function price(){
   if(prices)return prices;if(flight)return flight;
-  flight=(async()=>{const out=[],d=dbc();if(!d)throw Error('Нет подключения к базе');for(let a=0;;a+=1000){const {data,error}=await d.from('promotion_price_list').select('sku,product_name,category,subgroup,price_vat,valid_from').eq('active',true).order('category').order('subgroup').order('sku').range(a,a+999);if(error)throw error;out.push(...(data||[]));if(!data||data.length<1000)break;}prices=out.map(x=>({...x,category:String(x.category||'Без группы').trim()||'Без группы',subgroup:String(x.subgroup||'').trim()||null}));return prices})().finally(()=>flight=null);return flight;
+  flight=(async()=>{
+    const d=dbc();if(!d)throw Error('Нет подключения к базе');
+    const catalog=[],priced=[];
+    for(let a=0;;a+=1000){
+      const {data,error}=await d.from('price_list').select('sku,product,category,subgroup,uploaded_at').order('sku').range(a,a+999);
+      if(error)throw error;catalog.push(...(data||[]));if(!data||data.length<1000)break;
+    }
+    for(let a=0;;a+=1000){
+      const {data,error}=await d.from('promotion_price_list').select('sku,product_name,category,subgroup,price_vat,valid_from').eq('active',true).order('sku').range(a,a+999);
+      if(error)throw error;priced.push(...(data||[]));if(!data||data.length<1000)break;
+    }
+    const pm=new Map(priced.map(x=>[String(x.sku||'').trim(),x])),out=new Map();
+    catalog.forEach(x=>{
+      const sku=String(x.sku||'').trim();if(!sku)return;const p=pm.get(sku);
+      out.set(sku,{sku,product_name:String(p?.product_name||x.product||''),category:String(p?.category||x.category||'Без группы').trim()||'Без группы',subgroup:String(p?.subgroup||x.subgroup||'').trim()||null,price_vat:p?.price_vat==null?null:N(p.price_vat),valid_from:p?.valid_from||null});
+    });
+    priced.forEach(p=>{const sku=String(p.sku||'').trim();if(sku&&!out.has(sku))out.set(sku,{...p,sku,category:String(p.category||'Без группы').trim()||'Без группы',subgroup:String(p.subgroup||'').trim()||null})});
+    prices=[...out.values()];return prices;
+  })().finally(()=>flight=null);return flight;
 }
 async function saved(id){if(!id)return[];const {data,error}=await dbc().from('promotion_items').select('sku,product_name,category,subgroup,base_price_vat,discount_pct,promo_price_vat,price_valid_from').eq('promotion_id',id);if(error){console.warn(error);return[]}return data||[]}
 function fromPrice(x){return{sku:String(x.sku),product_name:String(x.product_name||''),category:x.category,subgroup:x.subgroup,base_price_vat:N(x.price_vat),discount_pct:0,promo_price_vat:N(x.price_vat),price_valid_from:x.valid_from||null}}
