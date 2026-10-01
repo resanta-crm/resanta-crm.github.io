@@ -3,7 +3,7 @@
 'use strict';
 if(window.RESANTA_SAFE_UPGRADES_LOADER_V236200)return;
 const V='23.6.200',flights=new Map();
-function active(id){return !!document.getElementById(id)?.classList.contains('active')}
+function active(id){const name=String(id||'').replace(/^page-/,'');return !!document.getElementById(id)?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')===name}
 function load(path,guard){
  if(window[guard])return Promise.resolve(true);
  if(flights.has(path))return flights.get(path);
