@@ -1,6 +1,6 @@
 {
-  "version": "23.6.202",
+  "version": "23.6.203",
   "released_at": "2026-10-01",
-  "purpose": "Root fix for disappearing VIP filters: final Performance renderer owns period controls; legacy VIP filter disabled; period changes reuse the existing 1C history index",
-  "deploy_trigger": "2026-10-01T15:28:00+03:00"
+  "purpose": "Promotions root: single control center, correct close/archive filtering, period-aware 1C effectiveness and financially honest incremental metrics",
+  "deploy_trigger": "2026-10-01T16:10:00+03:00"
 }
