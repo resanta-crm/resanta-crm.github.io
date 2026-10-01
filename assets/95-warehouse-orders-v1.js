@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.193',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.194',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 let correctionPreview=null,correctionFile=null,correctionStatus='',correctionTone='mut';
 let devices=[],devicesError='',pairing=null,notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
@@ -304,6 +304,30 @@ async function decideShortage(id,decision){
  }catch(e){actionMessage='Не удалось сохранить решение: '+String(e?.message||e);actionTone='error'}
  finally{busyAction=false;render()}
 }
+function splitDefaults(items){
+ const totals={tsd1:0,tsd2:0},out={};
+ (items||[]).filter(x=>!x.is_removed&&Number(x.expected_qty)>0).forEach(x=>{
+  const existing=String(x.device_key||'');
+  const k=(existing==='tsd1'||existing==='tsd2')?existing:(totals.tsd1<=totals.tsd2?'tsd1':'tsd2');
+  out[x.id]=k;totals[k]+=Number(x.expected_qty||0);
+ });
+ return out;
+}
+async function splitAssign(){
+ if(busyAction||!selected||!['office','supervisor'].includes(role))return;
+ const rows=[...mount.querySelectorAll('[data-split-item]')].map(s=>({item_id:s.dataset.splitItem,device_key:s.value}));
+ if(!rows.length)return;
+ if(!confirm('Разделить счёт №'+selected.document_no+' между ТСД-1 и ТСД-2?\nКаждая позиция будет закреплена только за одним ТСД. После первого скана перераспределение блокируется.'))return;
+ busyAction=true;actionMessage='Распределяю позиции между двумя ТСД…';actionTone='mut';render();
+ try{
+  const x=await bounded(rpc('warehouse_pick_split_assign_v2',{p_order_id:selected.id,p_assignments:rows}),18000,'Сервер не подтвердил разделение за 18 секунд');
+  if(!x?.ok)throw Error('Разделение не подтверждено');
+  actionMessage=x.status==='device_setup_pending'?'Заказ разделён. Один из ТСД ещё не подключён — сборка начнётся после подключения обоих.':'Заказ разделён между ТСД-1 и ТСД-2.';
+  actionTone=x.status==='device_setup_pending'?'error':'ok';
+  await loadList(selected.id);
+ }catch(e){actionMessage='Не удалось разделить заказ: '+String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;render()}
+}
 async function loadDevices(){
  if(!['office','supervisor'].includes(role)){devices=[];devicesError='';return;}
  try{
@@ -417,9 +441,14 @@ function render(){
   }
 
   if(finAllowed&&selectedFinance)f='<div class="wp1-finance">🔒 Только ОМ и руководитель · УНП '+esc(selectedFinance.buyer_unp||'—')+' · Сумма с НДС '+money(selectedFinance.total_with_vat)+' · НДС '+money(selectedFinance.vat_total)+'</div>';
+  const activeItems=(selected.items||[]).filter(x=>!x.is_removed&&Number(x.expected_qty)>0);
+  const canSplit=finAllowed&&['draft','device_setup_pending','waiting_pick'].includes(selected.status)&&activeItems.length>1&&activeItems.every(x=>Number(x.picked_qty||0)===0);
+  const splitMap=splitDefaults(activeItems);
+  const deviceProgress=finAllowed&&(selected.device_progress||[]).length?'<div class="wp1-box"><h4>📊 Сборка по ТСД</h4><div class="wp1-grid">'+(selected.device_progress||[]).map(x=>{const label=devices.find(d=>d.key===x.device_key)?.label||x.device_key;const pct=Number(x.assigned_qty)?Math.round(Number(x.picked_qty)/Number(x.assigned_qty)*100):100;return '<div><b>'+esc(label)+'</b><div class="wp1-mut">'+esc(x.line_count)+' поз. · '+esc(x.picked_qty)+' / '+esc(x.assigned_qty)+' шт.</div><div style="height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:6px"><i style="display:block;height:100%;background:#185fa5;width:'+Math.min(100,Math.max(0,pct))+'%"></i></div></div>'}).join('')+'</div></div>':'';
+  const splitPanel=canSplit?'<div class="wp1-box"><h4>👥 Большой заказ · разделить между ТСД</h4><p class="wp1-mut">CRM предложила распределение примерно 50/50 по количеству. При необходимости измените ТСД у любой позиции. Одна позиция всегда собирается только одним терминалом.</p><div class="wp1-table"><table><thead><tr><th>Артикул</th><th>Товар</th><th>Кол.</th><th>ТСД</th></tr></thead><tbody>'+activeItems.map(x=>'<tr><td>'+esc(x.sku)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.expected_qty)+'</td><td><select data-split-item="'+esc(x.id)+'" style="padding:7px;border:1px solid #cbd5e1;border-radius:7px"><option value="tsd1" '+(splitMap[x.id]==='tsd1'?'selected':'')+'>ТСД-1</option><option value="tsd2" '+(splitMap[x.id]==='tsd2'?'selected':'')+'>ТСД-2</option></select></td></tr>').join('')+'</tbody></table></div><button type="button" class="wp1-primary" id="wp1-split-apply" '+(busyAction?'disabled':'')+'>Разделить заказ</button></div>':'';
   const shortages=finAllowed&&(selected.shortages||[]).length?'<div class="wp1-box"><h4>⚠ Недостача · решение ОМ</h4>'+(selected.shortages||[]).map(s=>{const item=(selected.items||[]).find(x=>x.id===s.item_id);return '<div class="wp1-error" style="margin:7px 0"><b>'+esc(item?.sku||'Позиция')+'</b> · не хватает '+esc(s.missing_qty)+' шт.<br><span class="wp1-mut">Статус: '+esc(s.status)+(s.note?' · '+esc(s.note):'')+'</span><div style="margin-top:7px"><button type="button" data-short-wait="'+esc(s.id)+'" '+(busyAction?'disabled':'')+'>Ждём товар</button> <button type="button" class="wp1-primary" data-short-correct="'+esc(s.id)+'" '+(busyAction?'disabled':'')+'>Нужна корректировка счёта</button></div></div>'}).join('')+'</div>':'';
   const correction=finAllowed&&!['realized','shipped','cancelled'].includes(selected.status)?'<div class="wp1-box"><h4>✏️ Корректировка счёта · версия '+esc(selected.version||1)+' → '+esc(Number(selected.version||1)+1)+'</h4><p class="wp1-mut">Загрузите исправленный Excel того же счёта. Уже правильно собранные количества сохранятся. Если количество уменьшилось — ТСД покажет, что именно вернуть на склад.</p><input id="wp1-correction-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">'+(correctionFile?'<div class="wp1-mut" style="margin-top:5px">Файл: '+esc(correctionFile.name)+'</div>':'')+(correctionStatus?'<div class="'+(correctionTone==='error'?'wp1-error':correctionTone==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:8px">'+esc(correctionStatus)+'</div>':'')+(correctionPreview?'<div class="wp1-finance" style="margin-top:8px">Проверено: '+esc(correctionPreview.items.length)+' поз. / '+esc(correctionPreview.items.reduce((s,x)=>s+x.qty,0))+' шт. · '+money(correctionPreview.total)+'</div><button type="button" class="wp1-primary" id="wp1-apply-correction" '+(working?'disabled':'')+' style="margin-top:8px">Применить версию '+esc(Number(selected.version||1)+1)+'</button>':'')+'</div>':'';
-  detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · v'+esc(selected.version||1)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr style="'+(x.is_removed?'opacity:.6;background:#fff7ed':'')+'"><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+(x.is_removed?' · убрано корректировкой':'')+(Number(x.return_required_qty)>0?' · ВЕРНУТЬ '+esc(x.return_required_qty):'')+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div>'+shortages+correction+extra+'</section>';
+  detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · v'+esc(selected.version||1)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr style="'+(x.is_removed?'opacity:.6;background:#fff7ed':'')+'"><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+(x.is_removed?' · убрано корректировкой':'')+(Number(x.return_required_qty)>0?' · ВЕРНУТЬ '+esc(x.return_required_qty):'')+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div>'+deviceProgress+splitPanel+shortages+correction+extra+'</section>';
  }
  mount.innerHTML='<div id="wp1"><div class="wp1-head"><div><h3>📦 Заказы · защищённый контур</h3><div class="wp1-mut">Склад не получает цены, НДС, суммы, УНП или оригинальный Excel.</div></div><button type="button" id="wp1-refresh">↻ Обновить</button></div>'+devicePanel+upload+pr+'<div class="wp1-grid">'+list+detail+'</div></div>';
  mount.querySelector('#wp1-refresh')?.addEventListener('click',()=>{pairing=null;loadList().catch(showError)});
@@ -430,6 +459,7 @@ function render(){
  mount.querySelector('#wp1-assign-device')?.addEventListener('click',()=>assignDevice().catch(showError));
  mount.querySelector('#wp1-pair-selected')?.addEventListener('click',()=>{if(selected?.device_key)startPairing(selected.device_key).catch(showError)});
  mount.querySelector('#wp1-unassign-pending')?.addEventListener('click',()=>unassignPending().catch(showError));
+ mount.querySelector('#wp1-split-apply')?.addEventListener('click',()=>splitAssign().catch(showError));
  mount.querySelector('#wp1-correction-file')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(file){correctionFile=file;readCorrection(file).catch(showError)}});
  mount.querySelector('#wp1-apply-correction')?.addEventListener('click',()=>applyCorrection().catch(showError));
  mount.querySelectorAll('[data-short-wait]').forEach(b=>b.addEventListener('click',()=>decideShortage(b.dataset.shortWait,'wait').catch(showError)));
@@ -450,5 +480,5 @@ async function open(target){
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:false,invoiceRevisions:true,shortageWorkflow:true,autoCheck:true,excelLoadTimeout:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:false,invoiceRevisions:true,shortageWorkflow:true,splitTsd:true,autoCheck:true,excelLoadTimeout:true});
 })();
