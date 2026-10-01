@@ -9,7 +9,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_STABLE_RENDER_V23671)return;
-const V='v23.6.105';
+const V='v23.6.203';
 const base=window.renderPromotions;
 if(typeof base!=='function')return;
 
@@ -35,6 +35,11 @@ function promoDigest(){
   }catch(_){return''}
 }
 function filterSig(){
+  const ctl=window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203;
+  if(ctl?.enabled){
+    const s=ctl.state||{};
+    return ['pcc203',s.view,s.manager,s.client,s.group,s.sku,s.month].map(safe).join('|');
+  }
   const g=id=>safe(document.getElementById(id)?.value);
   return [
     g('promo-status-filter'),
@@ -128,6 +133,7 @@ function promoIdFromCard(card){
   const m=safe(el?.getAttribute?.('onclick')).match(/[0-9a-f]{8}-[0-9a-f-]{27,}/i);return m?m[0]:'';
 }
 function closedRowGuard(){
+  if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203)return;
   const list=document.getElementById('promo-list');if(!list)return;
   const sf=safe(document.getElementById('promo-status-filter')?.value||'current');
   if(sf==='all'||sf==='completed')return;
