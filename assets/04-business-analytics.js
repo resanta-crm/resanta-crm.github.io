@@ -2262,6 +2262,15 @@ function resetVipPerf(){
   vipPerf.ready=false;vipPerf.indexPromise=null;vipPerf.summaryPromise=null;vipPerf.byId=new Map();vipPerf.byName=new Map();vipPerf.nameKeys=[];vipPerf.months=[];vipPerf.monthSet=new Set();vipPerf.entityCache=new Map();vipPerf.summaries=null;vipPerf.lastRenderSig='';vipPerf.cards=new Map();vipPerf.details=new Map();vipPerf.detailFlights=new Map();vipPerf.renderToken++;
 }
 function vipDataChanged(){return vipPerf.histRef!==allPurchaseHistory||vipPerf.clientsRef!==allClients||vipPerf.vipRef!==allVipSales;}
+function resetVipPeriodView(){
+  // Смена периода не требует заново индексировать всю историю 1С.
+  // Если первичная индексация уже закончена — оставляем byId/byName/entityCache
+  // и сбрасываем только месячную сводку и ленивые детали.
+  if(!vipPerf.ready||vipPerf.indexPromise||vipPerf.summaryPromise){resetVipPerf();return;}
+  vipPerf.summaries=null;vipPerf.lastRenderSig='';vipPerf.cards=new Map();
+  vipPerf.details=new Map();vipPerf.detailFlights=new Map();vipPerf.renderToken++;
+}
+
 function setVipStatus(text){
   const root=document.getElementById('page-vip');if(!root)return;
   let el=root.querySelector('.v22722-page-loading');
@@ -2470,7 +2479,7 @@ try{if(typeof freshAnalytics22717==='function')freshAnalytics22717=async functio
 
 // Если история была заменена импортом/обновлением — сбрасываем только локальный индекс.
 window.addEventListener('resanta-v2273-status',()=>{if(vipDataChanged())resetVipPerf();});
-window.addEventListener('resanta-vip-period-change',()=>{resetVipPerf();if(activePage()==='vip')renderVipFastEntry();});
+window.addEventListener('resanta-vip-period-change',()=>{resetVipPeriodView();if(activePage()==='vip')renderVipFastEntry();});
 
 
 window.RESANTA_CRM_PERF_V227316=Object.freeze({version:VERSION,priority:'navigation',vipChunkedIndex:true,vipLazyDetails:true,vipLazyCategories:true,vipLazySku:true,duplicateVipRenderSuppression:true,loadAllRowsSingleFlight:true,loadDataSingleFlight:true,noBusinessLogicChange:true});
