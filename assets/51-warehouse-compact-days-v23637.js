@@ -16,7 +16,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
 const money=(v,cur='BYN')=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+cur;
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
-async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const {data,error}=await d.rpc(name,args);if(error)throw error;return data}
+async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
 function ensureCss(){
  if($('warehouse-compact-v23637-css'))return;
  const s=document.createElement('style');s.id='warehouse-compact-v23637-css';s.textContent=`
