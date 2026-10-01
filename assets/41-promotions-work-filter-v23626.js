@@ -8,7 +8,11 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_WORK_FILTER_V23626)return;
-const VERSION='v23.6.105';
+const VERSION='v23.6.203';
+if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203){
+  window.RESANTA_PROMOTIONS_WORK_FILTER_V23626=Object.freeze({version:VERSION,supersededBy:'RESANTA_PROMOTIONS_CONTROL_CENTER_V236203',dbWrites:false});
+  return;
+}
 let workMode=false,returnFilter='current';
 function promos(){try{return typeof allPromotions!=='undefined'&&Array.isArray(allPromotions)?allPromotions:(Array.isArray(window.allPromotions)?window.allPromotions:[])}catch(_){return[]}}
 function isBoss(){try{return typeof promoIsBoss==='function'&&promoIsBoss()}catch(_){return false}}
