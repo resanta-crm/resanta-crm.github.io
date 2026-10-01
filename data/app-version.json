@@ -1,6 +1,6 @@
 {
   "version": "23.6.198",
   "released_at": "2026-10-01",
-  "purpose": "Approved VIP month filter, global Sales month filter, PDZ daily snapshot history, September-only payment carryover",
-  "deploy_trigger": "2026-10-01T13:05:00+03:00"
-}\n
+  "purpose": "Emergency rollback to last working CRM after v23.6.199 startup regression",
+  "deploy_trigger": "2026-10-01T14:10:00+03:00"
+}
