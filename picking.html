@@ -17,7 +17,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 .status{border-radius:12px;padding:11px 13px;margin-top:10px;font-size:14px;line-height:1.4}.blue{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}.green{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}.red{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}.amber{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
 .order{width:100%;text-align:left;border:1px solid #d1d5db;background:#fff;border-radius:12px;padding:12px;margin:7px 0;cursor:pointer}.order.active{border-color:#60a5fa;background:#eff6ff}.order b{font-size:16px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.row .auto{flex:0 0 auto}
 .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.k{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px}.k .v{font-weight:900;font-size:20px}.k .l{font-size:11px;color:#64748b}
-.item{padding:11px 0;border-bottom:1px solid #e5e7eb}.item:last-child{border-bottom:0}.item .name{font-weight:700}.item .meta{font-size:13px;color:#64748b;margin-top:3px}.progress{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:6px}.progress>i{display:block;height:100%;background:#185FA5}
+.item{padding:11px 0;border-bottom:1px solid #e5e7eb}.item:last-child{border-bottom:0}.item .name{font-weight:700}.item .meta{font-size:13px;color:#64748b;margin-top:3px}.item.removed{opacity:.7;background:#fff7ed;padding:10px;border-radius:10px}.item-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.mini{border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:7px 9px;font-weight:800;font-size:12px}.mini.short{border-color:#f59e0b;background:#fffbeb;color:#92400e}.mini.return{border-color:#ef4444;background:#fff1f2;color:#9f1239}.badge{display:inline-block;border-radius:99px;padding:2px 7px;font-size:11px;font-weight:800;margin-left:5px}.badge.red{background:#fee2e2;color:#991b1b}.badge.amber{background:#fef3c7;color:#92400e}.progress{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:6px}.progress>i{display:block;height:100%;background:#185FA5}
 .scanbox{position:sticky;bottom:10px;z-index:3;box-shadow:0 8px 30px rgba(15,23,42,.18)}.ready{border:2px solid #22c55e}.mut{font-size:12px;color:#64748b}
 @media(max-width:560px){.wrap{padding:10px 8px 84px}.card{padding:11px;border-radius:12px}.top{gap:8px}.logo{width:42px;height:42px;font-size:22px;flex:0 0 42px}.grow,.top>div:last-child{min-width:0}.title{font-size:18px;line-height:1.2}.sub{font-size:12px}.kpi{grid-template-columns:1fr 1fr}.row>*{flex-basis:100%}.row .auto{flex-basis:auto}.inp{font-size:16px}.btn{min-height:46px}}
 </style>
@@ -69,7 +69,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-01-v23.6.191';
+const PICKING_APP_VERSION='2026-10-01-v23.6.193';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
@@ -168,10 +168,12 @@ function render(){
  const items=selected.items||[];
  const picked=items.reduce((s,x)=>s+num(x.picked_qty),0),total=items.reduce((s,x)=>s+num(x.expected_qty),0);
  const pct=total?Math.min(100,Math.round(picked/total*100)):0;
- $('order-card').innerHTML='<div class="'+(selected.status==='ready'?'ready':'')+'" style="border-radius:12px;padding:'+(selected.status==='ready'?'10px':'0')+'"><h2 style="margin:0 0 5px">Счёт №'+esc(selected.document_no)+'</h2><div class="sub">'+esc(selected.customer_display)+' · '+esc(statusName(selected.status))+'</div>'+
+ $('order-card').innerHTML='<div class="'+(selected.status==='ready'?'ready':'')+'" style="border-radius:12px;padding:'+(selected.status==='ready'?'10px':'0')+'"><h2 style="margin:0 0 5px">Счёт №'+esc(selected.document_no)+' <span class="badge amber">версия '+esc(selected.version||1)+'</span></h2><div class="sub">'+esc(selected.customer_display)+' · '+esc(statusName(selected.status))+'</div>'+
   '<div class="kpi"><div class="k"><div class="v">'+esc(qty(picked))+'</div><div class="l">Собрано, шт.</div></div><div class="k"><div class="v">'+esc(qty(total))+'</div><div class="l">Нужно, шт.</div></div><div class="k"><div class="v">'+pct+'%</div><div class="l">Готовность</div></div></div>'+
   (selected.status==='ready'?'<div class="status green"><b>✅ ЗАКАЗ ГОТОВ К ОТГРУЗКЕ</b><br>ОМ уже увидит этот статус в CRM.</div>':'')+
-  items.map(x=>{const e=num(x.expected_qty),p=num(x.picked_qty),pc=e?Math.min(100,Math.round(p/e*100)):0;return '<div class="item"><div class="name">'+esc(x.product)+'</div><div class="meta">'+esc(x.sku)+' · '+esc(x.barcode)+' · <b>'+esc(qty(p))+' / '+esc(qty(e))+' '+esc(x.unit||'шт.')+'</b></div><div class="progress"><i style="width:'+pc+'%"></i></div></div>'}).join('')+'</div>';
+  items.map(x=>{const e=num(x.expected_qty),p=num(x.picked_qty),ret=num(x.return_required_qty),pc=e?Math.min(100,Math.round(Math.min(p,e)/e*100)):0,missing=Math.max(0,e-p);const removed=!!x.is_removed;return '<div class="item '+(removed?'removed':'')+'"><div class="name">'+esc(x.product)+(removed?'<span class="badge amber">убрано корректировкой</span>':'')+(ret>0?'<span class="badge red">вернуть '+esc(qty(ret))+'</span>':'')+'</div><div class="meta">'+esc(x.sku)+' · '+esc(x.barcode)+' · <b>'+esc(qty(p))+' / '+esc(qty(e))+' '+esc(x.unit||'шт.')+'</b></div>'+(removed?'':'<div class="progress"><i style="width:'+pc+'%"></i></div>')+'<div class="item-actions">'+(ret>0?'<button type="button" class="mini return" data-return-item="'+esc(x.id)+'">↩ Вернул лишнее '+esc(qty(ret))+'</button>':'')+(!removed&&missing>0&&ret<=0?'<button type="button" class="mini short" data-shortage-item="'+esc(x.id)+'">⚠ Нет товара · '+esc(qty(missing))+'</button>':'')+(x.shortage_status?'<span class="badge amber">недостача: '+esc(x.shortage_status)+'</span>':'')+'</div></div>'}).join('')+'</div>';
+ document.querySelectorAll('[data-return-item]').forEach(b=>b.onclick=()=>confirmReturn(b.dataset.returnItem));
+ document.querySelectorAll('[data-shortage-item]').forEach(b=>b.onclick=()=>reportShortage(b.dataset.shortageItem));
  show('order-card',true);show('scan-card',true);
  const ready=selected.status==='ready';
  $('scan-code').disabled=ready;$('scan-qty').disabled=ready;$('scan-btn').disabled=ready||busy;
@@ -199,6 +201,35 @@ async function scan(){
  }catch(e){
   scanStatus('Связь не подтвердила скан. Не сканируйте повторно другой раз: нажмите «Добавить» ещё раз с тем же кодом — CRM использует тот же ID операции. '+String(e?.message||e),'amber');beep(false);
  }finally{busy=false;render();if(session&&selected?.status!=='ready')$('scan-code')?.focus()}
+}
+async function reportShortage(itemId){
+ if(busy||!selected)return;
+ const item=(selected.items||[]).find(x=>x.id===itemId);if(!item)return;
+ const missing=Math.max(0,num(item.expected_qty)-num(item.picked_qty));
+ if(missing<=0)return;
+ if(!confirm('Зафиксировать недостачу '+qty(missing)+' шт. по '+String(item.sku||'позиции')+'?\nОстальные позиции заказа можно продолжать собирать.'))return;
+ busy=true;render();scanStatus('Фиксирую недостачу…','amber');
+ try{
+  const r=await rpc('warehouse_pick_device_shortage_v2',{p_device_token:session.token,p_order_id:selected.id,p_item_id:itemId,p_note:null});
+  if(!r?.ok)throw new Error(({nothing_missing:'Остаток уже собран.',return_required_first:'Сначала верните лишнее по корректировке.',order_not_open:'Заказ недоступен.'}[r?.reason])||String(r?.reason||'Не удалось зафиксировать недостачу'));
+  beep(false);scanStatus('⚠ Недостача зафиксирована: '+String(r.sku||'')+' · не хватает '+qty(r.missing_qty)+' шт. ОМ увидит решение по заказу.','amber');
+  await loadOrders(selected.id);
+ }catch(e){scanStatus(String(e?.message||e),'red');beep(false)}
+ finally{busy=false;render()}
+}
+async function confirmReturn(itemId){
+ if(busy||!selected)return;
+ const item=(selected.items||[]).find(x=>x.id===itemId);if(!item)return;
+ const ret=num(item.return_required_qty);if(ret<=0)return;
+ if(!confirm('Подтвердить, что '+qty(ret)+' шт. '+String(item.sku||'')+' физически возвращены из заказа на склад?'))return;
+ busy=true;render();scanStatus('Подтверждаю возврат лишнего…','blue');
+ try{
+  const r=await rpc('warehouse_pick_device_confirm_return_v2',{p_device_token:session.token,p_order_id:selected.id,p_item_id:itemId});
+  if(!r?.ok)throw new Error(String(r?.reason||'Не удалось подтвердить возврат'));
+  beep(true);scanStatus('✓ Лишнее возвращено: '+String(r.sku||'')+' · '+qty(r.returned_qty)+' шт.','green');
+  await loadOrders(selected.id);
+ }catch(e){scanStatus(String(e?.message||e),'red');beep(false)}
+ finally{busy=false;render()}
 }
 async function undo(){
  if(busy||!selected)return;
@@ -234,7 +265,7 @@ $('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.mess
 $('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.191',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.193',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
