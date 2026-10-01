@@ -17,7 +17,7 @@ function isBoss(){try{return String(currentProfile?.role||'').toLowerCase()==='b
 function currentEmail(){try{return String(currentProfile?.email||currentUser?.email||'').trim().toLowerCase()}catch(_){return''}}
 function canReceiving(){return ['payushin_ar@resanta.ru','vitebsk@resanta.ru','sidarovich_kn@resanta.ru'].includes(currentEmail())}
 function canPicking(){const x=window.RESANTA_WAREHOUSE_PICKER_SESSION_V1;return x?.role==='warehouse'&&x?.email===currentEmail()}
-async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('Соединение с базой ещё не готово');const {data,error}=await d.rpc(name,args);if(error)throw error;return data;}
+async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('Соединение с базой ещё не готово');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data;}
 function ensureCss(){if($('warehouse-v23620-css'))return;const s=document.createElement('style');s.id='warehouse-v23620-css';s.textContent=`
 #wc-v23620 .wc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 #wc-v23620 .wc-tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin:0 0 14px}#wc-v23620 .wc-tab{border:1px solid var(--border);background:#fff;border-radius:9px;padding:9px 13px;white-space:nowrap;cursor:pointer;font-weight:700;font-size:12px}#wc-v23620 .wc-tab.active{background:var(--ab);border-color:#60A5FA;color:var(--at)}
