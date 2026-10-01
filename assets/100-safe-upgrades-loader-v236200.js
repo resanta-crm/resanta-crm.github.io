@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SAFE_UPGRADES_LOADER_V236200)return;
-const V='23.6.201',flights=new Map();
+const V='23.6.202',flights=new Map();
 function active(id){const name=String(id||'').replace(/^page-/,'');return !!document.getElementById(id)?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')===name}
 function load(path,guard){
  if(window[guard])return Promise.resolve(true);
@@ -19,7 +19,7 @@ function load(path,guard){
 }
 function route(){
  try{
-   if(active('page-vip')||active('page-debt'))load('assets/102-safe-vip-pdz-v236200.js','RESANTA_SAFE_VIP_PDZ_V236200');
+   if(active('page-debt'))load('assets/102-safe-vip-pdz-v236200.js','RESANTA_SAFE_VIP_PDZ_V236200');
    if(active('page-promotions'))load('assets/83-promotions-mo2-selector-v236123.js','RESANTA_PROMOTIONS_MO2_SELECTOR_V236123');
    if(active('page-triovist'))load('assets/104-safe-triovist-v236200.js','RESANTA_SAFE_TRIOVIST_V236200');
  }catch(e){console.warn('SAFE '+V+' route',e)}
