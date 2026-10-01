@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_FINISH_V236134)return;
-const V='v23.6.134';
+const V='v23.6.203';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -38,6 +38,7 @@ function reason(action){
  return null;
 }
 function decorateDashboard(){
+ if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203)return;
  const root=document.getElementById('promo-boss-dash-v236133');if(!root)return;
  root.querySelectorAll('.pbd133-row').forEach(row=>{
    const act=row.querySelector('.pbd133-action');if(act&&!act.querySelector('.pbd134-reason')){const r=reason(act.textContent);if(r){const b=document.createElement('span');b.className='pbd134-reason pbd134-'+r[1];b.textContent=r[0];act.prepend(b)}}
