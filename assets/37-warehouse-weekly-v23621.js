@@ -7,7 +7,7 @@
 if(window.RESANTA_WAREHOUSE_WEEKLY_V23622)return;
 const $=id=>document.getElementById(id), n=v=>Number(v)||0;
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
-async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const {data,error}=await d.rpc(name,args);if(error)throw error;return data}
+async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
 function money(v){return n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN'}
 let busy=false,lastRun=0;
 async function enhance(force=false){
