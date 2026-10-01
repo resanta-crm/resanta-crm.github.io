@@ -6,7 +6,6 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <title>Resanta Заказы · ТСД</title>
-<link rel="manifest" href="/picking-manifest.webmanifest">
 <link rel="icon" href="/picking-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
@@ -34,7 +33,6 @@ button,input,select{font:inherit}.hidden{display:none!important}.wrap{max-width:
   <label>Код подключения</label>
   <input id="pair-code" class="inp" maxlength="8" autocomplete="one-time-code" autocapitalize="characters" placeholder="Например: A1B2C3D4">
   <button id="pair-btn" class="btn primary" style="width:100%;margin-top:12px">Подключить терминал</button>
-  <button id="install-btn-pair" class="btn hidden" style="width:100%;margin-top:8px">⬇ Установить «Resanta Заказы»</button>
   <div id="pair-status" class="status red hidden"></div>
  </div>
 </div>
@@ -43,7 +41,6 @@ button,input,select{font:inherit}.hidden{display:none!important}.wrap{max-width:
  <div class="top">
   <div class="logo">📦</div>
   <div class="grow"><div class="title">Resanta · Сборка заказов</div><div id="device-line" class="sub"></div></div>
-  <button id="install-btn-app" class="btn auto hidden">⬇ Установить</button>
   <button id="refresh-btn" class="btn auto">↻</button>
  </div>
  <div id="session-warning" class="status amber hidden"></div>
@@ -73,7 +70,7 @@ const PICKING_APP_VERSION='2026-10-01-v23.6.186';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
-let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null,installPrompt=null;
+let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v||0);
@@ -98,15 +95,6 @@ async function rpc(name,args={}){
  const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
  if(!r.ok)throw new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));
  return j;
-}
-async function installApp(){
- if(!installPrompt)return;
- try{installPrompt.prompt();await installPrompt.userChoice}catch(_){}
- installPrompt=null;show('install-btn-pair',false);show('install-btn-app',false);
-}
-function exposeInstall(e){
- e.preventDefault();installPrompt=e;
- show('install-btn-pair',!session);show('install-btn-app',!!session);
 }
 async function pair(){
  const key=$('pair-device').value,code=String($('pair-code').value||'').trim().toUpperCase().replace(/\s/g,'');
@@ -206,9 +194,6 @@ async function boot(){
  clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},10000);
 }
 $('pair-btn').onclick=pair;$('pair-code').addEventListener('keydown',e=>{if(e.key==='Enter')pair()});
-$('install-btn-pair').onclick=installApp;$('install-btn-app').onclick=installApp;
-window.addEventListener('beforeinstallprompt',exposeInstall);
-window.addEventListener('appinstalled',()=>{installPrompt=null;show('install-btn-pair',false);show('install-btn-app',false)});
 $('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.message,'red'));
 $('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
 $('undo-btn').onclick=undo;
