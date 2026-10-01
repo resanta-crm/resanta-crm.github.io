@@ -1,6 +1,6 @@
 {
-  "version": "23.6.200",
+  "version": "23.6.201",
   "released_at": "2026-10-01",
-  "purpose": "Safe lazy business upgrades: mandatory AI markdown task, full Promotions catalog, VIP and PDZ controls, Triovist parser isolation and motivation comparison",
-  "deploy_trigger": "2026-10-01T14:25:00+03:00"
+  "purpose": "Persistent VIP month filters integrated with fast VIP performance core; period changes reuse the existing history index",
+  "deploy_trigger": "2026-10-01T14:45:00+03:00"
 }
