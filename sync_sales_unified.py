@@ -28,7 +28,7 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.167"
+VERSION = "v23.6.197"
 MINSK = ZoneInfo("Europe/Minsk")
 TARGET_HOURS = {9, 13, 17}
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
@@ -153,8 +153,12 @@ def choose_pending_slice(headers: list[dict], statuses: dict[str, dict]) -> dict
             by_slice[key] = meta
     slices = sorted(by_slice.items(), key=lambda item: item[0])
 
-    sales_stamp = status_stamp(statuses.get("sales"))
-    tri_stamp = status_stamp(statuses.get("triovist_sales"))
+    sales_row = statuses.get("sales") or {}
+    tri_row = statuses.get("triovist_sales") or {}
+    sales_stamp = status_stamp(sales_row)
+    tri_stamp = status_stamp(tri_row)
+    sales_period = str(sales_row.get("report_period") or "").strip()
+    tri_period = str(tri_row.get("report_period") or "").strip()
     stamps = [x for x in (sales_stamp, tri_stamp) if x is not None]
 
     if sales_stamp is not None and tri_stamp is not None and same_stamp(sales_stamp, tri_stamp):
@@ -162,8 +166,34 @@ def choose_pending_slice(headers: list[dict], statuses: dict[str, dict]) -> dict
         pending = [meta for key, meta in slices if key > baseline_key]
         return pending[0] if pending else None
 
-    # Переход со старой раздельной схемы: синхронизируем обе части на логическом
-    # срезе, которого уже достигла более свежая цепочка, а не перескакиваем дальше.
+    # ВАЖНО при переходе месяца: legacy-импорт одной части мог уже записать
+    # октябрь, когда вторая часть ещё оставалась на незакрытом сентябре.
+    # Нельзя брать max(source_message_at): тогда финальный срез прошлого месяца
+    # (например 30.09 17:00) навсегда считается "старым" и пропускается.
+    # Сначала закрываем более старый report_period самым свежим разрешённым
+    # срезом этого месяца, и только затем движемся в новый месяц.
+    if sales_period and tri_period and sales_period != tri_period:
+        older_period = min(sales_period, tri_period)
+        older_stamp = sales_stamp if sales_period == older_period else tri_stamp
+        candidates = []
+        for key, meta in slices:
+            local = normalize_dt(meta["sent"]).astimezone(MINSK)
+            if local.strftime("%Y-%m") != older_period:
+                continue
+            if older_stamp is not None and normalize_dt(meta["sent"]) <= older_stamp:
+                continue
+            candidates.append(meta)
+        if candidates:
+            chosen = candidates[-1]
+            local = normalize_dt(chosen["sent"]).astimezone(MINSK)
+            log(
+                f"⚠️ Месяцы sales/Triovist разошлись ({sales_period} vs {tri_period}). "
+                f"Сначала закрываю {older_period} срезом {local:%d.%m.%Y %H:%M}."
+            )
+            return chosen
+
+    # Переход со старой раздельной схемы внутри одного месяца: синхронизируем обе
+    # части на логическом срезе, которого уже достигла более свежая цепочка.
     if stamps:
         baseline_key = slice_key(max(stamps))
         same = [meta for key, meta in slices if key == baseline_key]
