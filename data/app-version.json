@@ -1,6 +1,6 @@
 {
-  "version": "23.6.189",
+  "version": "23.6.195",
   "released_at": "2026-10-01",
-  "purpose": "Fix Pages deployment root cause: unified TSD and picking files are now included in the public artifact; deployment fails if required TSD files are missing",
-  "deploy_trigger": "2026-10-01T10:20:00+03:00"
+  "purpose": "Warehouse workflow: invoice revisions without losing picked quantities, shortage decisions, split large orders between TSD-1/TSD-2, separate CRM Warehouse Telegram chat",
+  "deploy_trigger": "2026-10-01T11:20:00+03:00"
 }
