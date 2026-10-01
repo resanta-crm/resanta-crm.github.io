@@ -1,6 +1,6 @@
 {
-  "version": "23.6.184",
-  "released_at": "2026-09-30",
-  "purpose": "Office Manager assigns orders to fixed TSD-1/2 without personal emails; disconnected TSD is explicitly NOT DELIVERED and assignment can be undone. Telegram is not connected.",
-  "deploy_trigger": "2026-09-30T17:05:00Z"
+  "version": "23.6.185",
+  "released_at": "2026-10-01",
+  "purpose": "Secure TSD pairing without employee email/password; Office Manager assigns TSD-1/TSD-2; isolated picking.html scans exact order quantities and auto-sets Ready for shipment; Telegram remains off",
+  "deploy_trigger": "2026-10-01T09:35:00+03:00"
 }
