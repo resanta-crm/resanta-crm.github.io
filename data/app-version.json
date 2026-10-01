@@ -1,6 +1,6 @@
 {
-  "version": "23.6.198",
+  "version": "23.6.200",
   "released_at": "2026-10-01",
-  "purpose": "Emergency rollback to last working CRM after v23.6.199 startup regression",
-  "deploy_trigger": "2026-10-01T14:10:00+03:00"
+  "purpose": "Safe lazy business upgrades: mandatory AI markdown task, full Promotions catalog, VIP and PDZ controls, Triovist parser isolation and motivation comparison",
+  "deploy_trigger": "2026-10-01T14:25:00+03:00"
 }
