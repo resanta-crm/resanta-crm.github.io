@@ -15,7 +15,7 @@ const money=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maxi
 function d10(v){return safe(v).slice(0,10)}
 function monthEnd(v){
   const s=d10(v||window.TODAY||new Date().toISOString()),y=Number(s.slice(0,4)),m=Number(s.slice(5,7));
-  return new Date(y,m,0).toISOString().slice(0,10);
+  return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);
 }
 function due(date,mode){return mode==='call'?monthEnd(window.TODAY):d10(date||window.TODAY||new Date().toISOString())}
 function root(){return document.getElementById('aiweek-result')}
