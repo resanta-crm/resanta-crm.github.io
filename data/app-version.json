@@ -1,6 +1,6 @@
 {
-  "version": "23.6.188",
+  "version": "23.6.189",
   "released_at": "2026-10-01",
-  "purpose": "Fix TSD unified hub 404 by publishing root /tsd.html with root manifest and isolated service worker; legacy shortcuts redirect there",
-  "deploy_trigger": "2026-10-01T10:10:00+03:00"
+  "purpose": "Fix Pages deployment root cause: unified TSD and picking files are now included in the public artifact; deployment fails if required TSD files are missing",
+  "deploy_trigger": "2026-10-01T10:20:00+03:00"
 }
