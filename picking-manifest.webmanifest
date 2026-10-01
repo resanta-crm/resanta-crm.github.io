@@ -1,0 +1,14 @@
+{
+  "name":"Resanta Заказы",
+  "short_name":"Заказы",
+  "description":"ТСД-сборка заказов Resanta CRM",
+  "start_url":"/picking.html",
+  "scope":"/picking.html",
+  "display":"standalone",
+  "background_color":"#f4f6f8",
+  "theme_color":"#185FA5",
+  "lang":"ru",
+  "icons":[
+    {"src":"/picking-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
