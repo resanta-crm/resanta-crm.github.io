@@ -24,7 +24,6 @@ const INVENTORY_APP_VERSION='2026-09-22-v23.6.150-two-tsd-readable';
 })();
 </script>
 <title>Resanta Склад · ТСД</title>
-<link rel="manifest" href="/inventory-manifest.webmanifest">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827;min-height:100dvh}
@@ -61,7 +60,6 @@ label{display:block;font-size:13px;color:#6B7280;font-weight:700;margin:9px 0 5p
   <div class="top">
     <div class="logo">📦</div>
     <div class="grow"><div class="title">Resanta Склад</div><div id="user-line" class="sub"></div></div>
-    <button id="install-btn" class="btn secondary install hidden">Установить</button>
     <button id="logout-btn" class="btn secondary install">Выйти</button>
   </div>
   <div id="access-error" class="status red hidden"></div>
@@ -125,7 +123,7 @@ function tsdLabel(email){
  if(email==='sidarovich_kn@resanta.ru')return 'ТСД-2 · Кладовщик';
  return 'ТСД';
 }
-let session=null,active=null,access=null,lastUnknown='',installPrompt=null,flushing=false;
+let session=null,active=null,access=null,lastUnknown='',flushing=false;
 let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
@@ -425,8 +423,6 @@ async function init(){
  $('undo-btn').onclick=undo;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
  window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
- window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;show('install-btn',true)});
- $('install-btn').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;show('install-btn',false)};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
  if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.150',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
