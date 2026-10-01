@@ -7,7 +7,7 @@ const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const ym=v=>String(v||'').slice(0,7),months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const label=v=>{const s=ym(v),m=+s.slice(5,7);return(months[m-1]||s)+' '+s.slice(0,4)};
 const shift=(v,n)=>{const s=ym(v),d=new Date(+s.slice(0,4),+s.slice(5,7)-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
-const active=id=>!!document.getElementById(id)?.classList.contains('active');
+const active=id=>{const name=String(id||'').replace(/^page-/,'');return !!document.getElementById(id)?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')===name};
 const historyMonths=()=>{try{return[...new Set((allPurchaseHistory||[]).map(x=>ym(x.month)).filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse()}catch(_){return[]}};
 let vipMonth='',vipMode='yoy';
 try{vipMonth=localStorage.getItem(KEY)||'';vipMode=localStorage.getItem(MODE)||'yoy'}catch(_){}
