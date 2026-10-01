@@ -1,6 +1,6 @@
 {
-  "version": "23.6.201",
+  "version": "23.6.202",
   "released_at": "2026-10-01",
-  "purpose": "Persistent VIP month filters integrated with fast VIP performance core; period changes reuse the existing history index",
-  "deploy_trigger": "2026-10-01T14:45:00+03:00"
+  "purpose": "Root fix for disappearing VIP filters: final Performance renderer owns period controls; legacy VIP filter disabled; period changes reuse the existing 1C history index",
+  "deploy_trigger": "2026-10-01T15:28:00+03:00"
 }
