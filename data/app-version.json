@@ -1,6 +1,6 @@
 {
-  "version": "23.6.196",
+  "version": "23.6.197",
   "released_at": "2026-10-01",
-  "purpose": "TSD barcode scan fix: auto-submit hardware scans without Enter, clear field after success, play scan sound on both TSDs",
-  "deploy_trigger": "2026-10-01T11:50:00+03:00"
+  "purpose": "Fix month-boundary unified sales import, restore final September field/Triovist sales, refresh Manager KPI from current 1C history, carry approved unpaid payments into current month",
+  "deploy_trigger": "2026-10-01T12:45:00+03:00"
 }
