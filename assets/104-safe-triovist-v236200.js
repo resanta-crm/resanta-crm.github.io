@@ -59,6 +59,20 @@ document.addEventListener('click',e=>{
  if(e.target.closest?.('.nav-item,.bn-item,[data-page]'))setTimeout(sync,180);
 },true);
 document.addEventListener('change',e=>{const x=e.target.closest?.('[data-mmonth]');if(x)choose(x.value)},true);
-setTimeout(sync,120);
+function waitForTriUi(){
+ const root=document.getElementById('page-triovist');if(!root)return;
+ let obs=null;
+ const check=()=>{
+   sync();
+   if(document.getElementById('tr14-shell')&&document.getElementById('tri21-control-v236107')){obs?.disconnect();obs=null}
+ };
+ if(typeof MutationObserver==='function'){
+   obs=new MutationObserver(check);
+   obs.observe(root,{childList:true,subtree:true});
+   setTimeout(()=>{obs?.disconnect();obs=null},8000);
+ }
+ check();
+}
+setTimeout(waitForTriUi,120);
 window.RESANTA_SAFE_TRIOVIST_V236200=Object.freeze({version:V,parserOnlyInParserTab:true,motivationCompare:true,noPolling:true});
 })();
