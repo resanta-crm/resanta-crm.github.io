@@ -12,7 +12,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const n=v=>Number(v)||0;
 const qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
-async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const {data,error}=await d.rpc(name,args);if(error)throw error;return data}
+async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
 function dateRu(v){if(!v)return'—';try{return new Date(String(v).length===10?String(v)+'T00:00:00':String(v)).toLocaleDateString('ru-RU',{timeZone:'Europe/Minsk'})}catch(_){return String(v)}}
 function stampRu(v){if(!v)return'—';try{return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(v)).replace(',','')}catch(_){return String(v)}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
