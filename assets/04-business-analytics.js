@@ -728,7 +728,7 @@ renderVip=function(){
       const curLabel=vipMonthLabel(period.cur),prevLabel=vipMonthLabel(period.prev),asOf=TODAY.split('-').reverse().join('.');
       periodEl.innerHTML='<div class="card-title">Как считается ВИП</div>'
         +'<div style="font-size:13px;line-height:1.65"><b>Ориентир:</b> полный <b>'+prevLabel+'</b> → текущий <b>'+curLabel+'</b>'+(period.partial?' <span class="tag" style="background:var(--amb);color:var(--am)">факт на '+asOf+'</span>':'')+'</div>'
-        +'<div style="font-size:12px;color:var(--sub);margin-top:5px">Процент показывает, сколько менеджер уже сделал от оборота этого же месяца прошлого года. Это <b>не падение</b> в незакрытом месяце, а прогресс к прошлогодней планке.</div>'
+        +'<div style="font-size:12px;color:var(--sub);margin-top:5px">'+(period.compareMode==='mom'?'Сравнение идёт с предыдущим месяцем.':'Процент показывает, сколько менеджер уже сделал от оборота этого же месяца прошлого года. Это <b>не падение</b> в незакрытом месяце, а прогресс к прошлогодней планке.')+'</div>'
         +(!period.comparable?'<div style="font-size:12px;color:var(--r);margin-top:5px">В purchase_history нет данных за '+prevLabel+' — сравнение пока невозможно.</div>':'')
         +'<div style="font-size:12px;color:var(--sub);margin-top:5px">Источник: purchase_history из 1С. '+(crmImportStatus('sales')?'Последняя успешная загрузка: <b>'+crmDateTime(crmImportStatus('sales').last_success_at)+'</b>.':'')+'</div>';
     }else periodEl.innerHTML='<div class="card-title">Как считается ВИП</div><div style="font-size:12px;color:var(--sub)">История продаж ещё не загружена.</div>';
@@ -2208,7 +2208,7 @@ window.RESANTA_TRIOVIST_V227324=Object.freeze({
 (function(){
 'use strict';
 if(window.RESANTA_CRM_PERF_V227316)return;
-const VERSION='v22.7.31.6';
+const VERSION='v22.7.31.7';
 const legacyVipSummary=window.getVipClientSummary;
 
 // 1) Безопасный single-flight для одинаковых параллельных чтений больших таблиц.
@@ -2296,16 +2296,25 @@ function targetPct(prev,cur){prev=Number(prev)||0;cur=Number(cur)||0;if(prev<=0)
 function targetGap(prev,cur){return Math.max(0,(Number(prev)||0)-(Number(cur)||0));}
 function targetTag(prev,cur){
   prev=Number(prev)||0;cur=Number(cur)||0;
-  if(prev<0)return '<span class="tag tag-gray">возвраты в базе 2025</span>';
+  const p=vipPeriod(),suffix=p.compareMode==='mom'?'к пред. мес.':'к '+String(p.prev||'').slice(0,4);
+  if(prev<0)return '<span class="tag tag-gray">возвраты в базе</span>';
   if(prev===0&&cur>0)return '<span class="tag tag-m">новые продажи</span>';
-  if(prev===0)return '<span class="tag tag-gray">нет базы 2025</span>';
-  const pct=targetPct(prev,cur);if(pct>=100)return '<span class="tag tag-m">✅ '+pct+'% к 2025</span>';
-  return '<span class="tag" style="background:var(--amb);color:var(--am)">🎯 '+pct+'% к 2025</span>';
+  if(prev===0)return '<span class="tag tag-gray">нет базы</span>';
+  const pct=targetPct(prev,cur);if(pct>=100)return '<span class="tag tag-m">✅ '+pct+'% '+suffix+'</span>';
+  return '<span class="tag" style="background:var(--amb);color:var(--am)">🎯 '+pct+'% '+suffix+'</span>';
 }
 function vipPeriod(){
-  const months=vipPerf.months,current=currentMonth();if(!months.length)return {prev:null,cur:null,currentMonth:current,missingCurrent:true,comparable:false,partial:true};
+  const months=vipPerf.months,current=currentMonth();
+  if(!months.length)return {prev:null,cur:null,currentMonth:current,missingCurrent:true,comparable:false,partial:true,compareMode:'yoy'};
+  try{
+    const o=window.RESANTA_VIP_PERIOD_OVERRIDE_V236201?.();
+    if(o&&/^\d{4}-\d{2}$/.test(String(o.cur||''))){
+      const cur=String(o.cur),prev=String(o.prev||'');
+      return {prev:prev||null,cur,currentMonth:current,missingCurrent:cur!==current,comparable:!!prev&&vipPerf.monthSet.has(prev),partial:cur===current,compareMode:o.compareMode||'yoy'};
+    }
+  }catch(e){console.warn(VERSION+' VIP period override',e);}
   const cur=vipPerf.monthSet.has(current)?current:months[months.length-1],prev=prevYearMonth(cur);
-  return {prev,cur,currentMonth:current,missingCurrent:cur!==current,comparable:vipPerf.monthSet.has(prev),partial:cur===current};
+  return {prev,cur,currentMonth:current,missingCurrent:cur!==current,comparable:vipPerf.monthSet.has(prev),partial:cur===current,compareMode:'yoy'};
 }
 function defAliases(def){return [...new Set([def?.client_name,def?.legal_name,...(def?.member_names||[])].filter(Boolean))];}
 function matchedClientsFor(def){
@@ -2461,6 +2470,8 @@ try{if(typeof freshAnalytics22717==='function')freshAnalytics22717=async functio
 
 // Если история была заменена импортом/обновлением — сбрасываем только локальный индекс.
 window.addEventListener('resanta-v2273-status',()=>{if(vipDataChanged())resetVipPerf();});
+window.addEventListener('resanta-vip-period-change',()=>{resetVipPerf();if(activePage()==='vip')renderVipFastEntry();});
+
 
 window.RESANTA_CRM_PERF_V227316=Object.freeze({version:VERSION,priority:'navigation',vipChunkedIndex:true,vipLazyDetails:true,vipLazyCategories:true,vipLazySku:true,duplicateVipRenderSuppression:true,loadAllRowsSingleFlight:true,loadDataSingleFlight:true,noBusinessLogicChange:true});
 })();
