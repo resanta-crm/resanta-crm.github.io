@@ -161,7 +161,8 @@ function pageNeeds(page){
   if(page==='visits')return['visits','routes','tasks','absences'];
   if(page==='my-routes'||page==='route'||page==='routes-boss')return['routes','visits','tasks','absences'];
   if(page==='alerts')return['tasks','partial','absences'];
-  if(page==='control'||page==='managers')return['tasks','visits','routes','absences'];
+  if(page==='control')return['tasks','visits','routes','absences'];
+  if(page==='managers')return['tasks','visits','routes','absences','kpi','imports'];
   if(page==='vip')return['vips'];
   if(page==='falling'||page==='sales'||page==='abc'||page==='payments')return['imports'];
   return[];
@@ -364,7 +365,7 @@ function prefetchFeatureForPage(page,priority=65){
   }else if(page==='vip'){
     queueResource('vips',priority);
     featureJob('history',priority-2,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-vip'});});
-  }else if(page==='sales'||page==='falling'){
+  }else if(page==='sales'||page==='falling'||page==='managers'){
     featureJob('history',priority,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-'+page});});
   }else if(page==='abc'){
     featureJob('history',priority,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-abc'});});
@@ -491,7 +492,7 @@ function pageKeys(p){
     route:['routes','visits','tasks'],
     control:['tasks','visits','routes','absences'],
     alerts:['tasks','promotions','sales','vips'],
-    managers:['tasks','visits','routes','absences','users'],
+    managers:['tasks','visits','routes','absences','users','kpi','imports','sales'],
     users:['users'],
     vip:['vips','sales'],
     sales:['sales'],
@@ -550,7 +551,7 @@ async function refreshKey(key){
       }else if(key==='sales'){
         if(active==='alerts'&&typeof window.crmSignalsRefreshV227329==='function'){
           await window.crmSignalsRefreshV227329('sales');
-        }else if(['sales','falling','abc','vip'].includes(active)&&typeof window.v22722EnsureHistory==='function'){
+        }else if(['sales','falling','abc','vip','managers'].includes(active)&&typeof window.v22722EnsureHistory==='function'){
           await window.v22722EnsureHistory({force:true,reason:'responsive-version'});
         }else return false;
       }else if(key==='payments'){
