@@ -54,7 +54,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
  <div id="order-card" class="card hidden"></div>
  <div id="scan-card" class="card scanbox hidden">
   <b>Сканирование</b>
-  <div class="sub">Сканируйте штрихкод. Если сканер не добавляет Enter — нажмите «Добавить».</div>
+  <div class="sub">Аппаратный скан определяется автоматически: штрихкод сам добавится в заказ. Для ручного ввода наберите код и нажмите «Добавить».</div>
   <div class="row" style="margin-top:9px">
     <input id="scan-code" class="inp" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Штрихкод / артикул">
     <input id="scan-qty" class="inp" type="number" min="0.001" step="1" value="1" style="max-width:110px">
@@ -69,12 +69,13 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-01-v23.6.195';
+const PICKING_APP_VERSION='2026-10-01-v23.6.196';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
 const WAREHOUSE_CHAT_URL=SUPABASE_URL+'/functions/v1/crm-warehouse-chat-v2';
 let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null;
+let scannerInput={timer:null,start:0,last:0,lastLen:0,count:0,rapid:false};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v||0);
@@ -185,6 +186,35 @@ function render(){
  if(ready)scanStatus('Заказ полностью собран. Передайте его в зону готовых к отгрузке.','green');
  else if(doneHere&&selected.assignment_mode==='split')scanStatus('✓ Ваша часть заказа собрана. Ждём завершения второго ТСД.','green');
 }
+function resetScannerInput(){
+ if(scannerInput.timer)clearTimeout(scannerInput.timer);
+ scannerInput={timer:null,start:0,last:0,lastLen:0,count:0,rapid:false};
+}
+function detectHardwareScan(){
+ const el=$('scan-code');if(!el)return;
+ const raw=String(el.value||''),value=raw.trim(),now=Date.now(),len=raw.length;
+ if(scannerInput.timer){clearTimeout(scannerInput.timer);scannerInput.timer=null}
+ if(!value){resetScannerInput();return}
+ const delta=Math.max(0,len-(scannerInput.lastLen||0));
+ const gap=scannerInput.last?now-scannerInput.last:9999;
+ if(!scannerInput.start||gap>220||len<scannerInput.lastLen){
+  scannerInput.start=now;scannerInput.count=delta;scannerInput.rapid=delta>=4;
+ }else{
+  scannerInput.count+=delta;
+  if(delta>=4)scannerInput.rapid=true;
+ }
+ scannerInput.last=now;scannerInput.lastLen=len;
+ const duration=now-scannerInput.start;
+ if(!scannerInput.rapid&&scannerInput.count>=7&&duration<=500)scannerInput.rapid=true;
+ if(!scannerInput.rapid)return;
+ const snapshot=value;
+ scannerInput.timer=setTimeout(()=>{
+  const current=String($('scan-code')?.value||'').trim();
+  if(busy||!selected||selected.status==='ready'||current!==snapshot||current.length<3)return;
+  resetScannerInput();
+  scan();
+ },130);
+}
 async function scan(){
  if(busy||!selected||selected.status==='ready')return;
  const code=String($('scan-code').value||'').trim(),q=Number($('scan-qty').value||1);
@@ -200,7 +230,7 @@ async function scan(){
    if(r?.reason==='device_session_invalid')saveSession(null);
    scanStatus(msg,'red');beep(false);return;
   }
-  pendingScan=null;beep(true);$('scan-code').value='';$('scan-qty').value='1';
+  pendingScan=null;resetScannerInput();beep(true);$('scan-code').value='';$('scan-qty').value='1';
   scanStatus((r.duplicate_event?'Повторный ответ без повторного списания. ':'✓ ')+(r.sku||'')+' · '+qty(r.picked_qty)+' / '+qty(r.expected_qty)+(r.order_status==='ready'?' · ГОТОВО':''),r.order_status==='ready'?'green':'blue');
   dispatchWarehouseChat();
   await loadOrders(selected.id);
@@ -269,10 +299,12 @@ document.querySelectorAll('[data-pair-device]').forEach(b=>b.addEventListener('c
 ['pointerdown','touchstart','keydown'].forEach(type=>document.addEventListener(type,()=>{unlockAudio()},true));
 $('pair-btn').onclick=pair;$('pair-code').addEventListener('keydown',e=>{if(e.key==='Enter')pair()});
 $('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.message,'red'));
-$('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
+$('scan-btn').onclick=()=>{resetScannerInput();scan()};
+$('scan-code').addEventListener('input',detectHardwareScan);
+$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();resetScannerInput();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.195',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.196',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
