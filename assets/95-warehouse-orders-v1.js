@@ -309,7 +309,7 @@ async function decideShortage(id,decision){
 function splitDefaults(items){
  const totals={tsd1:0,tsd2:0},out={};
  (items||[]).filter(x=>!x.is_removed&&Number(x.expected_qty)>0).forEach(x=>{
-  const existing=String(x.device_key||'');
+  const existing=selected?.assignment_mode==='split'?String(x.device_key||''):'';
   const k=(existing==='tsd1'||existing==='tsd2')?existing:(totals.tsd1<=totals.tsd2?'tsd1':'tsd2');
   out[x.id]=k;totals[k]+=Number(x.expected_qty||0);
  });
