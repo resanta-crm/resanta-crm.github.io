@@ -69,10 +69,11 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-01-v23.6.194';
+const PICKING_APP_VERSION='2026-10-01-v23.6.195';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
+const WAREHOUSE_CHAT_URL=SUPABASE_URL+'/functions/v1/crm-warehouse-chat-v2';
 let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -111,6 +112,9 @@ async function beep(ok=true){
   }
  }catch(_){}
  try{if(navigator.vibrate)navigator.vibrate(ok?[70,45,70]:[160,70,160])}catch(_){}
+}
+async function dispatchWarehouseChat(){
+ try{await fetch(WAREHOUSE_CHAT_URL,{method:'POST',headers:{'content-type':'application/json'}})}catch(_){}
 }
 async function rpc(name,args={}){
  const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),{
@@ -198,6 +202,7 @@ async function scan(){
   }
   pendingScan=null;beep(true);$('scan-code').value='';$('scan-qty').value='1';
   scanStatus((r.duplicate_event?'Повторный ответ без повторного списания. ':'✓ ')+(r.sku||'')+' · '+qty(r.picked_qty)+' / '+qty(r.expected_qty)+(r.order_status==='ready'?' · ГОТОВО':''),r.order_status==='ready'?'green':'blue');
+  dispatchWarehouseChat();
   await loadOrders(selected.id);
  }catch(e){
   scanStatus('Связь не подтвердила скан. Не сканируйте повторно другой раз: нажмите «Добавить» ещё раз с тем же кодом — CRM использует тот же ID операции. '+String(e?.message||e),'amber');beep(false);
@@ -214,6 +219,7 @@ async function reportShortage(itemId){
   const r=await rpc('warehouse_pick_device_shortage_v2',{p_device_token:session.token,p_order_id:selected.id,p_item_id:itemId,p_note:null});
   if(!r?.ok)throw new Error(({nothing_missing:'Остаток уже собран.',return_required_first:'Сначала верните лишнее по корректировке.',order_not_open:'Заказ недоступен.'}[r?.reason])||String(r?.reason||'Не удалось зафиксировать недостачу'));
   beep(false);scanStatus('⚠ Недостача зафиксирована: '+String(r.sku||'')+' · не хватает '+qty(r.missing_qty)+' шт. ОМ увидит решение по заказу.','amber');
+  dispatchWarehouseChat();
   await loadOrders(selected.id);
  }catch(e){scanStatus(String(e?.message||e),'red');beep(false)}
  finally{busy=false;render()}
@@ -266,7 +272,7 @@ $('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.mess
 $('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.194',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.195',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
