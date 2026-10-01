@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#185FA5">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Resanta · Сборка заказов</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+button,input,select{font:inherit}.hidden{display:none!important}.wrap{max-width:780px;margin:0 auto;padding:16px 14px 90px}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:14px}.logo{width:50px;height:50px;border-radius:14px;background:#185FA5;color:#fff;display:grid;place-items:center;font-size:26px}.grow{flex:1}.title{font-weight:900;font-size:22px}.sub{font-size:13px;color:#64748b;line-height:1.45}
+.card{background:#fff;border:1px solid #d1d5db;border-radius:16px;padding:15px;margin-bottom:12px}.btn{border:1px solid #cbd5e1;border-radius:10px;background:#fff;padding:11px 14px;font-weight:700;cursor:pointer;min-height:44px}.btn.primary{background:#185FA5;border-color:#185FA5;color:#fff}.btn.warn{background:#fff7ed;border-color:#fdba74;color:#9a3412}.btn:disabled{opacity:.5}
+.inp{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:12px 13px;background:#fff;min-height:46px}label{display:block;font-weight:700;font-size:13px;margin:10px 0 6px}
+.status{border-radius:12px;padding:11px 13px;margin-top:10px;font-size:14px;line-height:1.4}.blue{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}.green{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}.red{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}.amber{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.order{width:100%;text-align:left;border:1px solid #d1d5db;background:#fff;border-radius:12px;padding:12px;margin:7px 0;cursor:pointer}.order.active{border-color:#60a5fa;background:#eff6ff}.order b{font-size:16px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.row .auto{flex:0 0 auto}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.k{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px}.k .v{font-weight:900;font-size:20px}.k .l{font-size:11px;color:#64748b}
+.item{padding:11px 0;border-bottom:1px solid #e5e7eb}.item:last-child{border-bottom:0}.item .name{font-weight:700}.item .meta{font-size:13px;color:#64748b;margin-top:3px}.progress{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:6px}.progress>i{display:block;height:100%;background:#185FA5}
+.scanbox{position:sticky;bottom:10px;z-index:3;box-shadow:0 8px 30px rgba(15,23,42,.18)}.ready{border:2px solid #22c55e}.mut{font-size:12px;color:#64748b}
+@media(max-width:560px){.kpi{grid-template-columns:1fr 1fr}.title{font-size:19px}.row>*{flex-basis:100%}.row .auto{flex-basis:auto}}
+</style>
+</head>
+<body>
+<div id="pair-view" class="wrap hidden">
+ <div class="card">
+  <div class="top"><div class="logo">📦</div><div><div class="title">Подключение ТСД к сборке</div><div class="sub">Без почты и пароля сотрудника. Код создаёт офис-менеджер в CRM и действует 10 минут.</div></div></div>
+  <label>Какой терминал</label>
+  <select id="pair-device" class="inp">
+   <option value="tsd1">ТСД-1 · Начальник склада</option>
+   <option value="tsd2">ТСД-2 · Кладовщик</option>
+  </select>
+  <label>Код подключения</label>
+  <input id="pair-code" class="inp" maxlength="8" autocomplete="one-time-code" autocapitalize="characters" placeholder="Например: A1B2C3D4">
+  <button id="pair-btn" class="btn primary" style="width:100%;margin-top:12px">Подключить терминал</button>
+  <div id="pair-status" class="status red hidden"></div>
+ </div>
+</div>
+
+<div id="app-view" class="wrap hidden">
+ <div class="top">
+  <div class="logo">📦</div>
+  <div class="grow"><div class="title">Resanta · Сборка заказов</div><div id="device-line" class="sub"></div></div>
+  <button id="refresh-btn" class="btn auto">↻</button>
+ </div>
+ <div id="session-warning" class="status amber hidden"></div>
+ <div class="card">
+  <b>Мои заказы</b>
+  <div class="mut">Здесь нет цен, НДС, УНП и исходных Excel-файлов.</div>
+  <div id="orders-list" style="margin-top:8px"></div>
+ </div>
+ <div id="order-card" class="card hidden"></div>
+ <div id="scan-card" class="card scanbox hidden">
+  <b>Сканирование</b>
+  <div class="sub">Сканируйте штрихкод. Если сканер не добавляет Enter — нажмите «Добавить».</div>
+  <div class="row" style="margin-top:9px">
+    <input id="scan-code" class="inp" inputmode="none" autocomplete="off" placeholder="Штрихкод / артикул">
+    <input id="scan-qty" class="inp" type="number" min="0.001" step="1" value="1" style="max-width:110px">
+    <button id="scan-btn" class="btn primary auto">Добавить</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button id="undo-btn" class="btn warn auto">↶ Отменить последний скан</button>
+  </div>
+  <div id="scan-status" class="status blue">Готов к сканированию.</div>
+ </div>
+</div>
+<script>
+'use strict';
+const PICKING_APP_VERSION='2026-10-01-v23.6.185';
+const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
+const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
+const SESSION_KEY='resanta_pick_device_session_v1';
+let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null;
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>Number(v||0);
+const qty=v=>num(v).toLocaleString('ru-RU',{maximumFractionDigits:3});
+const statusName=s=>({waiting_pick:'Ожидает сборки',picking:'В сборке',shortage:'Недостача',ready:'Готов к отгрузке'})[s]||s||'—';
+function show(id,on=true){$(id)?.classList.toggle('hidden',!on)}
+function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
+function loadSession(){try{const x=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');return x?.token&&x?.device_key?x:null}catch(_){return null}}
+function saveSession(x){session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
+function scanStatus(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
+function pairStatus(msg,kind='red'){const e=$('pair-status');if(!e)return;e.className='status '+kind;e.textContent=msg;show('pair-status',!!msg)}
+function beep(ok=true){
+ try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=ok?1040:240;g.gain.value=.11;o.connect(g);g.connect(audioCtx.destination);const t=audioCtx.currentTime;o.start(t);o.stop(t+(ok?.08:.22))}catch(_){}
+ try{navigator.vibrate?.(ok?45:[100,45,100])}catch(_){}
+}
+async function rpc(name,args={}){
+ const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),{
+  method:'POST',
+  headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},
+  body:JSON.stringify(args),cache:'no-store'
+ });
+ const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
+ if(!r.ok)throw new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));
+ return j;
+}
+async function pair(){
+ const key=$('pair-device').value,code=String($('pair-code').value||'').trim().toUpperCase().replace(/\s/g,'');
+ if(!/^[0-9A-F]{8}$/.test(code)){pairStatus('Введите 8-значный код из CRM.');return}
+ $('pair-btn').disabled=true;pairStatus('Проверяю код…','blue');
+ try{
+  const r=await rpc('warehouse_pick_pair_redeem_v1',{p_device_key:key,p_code:code});
+  if(!r?.ok){
+   const msg={invalid_code:'Неверный код.',code_expired_or_locked:'Код истёк или заблокирован. Попросите ОМ создать новый.',invalid_code_format:'Неверный формат кода.',device_disabled:'Терминал отключён.'}[r?.reason]||'Не удалось подключить терминал.';
+   throw new Error(msg);
+  }
+  saveSession({token:r.device_token,device_key:r.device_key,label:r.label,paired_at:new Date().toISOString()});
+  $('pair-code').value='';await boot();
+ }catch(e){pairStatus(e?.message||e,'red')}
+ finally{$('pair-btn').disabled=false}
+}
+async function loadOrders(prefer=null){
+ if(!session?.token)return;
+ const r=await rpc('warehouse_pick_device_orders_v1',{p_device_token:session.token,p_limit:30});
+ if(!r?.ok){
+  if(r?.reason==='device_session_invalid'){saveSession(null);await boot();return}
+  throw new Error(r?.reason||'Не удалось получить заказы');
+ }
+ orders=Array.isArray(r.rows)?r.rows:[];
+ $('device-line').textContent=(r.label||session.label||'ТСД')+' · защищённая сборка';
+ if(prefer&&orders.some(x=>x.id===prefer))await openOrder(prefer);
+ else if(selected&&orders.some(x=>x.id===selected.id))await openOrder(selected.id);
+ else if(orders.length)await openOrder((orders.find(x=>x.status==='picking')||orders.find(x=>x.status==='waiting_pick')||orders[0]).id);
+ else{selected=null;render()}
+}
+async function openOrder(id){
+ const d=await rpc('warehouse_pick_device_detail_v1',{p_device_token:session.token,p_order_id:id});
+ if(!d?.ok){if(d?.reason==='device_session_invalid'){saveSession(null);await boot();return}throw new Error(d?.reason||'Заказ недоступен')}
+ selected=d;render();
+ setTimeout(()=>{if(selected?.status!=='ready')$('scan-code')?.focus()},50);
+}
+function render(){
+ if(!session)return;
+ $('orders-list').innerHTML=orders.length?orders.map(o=>'<button type="button" class="order '+(selected?.id===o.id?'active':'')+'" data-order="'+esc(o.id)+'"><b>№'+esc(o.document_no)+'</b> · '+esc(o.customer_display)+'<div class="sub">'+esc(statusName(o.status))+' · '+esc(o.line_count)+' поз. / '+esc(qty(o.total_qty))+' шт.</div></button>').join(''):'<div class="status blue">Новых назначенных заказов пока нет.</div>';
+ document.querySelectorAll('[data-order]').forEach(b=>b.onclick=()=>openOrder(b.dataset.order).catch(e=>scanStatus(e.message,'red')));
+ if(!selected){show('order-card',false);show('scan-card',false);return}
+ const items=selected.items||[];
+ const picked=items.reduce((s,x)=>s+num(x.picked_qty),0),total=items.reduce((s,x)=>s+num(x.expected_qty),0);
+ const pct=total?Math.min(100,Math.round(picked/total*100)):0;
+ $('order-card').innerHTML='<div class="'+(selected.status==='ready'?'ready':'')+'" style="border-radius:12px;padding:'+(selected.status==='ready'?'10px':'0')+'"><h2 style="margin:0 0 5px">Счёт №'+esc(selected.document_no)+'</h2><div class="sub">'+esc(selected.customer_display)+' · '+esc(statusName(selected.status))+'</div>'+
+  '<div class="kpi"><div class="k"><div class="v">'+esc(qty(picked))+'</div><div class="l">Собрано, шт.</div></div><div class="k"><div class="v">'+esc(qty(total))+'</div><div class="l">Нужно, шт.</div></div><div class="k"><div class="v">'+pct+'%</div><div class="l">Готовность</div></div></div>'+
+  (selected.status==='ready'?'<div class="status green"><b>✅ ЗАКАЗ ГОТОВ К ОТГРУЗКЕ</b><br>ОМ уже увидит этот статус в CRM.</div>':'')+
+  items.map(x=>{const e=num(x.expected_qty),p=num(x.picked_qty),pc=e?Math.min(100,Math.round(p/e*100)):0;return '<div class="item"><div class="name">'+esc(x.product)+'</div><div class="meta">'+esc(x.sku)+' · '+esc(x.barcode)+' · <b>'+esc(qty(p))+' / '+esc(qty(e))+' '+esc(x.unit||'шт.')+'</b></div><div class="progress"><i style="width:'+pc+'%"></i></div></div>'}).join('')+'</div>';
+ show('order-card',true);show('scan-card',true);
+ const ready=selected.status==='ready';
+ $('scan-code').disabled=ready;$('scan-qty').disabled=ready;$('scan-btn').disabled=ready||busy;
+ $('undo-btn').disabled=busy||!['picking','ready','shortage'].includes(selected.status);
+ if(ready)scanStatus('Заказ полностью собран. Передайте его в зону готовых к отгрузке.','green');
+}
+async function scan(){
+ if(busy||!selected||selected.status==='ready')return;
+ const code=String($('scan-code').value||'').trim(),q=Number($('scan-qty').value||1);
+ if(!code){$('scan-code').focus();return}
+ if(!Number.isFinite(q)||q<=0){scanStatus('Количество должно быть больше 0.','red');beep(false);return}
+ const event=pendingScan&&pendingScan.order===selected.id&&pendingScan.code===code&&pendingScan.qty===q?pendingScan.id:uuid();
+ pendingScan={id:event,order:selected.id,code,qty:q};busy=true;render();scanStatus('Записываю скан…','blue');
+ try{
+  const r=await rpc('warehouse_pick_device_scan_v1',{p_device_token:session.token,p_order_id:selected.id,p_code:code,p_qty:q,p_client_event_id:event});
+  if(!r?.ok){
+   pendingScan=null;
+   const msg={not_in_order:'Этого артикула/штрихкода нет в заказе.',over_pick:'Количество превышает заказ. Больше сканировать нельзя.',ambiguous_code:'Код совпал с несколькими строками — обратитесь к ОМ.',order_not_open:'Заказ уже закрыт или недоступен.',device_session_invalid:'Сессия ТСД истекла. Переподключите терминал.'}[r?.reason]||('Ошибка: '+String(r?.reason||'unknown'));
+   if(r?.reason==='device_session_invalid')saveSession(null);
+   scanStatus(msg,'red');beep(false);return;
+  }
+  pendingScan=null;beep(true);$('scan-code').value='';$('scan-qty').value='1';
+  scanStatus((r.duplicate_event?'Повторный ответ без повторного списания. ':'✓ ')+(r.sku||'')+' · '+qty(r.picked_qty)+' / '+qty(r.expected_qty)+(r.order_status==='ready'?' · ГОТОВО':''),r.order_status==='ready'?'green':'blue');
+  await loadOrders(selected.id);
+ }catch(e){
+  scanStatus('Связь не подтвердила скан. Не сканируйте повторно другой раз: нажмите «Добавить» ещё раз с тем же кодом — CRM использует тот же ID операции. '+String(e?.message||e),'amber');beep(false);
+ }finally{busy=false;render();if(session&&selected?.status!=='ready')$('scan-code')?.focus()}
+}
+async function undo(){
+ if(busy||!selected)return;
+ if(!confirm('Отменить ПОСЛЕДНИЙ скан этого заказа?'))return;
+ busy=true;render();scanStatus('Отменяю последний скан…','blue');
+ try{
+  const r=await rpc('warehouse_pick_device_undo_v1',{p_device_token:session.token,p_order_id:selected.id});
+  if(!r?.ok)throw new Error(r?.reason==='nothing_to_undo'?'Нет сканов для отмены':String(r?.reason||'Не удалось отменить'));
+  pendingScan=null;beep(true);scanStatus('Последний скан отменён: '+String(r.sku||'')+' · теперь '+qty(r.picked_qty)+' / '+qty(r.expected_qty),'amber');
+  await loadOrders(selected.id);
+ }catch(e){scanStatus(e?.message||e,'red');beep(false)}
+ finally{busy=false;render()}
+}
+async function boot(){
+ session=loadSession();
+ if(!session){clearInterval(pollTimer);pollTimer=null;show('app-view',false);show('pair-view',true);return}
+ show('pair-view',false);show('app-view',true);$('device-line').textContent=session.label||session.device_key;
+ try{await loadOrders()}catch(e){
+  if(String(e?.message||e).includes('device_session_invalid')){saveSession(null);return boot()}
+  show('session-warning',true);$('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e);
+ }
+ clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},10000);
+}
+$('pair-btn').onclick=pair;$('pair-code').addEventListener('keydown',e=>{if(e.key==='Enter')pair()});
+$('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.message,'red'));
+$('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
+$('undo-btn').onclick=undo;
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
+boot();
+</script>
+</body>
+</html>
