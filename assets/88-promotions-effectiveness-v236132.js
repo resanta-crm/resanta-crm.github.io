@@ -45,7 +45,7 @@ function financeInfo(e){
   if(e.baseline_comparable&&num(e.incremental_sales)<=0&&num(e.evaluation_cost)>0)return{html:'Затраты есть, доп. оборот не подтверждён',tone:'bad'};
   return{html:'ROI: нужна себестоимость / валовая прибыль',tone:'muted'};
 }
-function style(){function style(){if(document.getElementById('promo-eff-style-v236132'))return;const s=document.createElement('style');s.id='promo-eff-style-v236132';s.textContent=`
+function style(){if(document.getElementById('promo-eff-style-v236132'))return;const s=document.createElement('style');s.id='promo-eff-style-v236132';s.textContent=`
 .promo-eff-v236132{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:10px;color:var(--sub)}
 .promo-eff-chip-v236132{border:1px solid var(--border);background:#fff;border-radius:999px;padding:4px 7px;white-space:nowrap}
 .promo-eff-chip-v236132.good{color:var(--g);border-color:#bbf7d0;background:#f0fdf4}.promo-eff-chip-v236132.bad{color:var(--r);border-color:#fecaca;background:#fef2f2}.promo-eff-chip-v236132.muted{color:var(--sub);background:#f8fafc}
@@ -100,7 +100,7 @@ function patchCard(card,p,e){
     +'<span class="promo-eff-chip-v236132 '+esc(fin.tone)+'">'+esc(fin.html)+'</span>';
   const ctrl=card.querySelector('.promo-control-v236125');if(ctrl)ctrl.insertAdjacentElement('afterend',box);else card.appendChild(box);
 }
-function patchCards(){function patchCards(){
+function patchCards(){
   const list=document.getElementById('promo-list');if(!list)return;
   list.querySelectorAll('.promo-card').forEach(card=>{const p=promotion(cardId(card)),e=row(p);if(p&&e)patchCard(card,p,e)});
   try{window.RESANTA_PROMOTIONS_CONTROL_V236125?.repaint?.()}catch(_){}
@@ -128,7 +128,7 @@ function detailHtml(p,e){
   }else if(!exact){h+='<div class="promo-eff-note-v236132">Старая акция: товарный охват сохранён по историческим фильтрам. Новые акции считаются строго по выбранным SKU.</div>'}
   return h+'</div>';
 }
-function patchDetail(id){function patchDetail(id){
+function patchDetail(id){
   const p=promotion(id),e=row(p),root=document.getElementById('promotion-detail-body');if(!p||!e||!root)return;
   root.querySelector('#promo-eff-detail-v236132')?.remove();
   const tmp=document.createElement('div');tmp.innerHTML=detailHtml(p,e);const node=tmp.firstElementChild;
