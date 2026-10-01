@@ -30,14 +30,21 @@ let debtDates=[],debtSelected='',debtFlight=null;
 const dateRu=v=>{const s=String(v||'');return/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):s};
 const money=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 async function loadDebt(dateValue){
+ if(dateValue&&typeof window.debtDate198==='function'){
+   debtSelected=String(dateValue);window.debtDate198(debtSelected);setTimeout(debtBar,80);return;
+ }
  if(debtFlight)return debtFlight;
  debtFlight=(async()=>{
    const client=typeof db!=='undefined'?db:window.db;if(!client?.rpc)return;
    const {data,error}=await client.rpc('crm_debt_history_v236198',{p_report_date:dateValue||null});if(error)throw error;
    debtDates=Array.isArray(data?.dates)?data.dates:[];debtSelected=String(data?.selected_date||'');
-   try{allClientDebt=Array.isArray(data?.rows)?data.rows:[]}catch(_){}
-   try{window.renderDebt?.()}catch(_){}
-   setTimeout(debtBar,0);
+   if(typeof window.debtDate198==='function'&&debtSelected){
+     window.debtDate198(debtSelected);
+   }else{
+     try{allClientDebt=Array.isArray(data?.rows)?data.rows:[]}catch(_){}
+     try{window.renderDebt?.()}catch(_){}
+   }
+   setTimeout(debtBar,100);
  })().catch(e=>console.warn(V,'PDZ',e)).finally(()=>debtFlight=null);
  return debtFlight;
 }
