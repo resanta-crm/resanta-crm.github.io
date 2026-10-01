@@ -17,7 +17,7 @@ function ensureVipMonth(){const a=historyMonths();if(!a.length)return'';if(!a.in
 function period(){const cur=ensureVipMonth();return{cur,prev:vipMode==='mom'?shift(cur,-1):shift(cur,-12),partial:cur===currentMonth(),currentMonth:currentMonth(),missingCurrent:false,compareMode:vipMode}}
 function installVipPeriod(){window.RESANTA_VIP_PERIOD_OVERRIDE_V236201=period;window.vipComparisonPeriod=period;try{vipComparisonPeriod=period}catch(_){}}
 function vipBar(){
- if(!active('page-vip'))return;installVipPeriod();
+ if(window.RESANTA_VIP_PERIOD_NATIVE_V236202||!active('page-vip'))return;installVipPeriod();
  const info=document.getElementById('vip-period-info');if(!info)return;
  document.getElementById('vip-period-controls-v236198')?.remove();
  let box=document.getElementById('vip-period-controls-v236200');
@@ -31,7 +31,7 @@ function vipBar(){
  const arr=historyMonths(),cur=ensureVipMonth(),p=period();
  box.innerHTML='<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><div><label class="form-label">Месяц ВИП</label><div style="display:flex;gap:5px"><button type="button" class="btn-secondary" data-vip-step="-1">←</button><select class="form-input" data-vip-month>'+arr.map(x=>'<option value="'+x+'" '+(x===cur?'selected':'')+'>'+E(label(x))+'</option>').join('')+'</select><button type="button" class="btn-secondary" data-vip-step="1">→</button></div></div><div><label class="form-label">Сравнение</label><select class="form-input" data-vip-mode><option value="yoy" '+(vipMode==='yoy'?'selected':'')+'>К прошлому году</option><option value="mom" '+(vipMode==='mom'?'selected':'')+'>К предыдущему месяцу</option></select></div><div style="font-size:11px;color:var(--sub);padding-bottom:8px"><b>'+E(label(cur))+'</b> ↔ '+E(label(p.prev))+'</div></div>';
 }
-function rerenderVip(){installVipPeriod();try{window.dispatchEvent(new CustomEvent('resanta-vip-period-change'))}catch(_){try{window.renderVip?.()}catch(e){console.warn(V,'VIP render',e)}}setTimeout(vipBar,0)}
+function rerenderVip(){if(window.RESANTA_VIP_PERIOD_NATIVE_V236202)return;installVipPeriod();try{window.dispatchEvent(new CustomEvent('resanta-vip-period-change'))}catch(_){try{window.renderVip?.()}catch(e){console.warn(V,'VIP render',e)}}setTimeout(vipBar,0)}
 let debtDates=[],debtSelected='',debtFlight=null;
 const dateRu=v=>{const s=String(v||'');return/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):s};
 const money=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -67,7 +67,7 @@ function debtBar(){
  }
 }
 function init(){
- if(active('page-vip')){installVipPeriod();vipBar()}
+ if(active('page-vip')&&!window.RESANTA_VIP_PERIOD_NATIVE_V236202){installVipPeriod();vipBar()}
  if(active('page-debt'))loadDebt(null);
 }
 document.addEventListener('change',e=>{
