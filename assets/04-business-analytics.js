@@ -2208,7 +2208,7 @@ window.RESANTA_TRIOVIST_V227324=Object.freeze({
 (function(){
 'use strict';
 if(window.RESANTA_CRM_PERF_V227316)return;
-const VERSION='v22.7.31.7';
+const VERSION='v22.7.31.8';
 const legacyVipSummary=window.getVipClientSummary;
 
 // 1) Безопасный single-flight для одинаковых параллельных чтений больших таблиц.
@@ -2312,18 +2312,35 @@ function targetTag(prev,cur){
   const pct=targetPct(prev,cur);if(pct>=100)return '<span class="tag tag-m">✅ '+pct+'% '+suffix+'</span>';
   return '<span class="tag" style="background:var(--amb);color:var(--am)">🎯 '+pct+'% '+suffix+'</span>';
 }
+const VIP_PERIOD_STORE='resanta_vip_period_v236202',VIP_MODE_STORE='resanta_vip_mode_v236202';
+function prevMonthVip(ym){
+  if(!/^\d{4}-\d{2}$/.test(String(ym||'')))return null;
+  const y=Number(String(ym).slice(0,4)),m=Number(String(ym).slice(5,7));
+  const d=new Date(y,m-2,1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function selectedVipMonth(){
+  const months=vipPerf.months,current=currentMonth();if(!months.length)return null;
+  let v='';try{v=localStorage.getItem(VIP_PERIOD_STORE)||'';}catch(_){}
+  if(!vipPerf.monthSet.has(v))v=vipPerf.monthSet.has(current)?current:months[months.length-1];
+  return v;
+}
+function selectedVipMode(){
+  let v='yoy';try{v=localStorage.getItem(VIP_MODE_STORE)||'yoy';}catch(_){}
+  return v==='mom'?'mom':'yoy';
+}
 function vipPeriod(){
   const months=vipPerf.months,current=currentMonth();
   if(!months.length)return {prev:null,cur:null,currentMonth:current,missingCurrent:true,comparable:false,partial:true,compareMode:'yoy'};
-  try{
-    const o=window.RESANTA_VIP_PERIOD_OVERRIDE_V236201?.();
-    if(o&&/^\d{4}-\d{2}$/.test(String(o.cur||''))){
-      const cur=String(o.cur),prev=String(o.prev||'');
-      return {prev:prev||null,cur,currentMonth:current,missingCurrent:cur!==current,comparable:!!prev&&vipPerf.monthSet.has(prev),partial:cur===current,compareMode:o.compareMode||'yoy'};
-    }
-  }catch(e){console.warn(VERSION+' VIP period override',e);}
-  const cur=vipPerf.monthSet.has(current)?current:months[months.length-1],prev=prevYearMonth(cur);
-  return {prev,cur,currentMonth:current,missingCurrent:cur!==current,comparable:vipPerf.monthSet.has(prev),partial:cur===current,compareMode:'yoy'};
+  const cur=selectedVipMonth(),mode=selectedVipMode(),prev=mode==='mom'?prevMonthVip(cur):prevYearMonth(cur);
+  return {prev,cur,currentMonth:current,missingCurrent:!vipPerf.monthSet.has(current),comparable:!!prev&&vipPerf.monthSet.has(prev),partial:cur===current,compareMode:mode};
+}
+function vipPeriodFilterHtml(period){
+  const opts=vipPerf.months.slice().reverse().map(m=>'<option value="'+h(m)+'" '+(m===period.cur?'selected':'')+'>'+h(monthLabel(m))+'</option>').join('');
+  return '<div id="vip-period-controls-native-v236202" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:0 0 10px;margin:0 0 10px;border-bottom:1px solid var(--border)">'
+    +'<div><label class="form-label">Месяц ВИП</label><div style="display:flex;gap:5px"><button type="button" class="btn-secondary" onclick="crmVipPeriodStepV236202(-1)">←</button><select class="form-input" onchange="crmVipPeriodMonthV236202(this.value)">'+opts+'</select><button type="button" class="btn-secondary" onclick="crmVipPeriodStepV236202(1)">→</button></div></div>'
+    +'<div><label class="form-label">Сравнение</label><select class="form-input" onchange="crmVipPeriodModeV236202(this.value)"><option value="yoy" '+(period.compareMode==='yoy'?'selected':'')+'>К прошлому году</option><option value="mom" '+(period.compareMode==='mom'?'selected':'')+'>К предыдущему месяцу</option></select></div>'
+    +'<div style="font-size:11px;color:var(--sub);padding-bottom:8px"><b>'+h(monthLabel(period.cur))+'</b> ↔ '+h(monthLabel(period.prev))+'</div></div>';
 }
 function defAliases(def){return [...new Set([def?.client_name,def?.legal_name,...(def?.member_names||[])].filter(Boolean))];}
 function matchedClientsFor(def){
@@ -2438,7 +2455,18 @@ function renderVipFast(list,period){
   const sig=vipRenderSignature(clients,period),root=document.getElementById('vip-list');if(!root)return;
   if(vipPerf.lastRenderSig===sig&&root.childElementCount)return;vipPerf.lastRenderSig=sig;setVipStatus('');
   const periodEl=document.getElementById('vip-period-info');if(periodEl){
-    if(period.cur){const curLabel=monthLabel(period.cur),prevLabel=monthLabel(period.prev),asOf=String(window.TODAY||'').split('-').reverse().join('.');periodEl.innerHTML='<div class="card-title">Как считается ВИП</div><div style="font-size:13px;line-height:1.65"><b>Ориентир:</b> полный <b>'+h(prevLabel)+'</b> → текущий <b>'+h(curLabel)+'</b>'+(period.partial?' <span class="tag" style="background:var(--amb);color:var(--am)">факт на '+h(asOf)+'</span>':'')+'</div><div style="font-size:12px;color:var(--sub);margin-top:5px">Процент показывает, сколько менеджер уже сделал от оборота этого же месяца прошлого года. Это <b>не падение</b> в незакрытом месяце, а прогресс к прошлогодней планке.</div>'+(!period.comparable?'<div style="font-size:12px;color:var(--r);margin-top:5px">В purchase_history нет данных за '+h(prevLabel)+' — сравнение пока невозможно.</div>':'')+'<div style="font-size:12px;color:var(--sub);margin-top:5px">Источник: purchase_history из 1С. '+(typeof crmImportStatus==='function'&&crmImportStatus('sales')?'Последняя успешная загрузка: <b>'+h(crmDateTime(crmImportStatus('sales').last_success_at))+'</b>.':'')+'</div><div style="font-size:10px;color:var(--sub);margin-top:5px">Расчёт юрлиц: <b>v22.7.17</b> · Performance core: <b>'+VERSION+'</b></div>';}else periodEl.innerHTML='<div class="card-title">Как считается рост ВИП</div><div style="font-size:12px;color:var(--sub)">История продаж ещё не загружена.</div>';
+    if(period.cur){
+      const curLabel=monthLabel(period.cur),prevLabel=monthLabel(period.prev),asOf=String(window.TODAY||'').split('-').reverse().join('.');
+      periodEl.innerHTML=vipPeriodFilterHtml(period)
+        +'<div class="card-title">Как считается ВИП</div>'
+        +'<div style="font-size:13px;line-height:1.65"><b>Ориентир:</b> полный <b>'+h(prevLabel)+'</b> → '+(period.partial?'текущий':'полный')+' <b>'+h(curLabel)+'</b>'+(period.partial?' <span class="tag" style="background:var(--amb);color:var(--am)">факт на '+h(asOf)+'</span>':'')+'</div>'
+        +'<div style="font-size:12px;color:var(--sub);margin-top:5px">'+(period.compareMode==='mom'?'Сравнение идёт с предыдущим месяцем.':'Процент показывает, сколько менеджер уже сделал от оборота этого же месяца прошлого года. Это <b>не падение</b> в незакрытом месяце, а прогресс к прошлогодней планке.')+'</div>'
+        +(!period.comparable?'<div style="font-size:12px;color:var(--r);margin-top:5px">В purchase_history нет данных за '+h(prevLabel)+' — сравнение пока невозможно.</div>':'')
+        +'<div style="font-size:12px;color:var(--sub);margin-top:5px">Источник: purchase_history из 1С. '+(typeof crmImportStatus==='function'&&crmImportStatus('sales')?'Последняя успешная загрузка: <b>'+h(crmDateTime(crmImportStatus('sales').last_success_at))+'</b>.':'')+'</div>'
+        +'<div style="font-size:10px;color:var(--sub);margin-top:5px">Расчёт юрлиц: <b>v22.7.17</b> · Performance core: <b>'+VERSION+'</b></div>';
+    }else{
+      periodEl.innerHTML='<div class="card-title">Как считается рост ВИП</div><div style="font-size:12px;color:var(--sub)">История продаж ещё не загружена.</div>';
+    }
   }
   const empty=document.getElementById('vip-empty');if(empty){empty.style.display=clients.length?'none':'block';empty.textContent=(allVipSales||[]).length?'У вас пока нет ВИП-клиентов, привязанных к вашему имени.':'ВИП-отчёт ещё не загружен — нужна разовая заливка таблицы vip_sales.';}
   const declBlock=document.getElementById('vip-decliners-block'),declRoot=document.getElementById('vip-decliners'),declTitle=declBlock?.querySelector('.card-title');if(declTitle)declTitle.textContent='🎯 Больше всего осталось до уровня '+monthLabel(period.prev)+' (топ-5)';
@@ -2479,7 +2507,21 @@ try{if(typeof freshAnalytics22717==='function')freshAnalytics22717=async functio
 
 // Если история была заменена импортом/обновлением — сбрасываем только локальный индекс.
 window.addEventListener('resanta-v2273-status',()=>{if(vipDataChanged())resetVipPerf();});
-window.addEventListener('resanta-vip-period-change',()=>{resetVipPeriodView();if(activePage()==='vip')renderVipFastEntry();});
+window.crmVipPeriodMonthV236202=function(v){
+  v=String(v||'');if(!vipPerf.monthSet.has(v))return;
+  try{localStorage.setItem(VIP_PERIOD_STORE,v);}catch(_){}
+  resetVipPeriodView();if(activePage()==='vip')renderVipFastEntry();
+};
+window.crmVipPeriodModeV236202=function(v){
+  v=v==='mom'?'mom':'yoy';try{localStorage.setItem(VIP_MODE_STORE,v);}catch(_){}
+  resetVipPeriodView();if(activePage()==='vip')renderVipFastEntry();
+};
+window.crmVipPeriodStepV236202=function(delta){
+  const months=vipPerf.months,cur=selectedVipMonth(),i=months.indexOf(cur);
+  if(i<0)return;const j=Math.max(0,Math.min(months.length-1,i+Number(delta||0)));
+  if(months[j]&&months[j]!==cur)window.crmVipPeriodMonthV236202(months[j]);
+};
+window.RESANTA_VIP_PERIOD_NATIVE_V236202=Object.freeze({version:'v23.6.202',owner:'VIP Performance core',reusesHistoryIndex:true,noPolling:true});
 
 
 window.RESANTA_CRM_PERF_V227316=Object.freeze({version:VERSION,priority:'navigation',vipChunkedIndex:true,vipLazyDetails:true,vipLazyCategories:true,vipLazySku:true,duplicateVipRenderSuppression:true,loadAllRowsSingleFlight:true,loadDataSingleFlight:true,noBusinessLogicChange:true});
