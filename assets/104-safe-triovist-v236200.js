@@ -11,7 +11,7 @@ const pct=v=>N(v).toFixed(1).replace('.',',')+'%';
 const MN=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const ym=v=>String(v||'').slice(0,7),label=v=>{const s=ym(v),m=+s.slice(5,7);return(MN[m-1]||s)+' '+s.slice(0,4)};
 const shift=(v,n)=>{const s=ym(v),d=new Date(+s.slice(0,4),+s.slice(5,7)-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
-const triActive=()=>!!document.getElementById('page-triovist')?.classList.contains('active');
+const triActive=()=>!!document.getElementById('page-triovist')?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')==='triovist';
 function tab(){const b=document.querySelector('#tr14-shell [data-tr14].on');return String(b?.dataset?.tr14||'')}
 function syncParser(){
  const p=document.getElementById('tri21-control-v236107');if(!p)return;
