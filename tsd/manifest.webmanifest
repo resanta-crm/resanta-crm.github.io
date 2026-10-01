@@ -1,15 +1,20 @@
 {
-  "name":"Resanta Склад",
-  "short_name":"Склад",
-  "id":"/tsd/",
-  "description":"Единый ТСД-центр Resanta CRM: приёмка, инвентаризация и заказы",
-  "start_url":"/tsd/",
-  "scope":"/tsd/",
-  "display":"standalone",
-  "background_color":"#f4f6f8",
-  "theme_color":"#185FA5",
-  "lang":"ru",
-  "icons":[
-    {"src":"/inventory-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  "name": "Resanta Склад",
+  "short_name": "Склад",
+  "id": "/inventory.html",
+  "description": "Единый ТСД-центр Resanta CRM: приёмка, инвентаризация и заказы",
+  "start_url": "/tsd/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#185FA5",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/inventory-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }
