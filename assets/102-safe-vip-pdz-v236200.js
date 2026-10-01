@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SAFE_VIP_PDZ_V236200)return;
-const V='v23.6.200',KEY='resanta_vip_month_v236200',MODE='resanta_vip_mode_v236200';
+const V='v23.6.201',KEY='resanta_vip_month_v236200',MODE='resanta_vip_mode_v236200';
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ym=v=>String(v||'').slice(0,7),months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const label=v=>{const s=ym(v),m=+s.slice(5,7);return(months[m-1]||s)+' '+s.slice(0,4)};
@@ -18,12 +18,18 @@ function period(){const cur=ensureVipMonth();return{cur,prev:vipMode==='mom'?shi
 function installVipPeriod(){window.vipComparisonPeriod=period;try{vipComparisonPeriod=period}catch(_){}}
 function vipBar(){
  if(!active('page-vip'))return;installVipPeriod();
- const root=document.getElementById('vip-period-info');if(!root)return;
+ const info=document.getElementById('vip-period-info');if(!info)return;
  document.getElementById('vip-period-controls-v236198')?.remove();
  let box=document.getElementById('vip-period-controls-v236200');
- if(!box){box=document.createElement('div');box.id='vip-period-controls-v236200';box.style.cssText='display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:0 0 10px;margin:0 0 10px;border-bottom:1px solid var(--border)';root.prepend(box)}
- const a=historyMonths(),cur=ensureVipMonth(),p=period();
- box.innerHTML='<div><label class="form-label">Месяц ВИП</label><div style="display:flex;gap:5px"><button type="button" class="btn-secondary" data-vip-step="-1">←</button><select class="form-input" data-vip-month>'+a.map(x=>'<option value="'+x+'" '+(x===cur?'selected':'')+'>'+E(label(x))+'</option>').join('')+'</select><button type="button" class="btn-secondary" data-vip-step="1">→</button></div></div><div><label class="form-label">Сравнение</label><select class="form-input" data-vip-mode><option value="yoy" '+(vipMode==='yoy'?'selected':'')+'>К прошлому году</option><option value="mom" '+(vipMode==='mom'?'selected':'')+'>К предыдущему месяцу</option></select></div><div style="font-size:11px;color:var(--sub);padding-bottom:8px"><b>'+E(label(cur))+'</b> ↔ '+E(label(p.prev))+'</div>';
+ if(!box){
+   box=document.createElement('div');
+   box.id='vip-period-controls-v236200';
+   box.className='card';
+   box.style.cssText='margin-bottom:12px;padding:12px 14px';
+   info.insertAdjacentElement('beforebegin',box);
+ }
+ const arr=historyMonths(),cur=ensureVipMonth(),p=period();
+ box.innerHTML='<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><div><label class="form-label">Месяц ВИП</label><div style="display:flex;gap:5px"><button type="button" class="btn-secondary" data-vip-step="-1">←</button><select class="form-input" data-vip-month>'+arr.map(x=>'<option value="'+x+'" '+(x===cur?'selected':'')+'>'+E(label(x))+'</option>').join('')+'</select><button type="button" class="btn-secondary" data-vip-step="1">→</button></div></div><div><label class="form-label">Сравнение</label><select class="form-input" data-vip-mode><option value="yoy" '+(vipMode==='yoy'?'selected':'')+'>К прошлому году</option><option value="mom" '+(vipMode==='mom'?'selected':'')+'>К предыдущему месяцу</option></select></div><div style="font-size:11px;color:var(--sub);padding-bottom:8px"><b>'+E(label(cur))+'</b> ↔ '+E(label(p.prev))+'</div></div>';
 }
 function rerenderVip(){installVipPeriod();try{window.renderVip?.()}catch(e){console.warn(V,'VIP render',e)}setTimeout(vipBar,0)}
 let debtDates=[],debtSelected='',debtFlight=null;
@@ -60,17 +66,37 @@ function debtBar(){
    banner.innerHTML='<div style="background:'+(hist?'var(--ab)':'var(--gb)')+';border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12px;color:'+(hist?'var(--at)':'var(--gt)')+'">'+(hist?'📅 Исторический':'✅ Свежий')+' срез ПДЗ на <b>'+dateRu(debtSelected)+'</b> · должников: <b>'+Number(x.debtors||0)+'</b> · просрочено: <b>'+money(x.total)+'</b>.'+(hist?' Это не текущая просрочка.':'')+'</div>';
  }
 }
+let vipSummaryBase=null,vipSummaryCache=null,vipSummaryKey='';
+function installVipSummaryCache(){
+ if(vipSummaryBase||typeof window.getVipClientSummary!=='function')return;
+ vipSummaryBase=window.getVipClientSummary;
+ const fast=function(){
+   let h=null,v=null,cl=null,stamp='';
+   try{h=allPurchaseHistory;v=allVipSales;cl=allClients;stamp=String(crmImportStatus?.('sales')?.last_success_at||'')}catch(_){}
+   const p=period(),key=[p.prev,p.cur,vipMode,h?.length||0,v?.length||0,cl?.length||0,stamp].join('|');
+   if(vipSummaryCache&&key===vipSummaryKey&&fast._h===h&&fast._v===v&&fast._c===cl)return vipSummaryCache;
+   const t=performance?.now?.()||Date.now();
+   const out=vipSummaryBase.apply(this,arguments);
+   vipSummaryCache=out;vipSummaryKey=key;fast._h=h;fast._v=v;fast._c=cl;
+   const spent=(performance?.now?.()||Date.now())-t;
+   if(spent>80)console.info(V+' VIP summary cached in '+Math.round(spent)+' ms');
+   return out;
+ };
+ window.getVipClientSummary=fast;
+ try{getVipClientSummary=fast}catch(_){}
+}
+function clearVipSummaryCache(){vipSummaryCache=null;vipSummaryKey=''}
 function init(){
- if(active('page-vip')){installVipPeriod();rerenderVip()}
+ if(active('page-vip')){installVipPeriod();installVipSummaryCache();vipBar()}
  if(active('page-debt'))loadDebt(null);
 }
 document.addEventListener('change',e=>{
- const vm=e.target.closest?.('[data-vip-month]');if(vm){vipMonth=vm.value;try{localStorage.setItem(KEY,vipMonth)}catch(_){};rerenderVip();return}
- const md=e.target.closest?.('[data-vip-mode]');if(md){vipMode=md.value;try{localStorage.setItem(MODE,vipMode)}catch(_){};rerenderVip();return}
+ const vm=e.target.closest?.('[data-vip-month]');if(vm){vipMonth=vm.value;clearVipSummaryCache();try{localStorage.setItem(KEY,vipMonth)}catch(_){};rerenderVip();return}
+ const md=e.target.closest?.('[data-vip-mode]');if(md){vipMode=md.value;clearVipSummaryCache();try{localStorage.setItem(MODE,vipMode)}catch(_){};rerenderVip();return}
  const dd=e.target.closest?.('[data-debt-date]');if(dd){loadDebt(dd.value);return}
 },true);
 document.addEventListener('click',e=>{
- const st=e.target.closest?.('[data-vip-step]');if(st){const a=historyMonths(),i=a.indexOf(ensureVipMonth()),next=Math.max(0,Math.min(a.length-1,i-Number(st.dataset.vipStep||0)));if(a[next]){vipMonth=a[next];try{localStorage.setItem(KEY,vipMonth)}catch(_){};rerenderVip()}return}
+ const st=e.target.closest?.('[data-vip-step]');if(st){const a=historyMonths(),i=a.indexOf(ensureVipMonth()),next=Math.max(0,Math.min(a.length-1,i-Number(st.dataset.vipStep||0)));if(a[next]){vipMonth=a[next];clearVipSummaryCache();try{localStorage.setItem(KEY,vipMonth)}catch(_){};rerenderVip()}return}
  if(e.target.closest?.('[data-debt-latest]')){const d=String(debtDates[0]?.report_date||'');if(d)loadDebt(d);return}
  if(e.target.closest?.('[data-debt-refresh]')){loadDebt(null);return}
  if(e.target.closest?.('.nav-item,.bn-item,[data-page]'))setTimeout(init,120);
