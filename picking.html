@@ -69,7 +69,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-01-v23.6.193';
+const PICKING_APP_VERSION='2026-10-01-v23.6.194';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
@@ -168,17 +168,18 @@ function render(){
  const items=selected.items||[];
  const picked=items.reduce((s,x)=>s+num(x.picked_qty),0),total=items.reduce((s,x)=>s+num(x.expected_qty),0);
  const pct=total?Math.min(100,Math.round(picked/total*100)):0;
- $('order-card').innerHTML='<div class="'+(selected.status==='ready'?'ready':'')+'" style="border-radius:12px;padding:'+(selected.status==='ready'?'10px':'0')+'"><h2 style="margin:0 0 5px">Счёт №'+esc(selected.document_no)+' <span class="badge amber">версия '+esc(selected.version||1)+'</span></h2><div class="sub">'+esc(selected.customer_display)+' · '+esc(statusName(selected.status))+'</div>'+
+ $('order-card').innerHTML='<div class="'+(selected.status==='ready'?'ready':'')+'" style="border-radius:12px;padding:'+(selected.status==='ready'?'10px':'0')+'"><h2 style="margin:0 0 5px">Счёт №'+esc(selected.document_no)+' <span class="badge amber">версия '+esc(selected.version||1)+'</span>'+(selected.assignment_mode==='split'?'<span class="badge amber">часть '+esc(session?.label||session?.device_key||'ТСД')+'</span>':'')+'</h2><div class="sub">'+esc(selected.customer_display)+' · '+esc(statusName(selected.status))+'</div>'+
   '<div class="kpi"><div class="k"><div class="v">'+esc(qty(picked))+'</div><div class="l">Собрано, шт.</div></div><div class="k"><div class="v">'+esc(qty(total))+'</div><div class="l">Нужно, шт.</div></div><div class="k"><div class="v">'+pct+'%</div><div class="l">Готовность</div></div></div>'+
   (selected.status==='ready'?'<div class="status green"><b>✅ ЗАКАЗ ГОТОВ К ОТГРУЗКЕ</b><br>ОМ уже увидит этот статус в CRM.</div>':'')+
   items.map(x=>{const e=num(x.expected_qty),p=num(x.picked_qty),ret=num(x.return_required_qty),pc=e?Math.min(100,Math.round(Math.min(p,e)/e*100)):0,missing=Math.max(0,e-p);const removed=!!x.is_removed;return '<div class="item '+(removed?'removed':'')+'"><div class="name">'+esc(x.product)+(removed?'<span class="badge amber">убрано корректировкой</span>':'')+(ret>0?'<span class="badge red">вернуть '+esc(qty(ret))+'</span>':'')+'</div><div class="meta">'+esc(x.sku)+' · '+esc(x.barcode)+' · <b>'+esc(qty(p))+' / '+esc(qty(e))+' '+esc(x.unit||'шт.')+'</b></div>'+(removed?'':'<div class="progress"><i style="width:'+pc+'%"></i></div>')+'<div class="item-actions">'+(ret>0?'<button type="button" class="mini return" data-return-item="'+esc(x.id)+'">↩ Вернул лишнее '+esc(qty(ret))+'</button>':'')+(!removed&&missing>0&&ret<=0?'<button type="button" class="mini short" data-shortage-item="'+esc(x.id)+'">⚠ Нет товара · '+esc(qty(missing))+'</button>':'')+(x.shortage_status?'<span class="badge amber">недостача: '+esc(x.shortage_status)+'</span>':'')+'</div></div>'}).join('')+'</div>';
  document.querySelectorAll('[data-return-item]').forEach(b=>b.onclick=()=>confirmReturn(b.dataset.returnItem));
  document.querySelectorAll('[data-shortage-item]').forEach(b=>b.onclick=()=>reportShortage(b.dataset.shortageItem));
  show('order-card',true);show('scan-card',true);
- const ready=selected.status==='ready';
- $('scan-code').disabled=ready;$('scan-qty').disabled=ready;$('scan-btn').disabled=ready||busy;
+ const ready=selected.status==='ready',doneHere=!!selected.device_complete;
+ $('scan-code').disabled=ready||doneHere;$('scan-qty').disabled=ready||doneHere;$('scan-btn').disabled=ready||doneHere||busy;
  $('undo-btn').disabled=busy||!['picking','ready','shortage'].includes(selected.status);
  if(ready)scanStatus('Заказ полностью собран. Передайте его в зону готовых к отгрузке.','green');
+ else if(doneHere&&selected.assignment_mode==='split')scanStatus('✓ Ваша часть заказа собрана. Ждём завершения второго ТСД.','green');
 }
 async function scan(){
  if(busy||!selected||selected.status==='ready')return;
@@ -265,7 +266,7 @@ $('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.mess
 $('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.193',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.194',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
