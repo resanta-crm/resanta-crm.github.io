@@ -1,6 +1,6 @@
 {
-  "version": "23.6.195",
+  "version": "23.6.196",
   "released_at": "2026-10-01",
-  "purpose": "Warehouse workflow: invoice revisions without losing picked quantities, shortage decisions, split large orders between TSD-1/TSD-2, separate CRM Warehouse Telegram chat",
-  "deploy_trigger": "2026-10-01T11:20:00+03:00"
+  "purpose": "TSD barcode scan fix: auto-submit hardware scans without Enter, clear field after success, play scan sound on both TSDs",
+  "deploy_trigger": "2026-10-01T11:50:00+03:00"
 }
