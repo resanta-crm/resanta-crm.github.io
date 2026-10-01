@@ -28,6 +28,7 @@ button,input,select{font:inherit}.hidden{display:none!important}.wrap{max-width:
   <div class="top"><div class="logo">📦</div><div><div class="title">Подключение ТСД к сборке</div><div class="sub">Без почты и пароля сотрудника. Код создаёт офис-менеджер в CRM и действует 10 минут.</div></div></div>
   <label>Какой терминал</label>
   <select id="pair-device" class="inp">
+   <option value="">— Выберите этот терминал —</option>
    <option value="tsd1">ТСД-1 · Начальник склада</option>
    <option value="tsd2">ТСД-2 · Кладовщик</option>
   </select>
@@ -67,7 +68,7 @@ button,input,select{font:inherit}.hidden{display:none!important}.wrap{max-width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-01-v23.6.186';
+const PICKING_APP_VERSION='2026-10-01-v23.6.190';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
@@ -99,12 +100,15 @@ async function rpc(name,args={}){
 }
 async function pair(){
  const key=$('pair-device').value,code=String($('pair-code').value||'').trim().toUpperCase().replace(/\s/g,'');
+ if(!key){pairStatus('Сначала выберите, какой это терминал: ТСД-1 или ТСД-2.');return}
  if(!/^[0-9A-F]{8}$/.test(code)){pairStatus('Введите 8-значный код из CRM.');return}
  $('pair-btn').disabled=true;pairStatus('Проверяю код…','blue');
  try{
   const r=await rpc('warehouse_pick_pair_redeem_v1',{p_device_key:key,p_code:code});
   if(!r?.ok){
-   const msg={invalid_code:'Неверный код.',code_expired_or_locked:'Код истёк или заблокирован. Попросите ОМ создать новый.',invalid_code_format:'Неверный формат кода.',device_disabled:'Терминал отключён.'}[r?.reason]||'Не удалось подключить терминал.';
+   const msg=r?.reason==='wrong_device'
+    ?('Этот код создан для «'+String(r.code_device_label||r.code_device_key||'другого ТСД')+'». Вы выбрали другой терминал. Для назначенного заказа создайте код именно для нужного ТСД.')
+    :({invalid_code:'Неверный код.',code_expired_or_locked:'Код истёк или заблокирован. Создайте новый код именно для выбранного ТСД.',invalid_code_format:'Неверный формат кода.',device_disabled:'Терминал отключён.'}[r?.reason]||'Не удалось подключить терминал.');
    throw new Error(msg);
   }
   saveSession({token:r.device_token,device_key:r.device_key,label:r.label,paired_at:new Date().toISOString()});
@@ -199,7 +203,7 @@ $('refresh-btn').onclick=()=>loadOrders(selected?.id).catch(e=>scanStatus(e.mess
 $('scan-btn').onclick=scan;$('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scan()}});
 $('undo-btn').onclick=undo;
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.186',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.190',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
