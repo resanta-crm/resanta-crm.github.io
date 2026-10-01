@@ -5,8 +5,9 @@
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.190',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.193',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
+let correctionPreview=null,correctionFile=null,correctionStatus='',correctionTone='mut';
 let devices=[],devicesError='',pairing=null,notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -242,6 +243,67 @@ async function confirmImport(){
  }finally{working=false;render();}
 }
 
+async function readCorrection(file=correctionFile||$('wp1-correction-file')?.files?.[0]){
+ if(checking||working||!selected)return;
+ if(!file){correctionStatus='Выберите исправленный Excel-файл счёта.';correctionTone='error';render();return}
+ correctionFile=file;correctionPreview=null;checking=true;correctionStatus='Читаю корректировку '+file.name+'…';correctionTone='mut';render();
+ try{
+  if(!/\.xlsx$/i.test(file.name)||file.size<100||file.size>10*1024*1024)throw Error('Нужен исправленный счёт .xlsx до 10 МБ.');
+  const buf=await file.arrayBuffer(),sha=await hashHex(buf),X=await sheetjs();
+  const book=X.read(buf,{type:'array'});if(!book.SheetNames?.length)throw Error('Excel не содержит листа');
+  const parsed=parseInvoice(absoluteInvoiceGrid(X,book.Sheets[book.SheetNames[0]]));
+  if(String(parsed.document_no)!==String(selected.document_no)||String(parsed.document_date)!==String(selected.document_date))
+    throw Error('Для корректировки номер и дата счёта должны остаться прежними.');
+  if(String(parsed.customer_display)!==String(selected.customer_display))
+    throw Error('Покупатель в корректировке не совпадает с текущим счётом.');
+  correctionPreview={...parsed,file,sha};
+  correctionStatus='Корректировка проверена: версия '+Number(selected.version||1)+' → '+(Number(selected.version||1)+1)+', '+parsed.items.length+' поз., '+parsed.items.reduce((s,x)=>s+x.qty,0)+' шт.';
+  correctionTone='ok';
+ }catch(e){correctionPreview=null;correctionStatus='Корректировка не принята: '+String(e?.message||e);correctionTone='error'}
+ finally{checking=false;render()}
+}
+async function applyCorrection(){
+ if(!selected||!correctionPreview||working||checking)return;
+ if(!confirm('Применить корректировку счёта №'+selected.document_no+' как версию '+(Number(selected.version||1)+1)+'?\nУже правильно собранное сохранится. Лишнее ТСД потребует вернуть на склад.'))return;
+ const id=selected.id;working=true;correctionStatus='Сохраняю исправленный оригинал…';correctionTone='mut';render();
+ try{
+  const d=dbx();const response=await bounded(d.auth.getUser(),12000,'Не удалось проверить сессию CRM');
+  const user=response?.data?.user;if(response?.error||!user?.id)throw Error('Авторизация истекла. Войдите в CRM заново.');
+  const path=user.id+'/'+crypto.randomUUID()+'.xlsx';
+  const uploaded=await bounded(d.storage.from(BUCKET).upload(path,correctionPreview.file,{
+    contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',upsert:false,cacheControl:'0'
+  }),35000,'Хранилище не подтвердило загрузку корректировки');
+  if(uploaded?.error)throw Error(uploaded.error.message);
+  correctionStatus='Сравниваю версии и сохраняю уже собранное…';render();
+  const x=await bounded(rpc('warehouse_pick_apply_revision_v2',{
+    p_order_id:id,p_document_no:correctionPreview.document_no,p_document_date:correctionPreview.document_date,
+    p_customer_display:correctionPreview.customer_display,p_buyer_unp:correctionPreview.buyer_unp,
+    p_original_path:path,p_original_sha256:correctionPreview.sha,p_report_total:correctionPreview.total,
+    p_report_vat:correctionPreview.vat,p_items:correctionPreview.items
+  }),30000,'Сервер не подтвердил корректировку за 30 секунд');
+  if(!x?.ok)throw Error('Корректировка не подтверждена сервером');
+  correctionPreview=null;correctionFile=null;
+  correctionStatus='Готово: версия '+x.version+'. Добавлено: '+x.added_lines+', изменено: '+x.changed_lines+', убрано: '+x.removed_lines+
+    (Number(x.return_required_qty)>0?'. На ТСД нужно вернуть '+x.return_required_qty+' шт. лишнего.':'')+
+    (Number(x.open_shortages)>0?'. Открытых недостач: '+x.open_shortages+'.':'');
+  correctionTone='ok';
+  await loadList(id);
+ }catch(e){correctionStatus='Не удалось применить корректировку: '+String(e?.message||e);correctionTone='error';render()}
+ finally{working=false;render()}
+}
+async function decideShortage(id,decision){
+ if(busyAction||!id)return;
+ const label=decision==='wait'?'Ждём товар':'Нужна корректировка счёта';
+ if(!confirm('Решение по недостаче: «'+label+'»?'))return;
+ busyAction=true;actionMessage='Сохраняю решение по недостаче…';actionTone='mut';render();
+ try{
+  const x=await rpc('warehouse_pick_shortage_decide_v2',{p_shortage_id:id,p_decision:decision});
+  if(!x?.ok)throw Error('Решение не подтверждено');
+  actionMessage=decision==='wait'?'Недостача отмечена: ждём товар.':'Недостача отмечена: ОМ должна загрузить корректировку счёта.';
+  actionTone='ok';await openOrder(selected.id);
+ }catch(e){actionMessage='Не удалось сохранить решение: '+String(e?.message||e);actionTone='error'}
+ finally{busyAction=false;render()}
+}
 async function loadDevices(){
  if(!['office','supervisor'].includes(role)){devices=[];devicesError='';return;}
  try{
@@ -313,6 +375,7 @@ async function loadList(prefer=null){
 }
 async function openOrder(id){
  selected=await rpc('warehouse_pick_detail_v1',{p_order_id:id});
+ correctionPreview=null;correctionFile=null;correctionStatus='';correctionTone='mut';
  selectedFinance=null;
  if(['office','supervisor'].includes(role))selectedFinance=await rpc('warehouse_pick_finance_v1',{p_order_id:id});
  try{notificationStatus=(await rpc('warehouse_pick_notification_status_v1',{p_order_id:id}))?.notification_status||null}catch(_){notificationStatus=null}
@@ -329,7 +392,7 @@ function render(){
  }
  const upload=finAllowed?'<section class="wp1-box"><h3>🔒 Загрузка счёта офис-менеджером</h3><p class="wp1-mut">После выбора файла проверка запускается автоматически. Оригинал и финансы доступны только ОМ и руководителю; пока создаётся лишь черновик.</p><input id="wp1-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"> '+(selectedFile?'<div class="wp1-mut" style="margin:5px 0">Выбранный файл: '+esc(selectedFile.name)+'</div>':'')+' <button id="wp1-check" type="button" '+(checking||working?'disabled':'')+'>'+(checking?'Проверяю…':'Проверить счёт')+'</button><div id="wp1-upload-status" role="status" aria-live="polite" class="'+(uploadStatusKind==='error'?'wp1-error':uploadStatusKind==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:10px;'+(uploadStatus?'':'display:none;')+'">'+esc(uploadStatus)+'</div></section>':'';
  const pr=preview&&finAllowed?'<section class="wp1-box"><div class="wp1-finance"><b>Предпросмотр для ОМ / руководителя</b><br>Счёт №'+esc(preview.document_no)+' от '+esc(preview.document_date)+' · '+esc(preview.customer_display)+'<br>УНП: '+esc(preview.buyer_unp||'—')+' · Итого с НДС: <b>'+money(preview.total)+'</b> · НДС: '+money(preview.vat)+'</div><div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Кол.</th><th>Всего с НДС</th></tr></thead><tbody>'+preview.items.map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.qty)+'</td><td>'+money(x.total_with_vat)+'</td></tr>').join('')+'</tbody></table></div><button type="button" class="wp1-primary" id="wp1-confirm" '+(working?'disabled':'')+'>Создать закрытый черновик</button></section>':'';
- const list='<section class="wp1-box"><h3>Заказы</h3><div class="wp1-list">'+(orders.length?orders.map(x=>'<button data-wp1-id="'+esc(x.id)+'" type="button" class="'+(selected?.id===x.id?'active':'')+'"><b>№'+esc(x.document_no)+'</b> · '+esc(x.document_date)+' · '+esc(x.customer_display)+'<br><span class="wp1-mut">'+esc(statusText(x.status))+' · '+esc(x.line_count)+' поз. / '+esc(x.total_qty)+' шт.</span></button>').join(''):'<div class="wp1-mut">Заказов пока нет.</div>')+'</div></section>';
+ const list='<section class="wp1-box"><h3>Заказы</h3><div class="wp1-list">'+(orders.length?orders.map(x=>'<button data-wp1-id="'+esc(x.id)+'" type="button" class="'+(selected?.id===x.id?'active':'')+'"><b>№'+esc(x.document_no)+'</b> · v'+esc(x.version||1)+' · '+esc(x.document_date)+' · '+esc(x.customer_display)+'<br><span class="wp1-mut">'+esc(statusText(x.status))+' · '+esc(x.line_count)+' поз. / '+esc(x.total_qty)+' шт.</span></button>').join(''):'<div class="wp1-mut">Заказов пока нет.</div>')+'</div></section>';
  let detail='';
  if(selected){
   let f='';
@@ -342,7 +405,7 @@ function render(){
      '<p class="wp1-mut">Telegram по заказам НЕ подключён. Назначение фиксируется в CRM; до подключения технического входа ТСД статус будет «Не доставлено».</p>'+
      (devices.length?'<select id="wp1-device" style="max-width:100%;padding:8px;border:1px solid #cbd5e1">'+opts+'</select> <button type="button" class="wp1-primary" id="wp1-assign-device" '+(busyAction?'disabled':'')+'>Назначить на ТСД</button>':
       '<p class="wp1-error">Список терминалов временно недоступен — назначение не выполнено.</p>')+note+'</div>';
-  }else if(finAllowed&&['device_setup_pending','waiting_pick','picking','ready'].includes(selected.status)){
+  }else if(finAllowed&&['device_setup_pending','waiting_pick','picking','shortage','ready'].includes(selected.status)){
    const label=devices.find(x=>x.key===selected.device_key)?.label||selected.device_key||'—';
    const isPending=selected.status==='device_setup_pending';
    extra='<div class="wp1-box"><h4>📦 Назначение заказа</h4><p><b>'+esc(label)+'</b></p>'+
@@ -354,7 +417,9 @@ function render(){
   }
 
   if(finAllowed&&selectedFinance)f='<div class="wp1-finance">🔒 Только ОМ и руководитель · УНП '+esc(selectedFinance.buyer_unp||'—')+' · Сумма с НДС '+money(selectedFinance.total_with_vat)+' · НДС '+money(selectedFinance.vat_total)+'</div>';
-  detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div>'+extra+'</section>';
+  const shortages=finAllowed&&(selected.shortages||[]).length?'<div class="wp1-box"><h4>⚠ Недостача · решение ОМ</h4>'+(selected.shortages||[]).map(s=>{const item=(selected.items||[]).find(x=>x.id===s.item_id);return '<div class="wp1-error" style="margin:7px 0"><b>'+esc(item?.sku||'Позиция')+'</b> · не хватает '+esc(s.missing_qty)+' шт.<br><span class="wp1-mut">Статус: '+esc(s.status)+(s.note?' · '+esc(s.note):'')+'</span><div style="margin-top:7px"><button type="button" data-short-wait="'+esc(s.id)+'" '+(busyAction?'disabled':'')+'>Ждём товар</button> <button type="button" class="wp1-primary" data-short-correct="'+esc(s.id)+'" '+(busyAction?'disabled':'')+'>Нужна корректировка счёта</button></div></div>'}).join('')+'</div>':'';
+  const correction=finAllowed&&!['realized','shipped','cancelled'].includes(selected.status)?'<div class="wp1-box"><h4>✏️ Корректировка счёта · версия '+esc(selected.version||1)+' → '+esc(Number(selected.version||1)+1)+'</h4><p class="wp1-mut">Загрузите исправленный Excel того же счёта. Уже правильно собранные количества сохранятся. Если количество уменьшилось — ТСД покажет, что именно вернуть на склад.</p><input id="wp1-correction-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">'+(correctionFile?'<div class="wp1-mut" style="margin-top:5px">Файл: '+esc(correctionFile.name)+'</div>':'')+(correctionStatus?'<div class="'+(correctionTone==='error'?'wp1-error':correctionTone==='ok'?'wp1-good':'wp1-mut')+'" style="margin-top:8px">'+esc(correctionStatus)+'</div>':'')+(correctionPreview?'<div class="wp1-finance" style="margin-top:8px">Проверено: '+esc(correctionPreview.items.length)+' поз. / '+esc(correctionPreview.items.reduce((s,x)=>s+x.qty,0))+' шт. · '+money(correctionPreview.total)+'</div><button type="button" class="wp1-primary" id="wp1-apply-correction" '+(working?'disabled':'')+' style="margin-top:8px">Применить версию '+esc(Number(selected.version||1)+1)+'</button>':'')+'</div>':'';
+  detail='<section class="wp1-box"><h3>Счёт №'+esc(selected.document_no)+' · v'+esc(selected.version||1)+' · '+esc(statusText(selected.status))+'</h3>'+f+'<div class="wp1-table"><table><thead><tr><th>Артикул / Штрихкод</th><th>Товар</th><th>Нужно</th><th>Собрано</th></tr></thead><tbody>'+(selected.items||[]).map(x=>'<tr style="'+(x.is_removed?'opacity:.6;background:#fff7ed':'')+'"><td>'+esc(x.sku)+'<br>'+esc(x.barcode)+'</td><td>'+esc(x.product)+(x.is_removed?' · убрано корректировкой':'')+(Number(x.return_required_qty)>0?' · ВЕРНУТЬ '+esc(x.return_required_qty):'')+'</td><td>'+esc(x.expected_qty)+'</td><td>'+esc(x.picked_qty)+'</td></tr>').join('')+'</tbody></table></div>'+shortages+correction+extra+'</section>';
  }
  mount.innerHTML='<div id="wp1"><div class="wp1-head"><div><h3>📦 Заказы · защищённый контур</h3><div class="wp1-mut">Склад не получает цены, НДС, суммы, УНП или оригинальный Excel.</div></div><button type="button" id="wp1-refresh">↻ Обновить</button></div>'+devicePanel+upload+pr+'<div class="wp1-grid">'+list+detail+'</div></div>';
  mount.querySelector('#wp1-refresh')?.addEventListener('click',()=>{pairing=null;loadList().catch(showError)});
@@ -365,6 +430,11 @@ function render(){
  mount.querySelector('#wp1-assign-device')?.addEventListener('click',()=>assignDevice().catch(showError));
  mount.querySelector('#wp1-pair-selected')?.addEventListener('click',()=>{if(selected?.device_key)startPairing(selected.device_key).catch(showError)});
  mount.querySelector('#wp1-unassign-pending')?.addEventListener('click',()=>unassignPending().catch(showError));
+ mount.querySelector('#wp1-correction-file')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(file){correctionFile=file;readCorrection(file).catch(showError)}});
+ mount.querySelector('#wp1-apply-correction')?.addEventListener('click',()=>applyCorrection().catch(showError));
+ mount.querySelectorAll('[data-short-wait]').forEach(b=>b.addEventListener('click',()=>decideShortage(b.dataset.shortWait,'wait').catch(showError)));
+ mount.querySelectorAll('[data-short-correct]').forEach(b=>b.addEventListener('click',()=>decideShortage(b.dataset.shortCorrect,'correction_required').catch(showError)));
+
  mount.querySelectorAll('[data-wp1-id]').forEach(b=>b.addEventListener('click',()=>openOrder(b.dataset.wp1Id).catch(showError)));
 }
 function showError(e){alert('Заказы: '+String(e?.message||e));}
@@ -374,11 +444,11 @@ async function open(target){
  mount.innerHTML='<div class="wp1-box">Проверяю доступ к разделу «Заказы»…</div>';
  try{
    const r=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
-   role=r.role;orders=r.rows||[];selected=null;selectedFinance=null;preview=null;selectedFile=null;uploadStatus='';uploadStatusKind='mut';checking=false;
+   role=r.role;orders=r.rows||[];selected=null;selectedFinance=null;preview=null;selectedFile=null;uploadStatus='';uploadStatusKind='mut';checking=false;correctionPreview=null;correctionFile=null;correctionStatus='';correctionTone='mut';
    await loadDevices();
    if(orders.length)await openOrder(orders[0].id);else render();
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:false,autoCheck:true,excelLoadTimeout:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:false,invoiceRevisions:true,shortageWorkflow:true,autoCheck:true,excelLoadTimeout:true});
 })();
