@@ -15,7 +15,7 @@ const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,ma
 const n=v=>{const s=String(v??'').replace(/[\s\u00a0]/g,'').replace(',','.').replace(/BYN/ig,'');return s===''?NaN:Number(s)};
 const round2=v=>Math.round((v+Number.EPSILON)*100)/100;
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
-async function rpc(fn,args={}){const d=dbx();if(!d)throw Error('Нет соединения с CRM');const {data,error}=await d.rpc(fn,args);if(error)throw error;return data}
+async function rpc(fn,args={}){const d=dbx();if(!d)throw Error('Нет соединения с CRM');const call=()=>d.rpc(fn,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
 const $=id=>mount?.querySelector('#'+id);
 const statusText=x=>({'draft':'Загружен · склад ещё не уведомлён','device_setup_pending':'Назначен ТСД · требуется подключение терминала','waiting_pick':'Ожидает сборки в ТСД','picking':'В сборке','shortage':'Недостача','ready':'Готов к отгрузке','realized':'Реализован','shipped':'Отгружен','cancelled':'Отменён'})[x]||x||'—';
 function css(){
