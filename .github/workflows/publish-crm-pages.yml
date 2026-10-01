@@ -91,6 +91,15 @@ jobs:
             fi
           done
 
+          # Критические ТСД-файлы обязаны попасть в публичный Pages-артефакт.
+          # Если allowlist когда-либо сломают, деплой должен упасть вместо тихого 404.
+          for required in tsd.html tsd-manifest.webmanifest tsd-sw.js picking.html; do
+            if [ ! -s "_site/$required" ]; then
+              echo "::error::Required public TSD file missing from Pages artifact: $required"
+              exit 1
+            fi
+          done
+
           # Аварийная защита: коммерческие выгрузки не должны попасть в Pages
           # даже если кто-то случайно добавит их в data/ позже.
           if find _site -type f \( -iname '*.xlsx' -o -iname '*.xls' -o -iname '*.csv' -o -iname '*.sql' -o -iname '*.zip' \) -print -quit | grep -q .; then
