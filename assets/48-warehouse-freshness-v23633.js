@@ -17,7 +17,9 @@ let lastFreshness=null,lastRequest=null,lastMeta=null,busy=false,pollTimer=null,
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
 async function rpc(name,args={}){
   const d=dbx();if(!d)throw new Error('База ещё не готова');
-  const {data,error}=await d.rpc(name,args);if(error)throw error;return data
+  const call=()=>d.rpc(name,args);
+  const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();
+  const {data,error}=out||{};if(error)throw error;return data
 }
 function active(){return !!$('page-warehouse-control')?.classList.contains('active')}
 function dmy(v){if(!v)return'—';const s=String(v).slice(0,10).split('-');return s.length===3?`${s[2]}.${s[1]}.${s[0]}`:String(v)}
