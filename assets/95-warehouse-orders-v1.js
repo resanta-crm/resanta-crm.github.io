@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.185',BUCKET='warehouse-order-sources-v1';
+const V='v23.6.190',BUCKET='warehouse-order-sources-v1';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 let devices=[],devicesError='',pairing=null,notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
@@ -346,7 +346,7 @@ function render(){
    const label=devices.find(x=>x.key===selected.device_key)?.label||selected.device_key||'—';
    const isPending=selected.status==='device_setup_pending';
    extra='<div class="wp1-box"><h4>📦 Назначение заказа</h4><p><b>'+esc(label)+'</b></p>'+
-     (isPending?'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div><button type="button" id="wp1-unassign-pending" '+(busyAction?'disabled':'')+'>Отменить недоставленное назначение</button>':
+     (isPending?'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div><button type="button" class="wp1-primary" id="wp1-pair-selected" '+(busyAction?'disabled':'')+'>Получить код именно для '+esc(label)+'</button> <button type="button" id="wp1-unassign-pending" '+(busyAction?'disabled':'')+'>Отменить недоставленное назначение</button>':
        '<div class="wp1-good">Заказ находится в рабочем списке назначенного ТСД. Статус: '+esc(statusText(selected.status))+'.</div>')+
       '<p class="wp1-mut">Telegram: не подключён. Уведомления «отправлено» нет.</p>'+note+'</div>';
   }else if(role==='warehouse'){
@@ -363,6 +363,7 @@ function render(){
  mount.querySelector('#wp1-check')?.addEventListener('click',()=>readPreview().catch(showError));
  mount.querySelector('#wp1-confirm')?.addEventListener('click',()=>confirmImport().catch(showError));
  mount.querySelector('#wp1-assign-device')?.addEventListener('click',()=>assignDevice().catch(showError));
+ mount.querySelector('#wp1-pair-selected')?.addEventListener('click',()=>{if(selected?.device_key)startPairing(selected.device_key).catch(showError)});
  mount.querySelector('#wp1-unassign-pending')?.addEventListener('click',()=>unassignPending().catch(showError));
  mount.querySelectorAll('[data-wp1-id]').forEach(b=>b.addEventListener('click',()=>openOrder(b.dataset.wp1Id).catch(showError)));
 }
