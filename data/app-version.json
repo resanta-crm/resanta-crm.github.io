@@ -1,6 +1,6 @@
 {
-  "version": "23.6.187",
+  "version": "23.6.188",
   "released_at": "2026-10-01",
-  "purpose": "Unified Resanta Warehouse TSD hub: one installed app with Receiving, Inventory and Orders; legacy module shortcuts redirect to the hub; separate install prompts removed",
-  "deploy_trigger": "2026-10-01T10:00:00+03:00"
+  "purpose": "Fix TSD unified hub 404 by publishing root /tsd.html with root manifest and isolated service worker; legacy shortcuts redirect there",
+  "deploy_trigger": "2026-10-01T10:10:00+03:00"
 }
