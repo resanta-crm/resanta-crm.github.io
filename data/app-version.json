@@ -1,6 +1,6 @@
 {
-  "version": "23.6.185",
+  "version": "23.6.186",
   "released_at": "2026-10-01",
-  "purpose": "Secure TSD pairing without employee email/password; Office Manager assigns TSD-1/TSD-2; isolated picking.html scans exact order quantities and auto-sets Ready for shipment; Telegram remains off",
-  "deploy_trigger": "2026-10-01T09:35:00+03:00"
+  "purpose": "Installable Resanta Orders PWA for TSD home screen; isolated picking service worker and manifest; no conflict with Inventory PWA",
+  "deploy_trigger": "2026-10-01T09:45:00+03:00"
 }
