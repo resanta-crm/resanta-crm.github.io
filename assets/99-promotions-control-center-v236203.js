@@ -76,13 +76,13 @@ function monthEnd(ym){if(!/^\d{4}-\d{2}$/.test(safe(ym)))return'';const [y,m]=ym
 function overlaps(p,ym){if(!ym||ym==='all')return true;return safe(p.start_date)<=monthEnd(ym)&&safe(p.end_date)>=ym+'-01'}
 function hayGroup(x){const f=x.p?.product_filters||{},it=Array.isArray(x.e?.items)?x.e.items:[];return norm([...(f.categories||[]),...(f.subgroups||[]),...it.flatMap(i=>[i.category,i.subgroup,i.product_name])].join(' '))}
 function haySku(x){const f=x.p?.product_filters||{},it=Array.isArray(x.e?.items)?x.e.items:[];return norm([...(f.skus||[]),...it.map(i=>i.sku)].join(' '))}
-function passesCommon(x){
+function passesCommon(x,view=state.view){
   const p=x.p;
   if(state.manager!=='all'&&safe(p.manager_name)!==state.manager)return false;
   if(state.client&&!norm(safe(p.client_name)+' '+safe(p.title)).includes(norm(state.client)))return false;
   if(state.group&&!hayGroup(x).includes(norm(state.group)))return false;
   if(state.sku&&!haySku(x).includes(norm(state.sku)))return false;
-  if(!overlaps(p,state.month))return false;
+  if(!['decision','needs_close'].includes(view)&&!overlaps(p,state.month))return false;
   return true;
 }
 function inView(x,view=state.view){
@@ -95,15 +95,15 @@ function inView(x,view=state.view){
   if(view==='rejected')return x.raw==='rejected';
   return false;
 }
-function matches(p){const x=rowMeta(p);return passesCommon(x)&&inView(x)}
+function matches(p){const x=rowMeta(p);return passesCommon(x,state.view)&&inView(x)}
 function sortRows(rows){
   const a=[...(rows||[])];
   if(state.view==='needs_close')return a.sort((x,y)=>safe(x.end_date).localeCompare(safe(y.end_date)));
   if(state.view==='completed'||state.view==='rejected')return a.sort((x,y)=>safe(y.end_date).localeCompare(safe(x.end_date)));
   return a.sort((x,y)=>safe(x.start_date).localeCompare(safe(y.start_date)));
 }
-function filteredBase(){return promos().map(rowMeta).filter(passesCommon)}
-function counts(){const rows=filteredBase(),o={};views.forEach(([k])=>o[k]=rows.filter(x=>inView(x,k)).length);return o}
+function filteredBase(view=state.view){return promos().map(rowMeta).filter(x=>passesCommon(x,view))}
+function counts(){const rows=promos().map(rowMeta),o={};views.forEach(([k])=>o[k]=rows.filter(x=>passesCommon(x,k)&&inView(x,k)).length);return o}
 function months(){
   const set=new Set([currentMonth()]);
   promos().forEach(p=>{const a=safe(p.start_date).slice(0,7),b=safe(p.end_date).slice(0,7);if(/^\d{4}-\d{2}$/.test(a))set.add(a);if(/^\d{4}-\d{2}$/.test(b))set.add(b)});
@@ -113,7 +113,7 @@ function monthLabel(ym){if(ym==='all')return'Все месяцы';const n=['Ян
 function managers(){return[...new Set(promos().map(p=>safe(p.manager_name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'))}
 function toneClass(t){return t?(' pcc203-'+t):''}
 function qualitySummary(){
-  const rows=filteredBase().filter(x=>inView(x));
+  const rows=filteredBase(state.view).filter(x=>inView(x));
   const warn=rows.filter(x=>x.e?.client_match_warning||['preliminary_month','client_match_ambiguous'].includes(safe(x.e?.data_quality))).length;
   return warn?(' · '+warn+' с предупреждением по данным'):'';
 }
@@ -142,6 +142,10 @@ function prepareDom(){
   document.getElementById('promo54-close-reminder')?.remove();
   document.getElementById('promo54-tools')?.remove();
   document.getElementById('promo-boss-dash-v236133')?.remove();
+  page.querySelectorAll('.promo-toolbar button').forEach(btn=>{
+    const oc=safe(btn.getAttribute('onclick'));
+    if(btn.id==='promo-budget-btn'||oc.includes("goPage('budgets'")||oc.includes('goPage("budgets"'))btn.style.display='none';
+  });
 }
 function root(){
   const page=document.getElementById('page-promotions');if(!page)return null;
@@ -172,7 +176,10 @@ function rerender(scroll=false){
   setTimeout(()=>{prepareDom();renderCenter();if(scroll)root()?.scrollIntoView({behavior:'smooth',block:'start'})},0);
 }
 function setView(v,{scroll=true}={}){
-  if(!views.some(x=>x[0]===v))return;state.view=v;rerender(scroll);
+  if(!views.some(x=>x[0]===v))return;
+  state.view=v;
+  if(v==='needs_close'||v==='decision')state.month='all';
+  rerender(scroll);
 }
 function setClient(v){state.client=safe(v);rerender(true)}
 function bind(){
@@ -204,5 +211,6 @@ window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203=Object.freeze({
   version:V,enabled:true,state,matches,sort:sortRows,setView,setClient,repaint:renderCenter,
   views:views.map(x=>x[0]),singleSourceOfTruth:true,noPolling:true,noMutationObserver:true,noDataWrites:true
 });
+window.addEventListener('resanta:promotions-effectiveness',()=>{if(active()){renderCenter();try{renderPromotions()}catch(_){}}});
 install();[100,400,1000,2500].forEach(ms=>setTimeout(install,ms));
 })();
