@@ -3721,22 +3721,31 @@ window.addEventListener('pageshow',function(){
   }
   async function triBuildFreshCandidatesV227304(manager,target){
     const month=currentMonth(),since=new Date(Date.now()-120*86400000).toISOString().slice(0,10);
+    // Быстрая проверка даты файла 21vek. Если партнёр не прислал свежий файл,
+    // тяжёлый stock-dashboard вообще не запускаем — сразу строим fallback-план.
+    let partnerState=null;
+    try{partnerState=await rpc('triovist_partner_stock_state_v236207',{},15000);}catch(e){console.warn('Не удалось быстро проверить дату остатков 21vek',e);}
+    const statePartnerDate=String(partnerState?.snapshot_date||'').slice(0,10);
+    const shouldLoadPartnerStock=!!statePartnerDate&&triAgeDaysV227304(statePartnerDate)<=10;
+    const stockPromise=shouldLoadPartnerStock
+      ?window.TRIOVIST_DATA_HUB_V227315.stock({p_target_days:Number(document.getElementById('tri-stock-days')?.value)||45})
+      :Promise.resolve(null);
     const results=await Promise.allSettled([
       window.TRIOVIST_DATA_HUB_V227315.sales({p_end_month:month,p_mode:'month',p_start_month:null}),
-      window.TRIOVIST_DATA_HUB_V227315.stock({p_target_days:Number(document.getElementById('tri-stock-days')?.value)||45}),
+      stockPromise,
       window.TRIOVIST_DATA_HUB_V227315.content({p_manager_email:null}),
       db.from('triovist_shipments').select('*').gte('shipment_date',since).order('shipment_date',{ascending:false}),
       db.from('triovist_first_positive_stock').select('*').eq('is_legacy',false).order('first_positive_date',{ascending:false}).limit(5000)
     ]);
     const [saleRes,stockRes,contentRes,shipSet,novSet]=results;
     const saleData=saleRes.status==='fulfilled'?(saleRes.value||{}):null;
-    const stockData=stockRes.status==='fulfilled'?(stockRes.value||{}):null;
+    const stockData=stockRes.status==='fulfilled'?(stockRes.value||null):null;
     const contentData=contentRes.status==='fulfilled'?(contentRes.value||{}):{managers:[],issues:[]};
     const shipRes=shipSet.status==='fulfilled'?(shipSet.value||{}):{data:[]};
     const novRes=novSet.status==='fulfilled'?(novSet.value||{}):{data:[]};
-    const imports=stockData?.imports||{},partnerDate=imports?.partner?.snapshot_date||'',ownDate=imports?.own?.report_date||'';
+    const imports=stockData?.imports||{},partnerDate=imports?.partner?.snapshot_date||statePartnerDate||'',ownDate=imports?.own?.report_date||'';
     const partnerRows=Array.isArray(stockData?.items)?stockData.items:[];
-    const partnerUsable=!!stockData&&!!partnerDate&&triAgeDaysV227304(partnerDate)<=10&&partnerRows.length>0;
+    const partnerUsable=shouldLoadPartnerStock&&!!stockData&&!!partnerDate&&triAgeDaysV227304(partnerDate)<=10&&partnerRows.length>0;
 
     if(!partnerUsable){
       const fallback=await rpc('triovist_tasks_fallback_candidates_v236207',{p_manager_email:manager,p_target_count:target},60000);
@@ -3745,7 +3754,7 @@ window.addEventListener('pageshow',function(){
       stock={items:[],imports:{partner:{snapshot_date:null},own:{report_date:fallback.own_report_date||null}},partner_stock_available:false,stock_mode:'without_partner_stock'};
       triShipmentsV22728=shipRes?.data||[];
       triNoveltiesV22728=novRes?.data||[];
-      const stockError=stockRes.status==='rejected'?String(stockRes.reason?.message||stockRes.reason||'ошибка чтения остатков'):(partnerDate?'остаток 21vek старше 10 дней':'остатки 21vek не загружены');
+      const stockError=!shouldLoadPartnerStock?(statePartnerDate?'остаток 21vek от '+statePartnerDate+' устарел':'остатки 21vek не загружены'):(stockRes.status==='rejected'?String(stockRes.reason?.message||stockRes.reason||'ошибка чтения остатков'):'остатки 21vek недоступны');
       return {candidates:Array.isArray(fallback.candidates)?fallback.candidates:[],diagnostics:fallback.diagnostics||{},meta:{generator_version:'v23.6.207',stock_mode:'without_partner_stock',partner_stock_available:false,partner_stock_error:stockError,warning:fallback.warning||'Остатки 21vek не получены. План построен без них.',sales_month:fallback.reference_month||String(saleData?.last_import?.month||'').slice(0,7),sales_imported_at:saleData?.last_import?.imported_at||null,own_report_date:fallback.own_report_date||null,partner_snapshot_date:null,generated_at:new Date().toISOString(),candidate_count:Number(fallback.candidate_count)||0,diagnostics:fallback.diagnostics||{}}};
     }
 
