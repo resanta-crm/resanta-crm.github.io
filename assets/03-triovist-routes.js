@@ -3719,27 +3719,51 @@ window.addEventListener('pageshow',function(){
       commercial_context:{...(ctx||{}),candidate_key:triCandidateKeyV227304(manager,sku,reason),generator_version:'v22.7.31',reason_code:reason,sku:String(sku||''),product_name:product||'',group_name:group||'Не распределено'}
     };
   }
-  async function triBuildFreshCandidatesV227304(){
+  async function triBuildFreshCandidatesV227304(manager,target){
     const month=currentMonth(),since=new Date(Date.now()-120*86400000).toISOString().slice(0,10);
-    const stage=async(label,promise)=>{try{return await promise;}catch(e){throw new Error(label+': '+(e?.message||e));}};
-    const [saleData,stockData,contentData,shipRes,novRes]=await Promise.all([
-      stage('Продажи 21vek',window.TRIOVIST_DATA_HUB_V227315.sales({p_end_month:month,p_mode:'month',p_start_month:null})),
-      stage('Остатки Триовиста',window.TRIOVIST_DATA_HUB_V227315.stock({p_target_days:Number(document.getElementById('tri-stock-days')?.value)||45})),
-      stage('Карточки 21vek',window.TRIOVIST_DATA_HUB_V227315.content({p_manager_email:null})).catch(()=>({managers:[],issues:[]})),
-      stage('Отгрузки 1С',db.from('triovist_shipments').select('*').gte('shipment_date',since).order('shipment_date',{ascending:false})),
-      stage('Реестр новинок',db.from('triovist_first_positive_stock').select('*').eq('is_legacy',false).order('first_positive_date',{ascending:false}).limit(5000))
+    const results=await Promise.allSettled([
+      window.TRIOVIST_DATA_HUB_V227315.sales({p_end_month:month,p_mode:'month',p_start_month:null}),
+      window.TRIOVIST_DATA_HUB_V227315.stock({p_target_days:Number(document.getElementById('tri-stock-days')?.value)||45}),
+      window.TRIOVIST_DATA_HUB_V227315.content({p_manager_email:null}),
+      db.from('triovist_shipments').select('*').gte('shipment_date',since).order('shipment_date',{ascending:false}),
+      db.from('triovist_first_positive_stock').select('*').eq('is_legacy',false).order('first_positive_date',{ascending:false}).limit(5000)
     ]);
-    if(shipRes?.error)throw new Error('Отгрузки 1С: '+(shipRes.error.message||shipRes.error));if(novRes?.error)throw new Error('Реестр новинок: '+(novRes.error.message||novRes.error));
-    const last=saleData?.last_import||{},imports=stockData?.imports||{},ownDate=imports?.own?.report_date||'',partnerDate=imports?.partner?.snapshot_date||'';
+    const [saleRes,stockRes,contentRes,shipSet,novSet]=results;
+    const saleData=saleRes.status==='fulfilled'?(saleRes.value||{}):null;
+    const stockData=stockRes.status==='fulfilled'?(stockRes.value||{}):null;
+    const contentData=contentRes.status==='fulfilled'?(contentRes.value||{}):{managers:[],issues:[]};
+    const shipRes=shipSet.status==='fulfilled'?(shipSet.value||{}):{data:[]};
+    const novRes=novSet.status==='fulfilled'?(novSet.value||{}):{data:[]};
+    const imports=stockData?.imports||{},partnerDate=imports?.partner?.snapshot_date||'',ownDate=imports?.own?.report_date||'';
+    const partnerRows=Array.isArray(stockData?.items)?stockData.items:[];
+    const partnerUsable=!!stockData&&!!partnerDate&&triAgeDaysV227304(partnerDate)<=10&&partnerRows.length>0;
+
+    if(!partnerUsable){
+      const fallback=await rpc('triovist_tasks_fallback_candidates_v236207',{p_manager_email:manager,p_target_count:target},60000);
+      if(!fallback?.ok)throw new Error('Не удалось сформировать резервный план без остатков 21vek: '+(fallback?.reason||'неизвестная ошибка'));
+      sales=saleData||{items:[],period_plans:[],selected_month_plans:[]};
+      stock={items:[],imports:{partner:{snapshot_date:null},own:{report_date:fallback.own_report_date||null}},partner_stock_available:false,stock_mode:'without_partner_stock'};
+      triShipmentsV22728=shipRes?.data||[];
+      triNoveltiesV22728=novRes?.data||[];
+      const stockError=stockRes.status==='rejected'?String(stockRes.reason?.message||stockRes.reason||'ошибка чтения остатков'):(partnerDate?'остаток 21vek старше 10 дней':'остатки 21vek не загружены');
+      return {candidates:Array.isArray(fallback.candidates)?fallback.candidates:[],diagnostics:fallback.diagnostics||{},meta:{generator_version:'v23.6.207',stock_mode:'without_partner_stock',partner_stock_available:false,partner_stock_error:stockError,warning:fallback.warning||'Остатки 21vek не получены. План построен без них.',sales_month:fallback.reference_month||String(saleData?.last_import?.month||'').slice(0,7),sales_imported_at:saleData?.last_import?.imported_at||null,own_report_date:fallback.own_report_date||null,partner_snapshot_date:null,generated_at:new Date().toISOString(),candidate_count:Number(fallback.candidate_count)||0,diagnostics:fallback.diagnostics||{}}};
+    }
+
+    if(saleRes.status!=='fulfilled')throw new Error('Продажи 21vek: '+(saleRes.reason?.message||saleRes.reason||'не удалось загрузить'));
+    if(shipSet.status!=='fulfilled')throw new Error('Отгрузки 1С: '+(shipSet.reason?.message||shipSet.reason||'не удалось загрузить'));
+    if(novSet.status!=='fulfilled')throw new Error('Реестр новинок: '+(novSet.reason?.message||novSet.reason||'не удалось загрузить'));
+    if(shipRes?.error)throw new Error('Отгрузки 1С: '+(shipRes.error.message||shipRes.error));
+    if(novRes?.error)throw new Error('Реестр новинок: '+(novRes.error.message||novRes.error));
+
+    const last=saleData?.last_import||{};
     const salesMonth=String(last.month||saleData?.end_month||month).slice(0,7),salesAt=last.imported_at||'';
     if(salesMonth!==month)throw new Error('Продажи 21vek не свежие: последний период '+(salesMonth||'не определён')+', нужен '+month+'. Сначала обновите продажи.');
     if(!salesAt||triAgeDaysV227304(salesAt)>3)throw new Error('Продажи 21vek не обновлялись более 3 дней. Сначала запустите импорт продаж.');
     if(!ownDate||triAgeDaysV227304(ownDate)>3)throw new Error('Остаток Витебска старше 3 дней. Свежие задачи не создаются на старом складе.');
-    if(!partnerDate||triAgeDaysV227304(partnerDate)>10)throw new Error('Остаток 21vek старше 10 дней. Сначала загрузите свежий недельный файл 21vek.');
     if(typeof window.triovistCommercialEngineV227313!=='function')throw new Error('Коммерческий движок v22.7.31.3 не загружен. Обновите страницу без кэша.');
-    // Эти данные уже только что прочитаны для генерации. Сохраняем их в рабочее
-    // состояние экрана, чтобы после INSERT не делать второй полный круг RPC.
+
     sales=saleData;stock=stockData;triShipmentsV22728=shipRes.data||[];triNoveltiesV22728=novRes.data||[];
+    stock.partner_stock_available=true;stock.stock_mode='full';
     stock.items=(stock.items||[]).filter(x=>!triTaskIs900V22728({group_name:x.assigned_group,category:x.category,subgroup:x.subgroup,items:[{sku:x.sku,product_name:x.product}]}));
     const blocked={};MANAGERS.forEach(m=>blocked[m]=new Set());
     (data.tasks||[]).filter(t=>ACTIVE.includes(t.status)&&t.status!=='pending_approval').forEach(t=>{
@@ -3748,7 +3772,7 @@ window.addEventListener('pageshow',function(){
       rows.forEach(x=>{const k=skuKey(x?.sku);if(k)blocked[m].add(k);});const one=skuKey(ctx.sku||t.sku);if(one)blocked[m].add(one);
     });
     const pack=window.triovistCommercialEngineV227313({salesData:saleData,stockData,contentIssues:contentData?.issues||[],shipments:shipRes.data||[],novelties:novRes.data||[],partnerSnapshotDate:partnerDate,ownReportDate:ownDate,blockedSkusByManager:Object.fromEntries(Object.entries(blocked).map(([m,set])=>[m,[...set]]))});
-    return {candidates:pack.candidates,diagnostics:pack.diagnostics,meta:{sales_month:salesMonth,sales_imported_at:salesAt,own_report_date:ownDate,partner_snapshot_date:partnerDate,generated_at:new Date().toISOString(),candidate_count:pack.candidates.length,diagnostics:pack.diagnostics}};
+    return {candidates:pack.candidates,diagnostics:pack.diagnostics,meta:{generator_version:'v23.6.207',stock_mode:'full',partner_stock_available:true,sales_month:salesMonth,sales_imported_at:salesAt,own_report_date:ownDate,partner_snapshot_date:partnerDate,generated_at:new Date().toISOString(),candidate_count:pack.candidates.length,diagnostics:pack.diagnostics}};
   }
 
 
@@ -3778,7 +3802,7 @@ window.addEventListener('pageshow',function(){
     const btn=document.getElementById('tri-task-generate-btn');if(btn)btn.disabled=true;
     try{
       banner('Формирую план '+name+': свежесть данных → продажи/остатки/карточки → агрегация SKU в подгруппы → денежный потенциал → '+target+' приоритетных подгрупп…');
-      const pack=await triBuildFreshCandidatesV227304(),d=pack.diagnostics||{};
+      const pack=await triBuildFreshCandidatesV227304(manager,target),d=pack.diagnostics||{};
       const portfolio=triSubgroupPortfolioV227319(pack.candidates,manager,target);
       if(!portfolio.rows.length){
         banner('Для '+name+' не найдено сильных подгрупп. Проверено '+num(d.scanned)+' SKU: без Витебска '+num(d.no_vitebsk)+', уже заняты согласованными задачами '+num(d.blocked_active)+', группа 900 '+num(d.group_900)+', без коммерческого сигнала '+num(d.no_signal)+'.','ok');
@@ -3790,7 +3814,7 @@ window.addEventListener('pageshow',function(){
       const out=await rpc('triovist_tasks_generate_subgroup_v227319',{p_manager_email:manager,p_target_count:target,p_month_end:dueDate,p_rows:rows,p_meta:meta},60000);
       const created=num(out?.created),deleted=num(out?.deleted_pending),archived=num(out?.archived_rule_tasks),locked=num(out?.locked_subgroup_tasks),createdIds=Array.isArray(out?.created_task_ids)?out.created_task_ids.map(String).filter(Boolean):[];
       const skipped=num(out?.skipped_duplicates)+num(out?.skipped_rules);
-      const summary=name+': найдено '+portfolio.totalCandidates+' сильных подгрупп → целевой план '+target+' · сохранено согласованных подгрупп '+locked+' · заменено несогласованных '+deleted+(archived?' · архивировано старых правил '+archived:'')+' · создано '+created+(skipped?' · пропущено '+skipped:'')+' · срок '+fmtDate(dueDate);
+      const stockNote=pack.meta?.partner_stock_available===false?' · ⚠ остатки 21vek не получены: использованы продажи '+String(pack.meta?.sales_month||'последнего закрытого месяца')+' + актуальный склад Витебск; 21vek не считается нулём':''; const summary=name+': найдено '+portfolio.totalCandidates+' сильных подгрупп → целевой план '+target+' · сохранено согласованных подгрупп '+locked+' · заменено несогласованных '+deleted+(archived?' · архивировано старых правил '+archived:'')+' · создано '+created+(skipped?' · пропущено '+skipped:'')+' · срок '+fmtDate(dueDate)+stockNote;
 
       window.TRIOVIST_DATA_HUB_V227315.invalidate('tasks');
       const fresh=await window.TRIOVIST_DATA_HUB_V227315.tasks({p_manager_email:null});
@@ -3820,15 +3844,21 @@ window.addEventListener('pageshow',function(){
     const salesRows=managerSalesRows.filter(x=>skus.size?skus.has(skuKey(x.sku)):norm(x.subgroup||x.category||x.assigned_group)===groupN);
     const stockRows=managerStockRows.filter(x=>skus.size?skus.has(skuKey(x.sku)):norm(x.subgroup||x.category||x.assigned_group)===groupN);
     const subgroupSalesRows=saved.task_scope==='subgroup'?managerSalesRows.filter(x=>norm(x.subgroup||x.category||x.assigned_group)===groupN):salesRows;
-    const current=subgroupSalesRows.reduce((a,x)=>a+num(x.current_revenue),0),previous=subgroupSalesRows.reduce((a,x)=>a+num(x.previous_revenue),0);
-    const snapshot=stock?.imports?.partner?.snapshot_date||saved.partner_snapshot_date||'';
-    const shippedAfter=stockRows.reduce((a,x)=>a+triShipmentQtyV22728(x.sku,snapshot),0),rawRecommended=stockRows.reduce((a,x)=>a+num(x.recommended),0);
-    const ctx={...saved,task_id:t.id,current_revenue:current,previous_revenue:previous,loss:Math.max(0,previous-current),partner_total:stockRows.reduce((a,x)=>a+num(x.partner_total),0),own_qty:stockRows.reduce((a,x)=>a+num(x.own_qty),0),chekhov_qty:stockRows.reduce((a,x)=>a+num(x.chekhov_qty),0),shipped_after_snapshot:shippedAfter,recommended_qty:Math.max(0,rawRecommended-shippedAfter),uncovered:stockRows.reduce((a,x)=>a+num(x.uncovered),0),sku_count:skus.size||storedItems.length,plan_items:storedItems};
+    const liveCurrent=subgroupSalesRows.reduce((a,x)=>a+num(x.current_revenue),0),livePrevious=subgroupSalesRows.reduce((a,x)=>a+num(x.previous_revenue),0);
+    const current=subgroupSalesRows.length?liveCurrent:num(saved.subgroup_current_revenue??saved.current_revenue);
+    const previous=subgroupSalesRows.length?livePrevious:num(saved.subgroup_previous_revenue??saved.previous_revenue);
+    const partnerKnown=saved.partner_stock_available!==false&&stock?.partner_stock_available!==false;
+    const snapshot=partnerKnown?(stock?.imports?.partner?.snapshot_date||saved.partner_snapshot_date||''):'';
+    const shippedAfter=partnerKnown?stockRows.reduce((a,x)=>a+triShipmentQtyV22728(x.sku,snapshot),0):0;
+    const rawRecommended=partnerKnown?stockRows.reduce((a,x)=>a+num(x.recommended),0):0;
+    const liveOwn=stockRows.reduce((a,x)=>a+num(x.own_qty),0);
+    const own=stockRows.length?liveOwn:num(saved.own_qty);
+    const ctx={...saved,task_id:t.id,current_revenue:current,previous_revenue:previous,loss:Math.max(0,previous-current),partner_stock_available:partnerKnown,partner_total:partnerKnown?stockRows.reduce((a,x)=>a+num(x.partner_total),0):null,own_qty:own,chekhov_qty:partnerKnown?stockRows.reduce((a,x)=>a+num(x.chekhov_qty),0):null,shipped_after_snapshot:partnerKnown?shippedAfter:null,recommended_qty:partnerKnown?Math.max(0,rawRecommended-shippedAfter):null,uncovered:partnerKnown?stockRows.reduce((a,x)=>a+num(x.uncovered),0):null,sku_count:skus.size||storedItems.length,plan_items:storedItems};
     if(saved.task_scope==='subgroup'){
       ctx.subgroup_current_revenue=current;ctx.subgroup_previous_revenue=previous;ctx.subgroup_loss=Math.max(0,previous-current);
       t._ctx=ctx;t.commercial_context=ctx;t.priority_score=num(t.base_priority||saved.priority_score||t.priority_score);return ctx;
     }
-    let score=num(t.base_priority);if(ctx.loss>0)score+=10;if(ctx.previous_revenue>0&&ctx.current_revenue===0)score+=8;if(ctx.recommended_qty>0&&ctx.own_qty>0)score+=7;if(ctx.partner_total<=0&&ctx.own_qty>0)score+=10;if(ctx.partner_total<=0&&ctx.own_qty<=0)score-=12;
+    let score=num(t.base_priority);if(ctx.loss>0)score+=10;if(ctx.previous_revenue>0&&ctx.current_revenue===0)score+=8;if(partnerKnown&&ctx.recommended_qty>0&&ctx.own_qty>0)score+=7;if(partnerKnown&&ctx.partner_total<=0&&ctx.own_qty>0)score+=10;if(partnerKnown&&ctx.partner_total<=0&&ctx.own_qty<=0)score-=12;
     t._ctx=ctx;t.priority_score=Math.max(0,Math.min(100,score));t.commercial_context=ctx;return ctx;
   }
 
@@ -3856,13 +3886,16 @@ window.addEventListener('pageshow',function(){
     if(!tasks.length)return 0;
     if(typeof _aiUsageToday==='function'&&typeof AI_DAILY_LIMIT!=='undefined'&&_aiUsageToday()>=AI_DAILY_LIMIT)throw new Error('Дневной лимит ИИ исчерпан. Базовые задачи уже созданы и работают.');
     if(typeof _bumpAiUsage==='function')_bumpAiUsage();
-    const input=tasks.map(t=>({
-      task_id:t.id,manager:managerName(manager),group:t.group_name,type:TYPE_LABELS[t.task_type]||t.task_type,
-      priority:t.priority_score,due_date:t.due_date,basis:t.basis,base_task:t.task_text,
-      expected_result:t.expected_result,criteria:t.criteria,commercial_context:t._ctx||t.commercial_context||{},
-      items:((t.items||[]).length?(t.items||[]):((t._ctx||t.commercial_context||{}).plan_items||[])).slice(0,12).map(x=>({sku:x.sku,product:x.product_name,reason:x.reason_label||x.issue_title,loss:x.loss,current_revenue:x.current_revenue,previous_revenue:x.previous_revenue,stock_21vek:x.partner_total,stock_vitebsk:x.own_qty,problem:x.content_issue_title||'',current:x.current_value,target:x.target_value}))
-    }));
-    const system='Ты — коммерческий директор крупнейшего интернет-канала 21vek.by для брендов Ресанта, Huter, Вихрь и Eurolux. Входная задача уже выбрана CRM НА УРОВНЕ ТОВАРНОЙ ПОДГРУППЫ. Не превращай её обратно в задачу по одному SKU и не создавай отдельные поручения на каждый товар. Цель — одно сильное коммерческое поручение менеджеру по всей подгруппе до due_date, а массив items — приоритетные SKU внутри этой задачи. Используй только входные факты и цифры. В title обязательно назови подгруппу и коммерческий результат: вернуть продажи / увеличить sell-out / восстановить наличие / усилить видимость. В task_text дай 4–6 действий: сначала отработать SKU в порядке коммерческого эффекта; для SKU с товаром на 21vek и падением продаж работать с sell-out (позиция, цена/SALE, поиск, карточка), без лишней отгрузки; для SKU с 21vek=0 отгружать только из свободного остатка Витебска и не повторять отгрузку, если она уже сделана; исправить отмеченные проблемы карточек; в конце сверить результат подгруппы. Чехов только справочно. Группа 900, вопросы покупателей и доставка запрещены. Не меняй список SKU, due_date, current_revenue, previous_revenue, loss, target_revenue и остатки. basis должен описывать ИМЕННО подгруппу: текущая выручка, аналог, потеря, сколько SKU в работе и какие типы проблем доминируют. expected_result и criteria должны использовать target_revenue подгруппы из commercial_context. Не пиши критерий «продажи > 0», если CRM дала денежную цель. Верни строго JSON-массив без markdown. Для каждой task_id один объект: {"task_id":"uuid","title":"коммерческая цель + подгруппа","task_text":"4-6 конкретных действий по подгруппе","basis":"цифры подгруппы и ключевые SKU","expected_result":"измеримый результат подгруппы к сроку","criteria":"точный критерий проверки","next_step":"следующий шаг, если цель не достигнута"}.'
+    const input=tasks.map(t=>{
+      const ctx=t._ctx||t.commercial_context||{},partnerKnown=ctx.partner_stock_available!==false;
+      return {
+        task_id:t.id,manager:managerName(manager),group:t.group_name,type:TYPE_LABELS[t.task_type]||t.task_type,
+        priority:t.priority_score,due_date:t.due_date,basis:t.basis,base_task:t.task_text,
+        expected_result:t.expected_result,criteria:t.criteria,commercial_context:ctx,partner_stock_known:partnerKnown,
+        items:((t.items||[]).length?(t.items||[]):((ctx.plan_items)||[])).slice(0,12).map(x=>({sku:x.sku,product:x.product_name,reason:x.reason_label||x.issue_title,loss:x.loss,current_revenue:x.current_revenue,previous_revenue:x.previous_revenue,partner_stock_known:partnerKnown&&x.partner_stock_available!==false,stock_21vek:(partnerKnown&&x.partner_stock_available!==false)?x.partner_total:null,stock_vitebsk:x.own_qty,problem:x.content_issue_title||'',current:x.current_value,target:x.target_value}))
+      };
+    });
+    const system='Ты — коммерческий директор крупнейшего интернет-канала 21vek.by для брендов Ресанта, Huter, Вихрь и Eurolux. Входная задача уже выбрана CRM НА УРОВНЕ ТОВАРНОЙ ПОДГРУППЫ. Не превращай её обратно в задачу по одному SKU и не создавай отдельные поручения на каждый товар. Цель — одно сильное коммерческое поручение менеджеру по всей подгруппе до due_date, а массив items — приоритетные SKU внутри этой задачи. Используй только входные факты и цифры. В title обязательно назови подгруппу и коммерческий результат: вернуть продажи / увеличить sell-out / восстановить наличие / усилить видимость. В task_text дай 4–6 действий: сначала отработать SKU в порядке коммерческого эффекта; для SKU с товаром на 21vek и падением продаж работать с sell-out (позиция, цена/SALE, поиск, карточка), без лишней отгрузки; для SKU с подтверждённым остатком 21vek=0 отгружать только из свободного остатка Витебска и не повторять отгрузку, если она уже сделана; если partner_stock_known=false или partner_stock_available=false, остаток 21vek НЕИЗВЕСТЕН: запрещено считать его нулём, писать «нет товара на 21vek» или назначать отгрузку вслепую — в этом режиме работай по sell-out: продажи, цена, позиция в поиске/категории, промо и карточка, а потребность в поставке проверь после получения свежего файла остатков; исправить отмеченные проблемы карточек; в конце сверить результат подгруппы. Чехов только справочно. Группа 900, вопросы покупателей и доставка запрещены. Не меняй список SKU, due_date, current_revenue, previous_revenue, loss, target_revenue и остатки. basis должен описывать ИМЕННО подгруппу: текущая выручка, аналог, потеря, сколько SKU в работе и какие типы проблем доминируют. expected_result и criteria должны использовать target_revenue подгруппы из commercial_context. Не пиши критерий «продажи > 0», если CRM дала денежную цель. Верни строго JSON-массив без markdown. Для каждой task_id один объект: {"task_id":"uuid","title":"коммерческая цель + подгруппа","task_text":"4-6 конкретных действий по подгруппе","basis":"цифры подгруппы и ключевые SKU","expected_result":"измеримый результат подгруппы к сроку","criteria":"точный критерий проверки","next_step":"следующий шаг, если цель не достигнута"}.'
     const prompt='ЗАДАЧИ ДЛЯ '+managerName(manager)+':\n'+JSON.stringify(input);
     let timer;const timeout=new Promise((_,rej)=>timer=setTimeout(()=>rej(new Error('ИИ не ответил за 70 секунд')),70000));
     try{
@@ -3963,14 +3996,15 @@ window.addEventListener('pageshow',function(){
 
   function triPlanItemLiveV227319(x,manager){
     const k=skuKey(x?.sku),sr=(sales.items||[]).filter(r=>String(r.manager_email||'').toLowerCase()===manager&&skuKey(r.sku)===k),st=(stock.items||[]).find(r=>String(r.manager_email||'').toLowerCase()===manager&&skuKey(r.sku)===k)||(stock.items||[]).find(r=>skuKey(r.sku)===k);
-    const cur=sr.reduce((a,r)=>a+num(r.current_revenue),0),prev=sr.reduce((a,r)=>a+num(r.previous_revenue),0),curQty=sr.reduce((a,r)=>a+num(r.current_qty),0),partner=num(st?.partner_total),own=num(st?.own_qty),days=st?.stock_days==null?null:num(st.stock_days),reason=String(x?.reason_code||'');
+    const partnerKnown=x?.partner_stock_available!==false&&stock?.partner_stock_available!==false&&!!st;
+    const cur=sr.length?sr.reduce((a,r)=>a+num(r.current_revenue),0):num(x?.current_revenue),prev=sr.length?sr.reduce((a,r)=>a+num(r.previous_revenue),0):num(x?.previous_revenue),curQty=sr.reduce((a,r)=>a+num(r.current_qty),0),partner=partnerKnown?num(st?.partner_total):null,own=st?num(st?.own_qty):num(x?.own_qty),days=partnerKnown&&st?.stock_days!=null?num(st.stock_days):null,reason=String(x?.reason_code||'');
     let status=String(x?.item_status||'open');
     if(['lost_sales','falling_sales'].includes(reason)&&num(x.target_revenue)>0)status=cur>=num(x.target_revenue)?'verified':'open';
-    else if(reason==='no_stock_21vek')status=partner>0?'verified':'open';
-    else if(reason==='low_stock_21vek')status=(days!=null&&days>=num(x.target_stock_days||14))?'verified':'open';
+    else if(reason==='no_stock_21vek'&&partnerKnown)status=partner>0?'verified':'open';
+    else if(reason==='low_stock_21vek'&&partnerKnown)status=(days!=null&&days>=num(x.target_stock_days||14))?'verified':'open';
     else if(reason==='novelty')status=curQty>=num(x.target_qty||1)?'verified':'open';
-    const current='Продажи '+money(cur)+' · 21vek '+qty(partner)+' · Витебск '+qty(own)+(days==null?'':' · запас '+qty(days)+' дн.');
-    return {...x,item_status:status,current_value:current,live_current_revenue:cur,live_previous_revenue:prev,live_partner_total:partner,live_own_qty:own};
+    const current='Продажи '+money(cur)+' · 21vek '+(partnerKnown?qty(partner):'нет данных')+' · Витебск '+qty(own)+(days==null?'':' · запас '+qty(days)+' дн.');
+    return {...x,partner_stock_available:partnerKnown,item_status:status,current_value:current,live_current_revenue:cur,live_previous_revenue:prev,live_partner_total:partner,live_own_qty:own};
   }
 
   function taskHtml(t){
@@ -3984,7 +4018,7 @@ window.addEventListener('pageshow',function(){
     const parentPill=ctx.parent_group&&norm(ctx.parent_group)!==norm(t.group_name)?'<span class="tri-task-pill">'+h(ctx.parent_group)+'</span>':'';
     const cur=ctx.subgroup_current_revenue==null?ctx.current_revenue:ctx.subgroup_current_revenue,prev=ctx.subgroup_previous_revenue==null?ctx.previous_revenue:ctx.subgroup_previous_revenue,loss=ctx.subgroup_loss==null?ctx.loss:ctx.subgroup_loss;
     const scopeNote=ctx.task_scope==='subgroup'?'<div class="tri-task-note" style="margin-top:5px">В работу отобрано: '+items.length+' SKU · потерянные '+num(ctx.lost_sku_count)+' · падающие '+num(ctx.falling_sku_count)+' · без наличия 21vek '+num(ctx.no_stock_sku_count)+' · проблемы карточек '+num(ctx.content_issue_count)+' · новинки '+num(ctx.novelty_count)+'.</div>':'';
-    return '<div class="tri-task-card '+h(t.status)+'"><div class="tri-task-card-head"><div><div class="tri-task-title">'+h(t.title)+'</div><div class="tri-task-meta"><span class="tri-task-pill tri-task-priority '+pc+'">'+p+'/100 · '+h(triPriorityLabelV227304(p))+'</span><span class="tri-task-pill tri-task-status">'+h(STATUS_LABELS[t.status]||t.status)+'</span><span class="tri-task-pill">'+h(t.manager_name)+'</span>'+parentPill+'<span class="tri-task-pill">'+h(t.group_name)+'</span><span class="tri-task-pill">до '+fmtDate(t.due_date)+'</span>'+(reasonLabel?'<span class="tri-task-pill">'+h(reasonLabel)+'</span>':'')+(t.ai_generated?'<span class="tri-task-pill tri-task-ai">🤖 ИИ</span>':'<span class="tri-task-pill">правило CRM</span>')+'</div></div><div style="text-align:right"><b>'+verified+' / '+items.length+'</b><div class="tri-task-note">SKU достигли цели</div></div></div><div class="tri-task-body"><div><div class="tri-task-box"><b>Что сделать</b>'+h(t.task_text||'—').replace(/\n/g,'<br>')+'</div><div class="tri-task-box" style="margin-top:8px"><b>Основание</b>'+h(t.basis||'—')+'<div class="tri-task-note" style="margin-top:5px">Подгруппа: продажи '+money(cur)+' · аналог '+money(prev)+' · потеря '+money(loss)+'</div><div class="tri-task-note">SKU в работе: 21vek '+qty(ctx.partner_total)+' шт. · Витебск '+qty(ctx.own_qty)+' · Чехов '+qty(ctx.chekhov_qty)+' (справочно)</div>'+scopeNote+'</div></div><div><div class="tri-task-box"><b>Ожидаемый результат</b>'+h(t.expected_result||'—')+'</div><div class="tri-task-box" style="margin-top:8px"><b>Критерий</b>'+h(t.criteria||'—')+'</div>'+(t.result_summary?'<div class="tri-task-box" style="margin-top:8px"><b>Последняя проверка</b>'+h(t.result_summary)+'</div>':'')+(t.manager_comment?'<div class="tri-task-box" style="margin-top:8px"><b>Комментарий менеджера</b>'+h(t.manager_comment)+'</div>':'')+(t.leader_comment?'<div class="tri-task-box" style="margin-top:8px"><b>Комментарий руководителя</b>'+h(t.leader_comment)+'</div>':'')+'</div></div><details class="tri-task-items"><summary>Показать приоритетные SKU и результат проверки ('+items.length+')</summary>'+itemHtml+'</details><div class="tri-task-actions">'+actionButtons(t)+'</div></div>';
+    return '<div class="tri-task-card '+h(t.status)+'"><div class="tri-task-card-head"><div><div class="tri-task-title">'+h(t.title)+'</div><div class="tri-task-meta"><span class="tri-task-pill tri-task-priority '+pc+'">'+p+'/100 · '+h(triPriorityLabelV227304(p))+'</span><span class="tri-task-pill tri-task-status">'+h(STATUS_LABELS[t.status]||t.status)+'</span><span class="tri-task-pill">'+h(t.manager_name)+'</span>'+parentPill+'<span class="tri-task-pill">'+h(t.group_name)+'</span><span class="tri-task-pill">до '+fmtDate(t.due_date)+'</span>'+(reasonLabel?'<span class="tri-task-pill">'+h(reasonLabel)+'</span>':'')+(t.ai_generated?'<span class="tri-task-pill tri-task-ai">🤖 ИИ</span>':'<span class="tri-task-pill">правило CRM</span>')+'</div></div><div style="text-align:right"><b>'+verified+' / '+items.length+'</b><div class="tri-task-note">SKU достигли цели</div></div></div><div class="tri-task-body"><div><div class="tri-task-box"><b>Что сделать</b>'+h(t.task_text||'—').replace(/\n/g,'<br>')+'</div><div class="tri-task-box" style="margin-top:8px"><b>Основание</b>'+h(t.basis||'—')+'<div class="tri-task-note" style="margin-top:5px">Подгруппа: продажи '+money(cur)+' · аналог '+money(prev)+' · потеря '+money(loss)+'</div><div class="tri-task-note">SKU в работе: 21vek '+(ctx.partner_stock_available===false?'нет данных':qty(ctx.partner_total)+' шт.')+' · Витебск '+qty(ctx.own_qty)+(ctx.partner_stock_available===false?'':' · Чехов '+qty(ctx.chekhov_qty)+' (справочно)')+'</div>'+scopeNote+'</div></div><div><div class="tri-task-box"><b>Ожидаемый результат</b>'+h(t.expected_result||'—')+'</div><div class="tri-task-box" style="margin-top:8px"><b>Критерий</b>'+h(t.criteria||'—')+'</div>'+(t.result_summary?'<div class="tri-task-box" style="margin-top:8px"><b>Последняя проверка</b>'+h(t.result_summary)+'</div>':'')+(t.manager_comment?'<div class="tri-task-box" style="margin-top:8px"><b>Комментарий менеджера</b>'+h(t.manager_comment)+'</div>':'')+(t.leader_comment?'<div class="tri-task-box" style="margin-top:8px"><b>Комментарий руководителя</b>'+h(t.leader_comment)+'</div>':'')+'</div></div><details class="tri-task-items"><summary>Показать приоритетные SKU и результат проверки ('+items.length+')</summary>'+itemHtml+'</details><div class="tri-task-actions">'+actionButtons(t)+'</div></div>';
   }
 
   function render(){
