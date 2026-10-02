@@ -3746,16 +3746,45 @@ window.addEventListener('pageshow',function(){
     const imports=stockData?.imports||{},partnerDate=imports?.partner?.snapshot_date||statePartnerDate||'',ownDate=imports?.own?.report_date||'';
     const partnerRows=Array.isArray(stockData?.items)?stockData.items:[];
     const partnerUsable=shouldLoadPartnerStock&&!!stockData&&!!partnerDate&&triAgeDaysV227304(partnerDate)<=10&&partnerRows.length>0;
+    const last=saleData?.last_import||{};
+    const salesMonth=String(last.month||saleData?.end_month||'').slice(0,7),salesAt=last.imported_at||'';
+    const needSeasonalPlan=!partnerUsable||salesMonth!==month;
 
-    if(!partnerUsable){
-      const fallback=await rpc('triovist_tasks_fallback_candidates_v236207',{p_manager_email:manager,p_target_count:target},60000);
-      if(!fallback?.ok)throw new Error('Не удалось сформировать резервный план без остатков 21vek: '+(fallback?.reason||'неизвестная ошибка'));
+    if(needSeasonalPlan){
+      const fallback=await rpc('triovist_tasks_month_candidates_v236210',{p_manager_email:manager,p_target_count:target},60000);
+      if(!fallback?.ok)throw new Error('Не удалось сформировать месячный план по сезонности: '+(fallback?.reason||'неизвестная ошибка'));
       sales=saleData||{items:[],period_plans:[],selected_month_plans:[]};
-      stock={items:[],imports:{partner:{snapshot_date:null},own:{report_date:fallback.own_report_date||null}},partner_stock_available:false,stock_mode:'without_partner_stock'};
+      if(fallback.partner_stock_available&&stockData){
+        stock=stockData;stock.partner_stock_available=true;stock.stock_mode='seasonal_with_stock';
+      }else{
+        stock={items:[],imports:{partner:{snapshot_date:fallback.partner_snapshot_date||null},own:{report_date:fallback.own_report_date||null}},partner_stock_available:false,stock_mode:'seasonal_without_partner_stock'};
+      }
       triShipmentsV22728=shipRes?.data||[];
       triNoveltiesV22728=novRes?.data||[];
-      const stockError=!shouldLoadPartnerStock?(statePartnerDate?'остаток 21vek от '+statePartnerDate+' устарел':'остатки 21vek не загружены'):(stockRes.status==='rejected'?String(stockRes.reason?.message||stockRes.reason||'ошибка чтения остатков'):'остатки 21vek недоступны');
-      return {candidates:Array.isArray(fallback.candidates)?fallback.candidates:[],diagnostics:fallback.diagnostics||{},meta:{generator_version:'v23.6.207',stock_mode:'without_partner_stock',partner_stock_available:false,partner_stock_error:stockError,warning:fallback.warning||'Остатки 21vek не получены. План построен без них.',sales_month:fallback.reference_month||String(saleData?.last_import?.month||'').slice(0,7),sales_imported_at:saleData?.last_import?.imported_at||null,own_report_date:fallback.own_report_date||null,partner_snapshot_date:null,generated_at:new Date().toISOString(),candidate_count:Number(fallback.candidate_count)||0,diagnostics:fallback.diagnostics||{}}};
+      const stockError=!fallback.partner_stock_available
+        ?(fallback.partner_snapshot_date?'остаток 21vek от '+fallback.partner_snapshot_date+' не считается свежим':'остатки 21vek не загружены')
+        :'';
+      return {
+        candidates:Array.isArray(fallback.candidates)?fallback.candidates:[],
+        diagnostics:fallback.diagnostics||{},
+        meta:{
+          generator_version:'v23.6.210',
+          stock_mode:fallback.mode||'seasonal_month_plan',
+          partner_stock_available:!!fallback.partner_stock_available,
+          partner_stock_error:stockError,
+          warning:fallback.warning||'Месячный план построен по сезонности и последнему закрытому месяцу.',
+          plan_month:fallback.target_month||month,
+          seasonal_reference_month:fallback.seasonal_reference_month||'',
+          sales_month:fallback.reference_month||salesMonth,
+          current_month_sales_available:!!fallback.current_month_sales_available,
+          sales_imported_at:salesAt||null,
+          own_report_date:fallback.own_report_date||ownDate||null,
+          partner_snapshot_date:fallback.partner_snapshot_date||partnerDate||null,
+          generated_at:new Date().toISOString(),
+          candidate_count:Number(fallback.candidate_count)||0,
+          diagnostics:fallback.diagnostics||{}
+        }
+      };
     }
 
     if(saleRes.status!=='fulfilled')throw new Error('Продажи 21vek: '+(saleRes.reason?.message||saleRes.reason||'не удалось загрузить'));
@@ -3764,10 +3793,7 @@ window.addEventListener('pageshow',function(){
     if(shipRes?.error)throw new Error('Отгрузки 1С: '+(shipRes.error.message||shipRes.error));
     if(novRes?.error)throw new Error('Реестр новинок: '+(novRes.error.message||novRes.error));
 
-    const last=saleData?.last_import||{};
-    const salesMonth=String(last.month||saleData?.end_month||month).slice(0,7),salesAt=last.imported_at||'';
-    if(salesMonth!==month)throw new Error('Продажи 21vek не свежие: последний период '+(salesMonth||'не определён')+', нужен '+month+'. Сначала обновите продажи.');
-    if(!salesAt||triAgeDaysV227304(salesAt)>3)throw new Error('Продажи 21vek не обновлялись более 3 дней. Сначала запустите импорт продаж.');
+    if(!salesAt||triAgeDaysV227304(salesAt)>3)throw new Error('Продажи 21vek текущего месяца не обновлялись более 3 дней. Сначала запустите импорт продаж.');
     if(!ownDate||triAgeDaysV227304(ownDate)>3)throw new Error('Остаток Витебска старше 3 дней. Свежие задачи не создаются на старом складе.');
     if(typeof window.triovistCommercialEngineV227313!=='function')throw new Error('Коммерческий движок v22.7.31.3 не загружен. Обновите страницу без кэша.');
 
@@ -3781,7 +3807,7 @@ window.addEventListener('pageshow',function(){
       rows.forEach(x=>{const k=skuKey(x?.sku);if(k)blocked[m].add(k);});const one=skuKey(ctx.sku||t.sku);if(one)blocked[m].add(one);
     });
     const pack=window.triovistCommercialEngineV227313({salesData:saleData,stockData,contentIssues:contentData?.issues||[],shipments:shipRes.data||[],novelties:novRes.data||[],partnerSnapshotDate:partnerDate,ownReportDate:ownDate,blockedSkusByManager:Object.fromEntries(Object.entries(blocked).map(([m,set])=>[m,[...set]]))});
-    return {candidates:pack.candidates,diagnostics:pack.diagnostics,meta:{generator_version:'v23.6.207',stock_mode:'full',partner_stock_available:true,sales_month:salesMonth,sales_imported_at:salesAt,own_report_date:ownDate,partner_snapshot_date:partnerDate,generated_at:new Date().toISOString(),candidate_count:pack.candidates.length,diagnostics:pack.diagnostics}};
+    return {candidates:pack.candidates,diagnostics:pack.diagnostics,meta:{generator_version:'v23.6.210',stock_mode:'full',partner_stock_available:true,plan_month:month,seasonal_reference_month:(Number(month.slice(0,4))-1)+'-'+month.slice(5,7),sales_month:salesMonth,current_month_sales_available:true,sales_imported_at:salesAt,own_report_date:ownDate,partner_snapshot_date:partnerDate,generated_at:new Date().toISOString(),candidate_count:pack.candidates.length,diagnostics:pack.diagnostics}};
   }
 
 
