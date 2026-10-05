@@ -22,13 +22,13 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from triovist_21vek_parser import parse_product, public_product_url
+from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=(os.environ["SUPABASE_URL"] or "").strip().rstrip("/")
 SUPABASE_KEY=(os.environ["SUPABASE_KEY"] or "").strip()
-PARSER_VERSION="competitors-v1.0"
+PARSER_VERSION="competitors-v1.1"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
-UA="ResantaCRM-21vekCompetitors/1.0 (+https://resanta-crm.by)"
+UA="ResantaCRM-21vekCompetitors/1.1 (+https://resanta-crm.by)"
 DELAY=max(0.25,float(os.environ.get("COMPETITOR_DELAY_SECONDS","0.45")))
 TIMEOUT=max(10,int(os.environ.get("COMPETITOR_HTTP_TIMEOUT","30")))
 
@@ -49,8 +49,8 @@ ALIASES={
     "voltage_v":["напряжение аккумулятора","номинальное напряжение","напряжение"],
     "battery_capacity_ah":["емкость аккумулятора","ёмкость аккумулятора","емкость акб","ёмкость акб"],
     "motor_type":["тип электродвигателя","тип двигателя"],
-    "max_rpm":["макс. скорость вращения","максимальная скорость вращения","max число оборотов, об/мин","частота вращения","число оборотов холостого хода"],
-    "torque_nm":["макс. крутящий момент","максимальный крутящий момент","max крутящий момент, нм","крутящий момент"],
+    "max_rpm":["макс. скорость вращения","максимальная скорость вращения","max число оборотов, об/мин","частота вращения","число оборотов холостого хода","число оборотов","обороты холостого хода","скорость вращения"],
+    "torque_nm":["макс. крутящий момент","максимальная крутящий момент","максимальный крутящий момент","max крутящий момент, нм","крутящий момент","крутящий момент макс","крутящий момент максимальный"],
     "wood_mm":["диам. сверления дерева","макс. диаметр сверления в древесине","максимальный диаметр сверления древесины","макс. диаметр сверления дерево"],
     "steel_mm":["диам. сверления стали","макс. диаметр сверления в стали","максимальный диаметр сверления металла","макс. диаметр сверления металл"],
     "weight_kg":["вес","масса, согласно процедуре ерта","масса, согласно процедуре epta","масса, кг"],
@@ -140,39 +140,125 @@ def nums(v: Any) -> list[float]:
     return out
 
 
+def _alias_map() -> dict[str,str]:
+    out={}
+    for key,aliases in ALIASES.items():
+        for a in aliases:
+            out[norm(a)]=key
+    return out
+
+
+def _primitive_text(value: Any) -> str:
+    if isinstance(value,bool):
+        return "да" if value else "нет"
+    if isinstance(value,(str,int,float)):
+        return str(value).strip()
+    if isinstance(value,list):
+        vals=[_primitive_text(x) for x in value]
+        vals=[x for x in vals if x]
+        if vals and len(vals)<=6:
+            return ", ".join(vals)
+    return ""
+
+
+def structured_specs(html: str) -> list[dict]:
+    """Extract known characteristics from public __NEXT_DATA__ structures.
+
+    21vek cards do not use one stable characteristic schema across brands. We
+    therefore look for common label/value shapes recursively and keep only
+    labels that are explicitly configured in triovist_competitor_rules.
+    """
+    aliases=_alias_map()
+    try:
+        state=next_state(html)
+    except Exception:
+        return []
+    root=(state.get("productCard") or {}).get("fullProductData") or {}
+    out=[];seen=set()
+
+    label_keys=("name","title","label","caption","propertyName","featureName","characteristicName","parameterName")
+    value_keys=("value","text","displayValue","propertyValue","featureValue","characteristicValue","parameterValue")
+
+    def add(label,value,path):
+        nl=norm(label); text=_primitive_text(value)
+        key=aliases.get(nl)
+        if not key or not text:
+            return
+        sig=(key,text)
+        if sig in seen:
+            return
+        seen.add(sig)
+        out.append({"key":key,"label":str(label),"value":text,"source":"next_data","path":path})
+
+    def walk(node,path="fd"):
+        if isinstance(node,dict):
+            label=None
+            for lk in label_keys:
+                if lk in node and isinstance(node.get(lk),(str,int,float)):
+                    label=node.get(lk);break
+            if label is not None:
+                for vk in value_keys:
+                    if vk in node:
+                        add(label,node.get(vk),path+"."+vk)
+            # Some payloads use the characteristic label as the JSON key.
+            for k,v in node.items():
+                if norm(k) in aliases:
+                    add(k,v,path+"."+str(k))
+                if isinstance(v,(dict,list)):
+                    walk(v,path+"."+str(k))
+        elif isinstance(node,list):
+            for i,v in enumerate(node):
+                walk(v,f"{path}[{i}]")
+
+    walk(root)
+    return out
+
+
 def line_specs(html: str) -> list[dict]:
-    """Extract known visible 21vek characteristics from rendered public HTML text."""
+    """Extract visible 21vek characteristics, including split two-line labels."""
     soup=BeautifulSoup(html,"html.parser")
     lines=[re.sub(r"\s+"," ",x).strip() for x in soup.get_text("\n",strip=True).splitlines()]
     lines=[x for x in lines if x]
-    alias_to_key={}
-    for key,aliases in ALIASES.items():
-        for a in aliases:
-            alias_to_key[norm(a)]=key
-    out=[]
-    seen=set()
+    alias_to_key=_alias_map()
+    out=[];seen=set()
     heading_words={
         "основные характеристики","рабочие характеристики","размеры и вес","комплектация",
-        "характеристики","описание","отзывы","обратите внимание"
+        "характеристики","описание","отзывы","обратите внимание","показать все характеристики"
     }
+
     for i,line in enumerate(lines):
-        nl=norm(line)
-        key=alias_to_key.get(nl)
+        key=None;label=line;consumed=1
+        # Prefer the longest configured label. This fixes cards where 21vek
+        # renders e.g. "Напряжение" / "аккумулятора" on separate lines.
+        for width in (3,2,1):
+            if i+width>len(lines):
+                continue
+            joined=" ".join(lines[i:i+width])
+            k=alias_to_key.get(norm(joined))
+            if k:
+                key=k;label=joined;consumed=width;break
         if not key:
             continue
+
         value=""
-        for j in range(i+1,min(len(lines),i+5)):
-            cand=lines[j].strip()
-            nc=norm(cand)
-            if not cand or nc in heading_words or nc in alias_to_key:
+        for j in range(i+consumed,min(len(lines),i+consumed+6)):
+            cand=lines[j].strip();nc=norm(cand)
+            if not cand or nc in heading_words:
                 continue
-            value=cand
-            break
+            # If the candidate itself is another characteristic label, stop:
+            # a missing value stays missing instead of borrowing a neighbour.
+            is_label=nc in alias_to_key
+            if not is_label:
+                for width in (2,3):
+                    if j+width<=len(lines) and norm(" ".join(lines[j:j+width])) in alias_to_key:
+                        is_label=True;break
+            if is_label:
+                break
+            value=cand;break
         if value and (key,value) not in seen:
-            out.append({"key":key,"label":line,"value":value,"source":"visible_html"})
+            out.append({"key":key,"label":label,"value":value,"source":"visible_html"})
             seen.add((key,value))
     return out
-
 
 def normalize_specs(raw: list[dict], parsed: dict) -> dict:
     values={}
@@ -358,7 +444,13 @@ def parse_card(session: requests.Session, url: str, item: dict) -> dict:
         "category":item.get("category"),
         "subgroup":item.get("subgroup"),
     })
-    raw=line_specs(html)
+    raw=[]
+    seen=set()
+    for row in structured_specs(html)+line_specs(html):
+        sig=(row.get("key"),str(row.get("value") or ""))
+        if sig in seen:
+            continue
+        seen.add(sig);raw.append(row)
     specs=normalize_specs(raw,parsed)
     return {"parsed":parsed,"specs_raw":raw,"specs":specs}
 
@@ -385,7 +477,11 @@ def similarity(ours: dict, comp: dict) -> float:
         return 0.0
     score=(total/used)*100
     coverage=min(1.0,used/sum(WEIGHTS.values()))
-    score*=0.85+0.15*coverage
+    # Missing data must reduce confidence materially. A card without either
+    # voltage or torque cannot be called a direct technical analogue.
+    score*=0.65+0.35*coverage
+    if comp.get("voltage_v") is None or comp.get("torque_nm") is None:
+        score=min(score,60)
     try:
         if abs(float(ours.get("voltage_v"))-float(comp.get("voltage_v")))>6:
             score=min(score,55)
@@ -508,6 +604,8 @@ def recommendation(our_price,comp_price,mrc,mrc_status,score,advantages,disadvan
         return f"Конкурент дешевле и технически не слабее. Рассмотреть цену около {target:.2f} BYN, но не ниже МРЦ."
     if score>=70:
         return "Цену снижать не требуется: использовать технические преимущества в карточке 21vek и в аргументации менеджеров."
+    if score<55 and disadvantages:
+        return "У конкурента есть преимущество по совокупной оценке. Цену ниже МРЦ не опускать; усилить карточку и отработать конкретные слабые характеристики."
     if disadvantages:
         return "Паритет по цене/характеристикам. Усилить карточку товара по слабым параметрам и контролировать цену конкурента."
     return "Сохранять текущую цену и мониторить изменения конкурента."
@@ -521,14 +619,19 @@ def load_rules(subgroup: str) -> None:
     })
     if not rows:
         return
-    ALIASES.clear(); WEIGHTS.clear()
+    WEIGHTS.clear()
     for row in rows:
         key=str(row.get("spec_key") or "").strip()
         if not key:
             continue
         aliases=row.get("aliases") or []
         if isinstance(aliases,list):
-            ALIASES[key]=[str(x) for x in aliases if str(x).strip()]
+            merged=list(ALIASES.get(key) or [])
+            for x in aliases:
+                s=str(x).strip()
+                if s and s not in merged:
+                    merged.append(s)
+            ALIASES[key]=merged
         try:
             WEIGHTS[key]=float(row.get("weight") or 0)
         except Exception:
