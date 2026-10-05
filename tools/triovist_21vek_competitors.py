@@ -619,14 +619,19 @@ def load_rules(subgroup: str) -> None:
     })
     if not rows:
         return
-    ALIASES.clear(); WEIGHTS.clear()
+    WEIGHTS.clear()
     for row in rows:
         key=str(row.get("spec_key") or "").strip()
         if not key:
             continue
         aliases=row.get("aliases") or []
         if isinstance(aliases,list):
-            ALIASES[key]=[str(x) for x in aliases if str(x).strip()]
+            merged=list(ALIASES.get(key) or [])
+            for x in aliases:
+                s=str(x).strip()
+                if s and s not in merged:
+                    merged.append(s)
+            ALIASES[key]=merged
         try:
             WEIGHTS[key]=float(row.get("weight") or 0)
         except Exception:
