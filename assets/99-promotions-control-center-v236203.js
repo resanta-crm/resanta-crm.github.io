@@ -150,6 +150,9 @@ function prepareDom(){
   document.getElementById('promo54-close-reminder')?.remove();
   document.getElementById('promo54-tools')?.remove();
   document.getElementById('promo-boss-dash-v236133')?.remove();
+  // v23.6.217: старый директорский блок v23.6.8 считал approved как «В работе»
+  // и пытался управлять скрытым legacy-фильтром. Центр управления — единственный источник истины.
+  document.getElementById('promo-v2368-director')?.remove();
   syncLegacyDirectorButtons();
   page.querySelectorAll('.promo-toolbar button').forEach(btn=>{
     const oc=safe(btn.getAttribute('onclick'));
