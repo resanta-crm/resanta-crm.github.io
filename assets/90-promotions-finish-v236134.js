@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_FINISH_V236134)return;
-const V='v23.6.203';
+const V='v23.6.216';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -47,7 +47,20 @@ function decorateDashboard(){
 }
 async function loadPrices(){
  if(prices)return prices;if(priceFlight)return priceFlight;const d=dbc();if(!d)throw Error('Нет подключения к базе');
- priceFlight=(async()=>{const out=[];for(let a=0;;a+=1000){const {data,error}=await d.from('promotion_price_list').select('sku,product_name,category,subgroup,price_vat,valid_from').eq('active',true).order('category').order('subgroup').order('sku').range(a,a+999);if(error)throw error;out.push(...(data||[]));if(!data||data.length<1000)break}prices=out;return out})().finally(()=>priceFlight=null);return priceFlight;
+ priceFlight=(async()=>{
+   const out=[];
+   for(let a=0;;a+=1000){
+     const {data,error}=await d.from('crm_promotion_catalog_v236215')
+       .select('sku,product_name,category,subgroup,price_vat,valid_from,in_full_catalog,has_current_mo2,source_kind')
+       .order('category').order('subgroup').order('sku').range(a,a+999);
+     if(error)throw error;
+     out.push(...(data||[]));
+     if(!data||data.length<1000)break;
+   }
+   prices=out;
+   return out;
+ })().finally(()=>priceFlight=null);
+ return priceFlight;
 }
 async function savedItems(id){const {data,error}=await dbc().from('promotion_items').select('sku,discount_pct').eq('promotion_id',id);if(error)throw error;return data||[]}
 function groups(){return[...new Set((prices||[]).map(x=>safe(x.category)||'Без группы'))].sort((a,b)=>a.localeCompare(b,'ru'))}
@@ -55,14 +68,14 @@ function subgroups(g){return[...new Set((prices||[]).filter(x=>(safe(x.category)
 function modal(){return document.getElementById('promo-sku-modal-v236134')}
 function filterState(){const m=modal();return{g:m?.querySelector('[data-psm-g]')?.value||'',s:m?.querySelector('[data-psm-s]')?.value||'',q:safe(m?.querySelector('[data-psm-q]')?.value).trim().toLowerCase()}}
 function candidates(){const f=filterState();return(prices||[]).filter(x=>{const g=safe(x.category)||'Без группы',s=safe(x.subgroup)||'Без подгруппы',q=(safe(x.sku)+' '+safe(x.product_name)).toLowerCase();return(!f.g||g===f.g)&&(!f.s||s===f.s)&&(!f.q||q.includes(f.q))})}
-function renderList(){const m=modal(),sel=m?.querySelector('[data-psm-list]');if(!sel)return;const a=candidates(),shown=a.slice(0,180);sel.innerHTML=shown.map(x=>'<option value="'+esc(x.sku)+'">'+esc(x.sku)+' · '+esc(x.product_name)+' · '+num(x.price_vat).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN</option>').join('');const c=m.querySelector('[data-psm-found]');if(c)c.textContent='Найдено '+a.length+(a.length>180?' · показаны первые 180':'')}
-function renderChosen(){const m=modal(),box=m?.querySelector('[data-psm-selected]');if(!box)return;const a=[...chosen.values()];if(!a.length){box.innerHTML='<div class="psm134-warn">Выберите конкретные SKU. Пустой список сохранить нельзя.</div>';return}box.innerHTML='<div class="psm134-count"><b>Выбрано '+a.length+' SKU</b></div><div class="psm134-table"><table><thead><tr><th>SKU</th><th>Товар</th><th>МО2</th><th>Скидка %</th><th></th></tr></thead><tbody>'+a.map(x=>'<tr><td><b>'+esc(x.sku)+'</b></td><td>'+esc(x.product_name)+'</td><td>'+num(x.price_vat).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td><input type="number" min="0" max="99.99" step="0.01" data-psm-disc="'+esc(x.sku)+'" value="'+num(x.discount_pct)+'"></td><td><button class="psm134-del" type="button" data-psm-del="'+esc(x.sku)+'">×</button></td></tr>').join('')+'</tbody></table></div>'}
+function renderList(){const m=modal(),sel=m?.querySelector('[data-psm-list]');if(!sel)return;const a=candidates(),shown=a.slice(0,180);sel.innerHTML=shown.map(x=>'<option value="'+esc(x.sku)+'">'+esc(x.sku)+' · '+esc(x.product_name)+' · '+(x.price_vat==null?'МО2: нет текущей цены':num(x.price_vat).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN')+'</option>').join('');const c=m.querySelector('[data-psm-found]');if(c)c.textContent='Найдено '+a.length+(a.length>180?' · показаны первые 180':'')}
+function renderChosen(){const m=modal(),box=m?.querySelector('[data-psm-selected]');if(!box)return;const a=[...chosen.values()];if(!a.length){box.innerHTML='<div class="psm134-warn">Выберите конкретные SKU. Пустой список сохранить нельзя.</div>';return}box.innerHTML='<div class="psm134-count"><b>Выбрано '+a.length+' SKU</b></div><div class="psm134-table"><table><thead><tr><th>SKU</th><th>Товар</th><th>МО2</th><th>Скидка %</th><th></th></tr></thead><tbody>'+a.map(x=>'<tr><td><b>'+esc(x.sku)+'</b></td><td>'+esc(x.product_name)+'</td><td>'+(x.price_vat==null?'<span style="color:#92400e">нет текущей цены</span>':num(x.price_vat).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}))+'</td><td><input type="number" min="0" max="99.99" step="0.01" data-psm-disc="'+esc(x.sku)+'" value="'+num(x.discount_pct)+'"></td><td><button class="psm134-del" type="button" data-psm-del="'+esc(x.sku)+'">×</button></td></tr>').join('')+'</tbody></table></div>'}
 function addSku(sku){const x=(prices||[]).find(v=>safe(v.sku)===safe(sku));if(x&&!chosen.has(safe(sku)))chosen.set(safe(sku),{...x,discount_pct:0})}
 async function openPicker(id){
  const p=promotion(id);if(!canRefine(p)){alert('Уточнение SKU для этой акции недоступно.');return}activePromotionId=safe(id);chosen=new Map();css();
  let m=modal();if(!m){m=document.createElement('div');m.id='promo-sku-modal-v236134';m.innerHTML='<div class="psm134-card"><div class="psm134-head"><div><h3>Уточнить SKU акции</h3><div class="psm134-note">Меняется только товарный охват акции. Клиент, сроки, план, бюджет, механика и согласования остаются без изменений.</div></div><button type="button" class="psm134-x" data-psm-close>×</button></div><div class="psm134-warn">После сохранения продажи этой акции будут считаться строго по выбранным артикулам, а не по всей группе / подгруппе.</div><div class="psm134-filters"><select data-psm-g></select><select data-psm-s><option value="">Все подгруппы</option></select><input data-psm-q placeholder="Поиск по SKU / названию"></div><div class="psm134-count" data-psm-found></div><select multiple size="8" class="psm134-list" data-psm-list></select><div class="psm134-tools"><button type="button" class="btn-secondary" data-psm-add>Добавить выбранные</button></div><div data-psm-selected></div><div class="psm134-foot"><button type="button" class="btn-secondary" data-psm-close>Отмена</button><button type="button" class="btn-primary" data-psm-save>Сохранить точные SKU</button></div></div>';document.body.appendChild(m)}else m.style.display='flex';
  m.querySelector('h3').textContent='Уточнить SKU · '+safe(p.client_name||'')+' — '+safe(p.title||'');
- try{await loadPrices();const saved=await savedItems(id);saved.forEach(v=>{const x=(prices||[]).find(z=>safe(z.sku)===safe(v.sku));if(x)chosen.set(safe(v.sku),{...x,discount_pct:num(v.discount_pct)})});const gs=groups(),g=gs[0]||'';m.querySelector('[data-psm-g]').innerHTML=gs.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');m.querySelector('[data-psm-g]').value=g;m.querySelector('[data-psm-s]').innerHTML='<option value="">Все подгруппы</option>'+subgroups(g).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');renderList();renderChosen()}catch(e){alert('Не удалось загрузить Прайс МО2: '+(e?.message||e));m.style.display='none'}
+ try{await loadPrices();const saved=await savedItems(id);saved.forEach(v=>{const x=(prices||[]).find(z=>safe(z.sku)===safe(v.sku));if(x)chosen.set(safe(v.sku),{...x,discount_pct:num(v.discount_pct)})});const gs=groups(),g=gs[0]||'';m.querySelector('[data-psm-g]').innerHTML=gs.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');m.querySelector('[data-psm-g]').value=g;m.querySelector('[data-psm-s]').innerHTML='<option value="">Все подгруппы</option>'+subgroups(g).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');renderList();renderChosen()}catch(e){alert('Не удалось загрузить полный каталог компании: '+(e?.message||e));m.style.display='none'}
 }
 function closePicker(){const m=modal();if(m)m.style.display='none';activePromotionId='';chosen.clear()}
 async function savePicker(){
@@ -86,5 +99,5 @@ function delegated(e){
 function changed(e){if(e.target?.matches?.('[data-psm-g]')){const g=e.target.value,sub=modal().querySelector('[data-psm-s]');sub.innerHTML='<option value="">Все подгруппы</option>'+subgroups(g).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');renderList();return}if(e.target?.matches?.('[data-psm-s]')){renderList();return}if(e.target?.matches?.('[data-psm-disc]')){const x=chosen.get(safe(e.target.dataset.psmDisc));if(x)x.discount_pct=Math.max(0,Math.min(99.99,num(e.target.value)));return}if(e.target?.closest?.('#promo-boss-dash-v236133'))setTimeout(decorateDashboard,0)}
 function typed(e){if(e.target?.matches?.('[data-psm-q]')){renderList();return}if(e.target?.closest?.('#promo-boss-dash-v236133'))setTimeout(decorateDashboard,0)}
 css();document.addEventListener('click',delegated,true);document.addEventListener('change',changed,true);document.addEventListener('input',typed,true);window.addEventListener('resanta:promotions-effectiveness',()=>{setTimeout(decorateDashboard,0);try{if(typeof promotionDetailId!=='undefined'&&promotionDetailId)decorateDetail(promotionDetailId)}catch(_){}});installDetailHook();[150,500,1200,3000].forEach(ms=>setTimeout(()=>{installDetailHook();decorateDashboard();try{if(typeof promotionDetailId!=='undefined'&&promotionDetailId)decorateDetail(promotionDetailId)}catch(_){}},ms));
-window.RESANTA_PROMOTIONS_FINISH_V236134=Object.freeze({version:V,noPolling:true,noMutationObserver:true,safeSkuRefinement:true,decorateDashboard,decorateDetail});
+window.RESANTA_PROMOTIONS_FINISH_V236134=Object.freeze({version:V,noPolling:true,noMutationObserver:true,safeSkuRefinement:true,fullCompanyCatalog:true,decorateDashboard,decorateDetail});
 })();
