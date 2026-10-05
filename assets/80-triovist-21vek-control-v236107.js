@@ -67,7 +67,8 @@ function money(v){const x=Number(v);return Number.isFinite(x)?x.toLocaleString('
 function pct(v){const x=Number(v);return Number.isFinite(x)?(x>0?'+':'')+x.toFixed(2).replace('.',',')+'%':'—';}
 function mrcBadge(row){
   const s=String(row?.status||'');
-  if(s==='inactive_below')return'<span class="tri21mrc-badge">⚪ ниже МРЦ, нет в наличии</span>';\n  if(s==='critical')return'<span class="tri21mrc-badge bad">🔴 ниже МРЦ</span>';
+  if(s==='inactive_below')return'<span class="tri21mrc-badge">⚪ ниже МРЦ, нет в наличии</span>';
+  if(s==='critical')return'<span class="tri21mrc-badge bad">🔴 ниже МРЦ</span>';
   if(s==='warning')return'<span class="tri21mrc-badge warn">🟠 ниже МРЦ</span>';
   if(s==='slight')return'<span class="tri21mrc-badge warn">🟡 ниже МРЦ</span>';
   if(s==='above')return'<span class="tri21mrc-badge good">выше МРЦ</span>';
