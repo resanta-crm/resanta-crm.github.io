@@ -712,6 +712,18 @@ def normalize_name(name):
     return " ".join(tokens)
 
 
+def exact_client_key(name):
+    """Строгий ключ юрлица: сохраняет юрформу и порядок слов.
+
+    Это первая ступень привязки 1С -> CRM. Она позволяет безопасно отличить
+    активную карточку от старых/архивных дублей, даже если после удаления
+    юрформы их canonical_client_key совпадает.
+    """
+    s = str(name or "").strip().lower().replace("ё", "е")
+    s = re.sub(r"[^0-9a-zа-я]+", " ", s)
+    return " ".join(s.split())
+
+
 def names_match(a, b):
     """Совпадение имён: точное или по вхождению.
 
@@ -768,26 +780,36 @@ def attach_client_ids(rows):
         "Authorization": f"Bearer {SUPABASE_KEY}",
     }
 
-    clients = _get_all_rest_rows("clients", "id,name,assortment")
+    clients = _get_all_rest_rows("clients", "id,name,assortment,is_archived,to_delete")
     aliases = []
     try:
         aliases = _get_all_rest_rows("client_aliases", "client_id,alias_name")
     except Exception as exc:
         log(f"  ⚠️ Таблица client_aliases недоступна, использую имена из карточек: {exc}")
 
+    # Архивные/помеченные на удаление карточки не должны делать действующего
+    # клиента «неоднозначным». Сначала ищем строгое совпадение юр. названия,
+    # затем — старый canonical-ключ без юрформы. Обе ступени только уникальные.
+    strict_keys = {}
     keys = {}
     for c in clients:
+        if bool(c.get("is_archived")) or bool(c.get("to_delete")):
+            continue
         cid = str(c.get("id") or "")
         names = client_name_variants(c)
         names.extend(a.get("alias_name") for a in aliases if str(a.get("client_id") or "") == cid)
         for name in names:
+            strict = exact_client_key(name)
+            if strict:
+                strict_keys.setdefault(strict, set()).add(cid)
             key = canonical_client_key(name)
-            if not key:
-                continue
-            keys.setdefault(key, set()).add(cid)
+            if key:
+                keys.setdefault(key, set()).add(cid)
 
+    strict_unique = {k: next(iter(ids)) for k, ids in strict_keys.items() if len(ids) == 1}
     unique = {k: next(iter(ids)) for k, ids in keys.items() if len(ids) == 1}
-    matched = 0
+    matched_strict = 0
+    matched_canonical = 0
     unresolved = set()
     ambiguous = set()
 
@@ -799,17 +821,28 @@ def attach_client_ids(rows):
         row["client_id"] = None
 
     for row in rows:
+        strict = exact_client_key(row.get("client_name"))
+        strict_ids = strict_keys.get(strict, set())
+        if strict in strict_unique:
+            row["client_id"] = strict_unique[strict]
+            matched_strict += 1
+            continue
+
         key = canonical_client_key(row.get("client_name"))
         ids = keys.get(key, set())
         if key in unique:
             row["client_id"] = unique[key]
-            matched += 1
-        elif len(ids) > 1:
+            matched_canonical += 1
+        elif len(strict_ids) > 1 or len(ids) > 1:
             ambiguous.add(row.get("client_name") or "")
         else:
             unresolved.add(row.get("client_name") or "")
 
-    log(f"  Прямая привязка purchase_history.client_id: {matched} из {len(rows)} строк")
+    matched = matched_strict + matched_canonical
+    log(
+        f"  Прямая привязка purchase_history.client_id: {matched} из {len(rows)} строк "
+        f"(строго {matched_strict}, по уникальному активному canonical {matched_canonical})"
+    )
     if ambiguous:
         log(f"  ⚠️ Неоднозначные названия ({len(ambiguous)}) — client_id не проставлен:")
         for name in sorted(ambiguous)[:20]:

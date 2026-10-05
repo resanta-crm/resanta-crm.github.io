@@ -215,7 +215,9 @@ def latest_valid_report_for_month(mail, target):
     return None, {"kind": "invalid", "message": msg, "subject_hits": subject_hits}
 
 def build_client_resolver():
-    clients = sales._get_all_rest_rows("clients", "id,name,assortment,manager_name")
+    clients = sales._get_all_rest_rows(
+        "clients", "id,name,assortment,manager_name,is_archived,to_delete"
+    )
     try:
         aliases = sales._get_all_rest_rows("client_aliases", "client_id,alias_name")
     except Exception as exc:
@@ -226,40 +228,61 @@ def build_client_resolver():
     for a in aliases:
         aliases_by_id[str(a.get("client_id") or "")].append(a.get("alias_name") or "")
 
+    strict = defaultdict(set)
     exact = defaultdict(set)
     fuzzy_names = []
     for c in clients:
+        if bool(c.get("is_archived")) or bool(c.get("to_delete")):
+            continue
         cid = str(c.get("id") or "")
         if not cid:
             continue
         manager = str(c.get("manager_name") or "")
         names = sales.client_name_variants(c) + aliases_by_id.get(cid, [])
         for name in names:
+            strict_key = sales.exact_client_key(name)
             key = sales.canonical_client_key(name)
             norm = sales.normalize_name(name)
+            if strict_key:
+                strict[strict_key].add(cid)
             if key:
                 exact[key].add(cid)
             if norm:
                 fuzzy_names.append((norm, cid, manager, str(name)))
 
+    unique_strict = {key: next(iter(ids)) for key, ids in strict.items() if len(ids) == 1}
     unique_exact = {key: next(iter(ids)) for key, ids in exact.items() if len(ids) == 1}
-    return {"exact": exact, "unique_exact": unique_exact, "fuzzy_names": fuzzy_names}
+    return {
+        "strict": strict,
+        "unique_strict": unique_strict,
+        "exact": exact,
+        "unique_exact": unique_exact,
+        "fuzzy_names": fuzzy_names,
+    }
 
 
 def apply_client_ids(rows, resolver):
-    matched_exact = matched_fuzzy = 0
+    matched_strict = matched_exact = matched_fuzzy = 0
     ambiguous = set()
     unresolved = set()
 
     for row in rows:
         row["client_id"] = None
+
+        strict_key = sales.exact_client_key(row.get("client_name"))
+        strict_ids = resolver["strict"].get(strict_key, set())
+        if strict_key in resolver["unique_strict"]:
+            row["client_id"] = resolver["unique_strict"][strict_key]
+            matched_strict += 1
+            continue
+
         key = sales.canonical_client_key(row.get("client_name"))
         ids = resolver["exact"].get(key, set())
         if key in resolver["unique_exact"]:
             row["client_id"] = resolver["unique_exact"][key]
             matched_exact += 1
             continue
-        if len(ids) > 1:
+        if len(strict_ids) > 1 or len(ids) > 1:
             ambiguous.add(row.get("client_name") or "")
             continue
 
@@ -284,12 +307,17 @@ def apply_client_ids(rows, resolver):
         else:
             unresolved.add(row.get("client_name") or "")
 
-    log(f"    client_id: точно {matched_exact}, безопасно по алиасу/юрлицу {matched_fuzzy}, всего строк {len(rows)}")
+    log(
+        f"    client_id: строго {matched_strict}, по уникальному активному canonical {matched_exact}, "
+        f"безопасно по алиасу/юрлицу {matched_fuzzy}, всего строк {len(rows)}"
+    )
     if ambiguous:
         log(f"    ⚠️ Неоднозначные ({len(ambiguous)}): " + "; ".join(sorted(ambiguous)[:12]))
     if unresolved:
         log(f"    ⚠️ Без карточки ({len(unresolved)}): " + "; ".join(sorted(unresolved)[:12]))
-    return {"matched_exact": matched_exact, "matched_fuzzy": matched_fuzzy,
+    return {"matched_exact": matched_strict + matched_exact,
+            "matched_strict": matched_strict,
+            "matched_fuzzy": matched_fuzzy,
             "ambiguous": sorted(ambiguous), "unresolved": sorted(unresolved)}
 
 
