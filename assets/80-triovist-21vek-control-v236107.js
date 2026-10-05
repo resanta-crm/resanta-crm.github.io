@@ -6,8 +6,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.214',TTL=15000;
-let cache=null,cacheAt=0,flight=null;
+const VERSION='v23.6.220',TTL=15000;
+let cache=null,cacheAt=0,flight=null,mrcCache=null,mrcCacheAt=0,mrcFlight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function dt(v){if(!v)return'—';try{return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return String(v);}}
@@ -29,8 +29,8 @@ function activeTriovist(){return document.getElementById('page-triovist')?.class
 function injectCss(){
   if(document.getElementById('tri21-control-css-v236107'))return;
   const s=document.createElement('style');s.id='tri21-control-css-v236107';s.textContent=`
-  .tri21ctl{margin-bottom:12px;padding:14px 16px;transition:border-color .18s,box-shadow .18s,background .18s}.tri21ctl.state-green{border-color:#BBF7D0}.tri21ctl.state-amber{border:2px solid #F59E0B;background:#FFFBEB;box-shadow:0 0 0 3px rgba(245,158,11,.08)}.tri21ctl.state-red{border:2px solid #DC2626;background:#FFF7F7;box-shadow:0 0 0 3px rgba(220,38,38,.10)}.tri21ctl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.tri21ctl-title{font-size:15px;font-weight:800}.tri21ctl-sub{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.45}.tri21ctl-badge{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 10px;font-size:11px;font-weight:800}.tri21ctl-green{background:#DCFCE7;color:#166534}.tri21ctl-amber,.tri21ctl-queued{background:#FEF3C7;color:#92400E}.tri21ctl-red{background:#FEE2E2;color:#B91C1C}.tri21ctl-running{background:#DBEAFE;color:#1D4ED8}.tri21ctl-alert{margin-top:11px;padding:11px 12px;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}.tri21ctl-alert strong{font-weight:850}.tri21ctl-alert.amber{background:#FEF3C7;border:1px solid #F59E0B;color:#92400E}.tri21ctl-alert.red{background:#FEE2E2;border:1px solid #EF4444;color:#991B1B}.tri21ctl-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:8px;margin-top:12px}.tri21ctl-kpi{background:var(--bg);border-radius:9px;padding:9px 10px}.tri21ctl-kpi b{display:block;font-size:16px}.tri21ctl-kpi span{font-size:9px;color:var(--sub);text-transform:uppercase}.tri21ctl-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)}.tri21ctl-meta{font-size:11px;color:var(--sub);line-height:1.55}.tri21ctl-actions{display:flex;gap:7px;flex-wrap:wrap}.tri21ctl-actions button{white-space:nowrap}.tri21ctl-note{font-size:10px;color:var(--sub);margin-top:6px;max-width:900px}.tri21ctl-fresh{margin-top:10px;padding:9px 11px;border-radius:9px;font-size:11px;line-height:1.45}.tri21ctl-fresh.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}.tri21ctl-fresh.warn{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.tri21ctl-error{font-size:12px;color:var(--r);font-weight:700;padding:10px;background:var(--rb);border:1px solid #FECACA;border-radius:8px}
-  @media(max-width:900px){.tri21ctl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.tri21ctl-grid{grid-template-columns:1fr 1fr}.tri21ctl-actions{width:100%}.tri21ctl-actions button{flex:1}}
+  .tri21ctl{margin-bottom:12px;padding:14px 16px;transition:border-color .18s,box-shadow .18s,background .18s}.tri21ctl.state-green{border-color:#BBF7D0}.tri21ctl.state-amber{border:2px solid #F59E0B;background:#FFFBEB;box-shadow:0 0 0 3px rgba(245,158,11,.08)}.tri21ctl.state-red{border:2px solid #DC2626;background:#FFF7F7;box-shadow:0 0 0 3px rgba(220,38,38,.10)}.tri21ctl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.tri21ctl-title{font-size:15px;font-weight:800}.tri21ctl-sub{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.45}.tri21ctl-badge{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 10px;font-size:11px;font-weight:800}.tri21ctl-green{background:#DCFCE7;color:#166534}.tri21ctl-amber,.tri21ctl-queued{background:#FEF3C7;color:#92400E}.tri21ctl-red{background:#FEE2E2;color:#B91C1C}.tri21ctl-running{background:#DBEAFE;color:#1D4ED8}.tri21ctl-alert{margin-top:11px;padding:11px 12px;border-radius:9px;font-size:12px;line-height:1.5;font-weight:650}.tri21ctl-alert strong{font-weight:850}.tri21ctl-alert.amber{background:#FEF3C7;border:1px solid #F59E0B;color:#92400E}.tri21ctl-alert.red{background:#FEE2E2;border:1px solid #EF4444;color:#991B1B}.tri21ctl-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:8px;margin-top:12px}.tri21ctl-kpi{background:var(--bg);border-radius:9px;padding:9px 10px}.tri21ctl-kpi b{display:block;font-size:16px}.tri21ctl-kpi span{font-size:9px;color:var(--sub);text-transform:uppercase}.tri21ctl-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)}.tri21ctl-meta{font-size:11px;color:var(--sub);line-height:1.55}.tri21ctl-actions{display:flex;gap:7px;flex-wrap:wrap}.tri21ctl-actions button{white-space:nowrap}.tri21ctl-note{font-size:10px;color:var(--sub);margin-top:6px;max-width:900px}.tri21ctl-fresh{margin-top:10px;padding:9px 11px;border-radius:9px;font-size:11px;line-height:1.45}.tri21ctl-fresh.ok{background:#F0FDF4;border:1px solid #BBF7D0;color:#166534}.tri21ctl-fresh.warn{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E}.tri21ctl-error{font-size:12px;color:var(--r);font-weight:700;padding:10px;background:var(--rb);border:1px solid #FECACA;border-radius:8px}.tri21mrc{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}.tri21mrc-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.tri21mrc-head>b,.tri21mrc-head b{font-size:13px}.tri21mrc-head div div{font-size:10px;color:var(--sub);margin-top:3px}.tri21mrc-kpi{display:grid;grid-template-columns:repeat(5,minmax(100px,1fr));gap:7px;margin-top:9px}.tri21mrc-kpi>div{background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:8px}.tri21mrc-kpi span{display:block;font-size:9px;color:var(--sub);text-transform:uppercase}.tri21mrc-kpi b{font-size:15px}.tri21mrc-details{margin-top:9px}.tri21mrc-details summary{cursor:pointer;font-size:11px;font-weight:800;color:#0C447C}.tri21mrc-table{overflow:auto;margin-top:7px;max-height:420px}.tri21mrc-table table{width:100%;border-collapse:collapse;font-size:10px;min-width:900px}.tri21mrc-table th,.tri21mrc-table td{padding:7px;border-bottom:1px solid #E5E7EB;text-align:left;vertical-align:top}.tri21mrc-table th{position:sticky;top:0;background:#F8FAFC;z-index:1}.tri21mrc-table td span{font-size:9px;color:var(--sub)}.tri21mrc-table a{color:#185FA5}.tri21mrc-badge{display:inline-block;border-radius:99px;padding:3px 6px;background:#F3F4F6;font-size:9px;font-weight:800}.tri21mrc-badge.good{background:#DCFCE7}.tri21mrc-badge.warn{background:#FEF3C7}.tri21mrc-badge.bad{background:#FEE2E2}.good{color:#166534!important}.warn{color:#92400E!important}.bad{color:#B91C1C!important}
+  @media(max-width:900px){.tri21ctl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tri21mrc-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.tri21ctl-grid{grid-template-columns:1fr 1fr}.tri21ctl-actions{width:100%}.tri21ctl-actions button{flex:1}}
   `;document.head.appendChild(s);
 }
 function ensurePanel(){
@@ -54,6 +54,51 @@ async function status(force=false){
   })().finally(()=>flight=null);
   return flight;
 }
+async function mrcStatus(force=false){
+  if(!force&&mrcCache&&Date.now()-mrcCacheAt<TTL)return mrcCache;
+  if(mrcFlight)return mrcFlight;
+  mrcFlight=(async()=>{
+    const r=await db.rpc('triovist_21vek_mrc_dashboard_v236220',{});if(r?.error)throw r.error;
+    mrcCache=r?.data||{};mrcCacheAt=Date.now();return mrcCache;
+  })().finally(()=>mrcFlight=null);
+  return mrcFlight;
+}
+function money(v){const x=Number(v);return Number.isFinite(x)?x.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN':'—';}
+function pct(v){const x=Number(v);return Number.isFinite(x)?(x>0?'+':'')+x.toFixed(2).replace('.',',')+'%':'—';}
+function mrcBadge(row){
+  const s=String(row?.status||'');
+  if(s==='inactive_below')return'<span class="tri21mrc-badge">⚪ ниже МРЦ, нет в наличии</span>';
+  if(s==='critical')return'<span class="tri21mrc-badge bad">🔴 ниже МРЦ</span>';
+  if(s==='warning')return'<span class="tri21mrc-badge warn">🟠 ниже МРЦ</span>';
+  if(s==='slight')return'<span class="tri21mrc-badge warn">🟡 ниже МРЦ</span>';
+  if(s==='above')return'<span class="tri21mrc-badge good">выше МРЦ</span>';
+  return'<span class="tri21mrc-badge">МРЦ</span>';
+}
+function mrcHtml(m){
+  const s=m?.summary||{},rows=Array.isArray(m?.rows)?m.rows:[];
+  const line=rows.length?rows.map(x=>`<tr>
+    <td><b>${esc(x.sku||'—')}</b><br><span>${esc(x.product_name||'')}</span></td>
+    <td>${money(x.mrc_byn)}</td>
+    <td>${money(x.price)}</td>
+    <td class="${Number(x.delta_pct)<0?'bad':'good'}"><b>${pct(x.delta_pct)}</b><br><span>${money(x.delta_byn)}</span></td>
+    <td>${mrcBadge(x)}</td>
+    <td>${esc(x.manager_name||'—')}</td>
+    <td>${x.product_url?'<a target="_blank" rel="noopener" href="'+esc(x.product_url)+'">21vek ↗</a>':'—'}</td>
+  </tr>`).join(''):'<tr><td colspan="7">Отклонений от МРЦ в текущем рабочем снимке нет.</td></tr>';
+  return `<div class="tri21mrc">
+    <div class="tri21mrc-head"><div><b>💰 МРЦ РБ / отклонения цены на 21vek</b><div>Источник: ${esc(m?.source_file||'РБ МРЦ')}, действует с ${esc(m?.effective_date||'—')}. Сравнение идёт строго по нашему артикулу.</div></div></div>
+    <div class="tri21mrc-kpi">
+      <div><span>МРЦ в файле</span><b>${n(s.mrc_rows)}</b></div>
+      <div><span>Карточек с МРЦ</span><b>${n(s.with_mrc)}</b></div>
+      <div><span>Ниже МРЦ · в наличии</span><b class="${Number(s.below_mrc_in_stock)>0?'bad':'good'}">${n(s.below_mrc_in_stock)}</b></div>
+      <div><span>Ниже МРЦ >5% · в наличии</span><b class="${Number(s.critical_below_mrc)>0?'bad':'good'}">${n(s.critical_below_mrc)}</b></div>
+      <div><span>Без МРЦ</span><b>${n(s.missing_mrc)}</b></div>
+    </div>
+    <details class="tri21mrc-details" ${Number(s.below_mrc_in_stock)>0?'open':''}><summary>Показать отклонения от МРЦ · до 120 позиций · ниже МРЦ без наличия отмечены отдельно</summary>
+      <div class="tri21mrc-table"><table><thead><tr><th>SKU / товар</th><th>МРЦ</th><th>Цена 21vek</th><th>Отклонение</th><th>Статус</th><th>Менеджер</th><th>Карточка</th></tr></thead><tbody>${line}</tbody></table></div>
+    </details>
+  </div>`;
+}
 function healthMeta(h){
   const x=String(h||'red');
   if(x==='green')return['🟢 Работает','tri21ctl-green'];
@@ -74,7 +119,7 @@ function warningHtml(d){
   if(st==='amber')return '<div class="tri21ctl-alert amber">⚠️ <strong>Данные 21vek требуют проверки.</strong> Можно видеть последний хороший снимок, но новые решения по остаткам и TOP лучше не принимать до зелёного статуса. Сообщите руководителю и приложите скрин.</div>';
   return'';
 }
-function render(d){
+function render(d,mrc){
   const root=ensurePanel();if(!root)return;
   const w=d?.working||{},p=d?.parser||{},g=d?.last_good||{},t=d?.top||{},rq=d?.refresh_request||null,rg=d?.registry||{};
   const [label,cls]=healthMeta(d?.health);
@@ -103,6 +148,7 @@ function render(d){
       <div class="tri21ctl-kpi"><span>TOP-60</span><b>${n(w.top60)}</b></div>
       <div class="tri21ctl-kpi"><span>Ошибки текущего/последнего запуска</span><b>${n(errors)}</b></div>
     </div>
+    ${mrcHtml(mrc)}
     <div class="tri21ctl-foot"><div class="tri21ctl-meta">
       Рабочий снимок: <b>${esc(w.snapshot_date||'—')}</b> · последний полный успешный сбор: <b>${dt(g.finished_at)}</b> · целей в нём: <b>${n(g.targets)}</b><br>
       TOP проверен: <b>${dt(t.finished_at)}</b>${rq?` · ручной запрос: <b>${rq.status==='claimed'?'выполняется':'в очереди'}</b>`:''}
@@ -115,16 +161,16 @@ function render(d){
 }
 async function load(force=false){
   const root=ensurePanel();if(!root)return;
-  try{render(await status(force));}
+  try{const [d,m]=await Promise.all([status(force),mrcStatus(force)]);render(d,m);}
   catch(e){console.error('21vek control',e);root.classList.remove('state-green','state-amber');root.classList.add('state-red');root.innerHTML='<div class="tri21ctl-error">🚨 Не удалось получить статус собственного парсера 21vek. Данные 21vek сейчас считать неподтверждёнными. Сообщите руководителю и приложите скрин. Техническая ошибка: '+esc(e?.message||e)+'</div>';}
 }
-window.triovist21vekRefreshStatusV236107=async function(){cache=null;cacheAt=0;await load(true);};
+window.triovist21vekRefreshStatusV236107=async function(){cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;await load(true);};
 window.triovist21vekRequestRefreshV236107=async function(){
   try{
     const d=await status(false);if(!d?.can_refresh)return;
     if(!confirm('Запустить полный сбор 21vek по всем карточкам и TOP? Текущий хороший снимок останется рабочим до успешного завершения.'))return;
     const r=await db.rpc('triovist_21vek_request_refresh_v236107',{});if(r?.error)throw r.error;
-    cache=null;cacheAt=0;await load(true);
+    cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;await load(true);
     const msg=r?.data?.message||'Обновление поставлено в очередь';
     if(typeof showToast==='function')showToast('✅ '+msg);else alert('✅ '+msg);
   }catch(e){alert('Не удалось запустить обновление 21vek: '+(e?.message||e));}
@@ -133,8 +179,8 @@ window.triovist21vekRequestRefreshV236107=async function(){
 const baseRender=window.renderTriovist;
 window.renderTriovist=function(){const out=baseRender?.apply(this,arguments);ensurePanel();if(activeTriovist())setTimeout(()=>load(false),0);return out;};
 const baseReload=window.triovistReload;
-if(typeof baseReload==='function')window.triovistReload=async function(){const out=await baseReload.apply(this,arguments);cache=null;cacheAt=0;if(activeTriovist())await load(true);return out;};
+if(typeof baseReload==='function')window.triovistReload=async function(){const out=await baseReload.apply(this,arguments);cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;if(activeTriovist())await load(true);return out;};
 
-window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),registrySeparated:true});
+window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),mrc:()=>mrcStatus(false),registrySeparated:true,mrcControl:true});
 setTimeout(()=>{if(activeTriovist()){ensurePanel();load(false);}},0);
 })();
