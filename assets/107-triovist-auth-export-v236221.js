@@ -149,6 +149,7 @@ async function exportExcel(){
   })().finally(()=>exportFlight=null);
   return exportFlight;
 }
-window.triovist21vekExportExcelV236109=exportExcel;
+function install(){window.triovist21vekExportExcelV236109=exportExcel;}
+install();[250,900,2200].forEach(ms=>setTimeout(install,ms));
 window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221=Object.freeze({version:V,fastExport:true,mrc:true,authRetry:true});
 })();
