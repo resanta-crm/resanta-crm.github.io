@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.203 · PROMOTIONS CONTROL CENTER ROOT
+/* RESANTA CRM v23.6.217 · PROMOTIONS CONTROL CENTER ROOT
  * Single source of truth for Promotions views and filters.
  * Owns operational filtering. Legacy work/close/status overlays must not decide card visibility.
  * No polling. No MutationObserver. No business-data writes.
@@ -7,7 +7,7 @@
 'use strict';
 if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203)return;
 
-const V='v23.6.203';
+const V='v23.6.217';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -104,6 +104,14 @@ function sortRows(rows){
 }
 function filteredBase(view=state.view){return promos().map(rowMeta).filter(x=>passesCommon(x,view))}
 function counts(){const rows=promos().map(rowMeta),o={};views.forEach(([k])=>o[k]=rows.filter(x=>passesCommon(x,k)&&inView(x,k)).length);return o}
+function globalViewCount(view){return promos().map(rowMeta).filter(x=>inView(x,view)).length}
+function syncLegacyDirectorButtons(){
+  const host=document.getElementById('promo-v2368-director');if(!host)return;
+  const work=host.querySelector('[data-v2368-work]');
+  if(work){const b=work.querySelector('b');if(b)b.textContent=String(globalViewCount('active'));work.title='Показать реально идущие сейчас акции';}
+  const decision=host.querySelector('[data-v2368-open-action]');
+  if(decision){const b=decision.querySelector('b');if(b)b.textContent=String(globalViewCount('decision'));decision.title='Показать акции, где требуется моё решение';}
+}
 function months(){
   const set=new Set([currentMonth()]);
   promos().forEach(p=>{const a=safe(p.start_date).slice(0,7),b=safe(p.end_date).slice(0,7);if(/^\d{4}-\d{2}$/.test(a))set.add(a);if(/^\d{4}-\d{2}$/.test(b))set.add(b)});
@@ -142,6 +150,7 @@ function prepareDom(){
   document.getElementById('promo54-close-reminder')?.remove();
   document.getElementById('promo54-tools')?.remove();
   document.getElementById('promo-boss-dash-v236133')?.remove();
+  syncLegacyDirectorButtons();
   page.querySelectorAll('.promo-toolbar button').forEach(btn=>{
     const oc=safe(btn.getAttribute('onclick'));
     if(btn.id==='promo-budget-btn'||oc.includes("goPage('budgets'")||oc.includes('goPage("budgets"'))btn.style.display='none';
@@ -158,6 +167,7 @@ function root(){
 function renderCenter(){
   if(!active())return;prepareDom();style();if(state.rendering)return;state.rendering=true;
   try{
+    syncLegacyDirectorButtons();
     const r=root();if(!r)return;const c=counts(),ms=months(),selected=c[state.view]||0;
     r.innerHTML='<div class="pcc203-head"><div><div class="pcc203-title">🎯 Центр управления акциями</div><div class="pcc203-note">Один фильтр управляет всем списком ниже. Отклонённые не смешиваются с рабочими акциями.</div></div></div>'
       +'<div class="pcc203-filters"><select data-pcc203="manager"><option value="all">Все менеджеры</option>'+managers().map(m=>'<option value="'+esc(m)+'" '+(state.manager===m?'selected':'')+'>'+esc(m)+'</option>').join('')+'</select>'
@@ -185,6 +195,10 @@ function setClient(v){state.client=safe(v);rerender(true)}
 function bind(){
   if(state.bound)return;state.bound=true;
   document.addEventListener('click',e=>{
+    const legacyWork=e.target.closest?.('[data-v2368-work]');
+    if(legacyWork){e.preventDefault();e.stopPropagation();state.manager='all';state.client='';state.group='';state.sku='';state.month='all';setView('active');return}
+    const legacyDecision=e.target.closest?.('[data-v2368-open-action]');
+    if(legacyDecision){e.preventDefault();e.stopPropagation();state.manager='all';state.client='';state.group='';state.sku='';state.month='all';setView('decision');return}
     const b=e.target.closest?.('[data-pcc203-view]');if(b){e.preventDefault();setView(b.dataset.pcc203View);return}
     if(e.target?.id==='promo54-close-filter'||e.target?.id==='promo54-show-ended'){e.preventDefault();e.stopPropagation();setView('needs_close');return}
   },true);
