@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.218 · TRIOVIST / 21VEK COMPETITORS PILOT
+/* RESANTA CRM v23.6.220 · TRIOVIST / 21VEK COMPETITORS PILOT
  * Read-only analytical UI. Data is collected server-side by the daily competitor workflow.
  * Pilot: cordless drill-drivers. No writes to sales/tasks/stock/price-list.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.218';
+const V='v23.6.220';
 let flight=null,last=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -66,20 +66,24 @@ function rowHtml(r){
 function css(){
  if(document.getElementById('tc218-css'))return;
  const s=document.createElement('style');s.id='tc218-css';s.textContent=`
- .tc218-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.tc218-note{font-size:11px;color:#64748b;line-height:1.45;margin-top:3px}.tc218-kpi{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:8px;margin:12px 0}.tc218-kpi>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px}.tc218-kpi span{font-size:9px;color:#64748b;text-transform:uppercase;display:block}.tc218-kpi b{font-size:18px;display:block;margin-top:3px}.tc218-row{border:1px solid #e5e7eb;border-radius:12px;margin:10px 0;background:#fff;overflow:hidden}.tc218-main{display:grid;grid-template-columns:minmax(220px,1.7fr) 110px minmax(230px,1.8fr) 120px 125px 125px 135px;gap:9px;padding:12px;align-items:start}.tc218-main small{display:block;color:#64748b;font-size:9px;text-transform:uppercase;margin-bottom:4px}.tc218-main b{display:block;font-size:12px}.tc218-main span{display:block;font-size:10px;color:#64748b;margin-top:3px}.tc218-brand{font-size:10px;color:#0c447c;font-weight:800;text-transform:uppercase;margin-bottom:3px}.tc218-link{font-size:10px;color:#185fa5;text-decoration:none}.tc218-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:8px 12px}.tc218-details summary{cursor:pointer;font-size:11px;font-weight:800;color:#0c447c}.tc218-compare,.tc218-ab{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.tc218-compare>div,.tc218-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:9px;padding:9px}.tc218-compare span{display:block;font-size:10px;margin:3px 0}.tc218-ab{font-size:11px}.tc218-ab ul{margin:6px 0 0 17px}.tc218-rec,.tc218-pitch{margin-top:8px;padding:9px;border-radius:8px;font-size:11px}.tc218-rec{background:#eff6ff;border:1px solid #bfdbfe}.tc218-pitch{background:#f0fdf4;border:1px solid #bbf7d0}.good{color:#166534!important}.warn{color:#92400e!important}.bad{color:#b91c1c!important}.tc218-empty{padding:20px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}.tc218-meta{font-size:10px;color:#64748b;margin-top:8px}
+ .tc218-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.tc218-note{font-size:11px;color:#64748b;line-height:1.45;margin-top:3px}.tc218-kpi{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:8px;margin:12px 0}.tc218-kpi>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:10px}.tc218-kpi span{font-size:9px;color:#64748b;text-transform:uppercase;display:block}.tc218-kpi b{font-size:18px;display:block;margin-top:3px}.tc218-row{border:1px solid #e5e7eb;border-radius:12px;margin:10px 0;background:#fff;overflow:hidden}.tc218-main{display:grid;grid-template-columns:minmax(220px,1.7fr) 110px minmax(230px,1.8fr) 120px 125px 125px 135px;gap:9px;padding:12px;align-items:start}.tc218-main small{display:block;color:#64748b;font-size:9px;text-transform:uppercase;margin-bottom:4px}.tc218-main b{display:block;font-size:12px}.tc218-main span{display:block;font-size:10px;color:#64748b;margin-top:3px}.tc218-brand{font-size:10px;color:#0c447c;font-weight:800;text-transform:uppercase;margin-bottom:3px}.tc218-link{font-size:10px;color:#185fa5;text-decoration:none}.tc218-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:8px 12px}.tc218-details summary{cursor:pointer;font-size:11px;font-weight:800;color:#0c447c}.tc218-compare,.tc218-ab{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}.tc218-compare>div,.tc218-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:9px;padding:9px}.tc218-compare span{display:block;font-size:10px;margin:3px 0}.tc218-ab{font-size:11px}.tc218-ab ul{margin:6px 0 0 17px}.tc218-rec,.tc218-pitch{margin-top:8px;padding:9px;border-radius:8px;font-size:11px}.tc218-rec{background:#eff6ff;border:1px solid #bfdbfe}.tc218-pitch{background:#f0fdf4;border:1px solid #bbf7d0}.good{color:#166534!important}.warn{color:#92400e!important}.bad{color:#b91c1c!important}.tc218-empty{padding:20px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}.tc218-meta{font-size:10px;color:#64748b;margin-top:8px}.tc218-group{margin:14px 0 18px}.tc218-group-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:5px;padding:0 2px}.tc218-group-head>b{font-size:13px;color:#0c447c}.tc218-group-head span{font-size:11px;color:#334155}.tc218-group-head em{font-style:normal;font-size:10px;color:#64748b;margin-left:auto}
  @media(max-width:1200px){.tc218-main{grid-template-columns:repeat(3,minmax(0,1fr))}.tc218-kpi{grid-template-columns:repeat(3,minmax(0,1fr))}}
  @media(max-width:650px){.tc218-main,.tc218-compare,.tc218-ab,.tc218-kpi{grid-template-columns:1fr}.tc218-row{overflow:visible}}
  `;document.head.appendChild(s);
 }
 function render(panel,d){
  css();
- const s=d?.summary||{},rows=Array.isArray(d?.rows)?d.rows:[],run=d?.last_run||{};
- const top=[];const seen=new Set();
- for(const r of rows){if(!seen.has(r.target_id)){seen.add(r.target_id);top.push(r)}}
- panel.innerHTML='<div class="tc218-head"><div><h3 style="margin:0">⚔️ Конкуренты 21vek</h3><div class="tc218-note">Пилот: аккумуляторные дрели-шуруповёрты. Сравнение по реальным характеристикам, цене 21vek и МРЦ РБ. Отсутствующая характеристика не считается нулём.</div></div><button type="button" class="tr14-refresh" data-tc218-refresh>↻ Обновить экран</button></div>'
+ const s=d?.summary||{},rows=Array.isArray(d?.rows)?d.rows:[],run=d?.last_run||{},users=Array.isArray(d?.allowed_users)?d.allowed_users:[];
+ const grouped=new Map();
+ for(const r of rows){const k=String(r.target_id||r.competitor_brand||'');if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r)}
+ const cards=[...grouped.values()].map(list=>{
+   const first=list[0]||{};
+   return '<section class="tc218-group"><div class="tc218-group-head"><b>'+E(first.competitor_brand||'Конкурент')+'</b><span>'+E(first.competitor_name||first.competitor_query||'')+'</span><em>Показано '+list.length+' ближайших наших SKU</em></div>'+list.map(rowHtml).join('')+'</section>';
+ }).join('');
+ panel.innerHTML='<div class="tc218-head"><div><h3 style="margin:0">⚔️ Конкуренты 21vek</h3><div class="tc218-note">Пилот: аккумуляторные дрели-шуруповёрты. Сравнение по реальным характеристикам, цене 21vek и МРЦ РБ. Ниже показаны до 5 ближайших наших SKU по каждому конкуренту — можно открыть обе карточки и проверить всё вручную. Отсутствующая характеристика не считается нулём.</div></div><button type="button" class="tr14-refresh" data-tc218-refresh>↻ Обновить экран</button></div>'
   +'<div class="tc218-kpi"><div><span>Конкурентов в пилоте</span><b>'+E(s.targets??0)+'</b></div><div><span>Данные получены</span><b>'+E(s.with_data??0)+'</b></div><div><span>Мы сильнее</span><b class="good">'+E(s.ours_stronger??0)+'</b></div><div><span>Паритет</span><b class="warn">'+E(s.parity??0)+'</b></div><div><span>Конкурент сильнее</span><b class="bad">'+E(s.competitor_stronger??0)+'</b></div><div><span>Наши ниже МРЦ</span><b class="'+((s.below_mrc||0)>0?'bad':'good')+'">'+E(s.below_mrc??0)+'</b></div></div>'
-  +(top.length?top.map(rowHtml).join(''):'<div class="tc218-empty">Сбор конкурентов уже подключён. Первый снимок ещё формируется — после успешного запуска здесь появятся реальные сравнения.</div>')
-  +'<div class="tc218-meta">Последний сбор: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · успешно '+E(run.success_count??0)+' / ошибок '+E(run.error_count??0)+'. История цен хранится в отдельных снимках и не перезаписывается.</div>';
+  +(cards||'<div class="tc218-empty">Сбор конкурентов уже подключён. Первый снимок ещё формируется — после успешного запуска здесь появятся реальные сравнения.</div>')
+  +'<div class="tc218-meta">Последний сбор: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · успешно '+E(run.success_count??0)+' / ошибок '+E(run.error_count??0)+'. История цен хранится в отдельных снимках и не перезаписывается. Доступ: '+E(users.length?users.join(', '):'Паюшин, Сидарович, Александренко, Кришталь')+'.</div>';
  panel.querySelector('[data-tc218-refresh]')?.addEventListener('click',async()=>{last=null;await open(panel,null,true)});
 }
 async function open(panel,ctx,force=false){
