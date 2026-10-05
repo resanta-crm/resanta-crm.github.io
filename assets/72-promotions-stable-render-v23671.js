@@ -249,7 +249,7 @@ window.RESANTA_PROMOTIONS_STABLE_RENDER_V23671=Object.freeze({
 if(window.RESANTA_PROMOTIONS_MO2_SELECTOR_V236123)return;
 if([...document.scripts].some(s=>String(s.src||'').includes('/83-promotions-mo2-selector-v236123.js')))return;
 const s=document.createElement('script');
-s.src='./assets/83-promotions-mo2-selector-v236123.js?v=23.6.123';
+s.src='./assets/83-promotions-mo2-selector-v236123.js?v=23.6.215';
 s.async=false;
 s.onerror=()=>console.warn('Не загрузился выбор товаров Прайс МО2');
 document.head.appendChild(s);
