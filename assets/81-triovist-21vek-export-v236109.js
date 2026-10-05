@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.115 · TRIOVIST 21VEK EXCEL EXPORT
+/* RESANTA CRM v23.6.221 · TRIOVIST 21VEK EXCEL EXPORT
  * Exports only the current good production snapshot visible to the signed-in user.
  * Access is enforced server-side by triovist_content_export_v236110.
  * SheetJS is loaded on demand only when the user clicks Export.
@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_EXPORT_V236109)return;
-const VERSION='v23.6.169';
+const VERSION='v23.6.221';
 let xlsxFlight=null,exportFlight=null;
 
 function activeTriovist(){return document.getElementById('page-triovist')?.classList.contains('active');}
@@ -46,13 +46,16 @@ function loadXlsx(){
 }
 
 async function currentCards(){
-  const all=[];const page=1000;let snapshot=null;
+  const all=[];const page=500;let snapshot=null;
   for(let offset=0;;offset+=page){
-    const r=await db.rpc('triovist_content_export_v236110',{
+    const call=()=>db.rpc('triovist_content_export_v236221',{
       p_manager_email:null,
       p_offset:offset,
       p_limit:page
     });
+    const r=typeof window.crmAuthRetryV236166==='function'
+      ? await window.crmAuthRetryV236166(call)
+      : await call();
     if(r?.error)throw r.error;
     const d=r?.data||{},rows=Array.isArray(d.rows)?d.rows:[];
     if(d.snapshot_date)snapshot=d.snapshot_date;
@@ -69,7 +72,11 @@ function rowForExcel(c){
     'Наименование':c.product_name||'',
     'Группа':c.category||'',
     'Подгруппа':c.subgroup||'',
-    'Цена, BYN':c.price==null?'':Number(c.price),
+    'Цена 21vek, BYN':c.price==null?'':Number(c.price),
+    'МРЦ РБ, BYN':c.mrc_byn==null?'':Number(c.mrc_byn),
+    'Отклонение от МРЦ, BYN':c.mrc_delta_byn==null?'':Number(c.mrc_delta_byn),
+    'Отклонение от МРЦ, %':c.mrc_delta_pct==null?'':Number(c.mrc_delta_pct),
+    'Статус МРЦ':c.mrc_status||'',
     'В наличии':toBool(c.in_stock),
     'Поисковая фраза':c.keyword||'',
     'Позиция':topPosition(c),
@@ -89,8 +96,8 @@ function rowForExcel(c){
 }
 
 function formatSheet(ws,rows){
-  ws['!cols']=[width(18),width(17),width(45),width(24),width(24),width(12),width(12),width(30),width(10),width(10),width(10),width(10),width(15),width(16),width(14),width(20),width(9),width(9),width(12),width(12),width(55)];
-  if(rows.length)ws['!autofilter']={ref:'A1:U'+(rows.length+1)};
+  ws['!cols']=[width(18),width(17),width(45),width(24),width(24),width(14),width(14),width(18),width(18),width(22),width(12),width(30),width(10),width(10),width(10),width(10),width(15),width(16),width(14),width(20),width(9),width(9),width(12),width(12),width(55)];
+  if(rows.length)ws['!autofilter']={ref:'A1:Y'+(rows.length+1)};
   ws['!freeze']={xSplit:0,ySplit:1,topLeftCell:'A2',activePane:'bottomLeft',state:'frozen'};
 }
 
@@ -114,12 +121,15 @@ async function exportExcel(){
           'Дата рабочего снимка':snapshot,
           'Карточек':x.length,
           'В наличии':x.filter(c=>c.in_stock===true).length,
-          'TOP-30':x.filter(c=>c.top30===true||(c.top30==null&&Number(c.listing_position||0)>0&&Number(c.listing_position)<=30)).length,
+          'С МРЦ':x.filter(c=>c.mrc_byn!=null).length,
+          'Ниже МРЦ (в наличии)':x.filter(c=>c.in_stock===true&&Number(c.mrc_delta_pct)<0).length,
+          'Ниже МРЦ >5% (в наличии)':x.filter(c=>c.in_stock===true&&Number(c.mrc_delta_pct)<-5).length,
+          'TOP-30':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=30).length,
           'TOP-60':x.filter(c=>c.top60===true||(c.top60==null&&Number(c.listing_position||0)>0&&Number(c.listing_position)<=60)).length,
           'Источник':'Собственный парсер 21vek'
         };
       });
-      const sws=XLSX.utils.json_to_sheet(summary);sws['!cols']=[width(22),width(22),width(12),width(12),width(12),width(12),width(28)];
+      const sws=XLSX.utils.json_to_sheet(summary);sws['!cols']=[width(22),width(22),width(12),width(12),width(12),width(22),width(26),width(12),width(12),width(28)];
       XLSX.utils.book_append_sheet(wb,sws,'Сводка');
 
       for(const name of managers){
@@ -133,7 +143,7 @@ async function exportExcel(){
       }
 
       const who=managers.length===1?'_'+String(managers[0]).replace(/[^0-9A-Za-zА-Яа-я_-]+/g,'_'):'';
-      XLSX.writeFile(wb,'Triovist_21vek_'+snapshot+who+'.xlsx',{compression:true});
+      XLSX.writeFile(wb,'Triovist_21vek_MRC_'+snapshot+who+'.xlsx',{compression:true});
       if(typeof showToast==='function')showToast('✅ Excel выгружен: '+cards.length.toLocaleString('ru-RU')+' карточек');
     }catch(e){
       console.error('21vek export',e);alert('Не удалось выгрузить Excel: '+(e?.message||e));
