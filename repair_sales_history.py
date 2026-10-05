@@ -315,7 +315,9 @@ def apply_client_ids(rows, resolver):
         log(f"    ⚠️ Неоднозначные ({len(ambiguous)}): " + "; ".join(sorted(ambiguous)[:12]))
     if unresolved:
         log(f"    ⚠️ Без карточки ({len(unresolved)}): " + "; ".join(sorted(unresolved)[:12]))
-    return {"matched_exact": matched_exact, "matched_fuzzy": matched_fuzzy,
+    return {"matched_exact": matched_strict + matched_exact,
+            "matched_strict": matched_strict,
+            "matched_fuzzy": matched_fuzzy,
             "ambiguous": sorted(ambiguous), "unresolved": sorted(unresolved)}
 
 
