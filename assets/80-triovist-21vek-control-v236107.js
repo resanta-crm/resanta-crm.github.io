@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.220',TTL=15000;
+const VERSION='v23.6.221',TTL=15000;
 let cache=null,cacheAt=0,flight=null,mrcCache=null,mrcCacheAt=0,mrcFlight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -49,7 +49,9 @@ async function status(force=false){
   if(!force&&cache&&Date.now()-cacheAt<TTL)return cache;
   if(flight)return flight;
   flight=(async()=>{
-    const r=await db.rpc('triovist_21vek_status_v236107',{});if(r?.error)throw r.error;
+    const call=()=>db.rpc('triovist_21vek_status_v236107',{});
+    const r=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();
+    if(r?.error)throw r.error;
     cache=r?.data||{};cacheAt=Date.now();return cache;
   })().finally(()=>flight=null);
   return flight;
@@ -58,7 +60,9 @@ async function mrcStatus(force=false){
   if(!force&&mrcCache&&Date.now()-mrcCacheAt<TTL)return mrcCache;
   if(mrcFlight)return mrcFlight;
   mrcFlight=(async()=>{
-    const r=await db.rpc('triovist_21vek_mrc_dashboard_v236220',{});if(r?.error)throw r.error;
+    const call=()=>db.rpc('triovist_21vek_mrc_dashboard_v236220',{});
+    const r=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();
+    if(r?.error)throw r.error;
     mrcCache=r?.data||{};mrcCacheAt=Date.now();return mrcCache;
   })().finally(()=>mrcFlight=null);
   return mrcFlight;
@@ -169,7 +173,9 @@ window.triovist21vekRequestRefreshV236107=async function(){
   try{
     const d=await status(false);if(!d?.can_refresh)return;
     if(!confirm('Запустить полный сбор 21vek по всем карточкам и TOP? Текущий хороший снимок останется рабочим до успешного завершения.'))return;
-    const r=await db.rpc('triovist_21vek_request_refresh_v236107',{});if(r?.error)throw r.error;
+    const call=()=>db.rpc('triovist_21vek_request_refresh_v236107',{});
+    const r=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();
+    if(r?.error)throw r.error;
     cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;await load(true);
     const msg=r?.data?.message||'Обновление поставлено в очередь';
     if(typeof showToast==='function')showToast('✅ '+msg);else alert('✅ '+msg);
