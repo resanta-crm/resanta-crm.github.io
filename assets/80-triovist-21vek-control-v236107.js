@@ -67,7 +67,7 @@ function money(v){const x=Number(v);return Number.isFinite(x)?x.toLocaleString('
 function pct(v){const x=Number(v);return Number.isFinite(x)?(x>0?'+':'')+x.toFixed(2).replace('.',',')+'%':'—';}
 function mrcBadge(row){
   const s=String(row?.status||'');
-  if(s==='critical')return'<span class="tri21mrc-badge bad">🔴 ниже МРЦ</span>';
+  if(s==='inactive_below')return'<span class="tri21mrc-badge">⚪ ниже МРЦ, нет в наличии</span>';\n  if(s==='critical')return'<span class="tri21mrc-badge bad">🔴 ниже МРЦ</span>';
   if(s==='warning')return'<span class="tri21mrc-badge warn">🟠 ниже МРЦ</span>';
   if(s==='slight')return'<span class="tri21mrc-badge warn">🟡 ниже МРЦ</span>';
   if(s==='above')return'<span class="tri21mrc-badge good">выше МРЦ</span>';
@@ -89,11 +89,11 @@ function mrcHtml(m){
     <div class="tri21mrc-kpi">
       <div><span>МРЦ в файле</span><b>${n(s.mrc_rows)}</b></div>
       <div><span>Карточек с МРЦ</span><b>${n(s.with_mrc)}</b></div>
-      <div><span>Ниже МРЦ</span><b class="${Number(s.below_mrc)>0?'bad':'good'}">${n(s.below_mrc)}</b></div>
-      <div><span>Ниже МРЦ >5%</span><b class="${Number(s.critical_below_mrc)>0?'bad':'good'}">${n(s.critical_below_mrc)}</b></div>
+      <div><span>Ниже МРЦ · в наличии</span><b class="${Number(s.below_mrc_in_stock)>0?'bad':'good'}">${n(s.below_mrc_in_stock)}</b></div>
+      <div><span>Ниже МРЦ >5% · в наличии</span><b class="${Number(s.critical_below_mrc)>0?'bad':'good'}">${n(s.critical_below_mrc)}</b></div>
       <div><span>Без МРЦ</span><b>${n(s.missing_mrc)}</b></div>
     </div>
-    <details class="tri21mrc-details" ${Number(s.below_mrc)>0?'open':''}><summary>Показать отклонения от МРЦ · до 120 позиций</summary>
+    <details class="tri21mrc-details" ${Number(s.below_mrc_in_stock)>0?'open':''}><summary>Показать отклонения от МРЦ · до 120 позиций · ниже МРЦ без наличия отмечены отдельно</summary>
       <div class="tri21mrc-table"><table><thead><tr><th>SKU / товар</th><th>МРЦ</th><th>Цена 21vek</th><th>Отклонение</th><th>Статус</th><th>Менеджер</th><th>Карточка</th></tr></thead><tbody>${line}</tbody></table></div>
     </details>
   </div>`;
