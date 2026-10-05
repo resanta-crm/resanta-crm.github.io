@@ -1,0 +1,41 @@
+name: Триовист — 21vek · конкуренты
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/triovist_21vek_competitors.py'
+      - 'tools/triovist_21vek_parser.py'
+      - '.github/workflows/triovist-21vek-competitors.yml'
+  schedule:
+    # Ежедневно после основного собственного парсера 21vek: 06:47 по Минску (UTC+3).
+    - cron: '47 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-21vek-competitors
+  cancel-in-progress: false
+
+jobs:
+  competitors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установить зависимости
+        run: pip install requests beautifulsoup4
+
+      - name: Собрать конкурентов 21vek и пересчитать сравнение
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          COMPETITOR_DELAY_SECONDS: '0.45'
+          COMPETITOR_HTTP_TIMEOUT: '30'
+        run: python tools/triovist_21vek_competitors.py
