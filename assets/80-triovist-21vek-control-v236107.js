@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.115',TTL=15000;
+const VERSION='v23.6.214',TTL=15000;
 let cache=null,cacheAt=0,flight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -76,13 +76,13 @@ function warningHtml(d){
 }
 function render(d){
   const root=ensurePanel();if(!root)return;
-  const w=d?.working||{},p=d?.parser||{},g=d?.last_good||{},t=d?.top||{},rq=d?.refresh_request||null;
+  const w=d?.working||{},p=d?.parser||{},g=d?.last_good||{},t=d?.top||{},rq=d?.refresh_request||null,rg=d?.registry||{};
   const [label,cls]=healthMeta(d?.health);
   const state=dangerState(d);
   root.classList.remove('state-green','state-amber','state-red');root.classList.add('state-'+state);
   const errors=Number(p?.errors||0);
   const expected=Number(w.cards||0),success=Number(g?.success||0);
-  const coverage=expected?`${n(success||expected)} / ${n(expected)}`:'—';
+  const coverage=expected?n(expected):'—';
   const reqActive=rq&&['queued','claimed'].includes(String(rq.status));
   const can=!!d?.can_refresh;
   const btnText=rq?.status==='claimed'?'⏳ Сбор выполняется':rq?.status==='queued'?'⏱ В очереди':'↻ Запустить обновление 21vek';
@@ -94,7 +94,7 @@ function render(d){
   root.innerHTML=`
     <div class="tri21ctl-head"><div><div class="tri21ctl-title">🌐 21vek · собственный парсер</div><div class="tri21ctl-sub">Источник рабочих карточек: <b>${esc(d?.source_label||'Собственный парсер 21vek')}</b></div></div><span class="tri21ctl-badge ${cls}">${label}</span></div>
     ${warningHtml(d)}
-    <div class="tri21ctl-fresh ${freshClass}">${freshIcon} <b>${workingAt?'Данные CRM обновлены '+dt(workingAt):'Время обновления рабочего снимка не определено'}</b>${workingAt?' · '+ageText(workingAt):''}. Карточки: ${n(g.success||w.cards)}/${n(w.cards)}; TOP: ${t.finished_at?'проверен '+dt(t.finished_at):'нет подтверждённого полного запуска'}.</div>
+    <div class="tri21ctl-fresh ${freshClass}">${freshIcon} <b>${workingAt?'Рабочий снимок собственного парсера: '+dt(workingAt):'Время рабочего снимка не определено'}</b>${workingAt?' · '+ageText(workingAt):''}. Карточки: ${n(w.cards)}; реестр целей: ${n(rg.targets)}${rg.changed_since_last_good?' · реестр изменился, нужен новый полный сбор':''}; TOP: ${t.finished_at?'проверен '+dt(t.finished_at):'нет подтверждённого полного запуска'}.</div>
     ${errText?`<div class="tri21ctl-alert red">❗ <strong>Что произошло:</strong> ${esc(errText)}<br><span style="font-weight:500">Рабочие данные не заменяются неполным запуском — CRM оставляет последний полностью проверенный снимок.</span></div>`:''}
     <div class="tri21ctl-grid">
       <div class="tri21ctl-kpi"><span>Карточки</span><b>${coverage}</b></div>
@@ -104,7 +104,7 @@ function render(d){
       <div class="tri21ctl-kpi"><span>Ошибки текущего/последнего запуска</span><b>${n(errors)}</b></div>
     </div>
     <div class="tri21ctl-foot"><div class="tri21ctl-meta">
-      Рабочий снимок: <b>${esc(w.snapshot_date||'—')}</b> · последний полный успешный сбор: <b>${dt(g.finished_at)}</b><br>
+      Рабочий снимок: <b>${esc(w.snapshot_date||'—')}</b> · последний полный успешный сбор: <b>${dt(g.finished_at)}</b> · целей в нём: <b>${n(g.targets)}</b><br>
       TOP проверен: <b>${dt(t.finished_at)}</b>${rq?` · ручной запрос: <b>${rq.status==='claimed'?'выполняется':'в очереди'}</b>`:''}
     </div><div class="tri21ctl-actions">
       <button id="tri21-export-xlsx-v236109" class="btn-secondary" type="button" onclick="window.triovist21vekExportExcelV236109?window.triovist21vekExportExcelV236109():alert('Модуль Excel ещё загружается. Повторите через несколько секунд.')">📥 Выгрузить Excel</button>
@@ -135,6 +135,6 @@ window.renderTriovist=function(){const out=baseRender?.apply(this,arguments);ens
 const baseReload=window.triovistReload;
 if(typeof baseReload==='function')window.triovistReload=async function(){const out=await baseReload.apply(this,arguments);cache=null;cacheAt=0;if(activeTriovist())await load(true);return out;};
 
-window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false)});
+window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),registrySeparated:true});
 setTimeout(()=>{if(activeTriovist()){ensurePanel();load(false);}},0);
 })();
