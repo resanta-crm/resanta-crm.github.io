@@ -37,9 +37,9 @@ TIMEOUT=max(10,int(os.environ.get('TOP_HTTP_TIMEOUT','30')))
 DEEP_EXACT=os.environ.get('TOP_DEEP_EXACT','0').strip().lower() not in ('0','false','no')
 DEEP_RADIUS=max(0,min(4,int(os.environ.get('TOP_DEEP_RADIUS','2'))))
 MAX_DEEP_PAGES=max(0,min(20,int(os.environ.get('TOP_MAX_DEEP_PAGES_PER_KEYWORD','10'))))
-PARSER_VERSION='top-shadow-v0.5'
+PARSER_VERSION='top-shadow-v0.6'
 ENDPOINT='https://gate.21vek.by/search-composer/api/v3/products'
-UA='ResantaCRM-21vekTopShadow/0.5 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekTopShadow/0.6 (+https://resanta-crm.by)'
 
 
 def api_headers(json_body: bool=False, prefer: str|None=None) -> dict[str,str]:
@@ -151,23 +151,23 @@ def derive_keyword(row: dict) -> str:
     return phrase or "товар"
 
 def current_targets() -> list[dict]:
-    imports=rest_get('triovist_content_imports',{
-        'is_current':'eq.true','status':'eq.complete','select':'id,manager_email,manager_name,snapshot_date'
-    })
-    if not imports:
-        raise RuntimeError('Current Triovist content imports not found')
+    rows=rest_get_all(
+        'triovist_21vek_registry_v236214',
+        {'select':'manager_email,manager_name,card_key,sku,donor_article,product_name,category,subgroup,product_url,keyword,listing_position,registry_snapshot_date'},
+        page_size=900,
+        timeout=90
+    )
+    if not rows:
+        raise RuntimeError('Dedicated 21vek target registry is empty')
     out=[]
-    select='manager_email,manager_name,card_key,sku,donor_article,product_name,category,subgroup,product_url,keyword,listing_position'
-    for imp in imports:
-        rows=rest_get_all('triovist_content_cards',{'import_id':f"eq.{imp['id']}",'select':select})
-        for x in rows:
-            source_kw=re.sub(r"\\s+"," ",str(x.get('keyword') or '')).strip(" ,.;:-")
-            derived=derive_keyword(x)
-            x['keyword']=source_kw or derived
-            x['_keyword_generated']=not bool(source_kw)
-            x['_keyword_source']='source' if source_kw else 'generated'
-            x['_baseline_snapshot_date']=imp.get('snapshot_date')
-            out.append(x)
+    for x in rows:
+        source_kw=re.sub(r"\s+"," ",str(x.get('keyword') or '')).strip(" ,.;:-")
+        derived=derive_keyword(x)
+        x['keyword']=source_kw or derived
+        x['_keyword_generated']=not bool(source_kw)
+        x['_keyword_source']='source' if source_kw else 'generated'
+        x['_baseline_snapshot_date']=x.get('registry_snapshot_date')
+        out.append(x)
     return out
 
 def grouped_targets(rows: list[dict]) -> list[tuple[str,list[dict]]]:
