@@ -513,6 +513,27 @@ def recommendation(our_price,comp_price,mrc,mrc_status,score,advantages,disadvan
     return "Сохранять текущую цену и мониторить изменения конкурента."
 
 
+def load_rules(subgroup: str) -> None:
+    rows=rest_get("triovist_competitor_rules",{
+        "subgroup":"eq."+subgroup,
+        "select":"spec_key,weight,direction,unit,aliases,critical",
+        "order":"weight.desc"
+    })
+    if not rows:
+        return
+    ALIASES.clear(); WEIGHTS.clear()
+    for row in rows:
+        key=str(row.get("spec_key") or "").strip()
+        if not key:
+            continue
+        aliases=row.get("aliases") or []
+        if isinstance(aliases,list):
+            ALIASES[key]=[str(x) for x in aliases if str(x).strip()]
+        try:
+            WEIGHTS[key]=float(row.get("weight") or 0)
+        except Exception:
+            WEIGHTS[key]=0.0
+
 def load_pilot_targets() -> list[dict]:
     return rest_get("triovist_competitor_targets",{
         "collect_enabled":"eq.true",
@@ -559,6 +580,7 @@ def finish_run(run_id: str,status: str,success: int,errors: int,notes: dict) -> 
 
 
 def main() -> None:
+    load_rules("Дрели-шуруповерты аккумуляторные")
     targets=load_pilot_targets()
     if not targets:
         print("No enabled competitor targets",flush=True)
