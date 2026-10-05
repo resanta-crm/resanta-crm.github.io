@@ -35,8 +35,8 @@ TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
 SNAPSHOT_BATCH_SIZE=max(10,int(os.environ.get("SHADOW_SNAPSHOT_BATCH_SIZE","75")))
 RAW_BATCH_SIZE=max(5,int(os.environ.get("SHADOW_RAW_BATCH_SIZE","15")))
-PARSER_VERSION="shadow-v0.9"
-UA="ResantaCRM-21vekShadow/0.9 (+https://resanta-crm.by)"
+PARSER_VERSION="shadow-v1.0"
+UA="ResantaCRM-21vekShadow/1.0 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
     "price","description_present","warranty_present","product_rating",
@@ -208,40 +208,39 @@ def recent_complete_matches(target_count: int) -> bool:
 
 
 def current_targets() -> list[dict]:
-    imports=rest_get("triovist_content_imports",{
-        "is_current":"eq.true",
-        "status":"eq.complete",
-        "select":"id,manager_email,manager_name,snapshot_date"
-    })
-    if not imports:
-        raise RuntimeError("Не найдены текущие снимки платного парсера")
+    """Read the dedicated target registry, not the mutable working snapshot.
 
-    result=[]
+    Manual Excel uploads may refresh the registry of cards/URLs, but they do not
+    replace the working own-parser snapshot. This keeps parser completeness
+    independent from UI/current-source switching.
+    """
     select=(
+        "registry_import_id,registry_snapshot_date,registry_source_file,"
         "manager_email,manager_name,card_key,sku,donor_article,product_name,category,subgroup,"
         "product_url,price,description_present,warranty_present,product_rating,review_count,"
         "photo_count,video_count,in_stock,delivery_minsk_days"
     )
-    for imp in imports:
-        rows=rest_get_all("triovist_content_cards",{
-            "import_id":f"eq.{imp['id']}",
-            "select":select
-        },page_size=900,timeout=90)
-        for x in rows:
-            url=str(x.get("product_url") or "").strip()
-            if not public_product_url(url):
-                continue
-            x["_baseline_snapshot_date"]=imp.get("snapshot_date")
-            result.append(x)
+    rows=rest_get_all(
+        "triovist_21vek_registry_v236214",
+        {"select":select},
+        page_size=900,
+        timeout=90
+    )
+    result=[]
+    for x in rows:
+        url=str(x.get("product_url") or "").strip()
+        if not public_product_url(url):
+            continue
+        x["_baseline_snapshot_date"]=x.get("registry_snapshot_date")
+        result.append(x)
 
     if not result:
-        raise RuntimeError("В текущих снимках нет корректных публичных URL 21vek")
+        raise RuntimeError("В реестре целей 21vek нет корректных публичных URL")
 
     result.sort(key=lambda x: hashlib.sha256(
         (str(x.get("manager_email"))+"|"+str(x.get("sku"))+"|"+str(x.get("product_url"))).encode("utf-8")
     ).hexdigest())
     return result[OFFSET:OFFSET+LIMIT]
-
 
 def baseline(row: dict) -> dict:
     return {k:row.get(k) for k in BASELINE_FIELDS} | {
@@ -368,7 +367,7 @@ def insert_run(target_count: int) -> str:
       "total_targets":target_count,
       "notes":{
         "mode":"shadow",
-        "source_registry":"current triovist_content_cards",
+        "source_registry":"triovist_21vek_registry_v236214",
         "offset":OFFSET,
         "production_cutover":False,
         "approved_scope_version":"2026-09-09-v1"
@@ -426,7 +425,7 @@ def apply_rate_limit_cooldown(response: requests.Response) -> None:
 
 def fetch_product(session: requests.Session, url: str) -> requests.Response:
     last_error: Exception|None=None
-    for attempt in range(3):
+    for attempt in range(5):
         wait_rate_slot()
         try:
             response=session.get(url,timeout=TIMEOUT,allow_redirects=True)
@@ -440,8 +439,8 @@ def fetch_product(session: requests.Session, url: str) -> requests.Response:
             last_error=error
         except (requests.Timeout,requests.ConnectionError) as exc:
             last_error=exc
-        if attempt<2:
-            time.sleep(1.0*(attempt+1))
+        if attempt<4:
+            time.sleep(min(8.0,1.5*(attempt+1)))
     if last_error is not None:
         raise last_error
     raise RuntimeError("21vek fetch failed")
@@ -535,7 +534,7 @@ def main() -> None:
           "finished_at":datetime.now(timezone.utc).isoformat(),
           "notes":{
             "mode":"shadow",
-            "source_registry":"current triovist_content_cards",
+            "source_registry":"triovist_21vek_registry_v236214",
             "offset":OFFSET,
             "production_cutover":False,
             "request_start_interval_seconds":DELAY,
