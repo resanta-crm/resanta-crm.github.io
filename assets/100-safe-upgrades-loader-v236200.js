@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SAFE_UPGRADES_LOADER_V236200)return;
-const V='23.6.231',flights=new Map();
+const V='23.6.232',flights=new Map();
 function active(id){const name=String(id||'').replace(/^page-/,'');return !!document.getElementById(id)?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')===name}
 function load(path,guard){
  if(window[guard])return Promise.resolve(true);
@@ -21,7 +21,7 @@ function route(){
  try{
    if(active('page-debt'))load('assets/102-safe-vip-pdz-v236200.js','RESANTA_SAFE_VIP_PDZ_V236200');
    if(active('page-promotions'))load('assets/83-promotions-mo2-selector-v236123.js','RESANTA_PROMOTIONS_MO2_SELECTOR_V236123');
-   if(active('page-triovist')){load('assets/104-safe-triovist-v236200.js','RESANTA_SAFE_TRIOVIST_V236200');load('assets/106-triovist-competitors-v236218.js','RESANTA_TRIOVIST_COMPETITORS_V236218');load('assets/107-triovist-auth-export-v236221.js','RESANTA_TRIOVIST_AUTH_EXPORT_V236221');load('assets/108-triovist-plan-server-v236231.js','RESANTA_TRIOVIST_PLAN_SERVER_V236231');}
+   if(active('page-triovist')){load('assets/104-safe-triovist-v236200.js','RESANTA_SAFE_TRIOVIST_V236200');load('assets/106-triovist-competitors-v236218.js','RESANTA_TRIOVIST_COMPETITORS_V236218');load('assets/107-triovist-auth-export-v236221.js','RESANTA_TRIOVIST_AUTH_EXPORT_V236221');load('assets/108-triovist-plan-server-v236231.js','RESANTA_TRIOVIST_PLAN_SERVER_V236231');load('assets/109-triovist-task-target-v236232.js','RESANTA_TRIOVIST_TASK_TARGET_EDITOR_V236232');}
  }catch(e){console.warn('SAFE '+V+' route',e)}
 }
 function boot(){
