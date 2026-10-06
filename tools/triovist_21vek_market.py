@@ -1083,12 +1083,12 @@ def main() -> None:
             print(f"SCOPE [{si}/{len(scopes)}] {scope['source_subgroup']} query={scope['search_query']!r}",flush=True)
 
             products,own_market,discover_meta=discover_scope(session,scope)
-            discovered_total+=discover_meta["raw"];competitor_total+=len(products)
+            discovered_total+=discover_meta["raw"]
             existing=load_existing_products(skey)
             observed_dt=datetime.now(timezone.utc)
             observed=observed_dt.isoformat()
             observed_date=(observed_dt+timedelta(hours=3)).date().isoformat()
-            current_rows=[];snapshot_rows=[]
+            current_rows=[];snapshot_rows=[];supplemental_filtered=0
 
             for pi,p in enumerate(products,1):
                 old=existing.get(p["product_key"])
@@ -1130,6 +1130,11 @@ def main() -> None:
                     p["specs_fetched_at"]=old.get("specs_fetched_at") if old else None
                     p["error_text"]="21vek search result has no canonical product URL";errors+=1
 
+                if profile=="infrared_heater" and "газов" in norm(p.get("search_query")):
+                    if (p.get("specs_normalized") or {}).get("energy_type")!="gas":
+                        supplemental_filtered+=1
+                        continue
+
                 p.pop("_search_item",None)
                 current_rows.append(p)
                 snapshot_rows.append({
@@ -1139,6 +1144,11 @@ def main() -> None:
                   )
                 })
                 if pi%20==0: print(f"  competitors {pi}/{len(products)}",flush=True)
+
+            discover_meta["competitors"]=len(current_rows)
+            if supplemental_filtered:
+                discover_meta["supplemental_filtered_non_gas"]=supplemental_filtered
+            competitor_total+=len(current_rows)
 
             rest_upsert("triovist_market_products_current_v1",current_rows,"scope_key,product_key")
             if snapshot_rows: rest_post("triovist_market_product_snapshots_v1",snapshot_rows)
