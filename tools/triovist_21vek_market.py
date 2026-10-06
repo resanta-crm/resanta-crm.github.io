@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.224.
+"""Triovist / 21vek automatic market analysis v23.6.236.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
