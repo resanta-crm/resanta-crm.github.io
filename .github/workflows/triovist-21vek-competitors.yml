@@ -9,6 +9,14 @@ on:
       - 'assets/106-triovist-competitors-v236218.js'
       - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
       - '.github/workflows/triovist-21vek-competitors.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/triovist_21vek_market.py'
+      - 'tools/triovist_21vek_parser.py'
+      - 'assets/106-triovist-competitors-v236218.js'
+      - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
+      - '.github/workflows/triovist-21vek-competitors.yml'
   schedule:
     # После основного собственного парсера 21vek. Позиция/цена фиксируются ежедневно.
     - cron: '47 3 * * *'
@@ -32,12 +40,15 @@ jobs:
           python-version: '3.11'
 
       - name: Проверить синтаксис нового контура
-        run: python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_parser.py
+        run: |
+          python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_parser.py
+          node --check assets/106-triovist-competitors-v236218.js
 
       - name: Установить зависимости
         run: pip install requests beautifulsoup4
 
       - name: Проверка рынка — Конвекторы + Бензопилы
+        if: github.event_name != 'pull_request'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
