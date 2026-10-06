@@ -30,8 +30,8 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.1"
-RULESET_VERSION="rules-v2"
+PARSER_VERSION="market-auto-v1.2"
+RULESET_VERSION="rules-v3"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
 DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
@@ -300,11 +300,26 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="chain_pitch_in":
         return parse_fraction(low)
     if not ns: return None
+    if key=="power_modes":
+        # 21vek may encode modes as "2 режима", "1000/2000 Вт" or
+        # "500 Вт, 1000 Вт". These are two modes, not 1000/2000 modes.
+        m=re.search(r"(\d+)\s*(?:режим|ступен)",low)
+        if m:
+            n=int(m.group(1))
+            return n if 1<=n<=10 else None
+        small=[int(x) for x in ns if float(x).is_integer() and 1<=x<=10]
+        if small: return max(small)
+        levels=[]
+        for x in ns:
+            if x>=20 and x not in levels: levels.append(x)
+        if 2<=len(levels)<=6 and ("/" in low or "," in low or ";" in low):
+            return len(levels)
+        return None
     v=max(ns)
     if key=="power_w":
         if "квт" in low or "kw" in low: v*=1000
         return round(v,2)
-    if key in ("area_m2","sections_count","power_modes","drive_links","engine_cc","color_temp_k","luminous_flux_lm","noise_db"):
+    if key in ("area_m2","sections_count","drive_links","engine_cc","color_temp_k","luminous_flux_lm","noise_db"):
         return round(v,3)
     if key in ("tank_l","fuel_tank_l"):
         if "мл" in low and "л" not in low.replace("мл",""): v/=1000
@@ -889,7 +904,7 @@ def main() -> None:
                     if op is not None and cp:
                         pdb=round(op-cp,2);pdp=round((op-cp)/cp*100,2)
                     comp_score=competitiveness(ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp)
-                    status="ours_stronger" if comp_score>=70 else ("parity" if comp_score>=55 else "competitor_stronger")
+                    status="ours_stronger" if comp_score>=65 else ("parity" if comp_score>=45 else "competitor_stronger")
                     adv,bad=compare_texts(
                       ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,p.get("position"),mr
                     )
