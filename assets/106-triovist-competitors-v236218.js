@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.235 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.236 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.235',TTL=30000;
+const V='v23.6.236',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -85,6 +85,30 @@ function convectorValue(k,v){
  if(k==='power_w')return E(v)+' Вт';
  return E(v);
 }
+function chainsawResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+ const d=Math.abs(av-bv);
+ if(k==='engine_cc'){
+  if(d<=3)return 'полное совпадение · разница '+d.toFixed(1).replace('.',',')+' см³';
+  if(d<=5)return 'близкое совпадение · разница '+d.toFixed(1).replace('.',',')+' см³';
+  if(d<=8)return 'частичное совпадение · разница '+d.toFixed(1).replace('.',',')+' см³';
+  return 'существенное отличие · разница '+d.toFixed(1).replace('.',',')+' см³';
+ }
+ if(k==='power_w'){
+  if(d<=200)return 'полное совпадение · разница '+Math.round(d)+' Вт';
+  if(d<=350)return 'близкое совпадение · разница '+Math.round(d)+' Вт';
+  if(d<=500)return 'частичное совпадение · разница '+Math.round(d)+' Вт';
+  return 'существенное отличие · разница '+Math.round(d)+' Вт';
+ }
+ return '—';
+}
+function chainsawValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='engine_cc')return E(v)+' см³';
+ if(k==='power_w')return E(v)+' Вт';
+ return E(v);
+}
 function listingKey(scope,sku){return String(scope||'')+'|'+String(sku||'')}
 function listingRowsMap(listing){
  const m=new Map();for(const x of (listing?.rows||[]))m.set(listingKey(x.scope_key,x.sku),x);return m;
@@ -158,6 +182,17 @@ function details(r,l){
   const area='<div class="tm224-ref"><b>Справочно — площадь обогрева:</b> конкурент '+(b.area_m2==null?'нет данных':E(b.area_m2)+' м²')+' · наш товар '+(a.area_m2==null?'нет данных':E(a.area_m2)+' м²')+'. <b>В сопоставимости не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+area
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='chainsaw_gas'){
+  const keys=[['engine_cc','Объём двигателя'],['power_w','Мощность']];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+chainsawValue(k,b[k])+'</td><td>'+chainsawValue(k,a[k])+'</td><td>'+E(chainsawResult(k,a[k],b[k]))+'</td></tr>').join('');
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'
+   +'<div class="tm224-ref"><b>Техническая сопоставимость бензопил:</b> только объём двигателя 50% + мощность 50%. Остальные характеристики на процент не влияют.</div>'
    +listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
