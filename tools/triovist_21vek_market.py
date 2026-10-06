@@ -620,7 +620,7 @@ def is_our_brand(item: dict,name: str) -> bool:
 def search_page(session: requests.Session, query: str,page: int,search_id: str="") -> dict:
     body={"query":query,"order":"default","page":page,"limit":60,"mode":"desktop","searchId":search_id,"filters":[]}
     last=None
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             r=session.post(SEARCH_ENDPOINT,headers=SEARCH_HEADERS,json=body,timeout=TIMEOUT,allow_redirects=True)
             if r.status_code==200:
@@ -628,14 +628,20 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
                 if isinstance(data,dict) and isinstance(data.get("products"),list): return data
                 raise RuntimeError("21vek search response has no products")
             last=RuntimeError(f"21vek search HTTP {r.status_code}: {r.text[:250]}")
-            if r.status_code==429:
-                try: wait=float(r.headers.get("Retry-After") or 3)
-                except Exception: wait=3
-                time.sleep(max(2,min(30,wait)))
-            elif r.status_code>=500: time.sleep(1.5*(attempt+1))
-            else: raise last
+            if r.status_code in (424,429):
+                # 21vek occasionally returns 424 "ML request error" from its
+                # ranking backend during bursts. It is transient: back off and
+                # retry instead of failing the whole market run.
+                try: retry_after=float(r.headers.get("Retry-After") or 0)
+                except Exception: retry_after=0
+                wait=max(retry_after,4.0*(attempt+1))
+                time.sleep(min(30,wait))
+            elif r.status_code>=500:
+                time.sleep(min(20,2.0*(attempt+1)))
+            else:
+                raise last
         except (requests.Timeout,requests.ConnectionError) as exc:
-            last=exc;time.sleep(1.5*(attempt+1))
+            last=exc;time.sleep(min(20,2.0*(attempt+1)))
     raise last or RuntimeError("21vek search failed")
 
 
