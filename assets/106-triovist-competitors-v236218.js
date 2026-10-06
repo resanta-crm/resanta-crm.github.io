@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.224 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.227 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.224',TTL=30000;
+const V='v23.6.227',TTL=30000;
 let flight=null,last=null,lastAt=0,exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -45,12 +45,13 @@ function specLine(k,v){
   base_type:'Цоколь',color_temp_k:'Цветовая температура',luminous_flux_lm:'Световой поток',bulb_shape:'Форма',
   engine_cc:'Объём двигателя',bar_length_cm:'Шина',chain_pitch_in:'Шаг цепи',drive_links:'Звенья',
   fuel_tank_l:'Топливный бак',chain_speed_ms:'Скорость цепи',motor_position:'Двигатель',
-  tool_free_tension:'Натяжение без инструмента',voltage_v:'Напряжение'
+  tool_free_tension:'Натяжение без инструмента',voltage_v:'Напряжение',equipment:'Комплектация',
+  width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
   airflow_m3h:' м³/ч',fuel_consumption_kgh:' кг/ч',tank_l:' л',width_mm:' мм',noise_db:' дБ',
   output_mlh:' мл/ч',color_temp_k:' K',luminous_flux_lm:' лм',engine_cc:' см³',bar_length_cm:' см',
-  chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В'};
+  chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
 }
