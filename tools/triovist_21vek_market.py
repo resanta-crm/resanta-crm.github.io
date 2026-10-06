@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.236.
+"""Triovist / 21vek automatic market analysis v23.6.238.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.6"
+PARSER_VERSION="market-auto-v1.7"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -315,8 +315,65 @@ def presence_value(text: str) -> bool|None:
     return True
 
 
+def infrared_energy_type(name: str,specs: dict|None=None,raw: list[dict]|None=None) -> str|None:
+    specs=specs or {};raw=raw or []
+    text=" ".join([
+      str(name or ""),
+      str(specs.get("energy_type") or ""),
+      str(specs.get("fuel_type") or ""),
+      " ".join(str(x.get("value") or "") for x in raw if isinstance(x,dict))
+    ])
+    n=norm(text)
+    if any(x in n for x in ("газов","пропан","бутан","сжиженн газ","баллон")): return "gas"
+    if any(x in n for x in ("электр","220","230","380","400","кварц","карбон","галоген","тэн")): return "electric"
+    # In the 21vek infrared-heater search the non-gas items are electric;
+    # keep unknown only when the title itself is not an infrared heater.
+    if "инфракрас" in n: return "electric"
+    return None
+
+
+def infrared_heater_family(v: Any) -> str:
+    n=norm(v)
+    if "кварц" in n:return "quartz"
+    if "карбон" in n or "углерод" in n:return "carbon"
+    if "галоген" in n:return "halogen"
+    if "керами" in n:return "ceramic"
+    if "тэн" in n or "трубчат" in n:return "ten"
+    return n
+
+
+def infrared_install_tokens(v: Any) -> set[str]:
+    n=norm(v);out=set()
+    if "универс" in n: out.update(("wall","floor","ceiling"))
+    if "настен" in n: out.add("wall")
+    if "наполь" in n: out.add("floor")
+    if "потол" in n: out.add("ceiling")
+    return out
+
+
+def thermostat_present(v: Any) -> bool|None:
+    if v is None:return None
+    n=norm(v)
+    if not n:return None
+    if any(x in n for x in ("нет","отсутств","не предусмотр")):return False
+    return True
+
+
+def voltage_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    if 200<=n<=250:return "single"
+    if 360<=n<=420:return "three"
+    return str(round(n,1))
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
+    if key=="energy_type":
+        n=norm(text)
+        if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
+        if any(x in n for x in ("электр","220","230","380","400")): return "electric"
+        return n[:80] or None
     if key in ("heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape","equipment"):
         return norm(text)[:240] or None
     if key=="base_type":
@@ -670,6 +727,11 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     })
     raw,specs=extract_specs(html,rules)
     card=parsed["card"];extra=parsed["extra"]
+    if any(r.get("spec_key")=="energy_type" for r in rules):
+        specs["energy_type"]=infrared_energy_type(
+          card.get("product_name") or base.get("model") or base.get("product_name") or "",
+          specs,raw
+        )
     return {
       "brand":extra.get("brand") or base.get("brand") or "",
       "model":card.get("product_name") or base.get("model") or base.get("product_name") or "",
@@ -714,6 +776,32 @@ def chainsaw_power_similarity(a: float,b: float) -> float:
     return 0.0
 
 
+def infrared_power_similarity(a: float,b: float) -> float:
+    diff=abs(a-b)
+    if diff<=100:return 1.0
+    if diff<=250:return 0.80
+    if diff<=400:return 0.50
+    return 0.0
+
+
+def infrared_heater_similarity(a: Any,b: Any) -> float:
+    aa=infrared_heater_family(a);bb=infrared_heater_family(b)
+    if not aa or not bb:return 0.0
+    return 1.0 if aa==bb else categorical_similarity(aa,bb)
+
+
+def infrared_install_similarity(a: Any,b: Any) -> float:
+    aa=infrared_install_tokens(a);bb=infrared_install_tokens(b)
+    if aa and bb:return 1.0 if aa&bb else 0.0
+    return categorical_similarity(a,b)
+
+
+def infrared_voltage_similarity(a: Any,b: Any) -> float:
+    ca=voltage_class(a);cb=voltage_class(b)
+    if ca is None or cb is None:return 0.0
+    return 1.0 if ca==cb else 0.0
+
+
 def categorical_similarity(a: Any,b: Any) -> float:
     na=norm(a);nb=norm(b)
     if not na or not nb: return 0.0
@@ -723,6 +811,44 @@ def categorical_similarity(a: Any,b: Any) -> float:
 
 
 def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -> float:
+    if profile=="infrared_heater":
+        ea=ours.get("energy_type");eb=comp.get("energy_type")
+        if ea is not None and eb is not None and str(ea)!=str(eb):
+            return 0.0
+        total=used=allw=0.0
+        energy_missing=ea is None or eb is None
+        voltage_mismatch=False
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0: continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None: continue
+            try:
+                if k=="power_w": s=infrared_power_similarity(float(a),float(b))
+                elif k=="heater_type": s=infrared_heater_similarity(a,b)
+                elif k=="installation_type": s=infrared_install_similarity(a,b)
+                elif k=="thermostat_type":
+                    pa,pb=thermostat_present(a),thermostat_present(b)
+                    s=1.0 if pa is not None and pb is not None and pa==pb else 0.0
+                elif k=="voltage_v":
+                    s=infrared_voltage_similarity(a,b)
+                    if voltage_class(a) is not None and voltage_class(b) is not None and s<1: voltage_mismatch=True
+                elif rule.get("direction")=="boolean":
+                    s=1.0 if bool(a)==bool(b) else 0.0
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if energy_missing:score=min(score,69.0)
+        if voltage_mismatch:score=min(score,89.0)
+        return round(max(0,min(100,score)),2)
+
     # Gasoline chainsaws use the approved fixed 50/50 formula:
     # engine displacement + power. Missing data keeps its weight as zero
     # contribution; weights are never re-normalized.
@@ -771,7 +897,7 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 def analog_grade(score: float,profile: str="generic") -> str:
-    if profile in ("convector","chainsaw_gas"):
+    if profile in ("convector","chainsaw_gas","infrared_heater"):
         if score>=90:return "direct"
         if score>=75:return "close"
         if score>=60:return "conditional"
@@ -809,7 +935,7 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
         if z is None: continue
         rw=float(rule.get("weight") or 0);s+=z*rw;w+=rw
     spec_score=s/w if w else 50
-    if profile=="convector" and not price_available:
+    if profile in ("convector","infrared_heater") and not price_available:
         return round(spec_score,2)
     return round(0.35*price_score+0.65*spec_score,2)
 
@@ -851,7 +977,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=60 if profile in ("convector","chainsaw_gas") else 70
+    min_match=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -910,7 +1036,7 @@ def main() -> None:
                 p["run_id"]=run_id;p["observed_at"]=observed;p["error_text"]=None
                 p["current_price"]=valid_price(p.get("current_price"))
                 need_specs=not fresh_specs(old,p.get("product_url") or "")
-                need_card=need_specs or (profile=="convector" and p["current_price"] is None)
+                need_card=need_specs or (profile in ("convector","infrared_heater") and p["current_price"] is None)
                 # Keep cached technical specs unless TTL/url/model requires refresh.
                 # For convectors, a missing/zero search price forces a card lookup;
                 # stale prices are never presented as the current price.
@@ -920,7 +1046,7 @@ def main() -> None:
                     p["specs_signature"]=old.get("specs_signature")
                     p["specs_fetched_at"]=old.get("specs_fetched_at")
                     if not p.get("brand"):p["brand"]=old.get("brand") or ""
-                    if profile!="convector" and p.get("current_price") is None:
+                    if profile not in ("convector","infrared_heater") and p.get("current_price") is None:
                         p["current_price"]=valid_price(old.get("current_price"))
                     if p.get("in_stock") is None:p["in_stock"]=old.get("in_stock")
                     if p.get("product_rating") is None:p["product_rating"]=old.get("product_rating")
@@ -1044,8 +1170,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=60 if profile in ("convector","chainsaw_gas") else 70
-            candidate_threshold=60 if profile in ("convector","chainsaw_gas") else 55
+            gap_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70
+            candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
