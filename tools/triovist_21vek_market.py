@@ -30,7 +30,8 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.0"
+PARSER_VERSION="market-auto-v1.1"
+RULESET_VERSION="rules-v2"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
 DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
@@ -316,9 +317,16 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="fuel_consumption_kgh":
         return round(v,3)
     if key=="bar_length_cm":
-        if "мм" in low: v/=10
-        elif "дюйм" in low or "inch" in low or '"' in low: v*=2.54
-        return round(v,2)
+        # 21vek often shows both units, e.g. "40 см (16")". Prefer the
+        # explicit metric value instead of taking max(numbers) and then
+        # converting because a quote exists somewhere in the string.
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low)
+        if m: return round(float(m.group(1).replace(",","."))/10,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*см\b",low)
+        if m: return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low)
+        if m: return round(float(m.group(1).replace(",","."))*2.54,2)
+        return round(ns[0],2)
     if key=="width_mm":
         if re.search(r"\bсм\b",low): v*=10
         elif re.search(r"\bм\b",low) and "мм" not in low: v*=1000
@@ -578,6 +586,7 @@ def load_existing_own(scope: str) -> dict[str,dict]:
 def fresh_specs(row: dict|None,url: str) -> bool:
     if not row or not row.get("specs_normalized") or not row.get("specs_fetched_at"): return False
     if str(row.get("product_url") or "")!=str(url or ""): return False
+    if not str(row.get("specs_signature") or "").startswith(RULESET_VERSION+":"): return False
     try:
         t=datetime.fromisoformat(str(row["specs_fetched_at"]).replace("Z","+00:00"))
         return datetime.now(timezone.utc)-t.astimezone(timezone.utc)<=timedelta(days=SPEC_TTL_DAYS)
@@ -602,7 +611,7 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
       "product_rating":card.get("product_rating"),
       "review_count":card.get("review_count"),
       "specs_raw":raw,"specs_normalized":specs,
-      "specs_signature":hashlib.sha1(json.dumps(specs,ensure_ascii=False,sort_keys=True).encode("utf-8")).hexdigest(),
+      "specs_signature":RULESET_VERSION+":"+hashlib.sha1(json.dumps(specs,ensure_ascii=False,sort_keys=True).encode("utf-8")).hexdigest(),
       "specs_fetched_at":datetime.now(timezone.utc).isoformat()
     }
 
