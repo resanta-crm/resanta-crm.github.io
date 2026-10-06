@@ -82,6 +82,7 @@ const num=v=>Number(v||0);
 const qty=v=>num(v).toLocaleString('ru-RU',{maximumFractionDigits:3});
 const statusName=s=>({waiting_pick:'Ожидает сборки',picking:'В сборке',shortage:'Недостача',ready:'Готов к отгрузке'})[s]||s||'—';
 function show(id,on=true){$(id)?.classList.toggle('hidden',!on)}
+function moduleVisible(){try{return !window.frameElement||!window.frameElement.closest('#work')?.classList.contains('hidden')}catch(_){return document.visibilityState==='visible'}}
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function loadSession(){try{const x=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');return x?.token&&x?.device_key?x:null}catch(_){return null}}
 function saveSession(x){if(!x)clearFastCache();session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
@@ -99,7 +100,7 @@ function loadFastCache(){
 }
 function clearFastCache(){try{localStorage.removeItem(fastCacheKey())}catch(_){} }
 function scheduleSync(delay=900){
- clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(session&&!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},delay)
+ clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(session&&!busy&&moduleVisible())loadOrders(selected?.id).catch(()=>{})},delay)
 }
 function pairStatus(msg,kind='red'){const e=$('pair-status');if(!e)return;e.className='status '+kind;e.textContent=msg;show('pair-status',!!msg)}
 async function unlockAudio(){
@@ -172,7 +173,7 @@ async function loadOrders(prefer=null){
  $('device-line').textContent=(r.label||session.label||'ТСД')+' · быстрый режим';
  show('session-warning',false);
  render();saveFastCache();
- setTimeout(()=>{if(selected?.status!=='ready')$('scan-code')?.focus()},20);
+ setTimeout(()=>{if(moduleVisible()&&selected?.status!=='ready')$('scan-code')?.focus()},20);
 }
 async function openOrder(id){
  const local=orders.find(x=>x.id===id);
@@ -180,7 +181,7 @@ async function openOrder(id){
  const d=await rpc('warehouse_pick_device_detail_v1',{p_device_token:session.token,p_order_id:id});
  if(!d?.ok){if(d?.reason==='device_session_invalid'){saveSession(null);await boot();return}throw new Error(d?.reason||'Заказ недоступен')}
  selected=d;render();saveFastCache();
- setTimeout(()=>{if(selected?.status!=='ready')$('scan-code')?.focus()},20);
+ setTimeout(()=>{if(moduleVisible()&&selected?.status!=='ready')$('scan-code')?.focus()},20);
 }
 function render(){
  if(!session)return;
@@ -311,7 +312,7 @@ async function boot(){
   if(String(e?.message||e).includes('device_session_invalid')){saveSession(null);return boot()}
   show('session-warning',true);$('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e)+(orders.length?' · показываю последний сохранённый список.':'');
  }
- clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},5000);
+ clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&moduleVisible())loadOrders(selected?.id).catch(()=>{})},5000);
 }
 document.querySelectorAll('[data-pair-device]').forEach(b=>b.addEventListener('click',()=>{
  $('pair-device').value=b.dataset.pairDevice||'';
@@ -326,7 +327,7 @@ $('scan-btn').onclick=()=>{resetScannerInput();scan()};
 $('scan-code').addEventListener('input',detectHardwareScan);
 $('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();resetScannerInput();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.222',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
