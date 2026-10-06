@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.4"
+PARSER_VERSION="market-auto-v1.5"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -134,6 +134,15 @@ def clean_label(v: str) -> str:
     s=re.sub(r"\b(?:resanta|ресанта|huter|вихрь|vikhr|eurolux)\b"," ",str(v or ""),flags=re.I)
     s=re.sub(r"\s+"," ",s).strip(" ,.;:-")
     return s
+
+
+def url_key(v: str) -> str:
+    return str(v or "").strip().split("?",1)[0].split("#",1)[0].rstrip("/").lower()
+
+
+def product_name_key(v: str) -> str:
+    s=re.sub(r"\(\s*\d+(?:/\d+){1,3}\s*\)\s*$"," ",str(v or ""))
+    return norm(s)
 
 
 def sku_depth(sku: str) -> int:
@@ -563,31 +572,41 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
     raise last or RuntimeError("21vek search failed")
 
 
-def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],dict]:
+def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],list[dict],dict]:
     q=scope["search_query"]
     d1=search_page(session,q,1,"");time.sleep(DELAY)
     sid=str(d1.get("searchId") or "")
     d2=search_page(session,q,2,sid);time.sleep(DELAY)
-    rows=[];seen=set();raw_count=0;own_excluded=0
+    rows=[];own_rows=[];seen=set();own_seen=set();raw_count=0;own_excluded=0
     for page,data in ((1,d1),(2,d2)):
         for i,item in enumerate(data.get("products") or []):
             raw_count+=1
-            name=item_name(item);url=item_url(item)
-            if is_our_brand(item,name):
-                own_excluded+=1;continue
-            meta=search_meta(item)
+            name=item_name(item);url=item_url(item);meta=search_meta(item)
+            position=(page-1)*60+i+1
             key=meta.get("external_id") or (hashlib.sha1(url.encode("utf-8")).hexdigest() if url else hashlib.sha1((name+str(page)+str(i)).encode("utf-8")).hexdigest())
+            if is_our_brand(item,name):
+                own_excluded+=1
+                own_key=str(key)
+                if own_key in own_seen: continue
+                own_seen.add(own_key)
+                own_rows.append({
+                  "scope_key":scope["scope_key"],"product_key":own_key,"search_query":q,
+                  "page_no":page,"position":position,"external_id":meta.get("external_id"),
+                  "brand":meta.get("brand") or "","model":name,"product_url":url,
+                  "current_price":valid_price(meta.get("price")),"in_stock":meta.get("in_stock")
+                })
+                continue
             if key in seen: continue
             seen.add(key)
             rows.append({
               "scope_key":scope["scope_key"],"product_key":str(key),"search_query":q,
-              "page_no":page,"position":(page-1)*60+i+1,"external_id":meta.get("external_id"),
+              "page_no":page,"position":position,"external_id":meta.get("external_id"),
               "brand":meta.get("brand") or "","model":name,"product_url":url,
               "current_price":meta.get("price"),"base_price":None,"in_stock":meta.get("in_stock"),
               "product_rating":meta.get("rating"),"review_count":meta.get("review_count"),
               "_search_item":item
             })
-    return rows,{"raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,"search_id":sid}
+    return rows,own_rows,{"raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,"own_in_top120":len(own_rows),"search_id":sid}
 
 
 def load_registry() -> dict[str,dict]:
@@ -817,6 +836,11 @@ def main() -> None:
     run_id=insert_run(len(scopes))
     session=requests.Session();session.headers.update(HEADERS)
     registry=load_registry();mrc=load_mrc()
+    registry_by_url={url_key(x.get("product_url")):sku for sku,x in registry.items() if url_key(x.get("product_url"))}
+    registry_names=defaultdict(list)
+    for sku,x in registry.items():
+        nk=product_name_key(x.get("product_name") or "")
+        if nk: registry_names[nk].append(sku)
     discovered_total=competitor_total=comparison_total=gap_total=errors=0
     run_notes=[]
 
@@ -827,10 +851,12 @@ def main() -> None:
                 run_notes.append({"scope":skey,"error":"no technical rules"});errors+=1;continue
             print(f"SCOPE [{si}/{len(scopes)}] {scope['source_subgroup']} query={scope['search_query']!r}",flush=True)
 
-            products,discover_meta=discover_scope(session,scope)
+            products,own_market,discover_meta=discover_scope(session,scope)
             discovered_total+=discover_meta["raw"];competitor_total+=len(products)
             existing=load_existing_products(skey)
-            observed=datetime.now(timezone.utc).isoformat()
+            observed_dt=datetime.now(timezone.utc)
+            observed=observed_dt.isoformat()
+            observed_date=(observed_dt+timedelta(hours=3)).date().isoformat()
             current_rows=[];snapshot_rows=[]
 
             for pi,p in enumerate(products,1):
@@ -887,6 +913,45 @@ def main() -> None:
             if snapshot_rows: rest_post("triovist_market_product_snapshots_v1",snapshot_rows)
             # Remove products which have left TOP-2 only after a successful discovery.
             rest_delete("triovist_market_products_current_v1",{"scope_key":"eq."+skey,"run_id":"neq."+run_id})
+
+            # Our brands are not competitors, but their exact ranking positions are
+            # captured from the very same 21vek result set before exclusion.
+            found_by_sku={}
+            for x in own_market:
+                sku=registry_by_url.get(url_key(x.get("product_url")))
+                if not sku:
+                    candidates=registry_names.get(product_name_key(x.get("model") or "")) or []
+                    if len(candidates)==1: sku=candidates[0]
+                if sku and sku in scope_skus[skey] and sku not in found_by_sku:
+                    found_by_sku[sku]=x
+
+            own_position_rows=[];own_position_snapshots=[]
+            for sku in sorted(scope_skus[skey]):
+                src=registry.get(sku) or {}
+                found=found_by_sku.get(sku)
+                has_card=bool(src.get("product_url"))
+                state="top120" if found else ("outside_top120" if has_card else "no_card")
+                row={
+                  "scope_key":skey,"sku":sku,
+                  "product_name":src.get("product_name") or (found or {}).get("model") or sku,
+                  "product_url":src.get("product_url") or (found or {}).get("product_url"),
+                  "external_id":(found or {}).get("external_id"),
+                  "brand":(found or {}).get("brand") or "",
+                  "page_no":(found or {}).get("page_no"),
+                  "position":(found or {}).get("position"),
+                  "listing_state":state,"in_top120":state=="top120",
+                  "current_price":valid_price((found or {}).get("current_price")) or valid_price(src.get("price")),
+                  "in_stock":(found or {}).get("in_stock"),
+                  "observed_at":observed,"run_id":run_id
+                }
+                own_position_rows.append(row)
+                snap=dict(row);snap["observed_date"]=observed_date
+                own_position_snapshots.append(snap)
+
+            rest_delete("triovist_market_own_positions_current_v1",{"scope_key":"eq."+skey})
+            if own_position_rows:
+                rest_upsert("triovist_market_own_positions_current_v1",own_position_rows,"scope_key,sku")
+                rest_upsert("triovist_market_own_position_snapshots_v1",own_position_snapshots,"scope_key,sku,observed_date")
 
             own_existing=load_existing_own(skey)
             own_rows=[]
@@ -979,6 +1044,9 @@ def main() -> None:
             run_notes.append({
               "scope":skey,"subgroup":scope["source_subgroup"],"query":scope["search_query"],
               **discover_meta,"our_matrix":len(scope_skus[skey]),"our_21vek":len(own_rows),
+              "our_listing_top120":sum(1 for x in own_position_rows if x["in_top120"]),
+              "our_listing_outside_top120":sum(1 for x in own_position_rows if x["listing_state"]=="outside_top120"),
+              "our_listing_no_card":sum(1 for x in own_position_rows if x["listing_state"]=="no_card"),
               "comparisons":len(analyses),"gaps":len(gaps)
             })
             print(f"  DONE competitors={len(products)} own21={len(own_rows)} comparisons={len(analyses)} gaps={len(gaps)}",flush=True)
