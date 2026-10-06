@@ -34,7 +34,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
   <div class="actions">
    <button class="action" data-url="/receiving.html" data-name="Приёмка товара"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></button>
    <button class="action" data-url="/inventory.html" data-name="Инвентаризация"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></button>
-   <button class="action" data-url="/picking.html?v=222" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
+   <button class="action" data-url="/picking.html?v=223" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
   </div>
   <button id="install" class="install hidden">⬇ Установить «Resanta Склад»</button>
   <div class="note">Один ярлык на терминале. Приёмка, инвентаризация и заказы остаются отдельными защищёнными модулями внутри него.</div>
@@ -46,7 +46,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-06-v23.6.222';
+const HUB_VERSION='2026-10-06-v23.6.223';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
 const PICKING_FAST_URL='/picking.html?v=222';
@@ -60,6 +60,10 @@ function openModule(url,name){
  if(f.dataset.moduleUrl!==target){f.dataset.moduleUrl=target;f.src=target}
  $('menu').classList.add('hidden');$('work').classList.remove('hidden');
  try{sessionStorage.setItem('resanta_tsd_last_module_v1',JSON.stringify({url:target,name}))}catch(_){}
+ if(target.indexOf('/picking.html')===0){
+  setTimeout(()=>{try{f.contentWindow.postMessage({type:'resanta-tsd-module-open'},location.origin)}catch(_){}},40);
+  setTimeout(()=>{try{f.contentWindow.postMessage({type:'resanta-tsd-module-open'},location.origin)}catch(_){}},450);
+ }
 }
 function menu(){ $('work').classList.add('hidden');$('menu').classList.remove('hidden');setTimeout(preloadOrders,80) }
 document.querySelectorAll('[data-url]').forEach(b=>b.onclick=()=>openModule(b.dataset.url,b.dataset.name));
