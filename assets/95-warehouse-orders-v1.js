@@ -426,8 +426,7 @@ async function manualCloseReady(){
   }
   actionMessage='✅ Заказ завершён ОМ. Он удалён из рабочего списка ТСД.';actionTone='ok';
   dispatchWarehouseChat();
-  selected=null;selectedFinance=null;
-  await loadList();
+  await loadList(id);
  }catch(e){actionMessage='Не удалось завершить заказ: '+String(e?.message||e);actionTone='error';render()}
  finally{busyAction=false;render()}
 }
