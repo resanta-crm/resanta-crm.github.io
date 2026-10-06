@@ -646,57 +646,94 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
 
 
 def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],list[dict],dict]:
+    def fetch_ranked(candidates: list[str],required: bool=True) -> tuple[str,dict,dict,str]|None:
+        last_exc=None
+        for cand in candidates:
+            try:
+                d1=search_page(session,cand,1,"",attempts=2 if len(candidates)>1 else 5)
+                time.sleep(DELAY)
+                sid=str(d1.get("searchId") or "")
+                d2=search_page(session,cand,2,sid)
+                time.sleep(DELAY)
+                return cand,d1,d2,sid
+            except Exception as exc:
+                last_exc=exc
+                time.sleep(2)
+        if required:
+            raise last_exc or RuntimeError("21vek search failed for all query variants")
+        return None
+
     q=scope["search_query"]
     candidates=[q]
     if scope.get("profile_key")=="infrared_heater":
         for alt in ("обогреватель инфракрасный","инфракрасный","инфрак"):
             if norm(alt)!=norm(q): candidates.append(alt)
-    d1=None;last_exc=None;used_query=q
-    for cand in candidates:
-        try:
-            d1=search_page(session,cand,1,"",attempts=2 if len(candidates)>1 else 5)
-            used_query=cand
-            break
-        except Exception as exc:
-            last_exc=exc
-            time.sleep(2)
-    if d1 is None:
-        raise last_exc or RuntimeError("21vek search failed for all query variants")
-    q=used_query
-    time.sleep(DELAY)
-    sid=str(d1.get("searchId") or "")
-    d2=search_page(session,q,2,sid);time.sleep(DELAY)
+
+    main=fetch_ranked(candidates,True)
+    assert main is not None
+    used_query,d1,d2,sid=main
+    datasets=[(used_query,d1,d2,sid)]
+    supplemental_error=None
+
+    # The general infrared search currently represents the electric market well
+    # but can omit gas heaters entirely. Collect gas infrared heaters through a
+    # separate ranking query and merge them into the same business subgroup.
+    if scope.get("profile_key")=="infrared_heater":
+        gas=fetch_ranked([
+          "газовый инфракрасный обогреватель",
+          "обогреватель газовый инфракрасный",
+          "газовый инфракрасный",
+          "газовый обогреватель"
+        ],False)
+        if gas is not None:
+            datasets.append(gas)
+        else:
+            supplemental_error="gas infrared query unavailable"
+
     rows=[];own_rows=[];seen=set();own_seen=set();raw_count=0;own_excluded=0
-    for page,data in ((1,d1),(2,d2)):
-        for i,item in enumerate(data.get("products") or []):
-            raw_count+=1
-            name=item_name(item);url=item_url(item);meta=search_meta(item)
-            position=(page-1)*60+i+1
-            key=meta.get("external_id") or (hashlib.sha1(url.encode("utf-8")).hexdigest() if url else hashlib.sha1((name+str(page)+str(i)).encode("utf-8")).hexdigest())
-            if is_our_brand(item,name):
-                own_excluded+=1
-                own_key=str(key)
-                if own_key in own_seen: continue
-                own_seen.add(own_key)
-                own_rows.append({
-                  "scope_key":scope["scope_key"],"product_key":own_key,"search_query":q,
+    search_ids={}
+    effective_queries=[]
+    for ranked_query,qd1,qd2,qsid in datasets:
+        search_ids[ranked_query]=qsid
+        effective_queries.append(ranked_query)
+        for page,data in ((1,qd1),(2,qd2)):
+            for i,item in enumerate(data.get("products") or []):
+                raw_count+=1
+                name=item_name(item);url=item_url(item);meta=search_meta(item)
+                position=(page-1)*60+i+1
+                key=meta.get("external_id") or (
+                  hashlib.sha1(url.encode("utf-8")).hexdigest() if url
+                  else hashlib.sha1((ranked_query+"|"+name+"|"+str(page)+"|"+str(i)).encode("utf-8")).hexdigest()
+                )
+                if is_our_brand(item,name):
+                    own_excluded+=1
+                    own_key=str(key)
+                    if own_key in own_seen: continue
+                    own_seen.add(own_key)
+                    own_rows.append({
+                      "scope_key":scope["scope_key"],"product_key":own_key,"search_query":ranked_query,
+                      "page_no":page,"position":position,"external_id":meta.get("external_id"),
+                      "brand":meta.get("brand") or "","model":name,"product_url":url,
+                      "current_price":valid_price(meta.get("price")),"in_stock":meta.get("in_stock")
+                    })
+                    continue
+                if key in seen: continue
+                seen.add(key)
+                rows.append({
+                  "scope_key":scope["scope_key"],"product_key":str(key),"search_query":ranked_query,
                   "page_no":page,"position":position,"external_id":meta.get("external_id"),
                   "brand":meta.get("brand") or "","model":name,"product_url":url,
-                  "current_price":valid_price(meta.get("price")),"in_stock":meta.get("in_stock")
+                  "current_price":meta.get("price"),"base_price":None,"in_stock":meta.get("in_stock"),
+                  "product_rating":meta.get("rating"),"review_count":meta.get("review_count"),
+                  "_search_item":item
                 })
-                continue
-            if key in seen: continue
-            seen.add(key)
-            rows.append({
-              "scope_key":scope["scope_key"],"product_key":str(key),"search_query":q,
-              "page_no":page,"position":position,"external_id":meta.get("external_id"),
-              "brand":meta.get("brand") or "","model":name,"product_url":url,
-              "current_price":meta.get("price"),"base_price":None,"in_stock":meta.get("in_stock"),
-              "product_rating":meta.get("rating"),"review_count":meta.get("review_count"),
-              "_search_item":item
-            })
-    return rows,own_rows,{"raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,"own_in_top120":len(own_rows),"search_id":sid,"effective_query":q}
-
+    meta={
+      "raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,
+      "own_in_top120":len(own_rows),"search_id":sid,"effective_query":used_query,
+      "effective_queries":effective_queries,"search_ids":search_ids
+    }
+    if supplemental_error: meta["supplemental_error"]=supplemental_error
+    return rows,own_rows,meta
 
 def load_registry() -> dict[str,dict]:
     rows=rest_get_all("triovist_21vek_registry_v236214",{
