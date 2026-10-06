@@ -30,7 +30,8 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.1"\nRULESET_VERSION="rules-v2"
+PARSER_VERSION="market-auto-v1.1"
+RULESET_VERSION="rules-v2"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
 DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
