@@ -1,25 +1,35 @@
-name: Триовист — 21vek · конкуренты
+name: Триовист — 21vek · рынок конкурентов
 
 on:
   push:
     branches: [main]
     paths:
-      - 'tools/triovist_21vek_competitors.py'
+      - 'tools/triovist_21vek_market.py'
       - 'tools/triovist_21vek_parser.py'
+      - 'assets/106-triovist-competitors-v236218.js'
+      - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
+      - '.github/workflows/triovist-21vek-competitors.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/triovist_21vek_market.py'
+      - 'tools/triovist_21vek_parser.py'
+      - 'assets/106-triovist-competitors-v236218.js'
+      - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
       - '.github/workflows/triovist-21vek-competitors.yml'
   schedule:
-    # Ежедневно после основного собственного парсера 21vek: 06:47 по Минску (UTC+3).
+    # После основного собственного парсера 21vek. Позиция/цена фиксируются ежедневно.
     - cron: '47 3 * * *'
   workflow_dispatch:
 
 concurrency:
-  group: triovist-21vek-competitors
+  group: triovist-21vek-market
   cancel-in-progress: false
 
 jobs:
-  competitors:
+  market:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Забрать код
         uses: actions/checkout@v4
@@ -29,13 +39,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Проверить синтаксис нового контура
+        run: |
+          python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_parser.py
+          node --check assets/106-triovist-competitors-v236218.js
+
       - name: Установить зависимости
         run: pip install requests beautifulsoup4
 
-      - name: Собрать конкурентов 21vek и пересчитать сравнение
+      - name: Проверка рынка — Конвекторы + Бензопилы
+        if: github.event_name != 'pull_request'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          COMPETITOR_DELAY_SECONDS: '0.45'
-          COMPETITOR_HTTP_TIMEOUT: '30'
-        run: python tools/triovist_21vek_competitors.py
+          MARKET_VALIDATE_PROFILES: 'convector,chainsaw_gas'
+          MARKET_DELAY_SECONDS: '0.22'
+          MARKET_HTTP_TIMEOUT: '30'
+          MARKET_SPEC_TTL_DAYS: '30'
+        run: python tools/triovist_21vek_market.py
