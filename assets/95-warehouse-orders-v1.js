@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.crmWarehouseOrdersV1)return;
-const V='v23.6.195',BUCKET='warehouse-order-sources-v1',WAREHOUSE_CHAT_URL='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-warehouse-chat-v2';
+const V='v23.6.222',BUCKET='warehouse-order-sources-v1',WAREHOUSE_CHAT_URL='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-warehouse-chat-v2';
 let mount=null,role=null,orders=[],preview=null,selected=null,selectedFinance=null,working=false,checking=false,selectedFile=null,uploadStatus='',uploadStatusKind='mut';
 let correctionPreview=null,correctionFile=null,correctionStatus='',correctionTone='mut';
 let devices=[],devicesError='',pairing=null,notificationStatus=null,busyAction=false,actionMessage='',actionTone='mut';
@@ -17,7 +17,7 @@ const round2=v=>Math.round((v+Number.EPSILON)*100)/100;
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
 async function rpc(fn,args={}){const d=dbx();if(!d)throw Error('Нет соединения с CRM');const call=()=>d.rpc(fn,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
 const $=id=>mount?.querySelector('#'+id);
-const statusText=x=>({'draft':'Загружен · склад ещё не уведомлён','device_setup_pending':'Назначен ТСД · требуется подключение терминала','waiting_pick':'Ожидает сборки в ТСД','picking':'В сборке','shortage':'Недостача','ready':'Готов к отгрузке','realized':'Реализован','shipped':'Отгружен','cancelled':'Отменён'})[x]||x||'—';
+const statusText=x=>({'draft':'Загружен · склад ещё не уведомлён','device_setup_pending':'Назначен ТСД · требуется подключение терминала','waiting_pick':'Ожидает сборки в ТСД','picking':'В сборке','shortage':'Недостача','ready':'Готов к отгрузке','realized':'Реализован','shipped':'Завершён ОМ','cancelled':'Отменён'})[x]||x||'—';
 function css(){
  if(document.getElementById('wp1-css'))return;
  const s=document.createElement('style');s.id='wp1-css';
@@ -411,6 +411,25 @@ async function unassignPending(){
  }catch(e){actionMessage='Не удалось подтвердить отмену: '+String(e?.message||e);actionTone='error'}
  finally{busyAction=false;try{await loadList(id)}catch(_){render()}}
 }
+async function manualCloseReady(){
+ if(busyAction||!selected||selected.status!=='ready'||!['office','supervisor'].includes(role))return;
+ if(!confirm('Завершить заказ №'+selected.document_no+' вручную?\nПосле этого он исчезнет с ТСД-1/ТСД-2 и останется в CRM как завершённый.'))return;
+ const id=selected.id;busyAction=true;actionMessage='Завершаю заказ и убираю его с ТСД…';actionTone='mut';render();
+ try{
+  const x=await bounded(rpc('warehouse_pick_manual_close_v236222',{p_order_id:id,p_reason:'Закрыт вручную ОМ после фактической сборки'}),12000,'Сервер не подтвердил завершение за 12 секунд');
+  if(!x?.ok){
+   const msg=x?.reason==='order_not_ready'?'Заказ ещё не имеет статуса «Готов к отгрузке». Сначала завершите сборку на ТСД.':
+     x?.reason==='open_shortages'?'Есть незакрытая недостача — сначала примите решение по ней.':
+     x?.reason==='return_required'?'Есть товар, который ТСД должен вернуть на склад после корректировки. Сначала подтвердите возврат.':
+     String(x?.reason||'Завершение не подтверждено');
+   throw Error(msg);
+  }
+  actionMessage='✅ Заказ завершён ОМ. Он удалён из рабочего списка ТСД.';actionTone='ok';
+  dispatchWarehouseChat();
+  await loadList(id);
+ }catch(e){actionMessage='Не удалось завершить заказ: '+String(e?.message||e);actionTone='error';render()}
+ finally{busyAction=false;render()}
+}
 async function loadList(prefer=null){
  const x=await rpc('warehouse_pick_list_v1',{p_limit:60,p_offset:0});
  role=x?.role||null;orders=Array.isArray(x?.rows)?x.rows:[];
@@ -466,7 +485,9 @@ function render(){
        ?'<div class="wp1-error">Заказ разделён между двумя ТСД, но один из терминалов ещё не подключён. Получите код нужного ТСД в блоке выше. Сборка откроется автоматически после подключения обоих.</div>'
        :'<div class="wp1-error">Терминал пока не подключён к отдельному входу сборки. Заказ закреплён, но НЕ доставлен. Сборку не начинать.</div><button type="button" class="wp1-primary" id="wp1-pair-selected" '+(busyAction?'disabled':'')+'>Получить код именно для '+esc(label)+'</button> <button type="button" id="wp1-unassign-pending" '+(busyAction?'disabled':'')+'>Отменить недоставленное назначение</button>')
        :'<div class="wp1-good">'+(isSplit?'Заказ распределён между двумя ТСД.':'Заказ находится в рабочем списке назначенного ТСД.')+' Статус: '+esc(statusText(selected.status))+'.</div>')+
-      '<p class="wp1-mut">Telegram склада подключим отдельным новым чатом.</p>'+note+'</div>';
+      '<p class="wp1-mut">Telegram склада подключим отдельным новым чатом.</p>'+
+      (selected.status==='ready'?'<div class="wp1-good" style="margin-top:10px"><b>Заказ собран.</b> ОМ может вручную завершить его и убрать с обоих ТСД.</div><button type="button" class="wp1-primary" id="wp1-manual-close" '+(busyAction?'disabled':'')+' style="margin-top:8px">✅ Завершить заказ</button>':'')+
+      note+'</div>';
   }else if(role==='warehouse'){
    extra='<p class="wp1-good">Это назначенный вашему терминалу заказ. Цены и УНП недоступны.</p>';
   }
@@ -491,6 +512,7 @@ function render(){
  mount.querySelector('#wp1-assign-device')?.addEventListener('click',()=>assignDevice().catch(showError));
  mount.querySelector('#wp1-pair-selected')?.addEventListener('click',()=>{if(selected?.device_key)startPairing(selected.device_key).catch(showError)});
  mount.querySelector('#wp1-unassign-pending')?.addEventListener('click',()=>unassignPending().catch(showError));
+ mount.querySelector('#wp1-manual-close')?.addEventListener('click',()=>manualCloseReady().catch(showError));
  mount.querySelector('#wp1-split-apply')?.addEventListener('click',()=>splitAssign().catch(showError));
  mount.querySelector('#wp1-correction-file')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(file){correctionFile=file;readCorrection(file).catch(showError)}});
  mount.querySelector('#wp1-apply-correction')?.addEventListener('click',()=>applyCorrection().catch(showError));
@@ -512,5 +534,5 @@ async function open(target){
  }catch(e){mount.innerHTML='<div class="wp1-error">Нет доступа к разделу «Заказы» или не удалось связаться с сервером. '+esc(e.message||e)+'</div>'}
 }
 window.crmWarehouseOrdersV1={open,refresh:loadList};
-window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:true,warehouseTelegramChat:true,invoiceRevisions:true,shortageWorkflow:true,splitTsd:true,autoCheck:true,excelLoadTimeout:true});
+window.RESANTA_WAREHOUSE_ORDERS_V1=Object.freeze({version:V,privateInvoicePreview:true,financeIsolated:true,deviceAssignment:true,securePairing:true,barcodePicking:true,undoUndelivered:true,telegramConnected:true,warehouseTelegramChat:true,invoiceRevisions:true,shortageWorkflow:true,splitTsd:true,manualCloseByOffice:true,autoCheck:true,excelLoadTimeout:true});
 })();
