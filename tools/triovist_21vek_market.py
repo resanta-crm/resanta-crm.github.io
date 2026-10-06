@@ -30,8 +30,8 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.3"
-RULESET_VERSION="rules-v4"
+PARSER_VERSION="market-auto-v1.4"
+RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
 DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
@@ -273,6 +273,14 @@ def nums(v: Any) -> list[float]:
     return out
 
 
+def valid_price(v: Any) -> float|None:
+    try:
+        n=float(v)
+        return n if math.isfinite(n) and n>0 else None
+    except Exception:
+        return None
+
+
 def parse_fraction(text: str) -> float|None:
     m=re.search(r"(\d+)\s*/\s*(\d+)",text)
     if m and float(m.group(2)):
@@ -288,6 +296,16 @@ def bool_value(text: str) -> bool|None:
     return None
 
 
+def presence_value(text: str) -> bool|None:
+    n=norm(text)
+    if not n or n in ("неизвестно","нет данных","n a","—","-"): return None
+    if any(x in n for x in ("нет","отсутств","не предусмотр")): return False
+    if any(x in n for x in ("да","есть","предусмотр","имеется")): return True
+    # For an explicit characteristic, a meaningful non-empty value such as
+    # "электронная", "плавная" or "LED" means the feature is present.
+    return True
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
     if key in ("heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape","equipment"):
@@ -295,6 +313,8 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
+    if key in ("display_present","power_adjustment","temperature_adjustment"):
+        return presence_value(text)
     if key in ("overheat_protection","humidistat","tool_free_tension"):
         return bool_value(text)
     if key=="chain_pitch_in":
@@ -499,7 +519,7 @@ def search_text(item: dict,key_words: tuple[str,...]) -> str:
 
 def search_meta(item: dict) -> dict:
     brand=search_text(item,("producer.name","brand.name",".brand",".producer"))
-    price=search_number(item,("saleprice","currentprice","finalprice",".price"))
+    price=valid_price(search_number(item,("saleprice","currentprice","finalprice",".price")))
     rating=search_number(item,(".rating","rating.value"))
     reviews=search_number(item,("reviewcount","reviews.count"))
     status=search_text(item,(".status","availability","available"))
@@ -624,8 +644,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     return {
       "brand":extra.get("brand") or base.get("brand") or "",
       "model":card.get("product_name") or base.get("model") or base.get("product_name") or "",
-      "current_price":card.get("price"),
-      "base_price":extra.get("base_price"),
+      "current_price":valid_price(card.get("price")),
+      "base_price":valid_price(extra.get("base_price")),
       "in_stock":card.get("in_stock"),
       "product_rating":card.get("product_rating"),
       "review_count":card.get("review_count"),
@@ -640,6 +660,15 @@ def numeric_similarity(a: float,b: float) -> float:
     return max(0.0,1.0-abs(a-b)/den)
 
 
+def convector_power_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.05: return 1.0
+    if diff<=0.10: return 0.85
+    if diff<=0.20: return 0.65
+    return 0.35 if diff<=0.30 else 0.0
+
+
 def categorical_similarity(a: Any,b: Any) -> float:
     na=norm(a);nb=norm(b)
     if not na or not nb: return 0.0
@@ -648,7 +677,7 @@ def categorical_similarity(a: Any,b: Any) -> float:
     return len(aa&bb)/max(1,len(aa|bb))
 
 
-def similarity(ours: dict,comp: dict,rules: list[dict]) -> float:
+def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -> float:
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
     for rule in rules:
         w=float(rule.get("weight") or 0);allw+=w
@@ -657,7 +686,10 @@ def similarity(ours: dict,comp: dict,rules: list[dict]) -> float:
             if rule.get("critical"): critical_missing=True
             continue
         direction=rule.get("direction")
-        if direction in ("categorical","boolean"):
+        if profile=="convector" and k=="power_w":
+            try: s=convector_power_similarity(float(a),float(b))
+            except Exception: s=categorical_similarity(a,b)
+        elif direction in ("categorical","boolean"):
             s=categorical_similarity(a,b) if direction=="categorical" else (1.0 if bool(a)==bool(b) else 0.0)
         else:
             try: s=numeric_similarity(float(a),float(b))
@@ -673,7 +705,12 @@ def similarity(ours: dict,comp: dict,rules: list[dict]) -> float:
     return round(max(0,min(100,score)),2)
 
 
-def analog_grade(score: float) -> str:
+def analog_grade(score: float,profile: str="generic") -> str:
+    if profile=="convector":
+        if score>=90:return "direct"
+        if score>=75:return "close"
+        if score>=60:return "conditional"
+        return "no_direct"
     if score>=85:return "direct"
     if score>=70:return "close"
     if score>=55:return "conditional"
@@ -695,8 +732,9 @@ def directional(rule: dict,a: Any,b: Any) -> float|None:
     return min(95,55+rel*80) if better else max(5,45-rel*80)
 
 
-def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|None,comp_price: float|None) -> float:
-    if our_price is not None and comp_price and comp_price>0:
+def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|None,comp_price: float|None,profile: str="generic") -> float:
+    price_available=our_price is not None and comp_price is not None and comp_price>0
+    if price_available:
         rel=(comp_price-our_price)/comp_price
         price_score=max(0,min(100,50+rel*280))
     else: price_score=50
@@ -706,6 +744,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
         if z is None: continue
         rw=float(rule.get("weight") or 0);s+=z*rw;w+=rw
     spec_score=s/w if w else 50
+    if profile=="convector" and not price_available:
+        return round(spec_score,2)
     return round(0.35*price_score+0.65*spec_score,2)
 
 
@@ -724,6 +764,7 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
         if d>0.5: adv.append(f"Наша цена ниже на {d:.1f}%")
         elif d<-0.5: bad.append(f"Конкурент дешевле на {abs(d):.1f}%")
     for rule in rules:
+        if float(rule.get("weight") or 0)<=0: continue
         k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
         if a is None or b is None: continue
         z=directional(rule,a,b)
@@ -742,11 +783,14 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
     db=price-mrc;return round(db,2),round(db/mrc*100,2)
 
 
-def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None) -> str:
+def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    if similarity_score<70:
-        return "Прямого аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
+    min_match=60 if profile=="convector" else 70
+    if similarity_score<min_match:
+        return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
+    if profile=="convector" and comp_price is None:
+        return "Цена конкурента не получена. Итог рассчитан только по техническим характеристикам; решение по цене не принимать."
     if status=="competitor_stronger":
         return "Конкурент сильнее по совокупности цены и характеристик. Усилить карточку/матрицу; цену снижать только в пределах МРЦ."
     if status=="ours_stronger":
@@ -792,15 +836,20 @@ def main() -> None:
             for pi,p in enumerate(products,1):
                 old=existing.get(p["product_key"])
                 p["run_id"]=run_id;p["observed_at"]=observed;p["error_text"]=None
+                p["current_price"]=valid_price(p.get("current_price"))
                 need_specs=not fresh_specs(old,p.get("product_url") or "")
+                need_card=need_specs or (profile=="convector" and p["current_price"] is None)
                 # Keep cached technical specs unless TTL/url/model requires refresh.
-                if old and not need_specs:
+                # For convectors, a missing/zero search price forces a card lookup;
+                # stale prices are never presented as the current price.
+                if old and not need_card:
                     p["specs_raw"]=old.get("specs_raw") or []
                     p["specs_normalized"]=old.get("specs_normalized") or {}
                     p["specs_signature"]=old.get("specs_signature")
                     p["specs_fetched_at"]=old.get("specs_fetched_at")
                     if not p.get("brand"):p["brand"]=old.get("brand") or ""
-                    if p.get("current_price") is None:p["current_price"]=old.get("current_price")
+                    if profile!="convector" and p.get("current_price") is None:
+                        p["current_price"]=valid_price(old.get("current_price"))
                     if p.get("in_stock") is None:p["in_stock"]=old.get("in_stock")
                     if p.get("product_rating") is None:p["product_rating"]=old.get("product_rating")
                     if p.get("review_count") is None:p["review_count"]=old.get("review_count")
@@ -848,7 +897,7 @@ def main() -> None:
                 old=own_existing.get(sku)
                 row={
                   "sku":sku,"scope_key":skey,"product_name":src.get("product_name") or sku,
-                  "product_url":src.get("product_url"),"current_price":src.get("price"),
+                  "product_url":src.get("product_url"),"current_price":valid_price(src.get("price")),
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
                 if fresh_specs(old,row["product_url"]):
@@ -884,43 +933,45 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
+            gap_threshold=60 if profile=="convector" else 70
+            candidate_threshold=60 if profile=="convector" else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
                 for ours in usable_own:
-                    sim=similarity(ours["specs_normalized"],p.get("specs_normalized") or {},rules)
+                    sim=similarity(ours["specs_normalized"],p.get("specs_normalized") or {},rules,profile)
                     scored.append((sim,ours))
                 scored.sort(key=lambda z:z[0],reverse=True)
                 best=scored[0][0] if scored else 0.0
-                if best<70:
+                if best<gap_threshold:
                     gaps.append({
                       "scope_key":skey,"product_key":p["product_key"],"best_similarity":round(best,2),
-                      "reason":"Нет нашего технически подтверждённого аналога с сопоставимостью ≥70%",
+                      "reason":f"Нет нашего технически подтверждённого аналога с сопоставимостью ≥{gap_threshold}%",
                       "computed_at":observed
                     })
-                top=[x for x in scored if x[0]>=55][:3]
+                top=[x for x in scored if x[0]>=candidate_threshold][:3]
                 for idx,(sim,ours) in enumerate(top):
-                    op=float(ours["current_price"]) if ours.get("current_price") is not None else None
-                    cp=float(p["current_price"]) if p.get("current_price") is not None else None
+                    op=valid_price(ours.get("current_price"))
+                    cp=valid_price(p.get("current_price"))
                     mr=float(ours["mrc_byn"]) if ours.get("mrc_byn") is not None else None
                     mdb,mdp=mrc_state(op,mr)
                     pdb=pdp=None
                     if op is not None and cp:
                         pdb=round(op-cp,2);pdp=round((op-cp)/cp*100,2)
-                    comp_score=competitiveness(ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp)
+                    comp_score=competitiveness(ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,profile)
                     status="ours_stronger" if comp_score>=65 else ("parity" if comp_score>=45 else "competitor_stronger")
                     adv,bad=compare_texts(
                       ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,p.get("position"),mr
                     )
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
-                      "similarity_score":round(sim,2),"analog_grade":analog_grade(sim),"is_primary":idx==0,
+                      "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
                       "competitiveness_score":comp_score,"status":status,"our_price":op,"mrc_byn":mr,
                       "mrc_delta_byn":mdb,"mrc_delta_pct":mdp,"competitor_price":cp,
                       "price_delta_byn":pdb,"price_delta_pct":pdp,
                       "our_specs":ours["specs_normalized"],"competitor_specs":p.get("specs_normalized") or {},
                       "advantages":adv,"disadvantages":bad,
-                      "recommendation":recommendation(mdp,sim,status,op,cp),"computed_at":observed
+                      "recommendation":recommendation(mdp,sim,status,op,cp,profile),"computed_at":observed
                     })
             if analyses: rest_post("triovist_market_analysis_current_v1",analyses)
             if gaps: rest_post("triovist_market_gaps_current_v1",gaps)
