@@ -69,7 +69,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-06-v23.6.222';
+const PICKING_APP_VERSION='2026-10-06-v23.6.223';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
@@ -87,7 +87,7 @@ function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+
 function loadSession(){try{const x=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');return x?.token&&x?.device_key?x:null}catch(_){return null}}
 function saveSession(x){if(!x)clearFastCache();session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
 function scanStatus(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
-function fastCacheKey(){return 'resanta_pick_fast_cache_v236222_'+String(session?.device_key||'device')}
+function fastCacheKey(){return 'resanta_pick_fast_cache_v236223_'+String(session?.device_key||'device')}
 function saveFastCache(){
  try{if(session?.device_key)localStorage.setItem(fastCacheKey(),JSON.stringify({at:Date.now(),orders,selected}))}catch(_){}
 }
@@ -133,15 +133,61 @@ async function beep(ok=true){
 async function dispatchWarehouseChat(){
  try{await fetch(WAREHOUSE_CHAT_URL,{method:'POST',headers:{'content-type':'application/json'}})}catch(_){}
 }
-async function rpc(name,args={}){
- const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),{
-  method:'POST',
-  headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},
-  body:JSON.stringify(args),cache:'no-store'
- });
- const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
- if(!r.ok)throw new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));
- return j;
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+async function fetchRpc(name,args,timeoutMs=4500){
+ const url=SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name);
+ const ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+ const timer=ctrl?setTimeout(()=>ctrl.abort(),timeoutMs):null;
+ try{
+  const r=await fetch(url,{
+   method:'POST',
+   headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},
+   body:JSON.stringify(args),cache:'no-store',mode:'cors',credentials:'omit',
+   ...(ctrl?{signal:ctrl.signal}:{})
+  });
+  const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
+  if(!r.ok)throw new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));
+  return j;
+ }finally{if(timer)clearTimeout(timer)}
+}
+function xhrRpc(name,args,timeoutMs=5000){
+ return new Promise((resolve,reject)=>{
+  try{
+   const x=new XMLHttpRequest();
+   x.open('POST',SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),true);
+   x.timeout=timeoutMs;
+   x.setRequestHeader('apikey',APIKEY);
+   x.setRequestHeader('Authorization','Bearer '+APIKEY);
+   x.setRequestHeader('content-type','application/json');
+   x.onload=()=>{
+    let j=null;try{j=x.responseText?JSON.parse(x.responseText):null}catch(_){j=x.responseText}
+    if(x.status>=200&&x.status<300)resolve(j);
+    else reject(new Error(j?.message||j?.hint||String(j||('HTTP '+x.status))));
+   };
+   x.onerror=()=>reject(new Error('Нет связи с сервером'));
+   x.ontimeout=()=>reject(new Error('Сервер не ответил вовремя'));
+   x.send(JSON.stringify(args||{}));
+  }catch(e){reject(e)}
+ })
+}
+async function rpc(name,args={},opts={}){
+ const retries=Math.max(0,Number(opts.retry||0)),timeout=Math.max(1800,Number(opts.timeout||4500));
+ let last=null;
+ for(let i=0;i<=retries;i++){
+  try{return await fetchRpc(name,args,timeout)}
+  catch(e){
+   last=e;
+   if(i<retries){await sleep(180*(i+1));continue}
+  }
+ }
+ if(opts.xhrFallback){
+  try{return await xhrRpc(name,args,timeout+1200)}catch(e){last=e}
+ }
+ const msg=String(last?.message||last||'Ошибка сети');
+ if(/failed to fetch|networkerror|load failed|нет связи|abort|timed out|вовремя/i.test(msg)){
+  throw new Error('Нет связи ТСД с сервером. Wi‑Fi может быть подключён, но сервер недоступен. CRM повторит запрос автоматически.');
+ }
+ throw last||new Error('Ошибка запроса');
 }
 async function pair(){
  const key=$('pair-device').value,code=String($('pair-code').value||'').trim().toUpperCase().replace(/\s/g,'');
@@ -163,7 +209,7 @@ async function pair(){
 }
 async function loadOrders(prefer=null){
  if(!session?.token)return;
- const r=await rpc('warehouse_pick_device_dashboard_v236222',{p_device_token:session.token,p_selected_order_id:prefer||selected?.id||null,p_limit:30});
+ const r=await rpc('warehouse_pick_device_dashboard_v236222',{p_device_token:session.token,p_selected_order_id:prefer||selected?.id||null,p_limit:30},{retry:2,xhrFallback:true,timeout:3200});
  if(!r?.ok){
   if(r?.reason==='device_session_invalid'){saveSession(null);await boot();return}
   throw new Error(r?.reason||'Не удалось получить заказы');
@@ -178,7 +224,7 @@ async function loadOrders(prefer=null){
 async function openOrder(id){
  const local=orders.find(x=>x.id===id);
  if(local&&selected?.id!==id){selected=null;render()}
- const d=await rpc('warehouse_pick_device_detail_v1',{p_device_token:session.token,p_order_id:id});
+ const d=await rpc('warehouse_pick_device_detail_v1',{p_device_token:session.token,p_order_id:id},{retry:1,xhrFallback:true,timeout:3200});
  if(!d?.ok){if(d?.reason==='device_session_invalid'){saveSession(null);await boot();return}throw new Error(d?.reason||'Заказ недоступен')}
  selected=d;render();saveFastCache();
  setTimeout(()=>{if(moduleVisible()&&selected?.status!=='ready')$('scan-code')?.focus()},20);
@@ -241,7 +287,7 @@ async function scan(){
  const event=pendingScan&&pendingScan.order===selected.id&&pendingScan.code===code&&pendingScan.qty===q?pendingScan.id:uuid();
  pendingScan={id:event,order:selected.id,code,qty:q};busy=true;$('scan-btn').disabled=true;scanStatus('Записываю скан…','blue');
  try{
-  const r=await rpc('warehouse_pick_device_scan_v1',{p_device_token:session.token,p_order_id:selected.id,p_code:code,p_qty:q,p_client_event_id:event});
+  const r=await rpc('warehouse_pick_device_scan_v1',{p_device_token:session.token,p_order_id:selected.id,p_code:code,p_qty:q,p_client_event_id:event},{retry:1,xhrFallback:true,timeout:3200});
   if(!r?.ok){
    pendingScan=null;
    const msg={not_in_order:'Этого артикула/штрихкода нет в заказе.',over_pick:'Количество превышает заказ. Больше сканировать нельзя.',ambiguous_code:'Код совпал с несколькими строками — обратитесь к ОМ.',order_not_open:'Заказ уже закрыт или недоступен.',device_session_invalid:'Сессия ТСД истекла. Переподключите терминал.'}[r?.reason]||('Ошибка: '+String(r?.reason||'unknown'));
@@ -302,17 +348,26 @@ async function undo(){
  }catch(e){scanStatus(e?.message||e,'red');beep(false)}
  finally{busy=false;render()}
 }
+async function refreshVisible(){
+ if(!session||busy||!moduleVisible())return;
+ try{await loadOrders(selected?.id)}
+ catch(e){
+  if(String(e?.message||e).includes('device_session_invalid')){saveSession(null);return boot()}
+  show('session-warning',true);
+  $('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e)+(orders.length?' · показываю сохранённые заказы.':'');
+ }
+}
 async function boot(){
  session=loadSession();
  if(!session){clearInterval(pollTimer);pollTimer=null;show('app-view',false);show('pair-view',true);return}
  show('pair-view',false);show('app-view',true);$('device-line').textContent=session.label||session.device_key;
- if(loadFastCache()){render();$('device-line').textContent=(session.label||session.device_key)+' · мгновенный кэш';}
- else $('orders-list').innerHTML='<div class="status blue">⏳ Загружаю заказы…</div>';
- try{await loadOrders()}catch(e){
-  if(String(e?.message||e).includes('device_session_invalid')){saveSession(null);return boot()}
-  show('session-warning',true);$('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e)+(orders.length?' · показываю последний сохранённый список.':'');
- }
- clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&moduleVisible())loadOrders(selected?.id).catch(()=>{})},5000);
+ const cached=loadFastCache();
+ if(cached){render();$('device-line').textContent=(session.label||session.device_key)+' · сохранённый список';}
+ else $('orders-list').innerHTML='<div class="status blue">Заказы готовы к загрузке.</div>';
+ // В скрытом pre-load iframe сеть не трогаем: раньше именно здесь TSD-1 ловил
+ // Failed to fetch и потом показывал старую ошибку уже после открытия раздела.
+ if(moduleVisible())await refreshVisible();
+ clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&moduleVisible())refreshVisible()},8000);
 }
 document.querySelectorAll('[data-pair-device]').forEach(b=>b.addEventListener('click',()=>{
  $('pair-device').value=b.dataset.pairDevice||'';
@@ -327,8 +382,13 @@ $('scan-btn').onclick=()=>{resetScannerInput();scan()};
 $('scan-code').addEventListener('input',detectHardwareScan);
 $('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();resetScannerInput();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.222',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+window.addEventListener('message',e=>{
+ if(e.origin!==location.origin||e.data?.type!=='resanta-tsd-module-open')return;
+ if(session&&!busy)refreshVisible();
+});
+window.addEventListener('online',()=>{if(session&&!busy&&moduleVisible())refreshVisible()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy)refreshVisible()});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.223',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
