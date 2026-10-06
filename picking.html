@@ -69,12 +69,12 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-01-v23.6.196';
+const PICKING_APP_VERSION='2026-10-06-v23.6.222';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
 const WAREHOUSE_CHAT_URL=SUPABASE_URL+'/functions/v1/crm-warehouse-chat-v2';
-let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null;
+let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null,syncTimer=null;
 let scannerInput={timer:null,start:0,last:0,lastLen:0,count:0,rapid:false};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -84,8 +84,23 @@ const statusName=s=>({waiting_pick:'Ожидает сборки',picking:'В с�
 function show(id,on=true){$(id)?.classList.toggle('hidden',!on)}
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function loadSession(){try{const x=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');return x?.token&&x?.device_key?x:null}catch(_){return null}}
-function saveSession(x){session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
+function saveSession(x){if(!x)clearFastCache();session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
 function scanStatus(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
+function fastCacheKey(){return 'resanta_pick_fast_cache_v236222_'+String(session?.device_key||'device')}
+function saveFastCache(){
+ try{if(session?.device_key)localStorage.setItem(fastCacheKey(),JSON.stringify({at:Date.now(),orders,selected}))}catch(_){}
+}
+function loadFastCache(){
+ try{
+  const x=JSON.parse(localStorage.getItem(fastCacheKey())||'null');
+  if(!x||Date.now()-Number(x.at||0)>12*3600000)return false;
+  orders=Array.isArray(x.orders)?x.orders:[];selected=x.selected||null;return true
+ }catch(_){return false}
+}
+function clearFastCache(){try{localStorage.removeItem(fastCacheKey())}catch(_){} }
+function scheduleSync(delay=900){
+ clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(session&&!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},delay)
+}
 function pairStatus(msg,kind='red'){const e=$('pair-status');if(!e)return;e.className='status '+kind;e.textContent=msg;show('pair-status',!!msg)}
 async function unlockAudio(){
  try{
@@ -147,23 +162,25 @@ async function pair(){
 }
 async function loadOrders(prefer=null){
  if(!session?.token)return;
- const r=await rpc('warehouse_pick_device_orders_v1',{p_device_token:session.token,p_limit:30});
+ const r=await rpc('warehouse_pick_device_dashboard_v236222',{p_device_token:session.token,p_selected_order_id:prefer||selected?.id||null,p_limit:30});
  if(!r?.ok){
   if(r?.reason==='device_session_invalid'){saveSession(null);await boot();return}
   throw new Error(r?.reason||'Не удалось получить заказы');
  }
  orders=Array.isArray(r.rows)?r.rows:[];
- $('device-line').textContent=(r.label||session.label||'ТСД')+' · защищённая сборка';
- if(prefer&&orders.some(x=>x.id===prefer))await openOrder(prefer);
- else if(selected&&orders.some(x=>x.id===selected.id))await openOrder(selected.id);
- else if(orders.length)await openOrder((orders.find(x=>x.status==='picking')||orders.find(x=>x.status==='waiting_pick')||orders[0]).id);
- else{selected=null;render()}
+ selected=r.selected||null;
+ $('device-line').textContent=(r.label||session.label||'ТСД')+' · быстрый режим';
+ show('session-warning',false);
+ render();saveFastCache();
+ setTimeout(()=>{if(selected?.status!=='ready')$('scan-code')?.focus()},20);
 }
 async function openOrder(id){
+ const local=orders.find(x=>x.id===id);
+ if(local&&selected?.id!==id){selected=null;render()}
  const d=await rpc('warehouse_pick_device_detail_v1',{p_device_token:session.token,p_order_id:id});
  if(!d?.ok){if(d?.reason==='device_session_invalid'){saveSession(null);await boot();return}throw new Error(d?.reason||'Заказ недоступен')}
- selected=d;render();
- setTimeout(()=>{if(selected?.status!=='ready')$('scan-code')?.focus()},50);
+ selected=d;render();saveFastCache();
+ setTimeout(()=>{if(selected?.status!=='ready')$('scan-code')?.focus()},20);
 }
 function render(){
  if(!session)return;
@@ -213,7 +230,7 @@ function detectHardwareScan(){
   if(busy||!selected||selected.status==='ready'||current!==snapshot||current.length<3)return;
   resetScannerInput();
   scan();
- },130);
+ },30);
 }
 async function scan(){
  if(busy||!selected||selected.status==='ready')return;
@@ -221,7 +238,7 @@ async function scan(){
  if(!code){$('scan-code').focus();return}
  if(!Number.isFinite(q)||q<=0){scanStatus('Количество должно быть больше 0.','red');beep(false);return}
  const event=pendingScan&&pendingScan.order===selected.id&&pendingScan.code===code&&pendingScan.qty===q?pendingScan.id:uuid();
- pendingScan={id:event,order:selected.id,code,qty:q};busy=true;render();scanStatus('Записываю скан…','blue');
+ pendingScan={id:event,order:selected.id,code,qty:q};busy=true;$('scan-btn').disabled=true;scanStatus('Записываю скан…','blue');
  try{
   const r=await rpc('warehouse_pick_device_scan_v1',{p_device_token:session.token,p_order_id:selected.id,p_code:code,p_qty:q,p_client_event_id:event});
   if(!r?.ok){
@@ -231,12 +248,16 @@ async function scan(){
    scanStatus(msg,'red');beep(false);return;
   }
   pendingScan=null;resetScannerInput();beep(true);$('scan-code').value='';$('scan-qty').value='1';
+  const item=(selected.items||[]).find(x=>String(x.sku||'')===String(r.sku||'')&&num(x.picked_qty)<=num(r.picked_qty));
+  if(item)item.picked_qty=num(r.picked_qty);
+  selected.status=r.order_status||selected.status;
+  selected.device_complete=(selected.items||[]).filter(x=>!x.is_removed).every(x=>num(x.picked_qty)>=num(x.expected_qty)&&num(x.return_required_qty)<=0);
+  const listRow=orders.find(x=>x.id===selected.id);if(listRow)listRow.status=selected.status;
   scanStatus((r.duplicate_event?'Повторный ответ без повторного списания. ':'✓ ')+(r.sku||'')+' · '+qty(r.picked_qty)+' / '+qty(r.expected_qty)+(r.order_status==='ready'?' · ГОТОВО':''),r.order_status==='ready'?'green':'blue');
-  dispatchWarehouseChat();
-  await loadOrders(selected.id);
+  render();saveFastCache();dispatchWarehouseChat();scheduleSync(r.order_status==='ready'?350:1200);
  }catch(e){
   scanStatus('Связь не подтвердила скан. Не сканируйте повторно другой раз: нажмите «Добавить» ещё раз с тем же кодом — CRM использует тот же ID операции. '+String(e?.message||e),'amber');beep(false);
- }finally{busy=false;render();if(session&&selected?.status!=='ready')$('scan-code')?.focus()}
+ }finally{busy=false;if($('scan-btn'))$('scan-btn').disabled=!!selected?.device_complete||selected?.status==='ready';if(session&&selected?.status!=='ready')$('scan-code')?.focus()}
 }
 async function reportShortage(itemId){
  if(busy||!selected)return;
@@ -284,11 +305,13 @@ async function boot(){
  session=loadSession();
  if(!session){clearInterval(pollTimer);pollTimer=null;show('app-view',false);show('pair-view',true);return}
  show('pair-view',false);show('app-view',true);$('device-line').textContent=session.label||session.device_key;
+ if(loadFastCache()){render();$('device-line').textContent=(session.label||session.device_key)+' · мгновенный кэш';}
+ else $('orders-list').innerHTML='<div class="status blue">⏳ Загружаю заказы…</div>';
  try{await loadOrders()}catch(e){
   if(String(e?.message||e).includes('device_session_invalid')){saveSession(null);return boot()}
-  show('session-warning',true);$('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e);
+  show('session-warning',true);$('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e)+(orders.length?' · показываю последний сохранённый список.':'');
  }
- clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},10000);
+ clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&document.visibilityState==='visible')loadOrders(selected?.id).catch(()=>{})},5000);
 }
 document.querySelectorAll('[data-pair-device]').forEach(b=>b.addEventListener('click',()=>{
  $('pair-device').value=b.dataset.pairDevice||'';
@@ -304,7 +327,7 @@ $('scan-code').addEventListener('input',detectHardwareScan);
 $('scan-code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();resetScannerInput();scan()}});
 $('undo-btn').onclick=undo;$('sound-test-btn').onclick=()=>{beep(true);scanStatus('Звуковой сигнал включён. Если звука нет — увеличьте громкость мультимедиа на самом ТСД.','blue')};
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&!busy)loadOrders(selected?.id).catch(()=>{})});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.196',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.222',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
