@@ -1,0 +1,931 @@
+#!/usr/bin/env python3
+"""Triovist / 21vek automatic market analysis v23.6.224.
+
+Separate contour from the production own-card parser.
+- scope comes from the current Resanta price matrix, not from a manual competitor list;
+- first two 21vek search ranking pages (60 + 60) are collected with exact position;
+- our brands are excluded from competitor market rows;
+- technical characteristics are normalized by configurable DB rules;
+- full specs are cached and refreshed only when needed; price/position snapshots are append-only;
+- missing characteristics are never treated as zero;
+- no CAPTCHA/auth bypass and no cookie reuse.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+import re
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
+
+from triovist_21vek_parser import next_state, parse_product, public_product_url
+
+SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
+SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
+PARSER_VERSION="market-auto-v1.0"
+SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
+UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
+DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
+TIMEOUT=max(10,int(os.environ.get("MARKET_HTTP_TIMEOUT","30")))
+SPEC_TTL_DAYS=max(1,int(os.environ.get("MARKET_SPEC_TTL_DAYS","30")))
+VALIDATE_PROFILES={
+    x.strip() for x in os.environ.get("MARKET_VALIDATE_PROFILES","").split(",") if x.strip()
+}
+OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
+
+HEADERS={
+    "User-Agent":UA,
+    "Accept":"text/html,application/xhtml+xml",
+    "Accept-Language":"ru-RU,ru;q=0.9",
+}
+SEARCH_HEADERS={
+    "User-Agent":UA,
+    "Accept":"application/json, text/plain, */*",
+    "Content-Type":"application/json",
+    "Origin":"https://www.21vek.by",
+    "Referer":"https://www.21vek.by/",
+}
+
+
+def api_headers(json_body: bool=False, prefer: str|None=None) -> dict[str,str]:
+    h={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"}
+    if json_body: h["Content-Type"]="application/json"
+    if prefer: h["Prefer"]=prefer
+    return h
+
+
+def rest_get(table: str, params: dict[str,str], timeout: int=90) -> list[dict]:
+    r=requests.get(f"{SUPABASE_URL}/rest/v1/{table}",headers=api_headers(),params=params,timeout=timeout)
+    if r.status_code!=200:
+        raise RuntimeError(f"GET {table}: {r.status_code} {r.text[:900]}")
+    return r.json() or []
+
+
+def rest_get_all(table: str, params: dict[str,str], page_size: int=800, timeout: int=90) -> list[dict]:
+    out=[];offset=0
+    while True:
+        p=dict(params);p["limit"]=str(page_size);p["offset"]=str(offset)
+        rows=rest_get(table,p,timeout)
+        out.extend(rows)
+        if len(rows)<page_size: return out
+        offset+=len(rows)
+
+
+def rest_post(table: str, rows: list[dict]|dict, prefer: str="return=minimal", timeout: int=90) -> Any:
+    if isinstance(rows,list) and rows:
+        keys=set().union(*(x.keys() for x in rows))
+        rows=[{k:x.get(k) for k in keys} for x in rows]
+    r=requests.post(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=api_headers(True,prefer),json=rows,timeout=timeout
+    )
+    if r.status_code not in (200,201,204):
+        raise RuntimeError(f"POST {table}: {r.status_code} {r.text[:1200]}")
+    return None if r.status_code==204 or not r.text.strip() else r.json()
+
+
+def rest_upsert(table: str, rows: list[dict], conflict: str, timeout: int=90) -> None:
+    if not rows: return
+    keys=set().union(*(x.keys() for x in rows))
+    payload=[{k:x.get(k) for k in keys} for x in rows]
+    r=requests.post(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=api_headers(True,"resolution=merge-duplicates,return=minimal"),
+        params={"on_conflict":conflict},json=payload,timeout=timeout
+    )
+    if r.status_code not in (200,201,204):
+        raise RuntimeError(f"UPSERT {table}: {r.status_code} {r.text[:1200]}")
+
+
+def rest_patch(table: str, filt: dict[str,str], values: dict, timeout: int=60) -> None:
+    r=requests.patch(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=api_headers(True,"return=minimal"),params=filt,json=values,timeout=timeout
+    )
+    if r.status_code not in (200,204):
+        raise RuntimeError(f"PATCH {table}: {r.status_code} {r.text[:1000]}")
+
+
+def rest_delete(table: str, filt: dict[str,str], timeout: int=60) -> None:
+    r=requests.delete(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        headers=api_headers(False,"return=minimal"),params=filt,timeout=timeout
+    )
+    if r.status_code not in (200,204):
+        raise RuntimeError(f"DELETE {table}: {r.status_code} {r.text[:1000]}")
+
+
+def norm(v: Any) -> str:
+    s=str(v or "").strip().lower().replace("ё","е")
+    s=re.sub(r"[^0-9a-zа-я./]+"," ",s)
+    return " ".join(s.split())
+
+
+def clean_label(v: str) -> str:
+    s=re.sub(r"\b(?:resanta|ресанта|huter|вихрь|vikhr|eurolux)\b"," ",str(v or ""),flags=re.I)
+    s=re.sub(r"\s+"," ",s).strip(" ,.;:-")
+    return s
+
+
+def sku_depth(sku: str) -> int:
+    return len([x for x in str(sku or "").split("/") if x])
+
+
+def sku_prefix2(sku: str) -> str:
+    p=[x for x in str(sku or "").split("/") if x]
+    return "/".join(p[:2]) if len(p)>=2 else str(sku or "")
+
+
+def profile_for(label: str) -> str:
+    n=norm(label)
+    if "конвектор" in n: return "convector"
+    if "маслян" in n and "радиатор" in n: return "oil_radiator"
+    if "тепловент" in n: return "fan_heater"
+    if "теплов" in n and "пуш" in n: return "heat_gun"
+    if "теплов" in n and "завес" in n: return "heat_curtain"
+    if "инфракрас" in n: return "infrared_heater"
+    if "увлажн" in n: return "humidifier"
+    if "ламп" in n or "led" in n: return "led_lamp"
+    if "бензопил" in n: return "chainsaw_gas"
+    if "электропил" in n or "электрическ" in n and "пил" in n: return "chainsaw_electric"
+    return "generic"
+
+
+def query_for(label: str, profile: str) -> str:
+    q={
+      "convector":"конвектор",
+      "oil_radiator":"масляный радиатор",
+      "fan_heater":"тепловентилятор",
+      "heat_gun":"тепловая пушка",
+      "heat_curtain":"тепловая завеса",
+      "infrared_heater":"инфракрасный обогреватель",
+      "humidifier":"увлажнитель воздуха",
+      "led_lamp":"светодиодная лампа",
+      "chainsaw_gas":"бензопила",
+      "chainsaw_electric":"электропила",
+    }.get(profile)
+    return q or clean_label(label)
+
+
+def scope_key(profile: str, query: str) -> str:
+    return profile+"-"+hashlib.sha1(norm(query).encode("utf-8")).hexdigest()[:8]
+
+
+def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
+    climate=rest_get_all("price_list",{
+      "category":"eq.Климатическое оборудование",
+      "select":"sku,product,category,subgroup,uploaded_at"
+    },page_size=800)
+    garden=rest_get_all("price_list",{
+      "category":"eq.Садовая техника",
+      "select":"sku,product,category,subgroup,uploaded_at"
+    },page_size=800)
+
+    headers={}
+    for x in climate:
+        sku=str(x.get("sku") or "")
+        if sku_depth(sku)==2:
+            headers[sku]=clean_label(str(x.get("product") or ""))
+
+    groups: dict[tuple[str,str],dict]={}
+    own: dict[str,set[str]]=defaultdict(set)
+    for prefix,label in headers.items():
+        children=[x for x in climate if sku_depth(str(x.get("sku") or ""))>=3 and sku_prefix2(str(x.get("sku") or ""))==prefix]
+        if not children: continue
+        profile=profile_for(label)
+        if profile=="generic": continue
+        query=query_for(label,profile)
+        key=scope_key(profile,query)
+        if key not in groups:
+            groups[key]={
+              "scope_key":key,"source_category":"Климатическое оборудование",
+              "source_subgroup":clean_label(label),"source_prefix":prefix,
+              "search_query":query,"profile_key":profile,"enabled":True,
+              "own_sku_count":0,"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
+              "updated_at":datetime.now(timezone.utc).isoformat(),
+            }
+        else:
+            # E.g. LED lamps may have separate brand-family headers in the price file.
+            groups[key]["source_prefix"]+=","+prefix
+        for x in children:
+            sku=str(x.get("sku") or "").strip()
+            if sku: own[key].add(sku)
+
+    for label,profile,needle in [
+      ("Бензопилы","chainsaw_gas","бензопил"),
+      ("Электропилы","chainsaw_electric","электропил"),
+    ]:
+        query=query_for(label,profile);key=scope_key(profile,query)
+        skus={
+          str(x.get("sku") or "").strip() for x in garden
+          if sku_depth(str(x.get("sku") or ""))>=3 and needle in norm(x.get("product"))
+        }
+        if skus:
+            groups[key]={
+              "scope_key":key,"source_category":"Садовая техника","source_subgroup":label,
+              "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
+              "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
+              "updated_at":datetime.now(timezone.utc).isoformat(),
+            }
+            own[key].update(skus)
+
+    for key,g in groups.items():
+        g["own_sku_count"]=len(own[key])
+
+    scopes=list(groups.values())
+    scopes.sort(key=lambda x:(x["source_category"],x["source_subgroup"]))
+    if VALIDATE_PROFILES:
+        scopes=[x for x in scopes if x["profile_key"] in VALIDATE_PROFILES]
+        own={k:v for k,v in own.items() if any(s["scope_key"]==k for s in scopes)}
+    return scopes,own
+
+
+def load_rules(profile: str) -> list[dict]:
+    return rest_get("triovist_market_rules_v1",{
+      "profile_key":"eq."+profile,
+      "select":"spec_key,label,weight,direction,unit,aliases,critical",
+      "order":"weight.desc"
+    })
+
+
+def alias_map(rules: list[dict]) -> dict[str,str]:
+    out={}
+    for r in rules:
+        for a in r.get("aliases") or []:
+            out[norm(a)]=r["spec_key"]
+    return out
+
+
+def nums(v: Any) -> list[float]:
+    out=[]
+    for x in re.findall(r"\d+(?:[.,]\d+)?",str(v or "")):
+        try: out.append(float(x.replace(",",".")))
+        except Exception: pass
+    return out
+
+
+def parse_fraction(text: str) -> float|None:
+    m=re.search(r"(\d+)\s*/\s*(\d+)",text)
+    if m and float(m.group(2)):
+        return float(m.group(1))/float(m.group(2))
+    ns=nums(text)
+    return ns[0] if ns else None
+
+
+def bool_value(text: str) -> bool|None:
+    n=norm(text)
+    if any(x in n for x in ("нет","отсутств","не предусмотр")): return False
+    if any(x in n for x in ("да","есть","предусмотр","имеется")): return True
+    return None
+
+
+def normalize_value(key: str, text: str) -> Any:
+    low=str(text or "").lower();ns=nums(text)
+    if key in ("heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape"):
+        return norm(text)[:120] or None
+    if key=="base_type":
+        m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
+        return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
+    if key in ("overheat_protection","humidistat","tool_free_tension"):
+        return bool_value(text)
+    if key=="chain_pitch_in":
+        return parse_fraction(low)
+    if not ns: return None
+    v=max(ns)
+    if key=="power_w":
+        if "квт" in low or "kw" in low: v*=1000
+        return round(v,2)
+    if key in ("area_m2","sections_count","power_modes","drive_links","engine_cc","color_temp_k","luminous_flux_lm","noise_db"):
+        return round(v,3)
+    if key in ("tank_l","fuel_tank_l"):
+        if "мл" in low and "л" not in low.replace("мл",""): v/=1000
+        return round(v,3)
+    if key=="output_mlh":
+        if re.search(r"\bл\s*/?\s*ч",low): v*=1000
+        return round(v,2)
+    if key=="airflow_m3h":
+        return round(v,2)
+    if key=="fuel_consumption_kgh":
+        return round(v,3)
+    if key=="bar_length_cm":
+        if "мм" in low: v/=10
+        elif "дюйм" in low or "inch" in low or '"' in low: v*=2.54
+        return round(v,2)
+    if key=="width_mm":
+        if re.search(r"\bсм\b",low): v*=10
+        elif re.search(r"\bм\b",low) and "мм" not in low: v*=1000
+        return round(v,2)
+    if key=="chain_speed_ms": return round(v,2)
+    if key=="weight_kg":
+        if re.search(r"\bг\b",low) and "кг" not in low: v/=1000
+        return round(v,3)
+    if key=="voltage_v": return round(v,2)
+    return round(v,3)
+
+
+def primitive_text(v: Any) -> str:
+    if isinstance(v,bool): return "да" if v else "нет"
+    if isinstance(v,(str,int,float)): return str(v).strip()
+    if isinstance(v,list) and len(v)<=8:
+        xs=[primitive_text(x) for x in v]
+        return ", ".join(x for x in xs if x)
+    return ""
+
+
+def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
+    aliases=alias_map(rules)
+    raw=[];seen=set()
+    try: state=next_state(html)
+    except Exception: state={}
+    root=(state.get("productCard") or {}).get("fullProductData") or {}
+    label_keys=("name","title","label","caption","propertyName","featureName","characteristicName","parameterName")
+    value_keys=("value","text","displayValue","propertyValue","featureValue","characteristicValue","parameterValue")
+
+    def add(label: Any,value: Any,source: str,path: str=""):
+        k=aliases.get(norm(label));text=primitive_text(value)
+        if not k or not text: return
+        sig=(k,text)
+        if sig in seen: return
+        seen.add(sig);raw.append({"key":k,"label":str(label),"value":text,"source":source,"path":path})
+
+    def walk(node: Any,path="fd"):
+        if isinstance(node,dict):
+            label=None
+            for lk in label_keys:
+                if isinstance(node.get(lk),(str,int,float)):
+                    label=node.get(lk);break
+            if label is not None:
+                for vk in value_keys:
+                    if vk in node: add(label,node.get(vk),"next_data",path+"."+vk)
+            for k,v in node.items():
+                if norm(k) in aliases: add(k,v,"next_data",path+"."+str(k))
+                if isinstance(v,(dict,list)): walk(v,path+"."+str(k))
+        elif isinstance(node,list):
+            for i,v in enumerate(node): walk(v,f"{path}[{i}]")
+    walk(root)
+
+    soup=BeautifulSoup(html,"html.parser")
+    lines=[re.sub(r"\s+"," ",x).strip() for x in soup.get_text("\n",strip=True).splitlines()]
+    lines=[x for x in lines if x]
+    for i,line in enumerate(lines):
+        key=None;label=line;width_used=1
+        for width in (4,3,2,1):
+            if i+width<=len(lines):
+                candidate=" ".join(lines[i:i+width])
+                if norm(candidate) in aliases:
+                    key=aliases[norm(candidate)];label=candidate;width_used=width;break
+        if not key: continue
+        for j in range(i+width_used,min(len(lines),i+width_used+5)):
+            cand=lines[j]
+            if norm(cand) in aliases: break
+            if cand:
+                add(label,cand,"visible_html")
+                break
+
+    values={}
+    for x in raw:
+        val=normalize_value(x["key"],x["value"])
+        if val is not None and x["key"] not in values:
+            values[x["key"]]=val
+    return raw,values
+
+
+def fetch_html(session: requests.Session,url: str) -> str:
+    if not public_product_url(url): raise RuntimeError("invalid public 21vek product URL")
+    last=None
+    for attempt in range(4):
+        try:
+            r=session.get(url,headers=HEADERS,timeout=TIMEOUT,allow_redirects=True)
+            if r.status_code==200: return r.text
+            last=RuntimeError(f"HTTP {r.status_code}")
+            if r.status_code==429:
+                try: wait=float(r.headers.get("Retry-After") or 3)
+                except Exception: wait=3
+                time.sleep(max(2,min(30,wait)))
+            elif r.status_code>=500: time.sleep(1.5*(attempt+1))
+            else: raise last
+        except (requests.Timeout,requests.ConnectionError) as exc:
+            last=exc;time.sleep(1.5*(attempt+1))
+    raise last or RuntimeError("21vek fetch failed")
+
+
+def flatten(obj: Any,prefix="") -> list[tuple[str,Any]]:
+    out=[]
+    if isinstance(obj,dict):
+        for k,v in obj.items():
+            p=f"{prefix}.{k}" if prefix else str(k)
+            if isinstance(v,(dict,list)): out.extend(flatten(v,p))
+            else: out.append((p,v))
+    elif isinstance(obj,list):
+        for i,v in enumerate(obj): out.extend(flatten(v,f"{prefix}[{i}]"))
+    return out
+
+
+def item_name(item: dict) -> str:
+    for k in ("name","title","productName","fullName"):
+        if item.get(k): return str(item[k])
+    for p,v in flatten(item):
+        if isinstance(v,str) and p.lower().endswith((".name",".title")) and len(v)>8:
+            return v
+    return ""
+
+
+def item_url(item: dict) -> str:
+    for p,v in flatten(item):
+        if isinstance(v,str) and any(x in p.lower() for x in ("url","href","link")) and ".html" in v:
+            u=urljoin("https://www.21vek.by/",v)
+            if public_product_url(u): return u
+    return ""
+
+
+def search_number(item: dict, key_words: tuple[str,...]) -> float|None:
+    candidates=[]
+    for p,v in flatten(item):
+        lp=p.lower()
+        if not isinstance(v,(int,float,str)): continue
+        if not any(k in lp for k in key_words): continue
+        try:
+            n=float(str(v).replace(",","."))
+            if math.isfinite(n): candidates.append((p,n))
+        except Exception: pass
+    if not candidates: return None
+    # Prefer sale/current paths and avoid old/original price for current.
+    candidates.sort(key=lambda z:(0 if any(k in z[0].lower() for k in ("saleprice","currentprice","finalprice")) else 1,len(z[0])))
+    return candidates[0][1]
+
+
+def search_text(item: dict,key_words: tuple[str,...]) -> str:
+    for p,v in flatten(item):
+        if isinstance(v,str) and any(k in p.lower() for k in key_words):
+            s=v.strip()
+            if s: return s
+    return ""
+
+
+def search_meta(item: dict) -> dict:
+    brand=search_text(item,("producer.name","brand.name",".brand",".producer"))
+    price=search_number(item,("saleprice","currentprice","finalprice",".price"))
+    rating=search_number(item,(".rating","rating.value"))
+    reviews=search_number(item,("reviewcount","reviews.count"))
+    status=search_text(item,(".status","availability","available"))
+    ins=None
+    if status:
+        n=norm(status)
+        if n in ("in","available","true","в наличии"): ins=True
+        elif n in ("out","false","нет в наличии","unavailable"): ins=False
+    ext=item.get("id")
+    return {
+      "brand":brand,"price":price,"rating":rating,
+      "review_count":int(reviews) if reviews is not None else None,
+      "in_stock":ins,"external_id":str(ext) if ext is not None else None
+    }
+
+
+def is_our_brand(item: dict,name: str) -> bool:
+    blob=norm(name+" "+json.dumps(item,ensure_ascii=False))
+    return any(re.search(r"(^|\s)"+re.escape(b)+r"(\s|$)",blob) for b in OUR_BRANDS)
+
+
+def search_page(session: requests.Session, query: str,page: int,search_id: str="") -> dict:
+    body={"query":query,"order":"default","page":page,"limit":60,"mode":"desktop","searchId":search_id,"filters":[]}
+    last=None
+    for attempt in range(3):
+        try:
+            r=session.post(SEARCH_ENDPOINT,headers=SEARCH_HEADERS,json=body,timeout=TIMEOUT,allow_redirects=True)
+            if r.status_code==200:
+                data=r.json()
+                if isinstance(data,dict) and isinstance(data.get("products"),list): return data
+                raise RuntimeError("21vek search response has no products")
+            last=RuntimeError(f"21vek search HTTP {r.status_code}: {r.text[:250]}")
+            if r.status_code==429:
+                try: wait=float(r.headers.get("Retry-After") or 3)
+                except Exception: wait=3
+                time.sleep(max(2,min(30,wait)))
+            elif r.status_code>=500: time.sleep(1.5*(attempt+1))
+            else: raise last
+        except (requests.Timeout,requests.ConnectionError) as exc:
+            last=exc;time.sleep(1.5*(attempt+1))
+    raise last or RuntimeError("21vek search failed")
+
+
+def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],dict]:
+    q=scope["search_query"]
+    d1=search_page(session,q,1,"");time.sleep(DELAY)
+    sid=str(d1.get("searchId") or "")
+    d2=search_page(session,q,2,sid);time.sleep(DELAY)
+    rows=[];seen=set();raw_count=0;own_excluded=0
+    for page,data in ((1,d1),(2,d2)):
+        for i,item in enumerate(data.get("products") or []):
+            raw_count+=1
+            name=item_name(item);url=item_url(item)
+            if is_our_brand(item,name):
+                own_excluded+=1;continue
+            meta=search_meta(item)
+            key=meta.get("external_id") or (hashlib.sha1(url.encode("utf-8")).hexdigest() if url else hashlib.sha1((name+str(page)+str(i)).encode("utf-8")).hexdigest())
+            if key in seen: continue
+            seen.add(key)
+            rows.append({
+              "scope_key":scope["scope_key"],"product_key":str(key),"search_query":q,
+              "page_no":page,"position":(page-1)*60+i+1,"external_id":meta.get("external_id"),
+              "brand":meta.get("brand") or "","model":name,"product_url":url,
+              "current_price":meta.get("price"),"base_price":None,"in_stock":meta.get("in_stock"),
+              "product_rating":meta.get("rating"),"review_count":meta.get("review_count"),
+              "_search_item":item
+            })
+    return rows,{"raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,"search_id":sid}
+
+
+def load_registry() -> dict[str,dict]:
+    rows=rest_get_all("triovist_21vek_registry_v236214",{
+      "select":"sku,product_name,category,subgroup,product_url,price,in_stock,product_rating,review_count,manager_email"
+    },page_size=900)
+    return {str(x.get("sku") or "").strip():x for x in rows if x.get("sku")}
+
+
+def load_mrc() -> dict[str,float]:
+    rows=rest_get_all("triovist_mrc_current",{"select":"sku,mrc_byn"},page_size=900)
+    out={}
+    for x in rows:
+        try: out[str(x.get("sku") or "").strip()]=float(x["mrc_byn"])
+        except Exception: pass
+    return out
+
+
+def load_existing_products(scope: str) -> dict[str,dict]:
+    rows=rest_get_all("triovist_market_products_current_v1",{
+      "scope_key":"eq."+scope,
+      "select":"*"
+    },page_size=500)
+    return {str(x["product_key"]):x for x in rows}
+
+
+def load_existing_own(scope: str) -> dict[str,dict]:
+    rows=rest_get_all("triovist_market_own_specs_current_v1",{
+      "scope_key":"eq."+scope,
+      "select":"*"
+    },page_size=500)
+    return {str(x["sku"]):x for x in rows}
+
+
+def fresh_specs(row: dict|None,url: str) -> bool:
+    if not row or not row.get("specs_normalized") or not row.get("specs_fetched_at"): return False
+    if str(row.get("product_url") or "")!=str(url or ""): return False
+    try:
+        t=datetime.fromisoformat(str(row["specs_fetched_at"]).replace("Z","+00:00"))
+        return datetime.now(timezone.utc)-t.astimezone(timezone.utc)<=timedelta(days=SPEC_TTL_DAYS)
+    except Exception: return False
+
+
+def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -> dict:
+    html=fetch_html(session,url)
+    parsed=parse_product(html,{
+      "url":url,"sku":base.get("sku"),"donor_article":base.get("external_id"),
+      "name":base.get("product_name") or base.get("model"),
+      "category":base.get("category"),"subgroup":base.get("subgroup")
+    })
+    raw,specs=extract_specs(html,rules)
+    card=parsed["card"];extra=parsed["extra"]
+    return {
+      "brand":extra.get("brand") or base.get("brand") or "",
+      "model":card.get("product_name") or base.get("model") or base.get("product_name") or "",
+      "current_price":card.get("price"),
+      "base_price":extra.get("base_price"),
+      "in_stock":card.get("in_stock"),
+      "product_rating":card.get("product_rating"),
+      "review_count":card.get("review_count"),
+      "specs_raw":raw,"specs_normalized":specs,
+      "specs_signature":hashlib.sha1(json.dumps(specs,ensure_ascii=False,sort_keys=True).encode("utf-8")).hexdigest(),
+      "specs_fetched_at":datetime.now(timezone.utc).isoformat()
+    }
+
+
+def numeric_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    return max(0.0,1.0-abs(a-b)/den)
+
+
+def categorical_similarity(a: Any,b: Any) -> float:
+    na=norm(a);nb=norm(b)
+    if not na or not nb: return 0.0
+    if na==nb or na in nb or nb in na: return 1.0
+    aa=set(na.split());bb=set(nb.split())
+    return len(aa&bb)/max(1,len(aa|bb))
+
+
+def similarity(ours: dict,comp: dict,rules: list[dict]) -> float:
+    total=used=allw=0.0;critical_mismatch=False;critical_missing=False
+    for rule in rules:
+        w=float(rule.get("weight") or 0);allw+=w
+        k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+        if a is None or b is None:
+            if rule.get("critical"): critical_missing=True
+            continue
+        direction=rule.get("direction")
+        if direction in ("categorical","boolean"):
+            s=categorical_similarity(a,b) if direction=="categorical" else (1.0 if bool(a)==bool(b) else 0.0)
+        else:
+            try: s=numeric_similarity(float(a),float(b))
+            except Exception: s=categorical_similarity(a,b)
+        if rule.get("critical") and s<0.45: critical_mismatch=True
+        total+=w*s;used+=w
+    if used<=0: return 0.0
+    score=total/used*100
+    coverage=min(1.0,used/max(allw,1e-9))
+    score*=0.60+0.40*coverage
+    if critical_missing: score=min(score,69.0)
+    if critical_mismatch: score=min(score,54.0)
+    return round(max(0,min(100,score)),2)
+
+
+def analog_grade(score: float) -> str:
+    if score>=85:return "direct"
+    if score>=70:return "close"
+    if score>=55:return "conditional"
+    return "no_direct"
+
+
+def directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    d=rule.get("direction")
+    if d in ("categorical","boolean"):
+        s=categorical_similarity(a,b) if d=="categorical" else (1.0 if bool(a)==bool(b) else 0.0)
+        return 50 if s>=0.99 else 35
+    if d=="neutral": return 50
+    try: av=float(a);bv=float(b)
+    except Exception:return None
+    if abs(av-bv)<1e-9:return 50
+    better=av>bv if d=="higher" else av<bv
+    rel=abs(av-bv)/max(abs(bv),1e-9)
+    return min(95,55+rel*80) if better else max(5,45-rel*80)
+
+
+def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|None,comp_price: float|None) -> float:
+    if our_price is not None and comp_price and comp_price>0:
+        rel=(comp_price-our_price)/comp_price
+        price_score=max(0,min(100,50+rel*280))
+    else: price_score=50
+    s=w=0.0
+    for rule in rules:
+        z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        if z is None: continue
+        rw=float(rule.get("weight") or 0);s+=z*rw;w+=rw
+    spec_score=s/w if w else 50
+    return round(0.35*price_score+0.65*spec_score,2)
+
+
+def fmt(v: Any,unit: str|None=None) -> str:
+    if isinstance(v,bool): return "да" if v else "нет"
+    try:
+        n=float(v);s=f"{n:.2f}".rstrip("0").rstrip(".").replace(".",",")
+        return s+(" "+unit if unit else "")
+    except Exception:return str(v)
+
+
+def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,comp_price: float|None,position: int|None,mrc: float|None) -> tuple[list[str],list[str]]:
+    adv=[];bad=[]
+    if our_price is not None and comp_price:
+        d=(comp_price-our_price)/comp_price*100
+        if d>0.5: adv.append(f"Наша цена ниже на {d:.1f}%")
+        elif d<-0.5: bad.append(f"Конкурент дешевле на {abs(d):.1f}%")
+    for rule in rules:
+        k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+        if a is None or b is None: continue
+        z=directional(rule,a,b)
+        if z is None or abs(z-50)<4: continue
+        txt=f"{rule['label']}: {fmt(a,rule.get('unit'))} против {fmt(b,rule.get('unit'))}"
+        (adv if z>50 else bad).append(txt)
+    if position and position<=10:
+        bad.append(f"Конкурент занимает {position}-е место по популярности")
+    if mrc and our_price is not None and our_price<mrc:
+        bad.append(f"Наша цена ниже МРЦ на {(mrc-our_price)/mrc*100:.1f}%")
+    return adv[:10],bad[:10]
+
+
+def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]:
+    if price is None or not mrc:return None,None
+    db=price-mrc;return round(db,2),round(db/mrc*100,2)
+
+
+def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None) -> str:
+    if mrc_delta_pct is not None and mrc_delta_pct<0:
+        return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
+    if similarity_score<70:
+        return "Прямого аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
+    if status=="competitor_stronger":
+        return "Конкурент сильнее по совокупности цены и характеристик. Усилить карточку/матрицу; цену снижать только в пределах МРЦ."
+    if status=="ours_stronger":
+        return "Мы сильнее: цену снижать не требуется. Вывести подтверждённые преимущества в карточку и аргументацию менеджера."
+    return "Паритет: контролировать позицию и цену конкурента, усиливать подтверждённые преимущества без снижения ниже МРЦ."
+
+
+def insert_run(scope_count: int) -> str:
+    rows=rest_post("triovist_market_runs_v1",{
+      "parser_version":PARSER_VERSION,"status":"running","scope_count":scope_count,
+      "notes":{"source":"price_list + public 21vek first two default-ranking pages",
+               "validate_profiles":sorted(VALIDATE_PROFILES),"own_brands_excluded":sorted(OUR_BRANDS),
+               "position_history":True,"spec_cache_days":SPEC_TTL_DAYS,
+               "production_own_parser_untouched":True}
+    },prefer="return=representation")
+    if not rows or not rows[0].get("id"): raise RuntimeError("cannot create market run")
+    return rows[0]["id"]
+
+
+def main() -> None:
+    scopes,scope_skus=load_price_scope()
+    if not scopes: raise RuntimeError("Seasonal market scope is empty")
+    rest_upsert("triovist_market_scopes_v1",scopes,"scope_key")
+    run_id=insert_run(len(scopes))
+    session=requests.Session();session.headers.update(HEADERS)
+    registry=load_registry();mrc=load_mrc()
+    discovered_total=competitor_total=comparison_total=gap_total=errors=0
+    run_notes=[]
+
+    try:
+        for si,scope in enumerate(scopes,1):
+            skey=scope["scope_key"];profile=scope["profile_key"];rules=load_rules(profile)
+            if not rules:
+                run_notes.append({"scope":skey,"error":"no technical rules"});errors+=1;continue
+            print(f"SCOPE [{si}/{len(scopes)}] {scope['source_subgroup']} query={scope['search_query']!r}",flush=True)
+
+            products,discover_meta=discover_scope(session,scope)
+            discovered_total+=discover_meta["raw"];competitor_total+=len(products)
+            existing=load_existing_products(skey)
+            observed=datetime.now(timezone.utc).isoformat()
+            current_rows=[];snapshot_rows=[]
+
+            for pi,p in enumerate(products,1):
+                old=existing.get(p["product_key"])
+                p["run_id"]=run_id;p["observed_at"]=observed;p["error_text"]=None
+                need_specs=not fresh_specs(old,p.get("product_url") or "")
+                # Keep cached technical specs unless TTL/url/model requires refresh.
+                if old and not need_specs:
+                    p["specs_raw"]=old.get("specs_raw") or []
+                    p["specs_normalized"]=old.get("specs_normalized") or {}
+                    p["specs_signature"]=old.get("specs_signature")
+                    p["specs_fetched_at"]=old.get("specs_fetched_at")
+                    if not p.get("brand"):p["brand"]=old.get("brand") or ""
+                    if p.get("current_price") is None:p["current_price"]=old.get("current_price")
+                    if p.get("in_stock") is None:p["in_stock"]=old.get("in_stock")
+                    if p.get("product_rating") is None:p["product_rating"]=old.get("product_rating")
+                    if p.get("review_count") is None:p["review_count"]=old.get("review_count")
+                elif p.get("product_url"):
+                    try:
+                        got=card_data(session,p["product_url"],p,rules)
+                        for k,v in got.items():
+                            if v is not None and v!="": p[k]=v
+                        time.sleep(DELAY)
+                    except Exception as exc:
+                        if old:
+                            p["specs_raw"]=old.get("specs_raw") or []
+                            p["specs_normalized"]=old.get("specs_normalized") or {}
+                            p["specs_signature"]=old.get("specs_signature")
+                            p["specs_fetched_at"]=old.get("specs_fetched_at")
+                        p["error_text"]=str(exc)[:1200];errors+=1
+                else:
+                    p["specs_raw"]=old.get("specs_raw") if old else []
+                    p["specs_normalized"]=old.get("specs_normalized") if old else {}
+                    p["specs_signature"]=old.get("specs_signature") if old else None
+                    p["specs_fetched_at"]=old.get("specs_fetched_at") if old else None
+                    p["error_text"]="21vek search result has no canonical product URL";errors+=1
+
+                p.pop("_search_item",None)
+                current_rows.append(p)
+                snapshot_rows.append({
+                  k:p.get(k) for k in (
+                    "run_id","scope_key","product_key","search_query","page_no","position","external_id","brand","model",
+                    "product_url","current_price","base_price","in_stock","product_rating","review_count","observed_at","error_text"
+                  )
+                })
+                if pi%20==0: print(f"  competitors {pi}/{len(products)}",flush=True)
+
+            rest_upsert("triovist_market_products_current_v1",current_rows,"scope_key,product_key")
+            if snapshot_rows: rest_post("triovist_market_product_snapshots_v1",snapshot_rows)
+            # Remove products which have left TOP-2 only after a successful discovery.
+            rest_delete("triovist_market_products_current_v1",{"scope_key":"eq."+skey,"run_id":"neq."+run_id})
+
+            own_existing=load_existing_own(skey)
+            own_rows=[]
+            for sku in sorted(scope_skus[skey]):
+                src=registry.get(sku)
+                if not src or not src.get("product_url"):
+                    continue
+                old=own_existing.get(sku)
+                row={
+                  "sku":sku,"scope_key":skey,"product_name":src.get("product_name") or sku,
+                  "product_url":src.get("product_url"),"current_price":src.get("price"),
+                  "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
+                }
+                if fresh_specs(old,row["product_url"]):
+                    row.update({
+                      "specs_raw":old.get("specs_raw") or [],"specs_normalized":old.get("specs_normalized") or {},
+                      "specs_signature":old.get("specs_signature"),"specs_fetched_at":old.get("specs_fetched_at")
+                    })
+                else:
+                    try:
+                        got=card_data(session,row["product_url"],{
+                          "sku":sku,"product_name":row["product_name"],"category":scope["source_category"],
+                          "subgroup":scope["source_subgroup"]
+                        },rules)
+                        row.update({
+                          "specs_raw":got["specs_raw"],"specs_normalized":got["specs_normalized"],
+                          "specs_signature":got["specs_signature"],"specs_fetched_at":got["specs_fetched_at"]
+                        })
+                        time.sleep(DELAY)
+                    except Exception as exc:
+                        if old:
+                            row.update({
+                              "specs_raw":old.get("specs_raw") or [],"specs_normalized":old.get("specs_normalized") or {},
+                              "specs_signature":old.get("specs_signature"),"specs_fetched_at":old.get("specs_fetched_at")
+                            })
+                        else:
+                            row.update({"specs_raw":[],"specs_normalized":{}})
+                        row["error_text"]=str(exc)[:1200];errors+=1
+                own_rows.append(row)
+            rest_upsert("triovist_market_own_specs_current_v1",own_rows,"sku")
+
+            # Rebuild only this scope's current analysis/gaps.
+            rest_delete("triovist_market_analysis_current_v1",{"scope_key":"eq."+skey})
+            rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
+            analyses=[];gaps=[]
+            usable_own=[x for x in own_rows if x.get("specs_normalized")]
+            for p in current_rows:
+                if p.get("error_text") and not p.get("specs_normalized"): continue
+                scored=[]
+                for ours in usable_own:
+                    sim=similarity(ours["specs_normalized"],p.get("specs_normalized") or {},rules)
+                    scored.append((sim,ours))
+                scored.sort(key=lambda z:z[0],reverse=True)
+                best=scored[0][0] if scored else 0.0
+                if best<70:
+                    gaps.append({
+                      "scope_key":skey,"product_key":p["product_key"],"best_similarity":round(best,2),
+                      "reason":"Нет нашего технически подтверждённого аналога с сопоставимостью ≥70%",
+                      "computed_at":observed
+                    })
+                top=[x for x in scored if x[0]>=55][:3]
+                for idx,(sim,ours) in enumerate(top):
+                    op=float(ours["current_price"]) if ours.get("current_price") is not None else None
+                    cp=float(p["current_price"]) if p.get("current_price") is not None else None
+                    mr=float(ours["mrc_byn"]) if ours.get("mrc_byn") is not None else None
+                    mdb,mdp=mrc_state(op,mr)
+                    pdb=pdp=None
+                    if op is not None and cp:
+                        pdb=round(op-cp,2);pdp=round((op-cp)/cp*100,2)
+                    comp_score=competitiveness(ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp)
+                    status="ours_stronger" if comp_score>=70 else ("parity" if comp_score>=55 else "competitor_stronger")
+                    adv,bad=compare_texts(
+                      ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,p.get("position"),mr
+                    )
+                    analyses.append({
+                      "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
+                      "similarity_score":round(sim,2),"analog_grade":analog_grade(sim),"is_primary":idx==0,
+                      "competitiveness_score":comp_score,"status":status,"our_price":op,"mrc_byn":mr,
+                      "mrc_delta_byn":mdb,"mrc_delta_pct":mdp,"competitor_price":cp,
+                      "price_delta_byn":pdb,"price_delta_pct":pdp,
+                      "our_specs":ours["specs_normalized"],"competitor_specs":p.get("specs_normalized") or {},
+                      "advantages":adv,"disadvantages":bad,
+                      "recommendation":recommendation(mdp,sim,status,op,cp),"computed_at":observed
+                    })
+            if analyses: rest_post("triovist_market_analysis_current_v1",analyses)
+            if gaps: rest_post("triovist_market_gaps_current_v1",gaps)
+            comparison_total+=len(analyses);gap_total+=len(gaps)
+            run_notes.append({
+              "scope":skey,"subgroup":scope["source_subgroup"],"query":scope["search_query"],
+              **discover_meta,"our_matrix":len(scope_skus[skey]),"our_21vek":len(own_rows),
+              "comparisons":len(analyses),"gaps":len(gaps)
+            })
+            print(f"  DONE competitors={len(products)} own21={len(own_rows)} comparisons={len(analyses)} gaps={len(gaps)}",flush=True)
+
+        status="complete" if errors==0 else "partial"
+        rest_patch("triovist_market_runs_v1",{"id":"eq."+run_id},{
+          "status":status,"discovered_count":discovered_total,"competitor_count":competitor_total,
+          "comparison_count":comparison_total,"gap_count":gap_total,"error_count":errors,
+          "finished_at":datetime.now(timezone.utc).isoformat(),"notes":{
+            "scopes":run_notes,"validation_mode":bool(VALIDATE_PROFILES),
+            "position_contract":"page1=1..60,page2=61..120,21vek default desktop ranking",
+            "full_spec_refresh_days":SPEC_TTL_DAYS,
+            "own_parser_untouched":True
+          }
+        })
+        print(f"DONE {status}: scopes={len(scopes)} competitors={competitor_total} comparisons={comparison_total} gaps={gap_total} errors={errors}",flush=True)
+        if competitor_total==0: raise SystemExit(2)
+    except Exception as exc:
+        try:
+            rest_patch("triovist_market_runs_v1",{"id":"eq."+run_id},{
+              "status":"failed","error_count":max(errors,1),"finished_at":datetime.now(timezone.utc).isoformat(),
+              "notes":{"fatal_error":str(exc)[:1800],"scopes":run_notes}
+            })
+        except Exception: pass
+        raise
+
+
+if __name__=="__main__":
+    main()
