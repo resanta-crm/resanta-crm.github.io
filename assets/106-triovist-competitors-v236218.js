@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.237 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.238 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.237',TTL=30000;
+const V='v23.6.238',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -118,6 +118,50 @@ function chainsawValue(k,v){
  if(k==='power_w')return E(v)+' Вт';
  return E(v);
 }
+function infraredEnergy(v){
+ if(v==null)return 'нет данных';
+ if(String(v)==='gas')return 'газовый';
+ if(String(v)==='electric')return 'электрический';
+ return E(v);
+}
+function infraredValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='energy_type')return infraredEnergy(v);
+ if(typeof v==='boolean')return v?'есть':'нет';
+ if(k==='power_w')return E(v)+' Вт';
+ if(k==='voltage_v')return E(v)+' В';
+ return E(v);
+}
+function infraredResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='energy_type')return String(a)===String(b)?'совпадает':'разный класс — не аналог';
+ if(k==='power_w'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const d=Math.abs(av-bv);
+  if(d<=100)return 'полное совпадение · разница '+Math.round(d)+' Вт';
+  if(d<=250)return 'близкое совпадение · разница '+Math.round(d)+' Вт';
+  if(d<=400)return 'частичное совпадение · разница '+Math.round(d)+' Вт';
+  return 'существенное отличие · разница '+Math.round(d)+' Вт';
+ }
+ if(k==='voltage_v'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const ca=av>=200&&av<=250?'220/230 В':(av>=360&&av<=420?'380/400 В':String(av));
+  const cb=bv>=200&&bv<=250?'220/230 В':(bv>=360&&bv<=420?'380/400 В':String(bv));
+  return ca===cb?'один класс питания':'разный класс питания';
+ }
+ if(k==='installation_type'){
+  const na=String(a).toLowerCase(),nb=String(b).toLowerCase();
+  const tok=x=>new Set([...(x.includes('настен')?['wall']:[]),...(x.includes('наполь')?['floor']:[]),...(x.includes('потол')?['ceiling']:[]),...(x.includes('универс')?['wall','floor','ceiling']:[])]);
+  const aa=tok(na),bb=tok(nb);return [...aa].some(x=>bb.has(x))?'совпадает':'отличается';
+ }
+ if(k==='thermostat_type'){
+  const present=x=>!/нет|отсутств|не предусмотр/i.test(String(x));
+  return present(a)===present(b)?'наличие совпадает':'отличается';
+ }
+ if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
 function listingKey(scope,sku){return String(scope||'')+'|'+String(sku||'')}
 function listingRowsMap(listing){
  const m=new Map();for(const x of (listing?.rows||[]))m.set(listingKey(x.scope_key,x.sku),x);return m;
@@ -213,6 +257,28 @@ function details(r,l){
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(rec)+'</div></details>';
+ }
+ if(r.profile_key==='infrared_heater'){
+  const keys=[
+   ['energy_type','Тип устройства / источник энергии'],
+   ['heater_type','Нагревательный элемент'],
+   ['power_w','Мощность обогрева'],
+   ['installation_type','Способ установки / монтаж'],
+   ['power_adjustment','Регулировка мощности'],
+   ['thermostat_type','Термостат'],
+   ['display_present','Дисплей'],
+   ['temperature_adjustment','Регулировка температуры'],
+   ['control_type','Управление'],
+   ['voltage_v','Напряжение']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+infraredValue(k,b[k])+'</td><td>'+infraredValue(k,a[k])+'</td><td>'+E(infraredResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Не участвуют в проценте:</b> площадь обогрева и вес. Газовые и электрические инфракрасные обогреватели между собой не сопоставляются.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
  }
  const keys=[...new Set([...Object.keys(a),...Object.keys(b)])];
  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
