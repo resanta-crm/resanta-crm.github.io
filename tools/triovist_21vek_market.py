@@ -30,8 +30,8 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.2"
-RULESET_VERSION="rules-v3"
+PARSER_VERSION="market-auto-v1.3"
+RULESET_VERSION="rules-v4"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
 DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
@@ -290,8 +290,8 @@ def bool_value(text: str) -> bool|None:
 
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
-    if key in ("heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape"):
-        return norm(text)[:120] or None
+    if key in ("heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape","equipment"):
+        return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
@@ -342,10 +342,14 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low)
         if m: return round(float(m.group(1).replace(",","."))*2.54,2)
         return round(ns[0],2)
-    if key=="width_mm":
-        if re.search(r"\bсм\b",low): v*=10
-        elif re.search(r"\bм\b",low) and "мм" not in low: v*=1000
-        return round(v,2)
+    if key in ("width_mm","height_mm","depth_mm"):
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low)
+        if m: return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*см\b",low)
+        if m: return round(float(m.group(1).replace(",","."))*10,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*м\b",low)
+        if m: return round(float(m.group(1).replace(",","."))*1000,2)
+        return round(ns[0],2)
     if key=="chain_speed_ms": return round(v,2)
     if key=="weight_kg":
         if re.search(r"\bг\b",low) and "кг" not in low: v/=1000
