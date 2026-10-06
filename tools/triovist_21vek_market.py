@@ -617,10 +617,10 @@ def is_our_brand(item: dict,name: str) -> bool:
     return any(re.search(r"(^|\s)"+re.escape(b)+r"(\s|$)",blob) for b in OUR_BRANDS)
 
 
-def search_page(session: requests.Session, query: str,page: int,search_id: str="") -> dict:
+def search_page(session: requests.Session, query: str,page: int,search_id: str="",attempts: int=5) -> dict:
     body={"query":query,"order":"default","page":page,"limit":60,"mode":"desktop","searchId":search_id,"filters":[]}
     last=None
-    for attempt in range(5):
+    for attempt in range(max(1,attempts)):
         try:
             r=session.post(SEARCH_ENDPOINT,headers=SEARCH_HEADERS,json=body,timeout=TIMEOUT,allow_redirects=True)
             if r.status_code==200:
@@ -647,7 +647,23 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
 
 def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],list[dict],dict]:
     q=scope["search_query"]
-    d1=search_page(session,q,1,"");time.sleep(DELAY)
+    candidates=[q]
+    if scope.get("profile_key")=="infrared_heater":
+        for alt in ("обогреватель инфракрасный","инфракрасный","инфрак"):
+            if norm(alt)!=norm(q): candidates.append(alt)
+    d1=None;last_exc=None;used_query=q
+    for cand in candidates:
+        try:
+            d1=search_page(session,cand,1,"",attempts=2 if len(candidates)>1 else 5)
+            used_query=cand
+            break
+        except Exception as exc:
+            last_exc=exc
+            time.sleep(2)
+    if d1 is None:
+        raise last_exc or RuntimeError("21vek search failed for all query variants")
+    q=used_query
+    time.sleep(DELAY)
     sid=str(d1.get("searchId") or "")
     d2=search_page(session,q,2,sid);time.sleep(DELAY)
     rows=[];own_rows=[];seen=set();own_seen=set();raw_count=0;own_excluded=0
@@ -679,7 +695,7 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
               "product_rating":meta.get("rating"),"review_count":meta.get("review_count"),
               "_search_item":item
             })
-    return rows,own_rows,{"raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,"own_in_top120":len(own_rows),"search_id":sid}
+    return rows,own_rows,{"raw":raw_count,"competitors":len(rows),"own_excluded":own_excluded,"own_in_top120":len(own_rows),"search_id":sid,"effective_query":q}
 
 
 def load_registry() -> dict[str,dict]:
