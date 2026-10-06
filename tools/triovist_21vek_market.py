@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.5"
+PARSER_VERSION="market-auto-v1.6"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -346,8 +346,18 @@ def normalize_value(key: str, text: str) -> Any:
         return None
     v=max(ns)
     if key=="power_w":
-        if "квт" in low or "kw" in low: v*=1000
-        return round(v,2)
+        # Read the first explicit power value for the current model and normalize
+        # kW/W to watts. Do not take max(all numbers): strings may also contain
+        # horsepower or a parenthetical "maximum power".
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:квт|kw)\b",low,re.I)
+        if m:
+            n=float(m.group(1).replace(",","."))
+            # Guard against obvious source-unit typos such as "2600 кВт" for a chainsaw.
+            return round(n if n>20 else n*1000,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:вт|w)\b",low,re.I)
+        if m:
+            return round(float(m.group(1).replace(",",".")),2)
+        return round(ns[0],2)
     if key in ("area_m2","sections_count","drive_links","engine_cc","color_temp_k","luminous_flux_lm","noise_db"):
         return round(v,3)
     if key in ("tank_l","fuel_tank_l"):
@@ -688,6 +698,22 @@ def convector_power_similarity(a: float,b: float) -> float:
     return 0.35 if diff<=0.30 else 0.0
 
 
+def chainsaw_engine_similarity(a: float,b: float) -> float:
+    diff=abs(a-b)
+    if diff<=3: return 1.0
+    if diff<=5: return 0.80
+    if diff<=8: return 0.50
+    return 0.0
+
+
+def chainsaw_power_similarity(a: float,b: float) -> float:
+    diff=abs(a-b)
+    if diff<=200: return 1.0
+    if diff<=350: return 0.80
+    if diff<=500: return 0.50
+    return 0.0
+
+
 def categorical_similarity(a: Any,b: Any) -> float:
     na=norm(a);nb=norm(b)
     if not na or not nb: return 0.0
@@ -697,6 +723,26 @@ def categorical_similarity(a: Any,b: Any) -> float:
 
 
 def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -> float:
+    # Gasoline chainsaws use the approved fixed 50/50 formula:
+    # engine displacement + power. Missing data keeps its weight as zero
+    # contribution; weights are never re-normalized.
+    if profile=="chainsaw_gas":
+        total=allw=0.0
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0: continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None: continue
+            try:
+                if k=="engine_cc": s=chainsaw_engine_similarity(float(a),float(b))
+                elif k=="power_w": s=chainsaw_power_similarity(float(a),float(b))
+                else: s=0.0
+            except Exception:
+                s=0.0
+            total+=w*s
+        return round(max(0,min(100,(total/max(allw,1e-9))*100)),2)
+
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
     for rule in rules:
         w=float(rule.get("weight") or 0);allw+=w
@@ -725,7 +771,7 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 def analog_grade(score: float,profile: str="generic") -> str:
-    if profile=="convector":
+    if profile in ("convector","chainsaw_gas"):
         if score>=90:return "direct"
         if score>=75:return "close"
         if score>=60:return "conditional"
@@ -805,7 +851,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=60 if profile=="convector" else 70
+    min_match=60 if profile in ("convector","chainsaw_gas") else 70
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -998,8 +1044,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=60 if profile=="convector" else 70
-            candidate_threshold=60 if profile=="convector" else 55
+            gap_threshold=60 if profile in ("convector","chainsaw_gas") else 70
+            candidate_threshold=60 if profile in ("convector","chainsaw_gas") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
