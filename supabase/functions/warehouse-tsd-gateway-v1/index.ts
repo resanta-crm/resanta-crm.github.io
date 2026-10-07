@@ -13,7 +13,7 @@ const ANON=Deno.env.get('SUPABASE_ANON_KEY')||jsonKey('SUPABASE_PUBLISHABLE_KEYS
 const ADMIN=createClient(BASE,SERVICE,{auth:{persistSession:false}});
 const cors={
   'Access-Control-Allow-Origin':'*',
-  'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info',
+  'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info, cache-control, pragma',
   'Access-Control-Allow-Methods':'POST, OPTIONS',
   'Content-Type':'application/json; charset=utf-8',
   'Cache-Control':'no-store'
