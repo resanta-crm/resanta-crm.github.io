@@ -1,8 +1,8 @@
-/* RESANTA CRM v23.6.232 · Triovist task target editor + listing badges */
+/* RESANTA CRM v23.6.247 · Triovist group task target editor + listing badges */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_TASK_TARGET_EDITOR_V236232)return;
-const V='v23.6.232';
+const V='v23.6.247';
 const LEADERS=['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru'];
 const profile=()=>{try{return window.currentProfile||currentProfile}catch(_){return window.currentProfile}};
 const email=()=>String(profile()?.email||'').trim().toLowerCase();
@@ -11,15 +11,15 @@ const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return w
 async function rpc(name,args){const d=dbx();if(!d?.rpc)throw new Error('Соединение с базой ещё не готово');const r=await d.rpc(name,args);if(r.error)throw r.error;return r.data}
 function parseTarget(card){
  const t=String(card?.querySelector('.tm51-result')?.textContent||'');
- const m=t.match(/цельs+([ds.,]+)s*BYN/i);
+ const m=t.match(/цель\s+([\d\s.,]+)\s*BYN/i);
  if(!m)return '';
- return m[1].replace(/s/g,'').replace(',','.');
+ return m[1].replace(/\s/g,'').replace(',','.');
 }
 function decorate(){
  const root=document.getElementById('tri-month-safe-v23651');if(!root)return;
  root.querySelectorAll('.tm51-task').forEach(card=>{
   const title=String(card.querySelector('.tm51-title')?.textContent||'');
-  if(/листингs*↑/i.test(title)&&!card.querySelector('[data-v232-listing-badge]')){
+  if(/листинг\s*↑/i.test(title)&&!card.querySelector('[data-v232-listing-badge]')){
     const pills=card.querySelector('.tm51-pills');
     if(pills){
       const s=document.createElement('span');s.className='tm51-pill';s.dataset.v232ListingBadge='1';
@@ -40,9 +40,9 @@ function decorate(){
 }
 async function edit(card,id){
  const current=parseTarget(card);
- const raw=prompt('Новый план по подгруппе, BYN:',current||'');
+ const raw=prompt('Новый план по группе, BYN:',current||'');
  if(raw===null)return;
- const n=Number(String(raw).replace(/s/g,'').replace(',','.'));
+ const n=Number(String(raw).replace(/\s/g,'').replace(',','.'));
  if(!Number.isFinite(n)||n<=0){alert('Введите сумму больше 0');return}
  if(!confirm('Установить план '+n.toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN?'))return;
  try{
