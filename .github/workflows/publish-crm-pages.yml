@@ -14,6 +14,10 @@ on:
       - receiving.html
       - picking.html
       - tsd.html
+      - tsd/index.html
+      - tsd/manifest.webmanifest
+      - tsd/sw.js
+      - picking-live-v241.html
       - inventory-manifest.webmanifest
       - inventory-sw.js
       - inventory-icon.svg
@@ -69,7 +73,16 @@ jobs:
           test -s index.html
           cp index.html _site/index.html
 
-          for file in CNAME robots.txt manifest.json service-worker.js inventory.html receiving.html picking.html tsd.html inventory-manifest.webmanifest inventory-sw.js inventory-icon.svg inventory-qr.svg picking-manifest.webmanifest picking-sw.js picking-icon.svg tsd-manifest.webmanifest tsd-sw.js; do
+          for file in CNAME robots.txt manifest.json service-worker.js inventory.html receiving.html picking.html picking-live-v241.html tsd.html inventory-manifest.webmanifest inventory-sw.js inventory-icon.svg inventory-qr.svg picking-manifest.webmanifest picking-sw.js picking-icon.svg tsd-manifest.webmanifest tsd-sw.js; do
+            if [ -f "$file" ]; then
+              cp "$file" "_site/$file"
+            fi
+          done
+
+          # Совместимость со старыми установленными ярлыками Resanta Склад.
+          # Папка tsd/ содержит только публичный entry point, manifest и service worker.
+          mkdir -p _site/tsd
+          for file in tsd/index.html tsd/manifest.webmanifest tsd/sw.js; do
             if [ -f "$file" ]; then
               cp "$file" "_site/$file"
             fi
@@ -93,7 +106,7 @@ jobs:
 
           # Критические ТСД-файлы обязаны попасть в публичный Pages-артефакт.
           # Если allowlist когда-либо сломают, деплой должен упасть вместо тихого 404.
-          for required in tsd.html tsd-manifest.webmanifest tsd-sw.js picking.html; do
+          for required in tsd.html tsd/index.html tsd/manifest.webmanifest tsd/sw.js tsd-manifest.webmanifest tsd-sw.js picking.html picking-live-v241.html; do
             if [ ! -s "_site/$required" ]; then
               echo "::error::Required public TSD file missing from Pages artifact: $required"
               exit 1
