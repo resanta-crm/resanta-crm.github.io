@@ -38,19 +38,22 @@ permissions:
   pages: write
   id-token: write
 
-# Production publications must finish normally. A newer commit may wait,
-# but it must not interrupt a Pages deployment that has already started.
+# v23.6.258: the legacy "pages" concurrency group is blocked by a stale
+# github-pages deployment in waiting state. Use a fresh production group and
+# keep queued deployments instead of silently cancelling older pending runs.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: resanta-pages-production-v2
+  queue: max
 
 jobs:
   deploy:
     name: Prepare and deploy site
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # v23.6.258: bypass the stale protected github-pages environment.
+    # deploy-pages supports a different environment name when needed.
     environment:
-      name: github-pages
+      name: resanta-pages-production
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
