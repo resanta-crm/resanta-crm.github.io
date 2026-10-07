@@ -1,6 +1,6 @@
 {
-  "version": "23.6.255",
+  "version": "23.6.256",
   "released_at": "2026-10-07",
-  "purpose": "Triovist AI: full task completion requires sales target plus all fixed listing actions; final listing check is frozen at month end using parser data from the final 72 hours.",
-  "deploy_trigger": "2026-10-07T15:05:00+03:00"
+  "purpose": "Triovist AI: approve action no longer depends on repeated browser confirm dialogs; approval button shows progress and sends immediately.",
+  "deploy_trigger": "2026-10-07T15:46:00+03:00"
 }
