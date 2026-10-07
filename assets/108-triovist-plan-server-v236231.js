@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.247 · TRIOVIST MONTH PLAN — GROUP SERVER LOGIC
+/* RESANTA CRM v23.6.248 · TRIOVIST MONTH PLAN — GROUP SERVER LOGIC
  * Intercepts the monthly plan action and builds one task per product group.
  * The browser no longer builds/ranks business candidates locally.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_PLAN_SERVER_V236231)return;
-const V='v23.6.247';
+const V='v23.6.248';
 const MANAGER_MAP={
  'александренко':'aleksandrenko_av@resanta.ru',
  'кришталь':'krishtal_na@resanta.ru'
@@ -91,11 +91,10 @@ async function generate(btn){
 }
 function renamePlanButtons(){
  document.querySelectorAll('#page-triovist button').forEach(b=>{
-  if(isButton(b))b.textContent='Сформировать план по группам';
+  if(isButton(b)&&txt(b.textContent)!=='Сформировать план по группам')b.textContent='Сформировать план по группам';
  });
 }
-setTimeout(renamePlanButtons,0);
-new MutationObserver(renamePlanButtons).observe(document.getElementById('page-triovist')||document.body,{childList:true,subtree:true});
+[0,250,1000].forEach(ms=>setTimeout(renamePlanButtons,ms));
 document.addEventListener('click',e=>{
  const b=e.target.closest?.('button');if(!isButton(b))return;
  if(!document.getElementById('page-triovist')?.contains(b))return;
