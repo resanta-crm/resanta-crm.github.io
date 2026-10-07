@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const INVENTORY_APP_VERSION='2026-10-07-v23.6.243-dual-network';
+const INVENTORY_APP_VERSION='2026-10-07-v23.6.249-pwa-unified';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -18,7 +18,7 @@ const INVENTORY_APP_VERSION='2026-10-07-v23.6.243-dual-network';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.239');
+        location.replace('/inventory.html?v=23.6.249&ts='+Date.now());
       }
     }
   }catch(_){}
@@ -473,7 +473,19 @@ async function init(){
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
  window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.243',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ 
+if('serviceWorker'in navigator){
+ navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
+  rs.filter(r=>{
+   const u=String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'');
+   return u.includes('/inventory-sw.js')
+  }).map(r=>r.unregister().catch(()=>false))
+ )).catch(()=>{});
+}
+if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(
+ keys.filter(k=>k.startsWith('resanta-inventory-')).map(k=>caches.delete(k))
+)).catch(()=>{});
+
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
