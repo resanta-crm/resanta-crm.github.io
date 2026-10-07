@@ -2002,12 +2002,17 @@ async function doLogout() {
 async function loadProfileAndStart() {
   try {
     const email=String(currentUser?.email||'').trim().toLowerCase();
-    const {data:profile,error} = await db.from('users').select('*').eq('email',email).maybeSingle();
+    const loadProfile=()=>db.from('users').select('*').eq('email',email).maybeSingle();
+    let result=null;
+    for(const delay of [0,500,1400]){
+      if(delay)await new Promise(r=>setTimeout(r,delay));
+      result=await crmAuthRetryV236166(loadProfile);
+      if(!result?.error)break;
+    }
+    const {data:profile,error}=result||{};
     if(error) throw error;
     if(!profile){
-      // SECURITY: Auth-пользователь без активного CRM-профиля не получает
-      // никакого fallback-доступа. Удалённый/отключённый сотрудник должен быть
-      // немедленно остановлен на входе.
+      // SECURITY: подтверждённое отсутствие активного CRM-профиля — реальный logout.
       await db.auth.signOut().catch(()=>{});
       currentUser=null;currentProfile=null;
       document.getElementById('login-wrap').style.display='flex';
@@ -2019,13 +2024,24 @@ async function loadProfileAndStart() {
     currentProfile=profile;
     startApp();
   } catch(e) {
-    console.error('Profile load failed',e);
-    await db.auth.signOut().catch(()=>{});
-    currentUser=null;currentProfile=null;
+    // v23.6.257: временный обрыв сети/проверки профиля больше не уничтожает
+    // действующую Supabase-сессию. Менеджеру не надо заново вводить пароль.
+    console.error('Profile load failed; session preserved',e);
+    let session=null;
+    try{session=(await db.auth.getSession()).data?.session||null;}catch(_){}
+    if(session?.user)currentUser=session.user;
+    if(currentProfile){
+      document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app').style.display='flex';
+      return;
+    }
     document.getElementById('login-wrap').style.display='flex';
     document.getElementById('app').style.display='none';
     const err=document.getElementById('login-error');
-    if(err){err.textContent='Не удалось проверить права доступа. Войдите снова.';err.style.display='block';}
+    if(err){
+      err.textContent='Связь с CRM временно прервалась. Сессия сохранена — проверьте интернет и откройте приложение ещё раз, пароль вводить не нужно.';
+      err.style.display='block';
+    }
   }
 }
 
