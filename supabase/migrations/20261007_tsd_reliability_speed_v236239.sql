@@ -142,3 +142,14 @@ $function$;
 
 revoke all on function public.warehouse_pick_manual_close_v236222(uuid,text) from public,anon;
 grant execute on function public.warehouse_pick_manual_close_v236222(uuid,text) to authenticated;
+
+
+-- Fast-path indexes used by the three TSD scan modes.
+create index if not exists warehouse_pick_scan_device_order_idx_v236239
+  on public.warehouse_pick_scan_events_v1(device_key,order_id,event_at desc);
+
+create index if not exists warehouse_inventory_items_session_sku_norm_idx_v236239
+  on public.warehouse_inventory_items(session_id,lower(trim(sku)));
+
+create index if not exists warehouse_receiving_items_session_sku_norm_idx_v236239
+  on public.warehouse_receiving_items(session_id,lower(trim(sku)));
