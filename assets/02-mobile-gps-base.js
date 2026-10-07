@@ -304,11 +304,8 @@ async function v19NativeStatus(){
   const tracker=v19NativeTracker();if(!tracker||typeof tracker.status!=='function')return {active:false,native:false};
   try{
     const status={...await tracker.status(),native:true};
-    // Нативный сервис может обновить Supabase refresh-token, пока WebView спит.
-    // При возврате синхронизируем сессию, чтобы приложение не разлогинилось.
-    if(status.accessToken&&status.refreshToken&&currentProfile?.role==='manager'){
-      try{await db.auth.setSession({access_token:status.accessToken,refresh_token:status.refreshToken});}catch(_e){}
-    }
+    // v23.6.257: WebView — единственный владелец Supabase refresh-token.
+    // Нативный GPS больше не может подменять браузерную сессию.
     return status;
   }catch(e){return {active:false,native:true,lastError:e.message||String(e)};}
 }
@@ -329,7 +326,7 @@ async function v19StartNativeFor(workday){
   const session=await v19Session();if(!session)throw new Error('Сессия CRM истекла — войдите заново');
   const result=await tracker.start({
     workdayId:String(workday.id),userId:String(currentUser.id),managerName:currentProfile?.name||currentUser.email,
-    supabaseUrl:SUPABASE_URL,anonKey:SUPABASE_KEY,accessToken:session.access_token,refreshToken:session.refresh_token||'',
+    supabaseUrl:SUPABASE_URL,anonKey:SUPABASE_KEY,accessToken:session.access_token,refreshToken:'',
     intervalMs:30000,minDistanceM:50
   });
   await db.rpc('gps_set_my_native_state',{p_workday_id:workday.id,p_active:true,p_error:null});
@@ -1740,30 +1737,26 @@ window.RESANTA_FALLING_MANAGER_FIX=Object.freeze({version:'20.4.0',autoRefresh:t
     }
     catch(e){return {active:false,serviceAlive:false,requestedActive:false,native:true,lastError:e.message||String(e)};}
   }
-  async function v208AdoptNativeSession(status){
-    if(!status?.accessToken||!status?.refreshToken||currentProfile?.role!=='manager')return null;
-    try{
-      const current=(await db.auth.getSession()).data?.session||null;
-      if(current?.access_token===status.accessToken)return current;
-      const result=await db.auth.setSession({access_token:status.accessToken,refresh_token:status.refreshToken});
-      return result?.data?.session||null;
-    }catch(_){return null;}
+  async function v208AdoptNativeSession(_status){
+    // v23.6.257: native GPS is no longer allowed to rotate/adopt Supabase sessions.
+    return null;
   }
   async function v208PushWebSession(session){
     const tracker=v208Tracker();
     if(!tracker||typeof tracker.updateSession!=='function'||!session?.access_token)return;
-    try{await tracker.updateSession({accessToken:session.access_token,refreshToken:session.refresh_token||''});}catch(_){ }
+    // Access token may be copied to GPS for sending points. Refresh token stays only in WebView.
+    try{await tracker.updateSession({accessToken:session.access_token,refreshToken:''});}catch(_){ }
   }
 
   v19Session=async function(){
     let session=null;
     try{session=(await db.auth.getSession()).data?.session||null;}catch(_){ }
-    if(!session){
-      const native=await v208RawNativeStatus();
-      session=await v208AdoptNativeSession(native);
-    }
-    if(!session){
-      try{session=(await db.auth.refreshSession()).data?.session||null;}catch(_){ }
+    const exp=Number(session?.expires_at||0),now=Math.floor(Date.now()/1000);
+    if(!session||(exp&&exp<=now+90)){
+      try{
+        if(typeof window.crmEnsureFreshSessionV236166==='function')session=await window.crmEnsureFreshSessionV236166(false);
+        else session=(await db.auth.refreshSession()).data?.session||null;
+      }catch(_){ }
     }
     if(session)await v208PushWebSession(session);
     return session;
@@ -1894,7 +1887,17 @@ window.RESANTA_FALLING_MANAGER_FIX=Object.freeze({version:'20.4.0',autoRefresh:t
   window.addEventListener('online',()=>setTimeout(v208GpsWatchdog,300));
   setInterval(v208GpsWatchdog,60000);
 
-  window.RESANTA_WORKDAY_GPS=Object.freeze({version:'19.2.0',intervalSeconds:20,minDistanceMeters:10,heartbeatSeconds:30,durableQueue:true,watchdog:true});
+  // Keep native GPS supplied with the current access token only.
+  // Never send or adopt refresh_token outside Supabase JS in WebView.
+  try{
+    db.auth.onAuthStateChange((event,session)=>{
+      if(session&&['INITIAL_SESSION','SIGNED_IN','TOKEN_REFRESHED','USER_UPDATED'].includes(event)){
+        setTimeout(()=>v208PushWebSession(session),0);
+      }
+    });
+  }catch(_){ }
+
+  window.RESANTA_WORKDAY_GPS=Object.freeze({version:'19.2.1-auth-owner-webview',intervalSeconds:20,minDistanceMeters:10,heartbeatSeconds:30,durableQueue:true,watchdog:true,refreshOwner:'webview'});
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 8 ===== */
