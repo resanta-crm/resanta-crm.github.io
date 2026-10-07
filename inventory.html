@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const INVENTORY_APP_VERSION='2026-09-22-v23.6.150-two-tsd-readable';
+const INVENTORY_APP_VERSION='2026-10-07-v23.6.239-fast-scan';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -18,7 +18,7 @@ const INVENTORY_APP_VERSION='2026-09-22-v23.6.150-two-tsd-readable';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?v=23.6.150');
+        location.replace('/inventory.html?v=23.6.239');
       }
     }
   }catch(_){}
@@ -124,7 +124,7 @@ function tsdLabel(email){
  if(email==='sidarovich_kn@resanta.ru')return 'ТСД-2 · Кладовщик';
  return 'ТСД';
 }
-let session=null,active=null,access=null,lastUnknown='',flushing=false;
+let session=null,active=null,access=null,lastUnknown='',flushing=false,refreshTimer=null,refreshFlight=null;
 let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
@@ -187,7 +187,7 @@ function beep(ok=true){
  if(navigator.vibrate)try{navigator.vibrate(ok?45:[90,40,90])}catch(_){}
 }
 function recentlySubmitted(code){
- const now=Date.now(),same=code===lastSubmittedCode&&now-lastSubmittedAt<900;
+ const now=Date.now(),same=code===lastSubmittedCode&&now-lastSubmittedAt<250;
  if(!same){lastSubmittedCode=code;lastSubmittedAt=now}
  return same
 }
@@ -234,13 +234,22 @@ async function bootAuthed(){
   show('access-error',true);text('access-error','Не удалось проверить доступ: '+(e?.message||e))
  }
 }
-async function reloadActive(){
+async function reloadActive(withHistory=true){
  active=await rpc('warehouse_inventory_get_active_v1',{p_warehouse:'Витебск'});
  if(!active?.active){active=null;show('scanner',false);show('no-session',true);return}
  show('no-session',false);show('scanner',true);
- text('kpi-sku',active.counted_sku||0);text('kpi-events',active.event_count||0);updateQueueKpi();await loadHistory();focusCode()
+ text('kpi-sku',active.counted_sku||0);text('kpi-events',active.event_count||0);updateQueueKpi();
+ if(withHistory)await loadHistory();
+ focusCode()
 }
-function focusCode(){setTimeout(()=>{const e=$('code');if(e&&!document.hidden)e.focus()},60)}
+function scheduleActiveRefresh(delay=700){
+ clearTimeout(refreshTimer);
+ refreshTimer=setTimeout(()=>{
+   if(refreshFlight)return;
+   refreshFlight=reloadActive(true).catch(()=>{}).finally(()=>{refreshFlight=null})
+ },delay)
+}
+function focusCode(){setTimeout(()=>{const e=$('code');if(e&&!document.hidden)e.focus()},20)}
 async function previewManualCode(code){
  code=String(code||'').trim();
  if(!active?.id||!code||/^\d{8,32}$/.test(code))return;
@@ -280,7 +289,7 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
   status((diff>0?'⚠ ':'✓ ')+(r.sku||'')+' · '+(r.product||'товар найден')+' · добавлено '+q+(diff>0?' · выше учёта на '+diff:''),diff>0?'amber':'green');
   scannerDiag('Код принят CRM: '+code+' · остаток 1С '+Number(r.system_qty_onhand||0)+' · факт '+Number(r.counted_qty||0));
   beep(diff<=0);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
-  await reloadActive()
+  focusCode();scheduleActiveRefresh(700)
  }catch(e){
   if(e?.network||!navigator.onLine){
    const ql=queue();ql.push({id:eventId,session_id:active.id,code,qty:q,queued_at:new Date().toISOString()});saveQueue(ql);
@@ -369,7 +378,7 @@ async function init(){
    scannerDiag('ТСД передаёт код в поле…');
    clearTimeout(inputAutoTimer);clearTimeout(lookupTimer);
    const v=codeEl.value.trim();
-   if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},140);
+   if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},55);
    else if(v.length>=4)lookupTimer=setTimeout(()=>previewManualCode(v),320);
  };
  codeEl.addEventListener('input',maybeAutoSubmit);
@@ -395,7 +404,7 @@ async function init(){
      scannerTimer=setTimeout(()=>{
        const v=scannerBuffer.trim();scannerBuffer='';
        if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
-     },160);
+     },80);
    }
  },true);
  document.addEventListener('keypress',e=>{
@@ -413,7 +422,7 @@ async function init(){
      scannerTimer=setTimeout(()=>{
        const v=scannerBuffer.trim();scannerBuffer='';
        if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
-     },160);
+     },80);
    }
  },true);
  document.addEventListener('beforeinput',browserInputSeen,true);
