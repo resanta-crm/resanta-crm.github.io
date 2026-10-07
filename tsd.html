@@ -4,7 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#185FA5">
-<meta http-equiv="Cache-Control" content="no-store">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<script>
+(function(){
+  const V='247';
+  try{
+    const u=new URL(location.href);
+    if(u.searchParams.get('v')!==V && !sessionStorage.getItem('tsd_hub_force_'+V)){
+      sessionStorage.setItem('tsd_hub_force_'+V,'1');
+      location.replace('/tsd.html?v='+V+'&ts='+Date.now());
+    }
+  }catch(_){}
+})();
+</script>
 <title>Resanta Склад · ТСД</title>
 <link rel="manifest" href="/tsd-manifest.webmanifest?v=242">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
@@ -32,7 +44,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
  <div class="card">
   <b style="font-size:18px">Что будем делать?</b>
   <div class="actions">
-   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=246"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
+   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=247"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
    <button class="action" data-url="/inventory.html?v=244" data-name="Инвентаризация"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></button>
    <button class="action" data-url="/picking.html?standalone=1&v=244" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
   </div>
@@ -46,7 +58,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-07-v23.6.246-receiving-direct-open';
+const HUB_VERSION='2026-10-07-v23.6.247-receiving-restored';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
 const PICKING_FAST_URL='/picking.html?standalone=1&v=243';
@@ -54,7 +66,7 @@ function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKI
 let moduleAttempt=0,moduleWatchdog=null,moduleReady=false;
 function freshUrl(target,attempt=1){
  const u=new URL(target,location.origin);
- u.searchParams.set('hub','246');
+ u.searchParams.set('hub','247');
  u.searchParams.set('attempt',String(attempt));
  u.searchParams.set('open',String(Date.now()));
  return u.pathname+u.search
