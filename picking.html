@@ -6,6 +6,20 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
+<script id="resanta_picking_iframe_recovery_v241">
+(function(){
+  if(window.top===window.self)return;
+  let jumped=false;
+  const go=()=>{if(jumped)return;jumped=true;try{window.top.location.replace('/picking-live-v241.html?v=241&source=iframe')}catch(_){}};
+  window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data&&e.data.type==='resanta-tsd-module-open')go()});
+  setTimeout(()=>{
+    try{
+      const f=window.frameElement,w=f&&f.closest&&f.closest('#work');
+      if(w&&!w.classList.contains('hidden'))go();
+    }catch(_){}
+  },700);
+})();
+</script>
 <title>Resanta Заказы · ТСД</title>
 <link rel="icon" href="/picking-icon.svg" type="image/svg+xml">
 <style>
@@ -69,7 +83,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-07-v23.6.240-ready-handshake';
+const PICKING_APP_VERSION='2026-10-07-v23.6.241-bridge';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
