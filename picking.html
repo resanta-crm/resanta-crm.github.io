@@ -99,7 +99,7 @@ const $=id=>document.getElementById(id);
 const STANDALONE=new URLSearchParams(location.search).has('standalone');
 setTimeout(()=>{
  const b=$('standalone-menu-btn');
- if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=243&from=picking')}
+ if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=244&from=picking')}
 },0);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v||0);
