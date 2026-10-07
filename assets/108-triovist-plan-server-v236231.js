@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.253 · TRIOVIST MONTH PLAN — SUBGROUP SERVER LOGIC
+/* RESANTA CRM v23.6.254 · TRIOVIST MONTH PLAN — SUBGROUP SERVER LOGIC
  * Intercepts the monthly plan action and builds one task per product subgroup.
  * The browser no longer builds/ranks business candidates locally.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_PLAN_SERVER_V236231)return;
-const V='v23.6.253';
+const V='v23.6.254';
 const MANAGER_MAP={
  'александренко':'aleksandrenko_av@resanta.ru',
  'кришталь':'krishtal_na@resanta.ru'
