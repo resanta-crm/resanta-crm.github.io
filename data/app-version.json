@@ -1,6 +1,6 @@
 {
-  "version": "23.6.253",
+  "version": "23.6.254",
   "released_at": "2026-10-07",
-  "purpose": "Triovist AI: explicit listing goals inside subgroup tasks; critical listing prioritized; current generator logic synchronized.",
-  "deploy_trigger": "2026-10-07T14:20:00+03:00"
+  "purpose": "Triovist AI: concrete parser-driven listing actions per subgroup, up to 10 SKU, with live listing progress.",
+  "deploy_trigger": "2026-10-07T14:45:00+03:00"
 }
