@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const RECEIVING_APP_VERSION='2026-09-23-v23.6.157-sound';
+const RECEIVING_APP_VERSION='2026-10-07-v23.6.239-fast-scan';
 (function(){
  try{
   const k='resanta_receiving_app_version',old=localStorage.getItem(k);
@@ -15,7 +15,7 @@ const RECEIVING_APP_VERSION='2026-09-23-v23.6.157-sound';
    localStorage.setItem(k,RECEIVING_APP_VERSION);
    if(old!==null&&!sessionStorage.getItem('receiving_reload_'+RECEIVING_APP_VERSION)){
     sessionStorage.setItem('receiving_reload_'+RECEIVING_APP_VERSION,'1');
-    location.replace('/receiving.html?v=23.6.157');
+    location.replace('/receiving.html?v=23.6.239');
    }
   }
  }catch(_){}
@@ -114,7 +114,7 @@ const INVENTORY_SESSION_KEY='resanta_inventory_session_v1';
 const QUEUE_KEY='resanta_receiving_queue_v1';
 const LOGIN_EMAIL_KEY='resanta_receiving_login_email_v1';
 const ALLOWED_EMAILS=['vitebsk@resanta.ru','sidarovich_kn@resanta.ru','payushin_ar@resanta.ru'];
-let session=null,active=null,access=null,lastUnknown='',flushing=false;
+let session=null,active=null,access=null,lastUnknown='',flushing=false,refreshTimer=null,refreshFlight=null;
 let scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null;
 let audioCtx=null,audioUnlocked=false;
 const $=id=>document.getElementById(id);
@@ -143,7 +143,7 @@ function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQu
 function updateQueue(){text('kpi-queue',queue().filter(x=>active&&x.session_id===active.id).length)}
 function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
 function net(msg){const e=$('net');if(!msg){e.style.display='none';return}e.textContent=msg;e.style.display='block'}
-function recentlySubmitted(code){const now=Date.now(),same=code===lastSubmittedCode&&now-lastSubmittedAt<900;if(!same){lastSubmittedCode=code;lastSubmittedAt=now}return same}
+function recentlySubmitted(code){const now=Date.now(),same=code===lastSubmittedCode&&now-lastSubmittedAt<250;if(!same){lastSubmittedCode=code;lastSubmittedAt=now}return same}
 
 function ensureAudio(){
  try{
@@ -221,7 +221,7 @@ function showLast(r){
  else{e.className='status blue';e.textContent='По УПД '+qfmt(exp)+' · принято '+qfmt(rec)+' · осталось '+qfmt(rem)+'.'}
  show('last-card',true)
 }
-async function reloadActive(){
+async function reloadActive(withHistory=true){
  active=await rpc('warehouse_receiving_get_active_v1',{});
  if(!active?.has_session){
   show('no-session',true);show('scanner',false);return
@@ -229,7 +229,15 @@ async function reloadActive(){
  show('no-session',false);show('scanner',true);
  text('doc-line','УПД '+(active.document_no||'без номера')+' от '+(active.document_date||'—')+' · ожидается '+qfmt(active.expected_qty)+' шт.');
  text('kpi-expected',qfmt(active.expected_qty));text('kpi-received',qfmt(active.received_qty));updateQueue();
- await loadHistory();setTimeout(()=>$('code')?.focus(),80)
+ if(withHistory)await loadHistory();
+ setTimeout(()=>$('code')?.focus(),20)
+}
+function scheduleActiveRefresh(delay=700){
+ clearTimeout(refreshTimer);
+ refreshTimer=setTimeout(()=>{
+  if(refreshFlight)return;
+  refreshFlight=reloadActive(true).catch(()=>{}).finally(()=>{refreshFlight=null})
+ },delay)
 }
 async function bootAuthed(){
  show('login-view',false);show('app-view',true);show('access-error',false);
@@ -265,7 +273,8 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
   show('bind-box',false);lastUnknown='';showLast(r);$('code').value='';$('scan-qty').value='1';
   const bad=!r.is_expected||num(r.difference_qty)>0;
   beep(bad?'warn':'ok');status((bad?'⚠ ':'✓ ')+(r.sku||'')+' · '+(r.product||'товар')+' · +'+q,bad?'amber':'green');
-  await reloadActive()
+  active.received_qty=num(active.received_qty)+q;text('kpi-received',qfmt(active.received_qty));
+  $('code')?.focus();scheduleActiveRefresh(700)
  }catch(e){
   if(e?.network||!navigator.onLine){
    const ql=queue();ql.push({id:eventId,session_id:active.id,code,qty:q,queued_at:new Date().toISOString()});saveQueue(ql);
@@ -322,7 +331,7 @@ function init(){
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};$('logout-btn').onclick=logout;
  $('send-btn').onclick=()=>{unlockAudio();sendScan($('code').value,$('scan-qty').value,'manual')};$('undo-btn').onclick=undo;$('sound-btn').onclick=()=>{unlockAudio();beep('ok');status('🔊 Звук ТСД включён.','green')};$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
  const code=$('code');code.onkeydown=e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=code.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
- const auto=()=>{clearTimeout(inputAutoTimer);const v=code.value.trim();if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(code.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},150)};
+ const auto=()=>{clearTimeout(inputAutoTimer);const v=code.value.trim();if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(code.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},55)};
  code.addEventListener('input',auto);code.addEventListener('paste',()=>setTimeout(auto,0));
  document.addEventListener('keydown',e=>{
   unlockAudio();
@@ -330,7 +339,7 @@ function init(){
   const t=e.target,editable=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);if(editable)return;
   const now=Date.now();if(now-scannerLastKeyAt>120)scannerBuffer='';scannerLastKeyAt=now;
   if(e.key==='Enter'||e.key==='Tab'){const v=scannerBuffer.trim();scannerBuffer='';if(v.length>=4){e.preventDefault();sendScan(v,$('scan-qty').value,'scan')}return}
-  if(e.key&&e.key.length===1){scannerBuffer+=e.key;clearTimeout(scannerTimer);scannerTimer=setTimeout(()=>{const v=scannerBuffer.trim();scannerBuffer='';if(/^\d{8,32}$/.test(v))sendScan(v,$('scan-qty').value,'scan')},160)}
+  if(e.key&&e.key.length===1){scannerBuffer+=e.key;clearTimeout(scannerTimer);scannerTimer=setTimeout(()=>{const v=scannerBuffer.trim();scannerBuffer='';if(/^\d{8,32}$/.test(v))sendScan(v,$('scan-qty').value,'scan')},80)}
  },true);
  document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('touchstart',unlockAudio,{passive:true});
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
