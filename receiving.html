@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const RECEIVING_APP_VERSION='2026-10-07-v23.6.245-scanner-focus-qty-product';
+const RECEIVING_APP_VERSION='2026-10-07-v23.6.246-direct-mode';
 (function(){
  try{
   const k='resanta_receiving_app_version',old=localStorage.getItem(k);
@@ -15,7 +15,7 @@ const RECEIVING_APP_VERSION='2026-10-07-v23.6.245-scanner-focus-qty-product';
    localStorage.setItem(k,RECEIVING_APP_VERSION);
    if(old!==null&&!sessionStorage.getItem('receiving_reload_'+RECEIVING_APP_VERSION)){
     sessionStorage.setItem('receiving_reload_'+RECEIVING_APP_VERSION,'1');
-    location.replace('/receiving.html?v=245&ts='+Date.now());
+    location.replace('/receiving.html?legacy-module=1&v=246&ts='+Date.now());
    }
   }
  }catch(_){}
@@ -55,6 +55,7 @@ label{display:block;font-size:12px;color:#6B7280;font-weight:700;margin:9px 0 5p
 
 <div id="app-view" class="wrap hidden">
  <div class="top">
+  <a href="/tsd.html?v=246" class="btn secondary" style="min-height:40px;padding:8px 10px;text-decoration:none;display:flex;align-items:center">← Меню</a>
   <div class="logo">📥</div>
   <div class="grow"><div class="title">Resanta · Приёмка</div><div id="user-line" class="sub"></div></div>
   <button id="logout-btn" class="btn secondary" style="min-height:40px;padding:8px 10px">Выйти</button>
