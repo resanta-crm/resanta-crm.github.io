@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <script>
 (function(){
-  const V='247';
+  const V='249';
   try{
     const u=new URL(location.href);
     if(u.searchParams.get('v')!==V && !sessionStorage.getItem('tsd_hub_force_'+V)){
@@ -18,7 +18,7 @@
 })();
 </script>
 <title>Resanta Склад · ТСД</title>
-<link rel="manifest" href="/tsd-manifest.webmanifest?v=247">
+<link rel="manifest" href="/tsd-manifest.webmanifest?v=249">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827}
@@ -44,7 +44,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
  <div class="card">
   <b style="font-size:18px">Что будем делать?</b>
   <div class="actions">
-   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=247"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
+   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=249"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
    <button class="action" data-url="/inventory.html?v=244" data-name="Инвентаризация"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></button>
    <button class="action" data-url="/picking.html?standalone=1&v=244" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
   </div>
@@ -58,7 +58,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-07-v23.6.247-receiving-restored';
+const HUB_VERSION='2026-10-07-v23.6.249-pwa-unified';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
 const PICKING_FAST_URL='/picking.html?standalone=1&v=243';
@@ -66,7 +66,7 @@ function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKI
 let moduleAttempt=0,moduleWatchdog=null,moduleReady=false;
 function freshUrl(target,attempt=1){
  const u=new URL(target,location.origin);
- u.searchParams.set('hub','247');
+ u.searchParams.set('hub','249');
  u.searchParams.set('attempt',String(attempt));
  u.searchParams.set('open',String(Date.now()));
  return u.pathname+u.search
@@ -148,12 +148,12 @@ if('serviceWorker'in navigator){
  navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
   rs.filter(r=>{
    const u=String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'');
-   return u.includes('/tsd/sw.js')||u.includes('/tsd-sw.js')
+   return u.includes('/tsd/sw.js')||u.includes('/tsd-sw.js')||u.includes('/inventory-sw.js')
   }).map(r=>r.unregister().catch(()=>false))
  )).catch(()=>{});
 }
 if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(
- keys.filter(k=>k.startsWith('resanta-tsd-hub-')).map(k=>caches.delete(k))
+ keys.filter(k=>k.startsWith('resanta-tsd-hub-')||k.startsWith('resanta-inventory-')).map(k=>caches.delete(k))
 )).catch(()=>{});
 </script>
 </body>
