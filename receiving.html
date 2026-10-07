@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const RECEIVING_APP_VERSION='2026-10-07-v23.6.246-direct-mode';
+const RECEIVING_APP_VERSION='2026-10-07-v23.6.247-manual-qty-restored';
 (function(){
  try{
   const k='resanta_receiving_app_version',old=localStorage.getItem(k);
@@ -15,7 +15,7 @@ const RECEIVING_APP_VERSION='2026-10-07-v23.6.246-direct-mode';
    localStorage.setItem(k,RECEIVING_APP_VERSION);
    if(old!==null&&!sessionStorage.getItem('receiving_reload_'+RECEIVING_APP_VERSION)){
     sessionStorage.setItem('receiving_reload_'+RECEIVING_APP_VERSION,'1');
-    location.replace('/receiving.html?legacy-module=1&v=246&ts='+Date.now());
+    location.replace('/receiving.html?legacy-module=1&v=247&ts='+Date.now());
    }
   }
  }catch(_){}
@@ -55,7 +55,6 @@ label{display:block;font-size:12px;color:#6B7280;font-weight:700;margin:9px 0 5p
 
 <div id="app-view" class="wrap hidden">
  <div class="top">
-  <a href="/tsd.html?v=246" class="btn secondary" style="min-height:40px;padding:8px 10px;text-decoration:none;display:flex;align-items:center">← Меню</a>
   <div class="logo">📥</div>
   <div class="grow"><div class="title">Resanta · Приёмка</div><div id="user-line" class="sub"></div></div>
   <button id="logout-btn" class="btn secondary" style="min-height:40px;padding:8px 10px">Выйти</button>
@@ -75,7 +74,7 @@ label{display:block;font-size:12px;color:#6B7280;font-weight:700;margin:9px 0 5p
    <input id="code" class="inp scan" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
    <div class="sub" style="margin-top:6px">ТСД показывает план по УПД, общий факт двух терминалов и остаток к приёмке. Лишний товар не теряется — отмечается отдельно.</div>
    <div class="row">
-    <div style="flex:1"><label>Количество за скан</label><input id="scan-qty" class="inp" type="number" value="1" readonly tabindex="-1" aria-readonly="true"><div class="sub" style="margin-top:4px">Каждый штрихкод = +1 шт.</div></div>
+    <div style="flex:1"><label>Количество</label><input id="scan-qty" class="inp" type="number" min="0.01" step="1" value="1"></div>
     <button id="send-btn" class="btn primary" style="align-self:flex-end;flex:1">Принять</button>
    </div>
    <div id="last-card" class="hidden" style="margin-top:12px">
@@ -274,7 +273,7 @@ async function reloadActive(withHistory=true){
  text('doc-line','УПД '+(active.document_no||'без номера')+' от '+(active.document_date||'—')+' · ожидается '+qfmt(active.expected_qty)+' шт.');
  text('kpi-expected',qfmt(active.expected_qty));text('kpi-received',qfmt(active.received_qty));updateQueue();
  if(withHistory)await loadHistory();
- setTimeout(()=>{const e=$('code');if(e){e.focus();try{e.setSelectionRange(e.value.length,e.value.length)}catch(_){}}},20)
+ setTimeout(()=>$('code')?.focus(),20)
 }
 function scheduleActiveRefresh(delay=700){
  clearTimeout(refreshTimer);
@@ -301,7 +300,7 @@ async function bootAuthed(){
  }
 }
 async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
- code=String(code||'').trim();const q=mode==='scan'?1:num(qtyVal);if(code&&recentlySubmitted(code))return;
+ code=String(code||'').trim();const q=num(qtyVal);if(code&&recentlySubmitted(code))return;
  if(!active?.id){beep('error');return status('Приёмка не запущена.','red')}if(!code)return $('code')?.focus();if(q<=0){beep('error');return status('Количество должно быть больше 0.','red')}
  const eventId=clientId||uuid();status('Записываю…','blue');
  try{
@@ -375,26 +374,15 @@ function init(){
  if(session){const e=tokenEmail(session);if(ALLOWED_EMAILS.includes(e)){localStorage.setItem(LOGIN_EMAIL_KEY,e);$('login-email').value=e}}
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};$('logout-btn').onclick=logout;
  $('send-btn').onclick=()=>{unlockAudio();sendScan($('code').value,$('scan-qty').value,'manual')};$('undo-btn').onclick=undo;$('sound-btn').onclick=()=>{unlockAudio();beep('ok');status('🔊 Звук ТСД включён.','green')};$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
- const code=$('code');code.onkeydown=e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();e.stopPropagation();const v=code.value.trim();if(v)sendScan(v,1,'scan');setTimeout(()=>code?.focus(),0)}};
- const auto=()=>{clearTimeout(inputAutoTimer);const v=code.value.trim();if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(code.value.trim()===v)sendScan(v,1,'scan')},55)};
+ const code=$('code');code.onkeydown=e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=code.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
+ const auto=()=>{clearTimeout(inputAutoTimer);const v=code.value.trim();if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(code.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},55)};
  code.addEventListener('input',auto);code.addEventListener('paste',()=>setTimeout(auto,0));
- const qtyInput=$('scan-qty');
- if(qtyInput){
-  qtyInput.addEventListener('focus',()=>setTimeout(()=>code?.focus(),0));
-  qtyInput.addEventListener('pointerdown',e=>{e.preventDefault();code?.focus()});
- }
- document.addEventListener('focusin',e=>{
-  if(!active?.id)return;
-  const t=e.target;
-  if(t?.id==='scan-qty')setTimeout(()=>code?.focus(),0);
- });
-
  document.addEventListener('keydown',e=>{
   unlockAudio();
   if(!active?.id||$('scanner')?.classList.contains('hidden'))return;
-  const t=e.target,editable=t&&((t.tagName==='INPUT'&&!t.readOnly)||t.tagName==='TEXTAREA'||t.isContentEditable);if(editable)return;
+  const t=e.target,editable=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);if(editable)return;
   const now=Date.now();if(now-scannerLastKeyAt>120)scannerBuffer='';scannerLastKeyAt=now;
-  if(e.key==='Enter'||e.key==='Tab'){const v=scannerBuffer.trim();scannerBuffer='';e.preventDefault();if(v.length>=4)sendScan(v,1,'scan');setTimeout(()=>code?.focus(),0);return}
+  if(e.key==='Enter'||e.key==='Tab'){const v=scannerBuffer.trim();scannerBuffer='';if(v.length>=4){e.preventDefault();sendScan(v,$('scan-qty').value,'scan')}return}
   if(e.key&&e.key.length===1){scannerBuffer+=e.key;clearTimeout(scannerTimer);scannerTimer=setTimeout(()=>{const v=scannerBuffer.trim();scannerBuffer='';if(/^\d{8,32}$/.test(v))sendScan(v,$('scan-qty').value,'scan')},80)}
  },true);
  document.addEventListener('pointerdown',unlockAudio,{passive:true});document.addEventListener('touchstart',unlockAudio,{passive:true});
