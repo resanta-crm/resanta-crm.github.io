@@ -59,6 +59,48 @@ async function crmAuthRetryV236166(factory){
 window.crmEnsureFreshSessionV236166=crmEnsureFreshSessionV236166;
 window.crmAuthRetryV236166=crmAuthRetryV236166;
 
+// v23.6.258: защита Android WebView от гонки старой и новой Supabase-сессии.
+// Свежая сессия после успешного password login держится в памяти несколько секунд:
+// если старый WebView/native-поток поздно пришлёт SIGNED_OUT, восстанавливаем именно
+// только что созданную сессию, а не выбрасываем менеджера обратно на экран входа.
+let crmLoginFlightV236258=null;
+let crmFreshSessionV236258=null;
+let crmFreshSessionUntilV236258=0;
+let crmExplicitSignOutV236258=false;
+
+function crmShowSignedOutUiV236258(){
+  currentUser=null; currentProfile=null;
+  const login=document.getElementById('login-wrap');
+  const app=document.getElementById('app');
+  if(login)login.style.display='flex';
+  if(app)app.style.display='none';
+}
+
+async function crmLocalSignOutV236258(){
+  crmExplicitSignOutV236258=true;
+  crmFreshSessionV236258=null;
+  crmFreshSessionUntilV236258=0;
+  try{return await db.auth.signOut({scope:'local'});}
+  finally{setTimeout(()=>{crmExplicitSignOutV236258=false;},500);}
+}
+
+async function crmRecoverFreshSessionV236258(){
+  if(crmExplicitSignOutV236258||Date.now()>crmFreshSessionUntilV236258)return null;
+  let session=null;
+  try{session=(await db.auth.getSession()).data?.session||null;}catch(_){}
+  if(session?.user)return session;
+  const fresh=crmFreshSessionV236258;
+  if(!fresh?.access_token||!fresh?.refresh_token)return null;
+  try{
+    const restored=await db.auth.setSession({
+      access_token:fresh.access_token,
+      refresh_token:fresh.refresh_token
+    });
+    if(!restored.error&&restored.data?.session)return restored.data.session;
+  }catch(_){}
+  return null;
+}
+
 let currentUser = null, currentProfile = null;
 let allClients = [], allClientAliases = [], allTasks = [], allVisits = [], allVisitQualityReviews = [], allVisitRouteReviews = [], allTaskPartialReviews = [], allManagerKpiPlans = [], allUsers = [], allRoutePlans = [], allNegotiations = [], allPurchases = [], allPurchaseItems = [], allPurchaseHistory = [], allClientPhotos = [], allVipSales = [], allVipPromotions = [], allPromotions = [], allPromotionBudgets = [], allPromotionBudgetMovements = [], allPromotionPhotos = [], allPromotionBudgetAudit = [], allClientDebt = [], allStock = [], allPrice = [], allDebtComments = [], allImportStatus = [];
 function clientIsArchived(c){return c?.is_archived===true||String(c?.is_archived||'').toLowerCase()==='true';}
@@ -1935,31 +1977,53 @@ function withTimeout(promise, ms, label){
 }
 
 async function doLogin() {
-  const email = document.getElementById('login-email').value.trim().toLowerCase();
-  const pass = document.getElementById('login-pass').value;
-  const err = document.getElementById('login-error');
-  const btn = document.getElementById('login-btn');
-  err.style.display='none';
-  if (!email||!pass){err.textContent='Введите email и пароль';err.style.display='block';return;}
-  btn.disabled=true; btn.textContent='Входим...';
-  try{
-    const {data,error} = await withTimeout(
-      db.auth.signInWithPassword({email,password:pass}), 20000, 'вход в систему'
-    );
-    if (error){
+  // На Android Enter + tap (или двойной tap WebView) раньше могли запустить два
+  // signInWithPassword одновременно. Это создаёт две сессии и оставляет старый
+  // refresh-поток конкурировать с новой сессией. Разрешаем только один login-flight.
+  if(crmLoginFlightV236258)return crmLoginFlightV236258;
+  crmLoginFlightV236258=(async()=>{
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const pass = document.getElementById('login-pass').value;
+    const err = document.getElementById('login-error');
+    const btn = document.getElementById('login-btn');
+    err.style.display='none';
+    if (!email||!pass){err.textContent='Введите email и пароль';err.style.display='block';return;}
+    btn.disabled=true; btn.textContent='Входим...';
+
+    // Останавливаем старый refresh-таймер WebView и локально очищаем только эту
+    // вкладку/приложение. Глобальный signOut здесь запрещён: он отзывает сессии
+    // пользователя на других устройствах.
+    try{db.auth.stopAutoRefresh();}catch(_){}
+    crmExplicitSignOutV236258=true;
+    try{await db.auth.signOut({scope:'local'});}catch(_){}
+    crmExplicitSignOutV236258=false;
+
+    try{
+      const {data,error} = await withTimeout(
+        db.auth.signInWithPassword({email,password:pass}), 20000, 'вход в систему'
+      );
+      if (error){
+        err.textContent='Неверный email или пароль';err.style.display='block';return;
+      }
+      currentUser = data.user;
+      crmFreshSessionV236258=data.session||null;
+      crmFreshSessionUntilV236258=Date.now()+12000;
+      try{db.auth.startAutoRefresh();}catch(_){}
+      await loadProfileAndStart();
+      // После стабильного старта свежий refresh-token больше в guard не нужен.
+      setTimeout(()=>{
+        if(Date.now()>=crmFreshSessionUntilV236258)crmFreshSessionV236258=null;
+      },13000);
+    }catch(e){
+      console.error('doLogin failed',e);
+      err.textContent='Сервер не отвечает. Проверьте интернет и попробуйте снова.';
+      err.style.display='block';
+    }finally{
+      try{db.auth.startAutoRefresh();}catch(_){}
       btn.disabled=false; btn.textContent='Войти';
-      err.textContent='Неверный email или пароль';err.style.display='block';return;
     }
-    currentUser = data.user;
-    btn.disabled=false; btn.textContent='Войти';
-    await loadProfileAndStart();
-  }catch(e){
-    // Сервер не ответил вовремя — не оставляем кнопку висеть, показываем ошибку.
-    console.error('doLogin failed',e);
-    btn.disabled=false; btn.textContent='Войти';
-    err.textContent='Сервер не отвечает. Проверьте интернет и попробуйте снова.';
-    err.style.display='block';
-  }
+  })().finally(()=>{crmLoginFlightV236258=null;});
+  return crmLoginFlightV236258;
 }
 
 let resetBusyUntil=0;
@@ -1993,10 +2057,8 @@ async function doReset() {
 }
 
 async function doLogout() {
-  await db.auth.signOut();
-  currentUser=null; currentProfile=null;
-  document.getElementById('login-wrap').style.display='flex';
-  document.getElementById('app').style.display='none';
+  await crmLocalSignOutV236258();
+  crmShowSignedOutUiV236258();
 }
 
 async function loadProfileAndStart() {
@@ -2013,7 +2075,7 @@ async function loadProfileAndStart() {
     if(error) throw error;
     if(!profile){
       // SECURITY: подтверждённое отсутствие активного CRM-профиля — реальный logout.
-      await db.auth.signOut().catch(()=>{});
+      await crmLocalSignOutV236258().catch(()=>{});
       currentUser=null;currentProfile=null;
       document.getElementById('login-wrap').style.display='flex';
       document.getElementById('app').style.display='none';
@@ -2168,7 +2230,7 @@ async function hardReset(){
   if(!confirm('Сбросить кеш и перезайти? Придётся войти в систему заново.'))return;
   try{
     // Выходим из сессии, чтобы не остаться с битым токеном.
-    await db.auth.signOut();
+    await crmLocalSignOutV236258();
   }catch(e){}
   try{ localStorage.clear(); }catch(e){}
   try{ sessionStorage.clear(); }catch(e){}
@@ -10107,9 +10169,21 @@ db.auth.onAuthStateChange(async(event,session)=>{
     return;
   }
   if(event==='SIGNED_OUT'){
-    currentUser=null; currentProfile=null;
-    document.getElementById('login-wrap').style.display='flex';
-    document.getElementById('app').style.display='none';
+    // Android WebView может прислать поздний SIGNED_OUT от старого refresh-потока
+    // уже после успешного нового входа. Серверная свежая сессия при этом жива.
+    if(!crmExplicitSignOutV236258&&Date.now()<=crmFreshSessionUntilV236258&&crmFreshSessionV236258){
+      setTimeout(async()=>{
+        const session=await crmRecoverFreshSessionV236258();
+        if(session?.user){
+          currentUser=session.user;
+          if(!currentProfile)await loadProfileAndStart();
+          return;
+        }
+        crmShowSignedOutUiV236258();
+      },180);
+      return;
+    }
+    crmShowSignedOutUiV236258();
   }
 });
 
