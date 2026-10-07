@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-10-07-resanta-crm-v23.6.257-mobile-auth-stability';
+const APP_VERSION = '2026-10-07-resanta-crm-v23.6.258-login-session-recovery';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -41,11 +41,11 @@ const APP_VERSION = '2026-10-07-resanta-crm-v23.6.257-mobile-auth-stability';
 })();
 </script>
 <title>Ресанта CRM</title>
-<link rel="preload" href="./assets/01-crm-core.js?v=23.6.257" as="script">
+<link rel="preload" href="./assets/01-crm-core.js?v=23.6.258" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=23.6.210" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="./assets/01-crm-core.js?v=23.6.206"></script>
-<script defer src="./assets/02-mobile-gps-base.js?v=23.6.257"></script>
+<script defer src="./assets/01-crm-core.js?v=23.6.258"></script>
+<script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
 <script defer src="./assets/03-triovist-routes.js?v=23.6.210"></script>
 <script defer src="./assets/111-triovist-db-queue-v236251.js?v=23.6.257"></script>
 <script defer src="./assets/79-falling-task-period-v236106.js?v=23.6.106"></script>
