@@ -8,13 +8,13 @@
 <script id="resanta_tsd_unified_redirect_v243">
 (function(){
  const p=new URLSearchParams(location.search);
- if(window.top===window.self&&!p.has('standalone')&&!p.has('legacy-module'))location.replace('/tsd.html?v=243');
+ if(window.top===window.self&&!p.has('standalone')&&!p.has('legacy-module'))location.replace('/tsd.html?v=250');
 })();
 </script>
 <script id="resanta_picking_iframe_recovery_v243">
 (function(){
  if(window.top===window.self)return;
- const go=()=>{try{window.top.location.replace('/picking.html?standalone=1&v=243&from=legacy-iframe&ts='+Date.now())}catch(_){}};
+ const go=()=>{try{window.top.location.replace('/picking.html?standalone=1&v=250&from=legacy-iframe&ts='+Date.now())}catch(_){}};
  window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data&&e.data.type==='resanta-tsd-module-open')go()});
  setTimeout(()=>{try{const f=window.frameElement,w=f&&f.closest&&f.closest('#work');if(w&&!w.classList.contains('hidden'))go()}catch(_){}},500);
 })();
@@ -83,7 +83,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-07-v23.6.243-stable-url-dual-network';
+const PICKING_APP_VERSION='2026-10-07-v23.6.250-pwa-unified';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const TSD_GATEWAYS=[
  'https://baqchjtvtmcfzwjjluhs.functions.supabase.co/warehouse-tsd-gateway-v1',
@@ -99,7 +99,7 @@ const $=id=>document.getElementById(id);
 const STANDALONE=new URLSearchParams(location.search).has('standalone');
 setTimeout(()=>{
  const b=$('standalone-menu-btn');
- if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=244&from=picking')}
+ if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=250&from=picking')}
 },0);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v||0);
@@ -485,7 +485,17 @@ window.addEventListener('message',e=>{
 });
 window.addEventListener('online',()=>{if(session&&scanQueue.length)processScanQueue();else if(session&&!busy&&!scanWorker&&moduleVisible())refreshVisible()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy&&!scanWorker)refreshVisible()});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.240',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+
+if('serviceWorker'in navigator){
+ navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
+  rs.filter(r=>String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'').includes('/picking-sw.js'))
+    .map(r=>r.unregister().catch(()=>false))
+ )).catch(()=>{});
+}
+if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(
+ keys.filter(k=>k.startsWith('resanta-picking-')).map(k=>caches.delete(k))
+)).catch(()=>{});
+
 boot();
 
 if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
