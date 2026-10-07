@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.250 · TRIOVIST MONTH PLAN — GROUP SERVER LOGIC
- * Intercepts the monthly plan action and builds one task per product group.
+/* RESANTA CRM v23.6.252 · TRIOVIST MONTH PLAN — SUBGROUP SERVER LOGIC
+ * Intercepts the monthly plan action and builds one task per product subgroup.
  * The browser no longer builds/ranks business candidates locally.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_PLAN_SERVER_V236231)return;
-const V='v23.6.250';
+const V='v23.6.252';
 const MANAGER_MAP={
  'александренко':'aleksandrenko_av@resanta.ru',
  'кришталь':'krishtal_na@resanta.ru'
@@ -16,7 +16,7 @@ const txt=v=>String(v||'').trim();
 const norm=v=>txt(v).toLowerCase();
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 async function rpc(name,args){const d=dbx();if(!d?.rpc)throw new Error('Соединение с базой ещё не готово');const r=await d.rpc(name,args);if(r.error)throw r.error;return r.data}
-function isButton(b){return !!b&&/сформировать\s+план\s+по\s+(?:подгруппам|группам)/i.test(txt(b.textContent))}
+function isButton(b){return !!b&&/сформировать\\s+план\\s+по\\s+(?:подгруппам|группам)/i.test(txt(b.textContent))}
 function panelOf(b){
  let p=b.closest('.card,section,article,[class*="card"],[class*="panel"]');
  if(!p)p=b.parentElement?.parentElement||b.parentElement;
@@ -68,7 +68,7 @@ async function generate(btn){
  if(busy)return;
  const panel=panelOf(btn),manager=managerFrom(panel),target=countFrom(panel);
  busy=true;btn.disabled=true;
- paint(panel,'⏳ Сервер пересчитывает группы: аналогичный месяц 2025 + 2024 + Чехов ≥200 + 21vek + листинг + сезонность…');
+ paint(panel,'⏳ Сервер пересчитывает подгруппы: октябрь 2025 + сентябрь 2026 + текущий факт + 21vek (колонка 10 «Свободно») + Витебск + листинг…');
  try{
   const pack=await rpc('triovist_tasks_month_candidates_v236210',{p_manager_email:manager,p_target_count:target});
   const rows=Array.isArray(pack?.candidates)?pack.candidates:[];
@@ -78,9 +78,9 @@ async function generate(btn){
     p_manager_email:manager,p_target_count:target,p_month_end:lastDay(),p_rows:rows,p_meta:meta
   });
   paint(panel,
-   '<b>✅ План групп пересобран сервером '+V+'.</b> '+
+   '<b>✅ План подгрупп пересобран сервером '+V+'.</b> '+
    'Кандидатов: <b>'+Number(pack?.candidate_count||rows.length)+'</b> · создано: <b>'+Number(res?.created||0)+'</b> · '+
-   'сохранено согласованных групп: <b>'+Number(res?.locked_group_tasks||0)+'</b>.'+
+   'сохранено ранее взятых в работу подгрупп: <b>'+Number(res?.locked_subgroup_tasks||0)+'</b>.'+
    '<br>Цель группы = максимум продаж аналогичного месяца прошлого года и 2024 года. Чехов ≥200 шт. — обязательный допуск группы. 21vek — ограничение по выполнимости SKU. Листинг и сезонность влияют на приоритет. Закрытие — по общей сумме продаж группы.',
    'ok'
   );
@@ -91,7 +91,7 @@ async function generate(btn){
 }
 function renamePlanButtons(){
  document.querySelectorAll('#page-triovist button').forEach(b=>{
-  if(isButton(b)&&txt(b.textContent)!=='Сформировать план по группам')b.textContent='Сформировать план по группам';
+  if(isButton(b)&&txt(b.textContent)!=='Сформировать план по подгруппам')b.textContent='Сформировать план по подгруппам';
  });
 }
 [0,250,1000].forEach(ms=>setTimeout(renamePlanButtons,ms));
