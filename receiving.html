@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const RECEIVING_APP_VERSION='2026-10-07-v23.6.239-fast-scan';
+const RECEIVING_APP_VERSION='2026-10-07-v23.6.243-dual-network';
 (function(){
  try{
   const k='resanta_receiving_app_version',old=localStorage.getItem(k);
@@ -108,6 +108,10 @@ label{display:block;font-size:12px;color:#6B7280;font-weight:700;margin:9px 0 5p
 (()=>{
 'use strict';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
+const TSD_GATEWAYS=[
+ 'https://baqchjtvtmcfzwjjluhs.functions.supabase.co/warehouse-tsd-gateway-v1',
+ SUPABASE_URL+'/functions/v1/warehouse-tsd-gateway-v1'
+];
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_receiving_session_v1';
 const INVENTORY_SESSION_KEY='resanta_inventory_session_v1';
@@ -184,21 +188,59 @@ function beep(kind='ok'){
  }
 }
 function unlockAudio(){ensureAudio()}
+async function gatewayCall(payload,timeoutMs=5500){
+ let last=null;
+ for(const url of TSD_GATEWAYS){
+  const ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeoutMs):null;
+  try{
+   const r=await fetch(url,{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},body:JSON.stringify(payload),cache:'no-store',mode:'cors',credentials:'omit',...(ctrl?{signal:ctrl.signal}:{})});
+   const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
+   if(!r.ok){const e=new Error(j?.message||j?.error||String(j||('HTTP '+r.status)));e.httpStatus=r.status;throw e}
+   return j
+  }catch(e){last=e}
+  finally{if(timer)clearTimeout(timer)}
+ }
+ const e=last||new Error('Резервный сервер ТСД недоступен');e.network=true;throw e
+}
 async function authToken(email,password){
- const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({email,password})});
- const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j?.msg||j?.error_description||'Неверный логин или пароль');return j
+ try{
+  const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({email,password})});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j?.msg||j?.error_description||'Неверный логин или пароль');return j
+ }catch(e){
+  if(e?.message&&/Неверный логин|invalid|credentials/i.test(String(e.message)))throw e;
+  return await gatewayCall({op:'auth_password',email,password},6000)
+ }
 }
 async function refreshAuth(){
  if(!session?.refresh_token)throw new Error('Сессия истекла');
- const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
- const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error('Нужно войти заново');saveSession(j);return j
+ let j=null;
+ try{
+  const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
+  j=await r.json().catch(()=>({}));if(!r.ok)throw new Error('Нужно войти заново')
+ }catch(e){
+  j=await gatewayCall({op:'auth_refresh',refresh_token:session.refresh_token},6000)
+ }
+ saveSession(j);return j
 }
 async function rpc(name,args={},retry=true){
  if(!session?.access_token)throw new Error('AUTH_REQUIRED');
- let r;try{r=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+session.access_token,'content-type':'application/json','cache-control':'no-store'},body:JSON.stringify(args)})}catch(e){e.network=true;throw e}
- if(r.status===401&&retry){await refreshAuth();return rpc(name,args,false)}
- const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
- if(!r.ok)throw new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));return j
+ let directErr=null;
+ try{
+  const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+encodeURIComponent(name),{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+session.access_token,'content-type':'application/json','cache-control':'no-store'},body:JSON.stringify(args),cache:'no-store'});
+  if(r.status===401&&retry){await refreshAuth();return rpc(name,args,false)}
+  const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
+  if(r.ok)return j;
+  const e=new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));e.httpStatus=r.status;
+  if(r.status<500&&r.status!==429)throw e;
+  directErr=e
+ }catch(e){directErr=e}
+ try{
+  return await gatewayCall({op:'rpc',name,args,access_token:session.access_token},6000)
+ }catch(gw){
+  if(gw?.httpStatus===401&&retry){await refreshAuth();return rpc(name,args,false)}
+  const e=gw||directErr||new Error('Нет связи');e.network=true;throw e
+ }
 }
 async function login(){
  $('login-btn').disabled=true;show('login-error',false);
