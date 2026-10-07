@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
 <title>Resanta Склад · ТСД</title>
-<link rel="manifest" href="/tsd-manifest.webmanifest">
+<link rel="manifest" href="/tsd-manifest.webmanifest?v=242">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827}
@@ -34,7 +34,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
   <div class="actions">
    <button class="action" data-url="/receiving.html?v=239" data-name="Приёмка товара"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></button>
    <button class="action" data-url="/inventory.html?v=239" data-name="Инвентаризация"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></button>
-   <button class="action" data-url="/picking-live-v241.html?v=241" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
+   <button class="action" data-url="/picking-live-v241.html?v=242" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
   </div>
   <button id="install" class="install hidden">⬇ Установить «Resanta Склад»</button>
   <div class="note">Один ярлык на терминале. Приёмка, инвентаризация и заказы остаются отдельными защищёнными модулями внутри него.</div>
@@ -46,15 +46,15 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-07-v23.6.241-standalone-picking';
+const HUB_VERSION='2026-10-07-v23.6.242-unified-installed-entry';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
-const PICKING_FAST_URL='/picking-live-v241.html?v=241';
+const PICKING_FAST_URL='/picking-live-v241.html?v=242';
 function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKING_FAST_URL:url}
 let moduleAttempt=0,moduleWatchdog=null,moduleReady=false;
 function freshUrl(target,attempt=1){
  const u=new URL(target,location.origin);
- u.searchParams.set('hub','240');
+ u.searchParams.set('hub','242');
  u.searchParams.set('attempt',String(attempt));
  u.searchParams.set('open',String(Date.now()));
  return u.pathname+u.search
@@ -130,7 +130,7 @@ $('reload').onclick=()=>{
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});
 $('install').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')};
 window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').classList.add('hidden')});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/tsd-sw.js?v=23.6.241',{scope:'/tsd.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/tsd-sw.js?v=23.6.242',{scope:'/tsd.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 </script>
 </body>
 </html>
