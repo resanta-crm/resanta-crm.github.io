@@ -3,7 +3,7 @@
   "short_name": "Склад",
   "id": "/inventory.html",
   "description": "Единый ТСД-центр Resanta CRM: приёмка, инвентаризация и заказы",
-  "start_url": "/tsd.html?v=243&entry=installed",
+  "start_url": "/tsd.html?v=247&entry=installed",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f4f6f8",
