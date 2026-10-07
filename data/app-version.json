@@ -1,6 +1,6 @@
 {
-  "version": "23.6.256",
+  "version": "23.6.257",
   "released_at": "2026-10-07",
-  "purpose": "Triovist AI: approve action no longer depends on repeated browser confirm dialogs; approval button shows progress and sends immediately.",
-  "deploy_trigger": "2026-10-07T15:46:00+03:00"
+  "purpose": "Android auth stability: WebView is the only Supabase refresh-token owner; native GPS keeps points in SQLite and receives access tokens only; transient profile errors no longer force logout.",
+  "deploy_trigger": "2026-10-07T16:58:00+03:00"
 }
