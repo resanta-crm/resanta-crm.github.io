@@ -1,10 +1,10 @@
 {
   "name": "Resanta Склад",
   "short_name": "Склад",
-  "id": "/tsd.html",
+  "id": "/inventory.html",
   "description": "Единый ТСД-центр Resanta CRM: приёмка, инвентаризация и заказы",
-  "start_url": "/tsd.html",
-  "scope": "/tsd.html",
+  "start_url": "/tsd.html?v=242&entry=installed",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f4f6f8",
   "theme_color": "#185FA5",
