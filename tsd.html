@@ -130,7 +130,19 @@ $('reload').onclick=()=>{
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});
 $('install').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')};
 window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').classList.add('hidden')});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/tsd-sw.js?v=23.6.242',{scope:'/tsd.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+// Online warehouse shell: do not let a stale hub service worker hold a TSD
+// on the Android/PWA splash screen. Modules manage their own runtime.
+if('serviceWorker'in navigator){
+ navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
+  rs.filter(r=>{
+   const u=String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'');
+   return u.includes('/tsd/sw.js')||u.includes('/tsd-sw.js')
+  }).map(r=>r.unregister().catch(()=>false))
+ )).catch(()=>{});
+}
+if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(
+ keys.filter(k=>k.startsWith('resanta-tsd-hub-')).map(k=>caches.delete(k))
+)).catch(()=>{});
 </script>
 </body>
 </html>
