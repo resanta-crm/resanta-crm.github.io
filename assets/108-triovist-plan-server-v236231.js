@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.231 · TRIOVIST MONTH PLAN — SERVER SOURCE ONLY
- * Intercepts the visible "Сформировать план по подгруппам" action.
+/* RESANTA CRM v23.6.247 · TRIOVIST MONTH PLAN — GROUP SERVER LOGIC
+ * Intercepts the monthly plan action and builds one task per product group.
  * The browser no longer builds/ranks business candidates locally.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_PLAN_SERVER_V236231)return;
-const V='v23.6.231';
+const V='v23.6.247';
 const MANAGER_MAP={
  'александренко':'aleksandrenko_av@resanta.ru',
  'кришталь':'krishtal_na@resanta.ru'
@@ -16,7 +16,7 @@ const txt=v=>String(v||'').trim();
 const norm=v=>txt(v).toLowerCase();
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 async function rpc(name,args){const d=dbx();if(!d?.rpc)throw new Error('Соединение с базой ещё не готово');const r=await d.rpc(name,args);if(r.error)throw r.error;return r.data}
-function isButton(b){return !!b&&/сформировать\s+план\s+по\s+подгруппам/i.test(txt(b.textContent))}
+function isButton(b){return !!b&&/сформировать\s+план\s+по\s+(?:подгруппам|группам)/i.test(txt(b.textContent))}
 function panelOf(b){
  let p=b.closest('.card,section,article,[class*="card"],[class*="panel"]');
  if(!p)p=b.parentElement?.parentElement||b.parentElement;
@@ -68,22 +68,20 @@ async function generate(btn){
  if(busy)return;
  const panel=panelOf(btn),manager=managerFrom(panel),target=countFrom(panel);
  busy=true;btn.disabled=true;
- paint(panel,'⏳ Сервер пересчитывает план: продажи + план менеджера + остатки 21vek + темп продаж + листинг…');
+ paint(panel,'⏳ Сервер пересчитывает группы: аналогичный месяц 2025 + 2024 + Чехов ≥200 + 21vek + листинг + сезонность…');
  try{
   const pack=await rpc('triovist_tasks_month_candidates_v236210',{p_manager_email:manager,p_target_count:target});
   const rows=Array.isArray(pack?.candidates)?pack.candidates:[];
-  if(!rows.length)throw new Error('Сервер не вернул подходящих подгрупп');
+  if(!rows.length)throw new Error('Сервер не вернул подходящих групп по новой логике');
   const meta={...pack};delete meta.candidates;
   const res=await rpc('triovist_tasks_generate_subgroup_v227319',{
     p_manager_email:manager,p_target_count:target,p_month_end:lastDay(),p_rows:rows,p_meta:meta
   });
-  const plan=Number(pack?.manager_plan_amount||0),fact=Number(pack?.manager_current_revenue||0),gap=Number(pack?.manager_plan_gap||0);
   paint(panel,
-   '<b>✅ План пересобран сервером '+V+'.</b> '+
+   '<b>✅ План групп пересобран сервером '+V+'.</b> '+
    'Кандидатов: <b>'+Number(pack?.candidate_count||rows.length)+'</b> · создано: <b>'+Number(res?.created||0)+'</b> · '+
-   'сохранено согласованных: <b>'+Number(res?.locked_subgroup_tasks||0)+'</b>.'+
-   (plan>0?' План менеджера: <b>'+plan.toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN</b> · факт: <b>'+fact.toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN</b> · осталось: <b>'+gap.toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN</b>.':'')+
-   '<br>Старый клиентский расчёт отключён. Остаток 21vek используется как ограничение, а не как цель продаж. Формулировки берутся из серверной задачи — внешняя ИИ-сессия для сохранения плана не нужна.',
+   'сохранено согласованных групп: <b>'+Number(res?.locked_group_tasks||0)+'</b>.'+
+   '<br>Цель группы = максимум продаж аналогичного месяца прошлого года и 2024 года. Чехов ≥200 шт. — обязательный допуск группы. 21vek — ограничение по выполнимости SKU. Листинг и сезонность влияют на приоритет. Закрытие — по общей сумме продаж группы.',
    'ok'
   );
   await refreshTasks();
@@ -91,11 +89,18 @@ async function generate(btn){
   paint(panel,'<b>Не удалось сформировать новый план.</b><br>'+esc(e?.message||e),'err');
  }finally{busy=false;btn.disabled=false}
 }
+function renamePlanButtons(){
+ document.querySelectorAll('#page-triovist button').forEach(b=>{
+  if(isButton(b))b.textContent='Сформировать план по группам';
+ });
+}
+setTimeout(renamePlanButtons,0);
+new MutationObserver(renamePlanButtons).observe(document.getElementById('page-triovist')||document.body,{childList:true,subtree:true});
 document.addEventListener('click',e=>{
  const b=e.target.closest?.('button');if(!isButton(b))return;
  if(!document.getElementById('page-triovist')?.contains(b))return;
  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
  generate(b);
 },true);
-window.RESANTA_TRIOVIST_PLAN_SERVER_V236231=Object.freeze({version:V,serverOnly:true,generate});
+window.RESANTA_TRIOVIST_PLAN_SERVER_V236231=Object.freeze({version:V,serverOnly:true,groupScope:true,generate});
 })();
