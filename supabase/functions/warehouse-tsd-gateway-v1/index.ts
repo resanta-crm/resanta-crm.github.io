@@ -1,8 +1,15 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const BASE=Deno.env.get('SUPABASE_URL')||'';
-const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
-const ANON=Deno.env.get('SUPABASE_ANON_KEY')||'';
+const jsonKey=(name:string)=>{
+ try{
+  const raw=Deno.env.get(name)||'';
+  const obj=raw?JSON.parse(raw):{};
+  return String(obj?.default||Object.values(obj||{})[0]||'')
+ }catch{return ''}
+};
+const SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||jsonKey('SUPABASE_SECRET_KEYS');
+const ANON=Deno.env.get('SUPABASE_ANON_KEY')||jsonKey('SUPABASE_PUBLISHABLE_KEYS');
 const ADMIN=createClient(BASE,SERVICE,{auth:{persistSession:false}});
 const cors={
   'Access-Control-Allow-Origin':'*',
