@@ -2,76 +2,18 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#185FA5">
-<meta http-equiv="Cache-Control" content="no-store">
-<title>Resanta Склад · ТСД</title>
-<link rel="manifest" href="/tsd/manifest.webmanifest">
-<link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
-<style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827}
-button{font:inherit}.hidden{display:none!important}
-#menu{min-height:100%;padding:18px 14px 28px;max-width:760px;margin:auto}
-.head{display:flex;align-items:center;gap:12px;margin-bottom:18px}.logo{width:56px;height:56px;border-radius:15px;background:#185FA5;color:white;display:grid;place-items:center;font-size:30px}.title{font-weight:900;font-size:24px}.sub{font-size:13px;color:#64748b;line-height:1.45}
-.card{background:#fff;border:1px solid #d1d5db;border-radius:18px;padding:16px;box-shadow:0 3px 10px rgba(0,0,0,.04)}
-.actions{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
-.action{border:2px solid #dbe3ec;background:#fff;border-radius:18px;padding:18px;text-align:left;min-height:112px;display:flex;align-items:center;gap:16px;cursor:pointer}
-.action:active{transform:scale(.99);background:#eff6ff}.ico{width:58px;height:58px;border-radius:16px;display:grid;place-items:center;font-size:31px;background:#eff6ff}.action b{display:block;font-size:20px;margin-bottom:5px}.action span{font-size:13px;color:#64748b;line-height:1.35}
-.install{width:100%;margin-top:14px;border:0;border-radius:12px;padding:14px;background:#185FA5;color:#fff;font-weight:900;font-size:16px}
-#work{position:fixed;inset:0;background:#f4f6f8;display:flex;flex-direction:column}
-.workbar{height:54px;flex:0 0 54px;background:#185FA5;color:#fff;display:flex;align-items:center;gap:8px;padding:7px 9px;box-shadow:0 2px 8px rgba(15,23,42,.18);z-index:5}
-.workbar button{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:9px;padding:8px 11px;font-weight:800}.workbar .name{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
-iframe{border:0;width:100%;height:calc(100dvh - 54px);background:#fff}
-.note{font-size:12px;color:#64748b;margin-top:12px;line-height:1.4}
-@media(min-width:620px){.actions{grid-template-columns:1fr 1fr}.action:last-child{grid-column:1/-1}}
-</style>
-</head>
-<body>
-<section id="menu">
- <div class="head"><div class="logo">🏭</div><div><div class="title">Resanta Склад</div><div class="sub">Единый рабочий экран ТСД</div></div></div>
- <div class="card">
-  <b style="font-size:18px">Что будем делать?</b>
-  <div class="actions">
-   <button class="action" data-url="/receiving.html" data-name="Приёмка товара"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></button>
-   <button class="action" data-url="/inventory.html" data-name="Инвентаризация"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></button>
-   <button class="action" data-url="/picking.html?v=223" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
-  </div>
-  <button id="install" class="install hidden">⬇ Установить «Resanta Склад»</button>
-  <div class="note">Один ярлык на терминале. Приёмка, инвентаризация и заказы остаются отдельными защищёнными модулями внутри него.</div>
- </div>
-</section>
-<section id="work" class="hidden">
- <div class="workbar"><button id="back">← Меню</button><div id="workname" class="name">Resanta Склад</div><button id="reload">↻</button></div>
- <iframe id="frame" allow="clipboard-read; clipboard-write"></iframe>
-</section>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<title>Resanta Склад</title>
 <script>
-'use strict';
-const HUB_VERSION='2026-10-06-v23.6.223';
-let installPrompt=null;
-const $=id=>document.getElementById(id);
-const PICKING_FAST_URL='/picking.html?v=222';
-function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKING_FAST_URL:url}
-function preloadOrders(){
- const f=$('frame');if(!f||!$('work').classList.contains('hidden'))return;
- if(f.dataset.moduleUrl!==PICKING_FAST_URL){f.dataset.moduleUrl=PICKING_FAST_URL;f.src=PICKING_FAST_URL}
-}
-function openModule(url,name){
- const target=moduleUrl(url),f=$('frame');$('workname').textContent=name||'Resanta Склад';
- if(f.dataset.moduleUrl!==target){f.dataset.moduleUrl=target;f.src=target}
- $('menu').classList.add('hidden');$('work').classList.remove('hidden');
- try{sessionStorage.setItem('resanta_tsd_last_module_v1',JSON.stringify({url:target,name}))}catch(_){}
- if(target.indexOf('/picking.html')===0){
-  setTimeout(()=>{try{f.contentWindow.postMessage({type:'resanta-tsd-module-open'},location.origin)}catch(_){}},40);
-  setTimeout(()=>{try{f.contentWindow.postMessage({type:'resanta-tsd-module-open'},location.origin)}catch(_){}},450);
- }
-}
-function menu(){ $('work').classList.add('hidden');$('menu').classList.remove('hidden');setTimeout(preloadOrders,80) }
-document.querySelectorAll('[data-url]').forEach(b=>b.onclick=()=>openModule(b.dataset.url,b.dataset.name));
-$('back').onclick=menu;$('reload').onclick=()=>{try{$('frame').contentWindow.location.reload()}catch(_){$('frame').src=$('frame').src}};setTimeout(preloadOrders,120);
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});
-$('install').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')};
-window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').classList.add('hidden')});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/tsd/sw.js?v=23.6.222',{scope:'/tsd/',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+(function(){
+  const target='/tsd.html?v=242&entry=installed-pwa&ts='+Date.now();
+  try{location.replace(target)}catch(_){location.href=target}
+})();
 </script>
+</head>
+<body style="margin:0;background:#f4f6f8;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh">
+<div style="text-align:center;color:#334155"><b>Resanta Склад</b><br><span style="font-size:12px">Запуск рабочего экрана…</span></div>
 </body>
 </html>
