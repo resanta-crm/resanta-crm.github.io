@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const RECEIVING_APP_VERSION='2026-10-07-v23.6.243-dual-network';
+const RECEIVING_APP_VERSION='2026-10-07-v23.6.244-dual-tsd-access';
 (function(){
  try{
   const k='resanta_receiving_app_version',old=localStorage.getItem(k);
@@ -15,7 +15,7 @@ const RECEIVING_APP_VERSION='2026-10-07-v23.6.243-dual-network';
    localStorage.setItem(k,RECEIVING_APP_VERSION);
    if(old!==null&&!sessionStorage.getItem('receiving_reload_'+RECEIVING_APP_VERSION)){
     sessionStorage.setItem('receiving_reload_'+RECEIVING_APP_VERSION,'1');
-    location.replace('/receiving.html?v=23.6.239');
+    location.replace('/receiving.html?v=244&ts='+Date.now());
    }
   }
  }catch(_){}
@@ -126,6 +126,7 @@ const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
 const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
 const num=v=>Number(v)||0;
 const qfmt=v=>num(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
+function errText(v){if(v==null)return'';if(typeof v==='string')return v;if(v instanceof Error)return errText(v.message);if(typeof v==='object'){return errText(v.message||v.msg||v.error_description||v.error||v.details||v.hint)||JSON.stringify(v)}return String(v)}
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function tsdLabel(email){email=String(email||'').toLowerCase();if(email==='vitebsk@resanta.ru')return'ТСД-1 · Начальник склада';if(email==='sidarovich_kn@resanta.ru')return'ТСД-2 · Кладовщик';return'CRM · Александр Паюшин'}
 function tokenEmail(s){try{const p=JSON.parse(atob(String(s?.access_token||'').split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return String(p?.email||'').toLowerCase()}catch(_){return''}}
@@ -196,7 +197,7 @@ async function gatewayCall(payload,timeoutMs=5500){
   try{
    const r=await fetch(url,{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},body:JSON.stringify(payload),cache:'no-store',mode:'cors',credentials:'omit',...(ctrl?{signal:ctrl.signal}:{})});
    const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
-   if(!r.ok){const e=new Error(j?.message||j?.error||String(j||('HTTP '+r.status)));e.httpStatus=r.status;throw e}
+   if(!r.ok){const e=new Error(errText(j)||('HTTP '+r.status));e.httpStatus=r.status;throw e}
    return j
   }catch(e){last=e}
   finally{if(timer)clearTimeout(timer)}
@@ -231,7 +232,7 @@ async function rpc(name,args={},retry=true){
   if(r.status===401&&retry){await refreshAuth();return rpc(name,args,false)}
   const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
   if(r.ok)return j;
-  const e=new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));e.httpStatus=r.status;
+  const e=new Error(errText(j)||('HTTP '+r.status));e.httpStatus=r.status;
   if(r.status<500&&r.status!==429)throw e;
   directErr=e
  }catch(e){directErr=e}
@@ -288,7 +289,8 @@ async function bootAuthed(){
   text('user-line',tsdLabel(access?.email)+' · '+(access?.name||access?.email||''));
   await reloadActive();await flushQueue()
  }catch(e){
-  const raw=String(e?.message||e);
+  const raw=errText(e);
+  if(/PGRST303|JWT|token.*expired|refresh.*token|LOGIN_REQUIRED|Сессия истекла/i.test(raw)){saveSession(null);active=null;access=null;show('app-view',false);show('login-view',true);text('login-error','Сессия ТСД истекла. Войдите один раз заново — доступ к приёмке открыт.');show('login-error',true);return}
   const msg=/ACCESS_DENIED/i.test(raw)
     ?'Эта учётная запись не имеет доступа к приёмке товара.'
     :(/Could not find the function|schema cache|PGRST202/i.test(raw)
