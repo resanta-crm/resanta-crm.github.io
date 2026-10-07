@@ -1,13 +1,13 @@
-/* RESANTA CRM v23.6.114 · УЦЕНКА
+/* RESANTA CRM v23.6.244 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
  */
 (function(){
 'use strict';
-if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.165')return;
-const V='v23.6.165';
-const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0};
+if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.244')return;
+const V='v23.6.244';
+const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0,photoReplace:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=v=>esc(v).replace(/"/g,'&quot;');
@@ -147,6 +147,11 @@ function ensureDom(){
  if(!$('markdown-camera-v23687')){
   const cam=document.createElement('input');cam.type='file';cam.accept='image/*';cam.capture='environment';cam.id='markdown-camera-v23687';cam.style.display='none';cam.onchange=e=>uploadFiles(e.target.files);document.body.appendChild(cam);
   const gal=document.createElement('input');gal.type='file';gal.accept='image/*';gal.multiple=true;gal.id='markdown-gallery-v23687';gal.style.display='none';gal.onchange=e=>uploadFiles(e.target.files);document.body.appendChild(gal);
+ }
+ if(!$('markdown-replace-v236244')){
+  const rep=document.createElement('input');rep.type='file';rep.accept='image/*';rep.id='markdown-replace-v236244';rep.style.display='none';
+  rep.onchange=e=>replacePhotoFile(e.target.files?.[0]||null);
+  document.body.appendChild(rep);
  }
 }
 function statusTabs(){
@@ -338,7 +343,13 @@ async function detailHtml(data){
      +(canReport?'<div class="md-actions"><button class="md-btn green" onclick="crmMarkdownReportSaleV23687(&quot;'+attr(a.id)+'&quot;,&quot;1&quot;)">🧾 Продать именно этот экземпляр</button></div>':'')
      +'</div>';
   }).join(''):'<div style="font-size:11px;color:var(--sub)">Этот экземпляр менеджеру ещё не назначен.</div>';
- const photosHtml=photoUrls.length?'<div class="md-photo-grid">'+photoUrls.map(p=>'<div class="md-photo">'+(p.signed_url?'<img src="'+attr(p.signed_url)+'" onclick="crmMarkdownZoomV23687(&quot;'+attr(p.signed_url)+'&quot;)">':'<div style="height:120px;display:flex;align-items:center;justify-content:center">📷</div>')+'<div class="md-photo-meta"><b>'+esc(i.instance_code||'')+' · '+esc(photoTypeLabel(p.photo_type))+'</b><br>'+esc(p.uploaded_by)+' · '+date(p.created_at)+(p.comment?'<br>'+esc(p.comment):'')+(data.is_payushin?'<br><button class="md-btn" style="padding:4px 6px;margin-top:4px" onclick="crmMarkdownDeletePhotoV23687(&quot;'+attr(p.id)+'&quot;,&quot;'+attr(p.storage_path)+'&quot;)">Удалить</button>':'')+'</div></div>').join('')+'</div>':'<div style="font-size:11px;color:#991B1B">У этого экземпляра фото ещё нет.</div>';
+ const photosHtml=photoUrls.length?'<div class="md-photo-grid">'+photoUrls.map(p=>{
+   const canManage=data.is_payushin||String(p.uploaded_by||'').toLowerCase()===String(data.current_name||'').toLowerCase();
+   const controls=canManage
+    ?'<br><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px"><button class="md-btn" style="padding:5px 7px" onclick="crmMarkdownReplacePhotoV236244(&quot;'+attr(p.id)+'&quot;,&quot;'+attr(p.storage_path)+'&quot;,&quot;'+attr(p.photo_type)+'&quot;)">↻ Заменить</button><button class="md-btn" style="padding:5px 7px;color:#991B1B;border-color:#FCA5A5" onclick="crmMarkdownDeletePhotoV23687(&quot;'+attr(p.id)+'&quot;,&quot;'+attr(p.storage_path)+'&quot;)">🗑 Удалить</button></div>'
+    :'';
+   return '<div class="md-photo">'+(p.signed_url?'<img src="'+attr(p.signed_url)+'" onclick="crmMarkdownZoomV23687(&quot;'+attr(p.signed_url)+'&quot;)">':'<div style="height:120px;display:flex;align-items:center;justify-content:center">📷</div>')+'<div class="md-photo-meta"><b>'+esc(i.instance_code||'')+' · '+esc(photoTypeLabel(p.photo_type))+'</b><br>'+esc(p.uploaded_by)+' · '+date(p.created_at)+(p.comment?'<br>'+esc(p.comment):'')+controls+'</div></div>';
+  }).join('')+'</div>':'<div style="font-size:11px;color:#991B1B">У этого экземпляра фото ещё нет.</div>';
  return '<div class="md-head"><div><div style="font-size:18px;font-weight:900">'+esc(i.nomenclature)+'</div><div style="font-size:12px;color:var(--sub)">Артикул <b>'+esc(i.article)+'</b> · Экземпляр <b>№'+esc(i.instance_no||1)+'</b> · ID <b>'+esc(i.instance_code||'')+'</b> · 1 шт.</div><div style="font-size:11px;color:var(--sub);margin-top:3px">По этому артикулу сейчас в 1С: '+qty(i.group_1c_count||0)+' шт. · свободно в CRM: '+qty(i.group_available_count||0)+' шт.</div></div><button class="md-x" onclick="crmMarkdownCloseV23687()">×</button></div>'
  +'<div class="md-sections"><div>'
  +'<div class="md-box"><h4>📦 Состояние именно этого экземпляра</h4><div style="font-size:12px;line-height:1.55"><b>🛡 Гарантия: '+(i.warranty_active?'сохраняется':'уточнить')+'</b>'+(i.warranty_months?' · '+i.warranty_months+' мес.':'')+(i.warranty_note?'<br>'+esc(i.warranty_note):'')+(i.source_comment?'<br><br><b>Комментарий 1С:</b> '+esc(i.source_comment):'')+'</div><label style="display:block;margin-top:9px">Дефект / фактическое состояние экземпляра '+esc(i.instance_code||'')+'<textarea id="md-condition-v23687" placeholder="Царапины, комплектность, ремонт, повреждение именно этой штуки...">'+esc(i.condition_comment||'')+'</textarea></label><div class="md-actions"><button class="md-btn primary" onclick="crmMarkdownSaveConditionV23687()">Сохранить дефект экземпляра</button></div></div>'
@@ -654,12 +665,70 @@ async function uploadFiles(list){
  if(ok){alert('✅ Экземпляр №'+unitNo+': загружено фото '+ok);await refreshDetail();await load(true)}
 }
 async function deletePhoto(id,path){
- if(!confirm('Удалить это фото?'))return;
+ if(!confirm('Удалить это фото? Если это обязательное фото товара в продаже, CRM потребует сначала заменить его.'))return;
  try{
   const out=await rpc('markdown_delete_photo_v1',{p_photo_id:id});
-  const p=out?.storage_path||path;if(p)await dbx().storage.from('markdown-photos').remove([p]);
+  const p=out?.storage_path||path;
+  if(p){
+   const {error}=await dbx().storage.from('markdown-photos').remove([p]);
+   if(error)console.warn(V,'storage photo remove',error);
+  }
   await refreshDetail();await load(true)
  }catch(e){alert('Не удалось удалить фото: '+(e?.message||e))}
+}
+function replacePhoto(id,path,type){
+ const old=(S.detail?.photos||[]).find(p=>String(p.id)===String(id))||{};
+ S.photoReplace={
+  id:String(id||''),
+  path:String(path||old.storage_path||''),
+  type:String(type||old.photo_type||'other'),
+  comment:String(old.comment||''),
+  unitNo:Number(old.unit_no||1)
+ };
+ const x=$('markdown-replace-v236244');
+ if(x){x.value='';x.click()}
+}
+async function replacePhotoFile(file){
+ const target=S.photoReplace;
+ if(!target||!S.current||!file)return;
+ const d=dbx();if(!d)return;
+ let newPath='',added=null;
+ try{
+  const body=await compress(file);
+  const ext=(body===file?(file.name.split('.').pop()||'jpg'):'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+  newPath=S.current+'/unit-'+target.unitNo+'/'+Date.now()+'_'+Math.random().toString(36).slice(2)+'.'+ext;
+  const {error:upErr}=await d.storage.from('markdown-photos').upload(newPath,body,{upsert:false,contentType:body.type||file.type||'image/jpeg'});
+  if(upErr)throw upErr;
+
+  added=await rpc('markdown_add_photo_v2',{
+   p_item_id:S.current,
+   p_storage_path:newPath,
+   p_photo_type:target.type,
+   p_comment:target.comment||null,
+   p_unit_no:target.unitNo
+  });
+
+  const out=await rpc('markdown_delete_photo_v1',{p_photo_id:target.id});
+  const oldPath=out?.storage_path||target.path;
+  if(oldPath){
+   const {error:rmErr}=await d.storage.from('markdown-photos').remove([oldPath]);
+   if(rmErr)console.warn(V,'old replacement photo remove',rmErr);
+  }
+
+  alert('✅ Фото заменено');
+  await refreshDetail();await load(true);
+ }catch(e){
+  if(added?.id){
+   try{await rpc('markdown_delete_photo_v1',{p_photo_id:added.id})}catch(_){}
+  }
+  if(newPath){
+   try{await d.storage.from('markdown-photos').remove([newPath])}catch(_){}
+  }
+  alert('Не удалось заменить фото: '+(e?.message||e));
+ }finally{
+  S.photoReplace=null;
+  const x=$('markdown-replace-v236244');if(x)x.value='';
+ }
 }
 function zoom(url){const z=$('markdown-image-v23687');if(!z)return;z.querySelector('img').src=url;z.classList.add('open')}
 function boot(){ensureDom();if(active())load(false)}
@@ -678,10 +747,11 @@ window.crmMarkdownPhotoUnitV236158=photoUnit;
 window.crmMarkdownCameraV23687=camera;
 window.crmMarkdownGalleryV23687=gallery;
 window.crmMarkdownDeletePhotoV23687=deletePhoto;
+window.crmMarkdownReplacePhotoV236244=replacePhoto;
 window.crmMarkdownZoomV23687=zoom;
 window.RESANTA_MARKDOWN_V23687=Object.freeze({
  version:V,priceBasis:'Мелкий опт 2 с НДС',workflow:'photos-per-unit->ready_for_pricing->priced->sale_claim->1c_confirmed',requiredPhotoTypes:['overall','defect','label'],photosPerPhysicalUnit:false,oneCardPerPhysicalUnit:true,instanceCode:true,excelExportForAll:true,excelEmbeddedPhotos:true,nativeSignedDownload:true,freshPricedOnlyExport:true,parallelPhotoExport:true,oldExportCleanup:true,asciiStorageKey:true,pageScoped:true,visibleToAllUsers:true,payushinPricingOnly:true,salesVerifiedBy1C:true,salesControlPayushinOnly:true,
- mobilePhotoCapture:true,taskIntegration:true,motivationFields:true,
+ mobilePhotoCapture:true,photoDeleteByAuthor:true,photoReplace:true,taskIntegration:true,motivationFields:true,
  noPolling:true,noMutationObserver:true,noGlobalPrefetch:true,cacheMs:60000
 });
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
