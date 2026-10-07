@@ -37,9 +37,9 @@ TIMEOUT=max(10,int(os.environ.get('TOP_HTTP_TIMEOUT','30')))
 DEEP_EXACT=os.environ.get('TOP_DEEP_EXACT','0').strip().lower() not in ('0','false','no')
 DEEP_RADIUS=max(0,min(4,int(os.environ.get('TOP_DEEP_RADIUS','2'))))
 MAX_DEEP_PAGES=max(0,min(20,int(os.environ.get('TOP_MAX_DEEP_PAGES_PER_KEYWORD','10'))))
-PARSER_VERSION='top-shadow-v0.6'
+PARSER_VERSION='top-shadow-v0.7'
 ENDPOINT='https://gate.21vek.by/search-composer/api/v3/products'
-UA='ResantaCRM-21vekTopShadow/0.6 (+https://resanta-crm.by)'
+UA='ResantaCRM-21vekTopShadow/0.7 (+https://resanta-crm.by)'
 
 
 def api_headers(json_body: bool=False, prefer: str|None=None) -> dict[str,str]:
@@ -150,6 +150,42 @@ def derive_keyword(row: dict) -> str:
     phrase=" ".join(clean.split()[:6]).strip()
     return phrase or "товар"
 
+def canonical_keyword(row: dict, source_keyword: str) -> tuple[str,str]:
+    """Normalize known commercial search families before measuring TOP.
+
+    Source keywords from older imports may be misspelled or overly broad.
+    For infrared heaters we use one stable family query so month-to-month
+    positions are comparable and AI tasks are based on the intended market.
+    """
+    name=norm_text(row.get("product_name"))
+    source=re.sub(r"\s+"," ",str(source_keyword or "")).strip(" ,.;:-")
+    sku=str(row.get("sku") or "").strip()
+
+    is_gas_heater=bool(re.search(r"газов\w*.*обогревател|обогревател.*газов\w*",name,re.I))
+    is_infra_heater=bool(
+        re.search(r"инфра[к|о]расн\w*.*обогревател|обогревател.*инфра[к|о]расн\w*",name,re.I)
+        or re.search(r"\bико[-\s]?\d",name,re.I)
+    )
+
+    if is_gas_heater:
+        return "газовый обогреватель","canonical_gas_heater"
+    if is_infra_heater:
+        return "инфракрасный обогреватель","canonical_infrared_heater"
+
+    # Correct a known legacy typo even if the product name is abbreviated.
+    if norm_text(source)=="инфрокрасный обогреватель":
+        return "инфракрасный обогреватель","canonical_typo_fix"
+
+    # A one-word query is too broad for this family. Keep source only when
+    # the product name does not allow a safe family classification.
+    if norm_text(source) in ("обогреватель","обогреватели") and sku.startswith("67/5/"):
+        if "газов" in name:
+            return "газовый обогреватель","canonical_gas_heater"
+        if "ико" in name or "инфра" in name:
+            return "инфракрасный обогреватель","canonical_infrared_heater"
+
+    return source,"source"
+
 def current_targets() -> list[dict]:
     rows=rest_get_all(
         'triovist_21vek_registry_v236214',
@@ -163,9 +199,12 @@ def current_targets() -> list[dict]:
     for x in rows:
         source_kw=re.sub(r"\s+"," ",str(x.get('keyword') or '')).strip(" ,.;:-")
         derived=derive_keyword(x)
-        x['keyword']=source_kw or derived
+        base_kw=source_kw or derived
+        canonical_kw,canonical_source=canonical_keyword(x,base_kw)
+        x['keyword']=canonical_kw or base_kw
         x['_keyword_generated']=not bool(source_kw)
-        x['_keyword_source']='source' if source_kw else 'generated'
+        x['_keyword_source']=canonical_source if canonical_source!='source' else ('source' if source_kw else 'generated')
+        x['_keyword_original']=source_kw or None
         x['_baseline_snapshot_date']=x.get('registry_snapshot_date')
         out.append(x)
     return out
@@ -379,12 +418,13 @@ def main() -> None:
     groups=grouped_targets(valid)
     selected=[x for _,xs in groups for x in xs]
     generated=sum(1 for x in all_targets if x.get('_keyword_generated'))
+    canonicalized=sum(1 for x in all_targets if str(x.get('_keyword_source') or '').startswith('canonical_'))
     if any(not str(x.get('keyword') or '').strip() for x in all_targets):
         raise RuntimeError('TOP coverage contract violated: at least one card has no search phrase')
     run_id=insert_run(len(groups),len(all_targets))
     print(
         f'TOP shadow {run_id}: keywords={len(groups)} targets={len(all_targets)} '
-        f'generated_keywords={generated} workers={WORKERS} start_interval={DELAY:.2f}s',flush=True
+        f'generated_keywords={generated} canonicalized_keywords={canonicalized} workers={WORKERS} start_interval={DELAY:.2f}s',flush=True
     )
 
     requests_count=0
@@ -452,13 +492,14 @@ def main() -> None:
           'top60_count':top60,'error_count':errors+row_errors,'finished_at':datetime.now(timezone.utc).isoformat(),
           'notes':{'mode':'shadow','endpoint':'search-composer/api/v3/products','page_size':60,'production_cutover':False,
                    'expected_rows':len(all_targets),'stored_rows':len(stats),'generated_keywords':generated,
+                   'canonicalized_keywords':canonicalized,
                    'outside_top60':outside60,'deep_exact':DEEP_EXACT,
                    'workers':WORKERS,'request_start_interval_seconds':DELAY}
         })
         print(
             f'DONE {status}: requests={requests_count} rows={len(stats)}/{len(all_targets)} '
             f'exact={found_exact} top30={top30} top60={top60} outside60={outside60} '
-            f'generated_keywords={generated} errors={errors+row_errors}',flush=True
+            f'generated_keywords={generated} canonicalized_keywords={canonicalized} errors={errors+row_errors}',flush=True
         )
         if status!='complete':
             raise RuntimeError('TOP shadow completeness check failed')
@@ -468,7 +509,8 @@ def main() -> None:
               'status':'failed','requests_count':requests_count,'error_count':max(errors,1),
               'finished_at':datetime.now(timezone.utc).isoformat(),
               'notes':{'fatal_error':str(fatal),'production_cutover':False,'workers':WORKERS,
-                       'generated_keywords':generated,'request_start_interval_seconds':DELAY}
+                       'generated_keywords':generated,'canonicalized_keywords':canonicalized,
+                       'request_start_interval_seconds':DELAY}
             })
         finally:
             raise
