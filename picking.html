@@ -69,11 +69,12 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-07-v23.6.239-fast-queue';
+const PICKING_APP_VERSION='2026-10-07-v23.6.240-ready-handshake';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
 const WAREHOUSE_CHAT_URL=SUPABASE_URL+'/functions/v1/crm-warehouse-chat-v2';
+try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'resanta-picking-ready',version:PICKING_APP_VERSION},location.origin)}catch(_){}
 let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null,syncTimer=null,scanQueue=[],scanWorker=false,scanRetryTimer=null;
 let scannerInput={timer:null,start:0,last:0,lastLen:0,count:0,rapid:false};
 const $=id=>document.getElementById(id);
@@ -434,7 +435,7 @@ window.addEventListener('message',e=>{
 });
 window.addEventListener('online',()=>{if(session&&scanQueue.length)processScanQueue();else if(session&&!busy&&!scanWorker&&moduleVisible())refreshVisible()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy&&!scanWorker)refreshVisible()});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.239',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.240',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
 </script>
 </body>
