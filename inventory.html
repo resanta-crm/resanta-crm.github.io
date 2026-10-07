@@ -473,7 +473,7 @@ async function init(){
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
  window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
- if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.239',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+ if('serviceWorker'in navigator)navigator.serviceWorker.register('/inventory-sw.js?v=23.6.243',{updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
  if(session)await bootAuthed();else show('login-view',true)
 }
 init();
