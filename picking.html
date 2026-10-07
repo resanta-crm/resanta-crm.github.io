@@ -5,19 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#185FA5">
 <meta http-equiv="Cache-Control" content="no-store">
-<script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
-<script id="resanta_picking_iframe_recovery_v241">
+<script id="resanta_tsd_unified_redirect_v243">
 (function(){
-  if(window.top===window.self)return;
-  let jumped=false;
-  const go=()=>{if(jumped)return;jumped=true;try{window.top.location.replace('/picking-live-v241.html?v=241&source=iframe')}catch(_){}};
-  window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data&&e.data.type==='resanta-tsd-module-open')go()});
-  setTimeout(()=>{
-    try{
-      const f=window.frameElement,w=f&&f.closest&&f.closest('#work');
-      if(w&&!w.classList.contains('hidden'))go();
-    }catch(_){}
-  },700);
+ const p=new URLSearchParams(location.search);
+ if(window.top===window.self&&!p.has('standalone')&&!p.has('legacy-module'))location.replace('/tsd.html?v=243');
+})();
+</script>
+<script id="resanta_picking_iframe_recovery_v243">
+(function(){
+ if(window.top===window.self)return;
+ const go=()=>{try{window.top.location.replace('/picking.html?standalone=1&v=243&from=legacy-iframe&ts='+Date.now())}catch(_){}};
+ window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data&&e.data.type==='resanta-tsd-module-open')go()});
+ setTimeout(()=>{try{const f=window.frameElement,w=f&&f.closest&&f.closest('#work');if(w&&!w.classList.contains('hidden'))go()}catch(_){}},500);
 })();
 </script>
 <title>Resanta Заказы · ТСД</title>
@@ -55,6 +54,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 
 <div id="app-view" class="wrap hidden">
  <div class="top">
+  <button id="standalone-menu-btn" class="btn auto hidden">← Меню</button>
   <div class="logo">📦</div>
   <div class="grow"><div class="title">Resanta · Сборка заказов</div><div id="device-line" class="sub"></div></div>
   <button id="refresh-btn" class="btn auto">↻</button>
@@ -83,8 +83,12 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-07-v23.6.241-bridge';
+const PICKING_APP_VERSION='2026-10-07-v23.6.243-stable-url-dual-network';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
+const TSD_GATEWAYS=[
+ 'https://baqchjtvtmcfzwjjluhs.functions.supabase.co/warehouse-tsd-gateway-v1',
+ SUPABASE_URL+'/functions/v1/warehouse-tsd-gateway-v1'
+];
 const APIKEY='sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd';
 const SESSION_KEY='resanta_pick_device_session_v1';
 const WAREHOUSE_CHAT_URL=SUPABASE_URL+'/functions/v1/crm-warehouse-chat-v2';
@@ -92,6 +96,11 @@ try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'re
 let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null,syncTimer=null,scanQueue=[],scanWorker=false,scanRetryTimer=null;
 let scannerInput={timer:null,start:0,last:0,lastLen:0,count:0,rapid:false};
 const $=id=>document.getElementById(id);
+const STANDALONE=new URLSearchParams(location.search).has('standalone');
+setTimeout(()=>{
+ const b=$('standalone-menu-btn');
+ if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=243&from=picking')}
+},0);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v||0);
 const qty=v=>num(v).toLocaleString('ru-RU',{maximumFractionDigits:3});
@@ -188,6 +197,30 @@ function xhrRpc(name,args,timeoutMs=5000){
   }catch(e){reject(e)}
  })
 }
+async function gatewayRpc(name,args,timeoutMs=5000){
+ let last=null;
+ for(const url of TSD_GATEWAYS){
+  const ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeoutMs):null;
+  try{
+   const r=await fetch(url,{
+    method:'POST',
+    headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},
+    body:JSON.stringify({op:'rpc',name,args}),
+    cache:'no-store',mode:'cors',credentials:'omit',
+    ...(ctrl?{signal:ctrl.signal}:{})
+   });
+   const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
+   if(!r.ok){
+    const err=new Error(j?.message||j?.error||String(j||('HTTP '+r.status)));
+    err.httpStatus=r.status;throw err
+   }
+   return j
+  }catch(e){last=e}
+  finally{if(timer)clearTimeout(timer)}
+ }
+ throw last||new Error('Резервный сервер ТСД недоступен')
+}
 async function rpc(name,args={},opts={}){
  const retries=Math.max(0,Number(opts.retry||0)),timeout=Math.max(1800,Number(opts.timeout||4500));
  let last=null;
@@ -203,6 +236,9 @@ async function rpc(name,args={},opts={}){
  const transient=!last?.httpStatus||last.httpStatus===429||last.httpStatus>=500;
  if(opts.xhrFallback&&transient){
   try{return await xhrRpc(name,args,timeout+1200)}catch(e){last=e}
+ }
+ if(transient){
+  try{return await gatewayRpc(name,args,timeout+1800)}catch(e){last=e}
  }
  const msg=String(last?.message||last||'Ошибка сети');
  if(/failed to fetch|networkerror|load failed|нет связи|abort|timed out|вовремя/i.test(msg)){
@@ -451,6 +487,11 @@ window.addEventListener('online',()=>{if(session&&scanQueue.length)processScanQu
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy&&!scanWorker)refreshVisible()});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/picking-sw.js?v=23.6.240',{scope:'/picking.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 boot();
+
+if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
+ rs.filter(r=>String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'').includes('/picking-sw.js')).map(r=>r.unregister().catch(()=>false))
+)).catch(()=>{});
+if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('resanta-picking-')).map(k=>caches.delete(k)))).catch(()=>{});
 </script>
 </body>
 </html>
