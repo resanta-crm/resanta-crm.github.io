@@ -34,7 +34,7 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
   <div class="actions">
    <button class="action" data-url="/receiving.html?v=239" data-name="Приёмка товара"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></button>
    <button class="action" data-url="/inventory.html?v=239" data-name="Инвентаризация"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></button>
-   <button class="action" data-url="/picking.html?v=240" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
+   <button class="action" data-url="/picking-live-v241.html?v=241" data-name="Заказы"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></button>
   </div>
   <button id="install" class="install hidden">⬇ Установить «Resanta Склад»</button>
   <div class="note">Один ярлык на терминале. Приёмка, инвентаризация и заказы остаются отдельными защищёнными модулями внутри него.</div>
@@ -46,10 +46,10 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-07-v23.6.240-no-preload-recovery';
+const HUB_VERSION='2026-10-07-v23.6.241-standalone-picking';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
-const PICKING_FAST_URL='/picking.html?v=240';
+const PICKING_FAST_URL='/picking-live-v241.html?v=241';
 function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKING_FAST_URL:url}
 let moduleAttempt=0,moduleWatchdog=null,moduleReady=false;
 function freshUrl(target,attempt=1){
@@ -96,17 +96,18 @@ function armModuleWatchdog(target){
  },1600)
 }
 function openModule(url,name){
- const target=moduleUrl(url),f=$('frame');$('workname').textContent=name||'Resanta Склад';
+ const target=moduleUrl(url);
+ if(target.indexOf('/picking-live-v241.html')===0){
+   try{sessionStorage.setItem('resanta_tsd_last_module_v1',JSON.stringify({url:target,name}))}catch(_){}
+   location.replace(freshUrl(target,1));
+   return
+ }
+ const f=$('frame');$('workname').textContent=name||'Resanta Склад';
  moduleReady=false;moduleAttempt=1;
  f.dataset.moduleUrl=target;
  f.src=freshUrl(target,moduleAttempt);
  $('menu').classList.add('hidden');$('work').classList.remove('hidden');
  try{sessionStorage.setItem('resanta_tsd_last_module_v1',JSON.stringify({url:target,name}))}catch(_){}
- if(target.indexOf('/picking.html')===0){
-  armModuleWatchdog(target);
-  setTimeout(()=>{try{f.contentWindow.postMessage({type:'resanta-tsd-module-open'},location.origin)}catch(_){}},180);
-  setTimeout(()=>{try{f.contentWindow.postMessage({type:'resanta-tsd-module-open'},location.origin)}catch(_){}},650)
- }
 }
 function menu(){
  clearTimeout(moduleWatchdog);moduleWatchdog=null;moduleReady=false;
@@ -129,7 +130,7 @@ $('reload').onclick=()=>{
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});
 $('install').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')};
 window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').classList.add('hidden')});
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/tsd-sw.js?v=23.6.240',{scope:'/tsd.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/tsd-sw.js?v=23.6.241',{scope:'/tsd.html',updateViaCache:'none'}).then(r=>r.update().catch(()=>{})).catch(()=>{});
 </script>
 </body>
 </html>
