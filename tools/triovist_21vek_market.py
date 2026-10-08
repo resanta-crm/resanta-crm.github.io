@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.258.
+"""Triovist / 21vek automatic market analysis v23.6.260.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.8"
+PARSER_VERSION="market-auto-v1.9"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -379,7 +379,7 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
-    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present"):
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light"):
         return presence_value(text)
     if key in ("overheat_protection","humidistat","tool_free_tension"):
         return bool_value(text)
@@ -767,10 +767,15 @@ def load_existing_own(scope: str) -> dict[str,dict]:
     return {str(x["sku"]):x for x in rows}
 
 
-def fresh_specs(row: dict|None,url: str) -> bool:
+def rules_signature_prefix(rules: list[dict]|None=None) -> str:
+    keys={str(x.get("spec_key") or "") for x in (rules or [])}
+    return RULESET_VERSION+"-fan2" if "remote_control" in keys and "fan_only_mode" in keys else RULESET_VERSION
+
+
+def fresh_specs(row: dict|None,url: str,rules: list[dict]|None=None) -> bool:
     if not row or not row.get("specs_normalized") or not row.get("specs_fetched_at"): return False
     if str(row.get("product_url") or "")!=str(url or ""): return False
-    if not str(row.get("specs_signature") or "").startswith(RULESET_VERSION+":"): return False
+    if not str(row.get("specs_signature") or "").startswith(rules_signature_prefix(rules)+":"): return False
     try:
         t=datetime.fromisoformat(str(row["specs_fetched_at"]).replace("Z","+00:00"))
         return datetime.now(timezone.utc)-t.astimezone(timezone.utc)<=timedelta(days=SPEC_TTL_DAYS)
@@ -793,7 +798,9 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         )
     if any(r.get("spec_key")=="device_type" for r in rules) and not specs.get("device_type"):
         device_name=norm(card.get("product_name") or base.get("model") or base.get("product_name") or "")
-        if "маслян" in device_name and ("радиатор" in device_name or "обогревател" in device_name):
+        if "тепловент" in device_name:
+            specs["device_type"]="тепловентилятор"
+        elif "маслян" in device_name and ("радиатор" in device_name or "обогревател" in device_name):
             specs["device_type"]="масляный радиатор"
     return {
       "brand":extra.get("brand") or base.get("brand") or "",
@@ -804,7 +811,7 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
       "product_rating":card.get("product_rating"),
       "review_count":card.get("review_count"),
       "specs_raw":raw,"specs_normalized":specs,
-      "specs_signature":RULESET_VERSION+":"+hashlib.sha1(json.dumps(specs,ensure_ascii=False,sort_keys=True).encode("utf-8")).hexdigest(),
+      "specs_signature":rules_signature_prefix(rules)+":"+hashlib.sha1(json.dumps(specs,ensure_ascii=False,sort_keys=True).encode("utf-8")).hexdigest(),
       "specs_fetched_at":datetime.now(timezone.utc).isoformat()
     }
 
@@ -848,6 +855,15 @@ def infrared_power_similarity(a: float,b: float) -> float:
 
 
 def oil_power_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.05:return 1.0
+    if diff<=0.10:return 0.85
+    if diff<=0.20:return 0.65
+    return 0.0
+
+
+def fan_heater_power_similarity(a: float,b: float) -> float:
     den=max(abs(a),abs(b),1e-9)
     diff=abs(a-b)/den
     if diff<=0.05:return 1.0
@@ -985,6 +1001,40 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         if critical_mismatch: score=min(score,54.0)
         return round(max(0,min(100,score)),2)
 
+    if profile=="fan_heater":
+        # Approved heat-fan formula: technical match only; price is checked later.
+        total=used=allw=0.0
+        critical_mismatch=False
+        critical_missing=False
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0: continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:
+                if rule.get("critical"): critical_missing=True
+                continue
+            try:
+                if k=="power_w": s=fan_heater_power_similarity(float(a),float(b))
+                elif k=="thermostat_type":
+                    pa,pb=thermostat_present(a),thermostat_present(b)
+                    s=1.0 if pa is not None and pb is not None and pa==pb else categorical_similarity(a,b)
+                elif rule.get("direction")=="boolean":
+                    s=1.0 if bool(a)==bool(b) else 0.0
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            if rule.get("critical") and s<0.45: critical_mismatch=True
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing: score=min(score,69.0)
+        if critical_mismatch: score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
+
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
     for rule in rules:
         w=float(rule.get("weight") or 0);allw+=w
@@ -1093,7 +1143,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=55 if profile=="oil_radiator" else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -1151,7 +1201,7 @@ def main() -> None:
                 old=existing.get(p["product_key"])
                 p["run_id"]=run_id;p["observed_at"]=observed;p["error_text"]=None
                 p["current_price"]=valid_price(p.get("current_price"))
-                need_specs=not fresh_specs(old,p.get("product_url") or "")
+                need_specs=not fresh_specs(old,p.get("product_url") or "",rules)
                 need_card=need_specs or (profile in ("convector","infrared_heater") and p["current_price"] is None)
                 # Keep cached technical specs unless TTL/url/model requires refresh.
                 # For convectors, a missing/zero search price forces a card lookup;
@@ -1263,7 +1313,7 @@ def main() -> None:
                   "product_url":src.get("product_url"),"current_price":valid_price(src.get("price")),
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
-                if fresh_specs(old,row["product_url"]):
+                if fresh_specs(old,row["product_url"],rules):
                     row.update({
                       "specs_raw":old.get("specs_raw") or [],"specs_normalized":old.get("specs_normalized") or {},
                       "specs_signature":old.get("specs_signature"),"specs_fetched_at":old.get("specs_fetched_at")
@@ -1296,7 +1346,7 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile=="oil_radiator" else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
