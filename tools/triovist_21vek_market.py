@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.271.
+"""Triovist / 21vek automatic market analysis v23.6.272.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.9"
+PARSER_VERSION="market-auto-v3.0"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -167,6 +167,7 @@ def profile_for(label: str) -> str:
     if "бензопил" in n: return "chainsaw_gas"
     if "электропил" in n or "электрическ" in n and "пил" in n: return "chainsaw_electric"
     if "снегоубор" in n: return "snow_blower"
+    if "воздуходув" in n: return "leaf_blower"
     return "generic"
 
 
@@ -183,6 +184,7 @@ def query_for(label: str, profile: str) -> str:
       "chainsaw_gas":"бензопила",
       "chainsaw_electric":"электропила",
       "snow_blower":"снегоуборщик",
+      "leaf_blower":"воздуходувка",
     }.get(profile)
     return q or clean_label(label)
 
@@ -235,6 +237,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Бензопилы","chainsaw_gas","бензопил"),
       ("Электропилы","chainsaw_electric","электропил"),
       ("Снегоуборщики","snow_blower","снегоубор"),
+      ("Воздуходувки","leaf_blower","воздуходув"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
@@ -247,6 +250,8 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                 matched=matched or ("электрическ" in pn and "пил" in pn)
             elif profile=="snow_blower":
                 matched=matched and sku.startswith("70/7/") and "насадк" not in pn and "листовк" not in pn
+            elif profile=="leaf_blower":
+                matched=matched and sku.startswith("70/13/") and not sku.startswith("900/")
             if matched:skus.add(sku)
         if skus:
             groups[key]={
@@ -554,6 +559,46 @@ def snow_blower_relative_similarity(a: float,b: float,full: float=0.05,close: fl
     return 0.0
 
 
+def leaf_blower_power_source_family(v: Any) -> str:
+    return snow_blower_power_source_family(v)
+
+
+def leaf_blower_device_family(v: Any) -> str:
+    n=norm(v)
+    if "воздуходув" in n or ("садов" in n and "пылесос" in n):return "leaf_blower"
+    return n
+
+
+def leaf_blower_construction_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("ранцев","рюкзач")):return "backpack"
+    if any(x in n for x in ("ручн","переносн")):return "handheld"
+    if any(x in n for x in ("колес","на колес")):return "wheeled"
+    return n
+
+
+def leaf_blower_function_tokens(v: Any) -> set[str]:
+    n=norm(v);out=set()
+    if any(x in n for x in ("обдув","выдув","воздуходув")):out.add("blow")
+    if any(x in n for x in ("всасыв","пылесос","сбор лист")):out.add("vacuum")
+    if any(x in n for x in ("измельч","мульч")):out.add("shred")
+    return out
+
+
+def leaf_blower_functions_similarity(a: Any,b: Any) -> float:
+    aa=leaf_blower_function_tokens(a);bb=leaf_blower_function_tokens(b)
+    if aa and bb:return len(aa&bb)/max(1,len(aa|bb))
+    return categorical_similarity(a,b)
+
+
+def leaf_blower_noise_similarity(a: float,b: float) -> float:
+    d=abs(a-b)
+    if d<=3:return 1.0
+    if d<=6:return 0.85
+    if d<=10:return 0.65
+    return 0.0
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
     if key=="energy_type":
@@ -567,6 +612,9 @@ def normalize_value(key: str, text: str) -> Any:
         return humidifier_power_supply_family(text)[:120] or None
     if key=="power_source":
         return snow_blower_power_source_family(text)[:120] or None
+    if key=="functions":
+        t=leaf_blower_function_tokens(text)
+        return "+".join(sorted(t)) if t else (norm(text)[:240] or None)
     if key=="engine_start_type":
         return snow_blower_start_family(text)[:120] or None
     if key=="gears":
@@ -580,7 +628,7 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"^(\d+)\s*\+\s*(\d+)$",n)
         if m:return m.group(1)+"+"+m.group(2)
         return n[:80] or None
-    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type"):
+    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type","construction","engine_type","battery_type"):
         return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
@@ -609,6 +657,14 @@ def normalize_value(key: str, text: str) -> Any:
         return None
     v=max(ns)
     if key=="motor_power_w":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л\.?\s*с\.?|hp|лс)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", "."))*735.499,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:квт|kw)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", "."))*1000,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:вт|w)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", ".")),2)
+        return round(ns[0],2)
+    if key=="fuel_power_w":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л\.?\s*с\.?|hp|лс)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",", "."))*735.499,2)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:квт|kw)\b",low,re.I)
@@ -662,6 +718,20 @@ def normalize_value(key: str, text: str) -> Any:
         if re.search(r"\bл\s*/?\s*ч",low): v*=1000
         return round(v,2)
     if key=="airflow_m3h":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",", "."))*60,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3)\s*/\s*(?:с|s)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", "."))*3600,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:с|s)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", "."))*3.6,2)
+        return round(v,2)
+    if key=="air_speed_ms":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:км|km)\s*/\s*(?:ч|h)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", "."))/3.6,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\s*/\s*(?:с|s)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", ".")),3)
+        return round(v,3)
+    if key=="rpm":
         return round(v,2)
     if key=="fuel_consumption_kgh":
         return round(v,3)
@@ -1015,6 +1085,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-esaw2"
     if "clearing_width_cm" in keys and "throw_distance_m" in keys and "power_source" in keys:
         return RULESET_VERSION+"-snow5"
+    if "air_speed_ms" in keys and "airflow_m3h" in keys and "power_source" in keys:
+        return RULESET_VERSION+"-blower1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1060,6 +1132,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="цепная электропила"
         elif "снегоубор" in device_name and "насадк" not in device_name:
             specs["device_type"]="снегоуборщик"
+        elif "воздуходув" in device_name or ("садов" in device_name and "пылесос" in device_name):
+            specs["device_type"]="воздуходувка"
     saw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="power_supply" for r in rules) and any(r.get("spec_key")=="bar_length_cm" for r in rules):
         if not specs.get("power_supply"):
@@ -1069,7 +1143,7 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             elif "электропил" in saw_n or ("цепн" in saw_n and "пил" in saw_n):
                 specs["power_supply"]="mains"
     snow_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
-    if any(r.get("spec_key")=="power_source" for r in rules):
+    if any(r.get("spec_key")=="snow_blower_type" for r in rules):
         title_n=norm(snow_name)
         device_n=norm(specs.get("device_type") or "")
         source_n=norm(specs.get("power_source") or "")
@@ -1127,6 +1201,25 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         sn=norm(snow_name)
         if "гусен" in sn:specs["drive_type"]="гусеничный"
         elif "колес" in sn:specs["drive_type"]="колесный"
+
+    blower_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="air_speed_ms" for r in rules):
+        bn=norm(blower_name)
+        source=None
+        if "аккумулятор" in bn:source="battery"
+        elif "бензин" in bn:source="fuel"
+        elif "электрическ" in bn or "сетев" in bn:source="electric"
+        else:
+            source=leaf_blower_power_source_family(specs.get("power_source"))
+        if source:specs["power_source"]=source
+        if not specs.get("construction"):
+            if any(x in bn for x in ("ранцев","рюкзач")):specs["construction"]="ранцевая"
+            elif "воздуходув" in bn:specs["construction"]="ручная"
+        if not specs.get("functions"):
+            ft=set(["blow"]) if "воздуходув" in bn else set()
+            if "пылесос" in bn:ft.add("vacuum")
+            if "измельч" in bn or "мульч" in bn:ft.add("shred")
+            if ft:specs["functions"]="+".join(sorted(ft))
 
     gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
@@ -1384,6 +1477,78 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+    if profile=="leaf_blower":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and leaf_blower_device_family(da)!=leaf_blower_device_family(db):
+            return 0.0
+
+        fa=leaf_blower_power_source_family(ours.get("power_source"))
+        fb=leaf_blower_power_source_family(comp.get("power_source"))
+        critical_missing=not fa or not fb
+        if fa and fb and fa!=fb:return 0.0
+
+        if fa=="fuel":
+            weights={
+              "device_type":0.08,"construction":0.12,"air_speed_ms":0.14,"engine_type":0.07,
+              "power_source":0.10,"functions":0.08,"airflow_m3h":0.15,"noise_db":0.04,
+              "fuel_power_w":0.09,"engine_cc":0.07,"fuel_tank_l":0.06
+            }
+        elif fa=="battery":
+            weights={
+              "device_type":0.08,"construction":0.10,"air_speed_ms":0.15,"engine_type":0.06,
+              "power_source":0.10,"battery_type":0.05,"battery_capacity_ah":0.07,"battery_voltage_v":0.12,
+              "rpm":0.05,"functions":0.08,"airflow_m3h":0.08,"noise_db":0.02,"motor_power_w":0.04
+            }
+        elif fa=="electric":
+            weights={
+              "device_type":0.10,"construction":0.12,"air_speed_ms":0.18,"engine_type":0.07,
+              "power_source":0.12,"rpm":0.07,"functions":0.10,"airflow_m3h":0.16,
+              "noise_db":0.03,"motor_power_w":0.05
+            }
+        else:
+            return 0.0
+
+        total=used=0.0
+        construction_mismatch=False
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k in ("air_speed_ms","airflow_m3h","rpm"):
+                    s=snow_blower_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k in ("motor_power_w","fuel_power_w","engine_cc"):
+                    s=snow_blower_relative_similarity(float(a),float(b),0.05,0.10,0.20)
+                elif k in ("battery_capacity_ah","fuel_tank_l"):
+                    s=snow_blower_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="battery_voltage_v":
+                    ca=snow_blower_battery_voltage_class(a);cb=snow_blower_battery_voltage_class(b)
+                    s=1.0 if ca is not None and cb is not None and ca==cb else 0.0
+                elif k=="noise_db":
+                    s=leaf_blower_noise_similarity(float(a),float(b))
+                elif k=="power_source":
+                    s=1.0 if leaf_blower_power_source_family(a)==leaf_blower_power_source_family(b) else 0.0
+                elif k=="device_type":
+                    s=1.0 if leaf_blower_device_family(a)==leaf_blower_device_family(b) else 0.0
+                elif k=="construction":
+                    aa=leaf_blower_construction_family(a);bb=leaf_blower_construction_family(b)
+                    s=1.0 if aa==bb else categorical_similarity(a,b)
+                    if aa and bb and aa!=bb:construction_mismatch=True
+                elif k=="functions":
+                    s=leaf_blower_functions_similarity(a,b)
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,69.0)
+        if construction_mismatch:score=min(score,84.0)
         return round(max(0,min(100,score)),2)
 
     if profile=="snow_blower":
@@ -1779,7 +1944,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -1984,7 +2149,7 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
