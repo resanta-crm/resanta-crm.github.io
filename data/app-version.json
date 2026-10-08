@@ -1,6 +1,6 @@
 {
-  "version": "23.6.261",
+  "version": "23.6.262",
   "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: heat guns split into electric single/three phase, gas, diesel direct and diesel indirect, with class-specific technical formulas.",
-  "deploy_trigger": "2026-10-08T11:25:00+03:00"
+  "purpose": "Triovist competitors: humidifier matching by type, technology, water output, area, tank, power, supply, control and remote control.",
+  "deploy_trigger": "2026-10-08T12:30:00+03:00"
 }
