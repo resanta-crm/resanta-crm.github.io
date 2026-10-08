@@ -1,6 +1,6 @@
 {
-  "version": "23.6.270",
+  "version": "23.6.271",
   "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: final snow blower matching with corrected fuel/electric/battery class inference and normalized forward/reverse gears.",
-  "deploy_trigger": "2026-10-08T15:36:00+03:00"
+  "purpose": "Triovist competitors: snow blower starter-source correction. Separate petrol main power from starter supply, remove false 220V battery interpretation, and block 'competitor stronger' verdict when competitor starter data is missing.",
+  "deploy_trigger": "2026-10-08T15:43:00+03:00"
 }
