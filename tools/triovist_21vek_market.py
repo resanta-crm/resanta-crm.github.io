@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.269.
+"""Triovist / 21vek automatic market analysis v23.6.270.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.7"
+PARSER_VERSION="market-auto-v2.8"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -569,9 +569,13 @@ def normalize_value(key: str, text: str) -> Any:
         return snow_blower_start_family(text)[:120] or None
     if key=="gears":
         n=norm(text)
-        m=re.search(r"(\d+)\s*(?:вперед|впер).*?(\d+)\s*(?:назад|зад)",n)
-        if m:return m.group(1)+"+"+m.group(2)
+        fwd=re.search(r"(\d+)\s*(?:вперед|впер)",n)
+        rev=re.search(r"(\d+)\s*(?:назад|задн)",n)
+        if fwd or rev:
+            return (fwd.group(1) if fwd else "0")+"+"+(rev.group(1) if rev else "0")
         m=re.search(r"(\d+)\s*/\s*(\d+)",n)
+        if m:return m.group(1)+"+"+m.group(2)
+        m=re.search(r"^(\d+)\s*\+\s*(\d+)$",n)
         if m:return m.group(1)+"+"+m.group(2)
         return n[:80] or None
     if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type"):
@@ -1008,7 +1012,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "chain_brake" in keys and "auto_chain_lubrication" in keys and "power_supply" in keys:
         return RULESET_VERSION+"-esaw2"
     if "clearing_width_cm" in keys and "throw_distance_m" in keys and "power_source" in keys:
-        return RULESET_VERSION+"-snow3"
+        return RULESET_VERSION+"-snow4"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
