@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""RESANTA CRM v23.6.167 — единый импорт продаж 1С для полевых и Triovist.
+"""RESANTA CRM v23.6.198 — единый импорт продаж 1С для полевых и Triovist.
 
-Источник один: письмо «Продажи для CRM». Автоматически принимаются только
-операционные срезы 09:xx, 13:xx и 17:xx по Минску. Письма 11:xx и 15:xx
-сознательно пропускаются.
+Источник один: письмо «Продажи для CRM». Автоматически принимаются
+ежечасные операционные срезы 09:xx–18:xx по Минску.
 
 Главный контракт:
   * одно письмо скачивается один раз;
@@ -28,9 +27,9 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.197"
+VERSION = "v23.6.198"
 MINSK = ZoneInfo("Europe/Minsk")
-TARGET_HOURS = {9, 13, 17}
+TARGET_HOURS = set(range(9, 19))
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
 MAX_CANDIDATES = max(10, int(os.environ.get("UNIFIED_MAX_EMAIL_CANDIDATES", "20")))
 HEADER_BATCH_SIZE = max(20, int(os.environ.get("UNIFIED_IMAP_HEADER_BATCH", "50")))
