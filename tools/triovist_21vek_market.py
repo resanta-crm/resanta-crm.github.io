@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.262.
+"""Triovist / 21vek automatic market analysis v23.6.266.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.3"
+PARSER_VERSION="market-auto-v2.4"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -485,14 +485,14 @@ def normalize_value(key: str, text: str) -> Any:
         return humidifier_technology_family(text)[:240] or None
     if key=="power_supply":
         return humidifier_power_supply_family(text)[:120] or None
-    if key in ("device_type","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment"):
+    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment"):
         return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
-    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light"):
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension"):
         return presence_value(text)
-    if key in ("overheat_protection","humidistat","tool_free_tension"):
+    if key in ("overheat_protection","humidistat"):
         return bool_value(text)
     if key=="chain_pitch_in":
         return parse_fraction(low)
@@ -886,6 +886,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-gun3"
     if "technologies" in keys and "output_mlh" in keys and "power_supply" in keys:
         return RULESET_VERSION+"-humid3"
+    if "chain_brake" in keys and "auto_chain_lubrication" in keys and "power_supply" in keys:
+        return RULESET_VERSION+"-esaw2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -927,6 +929,16 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="аромадиффузор"
         elif "увлажн" in device_name:
             specs["device_type"]="увлажнитель воздуха"
+        elif "электропил" in device_name or ("цепн" in device_name and "пил" in device_name):
+            specs["device_type"]="цепная электропила"
+    saw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="power_supply" for r in rules) and any(r.get("spec_key")=="bar_length_cm" for r in rules):
+        if not specs.get("power_supply"):
+            saw_n=norm(saw_name)
+            if any(x in saw_n for x in ("аккумуля","battery","li ion","li-ion")):
+                specs["power_supply"]="battery"
+            elif "электропил" in saw_n or ("цепн" in saw_n and "пил" in saw_n):
+                specs["power_supply"]="mains"
     gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
         gun_family=heat_gun_family(gun_name,specs,raw)
@@ -981,6 +993,39 @@ def chainsaw_power_similarity(a: float,b: float) -> float:
     if diff<=350: return 0.80
     if diff<=500: return 0.50
     return 0.0
+
+
+def electric_chainsaw_power_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.05:return 1.0
+    if diff<=0.10:return 0.85
+    if diff<=0.20:return 0.65
+    return 0.0
+
+
+def electric_chainsaw_bar_similarity(a: float,b: float) -> float:
+    diff=abs(a-b)
+    if diff<=2:return 1.0
+    if diff<=5:return 0.85
+    if diff<=10:return 0.65
+    return 0.0
+
+
+def electric_chainsaw_device_family(v: Any) -> str:
+    n=norm(v)
+    if "сабел" in n:return "reciprocating"
+    if "дисков" in n or "циркуляр" in n:return "circular"
+    if "торцов" in n:return "mitre"
+    if "цепн" in n or "электропил" in n:return "chainsaw"
+    return n
+
+
+def electric_chainsaw_supply_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
+    if any(x in n for x in ("сеть","сетев","220","230","розет","mains")):return "mains"
+    return n
 
 
 def infrared_power_similarity(a: float,b: float) -> float:
@@ -1101,6 +1146,46 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                 s=0.0
             total+=w*s
         return round(max(0,min(100,(total/max(allw,1e-9))*100)),2)
+
+    if profile=="chainsaw_electric":
+        da=ours.get("device_type");db=comp.get("device_type")
+        sa=ours.get("power_supply");sb=comp.get("power_supply")
+        critical_missing=(da is None or db is None or sa is None or sb is None)
+
+        if da is not None and db is not None:
+            if electric_chainsaw_device_family(da)!=electric_chainsaw_device_family(db):
+                return 0.0
+        if sa is not None and sb is not None:
+            if electric_chainsaw_supply_family(sa)!=electric_chainsaw_supply_family(sb):
+                return 0.0
+
+        total=used=allw=0.0
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0:continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="power_w":s=electric_chainsaw_power_similarity(float(a),float(b))
+                elif k=="bar_length_cm":s=electric_chainsaw_bar_similarity(float(a),float(b))
+                elif k=="device_type":
+                    s=1.0 if electric_chainsaw_device_family(a)==electric_chainsaw_device_family(b) else 0.0
+                elif k=="power_supply":
+                    s=1.0 if electric_chainsaw_supply_family(a)==electric_chainsaw_supply_family(b) else 0.0
+                elif rule.get("direction")=="boolean":
+                    s=1.0 if bool(a)==bool(b) else 0.0
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
 
     if profile=="oil_radiator":
         # Approved oil-radiator formula: technical similarity only.
@@ -1383,7 +1468,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -1586,7 +1671,7 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
