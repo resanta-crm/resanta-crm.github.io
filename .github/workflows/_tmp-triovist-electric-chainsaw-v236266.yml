@@ -1,10 +1,10 @@
-name: TMP — Triovist electric chainsaw market v23.6.266
+name: TMP — Triovist electric chainsaw market v23.6.267
 
 on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/_tmp-triovist-electric-chainsaw-v236266.yml'
+      - '.github/workflows/_tmp-triovist-electric-chainsaw-v236267.yml'
   workflow_dispatch:
 
 concurrency:
@@ -26,7 +26,7 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
       - name: Dependencies
         run: pip install requests beautifulsoup4
-      - name: Electric chainsaws only
+      - name: Electric chainsaws only · final
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
