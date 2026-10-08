@@ -47,12 +47,12 @@ jobs:
       - name: Установить зависимости
         run: pip install requests beautifulsoup4
 
-      - name: Проверка рынка — Конвекторы + Бензопилы + Инфракрасные
+      - name: Проверка рынка — Конвекторы + Масляные радиаторы + Бензопилы + Инфракрасные
         if: github.event_name != 'pull_request'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MARKET_VALIDATE_PROFILES: 'convector,chainsaw_gas,infrared_heater'
+          MARKET_VALIDATE_PROFILES: 'convector,oil_radiator,chainsaw_gas,infrared_heater'
           MARKET_DELAY_SECONDS: '0.22'
           MARKET_HTTP_TIMEOUT: '30'
           MARKET_SPEC_TTL_DAYS: '30'
