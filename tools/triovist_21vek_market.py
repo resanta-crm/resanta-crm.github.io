@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.0"
+PARSER_VERSION="market-auto-v2.1"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -468,8 +468,10 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:квт|kw)\b",low,re.I)
         if m:
             n=float(m.group(1).replace(",","."))
-            # Guard against obvious source-unit typos such as "2600 кВт" for a chainsaw.
-            return round(n if n>20 else n*1000,2)
+            # Real heat guns legitimately reach 24–75 kW. Only very large
+            # values (e.g. a source typo "2600 кВт" that actually means 2600 W)
+            # are treated as already-watts.
+            return round(n if n>=1000 else n*1000,2)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:вт|w)\b",low,re.I)
         if m:
             return round(float(m.group(1).replace(",",".")),2)
@@ -829,7 +831,7 @@ def load_existing_own(scope: str) -> dict[str,dict]:
 def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     keys={str(x.get("spec_key") or "") for x in (rules or [])}
     if "heating_mode" in keys and "fuel_consumption_kgh" in keys and "airflow_m3h" in keys:
-        return RULESET_VERSION+"-gun2"
+        return RULESET_VERSION+"-gun3"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
