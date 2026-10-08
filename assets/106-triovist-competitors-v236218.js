@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.268 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.271 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.268',TTL=30000;
+const V='v23.6.271',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -39,6 +39,7 @@ function statusLabel(s){
  if(s==='ours_stronger')return['🟢 Мы сильнее','good'];
  if(s==='competitor_stronger')return['🔴 Конкурент сильнее','bad'];
  if(s==='parity')return['🟡 Паритет','warn'];
+ if(s==='data_incomplete')return['🟡 Недостаточно данных','warn'];
  return['—',''];
 }
 function rowStatus(r){
@@ -68,14 +69,15 @@ function specLine(k,v){
   snow_blower_type:'Тип снегоуборщика',power_source:'Источник питания',battery_capacity_ah:'Емкость аккумулятора',battery_voltage_v:'Напряжение аккумулятора',
   clearing_width_cm:'Ширина обработки',intake_height_cm:'Высота обработки',throw_distance_m:'Макс. дальность выброса',drive_type:'Движитель',
   operator_panel_control:'Управление с панели оператора',motor_power_w:'Мощность двигателя',gears:'Количество передач',headlight:'Фара',
-  engine_start_type:'Пуск двигателя',heated_handles:'Подогрев ручек',clutch_type:'Сцепление',skid_height_adjustment:'Регулировка высоты полозьев',
+  engine_start_type:'Пуск двигателя',starter_power_source:'Питание электростартера',starter_voltage_v:'Напряжение электростартера',
+  heated_handles:'Подогрев ручек',clutch_type:'Сцепление',skid_height_adjustment:'Регулировка высоты полозьев',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
   airflow_m3h:' м³/ч',fuel_consumption_kgh:' кг/ч',tank_l:' л',width_mm:' мм',noise_db:' дБ',
   output_mlh:' мл/ч',color_temp_k:' K',luminous_flux_lm:' лм',engine_cc:' см³',bar_length_cm:' см',
   chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',
-  battery_capacity_ah:' А·ч',battery_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
+  battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -259,6 +261,29 @@ function snowBlowerSource(v){
  if(s==='electric'||/электр|сеть|сетев|220|230|розет/.test(s))return 'сетевой электрический';
  if(s==='fuel'||/бензин|топлив|двс/.test(s))return 'бензиновый';
  return E(v);
+}
+function snowBlowerStartText(s){
+ const v=s?.engine_start_type;
+ if(v==null)return 'нет данных';
+ const n=String(v).toLowerCase();
+ const parts=[];
+ if(/manual|руч/.test(n))parts.push('ручной');
+ if(/electric/.test(n)||/электр/.test(n))parts.push('электростартер');
+ let src=s?.starter_power_source;
+ if(src==='mains')src='сеть';
+ else if(src==='battery')src='АКБ';
+ const vv=N(s?.starter_voltage_v);
+ let tail='';
+ if(src)tail=' · '+src+(vv!=null?' '+E(vv)+' В':'');
+ return (parts.length?parts.join(' + '):E(v))+tail;
+}
+function snowBlowerStartResult(a,b){
+ const av=a?.engine_start_type,bv=b?.engine_start_type;
+ if(av==null&&bv==null)return 'нет данных';
+ if(av!=null&&bv==null)return 'у конкурента нет данных — не считать одинаковыми';
+ if(av==null&&bv!=null)return 'у нас нет данных';
+ const as=snowBlowerStartText(a),bs=snowBlowerStartText(b);
+ return as===bs?'совпадает':'способ запуска отличается';
 }
 function snowBlowerValue(k,v){
  if(v==null)return 'нет данных';
@@ -663,8 +688,16 @@ function details(r,l){
    ];
    formula='Аккумуляторные: тип 10% · тип снегоуборщика 8% · источник питания 8% · ширина 16% · высота 10% · дальность выброса 10% · движитель 7% · емкость АКБ 10% · напряжение АКБ 12% · управление с панели 3% · фара 2% · полозья 4%. 18/20 В и 36/40 В считаются одним классом.';
   }
-  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+snowBlowerValue(k,b[k])+'</td><td>'+snowBlowerValue(k,a[k])+'</td><td>'+E(snowBlowerResult(k,a[k],b[k]))+'</td></tr>').join('');
-  const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Бензиновые, сетевые и аккумуляторные между собой не аналоги. Для ширины/высоты/дальности и мощности действуют согласованные допуски. Цена в подборе технического аналога не участвует.</b></div>';
+  const body=keys.map(([k,n])=>{
+   if(k==='engine_start_type'){
+    return '<tr><td><b>'+E(n)+'</b></td><td>'+snowBlowerStartText(b)+'</td><td>'+snowBlowerStartText(a)+'</td><td>'+E(snowBlowerStartResult(a,b))+'</td></tr>';
+   }
+   return '<tr><td><b>'+E(n)+'</b></td><td>'+snowBlowerValue(k,b[k])+'</td><td>'+snowBlowerValue(k,a[k])+'</td><td>'+E(snowBlowerResult(k,a[k],b[k]))+'</td></tr>';
+  }).join('');
+  const missingStart=a?.engine_start_type&&!b?.engine_start_type
+   ?'<div class="tm224-market-note"><b>Важно:</b> у нашего товара подтверждён тип запуска, а у конкурента 21vek его не указал. Отсутствие данных не считается отсутствием функции, поэтому вывод «конкурент сильнее» только из-за цены блокируется.</div>'
+   :'';
+  const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Бензиновые, сетевые и аккумуляторные между собой не аналоги. Для ширины/высоты/дальности и мощности действуют согласованные допуски. Цена в подборе технического аналога не участвует.</b></div>'+missingStart;
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
