@@ -579,9 +579,13 @@ def leaf_blower_construction_family(v: Any) -> str:
 
 def leaf_blower_function_tokens(v: Any) -> set[str]:
     n=norm(v);out=set()
-    if any(x in n for x in ("обдув","выдув","воздуходув")):out.add("blow")
-    if any(x in n for x in ("всасыв","пылесос","сбор лист")):out.add("vacuum")
-    if any(x in n for x in ("измельч","мульч")):out.add("shred")
+    if any(x in n for x in ("blow","обдув","выдув","воздуходув")):out.add("blow")
+    if any(x in n for x in ("vacuum","всасыв","пылесос","сбор лист")):out.add("vacuum")
+    if any(x in n for x in ("shred","измельч","мульч")):out.add("shred")
+    if "антивиб" in n:out.add("anti_vibration")
+    if any(x in n for x in ("регулировк скорост","регулировк оборот","плавн регулиров")):out.add("speed_control")
+    if any(x in n for x in ("круиз","фиксац оборот","поддержан оборот")):out.add("cruise_control")
+    if "турбо" in n:out.add("turbo")
     return out
 
 
