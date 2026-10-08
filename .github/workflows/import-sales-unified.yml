@@ -1,4 +1,4 @@
-name: Продажи 1С — единый импорт 09/13/17
+name: Продажи 1С — единый импорт каждый час 09-18
 
 on:
   push:
@@ -9,9 +9,9 @@ on:
       - 'triovist_import_core.py'
       - '.github/workflows/import-sales-unified.yml'
   schedule:
-    # Минск = UTC+3. Для каждого нужного среза делаем четыре короткие попытки.
-    # Сам скрипт принимает только письма 09:xx / 13:xx / 17:xx и игнорирует 11/15.
-    - cron: '5,20,35,50 6,10,14 * * *'
+    # Минск = UTC+3. Каждый час с 09:00 до 18:00 делаем четыре короткие попытки
+    # забрать новый срез 1С: +05 / +20 / +35 / +50 минут.
+    - cron: '5,20,35,50 6-15 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -48,7 +48,7 @@ jobs:
           SALES_IMAP_HEADER_BATCH_SIZE: '50'
           SALES_IMAP_HEADER_SCAN_DEADLINE_SECONDS: '60'
           UNIFIED_SALES_LOOKBACK_DAYS: '4'
-          UNIFIED_MAX_EMAIL_CANDIDATES: '20'
+          UNIFIED_MAX_EMAIL_CANDIDATES: '50'
           UNIFIED_IMAP_HEADER_BATCH: '50'
           UNIFIED_HEADER_SCAN_DEADLINE_SECONDS: '60'
         run: python sync_sales_unified.py
