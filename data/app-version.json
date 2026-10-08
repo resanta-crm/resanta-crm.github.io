@@ -1,6 +1,6 @@
 {
-  "version": "23.6.257",
-  "released_at": "2026-10-07",
-  "purpose": "Android auth stability: WebView is the only Supabase refresh-token owner; native GPS keeps points in SQLite and receives access tokens only; transient profile errors no longer force logout.",
-  "deploy_trigger": "2026-10-07T16:58:00+03:00"
+  "version": "23.6.259",
+  "released_at": "2026-10-08",
+  "purpose": "Triovist competitors: oil radiator technical matching by device type, sections, heating power, power/temperature adjustment, control, wheels and thermostat.",
+  "deploy_trigger": "2026-10-08T10:25:00+03:00"
 }
