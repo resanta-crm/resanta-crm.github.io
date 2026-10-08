@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.273.
+"""Triovist / 21vek automatic market analysis v23.6.274.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.1"
+PARSER_VERSION="market-auto-v3.2"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -168,6 +168,7 @@ def profile_for(label: str) -> str:
     if "электропил" in n or "электрическ" in n and "пил" in n: return "chainsaw_electric"
     if "снегоубор" in n: return "snow_blower"
     if "воздуходув" in n: return "leaf_blower"
+    if any(x in n for x in ("мотобур","бензобур","землебур")): return "earth_auger"
     return "generic"
 
 
@@ -185,6 +186,7 @@ def query_for(label: str, profile: str) -> str:
       "chainsaw_electric":"электропила",
       "snow_blower":"снегоуборщик",
       "leaf_blower":"воздуходувка",
+      "earth_auger":"мотобур",
     }.get(profile)
     return q or clean_label(label)
 
@@ -238,6 +240,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Электропилы","chainsaw_electric","электропил"),
       ("Снегоуборщики","snow_blower","снегоубор"),
       ("Воздуходувки","leaf_blower","воздуходув"),
+      ("Мотобуры","earth_auger","мотобур"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
@@ -252,6 +255,9 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                 matched=matched and sku.startswith("70/7/") and "насадк" not in pn and "листовк" not in pn
             elif profile=="leaf_blower":
                 matched=matched and sku.startswith("70/13/") and not sku.startswith("900/")
+            elif profile=="earth_auger":
+                matched=(any(x in pn for x in ("мотобур","бензобур","землебур"))
+                         and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
             groups[key]={
@@ -603,6 +609,27 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
     return 0.0
 
 
+def earth_auger_device_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("мотобур","бензобур","землебур","earth auger","auger")):return "earth_auger"
+    return n
+
+
+def earth_auger_engine_family(v: Any) -> str:
+    n=norm(v)
+    if re.search(r"(^|\s)2\s*(?:такт|stroke)",n) or any(x in n for x in ("двухтакт","2-такт","2 такт","two stroke")):return "2stroke"
+    if re.search(r"(^|\s)4\s*(?:такт|stroke)",n) or any(x in n for x in ("четырехтакт","4-такт","4 такт","four stroke")):return "4stroke"
+    return n
+
+
+def earth_auger_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
     if key=="energy_type":
@@ -739,6 +766,14 @@ def normalize_value(key: str, text: str) -> Any:
         return round(v,3)
     if key=="rpm":
         return round(v,2)
+    if key in ("max_auger_diameter_mm","shaft_diameter_mm"):
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*см\b",low)
+        if m:return round(float(m.group(1).replace(",","."))*10,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*25.4,2)
+        return round(ns[0],2)
     if key=="fuel_consumption_kgh":
         return round(v,3)
     if key=="bar_length_cm":
@@ -1093,6 +1128,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-snow5"
     if "air_speed_ms" in keys and "airflow_m3h" in keys and "power_source" in keys:
         return RULESET_VERSION+"-blower2"
+    if "max_auger_diameter_mm" in keys and "shaft_diameter_mm" in keys and "fuel_power_w" in keys:
+        return RULESET_VERSION+"-auger1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1140,6 +1177,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="снегоуборщик"
         elif "воздуходув" in device_name or ("садов" in device_name and "пылесос" in device_name):
             specs["device_type"]="воздуходувка"
+        elif any(x in device_name for x in ("мотобур","бензобур","землебур")):
+            specs["device_type"]="мотобур"
     saw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="power_supply" for r in rules) and any(r.get("spec_key")=="bar_length_cm" for r in rules):
         if not specs.get("power_supply"):
@@ -1233,6 +1272,15 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
 
         if source=="fuel" and specs.get("fuel_power_w") is None and specs.get("motor_power_w") is not None:
             specs["fuel_power_w"]=specs.get("motor_power_w")
+
+    auger_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="max_auger_diameter_mm" for r in rules):
+        an=norm(auger_name)
+        if any(x in an for x in ("мотобур","бензобур","землебур")) and not specs.get("device_type"):
+            specs["device_type"]="мотобур"
+        if not specs.get("engine_type"):
+            if any(x in an for x in ("2 такт","2-такт","двухтакт")):specs["engine_type"]="2-тактный"
+            elif any(x in an for x in ("4 такт","4-такт","четырехтакт")):specs["engine_type"]="4-тактный"
 
     gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
@@ -1490,6 +1538,53 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+    if profile=="earth_auger":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and earth_auger_device_family(da)!=earth_auger_device_family(db):
+            return 0.0
+
+        ea=earth_auger_engine_family(ours.get("engine_type"))
+        eb=earth_auger_engine_family(comp.get("engine_type"))
+        if ea and eb and ea!=eb:return 0.0
+
+        sa=ours.get("shaft_diameter_mm");sb=comp.get("shaft_diameter_mm")
+        if sa is not None and sb is not None and abs(float(sa)-float(sb))>0.15:
+            return 0.0
+
+        weights={
+          "device_type":0.10,"engine_type":0.12,"fuel_power_w":0.18,"fuel_tank_l":0.07,
+          "rpm":0.06,"engine_cc":0.15,"max_auger_diameter_mm":0.20,"shaft_diameter_mm":0.12
+        }
+        required=("device_type","engine_type","fuel_power_w","max_auger_diameter_mm","shaft_diameter_mm")
+        critical_missing=any(ours.get(k) is None or comp.get(k) is None for k in required)
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="device_type":
+                    s=1.0 if earth_auger_device_family(a)==earth_auger_device_family(b) else 0.0
+                elif k=="engine_type":
+                    s=1.0 if earth_auger_engine_family(a)==earth_auger_engine_family(b) else 0.0
+                elif k=="shaft_diameter_mm":
+                    s=1.0 if abs(float(a)-float(b))<=0.15 else 0.0
+                elif k=="engine_cc":
+                    s=earth_auger_relative_similarity(float(a),float(b),0.05,0.10,0.20)
+                elif k in ("fuel_power_w","fuel_tank_l","rpm","max_auger_diameter_mm"):
+                    s=earth_auger_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
         return round(max(0,min(100,score)),2)
 
     if profile=="leaf_blower":
@@ -1957,7 +2052,9 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="earth_auger" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения мотобуров. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип двигателя, мощность, максимальный диаметр бура и посадочный диаметр."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -2162,8 +2259,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile=="earth_auger" else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -2195,11 +2292,19 @@ def main() -> None:
                         comp_start=comp_specs.get("engine_start_type")
                         if "electric" in our_start and comp_start is None and status=="competitor_stronger":
                             status="data_incomplete"
+                    if profile=="earth_auger":
+                        req=("device_type","engine_type","fuel_power_w","max_auger_diameter_mm","shaft_diameter_mm")
+                        if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
+                            status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr
                     )
                     if profile=="snow_blower" and "electric" in snow_blower_start_family(ours["specs_normalized"].get("engine_start_type")) and comp_specs.get("engine_start_type") is None:
                         bad.append("У конкурента нет данных по типу запуска: нельзя считать электростартер равным отсутствующим данным")
+                    if profile=="earth_auger":
+                        missing=[k for k in ("device_type","engine_type","fuel_power_w","max_auger_diameter_mm","shaft_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
+                        if missing:
+                            bad.append("Недостаточно данных по критическим характеристикам мотобура — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
