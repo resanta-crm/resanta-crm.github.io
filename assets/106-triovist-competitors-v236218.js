@@ -57,7 +57,7 @@ function specLine(k,v){
  if(v==null)return'';
  const names={
   device_type:'Тип устройства',power_w:'Мощность обогрева',area_m2:'Площадь обогрева',heater_type:'Нагревательный элемент',thermostat_type:'Термостат',
-  control_type:'Управление',display_present:'Наличие дисплея',power_adjustment:'Регулировка мощности',temperature_adjustment:'Регулировка температуры',wheels_present:'Колеса для перемещения',power_modes:'Количество режимов мощности',overheat_protection:'Защита от перегрева',
+  control_type:'Управление',display_present:'Дисплей',power_adjustment:'Регулировка мощности',temperature_adjustment:'Регулировка температуры',wheels_present:'Колеса для перемещения',remote_control:'Пульт ДУ',fan_present:'Встроенный вентилятор',fan_only_mode:'Обдув без нагрева',indicator_light:'Световой индикатор',power_modes:'Количество режимов мощности',overheat_protection:'Защита от перегрева',
   ip_rating:'Влагозащита',installation_type:'Установка',weight_kg:'Вес',sections_count:'Секции',
   fuel_type:'Тип нагрева',airflow_m3h:'Воздушный поток',fuel_consumption_kgh:'Расход топлива',
   tank_l:'Бак',width_mm:'Ширина',humidistat:'Гигростат',noise_db:'Шум',output_mlh:'Производительность',
@@ -118,6 +118,30 @@ function oilRadiatorResult(k,a,b){
   if(d<=1)return 'близкое совпадение · разница 1 секция';
   if(d<=2)return 'частичное совпадение · разница '+Math.round(d)+' секции';
   return 'существенное отличие · разница '+Math.round(d)+' секций';
+ }
+ if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function fanHeaterValue(k,v){
+ if(v==null)return 'нет данных';
+ if(typeof v==='boolean')return v?'есть':'нет';
+ if(k==='power_w')return E(v)+' Вт';
+ return E(v);
+}
+function fanHeaterResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='power_w'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  if(d<=.05)return 'полное совпадение';
+  if(d<=.10)return 'близкое совпадение';
+  if(d<=.20)return 'частичное совпадение';
+  return 'существенное отличие';
+ }
+ if(k==='thermostat_type'){
+  const present=x=>!/нет|отсутств|не предусмотр/i.test(String(x));
+  return present(a)===present(b)?'наличие совпадает':'отличается';
  }
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
@@ -282,6 +306,29 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+oilRadiatorValue(k,b[k])+'</td><td>'+oilRadiatorValue(k,a[k])+'</td><td>'+E(oilRadiatorResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 15% · секции 25% · мощность 25% · регулировка мощности 10% · регулировка температуры 7% · управление 7% · колеса 4% · термостат 7%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='fan_heater'){
+  const keys=[
+   ['device_type','Тип устройства'],
+   ['heater_type','Нагревательный элемент'],
+   ['power_w','Мощность обогрева'],
+   ['power_adjustment','Регулировка мощности'],
+   ['thermostat_type','Термостат'],
+   ['control_type','Управление'],
+   ['remote_control','Пульт ДУ'],
+   ['fan_present','Встроенный вентилятор'],
+   ['fan_only_mode','Обдув без нагрева'],
+   ['indicator_light','Световой индикатор'],
+   ['display_present','Дисплей']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
