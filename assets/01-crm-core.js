@@ -3187,12 +3187,39 @@ async function confirmMergeClient(){
   if(sourceId===targetId){alert('Нельзя объединить клиента с самим собой');return;}
   const source=allClients.find(x=>x.id===sourceId);
   const target=allClients.find(x=>x.id===targetId);
-  if(!source||!target)return;
-  if(!confirm('Клиент «'+source.name+'» будет удалён, а его задачи/визиты/фото переедут в «'+target.name+'». Продолжить?'))return;
-  await mergeClientInto(sourceId,targetId);
-  closeModal('modal-merge-client');
-  if(document.getElementById('modal-client').classList.contains('open'))openClient(targetId);
-  renderClients();
+  if(!source||!target){alert('Не удалось найти одну из карточек клиента. Обновите раздел и повторите.');return;}
+
+  // v23.6.265: модальное окно уже является явным подтверждением необратимого
+  // действия. Второй browser confirm() в Яндекс/Chrome иногда подавляется —
+  // тогда пользователь нажимает «Объединить», но до базы не уходит ни одного
+  // запроса. Поэтому финальное подтверждение — сама красная кнопка в модалке.
+  const btn=document.querySelector('#modal-merge-client button[onclick*="confirmMergeClient"]');
+  if(btn?.disabled)return;
+  const oldText=btn?.textContent||'Объединить';
+  if(btn){btn.disabled=true;btn.textContent='⏳ Объединяю…';}
+
+  try{
+    await mergeClientInto(sourceId,targetId);
+    closeModal('modal-merge-client');
+    if(document.getElementById('modal-client').classList.contains('open'))openClient(targetId);
+    renderClients();
+
+    // Полный пересчёт оборота тяжелее самого объединения и не должен держать
+    // окно заблокированным. Запускаем его после успешного объединения.
+    refreshClientRevenueFromServer(targetId).then(v=>{
+      const t=allClients.find(x=>x.id===targetId);
+      if(t)t.revenue_total=v;
+      if(typeof renderClients==='function')renderClients();
+    }).catch(e=>{
+      console.error(e);
+      alert('Клиенты объединены, но оборот пока не пересчитан: '+(e?.message||e));
+    });
+  }catch(e){
+    console.error('Merge client v23.6.265',e);
+    alert('Не удалось объединить клиентов: '+(e?.message||e));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=oldText;}
+  }
 }
 
 async function persistClientAliases(clientId,names){
@@ -3218,7 +3245,13 @@ async function refreshClientRevenueFromServer(clientId){
 async function mergeClientInto(sourceId,targetId){
   const source=allClients.find(x=>x.id===sourceId);
   const target=allClients.find(x=>x.id===targetId);
-  if(!source||!target)return;
+  if(!source||!target)throw new Error('Карточка источника или получателя не найдена');
+
+  async function mustDb(promise,label){
+    const res=await promise;
+    if(res?.error)throw new Error(label+': '+res.error.message);
+    return res?.data;
+  }
 
   // Сохраняем ВСЕ прежние названия ТТ у главной карточки. Именно по этим именам
   // приходят продажи из 1С, поэтому без алиасов после удаления дубля маст-лист
@@ -3243,26 +3276,40 @@ async function mergeClientInto(sourceId,targetId){
   const sku_count=(Number(target.sku_count)||0)+(Number(source.sku_count)||0)||null;
   const sku_our=(Number(target.sku_our)||0)+(Number(source.sku_our)||0)||null;
 
-  await db.from('tasks').update({client_id:targetId}).eq('client_id',sourceId);
-  await db.from('visits').update({client_id:targetId}).eq('client_id',sourceId);
-  await db.from('client_photos').update({client_id:targetId}).eq('client_id',sourceId);
-  await db.from('route_plans').update({client_name:target.name}).eq('client_name',source.name);
+  await mustDb(db.from('tasks').update({client_id:targetId}).eq('client_id',sourceId),'Перенос задач');
+  await mustDb(db.from('visits').update({client_id:targetId}).eq('client_id',sourceId),'Перенос визитов');
+  await mustDb(db.from('client_photos').update({client_id:targetId}).eq('client_id',sourceId),'Перенос фото');
+  await mustDb(db.from('route_plans').update({client_name:target.name}).eq('client_name',source.name),'Перенос маршрутов');
+
+  // Если обе карточки уже привязаны к одной физической торговой точке,
+  // source-связь безопасно удалится каскадом. Если target ещё не привязан —
+  // переносим недостающие связи до удаления source.
+  try{
+    const {data:srcPoints,error:srcPointsErr}=await db.from('route_physical_point_clients').select('point_id').eq('client_id',sourceId);
+    if(srcPointsErr)throw srcPointsErr;
+    if((srcPoints||[]).length){
+      const {data:tgtPoints,error:tgtPointsErr}=await db.from('route_physical_point_clients').select('point_id').eq('client_id',targetId);
+      if(tgtPointsErr)throw tgtPointsErr;
+      const have=new Set((tgtPoints||[]).map(x=>String(x.point_id)));
+      const add=(srcPoints||[]).filter(x=>!have.has(String(x.point_id))).map(x=>({point_id:x.point_id,client_id:targetId}));
+      if(add.length)await mustDb(db.from('route_physical_point_clients').upsert(add,{onConflict:'point_id,client_id',ignoreDuplicates:true}),'Перенос физической точки');
+    }
+  }catch(e){
+    throw new Error('Перенос физической точки: '+(e?.message||e));
+  }
+
   // Сначала фиксируем алиасы и суммарные показатели у главного клиента, только
   // затем удаляем дубль — так даже при обрыве связи история не потеряется.
-  await db.from('clients').update({assortment,revenue_total,sku_count,sku_our}).eq('id',targetId);
-  await db.from('clients').delete().eq('id',sourceId);
+  await mustDb(db.from('clients').update({assortment,revenue_total,sku_count,sku_our}).eq('id',targetId),'Обновление основной карточки');
+  await mustDb(db.from('clients').delete().eq('id',sourceId),'Удаление дубля');
 
   allTasks=allTasks.map(t=>t.client_id===sourceId?{...t,client_id:targetId}:t);
   allVisits=allVisits.map(v=>v.client_id===sourceId?{...v,client_id:targetId}:v);
   allClientPhotos=allClientPhotos.map(p=>p.client_id===sourceId?{...p,client_id:targetId}:p);
   allRoutePlans=allRoutePlans.map(r=>r.client_name===source.name?{...r,client_name:target.name}:r);
-  // После удаления дубля сервер заново суммирует всю purchase_history по
-  // основному имени и всем сохранённым прежним названиям ТТ.
-  let refreshedRevenue=revenue_total;
-  try{refreshedRevenue=await refreshClientRevenueFromServer(targetId);}catch(e){
-    console.error(e);alert('Карточки объединены, но оборот пока не пересчитан: '+e.message);
-  }
-  Object.assign(target,{assortment,revenue_total:refreshedRevenue,sku_count,sku_our});
+  // Тяжёлый серверный пересчёт оборота теперь запускается вызывающей функцией
+  // ПОСЛЕ закрытия модального окна, чтобы пользователь не ждал его здесь.
+  Object.assign(target,{assortment,revenue_total,sku_count,sku_our});
   allClients=allClients.filter(x=>x.id!==sourceId);
   Object.keys(_clientHistCache).forEach(k=>delete _clientHistCache[k]);
   _clientNameMatchCache=null;_phClientMatchCache=null;_phNameSet=null;
