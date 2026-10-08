@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.272.
+"""Triovist / 21vek automatic market analysis v23.6.273.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.0"
+PARSER_VERSION="market-auto-v3.1"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -719,7 +719,9 @@ def normalize_value(key: str, text: str) -> Any:
         return round(v,2)
     if key=="airflow_m3h":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3)\s*/\s*(?:мин|min)",low,re.I)
-        if m:return round(float(m.group(1).replace(",", "."))*60,2)
+        if m:
+            n=float(m.group(1).replace(",", "."))
+            return round(n if n>100 else n*60,2)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3)\s*/\s*(?:с|s)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",", "."))*3600,2)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:с|s)\b",low,re.I)
@@ -1086,7 +1088,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "clearing_width_cm" in keys and "throw_distance_m" in keys and "power_source" in keys:
         return RULESET_VERSION+"-snow5"
     if "air_speed_ms" in keys and "airflow_m3h" in keys and "power_source" in keys:
-        return RULESET_VERSION+"-blower1"
+        return RULESET_VERSION+"-blower2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
