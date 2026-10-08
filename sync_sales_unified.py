@@ -27,7 +27,7 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.198"
+VERSION = "v23.6.199"
 MINSK = ZoneInfo("Europe/Minsk")
 TARGET_HOURS = set(range(9, 19))
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
@@ -163,7 +163,7 @@ def choose_pending_slice(headers: list[dict], statuses: dict[str, dict]) -> dict
     if sales_stamp is not None and tri_stamp is not None and same_stamp(sales_stamp, tri_stamp):
         baseline_key = slice_key(max(stamps))
         pending = [meta for key, meta in slices if key > baseline_key]
-        return pending[0] if pending else None
+        return pending[-1] if pending else None
 
     # ВАЖНО при переходе месяца: legacy-импорт одной части мог уже записать
     # октябрь, когда вторая часть ещё оставалась на незакрытом сентябре.
@@ -199,7 +199,7 @@ def choose_pending_slice(headers: list[dict], statuses: dict[str, dict]) -> dict
         if same:
             return same[-1]
         pending = [meta for key, meta in slices if key > baseline_key]
-        return pending[0] if pending else None
+        return pending[-1] if pending else None
 
     return slices[-1][1]
 
