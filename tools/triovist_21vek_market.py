@@ -246,7 +246,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             if profile=="chainsaw_electric":
                 matched=matched or ("электрическ" in pn and "пил" in pn)
             elif profile=="snow_blower":
-                matched=matched and "насадк" not in pn and not sku.startswith("900/")
+                matched=matched and sku.startswith("70/7/") and "насадк" not in pn and "листовк" not in pn
             if matched:skus.add(sku)
         if skus:
             groups[key]={
