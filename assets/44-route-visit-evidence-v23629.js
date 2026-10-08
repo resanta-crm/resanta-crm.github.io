@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629)return;
-const VERSION='v23.6.29',EVIDENCE='verified_visit_evidence',BOSS_OK='boss_confirmed_gps_review',BOSS_NO='boss_rejected_gps_review';
+const VERSION='v23.6.264',EVIDENCE='verified_visit_evidence',BOSS_OK='boss_confirmed_gps_review',BOSS_NO='boss_rejected_gps_review';
 const low=v=>String(v??'').trim().toLowerCase();
 function visits(){try{return Array.isArray(allVisits)?allVisits:[]}catch(_){return[]}}
 function routes(){try{return Array.isArray(allRoutePlans)?allRoutePlans:[]}catch(_){return[]}}
@@ -31,9 +31,38 @@ async function reconcile(v){
   }catch(e){console.warn('Route evidence '+VERSION,e)}
   return false;
 }
+let reconcileRecentFlight=null,reconcileRecentScheduled=false,reconcileRecentDone=false;
+function activePageName(){
+  try{return typeof crmActivePage==='function'?String(crmActivePage()||''):String(document.getElementById('app')?.dataset?.activePage||'')}
+  catch(_){return''}
+}
+function recentReconcilePage(){
+  return ['visits','routes-boss','my-routes','route'].includes(activePageName());
+}
 async function reconcileRecent(){
-  const candidates=routes().filter(r=>String(r.link_status||'')==='gps_review_pending'&&r.linked_visit_id).slice(0,20);
-  for(const r of candidates){const v=visits().find(x=>visitId(x)===String(r.linked_visit_id));if(v)await reconcile(v);}
+  if(!recentReconcilePage())return false;
+  if(reconcileRecentDone)return true;
+  if(reconcileRecentFlight)return reconcileRecentFlight;
+  reconcileRecentFlight=(async()=>{
+    const candidates=routes().filter(r=>String(r.link_status||'')==='gps_review_pending'&&r.linked_visit_id).slice(0,20);
+    for(const r of candidates){
+      if(!recentReconcilePage())break;
+      const v=visits().find(x=>visitId(x)===String(r.linked_visit_id));
+      if(v)await reconcile(v);
+      await new Promise(resolve=>setTimeout(resolve,60));
+    }
+    reconcileRecentDone=true;
+    return true;
+  })().finally(()=>{reconcileRecentFlight=null});
+  return reconcileRecentFlight;
+}
+function scheduleReconcileRecent(){
+  if(reconcileRecentScheduled||reconcileRecentDone||reconcileRecentFlight||!recentReconcilePage())return;
+  reconcileRecentScheduled=true;
+  setTimeout(()=>{
+    reconcileRecentScheduled=false;
+    reconcileRecent().catch(e=>console.warn('Route evidence '+VERSION+' recent reconcile',e));
+  },180);
 }
 function wrapVerified(){
   let base=null;try{base=window.routePlanVerified||(typeof routePlanVerified==='function'?routePlanVerified:null)}catch(_){}
@@ -73,7 +102,21 @@ function wrapRender(){
   if(typeof base!=='function'||base.__routeEvidenceV23629)return false;
   const w=function(){const out=base.apply(this,arguments);setTimeout(cleanFalseReview,0);return out};w.__routeEvidenceV23629=true;w.__base=base;window.renderVisits=w;try{renderVisits=w}catch(_){}return true;
 }
-function install(){wrapVerified();wrapSaver('saveVisit');wrapSaver('saveQuickVisit');wrapRender();setTimeout(reconcileRecent,100);}
+function install(){wrapVerified();wrapSaver('saveVisit');wrapSaver('saveQuickVisit');wrapRender();scheduleReconcileRecent();}
 [300,900,1900,3500].forEach(ms=>setTimeout(install,ms));
-window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629=Object.freeze({version:VERSION,checkinTruth:true,sustainedStopTruth:true,reportGpsKeptForAudit:true,noRadiusInflation:true,singleSubmitPreserved:true});
+document.addEventListener('click',e=>{
+  if(e.target.closest?.('.nav-item,.bn-item,[data-page]'))setTimeout(scheduleReconcileRecent,220);
+},true);
+window.addEventListener('hashchange',()=>setTimeout(scheduleReconcileRecent,120));
+window.RESANTA_ROUTE_VISIT_EVIDENCE_V23629=Object.freeze({
+  version:VERSION,
+  checkinTruth:true,
+  sustainedStopTruth:true,
+  reportGpsKeptForAudit:true,
+  noRadiusInflation:true,
+  singleSubmitPreserved:true,
+  recentReconcileSingleFlight:true,
+  recentReconcilePageScoped:true,
+  scheduleRecent:scheduleReconcileRecent
+});
 })();
