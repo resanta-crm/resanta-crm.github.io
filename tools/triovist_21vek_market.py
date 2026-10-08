@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.268.
+"""Triovist / 21vek automatic market analysis v23.6.269.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.6"
+PARSER_VERSION="market-auto-v2.7"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1008,7 +1008,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "chain_brake" in keys and "auto_chain_lubrication" in keys and "power_supply" in keys:
         return RULESET_VERSION+"-esaw2"
     if "clearing_width_cm" in keys and "throw_distance_m" in keys and "power_source" in keys:
-        return RULESET_VERSION+"-snow2"
+        return RULESET_VERSION+"-snow3"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1064,25 +1064,35 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
                 specs["power_supply"]="mains"
     snow_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="power_source" for r in rules):
-        snow_text=" ".join([str(snow_name),str(specs.get("power_source") or ""),str(specs.get("motor_power_w") or ""),str(specs.get("engine_cc") or ""),str(specs.get("tank_l") or "")," ".join(str(x.get("value") or "") for x in raw if isinstance(x,dict))])
-        sn=norm(snow_text)
+        title_n=norm(snow_name)
+        device_n=norm(specs.get("device_type") or "")
+        source_n=norm(specs.get("power_source") or "")
         source=None
-        if any(x in sn for x in ("аккумуля","батар","battery","li ion","li-ion")):
+
+        # Main machine class must win over auxiliary starter/battery fields.
+        # A petrol snow blower may legitimately have an electric starter battery.
+        if "аккумулятор" in title_n or "аккумулятор" in device_n:
             source="battery"
-        elif any(x in norm(snow_name) for x in ("электрическ"," электро","электро ")) or any(x in sn for x in ("220 в","230 в","сетев")):
+        elif "электрическ" in title_n or "электрическ" in device_n or " электро" in (" "+title_n):
             source="electric"
-        elif any(x in sn for x in ("бензин","топлив","двс","рабочий объем двигателя","рабочий объем")) or specs.get("engine_cc") is not None or specs.get("tank_l") is not None:
+        elif "бензин" in title_n or "бензин" in device_n:
             source="fuel"
-        elif "снегоубор" in norm(snow_name):
-            # Plain full-size snow blowers without electric/battery markers in our matrix
-            # are predominantly fuel machines; keep this as last-resort title inference.
+        elif specs.get("engine_cc") is not None or specs.get("tank_l") is not None:
+            source="fuel"
+        elif snow_blower_power_source_family(source_n) in ("battery","electric","fuel"):
+            source=snow_blower_power_source_family(source_n)
+        elif specs.get("battery_voltage_v") is not None or specs.get("battery_capacity_ah") is not None:
+            source="battery"
+        elif "снегоубор" in title_n:
             source="fuel"
         if source:specs["power_source"]=source
+
     if any(r.get("spec_key")=="drive_type" for r in rules) and not specs.get("drive_type"):
         sn=norm(snow_name)
         if "гусен" in sn:specs["drive_type"]="гусеничный"
         elif "колес" in sn:specs["drive_type"]="колесный"
-        gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+
+    gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
         gun_family=heat_gun_family(gun_name,specs,raw)
         if gun_family: specs["fuel_type"]=gun_family
