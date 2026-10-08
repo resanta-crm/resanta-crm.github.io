@@ -63,8 +63,8 @@ function specLine(k,v){
   tank_l:'Бак',width_mm:'Ширина',humidistat:'Гигростат',noise_db:'Шум',output_mlh:'Макс. расход воды',
   base_type:'Цоколь',color_temp_k:'Цветовая температура',luminous_flux_lm:'Световой поток',bulb_shape:'Форма',
   engine_cc:'Объём двигателя',bar_length_cm:'Шина',chain_pitch_in:'Шаг цепи',drive_links:'Звенья',
-  fuel_tank_l:'Топливный бак',chain_speed_ms:'Скорость цепи',motor_position:'Двигатель',
-  tool_free_tension:'Натяжение без инструмента',voltage_v:'Напряжение',equipment:'Комплектация',
+  fuel_tank_l:'Топливный бак',chain_speed_ms:'Скорость цепи',motor_position:'Двигатель',purpose:'Назначение',
+  tool_free_tension:'Быстрое натяжение цепи',chain_brake:'Тормоз цепи',auto_chain_lubrication:'Автоматическая смазка цепи',voltage_v:'Напряжение',equipment:'Комплектация',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -269,6 +269,57 @@ function chainsawValue(k,v){
  if(k==='engine_cc')return E(v)+' см³';
  if(k==='power_w')return E(v)+' Вт';
  return E(v);
+}
+function electricChainsawSupply(v){
+ if(v==null)return 'нет данных';
+ const s=String(v).toLowerCase();
+ if(s==='battery'||/аккумуля|батар|battery|li-ion|li ion/.test(s))return 'аккумулятор';
+ if(s==='mains'||/сеть|сетев|220|230|розет/.test(s))return 'сеть';
+ return E(v);
+}
+function electricChainsawValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='power_supply')return electricChainsawSupply(v);
+ if(typeof v==='boolean')return v?'есть':'нет';
+ if(k==='bar_length_cm')return E(v)+' см';
+ if(k==='power_w')return E(v)+' Вт';
+ return E(v);
+}
+function electricChainsawResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='power_supply'){
+  return electricChainsawSupply(a)===electricChainsawSupply(b)?'совпадает':'сеть/аккумулятор — не аналог';
+ }
+ if(k==='device_type'){
+  const fam=x=>{
+   const s=String(x).toLowerCase();
+   if(/сабел/.test(s))return'recip';
+   if(/дисков|циркуляр/.test(s))return'circular';
+   if(/торцов/.test(s))return'mitre';
+   if(/цепн|электропил/.test(s))return'chain';
+   return s;
+  };
+  return fam(a)===fam(b)?'совпадает':'разный тип — не аналог';
+ }
+ if(k==='bar_length_cm'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'нет данных';
+  const d=Math.abs(av-bv);
+  if(d<=2)return'полное совпадение · разница '+d.toFixed(1).replace('.',',')+' см';
+  if(d<=5)return'близкое совпадение · разница '+d.toFixed(1).replace('.',',')+' см';
+  if(d<=10)return'частичное совпадение · разница '+d.toFixed(1).replace('.',',')+' см';
+  return'существенное отличие · разница '+d.toFixed(1).replace('.',',')+' см';
+ }
+ if(k==='power_w'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'нет данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  if(d<=.05)return'полное совпадение';
+  if(d<=.10)return'близкое совпадение';
+  if(d<=.20)return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
 }
 function infraredEnergy(v){
  if(v==null)return 'нет данных';
@@ -487,6 +538,27 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='chainsaw_electric'){
+  const keys=[
+   ['device_type','Тип'],
+   ['purpose','Назначение'],
+   ['power_supply','Тип питания электропилы'],
+   ['bar_length_cm','Длина шины'],
+   ['power_w','Мощность'],
+   ['chain_brake','Тормоз цепи'],
+   ['tool_free_tension','Быстрое натяжение цепи'],
+   ['auto_chain_lubrication','Автоматическая смазка цепи'],
+   ['motor_position','Расположение двигателя']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+electricChainsawValue(k,b[k])+'</td><td>'+electricChainsawValue(k,a[k])+'</td><td>'+E(electricChainsawResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Формула сопоставимости электропил:</b> тип 10% · назначение 10% · тип питания 20% · длина шины 20% · мощность 18% · тормоз цепи 7% · быстрое натяжение 5% · автоматическая смазка 5% · расположение двигателя 5%. <b>Сетевая и аккумуляторная пила между собой не аналоги. Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
