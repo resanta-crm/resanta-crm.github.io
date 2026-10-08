@@ -1,6 +1,6 @@
 {
-  "version": "23.6.259",
+  "version": "23.6.260",
   "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: oil radiator technical matching by device type, sections, heating power, power/temperature adjustment, control, wheels and thermostat.",
-  "deploy_trigger": "2026-10-08T10:25:00+03:00"
+  "purpose": "Triovist competitors: fan heater technical matching by device type, heater element, heating power, power adjustment, thermostat, control, remote, built-in fan, fan-only mode, indicator and display.",
+  "deploy_trigger": "2026-10-08T10:50:00+03:00"
 }
