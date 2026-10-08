@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.271 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.272 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.271',TTL=30000;
+const V='v23.6.272',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -71,6 +71,8 @@ function specLine(k,v){
   operator_panel_control:'Управление с панели оператора',motor_power_w:'Мощность двигателя',gears:'Количество передач',headlight:'Фара',
   engine_start_type:'Пуск двигателя',starter_power_source:'Питание электростартера',starter_voltage_v:'Напряжение электростартера',
   heated_handles:'Подогрев ручек',clutch_type:'Сцепление',skid_height_adjustment:'Регулировка высоты полозьев',
+  construction:'Конструкция',air_speed_ms:'Скорость воздушного потока',engine_type:'Тип двигателя',battery_type:'Тип аккумулятора',
+  rpm:'Обороты двигателя',functions:'Функции',fuel_power_w:'Мощность топливного двигателя',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -78,6 +80,7 @@ function specLine(k,v){
   output_mlh:' мл/ч',color_temp_k:' K',luminous_flux_lm:' лм',engine_cc:' см³',bar_length_cm:' см',
   chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',
   battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
+  air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -251,6 +254,83 @@ function humidifierResult(k,a,b){
   return 'существенное отличие';
  }
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function leafBlowerSource(v){
+ if(v==null)return 'нет данных';
+ const s=String(v).toLowerCase();
+ if(s==='battery'||/аккумуля|батар|battery|li-ion|li ion/.test(s))return 'аккумуляторная';
+ if(s==='electric'||/электр|сеть|сетев|220|230|розет/.test(s))return 'сетевая электрическая';
+ if(s==='fuel'||/бензин|топлив|двс/.test(s))return 'бензиновая';
+ return E(v);
+}
+function leafBlowerValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='power_source')return leafBlowerSource(v);
+ if(k==='air_speed_ms')return E(v)+' м/с';
+ if(k==='airflow_m3h')return E(v)+' м³/ч';
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='battery_voltage_v')return E(v)+' В';
+ if(k==='rpm')return E(v)+' об/мин';
+ if(k==='noise_db')return E(v)+' дБ';
+ if(k==='motor_power_w'||k==='fuel_power_w')return E(v)+' Вт';
+ if(k==='engine_cc')return E(v)+' см³';
+ if(k==='fuel_tank_l')return E(v)+' л';
+ if(k==='functions'){
+  const s=String(v).toLowerCase(),z=[];
+  if(/blow|обдув|выдув|воздуходув/.test(s))z.push('обдув');
+  if(/vacuum|всасыв|пылесос/.test(s))z.push('всасывание');
+  if(/shred|измельч|мульч/.test(s))z.push('измельчение');
+  return z.length?z.join(' + '):E(v);
+ }
+ return E(v);
+}
+function leafBlowerResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='power_source')return leafBlowerSource(a)===leafBlowerSource(b)?'один класс':'разный тип питания — не аналог';
+ if(k==='construction'){
+  const fam=x=>{
+   const s=String(x).toLowerCase();
+   if(/ранцев|рюкзач/.test(s))return'backpack';
+   if(/ручн|переносн/.test(s))return'handheld';
+   if(/колес/.test(s))return'wheeled';
+   return s;
+  };
+  return fam(a)===fam(b)?'совпадает':'разная конструкция — максимум близкий аналог';
+ }
+ if(k==='battery_voltage_v'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'нет данных';
+  const cls=x=>x>=16&&x<=22?'18/20 В':(x>=34&&x<=42?'36/40 В':(x>=46&&x<=52?'48 В':(x>=54&&x<=62?'60 В':(x>=72&&x<=84?'80 В':String(x)+' В'))));
+  return cls(av)===cls(bv)?'один класс · '+cls(av):'разный класс АКБ';
+ }
+ if(k==='noise_db'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'нет данных';
+  const d=Math.abs(av-bv);
+  if(d<=3)return'полное совпадение · разница '+d.toFixed(1).replace('.',',')+' дБ';
+  if(d<=6)return'близкое совпадение · разница '+d.toFixed(1).replace('.',',')+' дБ';
+  if(d<=10)return'частичное совпадение · разница '+d.toFixed(1).replace('.',',')+' дБ';
+  return'существенное отличие';
+ }
+ if(['air_speed_ms','airflow_m3h','rpm','battery_capacity_ah','fuel_tank_l','motor_power_w','fuel_power_w','engine_cc'].includes(k)){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'нет данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  const t=(k==='motor_power_w'||k==='fuel_power_w'||k==='engine_cc')?[.05,.10,.20]:[.10,.20,.30];
+  if(d<=t[0])return'полное совпадение';
+  if(d<=t[1])return'близкое совпадение';
+  if(d<=t[2])return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(k==='functions'){
+  const tok=x=>{
+   const s=String(x).toLowerCase(),z=[];
+   if(/blow|обдув|выдув|воздуходув/.test(s))z.push('blow');
+   if(/vacuum|всасыв|пылесос/.test(s))z.push('vacuum');
+   if(/shred|измельч|мульч/.test(s))z.push('shred');
+   return z.sort().join('+');
+  };
+  return tok(a)===tok(b)?'совпадает':'набор функций отличается';
+ }
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
  return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
 }
@@ -650,6 +730,41 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='leaf_blower'){
+  const type=String(a.power_source||b.power_source||'');
+  let keys=[],formula='';
+  if(type==='fuel'){
+   keys=[
+    ['device_type','Тип'],['construction','Конструкция'],['air_speed_ms','Скорость воздушного потока'],['engine_type','Тип двигателя'],
+    ['power_source','Тип питания'],['functions','Функции'],['airflow_m3h','Расход воздуха'],['noise_db','Уровень шума'],
+    ['fuel_power_w','Мощность топливного двигателя'],['engine_cc','Рабочий объем двигателя'],['fuel_tank_l','Емкость топливного бака']
+   ];
+   formula='Бензиновые: тип 8% · конструкция 12% · скорость потока 14% · тип двигателя 7% · тип питания 10% · функции 8% · расход воздуха 15% · шум 4% · мощность ДВС 9% · объем двигателя 7% · бак 6%.';
+  }else if(type==='battery'){
+   keys=[
+    ['device_type','Тип'],['construction','Конструкция'],['air_speed_ms','Скорость воздушного потока'],['engine_type','Тип двигателя'],
+    ['power_source','Тип питания'],['battery_type','Тип аккумулятора'],['battery_capacity_ah','Емкость аккумулятора'],
+    ['battery_voltage_v','Напряжение аккумулятора'],['rpm','Обороты двигателя'],['functions','Функции'],
+    ['airflow_m3h','Расход воздуха'],['noise_db','Уровень шума'],['motor_power_w','Номинальная мощность двигателя']
+   ];
+   formula='Аккумуляторные: тип 8% · конструкция 10% · скорость потока 15% · тип двигателя 6% · тип питания 10% · тип АКБ 5% · емкость АКБ 7% · напряжение 12% · обороты 5% · функции 8% · расход воздуха 8% · шум 2% · мощность 4%. 18/20 В и 36/40 В считаются одним классом.';
+  }else{
+   keys=[
+    ['device_type','Тип'],['construction','Конструкция'],['air_speed_ms','Скорость воздушного потока'],['engine_type','Тип двигателя'],
+    ['power_source','Тип питания'],['rpm','Обороты двигателя'],['functions','Функции'],['airflow_m3h','Расход воздуха'],
+    ['noise_db','Уровень шума'],['motor_power_w','Номинальная мощность двигателя']
+   ];
+   formula='Сетевые: тип 10% · конструкция 12% · скорость потока 18% · тип двигателя 7% · тип питания 12% · обороты 7% · функции 10% · расход воздуха 16% · шум 3% · мощность 5%.';
+  }
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+leafBlowerValue(k,b[k])+'</td><td>'+leafBlowerValue(k,a[k])+'</td><td>'+E(leafBlowerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Бензиновые, аккумуляторные и сетевые воздуходувки между собой не аналоги. Разная конструкция не может получить прямой аналог. Для потока, расхода, мощности, оборотов, АКБ и бака действуют согласованные допуски. Цена в подборе технического аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
