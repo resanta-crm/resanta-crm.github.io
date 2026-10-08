@@ -1,6 +1,6 @@
 {
-  "version": "23.6.260",
+  "version": "23.6.261",
   "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: fan heater technical matching by device type, heater element, heating power, power adjustment, thermostat, control, remote, built-in fan, fan-only mode, indicator and display.",
-  "deploy_trigger": "2026-10-08T10:50:00+03:00"
+  "purpose": "Triovist competitors: heat guns split into electric single/three phase, gas, diesel direct and diesel indirect, with class-specific technical formulas.",
+  "deploy_trigger": "2026-10-08T11:25:00+03:00"
 }
