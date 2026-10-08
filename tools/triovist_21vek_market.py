@@ -1218,14 +1218,21 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         else:
             source=leaf_blower_power_source_family(specs.get("power_source"))
         if source:specs["power_source"]=source
+
+        if norm(specs.get("construction")) in ("двигателя","двигатель"):
+            specs.pop("construction",None)
         if not specs.get("construction"):
             if any(x in bn for x in ("ранцев","рюкзач")):specs["construction"]="ранцевая"
-            elif "воздуходув" in bn:specs["construction"]="ручная"
-        if not specs.get("functions"):
-            ft=set(["blow"]) if "воздуходув" in bn else set()
-            if "пылесос" in bn:ft.add("vacuum")
-            if "измельч" in bn or "мульч" in bn:ft.add("shred")
-            if ft:specs["functions"]="+".join(sorted(ft))
+            elif any(x in bn for x in ("ручн","переносн")):specs["construction"]="ручная"
+
+        ft=leaf_blower_function_tokens(specs.get("functions"))
+        if "воздуходув" in bn:ft.add("blow")
+        if "пылесос" in bn:ft.add("vacuum")
+        if "измельч" in bn or "мульч" in bn:ft.add("shred")
+        if ft:specs["functions"]="+".join(sorted(ft))
+
+        if source=="fuel" and specs.get("fuel_power_w") is None and specs.get("motor_power_w") is not None:
+            specs["fuel_power_w"]=specs.get("motor_power_w")
 
     gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
