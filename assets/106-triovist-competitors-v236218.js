@@ -56,11 +56,11 @@ function gradeLabel(g){
 function specLine(k,v){
  if(v==null)return'';
  const names={
-  device_type:'Тип устройства',power_w:'Мощность обогрева',area_m2:'Площадь обогрева',heater_type:'Нагревательный элемент',thermostat_type:'Термостат',
+  device_type:'Тип устройства',power_w:'Мощность обогрева',area_m2:'Площадь обогрева',heater_type:'Нагревательный элемент',thermostat_type:'Термостат',technologies:'Технологии',power_supply:'Питание',
   control_type:'Управление',display_present:'Дисплей',power_adjustment:'Регулировка мощности',temperature_adjustment:'Регулировка температуры',wheels_present:'Колеса для перемещения',remote_control:'Пульт ДУ',fan_present:'Встроенный вентилятор',fan_only_mode:'Обдув без нагрева',indicator_light:'Световой индикатор',power_modes:'Количество режимов мощности',overheat_protection:'Защита от перегрева',
   ip_rating:'Влагозащита',installation_type:'Установка',weight_kg:'Вес',sections_count:'Секции',
   fuel_type:'Тип',heating_mode:'Нагрев',airflow_m3h:'Производительность',fuel_consumption_kgh:'Расход топлива',
-  tank_l:'Бак',width_mm:'Ширина',humidistat:'Гигростат',noise_db:'Шум',output_mlh:'Производительность',
+  tank_l:'Бак',width_mm:'Ширина',humidistat:'Гигростат',noise_db:'Шум',output_mlh:'Макс. расход воды',
   base_type:'Цоколь',color_temp_k:'Цветовая температура',luminous_flux_lm:'Световой поток',bulb_shape:'Форма',
   engine_cc:'Объём двигателя',bar_length_cm:'Шина',chain_pitch_in:'Шаг цепи',drive_links:'Звенья',
   fuel_tank_l:'Топливный бак',chain_speed_ms:'Скорость цепи',motor_position:'Двигатель',
@@ -188,6 +188,49 @@ function heatGunResult(k,a,b){
  if(k==='thermostat_type'){
   const present=x=>!/нет|отсутств|не предусмотр/i.test(String(x));
   return present(a)===present(b)?'наличие совпадает':'отличается';
+ }
+ if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function humidifierTech(v){
+ if(v==null)return 'нет данных';
+ return ({ultrasonic:'ультразвуковая',traditional:'традиционная',steam:'паровая'})[String(v)]||E(v);
+}
+function humidifierSupply(v){
+ if(v==null)return 'нет данных';
+ return ({
+  mains:'от сети',usb:'USB',battery:'аккумулятор/батарея',
+  'mains+usb':'сеть + USB','mains+battery':'сеть + аккумулятор',
+  'usb+battery':'USB + аккумулятор','mains+usb+battery':'сеть + USB + аккумулятор'
+ })[String(v)]||E(v);
+}
+function humidifierValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='technologies')return humidifierTech(v);
+ if(k==='power_supply')return humidifierSupply(v);
+ if(typeof v==='boolean')return v?'есть':'нет';
+ if(k==='power_w')return E(v)+' Вт';
+ if(k==='area_m2')return E(v)+' м²';
+ if(k==='tank_l')return E(v)+' л';
+ if(k==='output_mlh')return E(v)+' мл/ч';
+ return E(v);
+}
+function humidifierResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='device_type'){
+  const fam=x=>/увлажн/i.test(String(x))?'humidifier':(/мойк.*воздух/i.test(String(x))?'air_washer':(/диффуз/i.test(String(x))?'diffuser':String(x).toLowerCase()));
+  return fam(a)===fam(b)?'совпадает':'разный тип — не аналог';
+ }
+ if(k==='technologies')return String(a)===String(b)?'совпадает':'разная технология — не прямой аналог';
+ if(k==='output_mlh'||k==='area_m2'||k==='tank_l'||k==='power_w'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  const t=k==='power_w'?[.15,.30,.50]:[.10,.20,.30];
+  if(d<=t[0])return 'полное совпадение';
+  if(d<=t[1])return 'близкое совпадение';
+  if(d<=t[2])return 'частичное совпадение';
+  return 'существенное отличие';
  }
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
@@ -334,6 +377,27 @@ function details(r,l){
   const area='<div class="tm224-ref"><b>Справочно — площадь обогрева:</b> конкурент '+(b.area_m2==null?'нет данных':E(b.area_m2)+' м²')+' · наш товар '+(a.area_m2==null?'нет данных':E(a.area_m2)+' м²')+'. <b>В сопоставимости не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+area
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='humidifier'){
+  const keys=[
+   ['device_type','Тип'],
+   ['power_w','Потребляемая мощность'],
+   ['power_supply','Питание'],
+   ['area_m2','Макс. обслуживаемая площадь'],
+   ['tank_l','Емкость резервуара для воды'],
+   ['output_mlh','Макс. расход воды'],
+   ['technologies','Технологии'],
+   ['remote_control','Дистанционное управление'],
+   ['control_type','Управление']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+humidifierValue(k,b[k])+'</td><td>'+humidifierValue(k,a[k])+'</td><td>'+E(humidifierResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип 10% · технологии 20% · макс. расход воды 20% · площадь 15% · резервуар 15% · потребляемая мощность 7% · питание 5% · управление 5% · дистанционное управление 3%. Разный тип устройства — не аналог; разная технология не может быть прямым аналогом. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
