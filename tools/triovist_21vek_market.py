@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.4"
+PARSER_VERSION="market-auto-v2.5"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -234,10 +234,15 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Электропилы","chainsaw_electric","электропил"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
-        skus={
-          str(x.get("sku") or "").strip() for x in garden
-          if sku_depth(str(x.get("sku") or ""))>=3 and needle in norm(x.get("product"))
-        }
+        skus=set()
+        for x in garden:
+            sku=str(x.get("sku") or "").strip()
+            if sku_depth(sku)<3:continue
+            pn=norm(x.get("product"))
+            matched=needle in pn
+            if profile=="chainsaw_electric":
+                matched=matched or ("электрическ" in pn and "пил" in pn)
+            if matched:skus.add(sku)
         if skus:
             groups[key]={
               "scope_key":key,"source_category":"Садовая техника","source_subgroup":label,
@@ -1028,6 +1033,14 @@ def electric_chainsaw_supply_family(v: Any) -> str:
     return n
 
 
+def electric_chainsaw_purpose_family(v: Any) -> str:
+    n=norm(v)
+    if "полупроф" in n:return "semi_professional"
+    if "проф" in n:return "professional"
+    if "бытов" in n:return "household"
+    return n
+
+
 def infrared_power_similarity(a: float,b: float) -> float:
     diff=abs(a-b)
     if diff<=100:return 1.0
@@ -1173,6 +1186,8 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                     s=1.0 if electric_chainsaw_device_family(a)==electric_chainsaw_device_family(b) else 0.0
                 elif k=="power_supply":
                     s=1.0 if electric_chainsaw_supply_family(a)==electric_chainsaw_supply_family(b) else 0.0
+                elif k=="purpose":
+                    s=1.0 if electric_chainsaw_purpose_family(a)==electric_chainsaw_purpose_family(b) else 0.0
                 elif rule.get("direction")=="boolean":
                     s=1.0 if bool(a)==bool(b) else 0.0
                 else:
