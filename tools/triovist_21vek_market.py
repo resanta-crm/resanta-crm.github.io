@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.270.
+"""Triovist / 21vek automatic market analysis v23.6.271.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.8"
+PARSER_VERSION="market-auto-v2.9"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -519,8 +519,10 @@ def snow_blower_drive_family(v: Any) -> str:
 
 def snow_blower_start_family(v: Any) -> str:
     n=norm(v);out=[]
-    if "руч" in n:out.append("manual")
-    if any(x in n for x in ("электр","электростарт","220","12 в","12v")):out.append("electric")
+    if any(x in n for x in ("руч","manual")):out.append("manual")
+    if any(x in n for x in ("электр","электростарт","electric","220","230")):out.append("electric")
+    if any(x in n for x in ("battery","аккумуля","12 в","12v")):out.append("battery")
+    if any(x in n for x in ("mains","сеть","220","230")):out.append("mains")
     return "+".join(sorted(set(out))) if out else n
 
 
@@ -1012,7 +1014,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "chain_brake" in keys and "auto_chain_lubrication" in keys and "power_supply" in keys:
         return RULESET_VERSION+"-esaw2"
     if "clearing_width_cm" in keys and "throw_distance_m" in keys and "power_source" in keys:
-        return RULESET_VERSION+"-snow4"
+        return RULESET_VERSION+"-snow5"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1090,6 +1092,36 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         elif "снегоубор" in title_n:
             source="fuel"
         if source:specs["power_source"]=source
+
+        # For petrol machines 21vek may label starter supply as the machine's
+        # "Источник питания" / "Напряжение аккумулятора". Keep that auxiliary
+        # starter data separate from the main fuel class.
+        if source=="fuel":
+            current_raw=[x for x in raw if isinstance(x,dict) and str(x.get("path") or "").startswith("fd.attributes")]
+            src_values=[norm(x.get("value")) for x in current_raw if x.get("key")=="power_source"]
+            volt_values=[normalize_value("battery_voltage_v",str(x.get("value") or "")) for x in current_raw if x.get("key")=="battery_voltage_v"]
+            volt_values=[float(x) for x in volt_values if x is not None]
+            starter_source=None
+            if any(any(t in v for t in ("сеть","220","230")) for v in src_values):
+                starter_source="mains"
+            elif any(any(t in v for t in ("аккумуля","батар","12 в","12v")) for v in src_values):
+                starter_source="battery"
+            if volt_values:
+                vv=volt_values[0]
+                if vv>=100:
+                    starter_source=starter_source or "mains"
+                    specs["starter_voltage_v"]=vv
+                    specs.pop("battery_voltage_v",None)
+                elif vv<=60:
+                    starter_source=starter_source or "battery"
+                    specs["starter_voltage_v"]=vv
+                    specs.pop("battery_voltage_v",None)
+            if starter_source:
+                specs["starter_power_source"]=starter_source
+                sf=snow_blower_start_family(specs.get("engine_start_type"))
+                has_manual="manual" in sf
+                if "electric" in sf:
+                    specs["engine_start_type"]=("electric_"+starter_source)+("+manual" if has_manual else "")
 
     if any(r.get("spec_key")=="drive_type" for r in rules) and not specs.get("drive_type"):
         sn=norm(snow_name)
@@ -1666,6 +1698,33 @@ def directional(rule: dict,a: Any,b: Any) -> float|None:
     return min(95,55+rel*80) if better else max(5,45-rel*80)
 
 
+def snow_blower_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="engine_start_type":
+        aa=snow_blower_start_family(a);bb=snow_blower_start_family(b)
+        if aa==bb:return 50
+        ae="electric" in aa;be="electric" in bb
+        am="manual" in aa;bm="manual" in bb
+        if ae and not be:return 78 if am else 70
+        if be and not ae:return 22 if bm else 30
+        return 50
+    if k in ("headlight","heated_handles","operator_panel_control","skid_height_adjustment"):
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 70 if av and not bv else 30
+    if k=="gears":
+        def parts(v):
+            m=re.match(r"^(\d+)\+(\d+)$",str(v or "").strip())
+            return (int(m.group(1)),int(m.group(2))) if m else None
+        aa=parts(a);bb=parts(b)
+        if aa and bb:
+            if aa==bb:return 50
+            da=(aa[0]+aa[1])-(bb[0]+bb[1])
+            return 60 if da>0 else (40 if da<0 else 50)
+    return directional(rule,a,b)
+
+
 def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|None,comp_price: float|None,profile: str="generic") -> float:
     price_available=our_price is not None and comp_price is not None and comp_price>0
     if price_available:
@@ -1674,7 +1733,7 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
     else: price_score=50
     s=w=0.0
     for rule in rules:
-        z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        z=snow_blower_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"])) if profile=="snow_blower" else directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
         rw=float(rule.get("weight") or 0);s+=z*rw;w+=rw
     spec_score=s/w if w else 50
@@ -1725,6 +1784,8 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
         return "Цена конкурента не получена. Итог рассчитан только по техническим характеристикам; решение по цене не принимать."
+    if status=="data_incomplete":
+        return "У конкурента не подтверждены важные характеристики. Не считать его сильнее только из-за цены: сначала подтвердить тип запуска и недостающие функции."
     if status=="competitor_stronger":
         return "Конкурент сильнее по совокупности цены и характеристик. Усилить карточку/матрицу; цену снижать только в пределах МРЦ."
     if status=="ours_stronger":
@@ -1950,9 +2011,17 @@ def main() -> None:
                         pdb=round(op-cp,2);pdp=round((op-cp)/cp*100,2)
                     comp_score=competitiveness(ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,profile)
                     status="ours_stronger" if comp_score>=65 else ("parity" if comp_score>=45 else "competitor_stronger")
+                    comp_specs=p.get("specs_normalized") or {}
+                    if profile=="snow_blower":
+                        our_start=snow_blower_start_family(ours["specs_normalized"].get("engine_start_type"))
+                        comp_start=comp_specs.get("engine_start_type")
+                        if "electric" in our_start and comp_start is None and status=="competitor_stronger":
+                            status="data_incomplete"
                     adv,bad=compare_texts(
-                      ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,p.get("position"),mr
+                      ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr
                     )
+                    if profile=="snow_blower" and "electric" in snow_blower_start_family(ours["specs_normalized"].get("engine_start_type")) and comp_specs.get("engine_start_type") is None:
+                        bad.append("У конкурента нет данных по типу запуска: нельзя считать электростартер равным отсутствующим данным")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
