@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.238 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.268 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.238',TTL=30000;
+const V='v23.6.268',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -65,12 +65,18 @@ function specLine(k,v){
   engine_cc:'Объём двигателя',bar_length_cm:'Шина',chain_pitch_in:'Шаг цепи',drive_links:'Звенья',
   fuel_tank_l:'Топливный бак',chain_speed_ms:'Скорость цепи',motor_position:'Двигатель',purpose:'Назначение',
   tool_free_tension:'Быстрое натяжение цепи',chain_brake:'Тормоз цепи',auto_chain_lubrication:'Автоматическая смазка цепи',voltage_v:'Напряжение',equipment:'Комплектация',
+  snow_blower_type:'Тип снегоуборщика',power_source:'Источник питания',battery_capacity_ah:'Емкость аккумулятора',battery_voltage_v:'Напряжение аккумулятора',
+  clearing_width_cm:'Ширина обработки',intake_height_cm:'Высота обработки',throw_distance_m:'Макс. дальность выброса',drive_type:'Движитель',
+  operator_panel_control:'Управление с панели оператора',motor_power_w:'Мощность двигателя',gears:'Количество передач',headlight:'Фара',
+  engine_start_type:'Пуск двигателя',heated_handles:'Подогрев ручек',clutch_type:'Сцепление',skid_height_adjustment:'Регулировка высоты полозьев',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
   airflow_m3h:' м³/ч',fuel_consumption_kgh:' кг/ч',tank_l:' л',width_mm:' мм',noise_db:' дБ',
   output_mlh:' мл/ч',color_temp_k:' K',luminous_flux_lm:' лм',engine_cc:' см³',bar_length_cm:' см',
-  chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
+  chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',
+  battery_capacity_ah:' А·ч',battery_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
+  width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
 }
@@ -237,6 +243,77 @@ function humidifierResult(k,a,b){
   const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
   const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
   const t=k==='power_w'?[.15,.30,.50]:[.10,.20,.30];
+  if(d<=t[0])return 'полное совпадение';
+  if(d<=t[1])return 'близкое совпадение';
+  if(d<=t[2])return 'частичное совпадение';
+  return 'существенное отличие';
+ }
+ if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function snowBlowerSource(v){
+ if(v==null)return 'нет данных';
+ const s=String(v).toLowerCase();
+ if(s==='battery'||/аккумуля|батар|battery|li-ion|li ion/.test(s))return 'аккумуляторный';
+ if(s==='electric'||/электр|сеть|сетев|220|230|розет/.test(s))return 'сетевой электрический';
+ if(s==='fuel'||/бензин|топлив|двс/.test(s))return 'бензиновый';
+ return E(v);
+}
+function snowBlowerValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='power_source')return snowBlowerSource(v);
+ if(typeof v==='boolean')return v?'есть':'нет';
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='battery_voltage_v')return E(v)+' В';
+ if(k==='clearing_width_cm'||k==='intake_height_cm')return E(v)+' см';
+ if(k==='throw_distance_m')return E(v)+' м';
+ if(k==='motor_power_w')return E(v)+' Вт';
+ if(k==='engine_cc')return E(v)+' см³';
+ if(k==='tank_l')return E(v)+' л';
+ return E(v);
+}
+function snowBlowerResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='power_source')return snowBlowerSource(a)===snowBlowerSource(b)?'один класс':'разный источник — не аналог';
+ if(k==='device_type'){
+  const fam=x=>/насадк/i.test(String(x))?'attachment':(/лопат/i.test(String(x))?'shovel':(/снегоубор/i.test(String(x))?'snow':'other'));
+  return fam(a)===fam(b)?'совпадает':'разный тип — не аналог';
+ }
+ if(k==='snow_blower_type'){
+  const tok=x=>{
+   const s=String(x).toLowerCase(),z=[];
+   if(/несамоход/.test(s))z.push('non_self');else if(/самоход/.test(s))z.push('self');
+   if(/одноступ|1\s*ступ/.test(s))z.push('one');
+   if(/двухступ|2\s*ступ/.test(s))z.push('two');
+   if(/трехступ|3\s*ступ/.test(s))z.push('three');
+   return z.sort().join('+');
+  };
+  const aa=tok(a),bb=tok(b);
+  if(aa&&bb&&aa!==bb)return 'критическое отличие — не аналог';
+  return String(a).toLowerCase()===String(b).toLowerCase()?'совпадает':'тип отличается';
+ }
+ if(k==='drive_type'){
+  const fam=x=>/гусен/.test(String(x).toLowerCase())?'track':(/колес/.test(String(x).toLowerCase())?'wheel':String(x).toLowerCase());
+  return fam(a)===fam(b)?'совпадает':({track:true,wheel:true}[fam(a)]&&{track:true,wheel:true}[fam(b)]?'колёса/гусеницы — не прямой аналог':'отличается');
+ }
+ if(k==='battery_voltage_v'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const cls=x=>x>=16&&x<=22?'18/20 В':(x>=34&&x<=42?'36/40 В':(x>=46&&x<=52?'48 В':(x>=54&&x<=62?'60 В':(x>=72&&x<=84?'80 В':String(x)+' В'))));
+  return cls(av)===cls(bv)?'один класс · '+cls(av):'разный класс АКБ';
+ }
+ if(k==='clearing_width_cm'||k==='intake_height_cm'||k==='throw_distance_m'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const d=Math.abs(av-bv),t=k==='throw_distance_m'?[1,2,4]:[3,5,10],unit=k==='throw_distance_m'?' м':' см';
+  if(d<=t[0])return 'полное совпадение · разница '+d.toFixed(1).replace('.',',')+unit;
+  if(d<=t[1])return 'близкое совпадение · разница '+d.toFixed(1).replace('.',',')+unit;
+  if(d<=t[2])return 'частичное совпадение · разница '+d.toFixed(1).replace('.',',')+unit;
+  return 'существенное отличие · разница '+d.toFixed(1).replace('.',',')+unit;
+ }
+ if(k==='motor_power_w'||k==='engine_cc'||k==='tank_l'||k==='battery_capacity_ah'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  const t=(k==='tank_l'||k==='battery_capacity_ah')?[.10,.20,.30]:[.05,.10,.20];
   if(d<=t[0])return 'полное совпадение';
   if(d<=t[1])return 'близкое совпадение';
   if(d<=t[2])return 'частичное совпадение';
@@ -548,6 +625,46 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='snow_blower'){
+  const type=String(a.power_source||b.power_source||'');
+  let keys=[],formula='';
+  if(type==='fuel'){
+   keys=[
+    ['device_type','Тип'],['snow_blower_type','Тип снегоуборщика'],['clearing_width_cm','Ширина обработки'],
+    ['intake_height_cm','Высота обработки'],['throw_distance_m','Максимальная дальность выброса'],['drive_type','Движитель'],
+    ['operator_panel_control','Управление с панели оператора'],['gears','Количество передач'],['headlight','Фара'],
+    ['motor_power_w','Мощность двигателя на топливе'],['engine_cc','Рабочий объем двигателя'],['tank_l','Емкость бака'],
+    ['engine_start_type','Пуск двигателя'],['heated_handles','Подогрев ручек'],['clutch_type','Сцепление'],
+    ['skid_height_adjustment','Регулировка высоты полозьев']
+   ];
+   formula='Бензиновые: тип 10% · тип снегоуборщика 10% · ширина 12% · высота 8% · дальность выброса 8% · движитель 10% · управление с панели 4% · передачи 8% · фара 3% · мощность ДВС 10% · объем двигателя 5% · бак 3% · пуск 3% · подогрев ручек 2% · сцепление 2% · полозья 2%.';
+  }else if(type==='electric'){
+   keys=[
+    ['device_type','Тип'],['snow_blower_type','Тип снегоуборщика'],['power_source','Источник питания'],
+    ['clearing_width_cm','Ширина обработки'],['intake_height_cm','Высота обработки'],['throw_distance_m','Максимальная дальность выброса'],
+    ['drive_type','Движитель'],['motor_power_w','Мощность электродвигателя'],['operator_panel_control','Управление с панели оператора'],
+    ['headlight','Фара'],['skid_height_adjustment','Регулировка высоты полозьев']
+   ];
+   formula='Электрические: тип 12% · тип снегоуборщика 10% · источник питания 10% · ширина 18% · высота 12% · дальность выброса 10% · движитель 8% · мощность электродвигателя 12% · управление с панели 3% · фара 2% · полозья 3%.';
+  }else{
+   keys=[
+    ['device_type','Тип'],['snow_blower_type','Тип снегоуборщика'],['power_source','Источник питания'],
+    ['battery_capacity_ah','Емкость аккумулятора'],['battery_voltage_v','Напряжение аккумулятора'],
+    ['clearing_width_cm','Ширина обработки'],['intake_height_cm','Высота обработки'],['throw_distance_m','Максимальная дальность выброса'],
+    ['drive_type','Движитель'],['operator_panel_control','Управление с панели оператора'],['headlight','Фара'],
+    ['skid_height_adjustment','Регулировка высоты полозьев']
+   ];
+   formula='Аккумуляторные: тип 10% · тип снегоуборщика 8% · источник питания 8% · ширина 16% · высота 10% · дальность выброса 10% · движитель 7% · емкость АКБ 10% · напряжение АКБ 12% · управление с панели 3% · фара 2% · полозья 4%. 18/20 В и 36/40 В считаются одним классом.';
+  }
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+snowBlowerValue(k,b[k])+'</td><td>'+snowBlowerValue(k,a[k])+'</td><td>'+E(snowBlowerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Бензиновые, сетевые и аккумуляторные между собой не аналоги. Для ширины/высоты/дальности и мощности действуют согласованные допуски. Цена в подборе технического аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
