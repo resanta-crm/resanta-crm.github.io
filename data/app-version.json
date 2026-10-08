@@ -1,6 +1,6 @@
 {
-  "version": "23.6.266",
+  "version": "23.6.267",
   "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: electric chainsaw matching by type, purpose, power source, bar length, power, chain brake, tool-free tension, automatic lubrication and motor position.",
-  "deploy_trigger": "2026-10-08T14:35:00+03:00"
+  "purpose": "Triovist competitors: final electric chainsaw matching with exact purpose categories and complete electric-saw matrix coverage.",
+  "deploy_trigger": "2026-10-08T14:48:00+03:00"
 }
