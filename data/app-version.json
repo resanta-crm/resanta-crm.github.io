@@ -1,6 +1,6 @@
 {
-  "version": "23.6.264",
+  "version": "23.6.265",
   "released_at": "2026-10-08",
-  "purpose": "CRM performance: route visit evidence reconciliation is single-flight and runs only on Visits/Routes pages.",
-  "deploy_trigger": "2026-10-08T13:18:00+03:00"
+  "purpose": "Client duplicate merge: remove suppressed browser confirm, show progress, fail loudly on DB errors, preserve route physical-point links, and refresh revenue after closing.",
+  "deploy_trigger": "2026-10-08T13:23:00+03:00"
 }
