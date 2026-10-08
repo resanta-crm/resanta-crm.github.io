@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.272 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.274 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.272',TTL=30000;
+const V='v23.6.274',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -73,6 +73,7 @@ function specLine(k,v){
   heated_handles:'Подогрев ручек',clutch_type:'Сцепление',skid_height_adjustment:'Регулировка высоты полозьев',
   construction:'Конструкция',air_speed_ms:'Скорость воздушного потока',engine_type:'Тип двигателя',battery_type:'Тип аккумулятора',
   rpm:'Обороты двигателя',functions:'Функции',fuel_power_w:'Мощность топливного двигателя',
+  max_auger_diameter_mm:'Макс. диаметр бура',shaft_diameter_mm:'Диаметр посадочного отверстия',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -80,7 +81,7 @@ function specLine(k,v){
   output_mlh:' мл/ч',color_temp_k:' K',luminous_flux_lm:' лм',engine_cc:' см³',bar_length_cm:' см',
   chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',
   battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
-  air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',
+  air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',max_auger_diameter_mm:' мм',shaft_diameter_mm:' мм',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -256,6 +257,51 @@ function humidifierResult(k,a,b){
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
  return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function earthAugerFamily(v){
+ if(v==null)return '';
+ const s=String(v).toLowerCase();
+ if(/мотобур|бензобур|землебур|earth auger|auger/.test(s))return'earth_auger';
+ return s.trim();
+}
+function earthAugerEngine(v){
+ if(v==null)return '';
+ const s=String(v).toLowerCase();
+ if(/двухтакт|2\s*[- ]?такт|two\s*stroke/.test(s))return'2-тактный';
+ if(/четырехтакт|4\s*[- ]?такт|four\s*stroke/.test(s))return'4-тактный';
+ return s.trim();
+}
+function earthAugerValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='fuel_power_w'){
+  const n=N(v);return n==null?E(v):(n>=1000?(n/1000).toFixed(2).replace('.',',')+' кВт':n+' Вт');
+ }
+ if(k==='fuel_tank_l')return E(v)+' л';
+ if(k==='rpm')return E(v)+' об/мин';
+ if(k==='engine_cc')return E(v)+' см³';
+ if(k==='max_auger_diameter_mm'||k==='shaft_diameter_mm')return E(v)+' мм';
+ if(k==='engine_type')return E(earthAugerEngine(v)||v);
+ return E(v);
+}
+function earthAugerResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='device_type')return earthAugerFamily(a)===earthAugerFamily(b)?'один класс':'разный тип — не аналог';
+ if(k==='engine_type')return earthAugerEngine(a)===earthAugerEngine(b)?'совпадает':'разный тип двигателя — не аналог';
+ if(k==='shaft_diameter_mm'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  return Math.abs(av-bv)<=0.15?'совпадает':'разная посадка — не аналог';
+ }
+ if(['fuel_power_w','fuel_tank_l','rpm','engine_cc','max_auger_diameter_mm'].includes(k)){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  const t=k==='engine_cc'?[.05,.10,.20]:[.10,.20,.30];
+  if(d<=t[0])return'полное совпадение';
+  if(d<=t[1])return'близкое совпадение';
+  if(d<=t[2])return'частичное совпадение';
+  return'существенное отличие';
+ }
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb?'совпадает':'отличается';
 }
 function leafBlowerSource(v){
  if(v==null)return 'нет данных';
@@ -730,6 +776,21 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='earth_auger'){
+  const keys=[
+   ['device_type','Тип'],['engine_type','Тип двигателя'],['fuel_power_w','Мощность топливного двигателя'],
+   ['fuel_tank_l','Емкость топливного бака'],['rpm','Кол-во оборотов'],['engine_cc','Объем двигателя'],
+   ['max_auger_diameter_mm','Макс. диаметр бура'],['shaft_diameter_mm','Диаметр посадочного отверстия']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+earthAugerValue(k,b[k])+'</td><td>'+earthAugerValue(k,a[k])+'</td><td>'+E(earthAugerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Мотобуры:</b> тип и тип двигателя должны совпадать; посадочный диаметр сравнивается строго после нормализации (например, 1″ = 25,4 мм). Мощность, бак, обороты и максимальный диаметр бура — допуск ±10%; объем двигателя — ±5%. Основные параметры класса: мощность + объем двигателя + максимальный диаметр бура. Если нет типа двигателя, мощности, максимального диаметра бура или посадочного диаметра — вывод «сильнее/слабее» блокируется как недостаточно данных. Больше оборотов само по себе не означает лучший мотобур.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
