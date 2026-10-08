@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.261.
+"""Triovist / 21vek automatic market analysis v23.6.262.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.1"
+PARSER_VERSION="market-auto-v2.2"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -426,6 +426,51 @@ def heat_gun_metric_similarity(a: float,b: float) -> float:
     return 0.0
 
 
+def humidifier_device_family(v: Any) -> str:
+    n=norm(v)
+    if "аромадиффуз" in n or ("диффузор" in n and "увлажн" not in n):return "diffuser"
+    if "мойк" in n and "воздух" in n:return "air_washer"
+    if "очистител" in n and "увлажн" not in n:return "air_purifier"
+    if "увлажн" in n:return "humidifier"
+    return n
+
+
+def humidifier_technology_family(v: Any) -> str:
+    n=norm(v)
+    out=[]
+    if "ультразв" in n:out.append("ultrasonic")
+    if "традиц" in n or "холодн испар" in n or "естествен испар" in n:out.append("traditional")
+    if "паров" in n or "горяч пар" in n:out.append("steam")
+    return "+".join(out) if out else n
+
+
+def humidifier_power_supply_family(v: Any) -> str:
+    n=norm(v)
+    out=[]
+    if any(x in n for x in ("сеть","розет","220","230")):out.append("mains")
+    if "usb" in n or "юсб" in n:out.append("usb")
+    if any(x in n for x in ("аккумуля","батар")):out.append("battery")
+    return "+".join(out) if out else n
+
+
+def humidifier_metric_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.10:return 1.0
+    if diff<=0.20:return 0.85
+    if diff<=0.30:return 0.65
+    return 0.0
+
+
+def humidifier_power_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.15:return 1.0
+    if diff<=0.30:return 0.85
+    if diff<=0.50:return 0.65
+    return 0.0
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
     if key=="energy_type":
@@ -433,6 +478,10 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="technologies":
+        return humidifier_technology_family(text)[:240] or None
+    if key=="power_supply":
+        return humidifier_power_supply_family(text)[:120] or None
     if key in ("device_type","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment"):
         return norm(text)[:240] or None
     if key=="base_type":
@@ -832,6 +881,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     keys={str(x.get("spec_key") or "") for x in (rules or [])}
     if "heating_mode" in keys and "fuel_consumption_kgh" in keys and "airflow_m3h" in keys:
         return RULESET_VERSION+"-gun3"
+    if "technologies" in keys and "output_mlh" in keys and "power_supply" in keys:
+        return RULESET_VERSION+"-humid2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -867,6 +918,17 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="тепловентилятор"
         elif "маслян" in device_name and ("радиатор" in device_name or "обогревател" in device_name):
             specs["device_type"]="масляный радиатор"
+        elif "мойк" in device_name and "воздух" in device_name:
+            specs["device_type"]="мойка воздуха"
+        elif "аромадиффуз" in device_name or "арома диффуз" in device_name:
+            specs["device_type"]="аромадиффузор"
+        elif "увлажн" in device_name:
+            specs["device_type"]="увлажнитель воздуха"
+    if any(r.get("spec_key")=="technologies" for r in rules) and not specs.get("technologies"):
+        humid_name=norm(card.get("product_name") or base.get("model") or base.get("product_name") or "")
+        inferred=humidifier_technology_family(humid_name)
+        if inferred in ("ultrasonic","traditional","steam"):
+            specs["technologies"]=inferred
     gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
         gun_family=heat_gun_family(gun_name,specs,raw)
@@ -1171,6 +1233,52 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
             total+=w*s
         return round(max(0,min(100,total*100)),2)
 
+    if profile=="humidifier":
+        # Approved humidifier formula: technical match only; price is checked later.
+        da=ours.get("device_type");db=comp.get("device_type")
+        device_missing=da is None or db is None
+        if da is not None and db is not None:
+            fa=humidifier_device_family(da);fb=humidifier_device_family(db)
+            if fa and fb and fa!=fb:return 0.0
+
+        total=used=allw=0.0
+        tech_missing=False
+        tech_mismatch=False
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0:continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:
+                if k=="technologies":tech_missing=True
+                continue
+            try:
+                if k in ("output_mlh","area_m2","tank_l"):
+                    s=humidifier_metric_similarity(float(a),float(b))
+                elif k=="power_w":
+                    s=humidifier_power_similarity(float(a),float(b))
+                elif k=="technologies":
+                    ta=humidifier_technology_family(a);tb=humidifier_technology_family(b)
+                    s=1.0 if ta and tb and ta==tb else categorical_similarity(ta,tb)
+                    if s<0.45:tech_mismatch=True
+                elif k=="power_supply":
+                    pa=humidifier_power_supply_family(a);pb=humidifier_power_supply_family(b)
+                    s=1.0 if pa and pb and pa==pb else categorical_similarity(pa,pb)
+                elif rule.get("direction")=="boolean":
+                    s=1.0 if bool(a)==bool(b) else 0.0
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if device_missing:score=min(score,69.0)
+        if tech_missing or tech_mismatch:score=min(score,84.0)
+        return round(max(0,min(100,score)),2)
+
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
     for rule in rules:
         w=float(rule.get("weight") or 0);allw+=w
@@ -1279,7 +1387,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -1482,7 +1590,7 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
