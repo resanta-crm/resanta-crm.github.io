@@ -290,6 +290,16 @@ function electricChainsawResult(k,a,b){
  if(k==='power_supply'){
   return electricChainsawSupply(a)===electricChainsawSupply(b)?'совпадает':'сеть/аккумулятор — не аналог';
  }
+ if(k==='purpose'){
+  const fam=x=>{
+   const s=String(x).toLowerCase();
+   if(/полупроф/.test(s))return'semi_professional';
+   if(/проф/.test(s))return'professional';
+   if(/бытов/.test(s))return'household';
+   return s;
+  };
+  return fam(a)===fam(b)?'совпадает':'назначение отличается';
+ }
  if(k==='device_type'){
   const fam=x=>{
    const s=String(x).toLowerCase();
