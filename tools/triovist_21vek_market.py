@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.238.
+"""Triovist / 21vek automatic market analysis v23.6.258.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,8 +30,8 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.7"
-RULESET_VERSION="rules-v5"
+PARSER_VERSION="market-auto-v1.8"
+RULESET_VERSION="rules-v6"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
 DELAY=max(0.10,float(os.environ.get("MARKET_DELAY_SECONDS","0.22")))
@@ -374,12 +374,12 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
-    if key in ("heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape","equipment"):
+    if key in ("device_type","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape","equipment"):
         return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
-    if key in ("display_present","power_adjustment","temperature_adjustment"):
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present"):
         return presence_value(text)
     if key in ("overheat_protection","humidistat","tool_free_tension"):
         return bool_value(text)
@@ -791,6 +791,10 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
           card.get("product_name") or base.get("model") or base.get("product_name") or "",
           specs,raw
         )
+    if any(r.get("spec_key")=="device_type" for r in rules) and not specs.get("device_type"):
+        device_name=norm(card.get("product_name") or base.get("model") or base.get("product_name") or "")
+        if "маслян" in device_name and ("радиатор" in device_name or "обогревател" in device_name):
+            specs["device_type"]="масляный радиатор"
     return {
       "brand":extra.get("brand") or base.get("brand") or "",
       "model":card.get("product_name") or base.get("model") or base.get("product_name") or "",
@@ -840,6 +844,23 @@ def infrared_power_similarity(a: float,b: float) -> float:
     if diff<=100:return 1.0
     if diff<=250:return 0.80
     if diff<=400:return 0.50
+    return 0.0
+
+
+def oil_power_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.05:return 1.0
+    if diff<=0.10:return 0.85
+    if diff<=0.20:return 0.65
+    return 0.0
+
+
+def oil_sections_similarity(a: float,b: float) -> float:
+    diff=abs(a-b)
+    if diff<0.5:return 1.0
+    if diff<=1.0:return 0.80
+    if diff<=2.0:return 0.50
     return 0.0
 
 
@@ -927,6 +948,42 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                 s=0.0
             total+=w*s
         return round(max(0,min(100,(total/max(allw,1e-9))*100)),2)
+
+    if profile=="oil_radiator":
+        # Approved oil-radiator formula: technical similarity only.
+        # Price is evaluated only after the analog has been selected.
+        total=used=allw=0.0
+        critical_mismatch=False
+        critical_missing=False
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0: continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:
+                if rule.get("critical"): critical_missing=True
+                continue
+            try:
+                if k=="power_w": s=oil_power_similarity(float(a),float(b))
+                elif k=="sections_count": s=oil_sections_similarity(float(a),float(b))
+                elif k=="thermostat_type":
+                    pa,pb=thermostat_present(a),thermostat_present(b)
+                    s=1.0 if pa is not None and pb is not None and pa==pb else categorical_similarity(a,b)
+                elif rule.get("direction")=="boolean":
+                    s=1.0 if bool(a)==bool(b) else 0.0
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            if rule.get("critical") and s<0.45: critical_mismatch=True
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing: score=min(score,69.0)
+        if critical_mismatch: score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
 
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
     for rule in rules:
@@ -1036,7 +1093,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70
+    min_match=55 if profile=="oil_radiator" else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -1239,7 +1296,7 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70
+            gap_threshold=55 if profile=="oil_radiator" else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
