@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.260.
+"""Triovist / 21vek automatic market analysis v23.6.261.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v1.9"
+PARSER_VERSION="market-auto-v2.0"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -367,6 +367,65 @@ def voltage_class(v: Any) -> str|None:
     return str(round(n,1))
 
 
+def heat_gun_family(name: str,specs: dict|None=None,raw: list[dict]|None=None) -> str|None:
+    specs=specs or {};raw=raw or []
+    text=" ".join([
+      str(name or ""),
+      str(specs.get("fuel_type") or ""),
+      str(specs.get("heater_type") or ""),
+      " ".join(str(x.get("value") or "") for x in raw if isinstance(x,dict))
+    ])
+    n=norm(text)
+    if any(x in n for x in ("газов","пропан","бутан","сжиженн газ","газовая пушка")): return "gas"
+    if any(x in n for x in ("дизел","соляр","керосин","дизельная пушка")): return "diesel"
+    if any(x in n for x in ("электр","220 в","230 в","380 в","400 в","электрическая пушка")): return "electric"
+    return None
+
+
+def heat_gun_heating_mode(name: str,specs: dict|None=None,raw: list[dict]|None=None,family: str|None=None) -> str|None:
+    specs=specs or {};raw=raw or []
+    fam=family or heat_gun_family(name,specs,raw)
+    if fam!="diesel": return None
+    text=" ".join([
+      str(name or ""),
+      str(specs.get("heating_mode") or ""),
+      " ".join(str(x.get("value") or "") for x in raw if isinstance(x,dict))
+    ])
+    n=norm(text)
+    if "непрям" in n:return "indirect"
+    if "прям" in n:return "direct"
+    # Diesel heat guns without an explicit "indirect" marker are the direct-heating class.
+    if "дизел" in n and ("пуш" in n or "нагрев" in n):return "direct"
+    return None
+
+
+def heat_gun_power_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.05:return 1.0
+    if diff<=0.10:return 0.85
+    if diff<=0.20:return 0.65
+    return 0.0
+
+
+def heat_gun_airflow_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.10:return 1.0
+    if diff<=0.20:return 0.85
+    if diff<=0.30:return 0.65
+    return 0.0
+
+
+def heat_gun_metric_similarity(a: float,b: float) -> float:
+    den=max(abs(a),abs(b),1e-9)
+    diff=abs(a-b)/den
+    if diff<=0.10:return 1.0
+    if diff<=0.20:return 0.85
+    if diff<=0.30:return 0.65
+    return 0.0
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
     if key=="energy_type":
@@ -374,7 +433,7 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
-    if key in ("device_type","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","motor_position","bulb_shape","equipment"):
+    if key in ("device_type","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment"):
         return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
@@ -769,7 +828,11 @@ def load_existing_own(scope: str) -> dict[str,dict]:
 
 def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     keys={str(x.get("spec_key") or "") for x in (rules or [])}
-    return RULESET_VERSION+"-fan2" if "remote_control" in keys and "fan_only_mode" in keys else RULESET_VERSION
+    if "heating_mode" in keys and "fuel_consumption_kgh" in keys and "airflow_m3h" in keys:
+        return RULESET_VERSION+"-gun2"
+    if "remote_control" in keys and "fan_only_mode" in keys:
+        return RULESET_VERSION+"-fan2"
+    return RULESET_VERSION
 
 
 def fresh_specs(row: dict|None,url: str,rules: list[dict]|None=None) -> bool:
@@ -802,6 +865,18 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="тепловентилятор"
         elif "маслян" in device_name and ("радиатор" in device_name or "обогревател" in device_name):
             specs["device_type"]="масляный радиатор"
+    gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="fuel_type" for r in rules):
+        gun_family=heat_gun_family(gun_name,specs,raw)
+        if gun_family: specs["fuel_type"]=gun_family
+    else:
+        gun_family=None
+    if any(r.get("spec_key")=="heating_mode" for r in rules):
+        gun_mode=heat_gun_heating_mode(gun_name,specs,raw,gun_family)
+        if gun_mode: specs["heating_mode"]=gun_mode
+    if any(r.get("spec_key")=="voltage_v" for r in rules) and specs.get("voltage_v") is None:
+        vm=re.search(r"\b(220|230|380|400)\s*(?:в|v)\b",str(gun_name).lower(),re.I)
+        if vm: specs["voltage_v"]=float(vm.group(1))
     return {
       "brand":extra.get("brand") or base.get("brand") or "",
       "model":card.get("product_name") or base.get("model") or base.get("product_name") or "",
@@ -1035,6 +1110,65 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         if critical_mismatch: score=min(score,54.0)
         return round(max(0,min(100,score)),2)
 
+    if profile=="heat_gun":
+        fa=ours.get("fuel_type");fb=comp.get("fuel_type")
+        if fa is None or fb is None:return 0.0
+        if str(fa)!=str(fb):return 0.0
+
+        if fa=="electric":
+            ca=voltage_class(ours.get("voltage_v"));cb=voltage_class(comp.get("voltage_v"))
+            if ca is None or cb is None:return 0.0
+            if ca!=cb:return 0.0
+            weights={
+              "fuel_type":0.10,"power_w":0.25,"airflow_m3h":0.15,"voltage_v":0.15,
+              "heater_type":0.10,"control_type":0.05,"thermostat_type":0.05,
+              "overheat_protection":0.04,"power_adjustment":0.05,
+              "temperature_adjustment":0.03,"fan_only_mode":0.03
+            }
+        elif fa=="gas":
+            weights={
+              "fuel_type":0.15,"power_w":0.30,"airflow_m3h":0.20,
+              "fuel_consumption_kgh":0.10,"control_type":0.05,"thermostat_type":0.05,
+              "overheat_protection":0.05,"power_adjustment":0.05,
+              "temperature_adjustment":0.03,"fan_only_mode":0.02
+            }
+        elif fa=="diesel":
+            ma=ours.get("heating_mode");mb=comp.get("heating_mode")
+            if ma is None or mb is None:return 0.0
+            if str(ma)!=str(mb):return 0.0
+            weights={
+              "fuel_type":0.10,"power_w":0.24,"airflow_m3h":0.15,"heating_mode":0.15,
+              "fuel_consumption_kgh":0.10,"tank_l":0.08,"voltage_v":0.05,
+              "control_type":0.03,"thermostat_type":0.03,"overheat_protection":0.03,
+              "power_adjustment":0.02,"temperature_adjustment":0.01,"fan_only_mode":0.01
+            }
+        else:
+            return 0.0
+
+        total=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:
+                continue
+            try:
+                if k=="power_w": s=heat_gun_power_similarity(float(a),float(b))
+                elif k=="airflow_m3h": s=heat_gun_airflow_similarity(float(a),float(b))
+                elif k in ("fuel_consumption_kgh","tank_l"): s=heat_gun_metric_similarity(float(a),float(b))
+                elif k=="voltage_v":
+                    ca=voltage_class(a);cb=voltage_class(b)
+                    s=1.0 if ca is not None and cb is not None and ca==cb else 0.0
+                elif k=="thermostat_type":
+                    pa,pb=thermostat_present(a),thermostat_present(b)
+                    s=1.0 if pa is not None and pb is not None and pa==pb else categorical_similarity(a,b)
+                elif k in ("overheat_protection","power_adjustment","temperature_adjustment","fan_only_mode"):
+                    s=1.0 if bool(a)==bool(b) else 0.0
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s
+        return round(max(0,min(100,total*100)),2)
+
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
     for rule in rules:
         w=float(rule.get("weight") or 0);allw+=w
@@ -1143,7 +1277,7 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
-    min_match=55 if profile in ("oil_radiator","fan_heater") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -1346,7 +1480,7 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
