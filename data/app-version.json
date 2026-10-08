@@ -1,6 +1,6 @@
 {
-  "version": "23.6.262",
+  "version": "23.6.263",
   "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: humidifier matching by type, technology, water output, area, tank, power, supply, control and remote control.",
-  "deploy_trigger": "2026-10-08T12:30:00+03:00"
+  "purpose": "Triovist competitors: humidifier matching corrected for actual 21vek Type vs Technologies fields.",
+  "deploy_trigger": "2026-10-08T12:45:00+03:00"
 }
