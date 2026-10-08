@@ -59,7 +59,7 @@ function specLine(k,v){
   device_type:'Тип устройства',power_w:'Мощность обогрева',area_m2:'Площадь обогрева',heater_type:'Нагревательный элемент',thermostat_type:'Термостат',
   control_type:'Управление',display_present:'Дисплей',power_adjustment:'Регулировка мощности',temperature_adjustment:'Регулировка температуры',wheels_present:'Колеса для перемещения',remote_control:'Пульт ДУ',fan_present:'Встроенный вентилятор',fan_only_mode:'Обдув без нагрева',indicator_light:'Световой индикатор',power_modes:'Количество режимов мощности',overheat_protection:'Защита от перегрева',
   ip_rating:'Влагозащита',installation_type:'Установка',weight_kg:'Вес',sections_count:'Секции',
-  fuel_type:'Тип нагрева',airflow_m3h:'Воздушный поток',fuel_consumption_kgh:'Расход топлива',
+  fuel_type:'Тип',heating_mode:'Нагрев',airflow_m3h:'Производительность',fuel_consumption_kgh:'Расход топлива',
   tank_l:'Бак',width_mm:'Ширина',humidistat:'Гигростат',noise_db:'Шум',output_mlh:'Производительность',
   base_type:'Цоколь',color_temp_k:'Цветовая температура',luminous_flux_lm:'Световой поток',bulb_shape:'Форма',
   engine_cc:'Объём двигателя',bar_length_cm:'Шина',chain_pitch_in:'Шаг цепи',drive_links:'Звенья',
@@ -137,6 +137,52 @@ function fanHeaterResult(k,a,b){
   if(d<=.05)return 'полное совпадение';
   if(d<=.10)return 'близкое совпадение';
   if(d<=.20)return 'частичное совпадение';
+  return 'существенное отличие';
+ }
+ if(k==='thermostat_type'){
+  const present=x=>!/нет|отсутств|не предусмотр/i.test(String(x));
+  return present(a)===present(b)?'наличие совпадает':'отличается';
+ }
+ if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function heatGunType(v){
+ if(v==null)return 'нет данных';
+ return ({electric:'электрическая',gas:'газовая',diesel:'дизельная'})[String(v)]||E(v);
+}
+function heatGunHeating(v){
+ if(v==null)return 'нет данных';
+ return ({direct:'прямой',indirect:'непрямой'})[String(v)]||E(v);
+}
+function heatGunValue(k,v){
+ if(v==null)return 'нет данных';
+ if(k==='fuel_type')return heatGunType(v);
+ if(k==='heating_mode')return heatGunHeating(v);
+ if(typeof v==='boolean')return v?'есть':'нет';
+ if(k==='power_w')return E(v)+' Вт';
+ if(k==='airflow_m3h')return E(v)+' м³/ч';
+ if(k==='voltage_v')return E(v)+' В';
+ if(k==='fuel_consumption_kgh')return E(v)+' кг/ч';
+ if(k==='tank_l')return E(v)+' л';
+ return E(v);
+}
+function heatGunResult(k,a,b){
+ if(a==null||b==null)return 'нет данных';
+ if(k==='fuel_type')return String(a)===String(b)?'один тип':'разный тип — не аналог';
+ if(k==='heating_mode')return String(a)===String(b)?'совпадает':'прямой/непрямой — не аналог';
+ if(k==='voltage_v'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const cls=x=>x>=200&&x<=250?'1 фаза · 220/230 В':(x>=360&&x<=420?'3 фазы · 380/400 В':String(x)+' В');
+  return cls(av)===cls(bv)?cls(av):'разный класс питания — не аналог';
+ }
+ if(k==='power_w'||k==='airflow_m3h'||k==='fuel_consumption_kgh'||k==='tank_l'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  const t=k==='power_w'?[.05,.10,.20]:[.10,.20,.30];
+  if(d<=t[0])return 'полное совпадение';
+  if(d<=t[1])return 'близкое совпадение';
+  if(d<=t[2])return 'частичное совпадение';
   return 'существенное отличие';
  }
  if(k==='thermostat_type'){
@@ -288,6 +334,44 @@ function details(r,l){
   const area='<div class="tm224-ref"><b>Справочно — площадь обогрева:</b> конкурент '+(b.area_m2==null?'нет данных':E(b.area_m2)+' м²')+' · наш товар '+(a.area_m2==null?'нет данных':E(a.area_m2)+' м²')+'. <b>В сопоставимости не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+area
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='heat_gun'){
+  const type=String(a.fuel_type||b.fuel_type||'');
+  let keys=[],formula='';
+  if(type==='electric'){
+   keys=[
+    ['fuel_type','Тип'],['power_w','Тепловая мощность'],['airflow_m3h','Производительность'],
+    ['voltage_v','Напряжение'],['heater_type','Тип нагревательного элемента'],['control_type','Управление'],
+    ['thermostat_type','Термостат'],['overheat_protection','Защита от перегрева'],['power_adjustment','Регулировка мощности'],
+    ['temperature_adjustment','Регулировка температуры'],['fan_only_mode','Режим вентиляции']
+   ];
+   formula='Электрические: тип 10% · мощность 25% · производительность 15% · напряжение 15% · нагревательный элемент 10% · управление 5% · термостат 5% · защита 4% · регулировка мощности 5% · регулировка температуры 3% · вентиляция 3%. 220/230 В и 380/400 В между собой не аналоги.';
+  }else if(type==='gas'){
+   keys=[
+    ['fuel_type','Тип'],['power_w','Тепловая мощность'],['airflow_m3h','Производительность'],
+    ['fuel_consumption_kgh','Расход топлива'],['control_type','Управление'],['thermostat_type','Термостат'],
+    ['overheat_protection','Защита от перегрева'],['power_adjustment','Регулировка мощности'],
+    ['temperature_adjustment','Регулировка температуры'],['fan_only_mode','Режим вентиляции']
+   ];
+   formula='Газовые: тип 15% · мощность 30% · производительность 20% · расход топлива 10% · управление 5% · термостат 5% · защита 5% · регулировка мощности 5% · регулировка температуры 3% · вентиляция 2%.';
+  }else{
+   keys=[
+    ['fuel_type','Тип'],['power_w','Тепловая мощность'],['airflow_m3h','Производительность'],
+    ['heating_mode','Нагрев'],['fuel_consumption_kgh','Расход топлива'],['tank_l','Емкость бака'],
+    ['voltage_v','Напряжение'],['control_type','Управление'],['thermostat_type','Термостат'],
+    ['overheat_protection','Защита от перегрева'],['power_adjustment','Регулировка мощности'],
+    ['temperature_adjustment','Регулировка температуры'],['fan_only_mode','Режим вентиляции']
+   ];
+   formula='Дизельные: тип 10% · мощность 24% · производительность 15% · прямой/непрямой нагрев 15% · расход топлива 10% · бак 8% · напряжение 5% · управление 3% · термостат 3% · защита 3% · регулировка мощности 2% · регулировка температуры 1% · вентиляция 1%. Прямой и непрямой нагрев между собой не аналоги.';
+  }
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+heatGunValue(k,b[k])+'</td><td>'+heatGunValue(k,a[k])+'</td><td>'+E(heatGunResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Цена в подборе технического аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
