@@ -219,10 +219,20 @@ function humidifierValue(k,v){
 function humidifierResult(k,a,b){
  if(a==null||b==null)return 'нет данных';
  if(k==='device_type'){
-  const fam=x=>/увлажн/i.test(String(x))?'humidifier':(/мойк.*воздух/i.test(String(x))?'air_washer':(/диффуз/i.test(String(x))?'diffuser':String(x).toLowerCase()));
-  return fam(a)===fam(b)?'совпадает':'разный тип — не аналог';
+  const fam=x=>{
+   const s=String(x).toLowerCase();
+   if(/мойк.*воздух/.test(s))return 'air_washer';
+   if(/диффуз/.test(s)&&!/увлажн/.test(s))return 'diffuser';
+   if(/ультразв/.test(s)&&/увлажн/.test(s))return 'humidifier_ultrasonic';
+   if(/традиц|холодн.*испар|естествен.*испар/.test(s)&&/увлажн/.test(s))return 'humidifier_traditional';
+   if(/паров|горяч.*пар/.test(s)&&/увлажн/.test(s))return 'humidifier_steam';
+   return /увлажн/.test(s)?'humidifier':s;
+  };
+  const aa=fam(a),bb=fam(b);
+  const specific=x=>/^humidifier_/.test(x);
+  return (specific(aa)&&specific(bb)&&aa!==bb)?'разный тип увлажнения — не аналог':(aa===bb||aa==='humidifier'||bb==='humidifier'?'совпадает':'разный тип — не аналог');
  }
- if(k==='technologies')return String(a)===String(b)?'совпадает':'разная технология — не прямой аналог';
+ if(k==='technologies')return String(a)===String(b)?'совпадает':'набор технологий отличается';
  if(k==='output_mlh'||k==='area_m2'||k==='tank_l'||k==='power_w'){
   const av=N(a),bv=N(b);if(av==null||bv==null)return 'нет данных';
   const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
@@ -395,7 +405,7 @@ function details(r,l){
    ['control_type','Управление']
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+humidifierValue(k,b[k])+'</td><td>'+humidifierValue(k,a[k])+'</td><td>'+E(humidifierResult(k,a[k],b[k]))+'</td></tr>').join('');
-  const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип 10% · технологии 20% · макс. расход воды 20% · площадь 15% · резервуар 15% · потребляемая мощность 7% · питание 5% · управление 5% · дистанционное управление 3%. Разный тип устройства — не аналог; разная технология не может быть прямым аналогом. <b>Цена в подборе аналога не участвует.</b></div>';
+  const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип 10% · технологии 20% · макс. расход воды 20% · площадь 15% · резервуар 15% · потребляемая мощность 7% · питание 5% · управление 5% · дистанционное управление 3%. Тип увлажнителя — критический фильтр: ультразвуковой, традиционный и паровой между собой не считаются аналогами. Технологии/функции участвуют с весом 20%. <b>Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
