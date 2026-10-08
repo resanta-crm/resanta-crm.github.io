@@ -1,4 +1,4 @@
-name: TMP — Triovist humidifier market v23.6.262
+name: TMP — Triovist humidifier market v23.6.263
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: triovist-humidifier-v236262
+  group: triovist-humidifier-v236263
   cancel-in-progress: true
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
       - name: Dependencies
         run: pip install requests beautifulsoup4
-      - name: Humidifiers only
+      - name: Humidifiers only · corrected semantics
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
