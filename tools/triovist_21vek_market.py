@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v2.2"
+PARSER_VERSION="market-auto-v2.3"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -431,6 +431,9 @@ def humidifier_device_family(v: Any) -> str:
     if "аромадиффуз" in n or ("диффузор" in n and "увлажн" not in n):return "diffuser"
     if "мойк" in n and "воздух" in n:return "air_washer"
     if "очистител" in n and "увлажн" not in n:return "air_purifier"
+    if "ультразв" in n and "увлажн" in n:return "humidifier_ultrasonic"
+    if ("традиц" in n or "холодн испар" in n or "естествен испар" in n) and "увлажн" in n:return "humidifier_traditional"
+    if ("паров" in n or "горяч пар" in n) and "увлажн" in n:return "humidifier_steam"
     if "увлажн" in n:return "humidifier"
     return n
 
@@ -882,7 +885,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "heating_mode" in keys and "fuel_consumption_kgh" in keys and "airflow_m3h" in keys:
         return RULESET_VERSION+"-gun3"
     if "technologies" in keys and "output_mlh" in keys and "power_supply" in keys:
-        return RULESET_VERSION+"-humid2"
+        return RULESET_VERSION+"-humid3"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -924,11 +927,6 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="аромадиффузор"
         elif "увлажн" in device_name:
             specs["device_type"]="увлажнитель воздуха"
-    if any(r.get("spec_key")=="technologies" for r in rules) and not specs.get("technologies"):
-        humid_name=norm(card.get("product_name") or base.get("model") or base.get("product_name") or "")
-        inferred=humidifier_technology_family(humid_name)
-        if inferred in ("ultrasonic","traditional","steam"):
-            specs["technologies"]=inferred
     gun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="fuel_type" for r in rules):
         gun_family=heat_gun_family(gun_name,specs,raw)
@@ -1239,18 +1237,18 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         device_missing=da is None or db is None
         if da is not None and db is not None:
             fa=humidifier_device_family(da);fb=humidifier_device_family(db)
-            if fa and fb and fa!=fb:return 0.0
+            hard_classes={"diffuser","air_washer","air_purifier"}
+            if (fa in hard_classes) != (fb in hard_classes):return 0.0
+            if fa in hard_classes and fb in hard_classes and fa!=fb:return 0.0
+            if fa.startswith("humidifier_") and fb.startswith("humidifier_") and fa!=fb:return 0.0
 
         total=used=allw=0.0
-        tech_missing=False
-        tech_mismatch=False
         for rule in rules:
             w=float(rule.get("weight") or 0)
             if w<=0:continue
             allw+=w
             k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
             if a is None or b is None:
-                if k=="technologies":tech_missing=True
                 continue
             try:
                 if k in ("output_mlh","area_m2","tank_l"):
@@ -1260,7 +1258,6 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                 elif k=="technologies":
                     ta=humidifier_technology_family(a);tb=humidifier_technology_family(b)
                     s=1.0 if ta and tb and ta==tb else categorical_similarity(ta,tb)
-                    if s<0.45:tech_mismatch=True
                 elif k=="power_supply":
                     pa=humidifier_power_supply_family(a);pb=humidifier_power_supply_family(b)
                     s=1.0 if pa and pb and pa==pb else categorical_similarity(pa,pb)
@@ -1276,7 +1273,6 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if device_missing:score=min(score,69.0)
-        if tech_missing or tech_mismatch:score=min(score,84.0)
         return round(max(0,min(100,score)),2)
 
     total=used=allw=0.0;critical_mismatch=False;critical_missing=False
