@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.281.
+"""Triovist / 21vek automatic market analysis v23.6.282.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.3"
+PARSER_VERSION="market-auto-v3.4"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -170,6 +170,7 @@ def profile_for(label: str) -> str:
     if "воздуходув" in n: return "leaf_blower"
     if any(x in n for x in ("мотобур","бензобур","землебур")): return "earth_auger"
     if ("измельч" in n and ("сад" in n or "вет" in n)) or "садов шредер" in n: return "garden_shredder"
+    if "секатор" in n and "аккумулятор" in n: return "battery_pruner"
     return "generic"
 
 
@@ -189,6 +190,7 @@ def query_for(label: str, profile: str) -> str:
       "leaf_blower":"воздуходувка",
       "earth_auger":"мотобур",
       "garden_shredder":"садовый измельчитель",
+      "battery_pruner":"аккумуляторный секатор",
     }.get(profile)
     return q or clean_label(label)
 
@@ -244,6 +246,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Воздуходувки","leaf_blower","воздуходув"),
       ("Мотобуры","earth_auger","мотобур"),
       ("Садовые измельчители","garden_shredder","измельч"),
+      ("Аккумуляторные секаторы","battery_pruner","секатор"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
@@ -264,6 +267,10 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             elif profile=="garden_shredder":
                 matched=(("измельч" in pn or "садов шредер" in pn)
                          and "нож для" not in pn and "лезв" not in pn
+                         and not sku.startswith("900/"))
+            elif profile=="battery_pruner":
+                matched=("секатор" in pn and "аккумулятор" in pn
+                         and "лезв" not in pn and "нож для" not in pn
                          and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
@@ -616,6 +623,89 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
     return 0.0
 
 
+def battery_pruner_device_family(v: Any) -> str:
+    n=norm(v)
+    if "секатор" in n:return "pruner"
+    if "сучкорез" in n:return "lopper"
+    if "ножниц" in n:return "shears"
+    return n
+
+
+def battery_pruner_tool_family(v: Any) -> str:
+    n=norm(v)
+    if "секатор" in n:return "pruner"
+    if "сучкорез" in n:return "lopper"
+    if "ножниц" in n:return "shears"
+    return n
+
+
+def battery_pruner_source_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
+    if any(x in n for x in ("сетев","сеть","220","230","electric","электр")):return "mains"
+    if any(x in n for x in ("ручн","механическ","manual")):return "manual"
+    return n
+
+
+def battery_pruner_battery_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("lifepo4","li fe po4","литий железо фосфат")):return "lifepo4"
+    if any(x in n for x in ("li ion","li-ion","литий ион","литийион")):return "li_ion"
+    if any(x in n for x in ("nimh","ni mh","никель металл")):return "ni_mh"
+    if any(x in n for x in ("nicd","ni cd","никель кадм")):return "ni_cd"
+    return n
+
+
+def battery_pruner_knife_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("обводн","bypass")):return "bypass"
+    if any(x in n for x in ("наковальн","anvil")):return "anvil"
+    if any(x in n for x in ("двойн","двухлезв","double")):return "double"
+    if "нож" in n and "подвиж" in n:return "moving"
+    if "нож" in n and "неподвиж" in n:return "fixed"
+    return n
+
+
+def battery_pruner_blade_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("обводн","bypass")):return "bypass"
+    if any(x in n for x in ("наковальн","anvil")):return "anvil"
+    if any(x in n for x in ("двусторон","double edge","двухсторон")):return "double_edge"
+    if any(x in n for x in ("односторон","single edge")):return "single_edge"
+    if any(x in n for x in ("изогнут","curved")):return "curved"
+    if any(x in n for x in ("прям","straight")):return "straight"
+    return n
+
+
+def battery_pruner_voltage_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    if 10<=n<16:return "12_v"
+    if 16<=n<=22:return "18_20_v"
+    if 23<=n<=28:return "24_v"
+    if 34<=n<=42:return "36_40_v"
+    if 46<=n<=52:return "48_v"
+    if 54<=n<=62:return "60_v"
+    if 72<=n<=84:return "80_v"
+    return str(round(n,1))
+
+
+def battery_pruner_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def battery_pruner_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k in ("device_type","tool_type","voltage_v","power_source","battery_type","knife_type","blade_type"):
+        return 50
+    return directional(rule,a,b)
+
+
 def garden_shredder_device_family(v: Any) -> str:
     n=norm(v)
     if ("измельч" in n and ("сад" in n or "вет" in n)) or "шредер" in n:return "garden_shredder"
@@ -776,7 +866,7 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"^(\d+)\s*\+\s*(\d+)$",n)
         if m:return m.group(1)+"+"+m.group(2)
         return n[:80] or None
-    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type","construction","engine_type","battery_type"):
+    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type","construction","engine_type","battery_type","tool_type","knife_type","blade_type"):
         return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
@@ -898,6 +988,14 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мл|ml)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))/1000,3)
         return round(v,2)
+    if key=="max_cut_diameter_mm":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*см\b",low)
+        if m:return round(float(m.group(1).replace(",","."))*10,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*25.4,2)
+        return round(ns[0],2)
     if key=="max_branch_diameter_mm":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low)
         if m:return round(float(m.group(1).replace(",",".")),2)
@@ -1272,6 +1370,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-auger1"
     if "max_branch_diameter_mm" in keys and "cutting_mechanism" in keys and "collector_capacity_l" in keys:
         return RULESET_VERSION+"-shredder1"
+    if "max_cut_diameter_mm" in keys and "tool_type" in keys and "battery_capacity_ah" in keys:
+        return RULESET_VERSION+"-pruner1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1323,6 +1423,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="мотобур"
         elif ("измельч" in device_name and ("сад" in device_name or "вет" in device_name)) or "шредер" in device_name:
             specs["device_type"]="садовый измельчитель"
+        elif "секатор" in device_name:
+            specs["device_type"]="аккумуляторный секатор" if "аккумулятор" in device_name else "секатор"
     saw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="power_supply" for r in rules) and any(r.get("spec_key")=="bar_length_cm" for r in rules):
         if not specs.get("power_supply"):
@@ -1425,6 +1527,27 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         if not specs.get("engine_type"):
             if any(x in an for x in ("2 такт","2-такт","двухтакт")):specs["engine_type"]="2-тактный"
             elif any(x in an for x in ("4 такт","4-такт","четырехтакт")):specs["engine_type"]="4-тактный"
+
+    pruner_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="max_cut_diameter_mm" for r in rules):
+        pn=norm(pruner_name)
+        if "секатор" in pn:
+            if not specs.get("device_type"):specs["device_type"]="аккумуляторный секатор" if "аккумулятор" in pn else "секатор"
+            if not specs.get("tool_type"):specs["tool_type"]="секатор"
+        elif "сучкорез" in pn and not specs.get("tool_type"):
+            specs["tool_type"]="сучкорез"
+        elif "ножниц" in pn and not specs.get("tool_type"):
+            specs["tool_type"]="садовые ножницы"
+        if any(x in pn for x in ("аккумулятор","battery","li ion","li-ion")):
+            specs["power_source"]="battery"
+        if specs.get("voltage_v") is None:
+            vm=re.search(r"\b(\d+(?:[.,]\d+)?)\s*(?:в|v)\b",str(pruner_name).lower(),re.I)
+            if vm:
+                vv=float(vm.group(1).replace(",","."))
+                if 5<=vv<=100:specs["voltage_v"]=vv
+        if specs.get("battery_type") is None:
+            if any(x in pn for x in ("li ion","li-ion","литий ион","литий-ион")):specs["battery_type"]="Li-Ion"
+            elif any(x in pn for x in ("lifepo4","li fe po4")):specs["battery_type"]="LiFePO4"
 
     shredder_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="max_branch_diameter_mm" for r in rules):
@@ -1704,6 +1827,75 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+    if profile=="battery_pruner":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and battery_pruner_device_family(da)!=battery_pruner_device_family(db):
+            return 0.0
+
+        ta=battery_pruner_tool_family(ours.get("tool_type"))
+        tb=battery_pruner_tool_family(comp.get("tool_type"))
+        if ta and tb and ta!=tb:return 0.0
+
+        pa=battery_pruner_source_family(ours.get("power_source"))
+        pb=battery_pruner_source_family(comp.get("power_source"))
+        if pa and pb and pa!=pb:return 0.0
+
+        va=ours.get("voltage_v");vb=comp.get("voltage_v")
+        if va is not None and vb is not None:
+            ca=battery_pruner_voltage_class(va);cb=battery_pruner_voltage_class(vb)
+            if ca and cb and ca!=cb:return 0.0
+
+        weights={
+          "device_type":0.08,"tool_type":0.14,"voltage_v":0.15,"power_source":0.14,
+          "battery_type":0.07,"battery_capacity_ah":0.09,"knife_type":0.07,
+          "blade_type":0.07,"max_cut_diameter_mm":0.19
+        }
+        required=("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm")
+        critical_missing=any(ours.get(k) is None or comp.get(k) is None for k in required)
+        total=used=0.0
+        cutting_mismatch=False
+
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="device_type":
+                    s=1.0 if battery_pruner_device_family(a)==battery_pruner_device_family(b) else 0.0
+                elif k=="tool_type":
+                    s=1.0 if battery_pruner_tool_family(a)==battery_pruner_tool_family(b) else 0.0
+                elif k=="power_source":
+                    s=1.0 if battery_pruner_source_family(a)==battery_pruner_source_family(b) else 0.0
+                elif k=="voltage_v":
+                    ca=battery_pruner_voltage_class(a);cb=battery_pruner_voltage_class(b)
+                    s=1.0 if ca is not None and cb is not None and ca==cb else 0.0
+                elif k=="battery_type":
+                    s=1.0 if battery_pruner_battery_family(a)==battery_pruner_battery_family(b) else 0.45
+                elif k=="battery_capacity_ah":
+                    s=battery_pruner_relative_similarity(float(a),float(b),0.15,0.25,0.40)
+                elif k=="max_cut_diameter_mm":
+                    s=battery_pruner_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="knife_type":
+                    aa=battery_pruner_knife_family(a);bb=battery_pruner_knife_family(b)
+                    s=1.0 if aa==bb else 0.40
+                    if aa and bb and aa!=bb:cutting_mismatch=True
+                elif k=="blade_type":
+                    aa=battery_pruner_blade_family(a);bb=battery_pruner_blade_family(b)
+                    s=1.0 if aa==bb else 0.40
+                    if aa and bb and aa!=bb:cutting_mismatch=True
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        if cutting_mismatch:score=min(score,84.0)
         return round(max(0,min(100,score)),2)
 
     if profile=="garden_shredder":
@@ -2251,6 +2443,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=snow_blower_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="garden_shredder":
             z=garden_shredder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="battery_pruner":
+            z=battery_pruner_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -2279,7 +2473,12 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
         if float(rule.get("weight") or 0)<=0: continue
         k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
         if a is None or b is None: continue
-        z=garden_shredder_directional(rule,a,b) if profile=="garden_shredder" else directional(rule,a,b)
+        if profile=="garden_shredder":
+            z=garden_shredder_directional(rule,a,b)
+        elif profile=="battery_pruner":
+            z=battery_pruner_directional(rule,a,b)
+        else:
+            z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
         txt=f"{rule['label']}: {fmt(a,rule.get('unit'))} против {fmt(b,rule.get('unit'))}"
         (adv if z>50 else bad).append(txt)
@@ -2302,7 +2501,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения мотобуров. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип двигателя, мощность, максимальный диаметр бура и посадочный диаметр."
     if profile=="garden_shredder" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения садовых измельчителей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены режущий механизм, тип двигателя, входная мощность и максимальный диаметр веток."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="battery_pruner" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения аккумуляторных секаторов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип инструмента, аккумуляторное питание, напряжение и максимальная толщина среза."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -2507,8 +2708,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -2548,6 +2749,10 @@ def main() -> None:
                         req=("cutting_mechanism","engine_type","input_power_w","max_branch_diameter_mm")
                         if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
                             status="data_incomplete"
+                    if profile=="battery_pruner":
+                        req=("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm")
+                        if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
+                            status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -2561,6 +2766,10 @@ def main() -> None:
                         missing=[k for k in ("cutting_mechanism","engine_type","input_power_w","max_branch_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
                         if missing:
                             bad.append("Недостаточно данных по критическим характеристикам садового измельчителя — вывод сильнее/слабее заблокирован")
+                    if profile=="battery_pruner":
+                        missing=[k for k in ("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
+                        if missing:
+                            bad.append("Недостаточно данных по критическим характеристикам аккумуляторного секатора — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
