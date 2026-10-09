@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.284 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.285 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.284',TTL=30000;
+const V='v23.6.285',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -303,6 +303,9 @@ function sprayerBattery(v){
  const s=String(v).toLowerCase();
  if(/lifepo4|li[ -]?fe[ -]?po4|литий.*железо/.test(s))return'LiFePO4';
  if(/li[ -]?ion|литий.*ион/.test(s))return'Li-Ion';
+ if(/li[ -]?pol|lipo|литий.*полимер/.test(s))return'Li-Pol';
+ if(/sla|свинцово.*кислот/.test(s))return'SLA';
+ if(/gel|гелев/.test(s))return'GEL';
  if(/ni[ -]?mh|никель.*металл/.test(s))return'Ni-MH';
  if(/ni[ -]?cd|никель.*кадм/.test(s))return'Ni-Cd';
  return E(v);
