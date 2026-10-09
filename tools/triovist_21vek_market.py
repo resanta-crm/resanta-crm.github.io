@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.299.
+"""Triovist / 21vek automatic market analysis v23.6.300.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v5.0"
+PARSER_VERSION="market-auto-v5.1"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1823,7 +1823,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         # Keep wood depth separate from metal/aluminium values.
         if ("глубин" in ln or "толщин" in ln) and ("пропил" in ln or "рез" in ln) and "дерев" in ln:
             return "cut_depth_wood_mm"
-        if "ход" in ln and "длина" not in ln and any(x in ln for x in ("частот","число","колич","макс","холост","движен")):
+        if "ход" in ln and "длина" not in ln and any(x in ln for x in ("частот","число","колич","кол во","макс","холост","движен")):
             return "strokes_per_min"
         return None
 
@@ -2182,7 +2182,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-paintsprayer2"
     if "cut_depth_wood_mm" in keys and "strokes_per_min" in keys and "motor_type" in keys:
-        return RULESET_VERSION+"-jigsaw2"
+        return RULESET_VERSION+"-jigsaw3"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
