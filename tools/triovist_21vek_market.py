@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.286.
+"""Triovist / 21vek automatic market analysis v23.6.287.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.7"
+PARSER_VERSION="market-auto-v3.8"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -677,7 +677,7 @@ def impact_wrench_motor_family(v: Any) -> str:
 
 def impact_wrench_chuck_family(v: Any) -> str:
     n=norm(v)
-    if any(x in n for x in ("квадрат","square")):return "square"
+    if any(x in n for x in ("квадрат","square","четырехгран","четырёхгран")):return "square"
     if any(x in n for x in ("шестигран","hex")):return "hex"
     return n
 
@@ -1174,10 +1174,12 @@ def normalize_value(key: str, text: str) -> Any:
         if m:return round(float(m.group(1).replace(",", ".")),2)
         return round(ns[0],2)
     if key=="battery_capacity_ah":
-        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:а\s*ч|ач|ah)\b",low,re.I)
-        if m:return round(float(m.group(1).replace(",", ".")),3)
-        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:ма\s*ч|мач|mah)\b",low,re.I)
+        # Parse milliamp-hours first. Values such as "2000 мА·ч" must become 2 Ah,
+        # never 2000 Ah. The separator between A and h may be a dot/middle-dot/space.
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м\s*а\s*[·.\s-]?\s*ч|м\s*ач|m\s*a\s*h|mah)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",", "."))/1000,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:а\s*[·.\s-]?\s*ч|ач|a\s*h|ah)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",", ".")),3)
         return round(ns[0],3)
     if key=="battery_voltage_v":
         return round(ns[0],2)
