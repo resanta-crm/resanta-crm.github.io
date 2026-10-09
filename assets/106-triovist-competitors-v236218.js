@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.281 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.282 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.281',TTL=30000;
+const V='v23.6.282',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -78,6 +78,7 @@ function specLine(k,v){
   input_power_w:'Входная мощность',cutting_speed_rpm:'Скорость резания',max_branch_diameter_mm:'Макс. диаметр веток',
   collector_capacity_l:'Емкость бункера/травосборника',feed_openings_count:'Кол-во загрузочных отверстий',
   collector_present:'Бункер/травосборник',collector_type:'Тип бункера/травосборника',
+  tool_type:'Тип инструмента',knife_type:'Тип ножа',blade_type:'Тип лезвия',max_cut_diameter_mm:'Максимальная толщина среза',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -87,6 +88,7 @@ function specLine(k,v){
   battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
   air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',max_auger_diameter_mm:' мм',shaft_diameter_mm:' мм',
   input_power_w:' Вт',cutting_speed_rpm:' об/мин',max_branch_diameter_mm:' мм',collector_capacity_l:' л',feed_openings_count:' шт.',
+  max_cut_diameter_mm:' мм',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -260,6 +262,107 @@ function humidifierResult(k,a,b){
   return 'существенное отличие';
  }
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function batteryPrunerDevice(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/секатор/.test(s))return'секатор';
+ if(/сучкорез/.test(s))return'сучкорез';
+ if(/ножниц/.test(s))return'садовые ножницы';
+ return s.trim();
+}
+function batteryPrunerTool(v){
+ return batteryPrunerDevice(v);
+}
+function batteryPrunerSource(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(s==='battery'||/аккумуля|батар|battery|li[- ]?ion/.test(s))return'аккумуляторный';
+ if(/сетев|сеть|220|230|electric|электр/.test(s))return'сетевой';
+ if(/ручн|механическ|manual/.test(s))return'ручной';
+ return s.trim();
+}
+function batteryPrunerBattery(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/lifepo4|li[ -]?fe[ -]?po4|литий.*железо/.test(s))return'LiFePO4';
+ if(/li[ -]?ion|литий.*ион/.test(s))return'Li-Ion';
+ if(/ni[ -]?mh|никель.*металл/.test(s))return'Ni-MH';
+ if(/ni[ -]?cd|никель.*кадм/.test(s))return'Ni-Cd';
+ return E(v);
+}
+function batteryPrunerKnife(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/обводн|bypass/.test(s))return'обводной';
+ if(/наковальн|anvil/.test(s))return'с наковальней';
+ if(/двойн|двухлезв|double/.test(s))return'двойной';
+ if(/подвиж/.test(s))return'подвижный';
+ if(/неподвиж/.test(s))return'неподвижный';
+ return E(v);
+}
+function batteryPrunerBlade(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/обводн|bypass/.test(s))return'обводное';
+ if(/наковальн|anvil/.test(s))return'с наковальней';
+ if(/двусторон|двухсторон|double edge/.test(s))return'двустороннее';
+ if(/односторон|single edge/.test(s))return'одностороннее';
+ if(/изогнут|curved/.test(s))return'изогнутое';
+ if(/прям|straight/.test(s))return'прямое';
+ return E(v);
+}
+function batteryPrunerVoltage(v){
+ const n=N(v);if(n==null)return'нет данных';
+ if(n>=10&&n<16)return'12 В';
+ if(n>=16&&n<=22)return'18/20 В';
+ if(n>=23&&n<=28)return'24 В';
+ if(n>=34&&n<=42)return'36/40 В';
+ if(n>=46&&n<=52)return'48 В';
+ if(n>=54&&n<=62)return'60 В';
+ if(n>=72&&n<=84)return'80 В';
+ return E(v)+' В';
+}
+function batteryPrunerValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='device_type')return E(batteryPrunerDevice(v)||v);
+ if(k==='tool_type')return E(batteryPrunerTool(v)||v);
+ if(k==='power_source')return E(batteryPrunerSource(v)||v);
+ if(k==='voltage_v')return batteryPrunerVoltage(v);
+ if(k==='battery_type')return batteryPrunerBattery(v);
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='knife_type')return batteryPrunerKnife(v);
+ if(k==='blade_type')return batteryPrunerBlade(v);
+ if(k==='max_cut_diameter_mm')return E(v)+' мм';
+ return E(v);
+}
+function batteryPrunerResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='device_type')return batteryPrunerDevice(a)===batteryPrunerDevice(b)?'один тип':'разный тип — не аналог';
+ if(k==='tool_type')return batteryPrunerTool(a)===batteryPrunerTool(b)?'совпадает':'разный инструмент — не аналог';
+ if(k==='power_source')return batteryPrunerSource(a)===batteryPrunerSource(b)?'аккумуляторный класс':'разный тип питания — не аналог';
+ if(k==='voltage_v')return batteryPrunerVoltage(a)===batteryPrunerVoltage(b)?'один класс · '+batteryPrunerVoltage(a):'разный класс АКБ — не аналог';
+ if(k==='battery_type')return batteryPrunerBattery(a)===batteryPrunerBattery(b)?'совпадает':'тип аккумулятора отличается';
+ if(k==='battery_capacity_ah'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  if(d<=.15)return'полное совпадение';
+  if(d<=.25)return'близкое совпадение';
+  if(d<=.40)return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(k==='max_cut_diameter_mm'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  if(d<=.10)return'полное совпадение';
+  if(d<=.20)return'близкое совпадение';
+  if(d<=.30)return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(k==='knife_type')return batteryPrunerKnife(a)===batteryPrunerKnife(b)?'совпадает':'тип ножа отличается — не прямое совпадение';
+ if(k==='blade_type')return batteryPrunerBlade(a)===batteryPrunerBlade(b)?'совпадает':'тип лезвия отличается — не прямое совпадение';
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
  return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
 }
@@ -886,6 +989,21 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='battery_pruner'){
+  const keys=[
+   ['device_type','Тип'],['tool_type','Тип инструмента'],['voltage_v','Напряжение'],
+   ['power_source','Тип питания'],['battery_type','Тип аккумулятора'],['battery_capacity_ah','Емкость аккумулятора'],
+   ['knife_type','Тип ножа'],['blade_type','Тип лезвия'],['max_cut_diameter_mm','Максимальная толщина среза']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+batteryPrunerValue(k,b[k])+'</td><td>'+batteryPrunerValue(k,a[k])+'</td><td>'+E(batteryPrunerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Аккумуляторные секаторы:</b> тип, тип инструмента и аккумуляторное питание должны совпадать. Напряжение сравнивается по классу АКБ: 18/20 В — один класс, 36/40 В — другой. Емкость аккумулятора — допуск ±15%; максимальная толщина среза — ключевой параметр с допуском ±10%. Тип ножа и тип лезвия сравниваются отдельно: различие не делает инструмент автоматически сильнее, но не дает прямое совпадение. Если нет типа инструмента, питания, напряжения или максимальной толщины среза — вывод «сильнее/слабее» блокируется как недостаточно данных.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
