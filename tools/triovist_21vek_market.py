@@ -40,6 +40,14 @@ SPEC_TTL_DAYS=max(1,int(os.environ.get("MARKET_SPEC_TTL_DAYS","30")))
 VALIDATE_PROFILES={
     x.strip() for x in os.environ.get("MARKET_VALIDATE_PROFILES","").split(",") if x.strip()
 }
+# The production GitHub workflow predates the newer approved product profiles.
+# Keep those profiles in the daily market cycle even when the workflow supplies
+# its older validation list, so price/position/spec history continues automatically.
+if VALIDATE_PROFILES:
+    VALIDATE_PROFILES.update({
+        "earth_auger","garden_shredder","battery_pruner","sprayer",
+        "impact_wrench","circular_saw","impact_drill"
+    })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
 HEADERS={
