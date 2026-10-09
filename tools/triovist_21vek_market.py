@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.290.
+"""Triovist / 21vek automatic market analysis v23.6.291.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.1"
+PARSER_VERSION="market-auto-v4.2"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -734,6 +734,10 @@ def circular_saw_directional(rule: dict,a: Any,b: Any) -> float|None:
         av=bool(a);bv=bool(b)
         if av==bv:return 50
         return 70 if av else 30
+    if k=="input_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=150:return 50
+        return 66 if av>bv else 34
     if k in ("device_type","power_source","max_rpm","blade_diameter_mm","arbor_diameter_mm","battery_type","battery_voltage_v"):
         return 50
     return directional(rule,a,b)
@@ -2399,7 +2403,10 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                 elif k=="power_source":
                     s=1.0 if circular_saw_source_family(a)==circular_saw_source_family(b) else 0.0
                 elif k=="input_power_w":
-                    s=circular_saw_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                    # Approved business tolerance for circular saws: ±150 W is a full match.
+                    # Wider bands are only used to keep nearby powers as close/partial analogs.
+                    pd=abs(float(a)-float(b))
+                    s=1.0 if pd<=150 else (0.85 if pd<=300 else (0.65 if pd<=450 else 0.0))
                 elif k=="cut_speed_adjustment":
                     s=1.0 if bool(a)==bool(b) else 0.55
                 elif k=="max_rpm":
