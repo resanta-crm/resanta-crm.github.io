@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.290 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.291 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.290',TTL=30000;
+const V='v23.6.291',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -367,7 +367,13 @@ function circularSawResult(k,a,b){
   if(aa==='щеточный'&&bb==='бесщеточный')return'у конкурента бесщеточный';
   return'тип двигателя отличается';
  }
- if(['input_power_w','max_rpm','cut_depth_90_mm','cut_depth_45_mm'].includes(k)){
+ if(k==='input_power_w'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv);
+  if(d<=150)return'полное совпадение · допуск ±150 Вт';
+  return av>bv?'наша мощность выше на '+Math.round(d)+' Вт':'мощность конкурента выше на '+Math.round(d)+' Вт';
+ }
+ if(['max_rpm','cut_depth_90_mm','cut_depth_45_mm'].includes(k)){
   const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
   const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
   if(d<=.10)return'полное совпадение';
@@ -1376,7 +1382,7 @@ function details(r,l){
    ['battery_voltage_v','Напряжение аккумулятора'],['battery_capacity_ah','Емкость аккумулятора']
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+circularSawValue(k,b[k])+'</td><td>'+circularSawValue(k,a[k])+'</td><td>'+E(circularSawResult(k,a[k],b[k]))+'</td></tr>').join('');
-  const ref='<div class="tm224-ref"><b>Дисковые пилы:</b> обычные, погружные и мини-дисковые пилы разделяются по типу; сетевые и аккумуляторные не смешиваются. Диаметр диска задает класс: 160/165, 185/190 и 200/210 объединяются как соседние стандартные размеры, а существенно разные классы не сравниваются напрямую. Посадочное отверстие сравнивается строго. Глубина реза 90° и 45°, мощность и обороты — допуск ±10%; угол наклона — до ±5° считается сопоставимым. Для аккумуляторных напряжение сравнивается по классу, емкость АКБ — ±15%. Бесщеточный двигатель считается преимуществом. Если нет типа, питания, диаметра диска, посадки или глубины реза 90°, а для аккумуляторной еще и напряжения АКБ — вывод «сильнее/слабее» блокируется.</div>';
+  const ref='<div class="tm224-ref"><b>Дисковые пилы:</b> обычные, погружные и мини-дисковые пилы разделяются по типу; сетевые и аккумуляторные не смешиваются. Диаметр диска задает класс: 160/165, 185/190 и 200/210 объединяются как соседние стандартные размеры, а существенно разные классы не сравниваются напрямую. Посадочное отверстие сравнивается строго. По потребляемой мощности допуск ±150 Вт; глубина реза 90° и 45° и обороты — ±10%; угол наклона — до ±5° считается сопоставимым. Для аккумуляторных напряжение сравнивается по классу, емкость АКБ — ±15%. Бесщеточный двигатель считается преимуществом. Если нет типа, питания, диаметра диска, посадки или глубины реза 90°, а для аккумуляторной еще и напряжения АКБ — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
