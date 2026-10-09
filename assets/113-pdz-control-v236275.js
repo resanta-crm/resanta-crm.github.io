@@ -1,8 +1,8 @@
-/* RESANTA CRM v23.6.276 · PDZ CONTROL: FILTERS + 30/60 LEGAL AUDIT */
+/* RESANTA CRM v23.6.277 · PDZ CONTROL: REAL FILTERED LIST + 30/60 LEGAL AUDIT */
 (function(){
 'use strict';
-if(window.RESANTA_PDZ_CONTROL_V236276)return;
-const V='v23.6.276';
+if(window.RESANTA_PDZ_CONTROL_V236277)return;
+const V='v23.6.277';
 const state={manager:'all',age:'all',q:''};
 let sourceRows=[],legalRows=[],legalLoaded=false,legalFlight=null,inputTimer=0;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -265,34 +265,26 @@ document.addEventListener('click',e=>{
    const box=b.closest('[data-pdz-legal]');if(box)openModal(b.dataset.pdzAction,box);
    return;
  }
- if(e.target.closest?.('.nav-item,.bn-item,[data-page]'))setTimeout(()=>{if(active()){patch();loadLegal(false).then(rerender)}},180);
+ if(e.target.closest?.('.nav-item,.bn-item,[data-page]'))setTimeout(()=>{if(active())loadLegal(false).then(rerender)},180);
 },true);
-function patch(){
- const base=window.renderDebt||globalThis.renderDebt;
- if(typeof base!=='function'||base.__pdzControlV236276)return;
- const wrapped=function(){
-   const original=(()=>{try{return Array.isArray(allClientDebt)?allClientDebt:[]}catch(_){return[]}})();
-   if(original.length)sourceRows=original.slice();
-   const source=sourceRows.length?sourceRows:original;
-   const view=filtered(source);
-   let out;
-   try{
-     try{allClientDebt=view}catch(_){window.allClientDebt=view}
-     out=base.apply(this,arguments);
-   }finally{
-     try{allClientDebt=source}catch(_){window.allClientDebt=source}
-   }
-   setTimeout(apply,0);
-   return out;
- };
- wrapped.__pdzControlV236276=true;wrapped.__base=base;
- window.renderDebt=wrapped;try{renderDebt=wrapped}catch(_){}
-}
-ensureStyles();patch();
+
+// The period/snapshot module owns the actual debt renderer. Give it a pure
+// filter hook so it renders ONLY matching clients, instead of rendering the
+// full cached snapshot and merely changing the filter counters.
+window.RESANTA_PDZ_FILTER_ROWS_V236277=function(rows){
+ sourceRows=Array.isArray(rows)?rows.slice():[];
+ return filtered(sourceRows);
+};
+window.RESANTA_PDZ_AFTER_RENDER_V236277=function(rows){
+ sourceRows=Array.isArray(rows)?rows.slice():sourceRows;
+ setTimeout(apply,0);
+};
+
+ensureStyles();
 if(active()){
  const initial=(()=>{try{return Array.isArray(allClientDebt)?allClientDebt:[]}catch(_){return[]}})();
  if(initial.length)sourceRows=initial.slice();
  loadLegal(false).then(()=>setTimeout(rerender,0));
 }
-window.RESANTA_PDZ_CONTROL_V236276=Object.freeze({version:V,filters:true,hardHighlight30:true,hardHighlight60:true,legalAudit:true,noPolling:true});
+window.RESANTA_PDZ_CONTROL_V236277=Object.freeze({version:V,filters:true,realFilteredList:true,hardHighlight30:true,hardHighlight60:true,legalAudit:true,noPolling:true});
 })();
