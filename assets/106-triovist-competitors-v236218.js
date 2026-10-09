@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.293 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.294 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.293',TTL=30000;
+const V='v23.6.294',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -86,7 +86,7 @@ function specLine(k,v){
   max_rpm:'Макс. скорость вращения',max_torque_nm:'Макс. крутящий момент',charging_time_min:'Время зарядки',
   cut_speed_adjustment:'Регулировка скорости распила',cut_depth_90_mm:'Глубина реза 90°',cut_depth_45_mm:'Глубина реза 45°',
   blade_diameter_mm:'Диаметр пильного диска',arbor_diameter_mm:'Диаметр посадочного гнезда',tilt_angle_deg:'Угол наклона диска',
-  speed_count:'Количество скоростей',impact_present:'Наличие удара',
+  speed_count:'Количество скоростей',impact_present:'Наличие удара',battery_count:'Количество АКБ в комплекте',case_present:'Наличие кейса',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -99,7 +99,7 @@ function specLine(k,v){
   max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
   drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   cut_depth_90_mm:' мм',cut_depth_45_mm:' мм',blade_diameter_mm:' мм',arbor_diameter_mm:' мм',tilt_angle_deg:'°',
-  speed_count:' шт.',
+  speed_count:' шт.',battery_count:' шт.',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -280,6 +280,59 @@ function humidifierResult(k,a,b){
 
 
 
+
+function screwdriverMotor(v){
+ if(v==null)return'нет данных';
+ const s=String(v).toLowerCase();
+ if(/brushless|бесщет|бесщёточ/.test(s))return'бесщеточный';
+ if(/brushed|щеточ|щёточ|коллектор/.test(s))return'щеточный';
+ return E(v);
+}
+function screwdriverValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='motor_type')return screwdriverMotor(v);
+ if(k==='max_torque_nm')return E(v)+' Н·м';
+ if(k==='impact_present'||k==='case_present')return Boolean(v)?'есть':'нет';
+ if(k==='battery_count')return E(v)+' шт.';
+ return E(v);
+}
+function screwdriverResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='battery_capacity_ah'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.15)return'полное совпадение · допуск ±15%';
+  return av>bv?'у нас больше емкость АКБ':'у конкурента больше емкость АКБ';
+ }
+ if(k==='motor_type'){
+  const aa=screwdriverMotor(a),bb=screwdriverMotor(b);
+  if(aa===bb)return'совпадает';
+  if(aa==='бесщеточный'&&bb==='щеточный')return'наш бесщеточный — преимущество';
+  if(aa==='щеточный'&&bb==='бесщеточный')return'у конкурента бесщеточный';
+  return'тип двигателя отличается';
+ }
+ if(k==='max_torque_nm'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.10)return'полное совпадение · допуск ±10%';
+  return av>bv?'наш крутящий момент выше':'крутящий момент конкурента выше';
+ }
+ if(k==='impact_present'){
+  if(Boolean(a)===Boolean(b))return Boolean(a)?'удар есть у обоих':'удара нет у обоих';
+  return Boolean(a)?'удар есть у нас — преимущество':'удар есть у конкурента';
+ }
+ if(k==='battery_count'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  if(av===bv)return'совпадает';
+  return av>bv?'у нас больше АКБ в комплекте':'у конкурента больше АКБ в комплекте';
+ }
+ if(k==='case_present'){
+  if(Boolean(a)===Boolean(b))return Boolean(a)?'кейс есть у обоих':'кейса нет у обоих';
+  return Boolean(a)?'кейс есть у нас — преимущество':'кейс есть у конкурента';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
 function impactDrillDevice(v){
  if(v==null)return'';
  const s=String(v).toLowerCase();
@@ -1422,6 +1475,22 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='cordless_screwdriver'){
+  const keys=[
+   ['battery_capacity_ah','Емкость АКБ'],['motor_type','Щеточный/бесщеточный'],
+   ['max_torque_nm','Крутящий момент'],['impact_present','Наличие удара'],
+   ['battery_count','Количество АКБ в комплекте'],['case_present','Наличие кейса']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+screwdriverValue(k,b[k])+'</td><td>'+screwdriverValue(k,a[k])+'</td><td>'+E(screwdriverResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Шуруповерты:</b> в этом профиле сравниваются аккумуляторные шуруповерты и дрели-шуруповерты. Гайковерты, перфораторы, обычные дрели и отдельные ударные винтоверты исключаются. Емкость АКБ сравнивается с допуском ±15%, крутящий момент — ±10% и является главным силовым параметром. Бесщеточный двигатель считается преимуществом над щеточным. Наличие удара, количество АКБ и кейс учитываются как преимущества комплектации/функциональности. Значение 0 АКБ ставится только когда отсутствие аккумулятора прямо подтверждено. Если не подтверждены емкость АКБ или крутящий момент — вывод «сильнее/слабее» блокируется.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
  if(r.profile_key==='impact_drill'){
   const keys=[
    ['input_power_w','Мощность'],['speed_count','Количество скоростей'],
@@ -1838,5 +1907,5 @@ async function open(panel,ctx,force=false){
   render(panel,dash,listing);
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
