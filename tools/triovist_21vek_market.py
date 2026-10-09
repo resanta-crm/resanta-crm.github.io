@@ -529,6 +529,7 @@ def humidifier_power_similarity(a: float,b: float) -> float:
 
 def snow_blower_power_source_family(v: Any) -> str:
     n=norm(v)
+    if any(x in n for x in ("пневм","compressed air","air powered")):return "pneumatic"
     if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
     if any(x in n for x in ("электр","сеть","сетев","220","230","розет","mains")):return "electric"
     if any(x in n for x in ("бензин","топлив","двс","4 такт","четырехтакт","four stroke")):return "fuel"
@@ -663,7 +664,7 @@ def impact_wrench_source_family(v: Any) -> str:
     n=norm(v)
     if any(x in n for x in ("пневм","compressed air","air powered","воздуш")):return "pneumatic"
     if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
-    if any(x in n for x in ("сетев","сеть","220","230","mains","corded")):return "mains"
+    if any(x in n for x in ("сетев","сеть","220","230","mains","corded","electric")):return "mains"
     return n
 
 
@@ -741,7 +742,13 @@ def impact_wrench_required_missing(ours: dict,comp: dict) -> bool:
 def impact_wrench_directional(rule: dict,a: Any,b: Any) -> float|None:
     if a is None or b is None:return None
     k=rule.get("spec_key")
-    if k in ("device_type","wrench_type","power_source","motor_type","chuck_type","drive_size_in","max_rpm","battery_type","battery_voltage_v"):
+    if k=="motor_type":
+        aa=impact_wrench_motor_family(a);bb=impact_wrench_motor_family(b)
+        if aa==bb:return 50
+        if aa=="brushless" and bb=="brushed":return 72
+        if aa=="brushed" and bb=="brushless":return 28
+        return 50
+    if k in ("device_type","wrench_type","power_source","chuck_type","drive_size_in","max_rpm","battery_type","battery_voltage_v"):
         return 50
     if k=="operating_modes":
         aa=impact_wrench_mode_tokens(a);bb=impact_wrench_mode_tokens(b)
