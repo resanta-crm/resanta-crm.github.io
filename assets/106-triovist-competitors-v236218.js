@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.274 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.281 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.274',TTL=30000;
+const V='v23.6.281',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -74,6 +74,10 @@ function specLine(k,v){
   construction:'Конструкция',air_speed_ms:'Скорость воздушного потока',engine_type:'Тип двигателя',battery_type:'Тип аккумулятора',
   rpm:'Обороты двигателя',functions:'Функции',fuel_power_w:'Мощность топливного двигателя',
   max_auger_diameter_mm:'Макс. диаметр бура',shaft_diameter_mm:'Диаметр посадочного отверстия',
+  processed_material:'Перерабатываемый материал',body_material:'Материал корпуса',cutting_mechanism:'Режущий механизм',
+  input_power_w:'Входная мощность',cutting_speed_rpm:'Скорость резания',max_branch_diameter_mm:'Макс. диаметр веток',
+  collector_capacity_l:'Емкость бункера/травосборника',feed_openings_count:'Кол-во загрузочных отверстий',
+  collector_present:'Бункер/травосборник',collector_type:'Тип бункера/травосборника',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -82,6 +86,7 @@ function specLine(k,v){
   chain_pitch_in:'"',drive_links:' шт.',fuel_tank_l:' л',chain_speed_ms:' м/с',voltage_v:' В',
   battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
   air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',max_auger_diameter_mm:' мм',shaft_diameter_mm:' мм',
+  input_power_w:' Вт',cutting_speed_rpm:' об/мин',max_branch_diameter_mm:' мм',collector_capacity_l:' л',feed_openings_count:' шт.',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -255,6 +260,111 @@ function humidifierResult(k,a,b){
   return 'существенное отличие';
  }
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+function gardenShredderFamily(v){
+ if(v==null)return '';
+ const s=String(v).toLowerCase();
+ if((/измельч/.test(s)&&(/сад|вет/.test(s)))||/шредер/.test(s))return'garden_shredder';
+ return s.trim();
+}
+function gardenShredderEngine(v){
+ if(v==null)return '';
+ const s=String(v).toLowerCase();
+ if(/аккумуля|батар|battery|li[- ]?ion/.test(s))return'аккумуляторный';
+ if(/бензин|двс|топлив/.test(s))return'бензиновый';
+ if(/электр|сетев|сеть|220|230|380|400/.test(s))return'сетевой электрический';
+ return s.trim();
+}
+function gardenShredderCutting(v){
+ if(v==null)return '';
+ const s=String(v).toLowerCase();
+ if(/турбин/.test(s))return'турбинный';
+ if(/фрез/.test(s))return'фрезерный';
+ if(/валков|валец|ролик/.test(s))return'валковый';
+ if(/нож/.test(s))return'ножевой';
+ if(/диск/.test(s))return'дисковый';
+ return s.trim();
+}
+function gardenShredderMaterials(v){
+ if(v==null)return[];
+ const s=String(v).toLowerCase(),z=[];
+ if(/branches|ветк|ветв|суч|древес/.test(s))z.push('ветки');
+ if(/leaves|лист|листв/.test(s))z.push('листья');
+ if(/grass|трав/.test(s))z.push('трава');
+ if(/soft_waste|мягк|зел[её]н|растительн/.test(s))z.push('мягкие растительные отходы');
+ if(/garden_waste|садов.*отход|органич|компост/.test(s))z.push('садовые отходы');
+ return [...new Set(z)];
+}
+function gardenShredderVoltage(v){
+ const n=N(v);if(n==null)return'нет данных';
+ if(n>=200&&n<=250)return'220/230 В';
+ if(n>=360&&n<=420)return'380/400 В';
+ if(n>=16&&n<=22)return'18/20 В';
+ if(n>=34&&n<=42)return'36/40 В';
+ if(n>=46&&n<=52)return'48 В';
+ if(n>=54&&n<=62)return'60 В';
+ if(n>=72&&n<=84)return'80 В';
+ return E(v)+' В';
+}
+function gardenShredderValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='device_type')return'garden_shredder'===gardenShredderFamily(v)?'садовый измельчитель':E(v);
+ if(k==='engine_type')return E(gardenShredderEngine(v)||v);
+ if(k==='processed_material'){
+  const z=gardenShredderMaterials(v);return z.length?z.join(' + '):E(v);
+ }
+ if(k==='cutting_mechanism')return E(gardenShredderCutting(v)||v);
+ if(k==='collector_present')return Boolean(v)?'есть':'нет';
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='voltage_v')return gardenShredderVoltage(v);
+ if(k==='noise_db')return E(v)+' дБ';
+ if(k==='cutting_speed_rpm')return E(v)+' об/мин';
+ if(k==='max_branch_diameter_mm')return E(v)+' мм';
+ if(k==='collector_capacity_l')return E(v)+' л';
+ if(k==='feed_openings_count')return E(v)+' шт.';
+ return E(v);
+}
+function gardenShredderResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='device_type')return gardenShredderFamily(a)===gardenShredderFamily(b)?'один класс':'разный тип — не аналог';
+ if(k==='engine_type')return gardenShredderEngine(a)===gardenShredderEngine(b)?'совпадает':'разный тип двигателя/питания — не аналог';
+ if(k==='voltage_v')return gardenShredderVoltage(a)===gardenShredderVoltage(b)?'один класс · '+gardenShredderVoltage(a):'разный класс питания — не аналог';
+ if(k==='cutting_mechanism')return gardenShredderCutting(a)===gardenShredderCutting(b)?'совпадает':'режущий механизм отличается — не прямой аналог';
+ if(k==='processed_material'){
+  const aa=new Set(gardenShredderMaterials(a)),bb=new Set(gardenShredderMaterials(b));
+  if(!aa.size||!bb.size)return'недостаточно данных';
+  const same=aa.size===bb.size&&[...aa].every(x=>bb.has(x));
+  if(same)return'совпадает';
+  const ourMore=[...aa].every(x=>bb.has(x))&&bb.size>aa.size;
+  const compMore=[...bb].every(x=>aa.has(x))&&aa.size>bb.size;
+  if(compMore)return'наш перерабатывает больше типов';
+  if(ourMore)return'конкурент перерабатывает больше типов';
+  return'набор материалов отличается';
+ }
+ if(k==='noise_db'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv);
+  if(d<=3)return'сопоставимо · разница '+d.toFixed(1).replace('.',',')+' дБ';
+  if(d<=6)return'близко · разница '+d.toFixed(1).replace('.',',')+' дБ';
+  if(d<=10)return'частичное совпадение · разница '+d.toFixed(1).replace('.',',')+' дБ';
+  return'существенное отличие';
+ }
+ if(['input_power_w','cutting_speed_rpm','max_branch_diameter_mm','collector_capacity_l'].includes(k)){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1);
+  const t=k==='collector_capacity_l'?[.15,.30,.45]:[.10,.20,.30];
+  if(d<=t[0])return'полное совпадение';
+  if(d<=t[1])return'близкое совпадение';
+  if(d<=t[2])return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(k==='feed_openings_count'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  return Math.round(av)===Math.round(bv)?'совпадает':'количество отверстий отличается';
+ }
+ if(k==='collector_present')return Boolean(a)===Boolean(b)?'совпадает':(Boolean(a)?'у нас есть, у конкурента нет':'у конкурента есть, у нас нет');
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
  return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
 }
@@ -776,6 +886,24 @@ function details(r,l){
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+fanHeaterValue(k,b[k])+'</td><td>'+fanHeaterValue(k,a[k])+'</td><td>'+E(fanHeaterResult(k,a[k],b[k]))+'</td></tr>').join('');
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+ if(r.profile_key==='garden_shredder'){
+  const keys=[
+   ['device_type','Тип'],['processed_material','Перерабатываемый материал измельчителем'],['body_material','Материал корпуса'],
+   ['cutting_mechanism','Режущий механизм'],['input_power_w','Входная мощность'],['voltage_v','Напряжение'],
+   ['noise_db','Уровень шума'],['cutting_speed_rpm','Скорость резания'],['max_branch_diameter_mm','Максимальный диаметр веток'],
+   ['engine_type','Тип двигателя'],['collector_capacity_l','Емкость бункера/травосборника'],
+   ['feed_openings_count','Кол-во загрузочных отверстий'],['collector_present','Бункер/травосборник'],
+   ['collector_type','Тип бункера/травосборника']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+gardenShredderValue(k,b[k])+'</td><td>'+gardenShredderValue(k,a[k])+'</td><td>'+E(gardenShredderResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Садовые измельчители:</b> тип устройства и тип двигателя/питания — жесткие фильтры; 220/230 В считается одним сетевым классом. Режущий механизм — ключевой параметр: разные механизмы не получают прямой аналог. Входная мощность, скорость резания и максимальный диаметр веток — допуск ±10%; уровень шума — сопоставим при разнице до 3 дБ; емкость бункера — ±15%. Количество загрузочных отверстий сравнивается точно. Основные параметры класса: режущий механизм + тип двигателя + максимальный диаметр веток + мощность. Если нет режущего механизма, типа двигателя, мощности или максимального диаметра веток — вывод «сильнее/слабее» блокируется как недостаточно данных.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
