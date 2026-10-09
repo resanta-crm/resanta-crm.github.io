@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.289 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.290 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.289',TTL=30000;
+const V='v23.6.290',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -280,6 +280,7 @@ function humidifierResult(k,a,b){
 function circularSawDevice(v){
  if(v==null)return'';
  const s=String(v).toLowerCase();
+ if(/станок/.test(s)&&/циркуляр|распилов|настоль/.test(s))return'циркулярный станок';
  if(/торцов|miter|mitre/.test(s))return'торцовочная пила';
  if(/погруж|plunge/.test(s))return'погружная дисковая пила';
  if(/мини.*дисков|минипил|mini circular|compact circular/.test(s))return'мини-дисковая пила';
