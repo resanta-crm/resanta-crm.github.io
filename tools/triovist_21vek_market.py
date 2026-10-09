@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.292.
+"""Triovist / 21vek automatic market analysis v23.6.293.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.3"
+PARSER_VERSION="market-auto-v4.4"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1544,8 +1544,32 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     label_keys=("name","title","label","caption","propertyName","featureName","characteristicName","parameterName")
     value_keys=("value","text","displayValue","propertyValue","featureValue","characteristicValue","parameterValue")
 
+    impact_drill_mode={"speed_count","max_rpm","impact_present"}.issubset({str(x.get("spec_key") or "") for x in rules})
+
+    def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not impact_drill_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if "мощност" in ln and not any(x in ln for x in ("выходн","акуст","удар")):
+            return "input_power_w"
+        if ("скорост" in ln or "ступен" in ln) and any(x in ln for x in ("колич","число")) and "регулиров" not in ln:
+            return "speed_count"
+        if "удар" not in ln:
+            rpm_label=(
+                ("оборот" in ln and any(x in ln for x in ("макс","число","холост")))
+                or ("вращен" in ln and any(x in ln for x in ("макс","скорост","частот")))
+                or ("частота вращен" in ln)
+            )
+            if rpm_label and "регулиров" not in ln:return "max_rpm"
+        if "удар" in ln and not any(x in ln for x in ("частот","колич","число")):
+            return "impact_present"
+        if any(x in ln for x in ("режим","функц","операц")) and any(x in vn for x in ("с удар","ударн","impact")):
+            return "impact_present"
+        return None
+
     def add(label: Any,value: Any,source: str,path: str=""):
-        k=aliases.get(norm(label));text=primitive_text(value)
+        text=primitive_text(value)
+        k=aliases.get(norm(label)) or impact_drill_fuzzy_key(label,value)
         if not k or not text: return
         sig=(k,text)
         if sig in seen: return
@@ -1864,7 +1888,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "blade_diameter_mm" in keys and "cut_depth_90_mm" in keys and "arbor_diameter_mm" in keys:
         return RULESET_VERSION+"-circular2"
     if "speed_count" in keys and "max_rpm" in keys and "impact_present" in keys:
-        return RULESET_VERSION+"-impactdrill1"
+        return RULESET_VERSION+"-impactdrill2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -2053,7 +2077,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         elif "миксер" in dn:
             specs["device_type"]="дрель-миксер"
         elif "дрел" in dn:
-            if specs.get("impact_present") is True or "удар" in dn:
+            own_impact_scope=("дрел" in norm(base.get("subgroup")) and "удар" in norm(base.get("subgroup")))
+            if specs.get("impact_present") is True or "удар" in dn or own_impact_scope:
                 specs["device_type"]="ударная дрель"
                 if specs.get("impact_present") is None:specs["impact_present"]=True
             elif specs.get("impact_present") is False or "безудар" in dn:
