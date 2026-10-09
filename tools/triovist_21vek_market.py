@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.284.
+"""Triovist / 21vek automatic market analysis v23.6.285.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.5"
+PARSER_VERSION="market-auto-v3.6"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -939,6 +939,18 @@ def normalize_value(key: str, text: str) -> Any:
         return sprayer_carry_family(text)[:120] or None
     if key=="fuel_engine_type":
         return sprayer_engine_family(text)[:120] or None
+    if key=="battery_type":
+        n=norm(text)
+        if any(x in n for x in ("размеры и вес","время работы от","емкость","напряжение","зарядное устройство")):
+            return None
+        if any(x in n for x in ("lifepo4","li fe po4","литий железо фосфат")):return "lifepo4"
+        if any(x in n for x in ("li ion","li-ion","литий ион","литийион")):return "li ion"
+        if any(x in n for x in ("li pol","li-pol","lipo","литий полимер")):return "li pol"
+        if any(x in n for x in ("sla","свинцово кислот","свинцово-кислот")):return "sla"
+        if any(x in n for x in ("gel","гелев")):return "gel"
+        if any(x in n for x in ("nimh","ni mh","никель металл")):return "ni mh"
+        if any(x in n for x in ("nicd","ni cd","никель кадм")):return "ni cd"
+        return n[:120] or None
     if key=="processed_material":
         t=garden_shredder_material_tokens(text)
         return "+".join(sorted(t)) if t else None
@@ -1497,7 +1509,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "max_cut_diameter_mm" in keys and "tool_type" in keys and "battery_capacity_ah" in keys:
         return RULESET_VERSION+"-pruner1"
     if "spray_radius_m" in keys and "flow_rate_lmin" in keys and "tank_capacity_l" in keys:
-        return RULESET_VERSION+"-sprayer1"
+        return RULESET_VERSION+"-sprayer2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1666,7 +1678,7 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         source=sprayer_source_family(specs.get("power_source"))
         if any(x in sn for x in ("аккумуля","battery","li ion","li-ion")):source="battery"
         elif any(x in sn for x in ("бензин","двс","petrol","gasoline")):source="fuel"
-        elif any(x in sn for x in ("ручн","помпов","рычаж")):source="manual"
+        elif any(x in sn for x in ("ручн","помпов","рычаж","пульверизатор")):source="manual"
         if source:specs["power_source"]=source
 
         if source=="battery" and specs.get("voltage_v") is None:
