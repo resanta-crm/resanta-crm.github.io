@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.298.
+"""Triovist / 21vek automatic market analysis v23.6.299.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.9"
+PARSER_VERSION="market-auto-v5.0"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1792,6 +1792,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     rule_keys={str(x.get("spec_key") or "") for x in rules}
     impact_drill_mode={"speed_count","max_rpm","impact_present"}.issubset(rule_keys)
     cordless_mode={"battery_count","case_present","max_torque_nm","battery_capacity_ah"}.issubset(rule_keys)
+    jigsaw_mode={"cut_depth_wood_mm","strokes_per_min","motor_type"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -1812,6 +1813,18 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             return "impact_present"
         if any(x in ln for x in ("режим","функц","операц")) and any(x in vn for x in ("с удар","ударн","impact")):
             return "impact_present"
+        return None
+
+    def jigsaw_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not jigsaw_mode:return None
+        ln=norm(label)
+        if not ln:return None
+        # 21vek uses several wording variants for the same two agreed metrics.
+        # Keep wood depth separate from metal/aluminium values.
+        if ("глубин" in ln or "толщин" in ln) and ("пропил" in ln or "рез" in ln) and "дерев" in ln:
+            return "cut_depth_wood_mm"
+        if "ход" in ln and "длина" not in ln and any(x in ln for x in ("частот","число","колич","макс","холост","движен")):
+            return "strokes_per_min"
         return None
 
     def push(k: str,label: Any,text: str,source: str,path: str=""):
@@ -1840,7 +1853,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or impact_drill_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -2069,7 +2082,7 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     continue
                 if scope.get("profile_key")=="jigsaw":
                     jn=norm(name)
-                    if "лобзик" not in jn or any(x in jn for x in ("пилк","полотн","ручной лобзик")):
+                    if "лобзик" not in jn or "пилк" in jn or "полотн" in jn or ("ручной" in jn and "лобзик" in jn):
                         continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
@@ -2169,7 +2182,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-paintsprayer2"
     if "cut_depth_wood_mm" in keys and "strokes_per_min" in keys and "motor_type" in keys:
-        return RULESET_VERSION+"-jigsaw1"
+        return RULESET_VERSION+"-jigsaw2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
