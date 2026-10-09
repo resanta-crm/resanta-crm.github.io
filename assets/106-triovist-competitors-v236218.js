@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.283 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.284 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.283',TTL=30000;
+const V='v23.6.284',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -79,6 +79,8 @@ function specLine(k,v){
   collector_capacity_l:'Емкость бункера/травосборника',feed_openings_count:'Кол-во загрузочных отверстий',
   collector_present:'Бункер/травосборник',collector_type:'Тип бункера/травосборника',
   tool_type:'Тип инструмента',knife_type:'Тип ножа',blade_type:'Тип лезвия',max_cut_diameter_mm:'Максимальная толщина среза',
+  application_area:'Область применения',carry_type:'Вид переноски',flow_rate_lmin:'Производительность',
+  tank_capacity_l:'Объем емкости',fuel_engine_type:'Тип бензинового двигателя',spray_radius_m:'Радиус опрыскивания',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -88,7 +90,7 @@ function specLine(k,v){
   battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
   air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',max_auger_diameter_mm:' мм',shaft_diameter_mm:' мм',
   input_power_w:' Вт',cutting_speed_rpm:' об/мин',max_branch_diameter_mm:' мм',collector_capacity_l:' л',feed_openings_count:' шт.',
-  max_cut_diameter_mm:' мм',
+  max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -262,6 +264,116 @@ function humidifierResult(k,a,b){
   return 'существенное отличие';
  }
  if(typeof a==='boolean'||typeof b==='boolean')return Boolean(a)===Boolean(b)?'совпадает':'отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
+
+function sprayerDevice(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ return /опрыскив|sprayer/.test(s)?'опрыскиватель':E(v);
+}
+function sprayerSource(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(s==='battery'||/аккумуля|батар|battery|li[- ]?ion/.test(s))return'аккумуляторный';
+ if(s==='fuel'||/бензин|топлив|двс|petrol|gasoline/.test(s))return'бензиновый';
+ if(s==='mains'||/сетев|сеть|220|230/.test(s))return'сетевой';
+ if(s==='manual'||/ручн|механическ|помпов|рычаж/.test(s))return'ручной';
+ return E(v);
+}
+function sprayerCarry(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/backpack|ранцев|рюкзач|на спин/.test(s))return'ранцевый';
+ if(/shoulder|плеч/.test(s))return'плечевой';
+ if(/wheeled|колес|тележ/.test(s))return'колёсный';
+ if(/handheld|ручн|переносн|в руке/.test(s))return'ручной';
+ return E(v);
+}
+function sprayerEngine(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/2stroke|двухтакт|2\s*[- ]?такт|two\s*stroke/.test(s))return'2-тактный';
+ if(/4stroke|четырехтакт|4\s*[- ]?такт|four\s*stroke/.test(s))return'4-тактный';
+ return E(v);
+}
+function sprayerBattery(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/lifepo4|li[ -]?fe[ -]?po4|литий.*железо/.test(s))return'LiFePO4';
+ if(/li[ -]?ion|литий.*ион/.test(s))return'Li-Ion';
+ if(/ni[ -]?mh|никель.*металл/.test(s))return'Ni-MH';
+ if(/ni[ -]?cd|никель.*кадм/.test(s))return'Ni-Cd';
+ return E(v);
+}
+function sprayerVoltage(v){
+ const n=N(v);if(n==null)return'нет данных';
+ if(n>=3&&n<=4.5)return'3,7 В';
+ if(n>=10&&n<16)return'12 В';
+ if(n>=16&&n<=22)return'18/20 В';
+ if(n>=23&&n<=28)return'24 В';
+ if(n>=34&&n<=42)return'36/40 В';
+ if(n>=46&&n<=52)return'48 В';
+ if(n>=54&&n<=62)return'60 В';
+ if(n>=72&&n<=84)return'80 В';
+ return E(v)+' В';
+}
+function sprayerApplication(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase(),z=[];
+ if(/garden|сад|огород|растен|дерев|кустар/.test(s))z.push('сад/огород');
+ if(/agriculture|сельск|агро|поле|ферм/.test(s))z.push('сельское хозяйство');
+ if(/disinfection|дезинф|санитар|обработк.*помещ/.test(s))z.push('дезинфекция');
+ if(/fertilizer|удобрен|подкорм/.test(s))z.push('удобрения');
+ if(/plant_protection|вредител|инсекти|гербиц|пестиц/.test(s))z.push('защита растений');
+ return z.length?[...new Set(z)].join(' + '):E(v);
+}
+function sprayerValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='device_type')return sprayerDevice(v);
+ if(k==='application_area')return sprayerApplication(v);
+ if(k==='carry_type')return sprayerCarry(v);
+ if(k==='voltage_v')return sprayerVoltage(v);
+ if(k==='flow_rate_lmin')return E(v)+' л/мин';
+ if(k==='power_source')return sprayerSource(v);
+ if(k==='battery_type')return sprayerBattery(v);
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='tank_capacity_l')return E(v)+' л';
+ if(k==='fuel_engine_type')return sprayerEngine(v);
+ if(k==='fuel_power_w'){
+  const n=N(v);return n==null?E(v):(n>=1000?(n/1000).toFixed(2).replace('.',',')+' кВт':n+' Вт');
+ }
+ if(k==='engine_cc')return E(v)+' см³';
+ if(k==='fuel_tank_l')return E(v)+' л';
+ if(k==='spray_radius_m')return E(v)+' м';
+ return E(v);
+}
+function sprayerResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='device_type')return sprayerDevice(a)===sprayerDevice(b)?'один тип':'разный тип — не аналог';
+ if(k==='power_source')return sprayerSource(a)===sprayerSource(b)?'совпадает':'разный тип питания — не аналог';
+ if(k==='carry_type')return sprayerCarry(a)===sprayerCarry(b)?'совпадает':'вид переноски отличается — не прямой аналог';
+ if(k==='voltage_v')return sprayerVoltage(a)===sprayerVoltage(b)?'один класс · '+sprayerVoltage(a):'разный класс АКБ — не аналог';
+ if(k==='fuel_engine_type')return sprayerEngine(a)===sprayerEngine(b)?'совпадает':'2Т/4Т отличаются — не прямой аналог';
+ if(k==='battery_type')return sprayerBattery(a)===sprayerBattery(b)?'совпадает':'тип аккумулятора отличается';
+ if(k==='application_area')return sprayerApplication(a)===sprayerApplication(b)?'совпадает':'область применения отличается';
+ if(['flow_rate_lmin','battery_capacity_ah','tank_capacity_l','fuel_tank_l','spray_radius_m'].includes(k)){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.15)return'полное совпадение';
+  if(d<=.30)return'близкое совпадение';
+  if(d<=.45)return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(['fuel_power_w','engine_cc'].includes(k)){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.10)return'полное совпадение';
+  if(d<=.20)return'близкое совпадение';
+  if(d<=.30)return'частичное совпадение';
+  return'существенное отличие';
+ }
  const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
  return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
 }
@@ -996,6 +1108,24 @@ function details(r,l){
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
  }
+
+ if(r.profile_key==='sprayer'){
+  const keys=[
+   ['device_type','Тип'],['application_area','Область применения'],['carry_type','Вид переноски'],
+   ['voltage_v','Напряжение'],['flow_rate_lmin','Производительность'],['power_source','Тип питания'],
+   ['battery_type','Тип аккумулятора'],['battery_capacity_ah','Емкость аккумулятора'],['tank_capacity_l','Объем емкости'],
+   ['fuel_engine_type','Тип бензинового двигателя'],['fuel_power_w','Мощность'],['engine_cc','Объем двигателя'],
+   ['fuel_tank_l','Объем топливного бака'],['spray_radius_m','Радиус опрыскивания']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+sprayerValue(k,b[k])+'</td><td>'+sprayerValue(k,a[k])+'</td><td>'+E(sprayerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Опрыскиватели:</b> тип питания — жёсткий фильтр: ручные, аккумуляторные, сетевые и бензиновые между собой не смешиваются. У аккумуляторных напряжение сравнивается по классу АКБ; производительность, емкость аккумулятора, объем емкости и радиус — допуск ±15%. У бензиновых 2Т/4Т не считаются прямыми аналогами, мощность и объем двигателя — ±10%, топливный бак — ±15%. Разный вид переноски оставляет товар близким, но не прямым аналогом. Критические параметры зависят от типа питания; при их отсутствии вывод «сильнее/слабее» блокируется.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
  if(r.profile_key==='battery_pruner'){
   const keys=[
    ['device_type','Тип'],['tool_type','Тип инструмента'],['voltage_v','Напряжение'],
@@ -1345,5 +1475,5 @@ async function open(panel,ctx,force=false){
   render(panel,dash,listing);
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
