@@ -1,6 +1,6 @@
-/* Resanta CRM v23.6.198: approved period filters */
+/* Resanta CRM v23.6.277: approved period filters + PDZ external filter hook */
 (function(){'use strict';if(window.RESANTA_PERIOD_FILTERS_V236198)return;
-const V='v23.6.198',E=v=>String(v??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x])),N=v=>Number.isFinite(Number(v))?Number(v):0,Y=v=>String(v||'').slice(0,7),MN=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const V='v23.6.277',E=v=>String(v??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x])),N=v=>Number.isFinite(Number(v))?Number(v):0,Y=v=>String(v||'').slice(0,7),MN=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const ML=v=>{const s=Y(v),m=+s.slice(5,7);return(MN[m-1]||s)+' '+s.slice(0,4)},M=v=>N(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN',TM=()=>{try{return Y(TODAY)||new Date().toISOString().slice(0,7)}catch(_){return new Date().toISOString().slice(0,7)}},H=()=>{try{return Array.isArray(allPurchaseHistory)?allPurchaseHistory:[]}catch(_){return[]}},MS=()=>[...new Set(H().map(r=>Y(r.month)).filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse(),S=(v,n)=>{const s=Y(v),d=new Date(+s.slice(0,4),+s.slice(5,7)-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')},Q=v=>String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/giu,' ').trim(),boss=()=>{try{return currentProfile?.role==='boss'}catch(_){return false}},me=()=>{try{return String(currentProfile?.name||'')}catch(_){return''}},match=(a,b)=>{a=Q(a);b=Q(b);return!!(a&&b&&(a===b||a.includes(b)||b.includes(a)))},page=()=>document.getElementById('app')?.dataset?.activePage||'';
 
 /* VIP */
@@ -31,9 +31,28 @@ window.salesMonth198=v=>{if(!MS().includes(v))return;sm=v;try{localStorage.setIt
 
 /* PDZ history */
 const rd=window.renderDebt||globalThis.renderDebt;let dd='',dates=[],dl=false,df=null;const dc=new Map(),DR=v=>{const s=String(v||'');return /^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):s};
-async function dload(v){if(v&&dc.has(v)){dd=v;allClientDebt=dc.get(v);rd?.();dbar();return}if(df)return df;df=(async()=>{const client=typeof db!=='undefined'?db:window.db,{data,error}=await client.rpc('crm_debt_history_v236198',{p_report_date:v||null});if(error)throw error;dates=Array.isArray(data?.dates)?data.dates:[];dd=String(data?.selected_date||v||'');const rows=Array.isArray(data?.rows)?data.rows:[];if(dd)dc.set(dd,rows);allClientDebt=rows;dl=true;rd?.();dbar()})().catch(e=>console.warn(V+' debt history',e)).finally(()=>df=null);return df}
+function drender(rows){
+ const full=Array.isArray(rows)?rows:[];
+ let view=full;
+ try{
+   if(typeof window.RESANTA_PDZ_FILTER_ROWS_V236277==='function'){
+     const x=window.RESANTA_PDZ_FILTER_ROWS_V236277(full);
+     if(Array.isArray(x))view=x;
+   }
+ }catch(e){console.warn(V+' PDZ filter hook',e)}
+ let out;
+ try{
+   try{allClientDebt=view}catch(_){window.allClientDebt=view}
+   out=rd?.();
+ }finally{
+   try{allClientDebt=full}catch(_){window.allClientDebt=full}
+ }
+ setTimeout(()=>{try{window.RESANTA_PDZ_AFTER_RENDER_V236277?.(full)}catch(e){console.warn(V+' PDZ after-render',e)}},0);
+ return out;
+}
+async function dload(v){if(v&&dc.has(v)){dd=v;drender(dc.get(v));dbar();return}if(df)return df;df=(async()=>{const client=typeof db!=='undefined'?db:window.db,{data,error}=await client.rpc('crm_debt_history_v236198',{p_report_date:v||null});if(error)throw error;dates=Array.isArray(data?.dates)?data.dates:[];dd=String(data?.selected_date||v||'');const rows=Array.isArray(data?.rows)?data.rows:[];if(dd)dc.set(dd,rows);dl=true;drender(rows);dbar()})().catch(e=>console.warn(V+' debt history',e)).finally(()=>df=null);return df}
 function dbar(){if(page()!=='debt')return;let r=document.getElementById('debt-period-filter-v236198');if(!r){r=document.createElement('div');r.id='debt-period-filter-v236198';r.className='card';r.style.cssText='margin-bottom:12px;padding:12px 14px';document.getElementById('debt-freshness')?.insertAdjacentElement('beforebegin',r)}r.innerHTML='<div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><div><label class="form-label">Срез ПДЗ</label><select class="form-input" onchange="debtDate198(this.value)">'+dates.map(x=>{const d=String(x.report_date||'');return'<option value="'+d+'" '+(d===dd?'selected':'')+'>'+DR(d)+' · '+Number(x.debtors||0)+' должн. · '+M(x.total)+'</option>'}).join('')+'</select></div><div style="font-size:11px;color:var(--sub);padding-bottom:8px">Каждая дата отчёта 1С сохраняется отдельно.</div></div>';const latest=String(dates[0]?.report_date||'');if(dd&&latest&&dd!==latest){const x=dates.find(z=>String(z.report_date)===dd)||{},b=document.getElementById('debt-freshness');if(b)b.innerHTML='<div style="background:var(--ab);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12px;color:var(--at)">📅 Исторический срез ПДЗ на <b>'+DR(dd)+'</b> · должников: <b>'+Number(x.debtors||0)+'</b> · просрочено: <b>'+M(x.total)+'</b>.</div>'}}
-if(typeof rd==='function'){const w=function(){if(dd&&dc.has(dd))allClientDebt=dc.get(dd);const o=rd.apply(this,arguments);setTimeout(dbar,0);if(!dl&&!df)setTimeout(()=>dload(null),0);return o};window.renderDebt=w;try{renderDebt=w}catch(_){}}
+if(typeof rd==='function'){const w=function(){const rows=(dd&&dc.has(dd))?dc.get(dd):(()=>{try{return Array.isArray(allClientDebt)?allClientDebt:[]}catch(_){return[]}})();const o=drender(rows);setTimeout(dbar,0);if(!dl&&!df)setTimeout(()=>dload(null),0);return o};w.__pdzPeriodV236277=true;w.__base=rd;window.renderDebt=w;try{renderDebt=w}catch(_){}}
 window.debtDate198=v=>{if(v)dload(v)};
-window.RESANTA_PERIOD_FILTERS_V236198=Object.freeze({version:V,vipMonth:true,salesGlobalMonth:true,debtSnapshots:true,noPolling:true});
+window.RESANTA_PERIOD_FILTERS_V236198=Object.freeze({version:V,vipMonth:true,salesGlobalMonth:true,debtSnapshots:true,pdzExternalFilterHook:true,noPolling:true});
 })();
