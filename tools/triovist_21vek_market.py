@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.289.
+"""Triovist / 21vek automatic market analysis v23.6.290.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.0"
+PARSER_VERSION="market-auto-v4.1"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -294,8 +294,8 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "насадк" not in pn and "головк" not in pn
                          and not sku.startswith("900/"))
             elif profile=="circular_saw":
-                matched=((("дисков" in pn and "пил" in pn) or "циркуляр" in pn)
-                         and "диск для" not in pn and "пильн диск" not in pn
+                matched=((("дисков" in pn and "пил" in pn) or ("циркуляр" in pn and "пил" in pn))
+                         and "станок" not in pn and "диск для" not in pn and "пильн диск" not in pn
                          and "направляющ" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
             if matched:skus.add(sku)
@@ -655,6 +655,7 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
 
 def circular_saw_device_family(v: Any) -> str:
     n=norm(v)
+    if "станок" in n and any(x in n for x in ("циркуляр","распилов","настоль")):return "table_saw"
     if any(x in n for x in ("торцов","miter","mitre")):return "miter_saw"
     if any(x in n for x in ("погруж","plunge")):return "plunge_saw"
     if any(x in n for x in ("мини дисков","мини-дисков","минипил","mini circular","compact circular")):return "mini_circular_saw"
@@ -1787,7 +1788,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
     if "blade_diameter_mm" in keys and "cut_depth_90_mm" in keys and "arbor_diameter_mm" in keys:
-        return RULESET_VERSION+"-circular1"
+        return RULESET_VERSION+"-circular2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1829,6 +1830,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="аромадиффузор"
         elif "увлажн" in device_name:
             specs["device_type"]="увлажнитель воздуха"
+        elif "станок" in device_name and any(x in device_name for x in ("циркуляр","распилов","настоль")):
+            specs["device_type"]="циркулярный станок"
         elif ("дисков" in device_name and "пил" in device_name) or "циркуляр" in device_name:
             if "погруж" in device_name:specs["device_type"]="погружная дисковая пила"
             elif "мини" in device_name:specs["device_type"]="мини-дисковая пила"
@@ -1958,7 +1961,9 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     circular_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="blade_diameter_mm" for r in rules) and any(r.get("spec_key")=="cut_depth_90_mm" for r in rules):
         cn=norm(circular_name)
-        if "погруж" in cn:
+        if "станок" in cn and any(x in cn for x in ("циркуляр","распилов","настоль")):
+            specs["device_type"]="циркулярный станок"
+        elif "погруж" in cn:
             specs["device_type"]="погружная дисковая пила"
         elif "мини" in cn and ("дисков" in cn or "циркуляр" in cn):
             specs["device_type"]="мини-дисковая пила"
@@ -3482,6 +3487,10 @@ def main() -> None:
                             row.update({"specs_raw":[],"specs_normalized":{}})
                         row["error_text"]=str(exc)[:1200];errors+=1
                 own_rows.append(row)
+            # Current own-specs table must mirror the live matrix exactly.
+            # Load/cache happened above, so deleting this scope here does not cause refetches,
+            # but it prevents discontinued or misclassified SKUs from remaining in analytics.
+            rest_delete("triovist_market_own_specs_current_v1",{"scope_key":"eq."+skey})
             rest_upsert("triovist_market_own_specs_current_v1",own_rows,"sku")
 
             # Rebuild only this scope's current analysis/gaps.
