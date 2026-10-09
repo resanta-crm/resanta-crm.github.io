@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.295.
+"""Triovist / 21vek automatic market analysis v23.6.296.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.6"
+PARSER_VERSION="market-auto-v4.7"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -183,6 +183,7 @@ def profile_for(label: str) -> str:
     if "гайковерт" in n or "гайковёрт" in n: return "impact_wrench"
     if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     if "шуруповерт" in n and "аккумулятор" in n: return "cordless_screwdriver"
+    if "краскопульт" in n: return "paint_sprayer"
     if "дрел" in n and "удар" in n and "шуруповерт" not in n: return "impact_drill"
     return "generic"
 
@@ -209,6 +210,7 @@ def query_for(label: str, profile: str) -> str:
       "circular_saw":"дисковая пила",
       "impact_drill":"дрель ударная",
       "cordless_screwdriver":"аккумуляторный шуруповерт",
+      "paint_sprayer":"краскопульт",
     }.get(profile)
     return q or clean_label(label)
 
@@ -273,10 +275,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Дисковые пилы","circular_saw","дисков"),
       ("Дрели ударные","impact_drill","дрел"),
       ("Шуруповерты аккумуляторные","cordless_screwdriver","шуруповерт"),
+      ("Краскопульты","paint_sprayer","краскопульт"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -320,10 +323,16 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                 matched=("шуруповерт" in pn and "аккумулятор" in pn
                          and "винтоверт" not in pn and "гайковерт" not in pn and "перфоратор" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="paint_sprayer":
+                matched=("краскопульт" in pn
+                         and "пневмат" not in pn and "аэрограф" not in pn
+                         and "окрасочн аппарат" not in pn and "покрасочн станц" not in pn
+                         and "безвоздуш" not in pn
+                         and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver") else "Садовая техника"),"source_subgroup":label,
+              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else "Садовая техника"),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -675,6 +684,59 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
 
 
 
+
+
+
+def paint_sprayer_device_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("аэрограф","airbrush")):return "airbrush"
+    if any(x in n for x in ("пневмат","compressed air","air spray gun")):return "pneumatic_spray_gun"
+    if any(x in n for x in ("окрасочн аппарат","покрасочн станц","безвоздуш","airless")):return "paint_station"
+    if "краскопульт" in n or "paint sprayer" in n or "spray gun" in n:return "electric_spray_gun"
+    return n
+
+
+def paint_sprayer_tank_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("верхн","сверху","top","upper")):return "upper"
+    if any(x in n for x in ("нижн","снизу","bottom","lower")):return "lower"
+    if any(x in n for x in ("выносн","отдельн","раздельн","remote","separate")):return "remote"
+    return n
+
+
+def paint_sprayer_required_missing(ours: dict,comp: dict) -> bool:
+    return any(ours.get(k) is None or comp.get(k) is None for k in ("input_power_w","pressure_bar"))
+
+
+def paint_sprayer_power_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=100:return 1.0
+    if d<=200:return 0.85
+    if d<=300:return 0.65
+    return 0.0
+
+
+def paint_sprayer_pressure_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b))/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=0.10:return 1.0
+    if d<=0.20:return 0.85
+    if d<=0.30:return 0.65
+    return 0.0
+
+
+def paint_sprayer_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="input_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=100:return 50
+        return 66 if av>bv else 34
+    if k=="pressure_bar":
+        av=float(a);bv=float(b)
+        if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.10:return 50
+        return 68 if av>bv else 32
+    if k in ("tank_position","device_type"):return 50
+    return directional(rule,a,b)
 
 
 def screwdriver_device_family(v: Any) -> str:
@@ -1284,6 +1346,10 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="paint_sprayer_type":
+        return paint_sprayer_device_family(text)[:120] or None
+    if key=="tank_position":
+        return paint_sprayer_tank_family(text)[:120] or None
     if key=="screwdriver_type":
         return screwdriver_device_family(text)[:120] or None
     if key=="impact_drill_type":
@@ -1408,6 +1474,18 @@ def normalize_value(key: str, text: str) -> Any:
             return len(levels)
         return None
     v=max(ns)
+    if key=="pressure_bar":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мпа|mpa)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*10,4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:кпа|kpa)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/100,4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:psi)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*0.0689476,4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:бар|bar)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:атм|atm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*1.01325,4)
+        return round(ns[0],4)
     if key=="input_power_w":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:квт|kw)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",", "."))*1000,2)
@@ -1906,6 +1984,8 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
             for i,item in enumerate(data.get("products") or []):
                 raw_count+=1
                 name=item_name(item);url=item_url(item);meta=search_meta(item)
+                if scope.get("profile_key")=="paint_sprayer" and paint_sprayer_device_family(name)!="electric_spray_gun":
+                    continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
                   hashlib.sha1(url.encode("utf-8")).hexdigest() if url
@@ -2001,6 +2081,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-impactdrill2"
     if "battery_count" in keys and "case_present" in keys and "max_torque_nm" in keys:
         return RULESET_VERSION+"-screwdriver2"
+    if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
+        return RULESET_VERSION+"-paintsprayer1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -2064,6 +2146,10 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="опрыскиватель"
         elif "гайковерт" in device_name:
             specs["device_type"]="гайковерт"
+        elif "краскопульт" in device_name:
+            if "пневмат" in device_name:specs["device_type"]="пневматический краскопульт"
+            elif any(x in device_name for x in ("окрасочн аппарат","покрасочн станц","безвоздуш")):specs["device_type"]="окрасочный аппарат"
+            else:specs["device_type"]="электрический краскопульт"
         elif "шуруповерт" in device_name:
             specs["device_type"]="дрель-шуруповерт" if "дрел" in device_name else "шуруповерт"
         elif "перфоратор" in device_name:
@@ -2181,6 +2267,19 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
 
 
 
+
+
+    paint_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="pressure_bar" for r in rules) and any(r.get("spec_key")=="tank_position" for r in rules):
+        pn=norm(paint_name)
+        if "аэрограф" in pn:
+            specs["device_type"]="аэрограф"
+        elif "пневмат" in pn:
+            specs["device_type"]="пневматический краскопульт"
+        elif any(x in pn for x in ("окрасочн аппарат","покрасочн станц","безвоздуш")):
+            specs["device_type"]="окрасочный аппарат"
+        elif "краскопульт" in pn:
+            specs["device_type"]="электрический краскопульт"
 
     screwdriver_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="battery_count" for r in rules) and any(r.get("spec_key")=="max_torque_nm" for r in rules):
@@ -2638,6 +2737,39 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+
+
+    if profile=="paint_sprayer":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and paint_sprayer_device_family(da)!=paint_sprayer_device_family(db):
+            return 0.0
+        if da is not None and paint_sprayer_device_family(da)!="electric_spray_gun":return 0.0
+        if db is not None and paint_sprayer_device_family(db)!="electric_spray_gun":return 0.0
+
+        weights={"input_power_w":0.40,"tank_position":0.20,"pressure_bar":0.40}
+        critical_missing=paint_sprayer_required_missing(ours,comp)
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="input_power_w":
+                    s=paint_sprayer_power_similarity(float(a),float(b))
+                elif k=="pressure_bar":
+                    s=paint_sprayer_pressure_similarity(float(a),float(b))
+                elif k=="tank_position":
+                    s=1.0 if paint_sprayer_tank_family(a)==paint_sprayer_tank_family(b) else 0.55
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
 
     if profile=="cordless_screwdriver":
         da=ours.get("device_type");db=comp.get("device_type")
@@ -3588,6 +3720,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=impact_drill_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="cordless_screwdriver":
             z=screwdriver_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="paint_sprayer":
+            z=paint_sprayer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -3630,6 +3764,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=impact_drill_directional(rule,a,b)
         elif profile=="cordless_screwdriver":
             z=screwdriver_directional(rule,a,b)
+        elif profile=="paint_sprayer":
+            z=paint_sprayer_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -3666,7 +3802,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения ударных дрелей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, максимальные обороты и наличие удара."
     if profile=="cordless_screwdriver" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения аккумуляторных шуруповертов. Не считать конкурента сильнее, пока не подтверждены емкость АКБ и максимальный крутящий момент."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="paint_sprayer" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения краскопультов. Не считать конкурента сильнее, пока не подтверждены мощность и давление."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -3875,8 +4013,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -3930,6 +4068,8 @@ def main() -> None:
                         status="data_incomplete"
                     if profile=="cordless_screwdriver" and screwdriver_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="paint_sprayer" and paint_sprayer_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -3957,6 +4097,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по критическим характеристикам ударной дрели — вывод сильнее/слабее заблокирован")
                     if profile=="cordless_screwdriver" and screwdriver_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по емкости АКБ или крутящему моменту шуруповерта — вывод сильнее/слабее заблокирован")
+                    if profile=="paint_sprayer" and paint_sprayer_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по мощности или давлению краскопульта — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
