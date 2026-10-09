@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.282.
+"""Triovist / 21vek automatic market analysis v23.6.284.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.4"
+PARSER_VERSION="market-auto-v3.5"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -171,6 +171,7 @@ def profile_for(label: str) -> str:
     if any(x in n for x in ("мотобур","бензобур","землебур")): return "earth_auger"
     if ("измельч" in n and ("сад" in n or "вет" in n)) or "садов шредер" in n: return "garden_shredder"
     if "секатор" in n and "аккумулятор" in n: return "battery_pruner"
+    if "опрыскив" in n: return "sprayer"
     return "generic"
 
 
@@ -191,6 +192,7 @@ def query_for(label: str, profile: str) -> str:
       "earth_auger":"мотобур",
       "garden_shredder":"садовый измельчитель",
       "battery_pruner":"аккумуляторный секатор",
+      "sprayer":"опрыскиватель",
     }.get(profile)
     return q or clean_label(label)
 
@@ -247,6 +249,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Мотобуры","earth_auger","мотобур"),
       ("Садовые измельчители","garden_shredder","измельч"),
       ("Аккумуляторные секаторы","battery_pruner","секатор"),
+      ("Опрыскиватели","sprayer","опрыскив"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
@@ -271,6 +274,10 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             elif profile=="battery_pruner":
                 matched=("секатор" in pn and "аккумулятор" in pn
                          and "лезв" not in pn and "нож для" not in pn
+                         and not sku.startswith("900/"))
+            elif profile=="sprayer":
+                matched=("опрыскив" in pn
+                         and "запчаст" not in pn and "форсунк" not in pn and "шланг" not in pn
                          and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
@@ -623,6 +630,96 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
     return 0.0
 
 
+
+def sprayer_device_family(v: Any) -> str:
+    n=norm(v)
+    if "опрыскив" in n or "sprayer" in n:return "sprayer"
+    return n
+
+
+def sprayer_source_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
+    if any(x in n for x in ("бензин","топлив","двс","petrol","gasoline")):return "fuel"
+    if any(x in n for x in ("сетев","сеть","220","230","mains")):return "mains"
+    if any(x in n for x in ("ручн","механическ","помпов","рычаж","manual")):return "manual"
+    return n
+
+
+def sprayer_carry_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("ранцев","рюкзач","на спин")):return "backpack"
+    if any(x in n for x in ("плеч","на плеч")):return "shoulder"
+    if any(x in n for x in ("колес","тележ")):return "wheeled"
+    if any(x in n for x in ("ручн","переносн","в руке")):return "handheld"
+    return n
+
+
+def sprayer_engine_family(v: Any) -> str:
+    n=norm(v)
+    if re.search(r"(^|\s)2\s*(?:такт|stroke)",n) or any(x in n for x in ("двухтакт","2-такт","2 такт","two stroke")):return "2stroke"
+    if re.search(r"(^|\s)4\s*(?:такт|stroke)",n) or any(x in n for x in ("четырехтакт","4-такт","4 такт","four stroke")):return "4stroke"
+    return n
+
+
+def sprayer_application_tokens(v: Any) -> set[str]:
+    n=norm(v);out=set()
+    if any(x in n for x in ("сад","огород","растен","дерев","кустар")):out.add("garden")
+    if any(x in n for x in ("сельск","агро","поле","ферм")):out.add("agriculture")
+    if any(x in n for x in ("дезинф","санитар","обработк помещ")):out.add("disinfection")
+    if any(x in n for x in ("удобрен","подкорм")):out.add("fertilizer")
+    if any(x in n for x in ("вредител","инсекти","гербиц","пестиц")):out.add("plant_protection")
+    if not out and n:out.add(n)
+    return out
+
+
+def sprayer_voltage_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    if 3.0<=n<=4.5:return "3_7_v"
+    if 10<=n<16:return "12_v"
+    if 16<=n<=22:return "18_20_v"
+    if 23<=n<=28:return "24_v"
+    if 34<=n<=42:return "36_40_v"
+    if 46<=n<=52:return "48_v"
+    if 54<=n<=62:return "60_v"
+    if 72<=n<=84:return "80_v"
+    return str(round(n,1))
+
+
+def sprayer_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def sprayer_required_missing(ours: dict,comp: dict) -> bool:
+    source=sprayer_source_family(ours.get("power_source") or comp.get("power_source"))
+    base=("device_type","power_source","flow_rate_lmin","tank_capacity_l")
+    if any(ours.get(k) is None or comp.get(k) is None for k in base):return True
+    if source=="battery":
+        return ours.get("voltage_v") is None or comp.get("voltage_v") is None
+    if source=="fuel":
+        if ours.get("fuel_engine_type") is None or comp.get("fuel_engine_type") is None:return True
+        # Engine output can be expressed by power or displacement. Require at least one confirmed pair.
+        power_pair=ours.get("fuel_power_w") is not None and comp.get("fuel_power_w") is not None
+        cc_pair=ours.get("engine_cc") is not None and comp.get("engine_cc") is not None
+        return not (power_pair or cc_pair)
+    if source=="manual":
+        return ours.get("carry_type") is None or comp.get("carry_type") is None
+    return False
+
+
+def sprayer_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k in ("device_type","application_area","carry_type","voltage_v","power_source","battery_type","fuel_engine_type","engine_cc"):
+        return 50
+    return directional(rule,a,b)
+
+
 def battery_pruner_device_family(v: Any) -> str:
     n=norm(v)
     if "секатор" in n:return "pruner"
@@ -835,6 +932,13 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="application_area":
+        t=sprayer_application_tokens(text)
+        return "+".join(sorted(t)) if t else None
+    if key=="carry_type":
+        return sprayer_carry_family(text)[:120] or None
+    if key=="fuel_engine_type":
+        return sprayer_engine_family(text)[:120] or None
     if key=="processed_material":
         t=garden_shredder_material_tokens(text)
         return "+".join(sorted(t)) if t else None
@@ -866,7 +970,7 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"^(\d+)\s*\+\s*(\d+)$",n)
         if m:return m.group(1)+"+"+m.group(2)
         return n[:80] or None
-    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type","construction","engine_type","battery_type","tool_type","knife_type","blade_type"):
+    if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type","construction","engine_type","battery_type","tool_type","knife_type","blade_type","application_area","carry_type","fuel_engine_type"):
         return norm(text)[:240] or None
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
@@ -923,6 +1027,26 @@ def normalize_value(key: str, text: str) -> Any:
         if m:return round(float(m.group(1).replace(",", "."))/1000,3)
         return round(ns[0],3)
     if key=="battery_voltage_v":
+        return round(ns[0],2)
+    if key=="flow_rate_lmin":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:ч|h|hour)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/60,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мл|ml)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/1000,3)
+        return round(ns[0],3)
+    if key=="tank_capacity_l":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мл|ml)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/1000,3)
+        return round(ns[0],3)
+    if key=="spray_radius_m":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/100,2)
         return round(ns[0],2)
     if key in ("clearing_width_cm","intake_height_cm"):
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low)
@@ -1372,6 +1496,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-shredder1"
     if "max_cut_diameter_mm" in keys and "tool_type" in keys and "battery_capacity_ah" in keys:
         return RULESET_VERSION+"-pruner1"
+    if "spray_radius_m" in keys and "flow_rate_lmin" in keys and "tank_capacity_l" in keys:
+        return RULESET_VERSION+"-sprayer1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1425,6 +1551,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="садовый измельчитель"
         elif "секатор" in device_name:
             specs["device_type"]="аккумуляторный секатор" if "аккумулятор" in device_name else "секатор"
+        elif "опрыскив" in device_name:
+            specs["device_type"]="опрыскиватель"
     saw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="power_supply" for r in rules) and any(r.get("spec_key")=="bar_length_cm" for r in rules):
         if not specs.get("power_supply"):
@@ -1527,6 +1655,36 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         if not specs.get("engine_type"):
             if any(x in an for x in ("2 такт","2-такт","двухтакт")):specs["engine_type"]="2-тактный"
             elif any(x in an for x in ("4 такт","4-такт","четырехтакт")):specs["engine_type"]="4-тактный"
+
+
+    sprayer_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="spray_radius_m" for r in rules):
+        sn=norm(sprayer_name)
+        if "опрыскив" in sn and not specs.get("device_type"):
+            specs["device_type"]="опрыскиватель"
+
+        source=sprayer_source_family(specs.get("power_source"))
+        if any(x in sn for x in ("аккумуля","battery","li ion","li-ion")):source="battery"
+        elif any(x in sn for x in ("бензин","двс","petrol","gasoline")):source="fuel"
+        elif any(x in sn for x in ("ручн","помпов","рычаж")):source="manual"
+        if source:specs["power_source"]=source
+
+        if source=="battery" and specs.get("voltage_v") is None:
+            vm=re.search(r"\b(3[.,]7|12|18|20|24|36|40|48|60|80)\s*(?:в|v)\b",str(sprayer_name).lower(),re.I)
+            if vm:specs["voltage_v"]=float(vm.group(1).replace(",","."))
+        if source=="battery" and specs.get("battery_type") is None:
+            if any(x in sn for x in ("li ion","li-ion","литий ион","литий-ион")):specs["battery_type"]="Li-Ion"
+            elif any(x in sn for x in ("lifepo4","li fe po4")):specs["battery_type"]="LiFePO4"
+
+        if source=="fuel" and not specs.get("fuel_engine_type"):
+            if any(x in sn for x in ("2 такт","2-такт","двухтакт")):specs["fuel_engine_type"]="2stroke"
+            elif any(x in sn for x in ("4 такт","4-такт","четырехтакт")):specs["fuel_engine_type"]="4stroke"
+
+        if not specs.get("carry_type"):
+            if any(x in sn for x in ("ранцев","рюкзач")):specs["carry_type"]="backpack"
+            elif "плеч" in sn:specs["carry_type"]="shoulder"
+            elif "колес" in sn:specs["carry_type"]="wheeled"
+            elif "ручн" in sn:specs["carry_type"]="handheld"
 
     pruner_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="max_cut_diameter_mm" for r in rules):
@@ -1827,6 +1985,83 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+    if profile=="sprayer":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and sprayer_device_family(da)!=sprayer_device_family(db):
+            return 0.0
+
+        sa=sprayer_source_family(ours.get("power_source"))
+        sb=sprayer_source_family(comp.get("power_source"))
+        if sa and sb and sa!=sb:return 0.0
+        source=sa or sb
+
+        if source=="battery":
+            va=ours.get("voltage_v");vb=comp.get("voltage_v")
+            if va is not None and vb is not None:
+                ca=sprayer_voltage_class(va);cb=sprayer_voltage_class(vb)
+                if ca and cb and ca!=cb:return 0.0
+        if source=="fuel":
+            ea=sprayer_engine_family(ours.get("fuel_engine_type"))
+            eb=sprayer_engine_family(comp.get("fuel_engine_type"))
+            if ea and eb and ea!=eb:return 0.0
+
+        if source=="battery":
+            weights={"device_type":0.08,"application_area":0.05,"carry_type":0.08,"voltage_v":0.12,
+                     "flow_rate_lmin":0.15,"power_source":0.15,"battery_type":0.04,"battery_capacity_ah":0.09,
+                     "tank_capacity_l":0.14,"spray_radius_m":0.10}
+        elif source=="fuel":
+            weights={"device_type":0.08,"application_area":0.05,"carry_type":0.08,"flow_rate_lmin":0.15,
+                     "power_source":0.15,"tank_capacity_l":0.14,"fuel_engine_type":0.08,"fuel_power_w":0.08,
+                     "engine_cc":0.06,"fuel_tank_l":0.03,"spray_radius_m":0.10}
+        elif source=="manual":
+            weights={"device_type":0.12,"application_area":0.08,"carry_type":0.18,"flow_rate_lmin":0.24,
+                     "power_source":0.18,"tank_capacity_l":0.15,"spray_radius_m":0.05}
+        else:
+            weights={"device_type":0.10,"application_area":0.07,"carry_type":0.10,"flow_rate_lmin":0.20,
+                     "power_source":0.18,"tank_capacity_l":0.18,"spray_radius_m":0.10,"voltage_v":0.07}
+
+        critical_missing=sprayer_required_missing(ours,comp)
+        total=used=0.0;carry_mismatch=False
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="device_type":
+                    s=1.0 if sprayer_device_family(a)==sprayer_device_family(b) else 0.0
+                elif k=="power_source":
+                    s=1.0 if sprayer_source_family(a)==sprayer_source_family(b) else 0.0
+                elif k=="carry_type":
+                    s=1.0 if sprayer_carry_family(a)==sprayer_carry_family(b) else 0.45
+                    if sprayer_carry_family(a) and sprayer_carry_family(b) and sprayer_carry_family(a)!=sprayer_carry_family(b):
+                        carry_mismatch=True
+                elif k=="application_area":
+                    aa=sprayer_application_tokens(a);bb=sprayer_application_tokens(b)
+                    s=len(aa&bb)/max(1,len(aa|bb)) if aa and bb else categorical_similarity(a,b)
+                elif k=="voltage_v":
+                    ca=sprayer_voltage_class(a);cb=sprayer_voltage_class(b)
+                    s=1.0 if ca is not None and cb is not None and ca==cb else 0.0
+                elif k=="battery_type":
+                    s=1.0 if battery_pruner_battery_family(a)==battery_pruner_battery_family(b) else 0.45
+                elif k=="fuel_engine_type":
+                    s=1.0 if sprayer_engine_family(a)==sprayer_engine_family(b) else 0.0
+                elif k in ("flow_rate_lmin","tank_capacity_l","battery_capacity_ah","fuel_tank_l","spray_radius_m"):
+                    s=sprayer_relative_similarity(float(a),float(b),0.15,0.30,0.45)
+                elif k in ("fuel_power_w","engine_cc"):
+                    s=sprayer_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        if carry_mismatch:score=min(score,84.0)
         return round(max(0,min(100,score)),2)
 
     if profile=="battery_pruner":
@@ -2445,6 +2680,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=garden_shredder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="battery_pruner":
             z=battery_pruner_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="sprayer":
+            z=sprayer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -2477,6 +2714,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=garden_shredder_directional(rule,a,b)
         elif profile=="battery_pruner":
             z=battery_pruner_directional(rule,a,b)
+        elif profile=="sprayer":
+            z=sprayer_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -2503,7 +2742,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения садовых измельчителей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены режущий механизм, тип двигателя, входная мощность и максимальный диаметр веток."
     if profile=="battery_pruner" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения аккумуляторных секаторов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип инструмента, аккумуляторное питание, напряжение и максимальная толщина среза."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="sprayer" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения опрыскивателей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены критические параметры его типа питания."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -2708,8 +2949,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -2753,6 +2994,8 @@ def main() -> None:
                         req=("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm")
                         if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
                             status="data_incomplete"
+                    if profile=="sprayer" and sprayer_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -2770,6 +3013,8 @@ def main() -> None:
                         missing=[k for k in ("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
                         if missing:
                             bad.append("Недостаточно данных по критическим характеристикам аккумуляторного секатора — вывод сильнее/слабее заблокирован")
+                    if profile=="sprayer" and sprayer_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по критическим характеристикам опрыскивателя для его типа питания — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
