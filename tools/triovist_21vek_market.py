@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.294.
+"""Triovist / 21vek automatic market analysis v23.6.295.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.5"
+PARSER_VERSION="market-auto-v4.6"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1354,7 +1354,22 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
-    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment","cut_speed_adjustment","impact_present","case_present"):
+    if key=="impact_present":
+        n=norm(text)
+        b=bool_value(text)
+        if b is not None:return b
+        if any(x in n for x in ("с ударом","ударн","impact")):return True
+        if any(x in n for x in ("безудар","без удара","шуруповерт","винтоверт","сверлен","вращен")):return False
+        return None
+    if key=="case_present":
+        n=norm(text)
+        if any(x in n for x in ("показать все характерист","все характеристики","характеристики товара")):return None
+        b=bool_value(text)
+        if b is not None:return b
+        if any(x in n for x in ("без кейса","без чемодан","без футляр")):return False
+        if any(x in n for x in ("кейс","чемодан","футляр")):return True
+        return None
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment","cut_speed_adjustment"):
         return presence_value(text)
     if key in ("overheat_protection","humidistat"):
         return bool_value(text)
@@ -1615,7 +1630,9 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     label_keys=("name","title","label","caption","propertyName","featureName","characteristicName","parameterName")
     value_keys=("value","text","displayValue","propertyValue","featureValue","characteristicValue","parameterValue")
 
-    impact_drill_mode={"speed_count","max_rpm","impact_present"}.issubset({str(x.get("spec_key") or "") for x in rules})
+    rule_keys={str(x.get("spec_key") or "") for x in rules}
+    impact_drill_mode={"speed_count","max_rpm","impact_present"}.issubset(rule_keys)
+    cordless_mode={"battery_count","case_present","max_torque_nm","battery_capacity_ah"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -1638,13 +1655,35 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             return "impact_present"
         return None
 
+    def push(k: str,label: Any,text: str,source: str,path: str=""):
+        if not k or not text:return
+        sig=(k,text)
+        if sig in seen:return
+        seen.add(sig);raw.append({"key":k,"label":str(label),"value":text,"source":source,"path":path})
+
+    def cordless_extras(label: Any,value: Any,source: str,path: str=""):
+        if not cordless_mode:return
+        text=primitive_text(value)
+        if not text:return
+        ln=norm(label);vn=norm(text)
+        equipment_label=any(x in ln for x in ("комплект","поставк","набор","аксессуар","оснащен"))
+        if not equipment_label:return
+        if any(x in vn for x in ("аккумулятор","акб","батаре")):
+            if any(x in vn for x in ("без аккумулятор","без акб","аккумулятор не входит","акб не входит")):
+                push("battery_count",label,"0 аккумуляторов",source,path)
+            else:
+                m=re.search(r"(\d+)\s*(?:аккумулятор|акб|батаре)",str(text).lower(),re.I)
+                if m:push("battery_count",label,m.group(1)+" аккумулятора",source,path)
+        if any(x in vn for x in ("кейс","чемодан","футляр")):
+            push("case_present",label,"кейс",source,path)
+        elif any(x in vn for x in ("без кейса","без чемодан","без футляр")):
+            push("case_present",label,"без кейса",source,path)
+
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
         k=aliases.get(norm(label)) or impact_drill_fuzzy_key(label,value)
-        if not k or not text: return
-        sig=(k,text)
-        if sig in seen: return
-        seen.add(sig);raw.append({"key":k,"label":str(label),"value":text,"source":source,"path":path})
+        if k and text:push(k,label,text,source,path)
+        cordless_extras(label,value,source,path)
 
     def walk(node: Any,path="fd"):
         if isinstance(node,dict):
@@ -1961,7 +2000,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "speed_count" in keys and "max_rpm" in keys and "impact_present" in keys:
         return RULESET_VERSION+"-impactdrill2"
     if "battery_count" in keys and "case_present" in keys and "max_torque_nm" in keys:
-        return RULESET_VERSION+"-screwdriver1"
+        return RULESET_VERSION+"-screwdriver2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
