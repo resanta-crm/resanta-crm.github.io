@@ -1,0 +1,37 @@
+name: TMP — Triovist circular saw market v23.6.289
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-triovist-circular-saw-v236289.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: triovist-circular-saw-v236289
+  cancel-in-progress: true
+
+jobs:
+  circular-saw-market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax
+        run: |
+          python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_parser.py
+          node --check assets/106-triovist-competitors-v236218.js
+      - name: Dependencies
+        run: pip install requests beautifulsoup4
+      - name: Circular saws only final
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MARKET_VALIDATE_PROFILES: 'circular_saw'
+          MARKET_DELAY_SECONDS: '0.22'
+          MARKET_HTTP_TIMEOUT: '30'
+          MARKET_SPEC_TTL_DAYS: '30'
+        run: python tools/triovist_21vek_market.py
