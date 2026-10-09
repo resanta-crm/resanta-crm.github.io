@@ -134,8 +134,15 @@ Deno.serve(async(req)=>{
    const groupKey=`pdz_daily_group_sent:${today}:${groupChatId}`;
    if(!(await runtimeGet(groupKey))){
     try{
-      const header=summaryHeader(debts,reportDate,'Контроль: <b>Паюшин + Сидарович</b>',legalMap);
-      for(const part of chunks(linesFor(debts,true,legalMap),header)){await tg(part,groupChatId);sentMessages++;}
+      const actionRows=debts.filter(d=>Number(d.debt_overdue_days||0)>=30);
+      const under30=debts.filter(d=>Number(d.debt_overdue_days||0)<30);
+      const under30Total=under30.reduce((s,d)=>s+Number(d.debt_overdue||0),0);
+      const header=summaryHeader(debts,reportDate,'Контроль: <b>Паюшин + Сидарович</b>',legalMap)
+        +(under30.length?'🟡 До 30 дней: <b>'+under30.length+'</b> клиентов · <b>'+money(under30Total)+' BYN</b>\n':'');
+      const actionLines=actionRows.length
+        ? linesFor(actionRows,true,legalMap)
+        : ['✅ Клиентов 30+ дней, требующих претензии или суда, сейчас нет.'];
+      for(const part of chunks(actionLines,header)){await tg(part,groupChatId);sentMessages++;}
       await runtimeSet(groupKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:debts.length,total:debts.reduce((s,d)=>s+Number(d.debt_overdue||0),0)});
       groupSent=true;
     }catch(e){
