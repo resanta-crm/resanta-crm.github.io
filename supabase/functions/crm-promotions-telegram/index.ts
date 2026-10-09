@@ -102,6 +102,55 @@ async function handleStart(msg: any, code: string) {
   await db.from('crm_telegram_link_codes').update({ used_at: new Date().toISOString() }).eq('code', link.code);
   await send(chatId, `✅ <b>Telegram подключён к Resanta CRM</b>\n\nПользователь: <b>${esc(profile.name)}</b>\nБот: уведомления по акциям и согласованиям.\n\nПо действиям менеджеров контрольную копию также получают Сидарович и Паюшин.`);
 }
+async function configurePdzGroup(msg: any) {
+  const chatId = msg?.chat?.id;
+  const chatType = String(msg?.chat?.type || '');
+  const telegramUserId = msg?.from?.id || null;
+  if (!chatId || !telegramUserId) return;
+  if (!['group','supergroup'].includes(chatType)) {
+    await send(chatId, 'Создайте отдельную группу «ПДЗ · Контроль», добавьте туда этого бота и уже в группе отправьте команду /pdz_here.');
+    return;
+  }
+
+  const { data: binding } = await db.from('crm_telegram_bindings')
+    .select('user_id,active').eq('telegram_user_id', telegramUserId).eq('active', true).maybeSingle();
+  if (!binding?.user_id) {
+    await send(chatId, 'Команду может выполнить только руководитель, у которого Telegram уже привязан к Resanta CRM.');
+    return;
+  }
+  const { data: profile } = await db.from('users').select('id,name,email,role').eq('id', binding.user_id).maybeSingle();
+  const email = String(profile?.email || '').toLowerCase();
+  if (!profile || profile.role !== 'boss' || !LEADER_EMAILS.includes(email)) {
+    await send(chatId, 'Эту группу ПДЗ может подключить только Паюшин или Сидарович.');
+    return;
+  }
+
+  await runtimeSet('pdz_group_chat', {
+    chat_id: chatId,
+    title: msg?.chat?.title || 'ПДЗ · Контроль',
+    type: chatType,
+    active: true,
+    configured_at: new Date().toISOString(),
+    configured_by_user_id: profile.id,
+    configured_by: profile.name
+  });
+  await send(chatId,
+    '✅ <b>Группа подключена к ПДЗ Resanta CRM</b>\n\n'
+    +'Каждый день в <b>11:00 по Минску</b> сюда будет приходить общая сводка ПДЗ для Паюшина и Сидаровича.\n'
+    +'Менеджеры продолжат получать только своих должников в личные сообщения бота.\n\n'
+    +'✉ 30–59 дней — претензия + почта\n⚖ 60+ дней — передача документов в суд.'
+  );
+}
+
+async function pdzGroupStatus(msg: any) {
+  const x = await runtimeGet('pdz_group_chat');
+  if (x?.active && x?.chat_id) {
+    await send(msg.chat.id, '✅ ПДЗ-группа подключена: <b>'+esc(x.title || x.chat_id)+'</b>. Рассылка: ежедневно в 11:00 по Минску.');
+  } else {
+    await send(msg.chat.id, 'ПДЗ-группа ещё не подключена. Создайте группу «ПДЗ · Контроль», добавьте бота и отправьте в ней /pdz_here.');
+  }
+}
+
 async function handleTelegram(req: Request) {
   const stored = await runtimeGet('webhook_secret');
   const expected = stored?.secret || '';
@@ -113,7 +162,11 @@ async function handleTelegram(req: Request) {
   const text = String(msg.text || '').trim();
   const m = text.match(/^\/start(?:@\w+)?(?:\s+([0-9a-f-]{36}))?$/i);
   if (m) await handleStart(msg, m[1] || '');
-  else if (/^\/status(?:@\w+)?$/i.test(text)) {
+  else if (/^\/pdz_here(?:@\w+)?$/i.test(text)) {
+    await configurePdzGroup(msg);
+  } else if (/^\/pdz_status(?:@\w+)?$/i.test(text)) {
+    await pdzGroupStatus(msg);
+  } else if (/^\/status(?:@\w+)?$/i.test(text)) {
     const { data: b } = await db.from('crm_telegram_bindings').select('user_id,active').eq('chat_id', msg.chat.id).maybeSingle();
     await send(msg.chat.id, b?.active ? '✅ Telegram подключён к Resanta CRM.' : 'Telegram пока не привязан. Откройте CRM → Акции → «Подключить Telegram».');
   } else if (/^\/test(?:@\w+)?$/i.test(text)) {
@@ -239,7 +292,7 @@ Deno.serve(async (req: Request) => {
     if (url.searchParams.get('setup') === '1') return await setupWebhook(req);
     if (url.searchParams.get('dispatch') === '1') return await dispatchPending(req);
     if (req.method === 'POST') return await handleTelegram(req);
-    return json({ ok: true, service: 'crm-promotions-telegram', routing: 'manager+sidarovich+payushin' });
+    return json({ ok: true, service: 'crm-promotions-telegram', routing: 'promotions + pdz group binding' });
   } catch (e) {
     console.error(e);
     const message = e instanceof Error ? e.message : 'UNKNOWN_ERROR';
