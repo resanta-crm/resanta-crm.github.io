@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.287.
+"""Triovist / 21vek automatic market analysis v23.6.288.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.8"
+PARSER_VERSION="market-auto-v3.9"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1677,7 +1677,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "spray_radius_m" in keys and "flow_rate_lmin" in keys and "tank_capacity_l" in keys:
         return RULESET_VERSION+"-sprayer2"
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
-        return RULESET_VERSION+"-wrench1"
+        return RULESET_VERSION+"-wrench2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
