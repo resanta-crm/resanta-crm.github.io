@@ -1,4 +1,4 @@
-name: TMP — Triovist sprayer market v23.6.284
+name: TMP — Triovist sprayer market v23.6.285
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
       - name: Dependencies
         run: pip install requests beautifulsoup4
-      - name: Sprayers only final
+      - name: Sprayers final recheck
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
