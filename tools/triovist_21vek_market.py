@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.288.
+"""Triovist / 21vek automatic market analysis v23.6.289.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.9"
+PARSER_VERSION="market-auto-v4.0"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -173,6 +173,7 @@ def profile_for(label: str) -> str:
     if "секатор" in n and "аккумулятор" in n: return "battery_pruner"
     if "опрыскив" in n: return "sprayer"
     if "гайковерт" in n or "гайковёрт" in n: return "impact_wrench"
+    if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     return "generic"
 
 
@@ -195,6 +196,7 @@ def query_for(label: str, profile: str) -> str:
       "battery_pruner":"аккумуляторный секатор",
       "sprayer":"опрыскиватель",
       "impact_wrench":"гайковерт",
+      "circular_saw":"дисковая пила",
     }.get(profile)
     return q or clean_label(label)
 
@@ -256,10 +258,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Аккумуляторные секаторы","battery_pruner","секатор"),
       ("Опрыскиватели","sprayer","опрыскив"),
       ("Гайковерты","impact_wrench","гайковерт"),
+      ("Дисковые пилы","circular_saw","дисков"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile=="impact_wrench" else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -290,10 +293,15 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                 matched=(("гайковерт" in pn or "гайковёрт" in pn)
                          and "насадк" not in pn and "головк" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="circular_saw":
+                matched=((("дисков" in pn and "пил" in pn) or "циркуляр" in pn)
+                         and "диск для" not in pn and "пильн диск" not in pn
+                         and "направляющ" not in pn and "запчаст" not in pn
+                         and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":"Садовая техника","source_subgroup":label,
+              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw") else "Садовая техника"),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -642,6 +650,92 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
     return 0.0
 
 
+
+
+
+def circular_saw_device_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("торцов","miter","mitre")):return "miter_saw"
+    if any(x in n for x in ("погруж","plunge")):return "plunge_saw"
+    if any(x in n for x in ("мини дисков","мини-дисков","минипил","mini circular","compact circular")):return "mini_circular_saw"
+    if ("дисков" in n and "пил" in n) or "циркуляр" in n:return "circular_saw"
+    return n
+
+
+def circular_saw_source_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
+    if any(x in n for x in ("сетев","сеть","220","230","mains","corded","electric","электр")):return "mains"
+    return n
+
+
+def circular_saw_blade_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    if 75<=n<=95:return "85_90"
+    if 100<=n<=125:return "115"
+    if 126<=n<=150:return "140"
+    if 151<=n<=172:return "160_165"
+    if 173<=n<=195:return "185_190"
+    if 196<=n<=220:return "200_210"
+    if 221<=n<=245:return "235"
+    return str(round(n,1))
+
+
+def circular_saw_arbor_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    standards=(10,12.7,15.875,16,20,22.23,25.4,30,32)
+    best=min(standards,key=lambda x:abs(n-x))
+    if abs(n-best)<=0.6:return str(best)
+    return str(round(n,2))
+
+
+def circular_saw_voltage_class(v: Any) -> str|None:
+    return impact_wrench_voltage_class(v)
+
+
+def circular_saw_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def circular_saw_angle_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=5:return 1.0
+    if d<=10:return 0.85
+    if d<=15:return 0.65
+    return 0.0
+
+
+def circular_saw_required_missing(ours: dict,comp: dict) -> bool:
+    required=("device_type","power_source","blade_diameter_mm","arbor_diameter_mm","cut_depth_90_mm")
+    if any(ours.get(k) is None or comp.get(k) is None for k in required):return True
+    source=circular_saw_source_family(ours.get("power_source") or comp.get("power_source"))
+    if source=="battery":
+        return ours.get("battery_voltage_v") is None or comp.get("battery_voltage_v") is None
+    return False
+
+
+def circular_saw_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="motor_type":
+        aa=impact_wrench_motor_family(a);bb=impact_wrench_motor_family(b)
+        if aa==bb:return 50
+        if aa=="brushless" and bb=="brushed":return 72
+        if aa=="brushed" and bb=="brushless":return 28
+        return 50
+    if k=="cut_speed_adjustment":
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 70 if av else 30
+    if k in ("device_type","power_source","max_rpm","blade_diameter_mm","arbor_diameter_mm","battery_type","battery_voltage_v"):
+        return 50
+    return directional(rule,a,b)
 
 
 def impact_wrench_device_family(v: Any) -> str:
@@ -1064,6 +1158,8 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="circular_saw_type":
+        return circular_saw_device_family(text)[:120] or None
     if key=="wrench_type":
         return impact_wrench_kind_family(text)[:120] or None
     if key=="motor_type":
@@ -1128,7 +1224,7 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
-    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment"):
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment","cut_speed_adjustment"):
         return presence_value(text)
     if key in ("overheat_protection","humidistat"):
         return bool_value(text)
@@ -1183,6 +1279,18 @@ def normalize_value(key: str, text: str) -> Any:
         return round(ns[0],3)
     if key=="battery_voltage_v":
         return round(ns[0],2)
+    if key in ("cut_depth_90_mm","cut_depth_45_mm","blade_diameter_mm","arbor_diameter_mm"):
+        mm=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*мм\b",low,re.I)]
+        if mm:return round(max(mm),3)
+        cm=[float(x.replace(",","."))*10 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*см\b",low,re.I)]
+        if cm:return round(max(cm),3)
+        fm=re.search(r"(\d+)\s*/\s*(\d+)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low,re.I)
+        if fm and float(fm.group(2))!=0:return round(float(fm.group(1))/float(fm.group(2))*25.4,3)
+        im=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low,re.I)
+        if im:return round(float(im.group(1).replace(",","."))*25.4,3)
+        return round(max(ns),3)
+    if key=="tilt_angle_deg":
+        return round(max(ns),2)
     if key=="drive_size_in":
         m=re.search(r"(\d+)\s*/\s*(\d+)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])?",low,re.I)
         if m and float(m.group(2))!=0:return round(float(m.group(1))/float(m.group(2)),4)
@@ -1678,6 +1786,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-sprayer2"
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
+    if "blade_diameter_mm" in keys and "cut_depth_90_mm" in keys and "arbor_diameter_mm" in keys:
+        return RULESET_VERSION+"-circular1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1719,6 +1829,10 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="аромадиффузор"
         elif "увлажн" in device_name:
             specs["device_type"]="увлажнитель воздуха"
+        elif ("дисков" in device_name and "пил" in device_name) or "циркуляр" in device_name:
+            if "погруж" in device_name:specs["device_type"]="погружная дисковая пила"
+            elif "мини" in device_name:specs["device_type"]="мини-дисковая пила"
+            else:specs["device_type"]="дисковая пила"
         elif "электропил" in device_name or ("цепн" in device_name and "пил" in device_name):
             specs["device_type"]="цепная электропила"
         elif "снегоубор" in device_name and "насадк" not in device_name:
@@ -1839,6 +1953,39 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             elif any(x in an for x in ("4 такт","4-такт","четырехтакт")):specs["engine_type"]="4-тактный"
 
 
+
+
+    circular_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="blade_diameter_mm" for r in rules) and any(r.get("spec_key")=="cut_depth_90_mm" for r in rules):
+        cn=norm(circular_name)
+        if "погруж" in cn:
+            specs["device_type"]="погружная дисковая пила"
+        elif "мини" in cn and ("дисков" in cn or "циркуляр" in cn):
+            specs["device_type"]="мини-дисковая пила"
+        elif ("дисков" in cn and "пил" in cn) or "циркуляр" in cn:
+            specs["device_type"]="дисковая пила"
+
+        source=circular_saw_source_family(specs.get("power_source"))
+        if any(x in cn for x in ("аккумуля","battery","li ion","li-ion")):source="battery"
+        elif any(x in cn for x in ("сетев","электрическ","220","230")):source="mains"
+        elif specs.get("battery_voltage_v") is not None or specs.get("battery_capacity_ah") is not None:source="battery"
+        elif specs.get("input_power_w") is not None:source="mains"
+        if source:specs["power_source"]=source
+
+        if not specs.get("motor_type"):
+            if any(x in cn for x in ("бесщет","бесщёточ","brushless")):specs["motor_type"]="brushless"
+            elif any(x in cn for x in ("щеточ","щёточ","brushed")):specs["motor_type"]="brushed"
+
+        if source=="battery" and specs.get("battery_voltage_v") is None:
+            vm=re.search(r"\b(10[.,]8|12|18|20|24|36|40|48|60|80)\s*(?:в|v|li)\b",str(circular_name).lower(),re.I)
+            if vm:specs["battery_voltage_v"]=float(vm.group(1).replace(",","."))
+
+        if specs.get("blade_diameter_mm") is None:
+            candidates=[]
+            for x in re.findall(r"(?<!\d)(\d{2,3})(?!\d)",str(circular_name)):
+                n=float(x)
+                if 75<=n<=245:candidates.append(n)
+            if candidates:specs["blade_diameter_mm"]=candidates[0]
 
     wrench_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="max_torque_nm" for r in rules):
@@ -2199,6 +2346,87 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         if critical_missing:score=min(score,69.0)
         return round(max(0,min(100,score)),2)
 
+
+
+    if profile=="circular_saw":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and circular_saw_device_family(da)!=circular_saw_device_family(db):
+            return 0.0
+
+        sa=circular_saw_source_family(ours.get("power_source"));sb=circular_saw_source_family(comp.get("power_source"))
+        if sa and sb and sa!=sb:return 0.0
+        source=sa or sb
+
+        ba=ours.get("blade_diameter_mm");bb=comp.get("blade_diameter_mm")
+        if ba is not None and bb is not None and circular_saw_blade_class(ba)!=circular_saw_blade_class(bb):
+            return 0.0
+
+        aa=ours.get("arbor_diameter_mm");ab=comp.get("arbor_diameter_mm")
+        if aa is not None and ab is not None and circular_saw_arbor_class(aa)!=circular_saw_arbor_class(ab):
+            return 0.0
+
+        if source=="battery":
+            va=ours.get("battery_voltage_v");vb=comp.get("battery_voltage_v")
+            if va is not None and vb is not None and circular_saw_voltage_class(va)!=circular_saw_voltage_class(vb):
+                return 0.0
+
+        weights={
+          "device_type":0.10,"power_source":0.10,"input_power_w":0.00,"cut_speed_adjustment":0.04,
+          "max_rpm":0.06,"cut_depth_90_mm":0.18,"cut_depth_45_mm":0.08,"blade_diameter_mm":0.16,
+          "arbor_diameter_mm":0.12,"tilt_angle_deg":0.05,"motor_type":0.04,"battery_type":0.00,
+          "battery_voltage_v":0.00,"battery_capacity_ah":0.00
+        }
+        if source=="mains":
+            weights["input_power_w"]=0.10
+        elif source=="battery":
+            weights["battery_type"]=0.03;weights["battery_voltage_v"]=0.08;weights["battery_capacity_ah"]=0.05
+
+        critical_missing=circular_saw_required_missing(ours,comp)
+        total=used=allw=0.0
+        for k,w in weights.items():
+            if w<=0:continue
+            allw+=w
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="device_type":
+                    s=1.0 if circular_saw_device_family(a)==circular_saw_device_family(b) else 0.0
+                elif k=="power_source":
+                    s=1.0 if circular_saw_source_family(a)==circular_saw_source_family(b) else 0.0
+                elif k=="input_power_w":
+                    s=circular_saw_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="cut_speed_adjustment":
+                    s=1.0 if bool(a)==bool(b) else 0.55
+                elif k=="max_rpm":
+                    s=circular_saw_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k in ("cut_depth_90_mm","cut_depth_45_mm"):
+                    s=circular_saw_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="blade_diameter_mm":
+                    if circular_saw_blade_class(a)!=circular_saw_blade_class(b):s=0.0
+                    else:s=1.0 if abs(float(a)-float(b))/max(float(a),float(b),1)<=0.03 else 0.85
+                elif k=="arbor_diameter_mm":
+                    s=1.0 if circular_saw_arbor_class(a)==circular_saw_arbor_class(b) else 0.0
+                elif k=="tilt_angle_deg":
+                    s=circular_saw_angle_similarity(float(a),float(b))
+                elif k=="motor_type":
+                    s=1.0 if impact_wrench_motor_family(a)==impact_wrench_motor_family(b) else 0.55
+                elif k=="battery_type":
+                    s=1.0 if battery_pruner_battery_family(a)==battery_pruner_battery_family(b) else 0.45
+                elif k=="battery_voltage_v":
+                    s=1.0 if circular_saw_voltage_class(a)==circular_saw_voltage_class(b) else 0.0
+                elif k=="battery_capacity_ah":
+                    s=circular_saw_relative_similarity(float(a),float(b),0.15,0.30,0.45)
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
 
     if profile=="impact_wrench":
         da=ours.get("device_type");db=comp.get("device_type")
@@ -2984,6 +3212,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=sprayer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="impact_wrench":
             z=impact_wrench_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="circular_saw":
+            z=circular_saw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -3020,6 +3250,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=sprayer_directional(rule,a,b)
         elif profile=="impact_wrench":
             z=impact_wrench_directional(rule,a,b)
+        elif profile=="circular_saw":
+            z=circular_saw_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -3050,7 +3282,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения опрыскивателей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены критические параметры его типа питания."
     if profile=="impact_wrench" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения гайковертов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип гайковерта, питание, посадка и максимальный крутящий момент; для аккумуляторного также напряжение АКБ."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="circular_saw" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения дисковых пил. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип, питание, диаметр диска, посадочное отверстие и глубина реза 90°; для аккумуляторной также напряжение АКБ."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -3255,8 +3489,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -3304,6 +3538,8 @@ def main() -> None:
                         status="data_incomplete"
                     if profile=="impact_wrench" and impact_wrench_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="circular_saw" and circular_saw_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -3325,6 +3561,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по критическим характеристикам опрыскивателя для его типа питания — вывод сильнее/слабее заблокирован")
                     if profile=="impact_wrench" and impact_wrench_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по критическим характеристикам гайковерта — вывод сильнее/слабее заблокирован")
+                    if profile=="circular_saw" and circular_saw_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по критическим характеристикам дисковой пилы — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
