@@ -35,11 +35,6 @@ function chunks(lines:string[],header:string,max=3600){
  if(cur!==header)out.push(cur);
  return out;
 }
-function legal(days:number){
- if(days>=60)return '⚖ <b>В СУД</b>';
- if(days>=30)return '✉ <b>ПРЕТЕНЗИЯ + ПОЧТА</b>';
- return '';
-}
 function belongs(manager:string,userName:string){
  const m=norm(manager),u=norm(userName);
  if(!m||!u)return false;
@@ -51,6 +46,50 @@ function localDate(){
 }
 function ruDate(s:string){
  const [y,m,d]=s.split('-');return d&&m&&y?`${d}.${m}.${y}`:s;
+}
+function fmtTime(s:unknown){
+ if(!s)return '';
+ try{
+  return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(String(s)));
+ }catch(_){return String(s)}
+}
+
+type DebtRow={client_name:string;manager_name:string;debt_overdue:number;debt_overdue_pct:number|null;debt_overdue_days:number;report_date:string};
+type LegalRow={client_key:string;action_type:string;action_at:string;comment:string|null;author_name:string};
+
+function legalKey(client:string,type:string){return norm(client)+'|'+type}
+function actionText(d:DebtRow,legalMap:Map<string,LegalRow>){
+ const days=Number(d.debt_overdue_days||0);
+ const claim=legalMap.get(legalKey(d.client_name,'claim_sent'));
+ const court=legalMap.get(legalKey(d.client_name,'court_submitted'));
+ if(days>=60){
+  if(court)return '✅ <b>В суд передано</b> '+esc(fmtTime(court.action_at))+' · '+esc(court.author_name||'');
+  return '⚖ <b>В СУД</b>';
+ }
+ if(days>=30){
+  if(claim)return '✅ <b>Претензия отправлена</b> '+esc(fmtTime(claim.action_at))+' · '+esc(claim.author_name||'');
+  return '✉ <b>ПРЕТЕНЗИЯ + ПОЧТА</b>';
+ }
+ return '';
+}
+function linesFor(rows:DebtRow[],showManager:boolean,legalMap:Map<string,LegalRow>){
+ return rows.map((d,i)=>{
+  const action=actionText(d,legalMap);
+  const mgr=showManager?' · 👤 '+esc(d.manager_name||'—'):'';
+  return (i+1)+'. <b>'+esc(d.client_name||'—')+'</b> — <b>'+money(d.debt_overdue)+' BYN</b> · '+Number(d.debt_overdue_days||0)+' дн.'+mgr+(action?' · '+action:'');
+ });
+}
+function summaryHeader(rows:DebtRow[],reportDate:string,title:string,legalMap:Map<string,LegalRow>){
+ const total=rows.reduce((s,d)=>s+Number(d.debt_overdue||0),0);
+ const claimRows=rows.filter(d=>Number(d.debt_overdue_days||0)>=30&&Number(d.debt_overdue_days||0)<60);
+ const courtRows=rows.filter(d=>Number(d.debt_overdue_days||0)>=60);
+ const pendingClaims=claimRows.filter(d=>!legalMap.get(legalKey(d.client_name,'claim_sent'))).length;
+ const pendingCourts=courtRows.filter(d=>!legalMap.get(legalKey(d.client_name,'court_submitted'))).length;
+ return '💰 <b>Resanta CRM · ПДЗ на '+esc(ruDate(reportDate))+'</b>\n'
+   +title+'\n'
+   +'Должников: <b>'+rows.length+'</b> · сумма: <b>'+money(total)+' BYN</b>\n'
+   +'✉ 30–59: <b>'+claimRows.length+'</b> (не отправлено: <b>'+pendingClaims+'</b>) · '
+   +'⚖ 60+: <b>'+courtRows.length+'</b> (не передано: <b>'+pendingCourts+'</b>)\n';
 }
 
 Deno.serve(async(req)=>{
@@ -66,30 +105,66 @@ Deno.serve(async(req)=>{
   const reportDate=String(latestRows?.[0]?.report_date||'');
   if(!reportDate)return json({ok:true,reason:'NO_PDZ'});
 
-  const {data:debts,error:de}=await db.from('client_debt')
+  const {data:debtsRaw,error:de}=await db.from('client_debt')
    .select('client_name,manager_name,debt_overdue,debt_overdue_pct,debt_overdue_days,report_date')
    .eq('report_date',reportDate)
    .gt('debt_overdue',0)
    .order('debt_overdue_days',{ascending:false})
    .order('debt_overdue',{ascending:false});
   if(de)throw de;
+  const debts=(debtsRaw||[]) as DebtRow[];
+
+  const {data:legalRaw,error:lae}=await db.from('pdz_legal_actions')
+    .select('client_key,action_type,action_at,comment,author_name')
+    .order('action_at',{ascending:false}).limit(3000);
+  if(lae)throw lae;
+  const legalMap=new Map<string,LegalRow>();
+  for(const x of (legalRaw||[]) as LegalRow[]){
+    const k=String(x.client_key||'')+'|'+String(x.action_type||'');
+    if(!legalMap.has(k))legalMap.set(k,x);
+  }
+
+  const group=await runtimeGet('pdz_group_chat');
+  const groupChatId=group?.active&&group?.chat_id?group.chat_id:null;
+  let groupSent=false;
+  let sentMessages=0;
+  const errors:any[]=[];
+
+  if(groupChatId && debts.length){
+   const groupKey=`pdz_daily_group_sent:${today}:${groupChatId}`;
+   if(!(await runtimeGet(groupKey))){
+    try{
+      const header=summaryHeader(debts,reportDate,'Контроль: <b>Паюшин + Сидарович</b>',legalMap);
+      for(const part of chunks(linesFor(debts,true,legalMap),header)){await tg(part,groupChatId);sentMessages++;}
+      await runtimeSet(groupKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:debts.length,total:debts.reduce((s,d)=>s+Number(d.debt_overdue||0),0)});
+      groupSent=true;
+    }catch(e){
+      errors.push({group:group?.title||groupChatId,error:e instanceof Error?e.message:String(e)});
+    }
+   }
+  }
 
   const {data:bindings,error:be}=await db.from('crm_telegram_bindings')
    .select('user_id,chat_id,active').eq('active',true);
   if(be)throw be;
   const ids=[...new Set((bindings||[]).map((x:any)=>String(x.user_id)))];
-  if(!ids.length)return json({ok:true,reason:'NO_BINDINGS'});
+  if(!ids.length)return json({ok:errors.length===0,reason:'NO_BINDINGS',group_sent:groupSent,errors});
+
   const {data:users,error:ue}=await db.from('users').select('id,name,email,role').in('id',ids);
   if(ue)throw ue;
   const userMap=new Map((users||[]).map((x:any)=>[String(x.id),x]));
   const bindMap=new Map((bindings||[]).map((x:any)=>[String(x.user_id),x]));
 
-  let sentUsers=0,sentMessages=0;
-  const errors:any[]=[];
+  let sentUsers=0;
   for(const uid of ids){
    const u:any=userMap.get(uid),b:any=bindMap.get(uid);if(!u||!b)continue;
    const isLeader=LEADER_EMAILS.has(String(u.email||'').toLowerCase());
-   const rows=(debts||[]).filter((d:any)=>isLeader||belongs(String(d.manager_name||''),String(u.name||'')));
+
+   // If a common PDZ control group is configured, leaders receive the common
+   // digest there, while managers keep personal messages with only their clients.
+   if(isLeader&&groupChatId)continue;
+
+   const rows=debts.filter(d=>isLeader||belongs(String(d.manager_name||''),String(u.name||'')));
    const sentKey=`pdz_daily_sent:${today}:${uid}`;
    if(await runtimeGet(sentKey))continue;
    if(!rows.length){
@@ -97,29 +172,21 @@ Deno.serve(async(req)=>{
     continue;
    }
 
-   const total=rows.reduce((s:number,d:any)=>s+Number(d.debt_overdue||0),0);
-   const claims=rows.filter((d:any)=>Number(d.debt_overdue_days||0)>=30&&Number(d.debt_overdue_days||0)<60).length;
-   const courts=rows.filter((d:any)=>Number(d.debt_overdue_days||0)>=60).length;
-   const header='💰 <b>Resanta CRM · ПДЗ на '+esc(ruDate(reportDate))+'</b>\n'
-    +(isLeader?'Все менеджеры':'Менеджер: <b>'+esc(u.name)+'</b>')+'\n'
-    +'Должников: <b>'+rows.length+'</b> · сумма: <b>'+money(total)+' BYN</b>'
-    +(claims||courts?'\n✉ претензия 30–59: <b>'+claims+'</b> · ⚖ в суд 60+: <b>'+courts+'</b>':'')+'\n';
-
-   const lines=rows.map((d:any,i:number)=>{
-    const days=Number(d.debt_overdue_days||0);
-    const action=legal(days);
-    const mgr=isLeader?' · 👤 '+esc(d.manager_name||'—'):'';
-    return (i+1)+'. <b>'+esc(d.client_name||'—')+'</b> — <b>'+money(d.debt_overdue)+' BYN</b> · '+days+' дн.'+mgr+(action?' · '+action:'');
-   });
+   const title=isLeader?'Все менеджеры':'Менеджер: <b>'+esc(u.name)+'</b>';
+   const header=summaryHeader(rows,reportDate,title,legalMap);
    try{
-    for(const part of chunks(lines,header)){await tg(part,b.chat_id);sentMessages++;}
-    await runtimeSet(sentKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:rows.length,total});
+    for(const part of chunks(linesFor(rows,isLeader,legalMap),header)){await tg(part,b.chat_id);sentMessages++;}
+    await runtimeSet(sentKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:rows.length,total:rows.reduce((s,d)=>s+Number(d.debt_overdue||0),0)});
     sentUsers++;
    }catch(e){
     errors.push({user:u.name,error:e instanceof Error?e.message:String(e)});
    }
   }
-  return json({ok:errors.length===0,report_date:reportDate,sent_users:sentUsers,sent_messages:sentMessages,errors});
+
+  return json({
+    ok:errors.length===0,report_date:reportDate,group_configured:!!groupChatId,group_sent:groupSent,
+    sent_users:sentUsers,sent_messages:sentMessages,errors
+  });
  }catch(e){
   console.error(e);
   return json({ok:false,error:e instanceof Error?e.message:String(e)},500);
