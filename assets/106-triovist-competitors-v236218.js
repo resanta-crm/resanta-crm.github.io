@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.285 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.286 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.285',TTL=30000;
+const V='v23.6.286',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -81,6 +81,9 @@ function specLine(k,v){
   tool_type:'Тип инструмента',knife_type:'Тип ножа',blade_type:'Тип лезвия',max_cut_diameter_mm:'Максимальная толщина среза',
   application_area:'Область применения',carry_type:'Вид переноски',flow_rate_lmin:'Производительность',
   tank_capacity_l:'Объем емкости',fuel_engine_type:'Тип бензинового двигателя',spray_radius_m:'Радиус опрыскивания',
+  wrench_type:'Тип гайковерта',motor_type:'Тип электродвигателя',reverse_present:'Реверс',operating_modes:'Режимы',
+  chuck_type:'Тип патрона',drive_size_in:'Посадочный квадрат/шестигранник',rotation_adjustment:'Регулировка вращения',
+  max_rpm:'Макс. скорость вращения',max_torque_nm:'Макс. крутящий момент',charging_time_min:'Время зарядки',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -91,6 +94,7 @@ function specLine(k,v){
   air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',max_auger_diameter_mm:' мм',shaft_diameter_mm:' мм',
   input_power_w:' Вт',cutting_speed_rpm:' об/мин',max_branch_diameter_mm:' мм',collector_capacity_l:' л',feed_openings_count:' шт.',
   max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
+  drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -268,6 +272,136 @@ function humidifierResult(k,a,b){
  return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
 }
 
+
+function impactWrenchDevice(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/гайковерт|гайковёрт|impact wrench/.test(s))return'гайковерт';
+ if(/винтоверт|винтовёрт|impact driver/.test(s))return'винтоверт';
+ if(/шуруповерт|шуруповёрт/.test(s))return'шуруповерт';
+ if(/дрель/.test(s))return'дрель';
+ return E(v);
+}
+function impactWrenchKind(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/non_impact|безудар|без удара/.test(s))return'безударный';
+ if(/impact|ударн/.test(s))return'ударный';
+ return E(v);
+}
+function impactWrenchSource(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/pneumatic|пневм|compressed air|воздуш/.test(s))return'пневматический';
+ if(/battery|аккумуля|батар|li[- ]?ion/.test(s))return'аккумуляторный';
+ if(/mains|electric|сетев|сеть|220|230|corded/.test(s))return'сетевой';
+ return E(v);
+}
+function impactWrenchMotor(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/brushless|бесщет|бесщёточ/.test(s))return'бесщеточный';
+ if(/brushed|щеточ|щёточ|коллектор/.test(s))return'щеточный';
+ return E(v);
+}
+function impactWrenchChuck(v){
+ if(v==null)return'';
+ const s=String(v).toLowerCase();
+ if(/square|квадрат/.test(s))return'квадрат';
+ if(/hex|шестигран/.test(s))return'шестигранник';
+ return E(v);
+}
+function impactWrenchDrive(v){
+ const n=N(v);if(n==null)return'нет данных';
+ const z=[[.25,'1/4"'],[.375,'3/8"'],[.5,'1/2"'],[.75,'3/4"'],[1,'1"']];
+ for(const [x,t] of z)if(Math.abs(n-x)<=.025)return t;
+ return E(v)+'"';
+}
+function impactWrenchVoltage(v){
+ const n=N(v);if(n==null)return'нет данных';
+ if(n>=9&&n<=13)return'10,8/12 В';
+ if(n>=16&&n<=22)return'18/20 В';
+ if(n>=23&&n<=28)return'24 В';
+ if(n>=34&&n<=42)return'36/40 В';
+ if(n>=46&&n<=52)return'48 В';
+ if(n>=54&&n<=62)return'60 В';
+ if(n>=72&&n<=84)return'80 В';
+ return E(v)+' В';
+}
+function impactWrenchModes(v){
+ if(v==null)return'нет данных';
+ const s=String(v),m=s.match(/count:(\d+)/);
+ if(m)return m[1]+' режима';
+ return E(s.replace(/\+/g,', '));
+}
+function impactWrenchValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='device_type')return impactWrenchDevice(v);
+ if(k==='wrench_type')return impactWrenchKind(v);
+ if(k==='power_source')return impactWrenchSource(v);
+ if(k==='motor_type')return impactWrenchMotor(v);
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='reverse_present'||k==='rotation_adjustment')return Boolean(v)?'есть':'нет';
+ if(k==='operating_modes')return impactWrenchModes(v);
+ if(k==='chuck_type')return impactWrenchChuck(v);
+ if(k==='drive_size_in')return impactWrenchDrive(v);
+ if(k==='max_rpm')return E(v)+' об/мин';
+ if(k==='max_torque_nm')return E(v)+' Н·м';
+ if(k==='battery_type')return sprayerBattery(v);
+ if(k==='battery_voltage_v')return impactWrenchVoltage(v);
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='charging_time_min')return E(v)+' мин';
+ return E(v);
+}
+function impactWrenchResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='device_type')return impactWrenchDevice(a)===impactWrenchDevice(b)?'один тип':'другой инструмент — не аналог';
+ if(k==='wrench_type')return impactWrenchKind(a)===impactWrenchKind(b)?'совпадает':'ударный/безударный — не аналог';
+ if(k==='power_source')return impactWrenchSource(a)===impactWrenchSource(b)?'совпадает':'разный тип питания — не аналог';
+ if(k==='motor_type'){
+  const aa=impactWrenchMotor(a),bb=impactWrenchMotor(b);
+  if(aa===bb)return'совпадает';
+  if(aa==='бесщеточный'&&bb==='щеточный')return'наш бесщеточный — преимущество';
+  if(aa==='щеточный'&&bb==='бесщеточный')return'у конкурента бесщеточный';
+  return'тип двигателя отличается';
+ }
+ if(k==='chuck_type')return impactWrenchChuck(a)===impactWrenchChuck(b)?'совпадает':'тип патрона отличается — не прямой аналог';
+ if(k==='drive_size_in')return impactWrenchDrive(a)===impactWrenchDrive(b)?'строго совпадает':'другая посадка — не аналог';
+ if(k==='battery_voltage_v')return impactWrenchVoltage(a)===impactWrenchVoltage(b)?'один класс · '+impactWrenchVoltage(a):'разный класс АКБ — не аналог';
+ if(k==='reverse_present'||k==='rotation_adjustment'){
+  if(Boolean(a)===Boolean(b))return'совпадает';
+  return Boolean(a)?'есть у нас — преимущество':'есть у конкурента';
+ }
+ if(k==='operating_modes'){
+  const ca=(String(a).match(/count:(\d+)/)||[])[1],cb=(String(b).match(/count:(\d+)/)||[])[1];
+  if(ca&&cb&&ca!==cb)return Number(ca)>Number(cb)?'у нас больше режимов':'у конкурента больше режимов';
+  return String(a)===String(b)?'совпадает':'режимы отличаются';
+ }
+ if(['input_power_w','max_rpm','max_torque_nm'].includes(k)){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.10)return'полное совпадение';
+  if(k==='max_torque_nm')return av>bv?'наш крутящий момент выше':'крутящий момент конкурента выше';
+  if(d<=.20)return'близкое совпадение';
+  if(d<=.30)return'частичное совпадение';
+  return'существенное отличие';
+ }
+ if(k==='battery_capacity_ah'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.15)return'полное совпадение';
+  return av>bv?'у нас больше емкость АКБ':'у конкурента больше емкость АКБ';
+ }
+ if(k==='charging_time_min'){
+  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+  const d=Math.abs(av-bv)/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+  if(d<=.15)return'сопоставимо';
+  return av<bv?'наш заряжается быстрее':'конкурент заряжается быстрее';
+ }
+ if(k==='battery_type')return sprayerBattery(a)===sprayerBattery(b)?'совпадает':'тип аккумулятора отличается';
+ const na=String(a).trim().toLowerCase(),nb=String(b).trim().toLowerCase();
+ return na===nb||na.includes(nb)||nb.includes(na)?'совпадает':'отличается';
+}
 function sprayerDevice(v){
  if(v==null)return'';
  const s=String(v).toLowerCase();
@@ -1112,6 +1246,25 @@ function details(r,l){
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
  }
 
+
+ if(r.profile_key==='impact_wrench'){
+  const keys=[
+   ['device_type','Тип'],['wrench_type','Тип гайковерта'],['power_source','Тип питания'],
+   ['motor_type','Тип электродвигателя'],['input_power_w','Потребляемая мощность'],['reverse_present','Реверс'],
+   ['operating_modes','Режимы'],['chuck_type','Тип патрона'],['drive_size_in','Посадочный квадрат/шестигранник'],
+   ['rotation_adjustment','Регулировка вращения'],['max_rpm','Макс. скорость вращения'],['max_torque_nm','Макс. крутящий момент'],
+   ['battery_type','Тип аккумулятора'],['battery_voltage_v','Напряжение аккумулятора'],
+   ['battery_capacity_ah','Емкость аккумулятора'],['charging_time_min','Время зарядки']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+impactWrenchValue(k,b[k])+'</td><td>'+impactWrenchValue(k,a[k])+'</td><td>'+E(impactWrenchResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Гайковерты:</b> тип инструмента, ударный/безударный тип, питание и посадочный квадрат/шестигранник — жесткие границы класса. 1/4″, 3/8″, 1/2″, 3/4″ и 1″ сравниваются строго. Максимальный крутящий момент — ключевой параметр, прямое совпадение ±10%; скорость вращения и потребляемая мощность — ±10%, но больше оборотов само по себе не означает лучший инструмент. Для аккумуляторных 10,8/12 В и 18/20 В нормализуются по классу; емкость АКБ и время зарядки — ±15%. Бесщеточный двигатель считается преимуществом над щеточным. Если нет типа гайковерта, питания, посадки или максимального момента, а для аккумуляторного еще и напряжения АКБ — вывод «сильнее/слабее» блокируется.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
  if(r.profile_key==='sprayer'){
   const keys=[
    ['device_type','Тип'],['application_area','Область применения'],['carry_type','Вид переноски'],
@@ -1478,5 +1631,5 @@ async function open(panel,ctx,force=false){
   render(panel,dash,listing);
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
