@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.297.
+"""Triovist / 21vek automatic market analysis v23.6.298.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.8"
+PARSER_VERSION="market-auto-v4.9"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -184,6 +184,7 @@ def profile_for(label: str) -> str:
     if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     if "шуруповерт" in n and "аккумулятор" in n: return "cordless_screwdriver"
     if "краскопульт" in n: return "paint_sprayer"
+    if "лобзик" in n: return "jigsaw"
     if "дрел" in n and "удар" in n and "шуруповерт" not in n: return "impact_drill"
     return "generic"
 
@@ -211,6 +212,7 @@ def query_for(label: str, profile: str) -> str:
       "impact_drill":"дрель ударная",
       "cordless_screwdriver":"аккумуляторный шуруповерт",
       "paint_sprayer":"краскопульт",
+      "jigsaw":"лобзик",
     }.get(profile)
     return q or clean_label(label)
 
@@ -276,10 +278,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Дрели ударные","impact_drill","дрел"),
       ("Шуруповерты аккумуляторные","cordless_screwdriver","шуруповерт"),
       ("Краскопульты","paint_sprayer","краскопульт"),
+      ("Лобзики","jigsaw","лобзик"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -330,10 +333,15 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and not ("покрасоч" in pn and "станц" in pn)
                          and "безвоздуш" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="jigsaw":
+                matched=("лобзик" in pn
+                         and "пилк" not in pn and "полотн" not in pn and "набор" not in pn
+                         and "ручной" not in pn
+                         and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else "Садовая техника"),"source_subgroup":label,
+              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw") else "Садовая техника"),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -686,6 +694,65 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
 
 
 
+
+
+
+def jigsaw_device_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("сабельн","reciprocating")):return "reciprocating_saw"
+    if any(x in n for x in ("ручной лобзик","manual jigsaw")):return "manual_jigsaw"
+    if "лобзик" in n or "jigsaw" in n:return "jigsaw"
+    return n
+
+
+def jigsaw_source_family(v: Any) -> str:
+    return circular_saw_source_family(v)
+
+
+def jigsaw_required_missing(ours: dict,comp: dict) -> bool:
+    required=("cut_depth_wood_mm","strokes_per_min")
+    if any(ours.get(k) is None or comp.get(k) is None for k in required):return True
+    source=jigsaw_source_family(ours.get("power_source") or comp.get("power_source"))
+    if source=="mains":
+        return ours.get("input_power_w") is None or comp.get("input_power_w") is None
+    return False
+
+
+def jigsaw_power_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=100:return 1.0
+    if d<=200:return 0.85
+    if d<=300:return 0.65
+    return 0.0
+
+
+def jigsaw_relative_similarity(a: float,b: float,full: float=0.10,close: float=0.20,partial: float=0.30) -> float:
+    d=abs(float(a)-float(b))/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def jigsaw_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="input_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=100:return 50
+        return 66 if av>bv else 34
+    if k=="cut_depth_wood_mm":
+        av=float(a);bv=float(b)
+        if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.10:return 50
+        return 70 if av>bv else 30
+    if k=="motor_type":
+        aa=impact_wrench_motor_family(a);bb=impact_wrench_motor_family(b)
+        if aa==bb:return 50
+        if aa=="brushless" and bb=="brushed":return 72
+        if aa=="brushed" and bb=="brushless":return 28
+        return 50
+    if k in ("strokes_per_min","device_type","power_source"):return 50
+    return directional(rule,a,b)
 
 
 def paint_sprayer_device_family(v: Any) -> str:
@@ -1348,6 +1415,8 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="jigsaw_type":
+        return jigsaw_device_family(text)[:120] or None
     if key=="paint_sprayer_type":
         return paint_sprayer_device_family(text)[:120] or None
     if key=="tank_position":
@@ -1476,6 +1545,16 @@ def normalize_value(key: str, text: str) -> Any:
             return len(levels)
         return None
     v=max(ns)
+    if key=="cut_depth_wood_mm":
+        mm=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*мм\b",low,re.I)]
+        if mm:return round(max(mm),3)
+        cm=[float(x.replace(",","."))*10 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*см\b",low,re.I)]
+        if cm:return round(max(cm),3)
+        return round(max(ns),3)
+    if key=="strokes_per_min":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:ход(?:ов|а)?\s*/\s*мин|ход(?:ов|а)?\s*в\s*мин|spm|strokes?\s*/\s*min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        return round(max(ns),2)
     if key=="pressure_bar":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мпа|mpa)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))*10,4)
@@ -1988,6 +2067,10 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                 name=item_name(item);url=item_url(item);meta=search_meta(item)
                 if scope.get("profile_key")=="paint_sprayer" and paint_sprayer_device_family(name)!="electric_spray_gun":
                     continue
+                if scope.get("profile_key")=="jigsaw":
+                    jn=norm(name)
+                    if "лобзик" not in jn or any(x in jn for x in ("пилк","полотн","ручной лобзик")):
+                        continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
                   hashlib.sha1(url.encode("utf-8")).hexdigest() if url
@@ -2085,6 +2168,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-screwdriver2"
     if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-paintsprayer2"
+    if "cut_depth_wood_mm" in keys and "strokes_per_min" in keys and "motor_type" in keys:
+        return RULESET_VERSION+"-jigsaw1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -2148,6 +2233,9 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="опрыскиватель"
         elif "гайковерт" in device_name:
             specs["device_type"]="гайковерт"
+        elif "лобзик" in device_name:
+            if "ручной" in device_name:specs["device_type"]="ручной лобзик"
+            else:specs["device_type"]="лобзик"
         elif "краскопульт" in device_name:
             if "пневмат" in device_name:specs["device_type"]="пневматический краскопульт"
             elif (("окрасоч" in device_name and "аппарат" in device_name)
@@ -2272,6 +2360,27 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
 
 
 
+
+
+    jigsaw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="cut_depth_wood_mm" for r in rules) and any(r.get("spec_key")=="strokes_per_min" for r in rules):
+        jn=norm(jigsaw_name)
+        if "сабельн" in jn:
+            specs["device_type"]="сабельная пила"
+        elif "ручной" in jn and "лобзик" in jn:
+            specs["device_type"]="ручной лобзик"
+        elif "лобзик" in jn:
+            specs["device_type"]="лобзик"
+
+        source=jigsaw_source_family(specs.get("power_source"))
+        if any(x in jn for x in ("аккумуля","battery","li ion","li-ion")):source="battery"
+        elif any(x in jn for x in ("электрическ","сетев","220","230")):source="mains"
+        elif specs.get("input_power_w") is not None:source="mains"
+        if source:specs["power_source"]=source
+
+        if not specs.get("motor_type"):
+            if any(x in jn for x in ("бесщет","бесщёточ","brushless")):specs["motor_type"]="brushless"
+            elif any(x in jn for x in ("щеточ","щёточ","brushed")):specs["motor_type"]="brushed"
 
     paint_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="pressure_bar" for r in rules) and any(r.get("spec_key")=="tank_position" for r in rules):
@@ -2744,6 +2853,47 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+
+
+    if profile=="jigsaw":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and jigsaw_device_family(da)!=jigsaw_device_family(db):
+            return 0.0
+
+        sa=jigsaw_source_family(ours.get("power_source"));sb=jigsaw_source_family(comp.get("power_source"))
+        if sa and sb and sa!=sb:return 0.0
+        source=sa or sb
+
+        weights={"input_power_w":0.25 if source=="mains" else 0.0,
+                 "cut_depth_wood_mm":0.35,"strokes_per_min":0.25,"motor_type":0.15}
+        critical_missing=jigsaw_required_missing(ours,comp)
+        total=used=allw=0.0
+        for k,w in weights.items():
+            if w<=0:continue
+            allw+=w
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="input_power_w":
+                    s=jigsaw_power_similarity(float(a),float(b))
+                elif k=="cut_depth_wood_mm":
+                    s=jigsaw_relative_similarity(float(a),float(b))
+                elif k=="strokes_per_min":
+                    s=jigsaw_relative_similarity(float(a),float(b))
+                elif k=="motor_type":
+                    s=1.0 if impact_wrench_motor_family(a)==impact_wrench_motor_family(b) else 0.55
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
 
     if profile=="paint_sprayer":
         da=ours.get("device_type");db=comp.get("device_type")
@@ -3728,6 +3878,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=screwdriver_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="paint_sprayer":
             z=paint_sprayer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="jigsaw":
+            z=jigsaw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -3772,6 +3924,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=screwdriver_directional(rule,a,b)
         elif profile=="paint_sprayer":
             z=paint_sprayer_directional(rule,a,b)
+        elif profile=="jigsaw":
+            z=jigsaw_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -3810,7 +3964,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения аккумуляторных шуруповертов. Не считать конкурента сильнее, пока не подтверждены емкость АКБ и максимальный крутящий момент."
     if profile=="paint_sprayer" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения краскопультов. Не считать конкурента сильнее, пока не подтверждены мощность и давление."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="jigsaw" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения лобзиков. Не считать конкурента сильнее, пока не подтверждены максимальная глубина пропила по дереву и количество ходов в минуту; для сетевого лобзика также мощность."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -4019,8 +4175,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -4076,6 +4232,8 @@ def main() -> None:
                         status="data_incomplete"
                     if profile=="paint_sprayer" and paint_sprayer_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="jigsaw" and jigsaw_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -4105,6 +4263,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по емкости АКБ или крутящему моменту шуруповерта — вывод сильнее/слабее заблокирован")
                     if profile=="paint_sprayer" and paint_sprayer_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по мощности или давлению краскопульта — вывод сильнее/слабее заблокирован")
+                    if profile=="jigsaw" and jigsaw_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по критическим характеристикам лобзика — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
