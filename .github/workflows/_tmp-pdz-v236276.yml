@@ -1,4 +1,4 @@
-name: TMP — PDZ v23.6.276 syntax
+name: TMP — PDZ v23.6.277 syntax
 
 on:
   push:
@@ -14,4 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: JS syntax
-        run: node --check assets/113-pdz-control-v236275.js
+        run: |
+          node --check assets/98-period-filters-v236198.js
+          node --check assets/113-pdz-control-v236275.js
