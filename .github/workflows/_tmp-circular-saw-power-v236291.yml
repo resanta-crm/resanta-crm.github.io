@@ -1,0 +1,33 @@
+name: TMP — Circular saw ±150W v23.6.291
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-circular-saw-power-v236291.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax
+        run: |
+          python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_parser.py
+          node --check assets/106-triovist-competitors-v236218.js
+      - name: Dependencies
+        run: pip install requests beautifulsoup4
+      - name: Rebuild circular saw comparisons
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MARKET_VALIDATE_PROFILES: 'circular_saw'
+          MARKET_DELAY_SECONDS: '0.22'
+          MARKET_HTTP_TIMEOUT: '30'
+          MARKET_SPEC_TTL_DAYS: '30'
+        run: python tools/triovist_21vek_market.py
