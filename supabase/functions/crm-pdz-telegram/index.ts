@@ -160,11 +160,12 @@ Deno.serve(async(req)=>{
    const u:any=userMap.get(uid),b:any=bindMap.get(uid);if(!u||!b)continue;
    const isLeader=LEADER_EMAILS.has(String(u.email||'').toLowerCase());
 
-   // If a common PDZ control group is configured, leaders receive the common
-   // digest there, while managers keep personal messages with only their clients.
-   if(isLeader&&groupChatId)continue;
+   // Leaders never receive the full PDZ register in the bot's private chat.
+   // Their common digest is sent only to the dedicated PDZ control group.
+   // Until that group is configured, leadership delivery is intentionally skipped.
+   if(isLeader)continue;
 
-   const rows=debts.filter(d=>isLeader||belongs(String(d.manager_name||''),String(u.name||'')));
+   const rows=debts.filter(d=>belongs(String(d.manager_name||''),String(u.name||'')));
    const sentKey=`pdz_daily_sent:${today}:${uid}`;
    if(await runtimeGet(sentKey))continue;
    if(!rows.length){
