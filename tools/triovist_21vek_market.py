@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.285.
+"""Triovist / 21vek automatic market analysis v23.6.286.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v3.6"
+PARSER_VERSION="market-auto-v3.7"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -172,6 +172,7 @@ def profile_for(label: str) -> str:
     if ("измельч" in n and ("сад" in n or "вет" in n)) or "садов шредер" in n: return "garden_shredder"
     if "секатор" in n and "аккумулятор" in n: return "battery_pruner"
     if "опрыскив" in n: return "sprayer"
+    if "гайковерт" in n or "гайковёрт" in n: return "impact_wrench"
     return "generic"
 
 
@@ -193,6 +194,7 @@ def query_for(label: str, profile: str) -> str:
       "garden_shredder":"садовый измельчитель",
       "battery_pruner":"аккумуляторный секатор",
       "sprayer":"опрыскиватель",
+      "impact_wrench":"гайковерт",
     }.get(profile)
     return q or clean_label(label)
 
@@ -208,6 +210,9 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
     },page_size=800)
     garden=rest_get_all("price_list",{
       "category":"eq.Садовая техника",
+      "select":"sku,product,category,subgroup,uploaded_at"
+    },page_size=800)
+    all_price=rest_get_all("price_list",{
       "select":"sku,product,category,subgroup,uploaded_at"
     },page_size=800)
 
@@ -250,10 +255,12 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Садовые измельчители","garden_shredder","измельч"),
       ("Аккумуляторные секаторы","battery_pruner","секатор"),
       ("Опрыскиватели","sprayer","опрыскив"),
+      ("Гайковерты","impact_wrench","гайковерт"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        for x in garden:
+        source_rows=all_price if profile=="impact_wrench" else garden
+        for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
             pn=norm(x.get("product"))
@@ -278,6 +285,10 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             elif profile=="sprayer":
                 matched=("опрыскив" in pn
                          and "запчаст" not in pn and "форсунк" not in pn and "шланг" not in pn
+                         and not sku.startswith("900/"))
+            elif profile=="impact_wrench":
+                matched=(("гайковерт" in pn or "гайковёрт" in pn)
+                         and "насадк" not in pn and "головк" not in pn
                          and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
@@ -631,6 +642,120 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
 
 
 
+
+def impact_wrench_device_family(v: Any) -> str:
+    n=norm(v)
+    if "гайковерт" in n or "гайковёрт" in str(v or "").lower() or "impact wrench" in n:return "impact_wrench"
+    if "винтоверт" in n or "impact driver" in n:return "impact_driver"
+    if "шуруповерт" in n:return "screwdriver"
+    if "дрель" in n:return "drill"
+    return n
+
+
+def impact_wrench_kind_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("безудар","без удара","non impact","non-impact")):return "non_impact"
+    if any(x in n for x in ("ударн","impact")):return "impact"
+    return n
+
+
+def impact_wrench_source_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("пневм","compressed air","air powered","воздуш")):return "pneumatic"
+    if any(x in n for x in ("аккумуля","батар","battery","li ion","li-ion")):return "battery"
+    if any(x in n for x in ("сетев","сеть","220","230","mains","corded")):return "mains"
+    return n
+
+
+def impact_wrench_motor_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("бесщет","бесщёточ","brushless","bl motor")):return "brushless"
+    if any(x in n for x in ("щеточ","щёточ","brushed","коллектор")):return "brushed"
+    return n
+
+
+def impact_wrench_chuck_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("квадрат","square")):return "square"
+    if any(x in n for x in ("шестигран","hex")):return "hex"
+    return n
+
+
+def impact_wrench_voltage_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    if 9<=n<=13:return "10_8_12"
+    if 16<=n<=22:return "18_20"
+    if 23<=n<=28:return "24"
+    if 34<=n<=42:return "36_40"
+    if 46<=n<=52:return "48"
+    if 54<=n<=62:return "60"
+    if 72<=n<=84:return "80"
+    return str(round(n,1))
+
+
+def impact_wrench_drive_class(v: Any) -> str|None:
+    try:n=float(v)
+    except Exception:return None
+    known=[(0.25,"1/4"),(0.375,"3/8"),(0.5,"1/2"),(0.75,"3/4"),(1.0,"1")]
+    for x,label in known:
+        if abs(n-x)<=0.025:return label
+    return str(round(n,4))
+
+
+def impact_wrench_mode_tokens(v: Any) -> set[str]:
+    n=norm(v);out=set()
+    m=re.search(r"(\d+)\s*(?:режим|скорост)",n)
+    if m:out.add("count:"+m.group(1))
+    if any(x in n for x in ("автостоп","авто стоп","auto stop","autostop")):out.add("auto_stop")
+    if any(x in n for x in ("болт","bolt")):out.add("bolt")
+    if any(x in n for x in ("реверс стоп","reverse stop")):out.add("reverse_stop")
+    if any(x in n for x in ("точн","precision")):out.add("precision")
+    if not out and n:out.add(n)
+    return out
+
+
+def impact_wrench_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def impact_wrench_modes_similarity(a: Any,b: Any) -> float:
+    aa=impact_wrench_mode_tokens(a);bb=impact_wrench_mode_tokens(b)
+    if aa and bb:return len(aa&bb)/max(1,len(aa|bb))
+    return categorical_similarity(a,b)
+
+
+def impact_wrench_required_missing(ours: dict,comp: dict) -> bool:
+    required=("device_type","wrench_type","power_source","drive_size_in","max_torque_nm")
+    if any(ours.get(k) is None or comp.get(k) is None for k in required):return True
+    source=impact_wrench_source_family(ours.get("power_source") or comp.get("power_source"))
+    if source=="battery":
+        return ours.get("battery_voltage_v") is None or comp.get("battery_voltage_v") is None
+    return False
+
+
+def impact_wrench_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k in ("device_type","wrench_type","power_source","motor_type","chuck_type","drive_size_in","max_rpm","battery_type","battery_voltage_v"):
+        return 50
+    if k=="operating_modes":
+        aa=impact_wrench_mode_tokens(a);bb=impact_wrench_mode_tokens(b)
+        ca=next((int(x.split(":",1)[1]) for x in aa if x.startswith("count:")),None)
+        cb=next((int(x.split(":",1)[1]) for x in bb if x.startswith("count:")),None)
+        if ca is not None and cb is not None and ca!=cb:return 62 if ca>cb else 38
+        return 50
+    if k in ("reverse_present","rotation_adjustment"):
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 70 if av else 30
+    return directional(rule,a,b)
+
+
 def sprayer_device_family(v: Any) -> str:
     n=norm(v)
     if "опрыскив" in n or "sprayer" in n:return "sprayer"
@@ -932,6 +1057,15 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="wrench_type":
+        return impact_wrench_kind_family(text)[:120] or None
+    if key=="motor_type":
+        return impact_wrench_motor_family(text)[:120] or None
+    if key=="chuck_type":
+        return impact_wrench_chuck_family(text)[:120] or None
+    if key=="operating_modes":
+        t=impact_wrench_mode_tokens(text)
+        return "+".join(sorted(t)) if t else None
     if key=="application_area":
         t=sprayer_application_tokens(text)
         return "+".join(sorted(t)) if t else None
@@ -987,7 +1121,7 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="base_type":
         m=re.search(r"\b(?:e|gu|gx|g)\s*\d+(?:[.]\d+)?\b",low,re.I)
         return re.sub(r"\s+","",m.group(0)).upper() if m else (norm(text)[:40] or None)
-    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present"):
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment"):
         return presence_value(text)
     if key in ("overheat_protection","humidistat"):
         return bool_value(text)
@@ -1039,6 +1173,29 @@ def normalize_value(key: str, text: str) -> Any:
         if m:return round(float(m.group(1).replace(",", "."))/1000,3)
         return round(ns[0],3)
     if key=="battery_voltage_v":
+        return round(ns[0],2)
+    if key=="drive_size_in":
+        m=re.search(r"(\d+)\s*/\s*(\d+)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])?",low,re.I)
+        if m and float(m.group(2))!=0:return round(float(m.group(1))/float(m.group(2)),4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*мм\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/25.4,4)
+        n=ns[0]
+        return round(n/25.4,4) if n>2 else round(n,4)
+    if key=="max_rpm":
+        return round(max(ns),2)
+    if key=="max_torque_nm":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:н\s*[·.*-]?\s*м|нм|n\s*[·.*-]?\s*m|nm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:кгс?|kgf)\s*[·.*-]?\s*(?:м|m)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*9.80665,2)
+        return round(max(ns),2)
+    if key=="charging_time_min":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мин|min)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:ч|час|hours?|h)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*60,2)
         return round(ns[0],2)
     if key=="flow_rate_lmin":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:мин|min)",low,re.I)
@@ -1510,6 +1667,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-pruner1"
     if "spray_radius_m" in keys and "flow_rate_lmin" in keys and "tank_capacity_l" in keys:
         return RULESET_VERSION+"-sprayer2"
+    if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
+        return RULESET_VERSION+"-wrench1"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -1565,6 +1724,8 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="аккумуляторный секатор" if "аккумулятор" in device_name else "секатор"
         elif "опрыскив" in device_name:
             specs["device_type"]="опрыскиватель"
+        elif "гайковерт" in device_name:
+            specs["device_type"]="гайковерт"
     saw_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="power_supply" for r in rules) and any(r.get("spec_key")=="bar_length_cm" for r in rules):
         if not specs.get("power_supply"):
@@ -1668,6 +1829,36 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             if any(x in an for x in ("2 такт","2-такт","двухтакт")):specs["engine_type"]="2-тактный"
             elif any(x in an for x in ("4 такт","4-такт","четырехтакт")):specs["engine_type"]="4-тактный"
 
+
+
+    wrench_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="max_torque_nm" for r in rules):
+        wn=norm(wrench_name)
+        if "гайковерт" in wn and not specs.get("device_type"):specs["device_type"]="гайковерт"
+        if not specs.get("wrench_type"):
+            if any(x in wn for x in ("безудар","без удара")):specs["wrench_type"]="non_impact"
+            elif "удар" in wn:specs["wrench_type"]="impact"
+        source=impact_wrench_source_family(specs.get("power_source"))
+        if any(x in wn for x in ("пневм","воздуш")):source="pneumatic"
+        elif any(x in wn for x in ("аккумуля","battery","li ion","li-ion")):source="battery"
+        elif any(x in wn for x in ("сетев","220","230")):source="mains"
+        if source:specs["power_source"]=source
+        if not specs.get("motor_type"):
+            if any(x in wn for x in ("бесщет","бесщёточ","brushless")):specs["motor_type"]="brushless"
+            elif any(x in wn for x in ("щеточ","щёточ","brushed")):specs["motor_type"]="brushed"
+        if source=="battery" and specs.get("battery_voltage_v") is None:
+            vm=re.search(r"\b(10[.,]8|12|18|20|24|36|40|48|60|80)\s*(?:в|v)\b",str(wrench_name).lower(),re.I)
+            if vm:specs["battery_voltage_v"]=float(vm.group(1).replace(",","."))
+        if specs.get("drive_size_in") is None:
+            dm=re.search(r"(?:квадрат|square|hex|шестигранник)?\s*(1\s*/\s*4|3\s*/\s*8|1\s*/\s*2|3\s*/\s*4|1)\s*(?:[\"″]|дюйм)?",str(wrench_name).lower(),re.I)
+            if dm:
+                token=dm.group(1).replace(" ","")
+                if "/" in token:
+                    a,b=token.split("/",1);specs["drive_size_in"]=round(float(a)/float(b),4)
+                else:specs["drive_size_in"]=float(token)
+        if specs.get("chuck_type") is None:
+            if "квадрат" in wn or "square" in wn:specs["chuck_type"]="square"
+            elif "шестигран" in wn or "hex" in wn:specs["chuck_type"]="hex"
 
     sprayer_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="spray_radius_m" for r in rules):
@@ -1997,6 +2188,94 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+
+    if profile=="impact_wrench":
+        da=ours.get("device_type");db=comp.get("device_type")
+        if da is not None and db is not None and impact_wrench_device_family(da)!=impact_wrench_device_family(db):
+            return 0.0
+
+        ka=impact_wrench_kind_family(ours.get("wrench_type"));kb=impact_wrench_kind_family(comp.get("wrench_type"))
+        if ka and kb and ka!=kb:return 0.0
+
+        sa=impact_wrench_source_family(ours.get("power_source"));sb=impact_wrench_source_family(comp.get("power_source"))
+        if sa and sb and sa!=sb:return 0.0
+        source=sa or sb
+
+        va=ours.get("drive_size_in");vb=comp.get("drive_size_in")
+        if va is not None and vb is not None and impact_wrench_drive_class(va)!=impact_wrench_drive_class(vb):
+            return 0.0
+
+        if source=="battery":
+            ba=ours.get("battery_voltage_v");bb=comp.get("battery_voltage_v")
+            if ba is not None and bb is not None and impact_wrench_voltage_class(ba)!=impact_wrench_voltage_class(bb):
+                return 0.0
+
+        weights={
+          "device_type":0.07,"wrench_type":0.09,"power_source":0.10,"motor_type":0.05,
+          "input_power_w":0.05,"reverse_present":0.04,"operating_modes":0.05,"chuck_type":0.05,
+          "drive_size_in":0.12,"rotation_adjustment":0.04,"max_rpm":0.07,"max_torque_nm":0.17,
+          "battery_type":0.03,"battery_voltage_v":0.04,"battery_capacity_ah":0.02,"charging_time_min":0.01
+        }
+        if source=="mains":
+            weights["input_power_w"]=0.11;weights["battery_type"]=weights["battery_voltage_v"]=weights["battery_capacity_ah"]=weights["charging_time_min"]=0.0
+        elif source=="pneumatic":
+            for k in ("motor_type","input_power_w","battery_type","battery_voltage_v","battery_capacity_ah","charging_time_min"):weights[k]=0.0
+        elif source!="battery":
+            for k in ("battery_type","battery_voltage_v","battery_capacity_ah","charging_time_min"):weights[k]=0.0
+
+        critical_missing=impact_wrench_required_missing(ours,comp)
+        total=used=allw=0.0;chuck_mismatch=False
+        for k,w in weights.items():
+            if w<=0:continue
+            allw+=w
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="device_type":
+                    s=1.0 if impact_wrench_device_family(a)==impact_wrench_device_family(b) else 0.0
+                elif k=="wrench_type":
+                    s=1.0 if impact_wrench_kind_family(a)==impact_wrench_kind_family(b) else 0.0
+                elif k=="power_source":
+                    s=1.0 if impact_wrench_source_family(a)==impact_wrench_source_family(b) else 0.0
+                elif k=="motor_type":
+                    s=1.0 if impact_wrench_motor_family(a)==impact_wrench_motor_family(b) else 0.55
+                elif k=="input_power_w":
+                    s=impact_wrench_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k in ("reverse_present","rotation_adjustment"):
+                    s=1.0 if bool(a)==bool(b) else 0.55
+                elif k=="operating_modes":
+                    s=impact_wrench_modes_similarity(a,b)
+                elif k=="chuck_type":
+                    aa=impact_wrench_chuck_family(a);bb=impact_wrench_chuck_family(b)
+                    s=1.0 if aa==bb else 0.35
+                    if aa and bb and aa!=bb:chuck_mismatch=True
+                elif k=="drive_size_in":
+                    s=1.0 if impact_wrench_drive_class(a)==impact_wrench_drive_class(b) else 0.0
+                elif k=="max_rpm":
+                    s=impact_wrench_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="max_torque_nm":
+                    s=impact_wrench_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="battery_type":
+                    s=1.0 if battery_pruner_battery_family(a)==battery_pruner_battery_family(b) else 0.45
+                elif k=="battery_voltage_v":
+                    s=1.0 if impact_wrench_voltage_class(a)==impact_wrench_voltage_class(b) else 0.0
+                elif k=="battery_capacity_ah":
+                    s=impact_wrench_relative_similarity(float(a),float(b),0.15,0.30,0.45)
+                elif k=="charging_time_min":
+                    s=impact_wrench_relative_similarity(float(a),float(b),0.15,0.30,0.45)
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        if chuck_mismatch:score=min(score,84.0)
         return round(max(0,min(100,score)),2)
 
     if profile=="sprayer":
@@ -2694,6 +2973,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=battery_pruner_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="sprayer":
             z=sprayer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="impact_wrench":
+            z=impact_wrench_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -2728,6 +3009,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=battery_pruner_directional(rule,a,b)
         elif profile=="sprayer":
             z=sprayer_directional(rule,a,b)
+        elif profile=="impact_wrench":
+            z=impact_wrench_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -2756,7 +3039,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения аккумуляторных секаторов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип инструмента, аккумуляторное питание, напряжение и максимальная толщина среза."
     if profile=="sprayer" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения опрыскивателей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены критические параметры его типа питания."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="impact_wrench" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения гайковертов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип гайковерта, питание, посадка и максимальный крутящий момент; для аккумуляторного также напряжение АКБ."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -2961,8 +3246,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -3008,6 +3293,8 @@ def main() -> None:
                             status="data_incomplete"
                     if profile=="sprayer" and sprayer_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="impact_wrench" and impact_wrench_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -3027,6 +3314,8 @@ def main() -> None:
                             bad.append("Недостаточно данных по критическим характеристикам аккумуляторного секатора — вывод сильнее/слабее заблокирован")
                     if profile=="sprayer" and sprayer_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по критическим характеристикам опрыскивателя для его типа питания — вывод сильнее/слабее заблокирован")
+                    if profile=="impact_wrench" and impact_wrench_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по критическим характеристикам гайковерта — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
