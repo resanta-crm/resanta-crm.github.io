@@ -1,4 +1,4 @@
-name: TMP — Triovist impact wrench market v23.6.287
+name: TMP — Triovist impact wrench market v23.6.288
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
       - name: Dependencies
         run: pip install requests beautifulsoup4
-      - name: Impact wrenches final recheck
+      - name: Impact wrenches refreshed-spec recheck
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
