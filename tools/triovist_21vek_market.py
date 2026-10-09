@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.296.
+"""Triovist / 21vek automatic market analysis v23.6.297.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v4.7"
+PARSER_VERSION="market-auto-v4.8"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -326,7 +326,8 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             elif profile=="paint_sprayer":
                 matched=("краскопульт" in pn
                          and "пневмат" not in pn and "аэрограф" not in pn
-                         and "окрасочн аппарат" not in pn and "покрасочн станц" not in pn
+                         and not ("окрасоч" in pn and "аппарат" in pn)
+                         and not ("покрасоч" in pn and "станц" in pn)
                          and "безвоздуш" not in pn
                          and not sku.startswith("900/"))
             if matched:skus.add(sku)
@@ -691,7 +692,8 @@ def paint_sprayer_device_family(v: Any) -> str:
     n=norm(v)
     if any(x in n for x in ("аэрограф","airbrush")):return "airbrush"
     if any(x in n for x in ("пневмат","compressed air","air spray gun")):return "pneumatic_spray_gun"
-    if any(x in n for x in ("окрасочн аппарат","покрасочн станц","безвоздуш","airless")):return "paint_station"
+    if (("окрасоч" in n and "аппарат" in n) or ("покрасоч" in n and "станц" in n)
+        or "безвоздуш" in n or "airless" in n):return "paint_station"
     if "краскопульт" in n or "paint sprayer" in n or "spray gun" in n:return "electric_spray_gun"
     return n
 
@@ -2082,7 +2084,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "battery_count" in keys and "case_present" in keys and "max_torque_nm" in keys:
         return RULESET_VERSION+"-screwdriver2"
     if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
-        return RULESET_VERSION+"-paintsprayer1"
+        return RULESET_VERSION+"-paintsprayer2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -2148,7 +2150,9 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="гайковерт"
         elif "краскопульт" in device_name:
             if "пневмат" in device_name:specs["device_type"]="пневматический краскопульт"
-            elif any(x in device_name for x in ("окрасочн аппарат","покрасочн станц","безвоздуш")):specs["device_type"]="окрасочный аппарат"
+            elif (("окрасоч" in device_name and "аппарат" in device_name)
+                  or ("покрасоч" in device_name and "станц" in device_name)
+                  or "безвоздуш" in device_name):specs["device_type"]="окрасочный аппарат"
             else:specs["device_type"]="электрический краскопульт"
         elif "шуруповерт" in device_name:
             specs["device_type"]="дрель-шуруповерт" if "дрел" in device_name else "шуруповерт"
@@ -2276,7 +2280,9 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             specs["device_type"]="аэрограф"
         elif "пневмат" in pn:
             specs["device_type"]="пневматический краскопульт"
-        elif any(x in pn for x in ("окрасочн аппарат","покрасочн станц","безвоздуш")):
+        elif (("окрасоч" in pn and "аппарат" in pn)
+              or ("покрасоч" in pn and "станц" in pn)
+              or "безвоздуш" in pn):
             specs["device_type"]="окрасочный аппарат"
         elif "краскопульт" in pn:
             specs["device_type"]="электрический краскопульт"
