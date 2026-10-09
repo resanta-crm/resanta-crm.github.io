@@ -1,0 +1,17 @@
+name: TMP — PDZ v23.6.276 syntax
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_tmp-pdz-v236276.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: JS syntax
+        run: node --check assets/113-pdz-control-v236275.js
