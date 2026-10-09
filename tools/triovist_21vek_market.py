@@ -706,7 +706,7 @@ def rotary_hammer_chuck_family(v: Any) -> str:
     raw=str(v or "").strip().lower().replace("ё","е")
     n=norm(v)
     if re.search(r"\bsds\s*[- ]?max\b",raw,re.I) or "sds max" in n:return "sds_max"
-    if re.search(r"\bsds\s*\+\b",raw,re.I) or re.search(r"\bsds\s*[- ]?plus\b",raw,re.I) or "sds plus" in n:return "sds_plus"
+    if re.search(r"\bsds\s*\+",raw,re.I) or re.search(r"\bsds\s*[- ]?plus\b",raw,re.I) or "sds plus" in n:return "sds_plus"
     if re.search(r"\bsds\s*[- ]?top\b",raw,re.I) or "sds top" in n:return "sds_top"
     if any(x in n for x in ("шестигран","hex")):return "hex"
     if any(x in n for x in ("быстрозажим","quick release","quick-release","keyless")):return "keyless"
