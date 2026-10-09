@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.300.
+"""Triovist / 21vek automatic market analysis v23.6.301.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v5.1"
+PARSER_VERSION="market-auto-v5.2"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2937,7 +2937,10 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         score=total/used*100
         coverage=min(1.0,used/max(sum(weights.values()),1e-9))
         score*=0.60+0.40*coverage
-        if critical_missing:score=min(score,54.0)
+        # For paint sprayers 21vek usually omits pressure entirely.
+        # Missing critical data must block "stronger/weaker", but must NOT
+        # turn every real analogue into an assortment gap. Keep the technical
+        # similarity from the characteristics that are actually confirmed.
         return round(max(0,min(100,score)),2)
 
     if profile=="cordless_screwdriver":
