@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.306 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.307 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.306',TTL=30000;
+const V='v23.6.307',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -378,6 +378,46 @@ function rotaryHammerResult(k,a,b){
  if(k==='max_rpm'){
   if(d<=150)return'полное совпадение · допуск ±150 об/мин';
   return'скорость вращения отличается на '+Math.round(d)+' об/мин';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
+
+
+function reciprocatingSawValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='motor_type')return jigsawMotor(v);
+ if(k==='cut_depth_wood_mm'||k==='cut_depth_metal_mm')return E(v)+' мм';
+ if(k==='strokes_per_min')return E(v)+' ход/мин';
+ return E(v);
+}
+function reciprocatingSawResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='motor_type'){
+  const aa=jigsawMotor(a),bb=jigsawMotor(b);
+  if(aa===bb)return'совпадает';
+  if(aa==='бесщеточный'&&bb==='щеточный')return'наш бесщеточный — преимущество';
+  if(aa==='щеточный'&&bb==='бесщеточный')return'у конкурента бесщеточный';
+  return'тип двигателя отличается';
+ }
+ const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+ const d=Math.abs(av-bv);
+ if(k==='input_power_w'){
+  if(d<=150)return'полное совпадение · допуск ±150 Вт';
+  return av>bv?'наша мощность выше на '+Math.round(d)+' Вт':'мощность конкурента выше на '+Math.round(d)+' Вт';
+ }
+ if(k==='cut_depth_wood_mm'){
+  if(d<=20)return'полное совпадение · допуск ±20 мм';
+  return av>bv?'у нас глубина по дереву больше':'у конкурента глубина по дереву больше';
+ }
+ if(k==='cut_depth_metal_mm'){
+  if(d<=2)return'полное совпадение · допуск ±2 мм';
+  return av>bv?'у нас глубина по металлу больше':'у конкурента глубина по металлу больше';
+ }
+ if(k==='strokes_per_min'){
+  if(d<=300)return'полное совпадение · допуск ±300 ход/мин';
+  if(d<=600)return'близкое совпадение';
+  return'число ходов отличается';
  }
  return String(a)===String(b)?'совпадает':'отличается';
 }
@@ -1661,6 +1701,23 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='reciprocating_saw'){
+  const keys=[
+   ['input_power_w','Мощность'],['motor_type','Тип двигателя'],
+   ['cut_depth_wood_mm','Глубина пропила по дереву'],['cut_depth_metal_mm','Глубина пропила по металлу'],
+   ['strokes_per_min','Число ходов в минуту']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+reciprocatingSawValue(k,b[k])+'</td><td>'+reciprocatingSawValue(k,a[k])+'</td><td>'+E(reciprocatingSawResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Сабельные пилы:</b> сетевые и аккумуляторные модели не смешиваются между собой. Мощность — допуск ±150 Вт; тип двигателя нормализуется как щеточный/бесщеточный, бесщеточный считается преимуществом. Глубина пропила по дереву — ±20 мм, по металлу — ±2 мм; за пределами допуска большая глубина считается преимуществом. Число ходов — ±300 ход/мин, но больше ходов само по себе не означает более сильную пилу. Если не подтверждена хотя бы одна согласованная характеристика или тип питания — вывод «сильнее/слабее» блокируется.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+
  if(r.profile_key==='planer'){
   const keys=[
    ['motor_type','Тип двигателя'],['max_rpm','Максимальные обороты'],
@@ -2208,5 +2265,5 @@ async function open(panel,ctx,force=false){
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
