@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.318.
+"""Triovist / 21vek automatic market analysis v23.6.319.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.3"
+PARSER_VERSION="market-auto-v6.4"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -206,6 +206,7 @@ def profile_for(label: str) -> str:
     if "точильн" in n and "станок" in n: return "bench_grinder"
     if "точильно шлифовальн" in n and "станок" in n: return "bench_grinder"
     if "углошлиф" in n or ("болгар" in n and "машин" in n) or re.search(r"\bа?ушм\b",n): return "angle_grinder"
+    if "дренаж" in n and "насос" in n: return "drainage_pump"
     if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     if "шуруповерт" in n and "аккумулятор" in n: return "cordless_screwdriver"
     if "краскопульт" in n: return "paint_sprayer"
@@ -243,6 +244,7 @@ def query_for(label: str, profile: str) -> str:
       "miter_saw":"торцовочная пила",
       "bench_grinder":"точильный станок",
       "angle_grinder":"угловая шлифовальная машина",
+      "drainage_pump":"дренажный насос",
       "impact_drill":"дрель ударная",
       "cordless_screwdriver":"аккумуляторный шуруповерт",
       "paint_sprayer":"краскопульт",
@@ -317,6 +319,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Торцовочные пилы","miter_saw","торцов"),
       ("Точильные станки","bench_grinder","точильн"),
       ("Углошлифовальные машины","angle_grinder","углошлиф"),
+      ("Дренажные насосы","drainage_pump","дренаж"),
       ("Дрели ударные","impact_drill","дрел"),
       ("Шуруповерты аккумуляторные","cordless_screwdriver","шуруповерт"),
       ("Краскопульты","paint_sprayer","краскопульт"),
@@ -329,7 +332,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -382,6 +385,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "диск для" not in pn and "щетк" not in pn and "щёт" not in pn
                          and "ручк" not in pn and "ключ для" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="drainage_pump":
+                matched=("дренаж" in pn and "насос" in pn
+                         and "шланг" not in pn and "муфт" not in pn and "патруб" not in pn
+                         and "переходник" not in pn and "фильтр для" not in pn and "запчаст" not in pn
+                         and not sku.startswith("900/"))
             elif profile=="impact_drill":
                 matched=("дрел" in pn and "удар" in pn
                          and "шуруповерт" not in pn and "миксер" not in pn and "перфоратор" not in pn
@@ -431,7 +439,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"),"source_subgroup":label,
+              "scope_key":key,"source_category":("Насосы" if profile=="drainage_pump" else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника")),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -1200,6 +1208,70 @@ def impact_drill_directional(rule: dict,a: Any,b: Any) -> float|None:
 
 
 
+
+def drainage_pump_body_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("нержав","stainless","inox")):return "stainless"
+    if any(x in n for x in ("чугун","cast iron")):return "cast_iron"
+    has_metal=any(x in n for x in ("металл","сталь","алюмин","metal","steel","aluminium","aluminum"))
+    has_plastic=any(x in n for x in ("пластик","пластмасс","полимер","технополимер","plastic","polymer"))
+    if has_metal and has_plastic:return "metal_plastic"
+    if has_metal:return "metal"
+    if has_plastic:return "plastic"
+    return n[:120]
+
+
+def drainage_pump_required_missing(ours: dict,comp: dict) -> bool:
+    required=("flow_rate_lmin","input_power_w","max_head_m","pump_body_material","filter_particle_mm")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def drainage_pump_relative_similarity(a: float,b: float,full: float=0.10,close: float=0.20,partial: float=0.30) -> float:
+    den=max(abs(float(a)),abs(float(b)),1e-9)
+    d=abs(float(a)-float(b))/den
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def drainage_pump_head_similarity(a: float,b: float) -> float:
+    av=float(a);bv=float(b)
+    d=abs(av-bv);rel=d/max(abs(av),abs(bv),1e-9)
+    if d<=1 or rel<=0.10:return 1.0
+    if d<=2 or rel<=0.20:return 0.85
+    if d<=3 or rel<=0.30:return 0.65
+    return 0.0
+
+
+def drainage_pump_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k in ("flow_rate_lmin","input_power_w"):
+        av=float(a);bv=float(b)
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if rel<=0.10:return 50
+        return 66 if av>bv else 34
+    if k=="max_head_m":
+        av=float(a);bv=float(b)
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if abs(av-bv)<=1 or rel<=0.10:return 50
+        return 68 if av>bv else 32
+    if k=="filter_particle_mm":
+        av=float(a);bv=float(b)
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if abs(av-bv)<=1 or rel<=0.10:return 50
+        return 66 if av>bv else 34
+    if k=="pump_body_material":
+        aa=drainage_pump_body_family(a);bb=drainage_pump_body_family(b)
+        if aa==bb:return 50
+        rank={"plastic":1.0,"metal_plastic":2.0,"metal":3.0,"cast_iron":3.0,"stainless":3.0}
+        ra=rank.get(aa,2.0);rb=rank.get(bb,2.0)
+        if ra==rb:return 50
+        return 63 if ra>rb else 37
+    return directional(rule,a,b)
+
+
 def angle_grinder_source_family(v: Any) -> str:
     return circular_saw_source_family(v)
 
@@ -1844,6 +1916,8 @@ def normalize_value(key: str, text: str) -> Any:
         return construction_vacuum_cleaning_family(text)[:120] or None
     if key=="vacuum_body_material":
         return construction_vacuum_body_family(text)[:120] or None
+    if key=="pump_body_material":
+        return drainage_pump_body_family(text)[:120] or None
     if key=="rotary_hammer_chuck":
         return rotary_hammer_chuck_family(text)[:120] or None
     if key=="chuck_type":
@@ -2081,7 +2155,25 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:ч|час|hours?|h)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))*60,2)
         return round(ns[0],2)
+    if key=="max_head_m":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/100,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/1000,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        return round(ns[0],3) if ns else None
+    if key=="filter_particle_mm":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*10,3)
+        return round(ns[0],3) if ns else None
     if key=="flow_rate_lmin":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:ч|h|hour)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*1000/60,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*1000,3)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:мин|min)",low,re.I)
         if m:return round(float(m.group(1).replace(",",".")),3)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:ч|h|hour)",low,re.I)
@@ -2248,6 +2340,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
     angle_grinder_mode={"power_source","motor_type","battery_capacity_ah","input_power_w","soft_start_present","speed_adjustment_present","grinder_disc_diameter_mm"}.issubset(rule_keys)
+    drainage_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","pump_body_material","filter_particle_mm"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -2276,6 +2369,29 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
 
 
+
+
+
+    def drainage_pump_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not drainage_pump_mode:return None
+        ln=norm(label)
+        if not ln:return None
+        if any(x in ln for x in ("производительн","пропускн способн","максимальн подач","макс подач","расход вод")):
+            return "flow_rate_lmin"
+        if ln=="подача" or ("подач" in ln and "высот" not in ln):
+            return "flow_rate_lmin"
+        if "мощност" in ln and not any(x in ln for x in ("выходн","акуст")):
+            return "input_power_w"
+        if "напор" in ln or ("высот" in ln and any(x in ln for x in ("подъем","подъём","подач"))):
+            return "max_head_m"
+        if "материал" in ln and "корпус" in ln:
+            return "pump_body_material"
+        if (
+            ("частиц" in ln or "загрязнен" in ln or "загрязнён" in ln or "примес" in ln)
+            and any(x in ln for x in ("размер","диаметр","пропуск","макс","фильтр"))
+        ):
+            return "filter_particle_mm"
+        return None
 
 
     def angle_grinder_fuzzy_key(label: Any,value: Any) -> str|None:
@@ -2458,7 +2574,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -2723,6 +2839,11 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     grinder_class=(("точильн" in gn and "станок" in gn) or ("точильно шлифовальн" in gn and "станок" in gn) or "bench grinder" in gn)
                     if not grinder_class or any(x in gn for x in ("камень для","круг для","диск для","заточный многофункцион","для цеп","запчаст")):
                         continue
+                if scope.get("profile_key")=="drainage_pump":
+                    dn=norm(name)
+                    pump_class=("дренаж" in dn and "насос" in dn)
+                    if not pump_class or any(x in dn for x in ("шланг","муфт","патруб","переходник","фильтр для","запчаст")):
+                        continue
                 if scope.get("profile_key")=="angle_grinder":
                     an=norm(name)
                     grinder_class=(("углов" in an and "шлиф" in an and "машин" in an) or "болгарк" in an or re.search(r"\bа?ушм\b",an))
@@ -2817,6 +2938,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-sprayer2"
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
+    if "max_head_m" in keys and "pump_body_material" in keys and "filter_particle_mm" in keys and "flow_rate_lmin" in keys:
+        return RULESET_VERSION+"-drainpump1"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
         return RULESET_VERSION+"-anglegrinder1"
     if "grinding_wheel_diameter_mm" in keys and "motor_type" in keys and "max_rpm" in keys and "input_power_w" in keys:
@@ -3917,6 +4040,35 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+    if profile=="drainage_pump":
+        weights={"flow_rate_lmin":0.25,"input_power_w":0.20,"max_head_m":0.25,"pump_body_material":0.15,"filter_particle_mm":0.15}
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k in ("flow_rate_lmin","input_power_w","filter_particle_mm"):
+                    s=drainage_pump_relative_similarity(float(a),float(b))
+                elif k=="max_head_m":
+                    s=drainage_pump_head_similarity(float(a),float(b))
+                elif k=="pump_body_material":
+                    aa=drainage_pump_body_family(a);bb=drainage_pump_body_family(b)
+                    if aa==bb:s=1.0
+                    elif aa in ("stainless","cast_iron","metal","metal_plastic") and bb in ("stainless","cast_iron","metal","metal_plastic"):s=0.90
+                    elif "plastic" in (aa,bb):s=0.65
+                    else:s=0.70
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        return round(max(0,min(100,score)),2)
+
+
     if profile=="angle_grinder":
         sa=angle_grinder_source_family(ours.get("power_source"));sb=angle_grinder_source_family(comp.get("power_source"))
         if sa and sb and sa!=sb:return 0.0
@@ -4898,6 +5050,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=miter_saw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="bench_grinder":
             z=bench_grinder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="drainage_pump":
+            z=drainage_pump_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="angle_grinder":
             z=angle_grinder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="impact_drill":
@@ -4960,6 +5114,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=miter_saw_directional(rule,a,b)
         elif profile=="bench_grinder":
             z=bench_grinder_directional(rule,a,b)
+        elif profile=="drainage_pump":
+            z=drainage_pump_directional(rule,a,b)
         elif profile=="angle_grinder":
             z=angle_grinder_directional(rule,a,b)
         elif profile=="impact_drill":
@@ -5245,8 +5401,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -5278,6 +5434,11 @@ def main() -> None:
                     )
                 if profile=="bench_grinder" and scored:
                     gap_confirmed=not bench_grinder_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="drainage_pump" and scored:
+                    gap_confirmed=not drainage_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -5332,6 +5493,8 @@ def main() -> None:
                         data_incomplete=True
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
+                    if profile=="drainage_pump" and drainage_pump_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
                     if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="impact_drill" and impact_drill_required_missing(ours["specs_normalized"],comp_specs):
@@ -5379,6 +5542,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по мощности, диаметру диска, протяжке, глубине реза 90°/45° или скорости вращения торцовочной пилы — итог предварительный, часть характеристик не подтверждена")
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по типу двигателя, мощности, скорости вращения или диаметру круга точильного станка — итог предварительный, часть характеристик не подтверждена")
+                    if profile=="drainage_pump" and drainage_pump_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по производительности, мощности, максимальному напору, материалу корпуса или размеру фильтрующих частиц дренажного насоса — итог предварительный, часть характеристик не подтверждена")
                     if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по типу двигателя, питанию, мощности/емкости АКБ, плавному пуску, регулировке оборотов или диаметру диска УШМ — итог предварительный, часть характеристик не подтверждена")
                     if profile=="impact_drill" and impact_drill_required_missing(ours["specs_normalized"],comp_specs):
