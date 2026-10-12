@@ -4570,7 +4570,13 @@ def main() -> None:
                     scored.append((sim,ours))
                 scored.sort(key=lambda z:z[0],reverse=True)
                 best=scored[0][0] if scored else 0.0
-                if best<gap_threshold:
+                gap_confirmed=True
+                if profile=="reciprocating_saw" and scored:
+                    gap_confirmed=not reciprocating_saw_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if best<gap_threshold and gap_confirmed:
                     gaps.append({
                       "scope_key":skey,"product_key":p["product_key"],"best_similarity":round(best,2),
                       "reason":f"Нет нашего технически подтверждённого аналога с сопоставимостью ≥{gap_threshold}%",
