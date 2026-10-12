@@ -1,12 +1,12 @@
-/* RESANTA CRM v23.6.303 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.305 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.303',TTL=30000;
-let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
+const V='v23.6.305',TTL=30000;
+let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
 const money=v=>N(v)==null||N(v)<=0?'нет данных':N(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -22,7 +22,7 @@ async function rpc(name,args={}){
 async function load(force=false){
  if(last&&!force&&Date.now()-lastAt<TTL)return last;
  if(flight)return flight;
- flight=rpc('triovist_market_dashboard_v236283',{}).then(d=>{last=d;lastAt=Date.now();return d}).finally(()=>flight=null);
+ flight=rpc('triovist_market_dashboard_v236305',{}).then(d=>{last=d;lastAt=Date.now();return d}).finally(()=>flight=null);
  return flight;
 }
 async function loadListing(days=7,force=false){
@@ -34,6 +34,28 @@ async function loadListing(days=7,force=false){
   .then(data=>{listingCache.set(d,{data,at:Date.now()});return data})
   .finally(()=>listingFlight=null);
  return listingFlight;
+}
+async function loadCompetitorHistory(days=7,force=false){
+ const d=[3,7,10,14,20,30].includes(Number(days))?Number(days):7;
+ const cached=historyCache.get(d);
+ if(cached&&!force&&Date.now()-cached.at<TTL)return cached.data;
+ if(historyFlight)return historyFlight;
+ historyFlight=rpc('triovist_market_competitor_history_v236305',{p_days:d})
+  .then(data=>{historyCache.set(d,{data,at:Date.now()});return data})
+  .finally(()=>historyFlight=null);
+ return historyFlight;
+}
+function mergeCompetitorHistory(d,h){
+ const days=N(h?.days)||7,rows=Array.isArray(d?.rows)?d.rows:[],hist=Array.isArray(h?.rows)?h.rows:[];
+ const map=new Map(hist.map(x=>[String(x.scope_key||'')+'|'+String(x.product_key||''),x]));
+ for(const r of rows){
+  const x=map.get(String(r.scope_key||'')+'|'+String(r.product_key||''));
+  if(!x)continue;
+  r['price_'+days+'d']=x.past_price??null;
+  r.position_7d=x.position_7d??null;
+  r.position_30d=x.position_30d??null;
+ }
+ return d;
 }
 function statusLabel(s){
  if(s==='ours_stronger')return['🟢 Мы сильнее','good'];
@@ -2110,14 +2132,23 @@ function render(panel,d,listing){
  refreshBrandOptions(panel,{...d,rows});
  applyFilters(panel,{...d,rows},listing);
  panel.querySelector('[data-f-scope]')?.addEventListener('change',()=>{refreshBrandOptions(panel,d);applyFilters(panel,d,listing)});
- panel.querySelectorAll('[data-f-brand],[data-f-status],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-days],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener(x.tagName==='INPUT'&&x.type==='text'?'input':'change',()=>applyFilters(panel,d,listing)));
+ panel.querySelectorAll('[data-f-brand],[data-f-status],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener(x.tagName==='INPUT'&&x.type==='text'?'input':'change',()=>applyFilters(panel,d,listing)));
+ panel.querySelector('[data-f-price-days]')?.addEventListener('change',async e=>{
+   const days=N(e.currentTarget.value)||7;e.currentTarget.disabled=true;
+   try{
+     const h=await loadCompetitorHistory(days,false);
+     mergeCompetitorHistory(d,h);
+     applyFilters(panel,d,listing);
+   }catch(err){console.warn('Не удалось загрузить историю цен конкурентов',err);applyFilters(panel,d,listing)}
+   finally{e.currentTarget.disabled=false}
+ });
  panel.querySelector('[data-f-days]')?.addEventListener('change',async e=>{
    const days=N(e.currentTarget.value)||7;e.currentTarget.disabled=true;
    try{listing=await loadListing(days,false);applyFilters(panel,d,listing)}
    catch(err){alert('Не удалось загрузить историю нашего листинга: '+(err?.message||err))}
    finally{e.currentTarget.disabled=false}
  });
- panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();await open(panel,null,true)});
+ panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();await open(panel,null,true)});
  panel.querySelector('[data-tm224-export]')?.addEventListener('click',e=>exportExcel(e.currentTarget));
 }
 async function open(panel,ctx,force=false){
@@ -2125,7 +2156,8 @@ async function open(panel,ctx,force=false){
  try{
   const [dash,listing]=await Promise.all([load(force),loadListing(7,force)]);
   render(panel,dash,listing);
+  loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
