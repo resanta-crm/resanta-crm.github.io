@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.309 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.310 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.309',TTL=30000;
+const V='v23.6.310',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -111,7 +111,7 @@ function specLine(k,v){
   speed_count:'Количество скоростей',impact_present:'Наличие удара',battery_count:'Количество АКБ в комплекте',case_present:'Наличие кейса',
   tank_position:'Расположение бачка',pressure_bar:'Давление',
   cut_depth_wood_mm:'Максимальная глубина пропила',strokes_per_min:'Количество ходов в минуту',
-  planing_depth_mm:'Глубина строгания',planing_width_mm:'Ширина строгания',cut_depth_metal_mm:'Глубина пропила по металлу',vacuum_cleaning_type:'Тип уборки',vacuum_body_material:'Материал корпуса',
+  planing_depth_mm:'Глубина строгания',planing_width_mm:'Ширина строгания',cut_depth_metal_mm:'Глубина пропила по металлу',vacuum_cleaning_type:'Тип уборки',vacuum_body_material:'Материал корпуса',airflow_lmin:'Производительность',heating_time_sec:'Время нагрева',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -124,7 +124,7 @@ function specLine(k,v){
   max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
   drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   cut_depth_90_mm:' мм',cut_depth_45_mm:' мм',blade_diameter_mm:' мм',arbor_diameter_mm:' мм',tilt_angle_deg:'°',
-  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',cut_depth_metal_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',
+  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',cut_depth_metal_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',airflow_lmin:' л/мин',heating_time_sec:' с',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -383,6 +383,36 @@ function rotaryHammerResult(k,a,b){
 }
 
 
+
+
+function constructionHeatGunValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='airflow_lmin')return E(v)+' л/мин';
+ if(k==='heating_time_sec'){
+  const n=N(v);if(n==null)return E(v);
+  return n>=60?(Math.round(n/6)/10)+' мин':E(n)+' с';
+ }
+ if(k==='input_power_w')return E(v)+' Вт';
+ return E(v);
+}
+function constructionHeatGunResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+ const d=Math.abs(av-bv);
+ if(k==='airflow_lmin'){
+  if(d<=50)return'полное совпадение · допуск ±50 л/мин';
+  return av>bv?'наш воздушный поток выше на '+Math.round(d)+' л/мин':'поток конкурента выше на '+Math.round(d)+' л/мин';
+ }
+ if(k==='heating_time_sec'){
+  if(d<=10)return'полное совпадение · допуск ±10 с';
+  return av<bv?'наш нагрев быстрее на '+Math.round(d)+' с':'конкурент нагревается быстрее на '+Math.round(d)+' с';
+ }
+ if(k==='input_power_w'){
+  if(d<=150)return'полное совпадение · допуск ±150 Вт';
+  return av>bv?'наша мощность выше на '+Math.round(d)+' Вт':'мощность конкурента выше на '+Math.round(d)+' Вт';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
 
 function constructionVacuumCleaning(v){
  if(v==null)return'нет данных';
@@ -1759,6 +1789,21 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='construction_heat_gun'){
+  const keys=[
+   ['airflow_lmin','Производительность'],['heating_time_sec','Время нагрева'],['input_power_w','Мощность']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+constructionHeatGunValue(k,b[k])+'</td><td>'+constructionHeatGunValue(k,a[k])+'</td><td>'+E(constructionHeatGunResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Термопистолеты / строительные фены:</b> на 21vek наши ТП-2000 относятся к категории строительных фенов, поэтому производительность считается как максимальный воздушный поток в л/мин. Полное совпадение: поток ±50 л/мин, время нагрева ±10 с, мощность ±150 Вт. Чем меньше время нагрева — тем лучше; больший воздушный поток и мощность учитываются как преимущество за пределами допуска. Если характеристика отсутствует, процент считается по подтвержденным данным, но итог отмечается как «Недостаточно данных».</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+
  if(r.profile_key==='construction_vacuum'){
   const keys=[
    ['input_power_w','Мощность'],['tank_capacity_l','Объем бака'],
@@ -2337,5 +2382,5 @@ async function open(panel,ctx,force=false){
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
