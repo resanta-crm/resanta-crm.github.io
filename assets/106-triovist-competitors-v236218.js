@@ -1,12 +1,12 @@
-/* RESANTA CRM v23.6.305 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.306 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.305',TTL=30000;
-let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),exportFlight=null,xlsxFlight=null;
+const V='v23.6.306',TTL=30000;
+let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
 const money=v=>N(v)==null||N(v)<=0?'нет данных':N(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -22,7 +22,7 @@ async function rpc(name,args={}){
 async function load(force=false){
  if(last&&!force&&Date.now()-lastAt<TTL)return last;
  if(flight)return flight;
- flight=rpc('triovist_market_dashboard_v236305',{}).then(d=>{last=d;lastAt=Date.now();return d}).finally(()=>flight=null);
+ flight=rpc('triovist_market_dashboard_v236306',{}).then(d=>{last=d;lastAt=Date.now();return d}).finally(()=>flight=null);
  return flight;
 }
 async function loadListing(days=7,force=false){
@@ -2001,6 +2001,20 @@ function details(r,l){
   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
 }
+
+function detailKey(scope,product){return String(scope||'')+'|'+String(product||'')}
+async function loadCompetitorDetail(scope,product,force=false){
+ const key=detailKey(scope,product);
+ if(!force&&detailCache.has(key))return detailCache.get(key);
+ if(detailFlights.has(key))return detailFlights.get(key);
+ const p=rpc('triovist_market_competitor_detail_v236306',{p_scope_key:String(scope||''),p_product_key:String(product||'')})
+  .then(data=>{detailCache.set(key,data||{});return data||{}})
+  .finally(()=>detailFlights.delete(key));
+ detailFlights.set(key,p);return p;
+}
+function lazyDetails(r){
+ return '<details class="tm224-details" data-tm224-detail data-scope="'+E(r.scope_key||'')+'" data-product="'+E(r.product_key||'')+'"><summary>Характеристики и аргументы</summary><div data-detail-body class="tm224-note" style="padding:8px 0">Откройте — характеристики загрузятся отдельно.</div></details>';
+}
 function positionHistoryText(r){
  const x7=N(r.position_7d),x30=N(r.position_30d),xs=[];
  if(x7!=null)xs.push('7д: #'+x7);
@@ -2029,7 +2043,7 @@ function rowHtml(r,ownMap,days,priceDays){
   +(gap?'':('<div><small>Наша цена / МРЦ</small><b>'+money(r.our_price)+' / '+money(r.mrc_byn)+'</b><span class="'+(N(r.mrc_delta_pct)<0?'bad':'good')+'">от МРЦ '+pct(r.mrc_delta_pct)+'</span></div>'
    +'<div><small>Сопоставимость</small><b>'+pct(r.similarity_score).replace('+','')+'</b><span>'+E(gradeLabel(r.analog_grade))+'</span></div>'
    +'<div><small>Итог</small><b class="'+sc+'">'+sl+'</b><span>'+(priceMissing?'сравнение цены невозможно':'цена к конкуренту '+pct(r.price_delta_pct))+'</span></div>'))
-  +'</div>'+details(r,lp)+'</div>';
+  +'</div>'+(r.__detailLoaded?details(r,lp):lazyDetails(r))+'</div>';
 }
 function css(){
  if(document.getElementById('tm224-css'))return;
@@ -2091,8 +2105,11 @@ function applyFilters(panel,d,listing){
  });
  panel.querySelectorAll('[data-scope-card]').forEach(x=>{x.style.display=!scope||x.getAttribute('data-scope-card')===scope?'':'none'});
  const holder=panel.querySelector('[data-tm224-rows]');
- holder.innerHTML=rows.length?rows.map(r=>rowHtml(r,ownMap,days,priceDays)).join(''):'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
- panel.querySelector('[data-tm224-count]').textContent='Показано '+rows.length+' из '+base.length+' · полный список без ограничений по менеджеру';
+ const limit=Math.max(60,Number(panel.dataset.tm224Limit||120)||120),visible=rows.slice(0,limit);
+ holder.innerHTML=rows.length
+  ?visible.map(r=>rowHtml(r,ownMap,days,priceDays)).join('')+(rows.length>visible.length?'<div class="tm224-more"><button type="button" class="tr14-refresh" data-tm224-more>Показать ещё '+Math.min(120,rows.length-visible.length)+' из '+(rows.length-visible.length)+'</button></div>':'')
+  :'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
+ panel.querySelector('[data-tm224-count]').textContent='Показано '+visible.length+' из '+rows.length+' · в подгруппе '+base.length;
 }
 function loadXlsx(){
  if(window.XLSX)return Promise.resolve(window.XLSX);
@@ -2131,8 +2148,8 @@ function render(panel,d,listing){
  const daySel=panel.querySelector('[data-f-days]');if(daySel)daySel.value=String(pd);
  refreshBrandOptions(panel,{...d,rows});
  applyFilters(panel,{...d,rows},listing);
- panel.querySelector('[data-f-scope]')?.addEventListener('change',()=>{refreshBrandOptions(panel,d);applyFilters(panel,d,listing)});
- panel.querySelectorAll('[data-f-brand],[data-f-status],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener(x.tagName==='INPUT'&&x.type==='text'?'input':'change',()=>applyFilters(panel,d,listing)));
+ panel.querySelector('[data-f-scope]')?.addEventListener('change',()=>{panel.dataset.tm224Limit='120';refreshBrandOptions(panel,d);applyFilters(panel,d,listing)});
+ panel.querySelectorAll('[data-f-brand],[data-f-status],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener(x.tagName==='INPUT'&&x.type==='text'?'input':'change',()=>{panel.dataset.tm224Limit='120';applyFilters(panel,d,listing)}));
  panel.querySelector('[data-f-price-days]')?.addEventListener('change',async e=>{
    const days=N(e.currentTarget.value)||7;e.currentTarget.disabled=true;
    try{
@@ -2148,8 +2165,36 @@ function render(panel,d,listing){
    catch(err){alert('Не удалось загрузить историю нашего листинга: '+(err?.message||err))}
    finally{e.currentTarget.disabled=false}
  });
- panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();await open(panel,null,true)});
+ panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();panel.dataset.tm224Limit='120';await open(panel,null,true)});
  panel.querySelector('[data-tm224-export]')?.addEventListener('click',e=>exportExcel(e.currentTarget));
+
+ panel.addEventListener('click',e=>{
+   const more=e.target.closest?.('[data-tm224-more]');
+   if(!more)return;
+   panel.dataset.tm224Limit=String((Number(panel.dataset.tm224Limit)||120)+120);
+   applyFilters(panel,d,listing);
+ });
+ panel.addEventListener('toggle',async e=>{
+   const el=e.target?.closest?.('[data-tm224-detail]');
+   if(!el||!el.open||el.dataset.loading==='1')return;
+   const scope=el.dataset.scope||'',product=el.dataset.product||'';
+   const row=(Array.isArray(d.rows)?d.rows:[]).find(x=>String(x.scope_key||'')===scope&&String(x.product_key||'')===product);
+   if(!row)return;
+   el.dataset.loading='1';
+   const body=el.querySelector('[data-detail-body]');if(body)body.textContent='Загружаю характеристики…';
+   try{
+     const detail=await loadCompetitorDetail(scope,product,false);
+     Object.assign(row,detail||{}, {__detailLoaded:true});
+     const lp=listingRowsMap(listing).get(listingKey(row.scope_key,row.our_sku));
+     const box=document.createElement('div');box.innerHTML=details(row,lp);
+     const fresh=box.firstElementChild;
+     if(fresh){fresh.open=true;el.replaceWith(fresh)}
+   }catch(err){
+     el.dataset.loading='0';
+     if(body)body.textContent='Не удалось загрузить характеристики: '+(err?.message||err);
+   }
+ },true);
+
 }
 async function open(panel,ctx,force=false){
  if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю автоматический анализ рынка и наш листинг 21vek…</div>';
@@ -2159,5 +2204,5 @@ async function open(panel,ctx,force=false){
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
