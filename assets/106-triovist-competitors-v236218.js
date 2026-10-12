@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.323 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.324 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.323',TTL=30000;
+const V='v23.6.324',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -398,7 +398,7 @@ function drainagePumpMaterial(v){
   if(t==='stainless'||/нержав|stainless|inox/.test(t))return'нержавеющая сталь';
   if(t==='cast_iron'||/чугун|cast iron/.test(t))return'чугун';
   if(t==='aluminum'||/алюмин|aluminium|aluminum/.test(t))return'алюминий';
-  if(t==='steel'||(/^|\s)сталь(\s|$)|(^|\s)steel(\s|$)/.test(t))return'сталь';
+  if(t==='steel'||/(^|\s)сталь(\s|$)|(^|\s)steel(\s|$)/.test(t))return'сталь';
   if(t==='technopolymer'||/технополимер|technopolymer/.test(t))return'технополимер';
   if(t==='polymer'||/(^|\s)полимер(\s|$)|(^|\s)polymer(\s|$)/.test(t))return'полимер';
   if(t==='plastic'||/пластик|пластмасс|plastic/.test(t))return'пластик';
