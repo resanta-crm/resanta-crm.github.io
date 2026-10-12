@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.312.
+"""Triovist / 21vek automatic market analysis v23.6.314.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.0"
+PARSER_VERSION="market-auto-v6.1"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -205,6 +205,7 @@ def profile_for(label: str) -> str:
     if "торцов" in n and "пил" in n: return "miter_saw"
     if "точильн" in n and "станок" in n: return "bench_grinder"
     if "точильно шлифовальн" in n and "станок" in n: return "bench_grinder"
+    if "углошлиф" in n or ("болгар" in n and "машин" in n) or re.search(r"\bа?ушм\b",n): return "angle_grinder"
     if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     if "шуруповерт" in n and "аккумулятор" in n: return "cordless_screwdriver"
     if "краскопульт" in n: return "paint_sprayer"
@@ -241,6 +242,7 @@ def query_for(label: str, profile: str) -> str:
       "circular_saw":"дисковая пила",
       "miter_saw":"торцовочная пила",
       "bench_grinder":"точильный станок",
+      "angle_grinder":"угловая шлифовальная машина",
       "impact_drill":"дрель ударная",
       "cordless_screwdriver":"аккумуляторный шуруповерт",
       "paint_sprayer":"краскопульт",
@@ -314,6 +316,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Дисковые пилы","circular_saw","дисков"),
       ("Торцовочные пилы","miter_saw","торцов"),
       ("Точильные станки","bench_grinder","точильн"),
+      ("Углошлифовальные машины","angle_grinder","углошлиф"),
       ("Дрели ударные","impact_drill","дрел"),
       ("Шуруповерты аккумуляторные","cordless_screwdriver","шуруповерт"),
       ("Краскопульты","paint_sprayer","краскопульт"),
@@ -326,7 +329,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -373,6 +376,12 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "камень для" not in pn and "круг для" not in pn
                          and "заточный многофункцион" not in pn and "для цеп" not in pn
                          and "запчаст" not in pn and not sku.startswith("900/"))
+            elif profile=="angle_grinder":
+                matched=(("углошлиф" in pn or re.search(r"\bа?ушм\b",pn))
+                         and "полировальн" not in pn
+                         and "диск для" not in pn and "щетк" not in pn and "щёт" not in pn
+                         and "ручк" not in pn and "ключ для" not in pn and "запчаст" not in pn
+                         and not sku.startswith("900/"))
             elif profile=="impact_drill":
                 matched=("дрел" in pn and "удар" in pn
                          and "шуруповерт" not in pn and "миксер" not in pn and "перфоратор" not in pn
@@ -422,7 +431,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder") else "Садовая техника"),"source_subgroup":label,
+              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -1190,6 +1199,61 @@ def impact_drill_directional(rule: dict,a: Any,b: Any) -> float|None:
 
 
 
+
+def angle_grinder_source_family(v: Any) -> str:
+    return circular_saw_source_family(v)
+
+
+def angle_grinder_motor_family(v: Any) -> str:
+    return impact_wrench_motor_family(v)
+
+
+def angle_grinder_required_missing(ours: dict,comp: dict) -> bool:
+    required=("power_source","motor_type","soft_start_present","speed_adjustment_present","grinder_disc_diameter_mm")
+    if any(ours.get(k) is None or comp.get(k) is None for k in required):
+        return True
+    source=angle_grinder_source_family(ours.get("power_source") or comp.get("power_source"))
+    if source=="battery":
+        return ours.get("battery_capacity_ah") is None or comp.get("battery_capacity_ah") is None
+    if source=="mains":
+        return ours.get("input_power_w") is None or comp.get("input_power_w") is None
+    return True
+
+
+def angle_grinder_abs_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def angle_grinder_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="motor_type":
+        aa=angle_grinder_motor_family(a);bb=angle_grinder_motor_family(b)
+        if aa==bb:return 50
+        if aa=="brushless" and bb=="brushed":return 72
+        if aa=="brushed" and bb=="brushless":return 28
+        return 50
+    if k in ("soft_start_present","speed_adjustment_present"):
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 70 if av else 30
+    if k=="battery_capacity_ah":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=0.5:return 50
+        return 65 if av>bv else 35
+    if k=="input_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=150:return 50
+        return 66 if av>bv else 34
+    if k in ("power_source","grinder_disc_diameter_mm"):
+        return 50
+    return directional(rule,a,b)
+
+
 def bench_grinder_motor_family(v: Any) -> str:
     n=norm(v)
     if any(x in n for x in ("асинхрон","индукцион","induction","asynchronous")):return "induction"
@@ -1877,7 +1941,7 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("без кейса","без чемодан","без футляр")):return False
         if any(x in n for x in ("кейс","чемодан","футляр")):return True
         return None
-    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment","cut_speed_adjustment","sliding_present"):
+    if key in ("display_present","power_adjustment","temperature_adjustment","wheels_present","remote_control","fan_present","fan_only_mode","indicator_light","chain_brake","auto_chain_lubrication","tool_free_tension","operator_panel_control","headlight","heated_handles","skid_height_adjustment","collector_present","reverse_present","rotation_adjustment","cut_speed_adjustment","sliding_present","soft_start_present","speed_adjustment_present"):
         return presence_value(text)
     if key in ("overheat_protection","humidistat"):
         return bool_value(text)
@@ -1982,7 +2046,7 @@ def normalize_value(key: str, text: str) -> Any:
         return round(ns[0],3)
     if key=="battery_voltage_v":
         return round(ns[0],2)
-    if key in ("cut_depth_90_mm","cut_depth_45_mm","blade_diameter_mm","arbor_diameter_mm","grinding_wheel_diameter_mm"):
+    if key in ("cut_depth_90_mm","cut_depth_45_mm","blade_diameter_mm","arbor_diameter_mm","grinding_wheel_diameter_mm","grinder_disc_diameter_mm"):
         mm=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*мм\b",low,re.I)]
         if mm:return round(max(mm),3)
         cm=[float(x.replace(",","."))*10 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*см\b",low,re.I)]
@@ -2183,6 +2247,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     construction_heat_gun_mode={"airflow_lmin","heating_time_sec","input_power_w"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
+    angle_grinder_mode={"power_source","motor_type","battery_capacity_ah","input_power_w","soft_start_present","speed_adjustment_present","grinder_disc_diameter_mm"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -2211,6 +2276,29 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
 
 
+
+
+    def angle_grinder_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not angle_grinder_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if "мощност" in ln and not any(x in ln for x in ("выходн","акуст")):
+            return "input_power_w"
+        if "двигател" in ln and any(x in ln for x in ("тип","мотор")):
+            return "motor_type"
+        if any(x in ln for x in ("источник питан","тип питан","электропитан")):
+            return "power_source"
+        if "питан" in ln and any(x in vn for x in ("аккумуля","батар","сеть","сетев","220","230")):
+            return "power_source"
+        if ("емкост" in ln or "ёмкост" in ln) and any(x in ln for x in ("аккумуля","акб","батар")):
+            return "battery_capacity_ah"
+        if "плавн" in ln and any(x in ln for x in ("пуск","старт")):
+            return "soft_start_present"
+        if "регулиров" in ln and any(x in ln for x in ("оборот","скорост","частот вращ")):
+            return "speed_adjustment_present"
+        if "диаметр" in ln and any(x in ln for x in ("диск","круг")) and "посад" not in ln:
+            return "grinder_disc_diameter_mm"
+        return None
 
     def bench_grinder_fuzzy_key(label: Any,value: Any) -> str|None:
         if not bench_grinder_mode:return None
@@ -2370,7 +2458,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -2635,6 +2723,11 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     grinder_class=(("точильн" in gn and "станок" in gn) or ("точильно шлифовальн" in gn and "станок" in gn) or "bench grinder" in gn)
                     if not grinder_class or any(x in gn for x in ("камень для","круг для","диск для","заточный многофункцион","для цеп","запчаст")):
                         continue
+                if scope.get("profile_key")=="angle_grinder":
+                    an=norm(name)
+                    grinder_class=(("углов" in an and "шлиф" in an and "машин" in an) or "болгарк" in an or re.search(r"\bа?ушм\b",an))
+                    if not grinder_class or any(x in an for x in ("полировальн","диск для","щетк","щёт","ручк","ключ для","запчаст")):
+                        continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
                   hashlib.sha1(url.encode("utf-8")).hexdigest() if url
@@ -2724,6 +2817,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-sprayer2"
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
+    if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
+        return RULESET_VERSION+"-anglegrinder1"
     if "grinding_wheel_diameter_mm" in keys and "motor_type" in keys and "max_rpm" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-benchgrinder1"
     if "blade_diameter_mm" in keys and "sliding_present" in keys and "cut_depth_90_mm" in keys and "cut_depth_45_mm" in keys:
@@ -3076,6 +3171,37 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
                 specs["device_type"]="безударная дрель"
             elif not specs.get("device_type"):
                 specs["device_type"]="дрель"
+
+
+    angle_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="grinder_disc_diameter_mm" for r in rules) and any(r.get("spec_key")=="soft_start_present" for r in rules):
+        an=norm(angle_name)
+        desc=norm(extra.get("description_text") or "")
+        source=angle_grinder_source_family(specs.get("power_source"))
+        if any(x in an for x in ("аккумуля","аушм","battery","li ion","li-ion")):source="battery"
+        elif any(x in an for x in ("сетев","220","230")):source="mains"
+        elif specs.get("battery_capacity_ah") is not None:source="battery"
+        elif specs.get("input_power_w") is not None:source="mains"
+        if source:specs["power_source"]=source
+
+        if not specs.get("motor_type"):
+            if any(x in an+" "+desc for x in ("бесщет","бесщёточ","brushless")):specs["motor_type"]="brushless"
+            elif any(x in an+" "+desc for x in ("щеточ","щёточ","коллектор","brushed")):specs["motor_type"]="brushed"
+
+        if specs.get("battery_capacity_ah") is None and source=="battery":
+            am=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:а\s*[·.\s-]?\s*ч|ач|ah)\b",str(angle_name)+" "+str(extra.get("description_text") or ""),re.I)
+            if am:specs["battery_capacity_ah"]=float(am.group(1).replace(",","."))
+
+        if specs.get("grinder_disc_diameter_mm") is None:
+            candidates=[]
+            for x in re.findall(r"(?<!\d)(115|125|150|180|230)(?!\d)",str(angle_name)):
+                candidates.append(float(x))
+            if candidates:specs["grinder_disc_diameter_mm"]=candidates[0]
+
+        if specs.get("soft_start_present") is None:
+            if any(x in desc for x in ("плавн пуск","плавн старт","мягк пуск")):specs["soft_start_present"]=True
+        if specs.get("speed_adjustment_present") is None:
+            if any(x in desc for x in ("регулировк оборот","регулировк числа оборот","регулировк скорост","электронн регулировк")):specs["speed_adjustment_present"]=True
 
     circular_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="blade_diameter_mm" for r in rules) and any(r.get("spec_key")=="cut_depth_90_mm" for r in rules):
@@ -3788,6 +3914,48 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         if critical_missing:score=min(score,54.0)
         return round(max(0,min(100,score)),2)
 
+
+
+
+    if profile=="angle_grinder":
+        sa=angle_grinder_source_family(ours.get("power_source"));sb=angle_grinder_source_family(comp.get("power_source"))
+        if sa and sb and sa!=sb:return 0.0
+
+        da=ours.get("grinder_disc_diameter_mm");db=comp.get("grinder_disc_diameter_mm")
+        if da is not None and db is not None and abs(float(da)-float(db))>2:
+            return 0.0
+
+        source=sa or sb
+        weights={"motor_type":0.20,"soft_start_present":0.15,"speed_adjustment_present":0.15,"grinder_disc_diameter_mm":0.25}
+        if source=="battery":weights["battery_capacity_ah"]=0.25
+        elif source=="mains":weights["input_power_w"]=0.25
+        else:
+            weights["battery_capacity_ah"]=0.125;weights["input_power_w"]=0.125
+
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="motor_type":
+                    aa=angle_grinder_motor_family(a);bb=angle_grinder_motor_family(b)
+                    s=1.0 if aa==bb else 0.60
+                elif k=="battery_capacity_ah":
+                    s=angle_grinder_abs_similarity(float(a),float(b),0.5,1.0,1.5)
+                elif k=="input_power_w":
+                    s=angle_grinder_abs_similarity(float(a),float(b),150,300,450)
+                elif k in ("soft_start_present","speed_adjustment_present"):
+                    s=1.0 if bool(a)==bool(b) else 0.65
+                elif k=="grinder_disc_diameter_mm":
+                    s=1.0 if abs(float(a)-float(b))<=2 else 0.0
+                else:s=0.0
+            except Exception:s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        return round(max(0,min(100,score)),2)
 
 
     if profile=="bench_grinder":
@@ -4730,6 +4898,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=miter_saw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="bench_grinder":
             z=bench_grinder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="angle_grinder":
+            z=angle_grinder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="impact_drill":
             z=impact_drill_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="cordless_screwdriver":
@@ -4790,6 +4960,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=miter_saw_directional(rule,a,b)
         elif profile=="bench_grinder":
             z=bench_grinder_directional(rule,a,b)
+        elif profile=="angle_grinder":
+            z=angle_grinder_directional(rule,a,b)
         elif profile=="impact_drill":
             z=impact_drill_directional(rule,a,b)
         elif profile=="cordless_screwdriver":
@@ -4844,6 +5016,8 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения торцовочных пил. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, диаметр диска, наличие протяжки, глубина реза 90°/45° и скорость вращения."
     if profile=="bench_grinder" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения точильных станков. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип двигателя, мощность, скорость вращения и диаметр круга."
+    if profile=="angle_grinder" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения УШМ. Сетевые и аккумуляторные модели не смешиваются; для сетевой должны быть подтверждены тип двигателя, мощность, плавный пуск, регулировка оборотов и диаметр диска, для аккумуляторной — тип двигателя, емкость АКБ, плавный пуск, регулировка оборотов и диаметр диска."
     if profile=="impact_drill" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения ударных дрелей. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, максимальные обороты и наличие удара."
     if profile=="cordless_screwdriver" and status=="data_incomplete":
@@ -4862,7 +5036,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения строительных пылесосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, объем бака, тип уборки и материал корпуса."
     if profile=="construction_heat_gun" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения термопистолетов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены производительность воздушного потока, время нагрева и мощность."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -5071,8 +5245,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -5104,6 +5278,11 @@ def main() -> None:
                     )
                 if profile=="bench_grinder" and scored:
                     gap_confirmed=not bench_grinder_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="angle_grinder" and scored:
+                    gap_confirmed=not angle_grinder_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -5152,6 +5331,8 @@ def main() -> None:
                         status="data_incomplete"
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     if profile=="impact_drill" and impact_drill_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
                     if profile=="cordless_screwdriver" and screwdriver_required_missing(ours["specs_normalized"],comp_specs):
@@ -5197,6 +5378,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по мощности, диаметру диска, протяжке, глубине реза 90°/45° или скорости вращения торцовочной пилы — вывод сильнее/слабее заблокирован")
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по типу двигателя, мощности, скорости вращения или диаметру круга точильного станка — вывод сильнее/слабее заблокирован")
+                    if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по типу двигателя, питанию, мощности/емкости АКБ, плавному пуску, регулировке оборотов или диаметру диска УШМ — вывод сильнее/слабее заблокирован")
                     if profile=="impact_drill" and impact_drill_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по критическим характеристикам ударной дрели — вывод сильнее/слабее заблокирован")
                     if profile=="cordless_screwdriver" and screwdriver_required_missing(ours["specs_normalized"],comp_specs):
