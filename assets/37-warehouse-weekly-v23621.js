@@ -8,6 +8,7 @@ if(window.RESANTA_WAREHOUSE_WEEKLY_V23622)return;
 const $=id=>document.getElementById(id), n=v=>Number(v)||0;
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
 async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
+function monthArg(){return window.crmWarehouseControlV1?.getMonthDate?.()||null}
 function money(v){return n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN'}
 let busy=false,lastRun=0;
 async function enhance(force=false){
@@ -15,7 +16,7 @@ async function enhance(force=false){
  if(!page||!root||!page.classList.contains('active')||busy)return;
  const now=Date.now(); if(!force&&now-lastRun<1500)return; lastRun=now; busy=true;
  try{
-   const d=await rpc('warehouse_control_get_dashboard_v1',{}); if(!d?.has_data)return;
+   const d=await rpc('warehouse_control_get_dashboard_v2',{p_month:monthArg()}); if(!d?.has_data)return;
    const cycle=n(d.order_cycle_days)||7, skip=d.truck_decision==='SKIP';
    let box=$('wc-weekly-v23621');
    if(!box){box=document.createElement('div');box.id='wc-weekly-v23621';const head=root.querySelector('.wc-head');(head?.parentNode||root).insertBefore(box,head?.nextSibling||root.firstChild)}
@@ -40,5 +41,5 @@ function hook(){
 function install(){hook();const page=$('page-warehouse-control');if(page?.classList.contains('active'))setTimeout(()=>enhance(false),150)}
 [300,800,1500,3000].forEach(ms=>setTimeout(install,ms));
 window.addEventListener('focus',()=>{if($('page-warehouse-control')?.classList.contains('active'))enhance(false)});
-window.RESANTA_WAREHOUSE_WEEKLY_V23622=Object.freeze({version:'v23.6.22',eventDriven:true,noPolling:true,noMutationObserver:true,physicalStockOnly:true,defaultOrderCycleDays:7});
+window.RESANTA_WAREHOUSE_WEEKLY_V23622=Object.freeze({version:'v23.6.320',monthAware:true,eventDriven:true,noPolling:true,noMutationObserver:true,physicalStockOnly:true,defaultOrderCycleDays:7});
 })();
