@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.307 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.308 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.307',TTL=30000;
+const V='v23.6.308',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -111,7 +111,7 @@ function specLine(k,v){
   speed_count:'Количество скоростей',impact_present:'Наличие удара',battery_count:'Количество АКБ в комплекте',case_present:'Наличие кейса',
   tank_position:'Расположение бачка',pressure_bar:'Давление',
   cut_depth_wood_mm:'Максимальная глубина пропила',strokes_per_min:'Количество ходов в минуту',
-  planing_depth_mm:'Глубина строгания',planing_width_mm:'Ширина строгания',
+  planing_depth_mm:'Глубина строгания',planing_width_mm:'Ширина строгания',cut_depth_metal_mm:'Глубина пропила по металлу',vacuum_cleaning_type:'Тип уборки',vacuum_body_material:'Материал корпуса',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -124,7 +124,7 @@ function specLine(k,v){
   max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
   drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   cut_depth_90_mm:' мм',cut_depth_45_mm:' мм',blade_diameter_mm:' мм',arbor_diameter_mm:' мм',tilt_angle_deg:'°',
-  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',
+  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',cut_depth_metal_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -382,6 +382,62 @@ function rotaryHammerResult(k,a,b){
  return String(a)===String(b)?'совпадает':'отличается';
 }
 
+
+
+function constructionVacuumCleaning(v){
+ if(v==null)return'нет данных';
+ const s=String(v).toLowerCase();
+ if(s==='dry_wet'||(/сух|dry/.test(s)&&/влаж|wet|жидк/.test(s)))return'сухая + влажная';
+ if(s==='wet'||/влаж|wet|жидк/.test(s))return'влажная';
+ if(s==='dry'||/сух|dry/.test(s))return'сухая';
+ return E(v);
+}
+function constructionVacuumBody(v){
+ if(v==null)return'нет данных';
+ const s=String(v).toLowerCase();
+ if(s==='stainless'||/нержав|stainless|inox/.test(s))return'нержавеющая сталь';
+ if(s==='metal_plastic')return'металл + пластик';
+ if(s==='metal'||/металл|сталь|алюмин|metal|steel/.test(s))return'металл';
+ if(s==='plastic'||/пласт|полимер|plastic/.test(s))return'пластик';
+ return E(v);
+}
+function constructionVacuumValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='tank_capacity_l')return E(v)+' л';
+ if(k==='vacuum_cleaning_type')return constructionVacuumCleaning(v);
+ if(k==='vacuum_body_material')return constructionVacuumBody(v);
+ return E(v);
+}
+function constructionVacuumResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='vacuum_cleaning_type'){
+  const aa=constructionVacuumCleaning(a),bb=constructionVacuumCleaning(b);
+  if(aa===bb)return'совпадает';
+  if(aa==='сухая + влажная')return'у нас больше режимов уборки';
+  if(bb==='сухая + влажная')return'у конкурента больше режимов уборки';
+  return'тип уборки отличается';
+ }
+ if(k==='vacuum_body_material'){
+  const aa=constructionVacuumBody(a),bb=constructionVacuumBody(b);
+  if(aa===bb)return'совпадает';
+  const strong=x=>x==='металл'||x==='нержавеющая сталь'||x==='металл + пластик';
+  if(strong(aa)&&bb==='пластик')return'наш корпус прочнее по материалу';
+  if(strong(bb)&&aa==='пластик')return'у конкурента более прочный материал';
+  return'материал корпуса отличается';
+ }
+ const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+ const d=Math.abs(av-bv);
+ if(k==='input_power_w'){
+  if(d<=150)return'полное совпадение · допуск ±150 Вт';
+  return av>bv?'наша мощность выше на '+Math.round(d)+' Вт':'мощность конкурента выше на '+Math.round(d)+' Вт';
+ }
+ if(k==='tank_capacity_l'){
+  if(d<=5)return'полное совпадение · допуск ±5 л';
+  return av>bv?'у нас бак больше на '+d.toFixed(1).replace('.',',')+' л':'у конкурента бак больше на '+d.toFixed(1).replace('.',',')+' л';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
 
 function reciprocatingSawValue(k,v){
  if(v==null)return'нет данных';
@@ -1702,6 +1758,22 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='construction_vacuum'){
+  const keys=[
+   ['input_power_w','Мощность'],['tank_capacity_l','Объем бака'],
+   ['vacuum_cleaning_type','Тип уборки'],['vacuum_body_material','Материал корпуса']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+constructionVacuumValue(k,b[k])+'</td><td>'+constructionVacuumValue(k,a[k])+'</td><td>'+E(constructionVacuumResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Строительные пылесосы:</b> мощность сравнивается с допуском ±150 Вт, объем бака — ±5 л. Тип уборки нормализуется как сухая / влажная / сухая + влажная; комбинированная сухая + влажная считается функциональным преимуществом, но не отдельным классом. Материал корпуса нормализуется как пластик / металл / нержавеющая сталь; металл и нержавейка считаются конструктивным преимуществом над пластиком. Если не подтверждена хотя бы одна из четырех характеристик — вывод «сильнее/слабее» блокируется.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+
  if(r.profile_key==='reciprocating_saw'){
   const keys=[
    ['input_power_w','Мощность'],['motor_type','Тип двигателя'],
@@ -2265,5 +2337,5 @@ async function open(panel,ctx,force=false){
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
