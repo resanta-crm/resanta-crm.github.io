@@ -28,12 +28,10 @@ const APP_VERSION = '2026-10-12-resanta-crm-v23.6.315-markdown-search-clear';
       if (window.caches && caches.keys) {
         caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(()=>{});
       }
-      // Если это не первый заход (saved уже был) — перезагружаем страницу,
-      // чтобы браузер забрал свежие файлы, а не отдал старые из кеша.
-      if (saved !== null && !sessionStorage.getItem('crm_reloaded_once')) {
-        sessionStorage.setItem('crm_reloaded_once', '1');
-        location.reload(true);
-      }
+      // Текущий index.html уже новый. Раньше здесь делали второй location.reload(),
+      // из-за чего каждый деплой заставлял CRM грузиться дважды и пользователь
+      // видел длинный полноэкранный спиннер. Версии JS/CSS уже cache-busted в src.
+      sessionStorage.removeItem('crm_reloaded_once');
     } else {
       sessionStorage.removeItem('crm_reloaded_once');
     }
@@ -51,7 +49,7 @@ const APP_VERSION = '2026-10-12-resanta-crm-v23.6.315-markdown-search-clear';
 <script defer src="./assets/79-falling-task-period-v236106.js?v=23.6.106"></script>
 <script defer src="./assets/73-route-coverage-v23674.js?v=23.6.75"></script>
 <script defer src="./assets/04-business-analytics.js?v=23.6.202"></script>
-<script defer src="./assets/05-performance-core.js?v=23.6.306"></script>
+<script defer src="./assets/05-performance-core.js?v=23.6.316"></script>
 <script defer src="./assets/06-root-fixes.js?v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
 <script defer src="./assets/66-performance-root-v23657.js?v=23.6.315"></script>
