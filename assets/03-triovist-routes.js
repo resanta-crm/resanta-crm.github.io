@@ -48,6 +48,46 @@ window.TRIOVIST_DATA_HUB_V227315=Object.freeze({
 window.RESANTA_TRIOVIST_PERF_V227315=Object.freeze({version:VERSION,singleFlight:true,sharedCache:true,errorCooldownMs:ERROR_COOLDOWN});
 })();
 
+/* RESANTA CRM v23.6.306 · coalesce identical heavy read RPCs.
+ * Several historical Triovist UI layers can request the same read dashboard
+ * during the same navigation tick. One network request is enough for all of them.
+ */
+(function(){
+'use strict';
+if(window.RESANTA_TRIOVIST_RPC_COALESCER_V236306)return;
+const READ_ONLY=new Set([
+ 'triovist_get_dashboard','triovist_get_stock_dashboard','triovist_tasks_get_dashboard','triovist_content_get_dashboard',
+ 'triovist_tasks_get_dashboard_month_v23648','triovist_month_summary_v23647','triovist_motivation_get_policy',
+ 'triovist_21vek_mrc_dashboard_v236220','triovist_21vek_status_v236107',
+ 'triovist_market_dashboard_v236306','triovist_market_own_listing_v236235','triovist_market_competitor_history_v236305'
+]);
+const flights=new Map(),stats={network:0,shared:0};
+function stable(v){
+ if(v==null||typeof v!=='object')return v;
+ if(Array.isArray(v))return v.map(stable);
+ const o={};Object.keys(v).sort().forEach(k=>o[k]=stable(v[k]));return o;
+}
+function key(name,args){let s='';try{s=JSON.stringify(stable(args||{}))}catch(_){s=String(args||'')}return name+'|'+s}
+function install(){
+ let client=null;try{client=typeof db!=='undefined'?db:window.db}catch(_){client=window.db}
+ if(!client||typeof client.rpc!=='function'){setTimeout(install,100);return}
+ if(client.rpc.__resantaCoalescedV236306)return;
+ const raw=client.rpc.bind(client);
+ const wrapped=function(name,args,options){
+   if(!READ_ONLY.has(String(name||'')))return raw(name,args,options);
+   const k=key(String(name),args);
+   if(flights.has(k)){stats.shared++;return flights.get(k)}
+   stats.network++;
+   const p=Promise.resolve(raw(name,args,options)).finally(()=>flights.delete(k));
+   flights.set(k,p);return p;
+ };
+ wrapped.__resantaCoalescedV236306=true;
+ try{client.rpc=wrapped}catch(e){console.warn('RPC coalescer install failed',e);return}
+ window.RESANTA_TRIOVIST_RPC_COALESCER_V236306=Object.freeze({version:'23.6.306',stats,readOnly:[...READ_ONLY]});
+}
+install();
+})();
+
 /* ===== ORIGINAL INLINE SCRIPT 10 ===== */
 // ============================================================================
 // RESANTA CRM v22.0 · Триовист / 21vek.by
