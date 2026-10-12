@@ -2400,7 +2400,9 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                         continue
                 if scope.get("profile_key")=="construction_vacuum":
                     vn=norm(name)
-                    if "пылесос" not in vn or any(x in vn for x in ("робот","вертикальн","ручной","автомобильн","моющ","мешок для","фильтр для","шланг для","насадк")):
+                    vacuum_class=any(x in vn for x in ("профессиональн","строительн","промышленн"))
+                    if ("пылесос" not in vn or not vacuum_class
+                        or any(x in vn for x in ("робот","вертикальн","ручной","автомобильн","моющ","мешок для","фильтр для","шланг для","насадк"))):
                         continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
