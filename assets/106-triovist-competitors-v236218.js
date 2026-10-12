@@ -2011,12 +2011,15 @@ function details(r,l){
    ['filter_particle_mm','Размер фильтрующих частиц']
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+drainagePumpValue(k,b[k])+'</td><td>'+drainagePumpValue(k,a[k])+'</td><td>'+E(drainagePumpResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const materialClaim=x=>/материал корпуса|корпус (?:прочнее|конкурента)|прочн.*корпус/i.test(String(x||''));
+  const drainageAdv=(r.advantages||[]).filter(x=>!materialClaim(x));
+  const drainageBad=(r.disadvantages||[]).filter(x=>!materialClaim(x));
   const ref='<div class="tm224-ref"><b>Дренажные насосы:</b> производительность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%. Материал корпуса сравнивается как точная техническая характеристика: пластик, технополимер, нержавеющая сталь, чугун, алюминий и сталь не сводятся в один «металл». Для материала нет выдуманной шкалы «лучше/хуже»: различие влияет на подбор аналога, но само по себе не делает наш товар или конкурента сильнее. Больший допустимый размер фильтрующих частиц считается преимуществом. При отсутствии части характеристик итог «Мы сильнее / Паритет / Конкурент сильнее» сохраняется, а расчёт отмечается как предварительный.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
-   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
-   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+(drainageAdv.length?'<ul>'+drainageAdv.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+(drainageBad.length?'<ul>'+drainageBad.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
  }
 
