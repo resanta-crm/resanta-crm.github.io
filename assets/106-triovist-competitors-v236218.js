@@ -89,6 +89,7 @@ function specLine(k,v){
   speed_count:'Количество скоростей',impact_present:'Наличие удара',battery_count:'Количество АКБ в комплекте',case_present:'Наличие кейса',
   tank_position:'Расположение бачка',pressure_bar:'Давление',
   cut_depth_wood_mm:'Максимальная глубина пропила',strokes_per_min:'Количество ходов в минуту',
+  planing_depth_mm:'Глубина строгания',planing_width_mm:'Ширина строгания',
   width_mm:'Ширина',height_mm:'Высота',depth_mm:'Глубина'
  };
  const units={power_w:' Вт',area_m2:' м²',power_modes:' шт.',weight_kg:' кг',sections_count:' шт.',
@@ -101,7 +102,7 @@ function specLine(k,v){
   max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
   drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   cut_depth_90_mm:' мм',cut_depth_45_mm:' мм',blade_diameter_mm:' мм',arbor_diameter_mm:' мм',tilt_angle_deg:'°',
-  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',strokes_per_min:' ход/мин',
+  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
