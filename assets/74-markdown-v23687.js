@@ -1,13 +1,13 @@
-/* RESANTA CRM v23.6.244 · УЦЕНКА
+/* RESANTA CRM v23.6.245 · УЦЕНКА
  * Page-scoped module. No polling, no MutationObserver, no global data preload.
  * All users can view; all authenticated users can add photos/condition notes.
  * Only Alexander Payushin can approve price/discount and sales assignments.
  */
 (function(){
 'use strict';
-if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.244')return;
-const V='v23.6.244';
-const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0,photoReplace:null};
+if(window.RESANTA_MARKDOWN_V23687?.version==='v23.6.245')return;
+const V='v23.6.245';
+const S={rows:[],stats:{},total:0,filter:'active',search:'',loadedAt:0,flight:null,gen:0,current:null,detail:null,managers:null,detailFlight:null,coverObserver:null,controlSummary:null,controlSummaryAt:0,controlSummaryFlight:null,controlRows:[],controlFilter:'alerts',controlFlight:null,saleAssignment:null,saleClient:null,clientSearchTimer:null,clientSearchSeq:0,searchTimer:null,importStatus:null,importStatusAt:0,importStatusFlight:null,photoUnit:0,photoReplace:null};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=v=>esc(v).replace(/"/g,'&quot;');
@@ -200,14 +200,28 @@ function render(){
  const inp=$('md-search-v23687');
  const runSearch=async()=>{
   if(!inp)return;
+  clearTimeout(S.searchTimer);
   const q=inp.value.trim();
   S.search=q;
+  S.loadedAt=0;
   await load(true);
   const next=$('md-search-v23687');
   if(next){try{next.focus({preventScroll:true});next.setSelectionRange(next.value.length,next.value.length)}catch(_){}}
  };
  if(inp){
-  inp.oninput=null;
+  inp.oninput=()=>{
+   clearTimeout(S.searchTimer);
+   const q=inp.value.trim();
+   if(!q){
+    // Clearing the article/search field must immediately restore the full selected list.
+    S.search='';
+    S.loadedAt=0;
+    load(true);
+    return;
+   }
+   // Also refresh while typing so users do not have to press "Найти" after every edit.
+   S.searchTimer=setTimeout(()=>{if(inp.isConnected)runSearch()},350);
+  };
   inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch()}};
  }
  const go=$('md-search-go-v23695');if(go)go.onclick=runSearch;
@@ -274,7 +288,12 @@ async function loadControlSummary(force=false){
 }
 async function load(force=false){
  ensureDom();
- if(S.flight)return S.flight;
+ if(S.flight){
+  if(!force)return S.flight;
+  // A changed/cleared search must not be swallowed by an older request already in flight.
+  try{await S.flight}catch(_){}
+  if(S.flight)return S.flight;
+ }
  const now=Date.now();
  if(!force&&S.loadedAt&&now-S.loadedAt<60000){render();return true}
  const root=$('markdown-root');
