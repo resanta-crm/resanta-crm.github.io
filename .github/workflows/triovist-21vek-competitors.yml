@@ -6,9 +6,7 @@ on:
     paths:
       - 'tools/triovist_21vek_market.py'
       - 'tools/triovist_21vek_parser.py'
-      - 'assets/106-triovist-competitors-v236218.js'
       - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
-      - '.github/workflows/triovist-21vek-competitors.yml'
   pull_request:
     branches: [main]
     paths:
