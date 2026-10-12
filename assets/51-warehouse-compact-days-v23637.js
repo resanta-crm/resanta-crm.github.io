@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_WAREHOUSE_COMPACT_V23637)return;
-const V='v23.6.141';
+const V='v23.6.320';
 const FIXED_HORIZON=14;
 let mode='overview',offset=0,limit=100,search='';
 const $=id=>document.getElementById(id);
@@ -16,6 +16,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
 const money=(v,cur='BYN')=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+cur;
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
+function monthArg(){return window.crmWarehouseControlV1?.getMonthDate?.()||null}
 async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('База ещё не готова');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data}
 function ensureCss(){
  if($('warehouse-compact-v23637-css'))return;
@@ -59,7 +60,7 @@ function title(){return mode==='excess'?'Перелимит · товары на
 async function load(){
  ensureFixedHorizon();const root=$('wc-body');if(!root||!['all','excess','stockout','order'].includes(mode))return;
  root.innerHTML='<div class="card">Загрузка списка…</div>';
- try{const data=await rpc('warehouse_control_get_items_v1',{p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});render(data)}
+ try{const data=await rpc('warehouse_control_get_items_v2',{p_month:monthArg(),p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});render(data)}
  catch(e){const live=$('wc-body');if(live)live.innerHTML='<div class="wc-alert red"><b>Не удалось загрузить список.</b><br>'+esc(e?.message||e)+'</div>'}
 }
 function demandMini(r){return `<div class="wc-mini">прогноз ${qty(r.forecast_qty)} · 3 мес. ${qty(r.avg3_qty)} · прошлый год ${qty(r.ly_qty)}</div><div class="wc-mini">${esc(r.forecast_source||'')}</div>`}
@@ -84,7 +85,7 @@ function render(data){
  const find=$('wc-find'),inp=$('wc-search'),prev=$('wc-prev'),next=$('wc-next');
  if(find)find.onclick=()=>{search=inp?.value.trim()||'';offset=0;load()};if(inp)inp.onkeydown=e=>{if(e.key==='Enter')find?.click()};if(prev)prev.onclick=()=>{offset=Math.max(0,offset-limit);load()};if(next)next.onclick=()=>{offset+=limit;load()};if($('wc-export'))$('wc-export').onclick=exportOrder;if($('wc-export-excess'))$('wc-export-excess').onclick=exportExcess
 }
-async function allRowsFor(m){let out=[],off=0;for(let i=0;i<30;i++){const d=await rpc('warehouse_control_get_items_v1',{p_mode:m,p_search:'',p_limit:500,p_offset:off});const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}return out}
+async function allRowsFor(m){let out=[],off=0;for(let i=0;i<30;i++){const d=await rpc('warehouse_control_get_items_v2',{p_month:monthArg(),p_mode:m,p_search:'',p_limit:500,p_offset:off});const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}return out}
 async function ensureXlsx(){if(window.XLSX)return true;try{if(typeof _loadSheetJS==='function'){await _loadSheetJS();return !!window.XLSX}}catch(_){}return false}
 function csv(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
 function fallbackCsv(rows,headers,mapper,name){const lines=[headers.map(csv).join(';'),...rows.map(r=>mapper(r).map(csv).join(';'))];const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
@@ -93,5 +94,5 @@ async function exportOrder(){try{const fresh=await rpc('warehouse_control_get_fr
 async function exportExcess(){try{const rows=await allRowsFor('excess');if(!rows.length){alert('Сейчас нет позиций в перелимите.');return}const headers=['Артикул','Товар','Остаток Витебск','Дней запаса','Норма склада, дней','Нормальный остаток, шт.','Лишних, шт.','Излишек BYN','Излишек RUB','Прогноз продаж/мес.','Среднее 3 мес.','Прошлый год','Источник прогноза','Уровень перелимита','Рекомендация','Группа 900'];const mapper=r=>[r.sku,r.product,n(r.vitebsk_avail),r.days_cover,n(r.norm_days),n(r.norm_target_qty),n(r.excess_qty),n(r.excess_cost_byn),n(r.excess_cost_rub),n(r.forecast_qty),n(r.avg3_qty),n(r.ly_qty),r.forecast_source,r.excess_severity,r.excess_action,r.group900?'Да':'Нет'];await writeExcel(rows,headers,mapper,'Перелимит_акция_на_слив_'+new Date().toISOString().slice(0,10))}catch(e){alert('Не удалось выгрузить перелимит: '+(e?.message||e))}}
 function install(){ensureCss();ensureFixedHorizon();const page=$('page-warehouse-control');if(!page||page.dataset.compactV23639)return;page.dataset.compactV23639='1';page.addEventListener('click',async e=>{const tab=e.target.closest('#wc-v23620 .wc-tab');if(tab){const m=tab.dataset.mode;if(!m)return;if(m==='overview'){mode='overview';setTimeout(ensureFixedHorizon,0);return}if(!['all','excess','stockout','order'].includes(m)){mode=m;return}e.preventDefault();e.stopImmediatePropagation();mode=m;offset=0;document.querySelectorAll('#wc-v23620 .wc-tab').forEach(b=>b.classList.toggle('active',b===tab));await load();return}const refresh=e.target.closest('#wc-refresh');if(refresh){setTimeout(ensureFixedHorizon,0);if(!['all','excess','stockout','order'].includes(mode))return;e.preventDefault();e.stopImmediatePropagation();refresh.disabled=true;try{const api=window.crmWarehouseControlV1;if(api?.__freshnessOriginalOpen)await api.__freshnessOriginalOpen(true);else if(api?.open)await api.open(true);ensureFixedHorizon();document.querySelectorAll('#wc-v23620 .wc-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));await load()}finally{const b=$('wc-refresh');if(b)b.disabled=false}}},true)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();[400,1000,2200,4500].forEach(ms=>setTimeout(()=>{install();ensureFixedHorizon()},ms));
-window.RESANTA_WAREHOUSE_COMPACT_V23637=Object.freeze({version:V,stableForecast:true,fixedOrderHorizonDays:FIXED_HORIZON,persistentHorizon:true,excessSellThrough:true,excelExports:true,staleExportWithConfirmation:true,stickyHeader:true,stickySku:true,ownedModes:['all','excess','stockout','order'],foreignTabsPassThrough:true,noPolling:true,noMutationObserver:true});
+window.RESANTA_WAREHOUSE_COMPACT_V23637=Object.freeze({version:V,monthAware:true,stableForecast:true,fixedOrderHorizonDays:FIXED_HORIZON,persistentHorizon:true,excessSellThrough:true,excelExports:true,staleExportWithConfirmation:true,stickyHeader:true,stickySku:true,ownedModes:['all','excess','stockout','order'],foreignTabsPassThrough:true,noPolling:true,noMutationObserver:true});
 })();
