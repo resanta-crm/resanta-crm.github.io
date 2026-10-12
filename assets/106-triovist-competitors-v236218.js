@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.313 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.314 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.313',TTL=30000;
+const V='v23.6.314',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -107,7 +107,7 @@ function specLine(k,v){
   chuck_type:'Тип патрона',drive_size_in:'Посадочный квадрат/шестигранник',rotation_adjustment:'Регулировка вращения',
   max_rpm:'Макс. скорость вращения',max_torque_nm:'Макс. крутящий момент',charging_time_min:'Время зарядки',
   cut_speed_adjustment:'Регулировка скорости распила',cut_depth_90_mm:'Глубина реза 90°',cut_depth_45_mm:'Глубина реза 45°',
-  blade_diameter_mm:'Диаметр пильного диска',sliding_present:'Наличие протяжки',grinding_wheel_diameter_mm:'Диаметр круга',arbor_diameter_mm:'Диаметр посадочного гнезда',tilt_angle_deg:'Угол наклона диска',
+  blade_diameter_mm:'Диаметр пильного диска',sliding_present:'Наличие протяжки',grinding_wheel_diameter_mm:'Диаметр круга',grinder_disc_diameter_mm:'Диаметр диска',soft_start_present:'Плавный пуск',speed_adjustment_present:'Регулировка оборотов',arbor_diameter_mm:'Диаметр посадочного гнезда',tilt_angle_deg:'Угол наклона диска',
   speed_count:'Количество скоростей',impact_present:'Наличие удара',battery_count:'Количество АКБ в комплекте',case_present:'Наличие кейса',
   tank_position:'Расположение бачка',pressure_bar:'Давление',
   cut_depth_wood_mm:'Максимальная глубина пропила',strokes_per_min:'Количество ходов в минуту',
@@ -124,7 +124,7 @@ function specLine(k,v){
   max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',tank_capacity_l:' л',spray_radius_m:' м',
   drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   cut_depth_90_mm:' мм',cut_depth_45_mm:' мм',blade_diameter_mm:' мм',arbor_diameter_mm:' мм',tilt_angle_deg:'°',
-  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',cut_depth_metal_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',grinding_wheel_diameter_mm:' мм',airflow_lmin:' л/мин',heating_time_sec:' с',
+  speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',cut_depth_metal_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',grinding_wheel_diameter_mm:' мм',grinder_disc_diameter_mm:' мм',airflow_lmin:' л/мин',heating_time_sec:' с',
   width_mm:' мм',height_mm:' мм',depth_mm:' мм'};
  const x=typeof v==='boolean'?(v?'да':'нет'):v;
  return '<span><b>'+E(names[k]||k)+':</b> '+E(x)+E(units[k]||'')+'</span>';
@@ -386,6 +386,72 @@ function rotaryHammerResult(k,a,b){
 
 
 
+
+
+function angleGrinderSource(v){
+ if(v==null)return'нет данных';
+ const s=String(v).toLowerCase();
+ if(/battery|аккумуля|батар|li[ -]?ion/.test(s))return'аккумуляторная';
+ if(/mains|corded|сетев|сеть|220|230|электр/.test(s))return'сетевая';
+ return E(v);
+}
+function angleGrinderMotor(v){
+ if(v==null)return'нет данных';
+ const s=String(v).toLowerCase();
+ if(s==='brushless'||/бесщет|бесщёточ|brushless/.test(s))return'бесщеточный';
+ if(s==='brushed'||/щеточ|щёточ|коллектор|brushed/.test(s))return'щеточный';
+ return E(v);
+}
+function angleGrinderBool(v){
+ if(v==null)return'нет данных';
+ if(v===true||String(v).toLowerCase()==='true'||String(v).toLowerCase()==='да'||String(v)==='1')return'есть';
+ if(v===false||String(v).toLowerCase()==='false'||String(v).toLowerCase()==='нет'||String(v)==='0')return'нет';
+ return E(v);
+}
+function angleGrinderValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='power_source')return angleGrinderSource(v);
+ if(k==='motor_type')return angleGrinderMotor(v);
+ if(k==='battery_capacity_ah')return E(v)+' А·ч';
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='soft_start_present'||k==='speed_adjustment_present')return angleGrinderBool(v);
+ if(k==='grinder_disc_diameter_mm')return E(v)+' мм';
+ return E(v);
+}
+function angleGrinderResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='power_source'){
+  const aa=angleGrinderSource(a),bb=angleGrinderSource(b);
+  return aa===bb?'совпадает · строгий тип питания':'сетевые и аккумуляторные не смешиваются';
+ }
+ if(k==='motor_type'){
+  const aa=angleGrinderMotor(a),bb=angleGrinderMotor(b);
+  if(aa===bb)return'совпадает';
+  if(aa==='бесщеточный'&&bb==='щеточный')return'наш бесщеточный — преимущество';
+  if(aa==='щеточный'&&bb==='бесщеточный')return'у конкурента бесщеточный';
+  return'тип двигателя отличается';
+ }
+ if(k==='soft_start_present'||k==='speed_adjustment_present'){
+  const aa=angleGrinderBool(a),bb=angleGrinderBool(b);
+  if(aa===bb)return'совпадает';
+  return aa==='есть'?'у нас функция есть — преимущество':'у конкурента функция есть';
+ }
+ const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+ const d=Math.abs(av-bv);
+ if(k==='battery_capacity_ah'){
+  if(d<=.5)return'полное совпадение · допуск ±0,5 А·ч';
+  return av>bv?'у нас емкость АКБ больше':'у конкурента емкость АКБ больше';
+ }
+ if(k==='input_power_w'){
+  if(d<=150)return'полное совпадение · допуск ±150 Вт';
+  return av>bv?'наша мощность выше на '+Math.round(d)+' Вт':'мощность конкурента выше на '+Math.round(d)+' Вт';
+ }
+ if(k==='grinder_disc_diameter_mm'){
+  if(d<=2)return'один класс · допуск ±2 мм';
+  return'разный диаметр диска — не прямой аналог';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
 
 function benchGrinderMotor(v){
  if(v==null)return'нет данных';
@@ -1876,6 +1942,25 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='angle_grinder'){
+  const source=angleGrinderSource(a.power_source||b.power_source);
+  const keys=[
+   ['power_source','Источник питания'],['motor_type','Тип двигателя'],
+   ...(source==='аккумуляторная'?[['battery_capacity_ah','Емкость АКБ']]:[['input_power_w','Мощность']]),
+   ['soft_start_present','Плавный пуск'],['speed_adjustment_present','Регулировка оборотов'],
+   ['grinder_disc_diameter_mm','Диаметр диска']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+angleGrinderValue(k,b[k])+'</td><td>'+angleGrinderValue(k,a[k])+'</td><td>'+E(angleGrinderResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>УШМ / болгарки:</b> сетевые и аккумуляторные модели разделяются строго. Для сетевых мощность сравнивается с допуском ±150 Вт; для аккумуляторных емкость АКБ — ±0,5 А·ч. Тип двигателя нормализуется как щеточный/бесщеточный, бесщеточный считается преимуществом. Плавный пуск и регулировка оборотов — функциональные преимущества. Диаметр диска — строгий класс инструмента: допуск только ±2 мм; 115, 125, 150, 180 и 230 мм между собой не смешиваются. При отсутствии характеристики процент считается по доступным данным, а итог отмечается как «Недостаточно данных».</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+
  if(r.profile_key==='bench_grinder'){
   const keys=[
    ['motor_type','Тип двигателя'],['input_power_w','Мощность'],
@@ -2498,5 +2583,5 @@ async function open(panel,ctx,force=false){
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
