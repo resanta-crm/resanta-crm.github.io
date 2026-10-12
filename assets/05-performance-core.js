@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.0.0
+/* RESANTA CRM v23.6.316
  * Ultra-fast core, data-version watcher, single-render navigation
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 55-57
@@ -322,12 +322,26 @@ async function bootstrap(force=false){
     try{
       try{v2273ResetHistoryIndexes?.();}catch(_){}
       try{_clientNameMatchCache=null;}catch(_){}
-      const clientsReq=db.from('clients').select('*').order('revenue_total',{ascending:false}).limit(1000);
-      const usersReq=db.from('users').select('*');
-      const [clientsRes,usersRes]=await Promise.all([clientsReq,usersReq]);
-      if(clientsRes?.error)throw clientsRes.error;
-      allClients=(clientsRes?.data||[]).filter(c=>!clientIsArchived(c));
-      allUsers=usersRes?.error?(currentProfile?[currentProfile]:[]):(usersRes?.data||[]);
+      // v23.6.316: one fast bootstrap RPC instead of two RLS-heavy table reads.
+      // The server resolves actor scope once, so clients no longer evaluate
+      // is_boss()/current_user_name() for every row during every page refresh.
+      let core=null,coreError=null;
+      try{
+        const res=await db.rpc('crm_bootstrap_core_v236316');
+        core=res?.data||null;coreError=res?.error||null;
+      }catch(e){coreError=e}
+      if(coreError||!core){
+        console.warn(VERSION+' fast bootstrap RPC fallback',coreError);
+        const clientsReq=db.from('clients').select('*').order('revenue_total',{ascending:false}).limit(1000);
+        const usersReq=db.from('users').select('*');
+        const [clientsRes,usersRes]=await Promise.all([clientsReq,usersReq]);
+        if(clientsRes?.error)throw clientsRes.error;
+        allClients=(clientsRes?.data||[]).filter(c=>!clientIsArchived(c));
+        allUsers=usersRes?.error?(currentProfile?[currentProfile]:[]):(usersRes?.data||[]);
+      }else{
+        allClients=(Array.isArray(core.clients)?core.clients:[]).filter(c=>!clientIsArchived(c));
+        allUsers=Array.isArray(core.users)&&core.users.length?core.users:(currentProfile?[currentProfile]:[]);
+      }
 
       allTasks=[];allVisits=[];allRoutePlans=[];allNegotiations=[];allClientAliases=[];
       allVisitQualityReviews=[];allVisitRouteReviews=[];allTaskPartialReviews=[];allManagerKpiPlans=[];allImportStatus=[];allVipSales=[];allVipPromotions=[];
