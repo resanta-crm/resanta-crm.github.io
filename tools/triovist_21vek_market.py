@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.307.
+"""Triovist / 21vek automatic market analysis v23.6.308.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v5.5"
+PARSER_VERSION="market-auto-v5.6"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -188,6 +188,8 @@ def profile_for(label: str) -> str:
     if "перфоратор" in n: return "rotary_hammer"
     if "рубан" in n: return "planer"
     if "сабельн" in n and "пил" in n: return "reciprocating_saw"
+    if "строительн" in n and "пылесос" in n: return "construction_vacuum"
+    if "пылесос строительн" in n: return "construction_vacuum"
     if "дрел" in n and "удар" in n and "шуруповерт" not in n: return "impact_drill"
     return "generic"
 
@@ -219,6 +221,7 @@ def query_for(label: str, profile: str) -> str:
       "rotary_hammer":"перфоратор",
       "planer":"электрорубанок",
       "reciprocating_saw":"сабельная пила",
+      "construction_vacuum":"строительный пылесос",
     }.get(profile)
     return q or clean_label(label)
 
@@ -288,10 +291,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Перфораторы","rotary_hammer","перфоратор"),
       ("Рубанки","planer","рубан"),
       ("Сабельные пилы","reciprocating_saw","сабельн"),
+      ("Строительные пылесосы","construction_vacuum","пылесос"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -363,10 +367,15 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "полотно" not in pn and "полотн" not in pn and "пилка" not in pn
                          and "насадк" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="construction_vacuum":
+                matched=("пылесос" in pn and "строительн" in pn
+                         and "мешк" not in pn and "фильтр" not in pn and "шланг" not in pn
+                         and "моющ" not in pn and "мойка пылесос" not in pn
+                         and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw") else "Садовая техника"),"source_subgroup":label,
+              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else "Садовая техника"),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -719,6 +728,68 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
 
 
 
+
+
+
+def construction_vacuum_cleaning_family(v: Any) -> str:
+    n=norm(v)
+    has_dry=any(x in n for x in ("сух", "dry"))
+    has_wet=any(x in n for x in ("влаж", "wet", "жидкост", "сбор воды", "сбор жидкости"))
+    if has_dry and has_wet:return "dry_wet"
+    if has_wet:return "wet"
+    if has_dry:return "dry"
+    return n
+
+
+def construction_vacuum_body_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("нержав", "stainless", "inox")):return "stainless"
+    has_metal=any(x in n for x in ("металл","сталь","алюмин","metal","steel"))
+    has_plastic=any(x in n for x in ("пласт","полимер","plastic"))
+    if has_metal and has_plastic:return "metal_plastic"
+    if has_metal:return "metal"
+    if has_plastic:return "plastic"
+    return n
+
+
+def construction_vacuum_required_missing(ours: dict,comp: dict) -> bool:
+    required=("input_power_w","tank_capacity_l","vacuum_cleaning_type","vacuum_body_material")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def construction_vacuum_abs_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def construction_vacuum_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="input_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=150:return 50
+        return 66 if av>bv else 34
+    if k=="tank_capacity_l":
+        av=float(a);bv=float(b)
+        if abs(av-bv)<=5:return 50
+        return 68 if av>bv else 32
+    if k=="vacuum_cleaning_type":
+        aa=construction_vacuum_cleaning_family(a);bb=construction_vacuum_cleaning_family(b)
+        if aa==bb:return 50
+        if aa=="dry_wet" and bb in ("dry","wet"):return 72
+        if bb=="dry_wet" and aa in ("dry","wet"):return 28
+        return 50
+    if k=="vacuum_body_material":
+        aa=construction_vacuum_body_family(a);bb=construction_vacuum_body_family(b)
+        if aa==bb:return 50
+        strong={"metal","stainless","metal_plastic"}
+        if aa in strong and bb=="plastic":return 65
+        if bb in strong and aa=="plastic":return 35
+        return 50
+    return directional(rule,a,b)
 
 
 def reciprocating_saw_source_family(v: Any) -> str:
@@ -1551,6 +1622,10 @@ def normalize_value(key: str, text: str) -> Any:
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
         if any(x in n for x in ("электр","220","230","380","400")): return "electric"
         return n[:80] or None
+    if key=="vacuum_cleaning_type":
+        return construction_vacuum_cleaning_family(text)[:120] or None
+    if key=="vacuum_body_material":
+        return construction_vacuum_body_family(text)[:120] or None
     if key=="rotary_hammer_chuck":
         return rotary_hammer_chuck_family(text)[:120] or None
     if key=="chuck_type":
@@ -1948,6 +2023,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     rotary_hammer_mode={"chuck_type","input_power_w","impact_energy_j","max_rpm"}.issubset(rule_keys)
     planer_mode={"motor_type","max_rpm","planing_depth_mm","planing_width_mm"}.issubset(rule_keys)
     reciprocating_saw_mode={"power_source","input_power_w","motor_type","cut_depth_wood_mm","cut_depth_metal_mm","strokes_per_min"}.issubset(rule_keys)
+    construction_vacuum_mode={"input_power_w","tank_capacity_l","vacuum_cleaning_type","vacuum_body_material"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -1972,6 +2048,23 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
 
 
+
+
+    def construction_vacuum_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not construction_vacuum_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if "мощност" in ln and not any(x in ln for x in ("всасыв", "розет", "выходн")):
+            return "input_power_w"
+        if any(x in ln for x in ("объем", "обьем", "емкост")) and any(x in ln for x in ("бак","контейнер","пылесбор")):
+            return "tank_capacity_l"
+        if any(x in ln for x in ("тип убор", "вид убор", "режим убор", "тип очист")):
+            return "vacuum_cleaning_type"
+        if "материал" in ln and any(x in ln for x in ("корпус","бак","контейнер","пылесбор")):
+            return "vacuum_body_material"
+        if "уборк" in ln and any(x in vn for x in ("сух","влаж","wet","dry")):
+            return "vacuum_cleaning_type"
+        return None
 
     def reciprocating_saw_fuzzy_key(label: Any,value: Any) -> str|None:
         if not reciprocating_saw_mode:return None
@@ -2062,7 +2155,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -2305,6 +2398,10 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     sn=norm(name)
                     if "сабельн" not in sn or "пил" not in sn or any(x in sn for x in ("полотно","полотн","пилка","насадк","запчаст")):
                         continue
+                if scope.get("profile_key")=="construction_vacuum":
+                    vn=norm(name)
+                    if "пылесос" not in vn or any(x in vn for x in ("робот","вертикальн","ручной","автомобильн","моющ","мешок для","фильтр для","шланг для","насадк")):
+                        continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
                   hashlib.sha1(url.encode("utf-8")).hexdigest() if url
@@ -2402,6 +2499,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-screwdriver2"
     if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-paintsprayer2"
+    if "tank_capacity_l" in keys and "vacuum_cleaning_type" in keys and "vacuum_body_material" in keys:
+        return RULESET_VERSION+"-vacuum1"
     if "cut_depth_metal_mm" in keys and "cut_depth_wood_mm" in keys and "strokes_per_min" in keys and "motor_type" in keys:
         return RULESET_VERSION+"-recipsaw1"
     if "cut_depth_wood_mm" in keys and "strokes_per_min" in keys and "motor_type" in keys:
@@ -3121,6 +3220,43 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+
+
+
+    if profile=="construction_vacuum":
+        weights={"input_power_w":0.30,"tank_capacity_l":0.25,"vacuum_cleaning_type":0.25,"vacuum_body_material":0.20}
+        critical_missing=construction_vacuum_required_missing(ours,comp)
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="input_power_w":
+                    s=construction_vacuum_abs_similarity(float(a),float(b),150,300,450)
+                elif k=="tank_capacity_l":
+                    s=construction_vacuum_abs_similarity(float(a),float(b),5,10,15)
+                elif k=="vacuum_cleaning_type":
+                    aa=construction_vacuum_cleaning_family(a);bb=construction_vacuum_cleaning_family(b)
+                    if aa==bb:s=1.0
+                    elif "dry_wet" in (aa,bb) and ({aa,bb}&{"dry","wet"}):s=0.78
+                    else:s=0.55
+                elif k=="vacuum_body_material":
+                    aa=construction_vacuum_body_family(a);bb=construction_vacuum_body_family(b)
+                    if aa==bb:s=1.0
+                    elif aa in ("metal","stainless","metal_plastic") and bb in ("metal","stainless","metal_plastic"):s=0.90
+                    elif "plastic" in (aa,bb):s=0.70
+                    else:s=0.60
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:
+                s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
 
 
     if profile=="reciprocating_saw":
@@ -4253,6 +4389,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=planer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="reciprocating_saw":
             z=reciprocating_saw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="construction_vacuum":
+            z=construction_vacuum_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -4305,6 +4443,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=planer_directional(rule,a,b)
         elif profile=="reciprocating_saw":
             z=reciprocating_saw_directional(rule,a,b)
+        elif profile=="construction_vacuum":
+            z=construction_vacuum_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -4351,7 +4491,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения рубанков. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип двигателя, максимальные обороты, глубина и ширина строгания."
     if profile=="reciprocating_saw" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения сабельных пил. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, тип двигателя, глубина пропила по дереву и металлу, число ходов в минуту и тип питания."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="construction_vacuum" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения строительных пылесосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, объем бака, тип уборки и материал корпуса."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -4560,8 +4702,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -4573,6 +4715,11 @@ def main() -> None:
                 gap_confirmed=True
                 if profile=="reciprocating_saw" and scored:
                     gap_confirmed=not reciprocating_saw_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="construction_vacuum" and scored:
+                    gap_confirmed=not construction_vacuum_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -4631,6 +4778,8 @@ def main() -> None:
                         status="data_incomplete"
                     if profile=="reciprocating_saw" and reciprocating_saw_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="construction_vacuum" and construction_vacuum_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -4668,6 +4817,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по типу двигателя, оборотам, глубине или ширине строгания рубанка — вывод сильнее/слабее заблокирован")
                     if profile=="reciprocating_saw" and reciprocating_saw_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по мощности, типу двигателя, пропилу дерева/металла, числу ходов или типу питания сабельной пилы — вывод сильнее/слабее заблокирован")
+                    if profile=="construction_vacuum" and construction_vacuum_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по мощности, объему бака, типу уборки или материалу корпуса строительного пылесоса — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
