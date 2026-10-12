@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.314.
+"""Triovist / 21vek automatic market analysis v23.6.317.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.1"
+PARSER_VERSION="market-auto-v6.2"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -5303,12 +5303,13 @@ def main() -> None:
                         pdb=round(op-cp,2);pdp=round((op-cp)/cp*100,2)
                     comp_score=competitiveness(ours["specs_normalized"],p.get("specs_normalized") or {},rules,op,cp,profile)
                     status="ours_stronger" if comp_score>=65 else ("parity" if comp_score>=45 else "competitor_stronger")
+                    data_incomplete=False
                     comp_specs=p.get("specs_normalized") or {}
                     if profile=="snow_blower":
                         our_start=snow_blower_start_family(ours["specs_normalized"].get("engine_start_type"))
                         comp_start=comp_specs.get("engine_start_type")
                         if "electric" in our_start and comp_start is None and status=="competitor_stronger":
-                            status="data_incomplete"
+                            data_incomplete=True
                     if profile=="earth_auger":
                         req=("device_type","engine_type","fuel_power_w","max_auger_diameter_mm","shaft_diameter_mm")
                         if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
@@ -5359,11 +5360,11 @@ def main() -> None:
                     if profile=="earth_auger":
                         missing=[k for k in ("device_type","engine_type","fuel_power_w","max_auger_diameter_mm","shaft_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
                         if missing:
-                            bad.append("Недостаточно данных по критическим характеристикам мотобура — вывод сильнее/слабее заблокирован")
+                            bad.append("Недостаточно данных по критическим характеристикам мотобура — итог предварительный, часть характеристик не подтверждена")
                     if profile=="garden_shredder":
                         missing=[k for k in ("cutting_mechanism","engine_type","input_power_w","max_branch_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
                         if missing:
-                            bad.append("Недостаточно данных по критическим характеристикам садового измельчителя — вывод сильнее/слабее заблокирован")
+                            bad.append("Недостаточно данных по критическим характеристикам садового измельчителя — итог предварительный, часть характеристик не подтверждена")
                     if profile=="battery_pruner":
                         missing=[k for k in ("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
                         if missing:
@@ -5401,12 +5402,12 @@ def main() -> None:
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
-                      "competitiveness_score":comp_score,"status":status,"our_price":op,"mrc_byn":mr,
+                      "competitiveness_score":comp_score,"status":status,"data_incomplete":data_incomplete,"our_price":op,"mrc_byn":mr,
                       "mrc_delta_byn":mdb,"mrc_delta_pct":mdp,"competitor_price":cp,
                       "price_delta_byn":pdb,"price_delta_pct":pdp,
                       "our_specs":ours["specs_normalized"],"competitor_specs":p.get("specs_normalized") or {},
                       "advantages":adv,"disadvantages":bad,
-                      "recommendation":recommendation(mdp,sim,status,op,cp,profile),"computed_at":observed
+                      "recommendation":(("⚠️ Итог предварительный: часть характеристик не подтверждена. " if data_incomplete else "")+recommendation(mdp,sim,status,op,cp,profile)),"computed_at":observed
                     })
             if analyses: rest_post("triovist_market_analysis_current_v1",analyses)
             if gaps: rest_post("triovist_market_gaps_current_v1",gaps)
