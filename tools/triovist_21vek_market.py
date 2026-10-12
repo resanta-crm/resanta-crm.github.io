@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.317.
+"""Triovist / 21vek automatic market analysis v23.6.318.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.2"
+PARSER_VERSION="market-auto-v6.3"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -5313,45 +5313,45 @@ def main() -> None:
                     if profile=="earth_auger":
                         req=("device_type","engine_type","fuel_power_w","max_auger_diameter_mm","shaft_diameter_mm")
                         if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
-                            status="data_incomplete"
+                            data_incomplete=True
                     if profile=="garden_shredder":
                         req=("cutting_mechanism","engine_type","input_power_w","max_branch_diameter_mm")
                         if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
-                            status="data_incomplete"
+                            data_incomplete=True
                     if profile=="battery_pruner":
                         req=("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm")
                         if any(ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None for k in req):
-                            status="data_incomplete"
+                            data_incomplete=True
                     if profile=="sprayer" and sprayer_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="impact_wrench" and impact_wrench_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="circular_saw" and circular_saw_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="miter_saw" and miter_saw_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="impact_drill" and impact_drill_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="cordless_screwdriver" and screwdriver_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="paint_sprayer" and paint_sprayer_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="jigsaw" and jigsaw_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="rotary_hammer" and rotary_hammer_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="planer" and planer_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="reciprocating_saw" and reciprocating_saw_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="construction_vacuum" and construction_vacuum_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     if profile=="construction_heat_gun" and construction_heat_gun_required_missing(ours["specs_normalized"],comp_specs):
-                        status="data_incomplete"
+                        data_incomplete=True
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -5368,37 +5368,37 @@ def main() -> None:
                     if profile=="battery_pruner":
                         missing=[k for k in ("device_type","tool_type","voltage_v","power_source","max_cut_diameter_mm") if ours["specs_normalized"].get(k) is None or comp_specs.get(k) is None]
                         if missing:
-                            bad.append("Недостаточно данных по критическим характеристикам аккумуляторного секатора — вывод сильнее/слабее заблокирован")
+                            bad.append("Недостаточно данных по критическим характеристикам аккумуляторного секатора — итог предварительный, часть характеристик не подтверждена")
                     if profile=="sprayer" and sprayer_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по критическим характеристикам опрыскивателя для его типа питания — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по критическим характеристикам опрыскивателя для его типа питания — итог предварительный, часть характеристик не подтверждена")
                     if profile=="impact_wrench" and impact_wrench_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по критическим характеристикам гайковерта — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по критическим характеристикам гайковерта — итог предварительный, часть характеристик не подтверждена")
                     if profile=="circular_saw" and circular_saw_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по критическим характеристикам дисковой пилы — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по критическим характеристикам дисковой пилы — итог предварительный, часть характеристик не подтверждена")
                     if profile=="miter_saw" and miter_saw_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по мощности, диаметру диска, протяжке, глубине реза 90°/45° или скорости вращения торцовочной пилы — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по мощности, диаметру диска, протяжке, глубине реза 90°/45° или скорости вращения торцовочной пилы — итог предварительный, часть характеристик не подтверждена")
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по типу двигателя, мощности, скорости вращения или диаметру круга точильного станка — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по типу двигателя, мощности, скорости вращения или диаметру круга точильного станка — итог предварительный, часть характеристик не подтверждена")
                     if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по типу двигателя, питанию, мощности/емкости АКБ, плавному пуску, регулировке оборотов или диаметру диска УШМ — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по типу двигателя, питанию, мощности/емкости АКБ, плавному пуску, регулировке оборотов или диаметру диска УШМ — итог предварительный, часть характеристик не подтверждена")
                     if profile=="impact_drill" and impact_drill_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по критическим характеристикам ударной дрели — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по критическим характеристикам ударной дрели — итог предварительный, часть характеристик не подтверждена")
                     if profile=="cordless_screwdriver" and screwdriver_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по емкости АКБ или крутящему моменту шуруповерта — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по емкости АКБ или крутящему моменту шуруповерта — итог предварительный, часть характеристик не подтверждена")
                     if profile=="paint_sprayer" and paint_sprayer_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по мощности или давлению краскопульта — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по мощности или давлению краскопульта — итог предварительный, часть характеристик не подтверждена")
                     if profile=="jigsaw" and jigsaw_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по критическим характеристикам лобзика — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по критическим характеристикам лобзика — итог предварительный, часть характеристик не подтверждена")
                     if profile=="rotary_hammer" and rotary_hammer_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по типу патрона, мощности, энергии удара или максимальной скорости вращения перфоратора — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по типу патрона, мощности, энергии удара или максимальной скорости вращения перфоратора — итог предварительный, часть характеристик не подтверждена")
                     if profile=="planer" and planer_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по типу двигателя, оборотам, глубине или ширине строгания рубанка — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по типу двигателя, оборотам, глубине или ширине строгания рубанка — итог предварительный, часть характеристик не подтверждена")
                     if profile=="reciprocating_saw" and reciprocating_saw_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по мощности, типу двигателя, пропилу дерева/металла, числу ходов или типу питания сабельной пилы — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по мощности, типу двигателя, пропилу дерева/металла, числу ходов или типу питания сабельной пилы — итог предварительный, часть характеристик не подтверждена")
                     if profile=="construction_vacuum" and construction_vacuum_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по мощности, объему бака, типу уборки или материалу корпуса строительного пылесоса — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по мощности, объему бака, типу уборки или материалу корпуса строительного пылесоса — итог предварительный, часть характеристик не подтверждена")
                     if profile=="construction_heat_gun" and construction_heat_gun_required_missing(ours["specs_normalized"],comp_specs):
-                        bad.append("Недостаточно данных по производительности воздушного потока, времени нагрева или мощности термопистолета — вывод сильнее/слабее заблокирован")
+                        bad.append("Недостаточно данных по производительности воздушного потока, времени нагрева или мощности термопистолета — итог предварительный, часть характеристик не подтверждена")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
