@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.319.
+"""Triovist / 21vek automatic market analysis v23.6.322.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.4"
+PARSER_VERSION="market-auto-v6.5"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -1209,16 +1209,45 @@ def impact_drill_directional(rule: dict,a: Any,b: Any) -> float|None:
 
 
 
+def drainage_pump_body_material_part(v: Any) -> str:
+    """Возвращает именно материал КОРПУСА, не материал насосной части/крыльчатки."""
+    raw=str(v or "").strip()
+    if not raw:return ""
+    low=raw.lower().replace("ё","е")
+    # 21vek встречается в виде: "алюминий (корпус), чугун (насос)".
+    # Раньше слово "чугун" перехватывало всю строку, и корпус ошибочно становился чугунным.
+    for pattern in (
+        r"([^,;/]+?)\s*\(\s*корпус(?:а| насоса)?\s*\)",
+        r"материал\s+корпуса\s*[:\-]\s*([^,;/]+)",
+        r"корпус\s*[:\-]\s*([^,;/]+)",
+    ):
+        m=re.search(pattern,low,re.I)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+    return raw
+
+
 def drainage_pump_body_family(v: Any) -> str:
-    n=norm(v)
-    if any(x in n for x in ("нержав","stainless","inox")):return "stainless"
-    if any(x in n for x in ("чугун","cast iron")):return "cast_iron"
-    has_metal=any(x in n for x in ("металл","сталь","алюмин","metal","steel","aluminium","aluminum"))
-    has_plastic=any(x in n for x in ("пластик","пластмасс","полимер","технополимер","plastic","polymer"))
-    if has_metal and has_plastic:return "metal_plastic"
-    if has_metal:return "metal"
-    if has_plastic:return "plastic"
-    return n[:120]
+    n=norm(drainage_pump_body_material_part(v))
+    if not n:return ""
+    # Не объединяем разные материалы в абстрактный "металл":
+    # пользователь просил сравнивать именно материал корпуса.
+    tokens=[]
+    if any(x in n for x in ("нержав","stainless","inox")):tokens.append("stainless")
+    # Не считать "нержавеющая сталь" одновременно обычной сталью.
+    n_wo_stainless=re.sub(r"нержав\w*\s+сталь|stainless\s+steel|inox"," ",n)
+    if any(x in n_wo_stainless for x in ("чугун","cast iron")):tokens.append("cast_iron")
+    if any(x in n_wo_stainless for x in ("алюмин","aluminium","aluminum")):tokens.append("aluminum")
+    if re.search(r"(^|\s)сталь(?:\s|$)",n_wo_stainless) or re.search(r"(^|\s)steel(?:\s|$)",n_wo_stainless):tokens.append("steel")
+    if any(x in n for x in ("технополимер","technopolymer")):tokens.append("technopolymer")
+    n_wo_tech=re.sub(r"технополимер|technopolymer"," ",n)
+    if any(x in n_wo_tech for x in ("пластик","пластмасс","plastic")):tokens.append("plastic")
+    if any(x in n_wo_tech for x in ("полимер","polymer")):tokens.append("polymer")
+    if not tokens and any(x in n for x in ("металл","metal")):tokens.append("metal")
+    uniq=[]
+    for x in tokens:
+        if x not in uniq:uniq.append(x)
+    return "+".join(uniq) if uniq else n[:120]
 
 
 def drainage_pump_required_missing(ours: dict,comp: dict) -> bool:
@@ -1263,12 +1292,9 @@ def drainage_pump_directional(rule: dict,a: Any,b: Any) -> float|None:
         if abs(av-bv)<=1 or rel<=0.10:return 50
         return 66 if av>bv else 34
     if k=="pump_body_material":
-        aa=drainage_pump_body_family(a);bb=drainage_pump_body_family(b)
-        if aa==bb:return 50
-        rank={"plastic":1.0,"metal_plastic":2.0,"metal":3.0,"cast_iron":3.0,"stainless":3.0}
-        ra=rank.get(aa,2.0);rb=rank.get(bb,2.0)
-        if ra==rb:return 50
-        return 63 if ra>rb else 37
+        # Материал корпуса — характеристика сопоставимости, а не шкала "лучше/хуже".
+        # Нержавейка, чугун, алюминий, сталь и пластик не получают выдуманный ранг прочности.
+        return 50
     return directional(rule,a,b)
 
 
@@ -2939,7 +2965,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
     if "max_head_m" in keys and "pump_body_material" in keys and "filter_particle_mm" in keys and "flow_rate_lmin" in keys:
-        return RULESET_VERSION+"-drainpump1"
+        return RULESET_VERSION+"-drainpump2"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
         return RULESET_VERSION+"-anglegrinder1"
     if "grinding_wheel_diameter_mm" in keys and "motor_type" in keys and "max_rpm" in keys and "input_power_w" in keys:
@@ -4053,10 +4079,9 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                     s=drainage_pump_head_similarity(float(a),float(b))
                 elif k=="pump_body_material":
                     aa=drainage_pump_body_family(a);bb=drainage_pump_body_family(b)
-                    if aa==bb:s=1.0
-                    elif aa in ("stainless","cast_iron","metal","metal_plastic") and bb in ("stainless","cast_iron","metal","metal_plastic"):s=0.90
-                    elif "plastic" in (aa,bb):s=0.65
-                    else:s=0.70
+                    # Для подбора аналога точное совпадение материала важно.
+                    # Разные материалы уменьшают сопоставимость одинаково, без скрытого рейтинга.
+                    s=1.0 if aa and aa==bb else 0.65
                 else:
                     s=categorical_similarity(a,b)
             except Exception:
