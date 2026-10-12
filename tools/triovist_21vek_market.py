@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.309.
+"""Triovist / 21vek automatic market analysis v23.6.310.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v5.7"
+PARSER_VERSION="market-auto-v5.8"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -190,6 +190,7 @@ def profile_for(label: str) -> str:
     if "сабельн" in n and "пил" in n: return "reciprocating_saw"
     if "строительн" in n and "пылесос" in n: return "construction_vacuum"
     if "пылесос строительн" in n: return "construction_vacuum"
+    if "термопистолет" in n or (("строительн" in n or "техническ" in n) and "фен" in n): return "construction_heat_gun"
     if "дрел" in n and "удар" in n and "шуруповерт" not in n: return "impact_drill"
     return "generic"
 
@@ -222,6 +223,7 @@ def query_for(label: str, profile: str) -> str:
       "planer":"электрорубанок",
       "reciprocating_saw":"сабельная пила",
       "construction_vacuum":"строительный пылесос",
+      "construction_heat_gun":"строительный фен",
     }.get(profile)
     return q or clean_label(label)
 
@@ -292,10 +294,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Рубанки","planer","рубан"),
       ("Сабельные пилы","reciprocating_saw","сабельн"),
       ("Строительные пылесосы","construction_vacuum","пылесос"),
+      ("Термопистолеты","construction_heat_gun","термопистолет"),
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -372,10 +375,15 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "мешк" not in pn and "фильтр" not in pn and "шланг" not in pn
                          and "моющ" not in pn and "мойка пылесос" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="construction_heat_gun":
+                matched=("термопистолет" in pn
+                         and "клеев" not in pn and "термокле" not in pn
+                         and "насадк" not in pn and "запчаст" not in pn
+                         and not sku.startswith("900/"))
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else "Садовая техника"),"source_subgroup":label,
+              "scope_key":key,"source_category":("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun") else "Садовая техника"),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
