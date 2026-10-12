@@ -27,7 +27,7 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.199"
+VERSION = "v23.6.320"
 MINSK = ZoneInfo("Europe/Minsk")
 TARGET_HOURS = set(range(9, 19))
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
@@ -96,6 +96,25 @@ def get_import_statuses() -> dict[str, dict]:
 
 def status_stamp(row: dict | None) -> datetime | None:
     return parse_iso((row or {}).get("source_message_at"))
+
+
+def record_hourly_check(result: str) -> None:
+    """Heartbeat проверки почасовых продаж, не меняет last_success/source_message_at."""
+    try:
+        response = requests.patch(
+            f"{field.SUPABASE_URL}/rest/v1/crm_import_status",
+            headers=api_headers(),
+            params={"source": "in.(sales,triovist_sales)"},
+            json={
+                "last_check_at": datetime.now(timezone.utc).isoformat(),
+                "last_check_result": str(result or "")[:500],
+            },
+            timeout=20,
+        )
+        if response.status_code not in (200, 204):
+            log(f"⚠️ Heartbeat продаж не записан: {response.status_code} {response.text[:300]}")
+    except Exception as exc:
+        log(f"⚠️ Heartbeat продаж не записан: {exc}")
 
 
 def recent_subject_candidates(mail, message_ids: list[bytes]) -> list[dict]:
@@ -325,7 +344,8 @@ def main() -> None:
     report_end: date | None = None
     mail = None
     try:
-        log(f"RESANTA {VERSION}: единый импорт 1С 09:00 / 13:00 / 17:00")
+        log(f"RESANTA {VERSION}: почасовой единый импорт 1С 09:00–18:00")
+        record_hourly_check("running: checking mailbox")
         mail = field.imaplib.IMAP4_SSL(field.IMAP_HOST, field.IMAP_PORT, timeout=field.MAIL_TIMEOUT)
         mail.login(field.IMAP_USER, field.IMAP_PASS)
         field.select_mailbox(mail)
@@ -345,7 +365,10 @@ def main() -> None:
         statuses = get_import_statuses()
         selected = choose_pending_slice(headers, statuses)
         if selected is None:
-            log("✅ Нового разрешённого среза 09:00 / 13:00 / 17:00 нет — без изменений.")
+            latest=(headers[0].get("sent") if headers else None)
+            latest_txt=normalize_dt(latest).astimezone(MINSK).strftime("%d.%m.%Y %H:%M") if latest else "нет подходящих писем"
+            record_hourly_check(f"no_new_slice: latest matching email {latest_txt}")
+            log(f"✅ Нового почасового среза 09:00–18:00 нет — без изменений. Последнее подходящее письмо: {latest_txt}.")
             return
 
         sent = normalize_dt(selected["sent"])
@@ -390,8 +413,10 @@ def main() -> None:
         log(f"✅ Единая транзакция подтверждена: {result}")
 
         refresh_secondary_data(report_end, month, sent, field_rows)
+        record_hourly_check(f"imported: {local:%d.%m.%Y %H:%M}")
         log(f"ГОТОВО: один срез {local:%d.%m.%Y %H:%M} применён к полевым и Triovist.")
     except Exception as exc:
+        record_hourly_check(f"error: {str(exc)[:420]}")
         mark_pair_error(str(exc), report_period=report_period, report_date=report_end)
         log(f"ОШИБКА: {exc}")
         raise
