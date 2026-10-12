@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.302 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.303 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.302',TTL=30000;
+const V='v23.6.303',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -281,6 +281,41 @@ function humidifierResult(k,a,b){
 
 
 
+
+
+function planerValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='motor_type')return jigsawMotor(v);
+ if(k==='max_rpm')return E(v)+' об/мин';
+ if(k==='planing_depth_mm'||k==='planing_width_mm')return E(v)+' мм';
+ return E(v);
+}
+function planerResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ if(k==='motor_type'){
+  const aa=jigsawMotor(a),bb=jigsawMotor(b);
+  if(aa===bb)return'совпадает';
+  if(aa==='бесщеточный'&&bb==='щеточный')return'наш бесщеточный — преимущество';
+  if(aa==='щеточный'&&bb==='бесщеточный')return'у конкурента бесщеточный';
+  return'тип двигателя отличается';
+ }
+ const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+ const d=Math.abs(av-bv);
+ if(k==='max_rpm'){
+  if(d<=1500)return'полное совпадение · допуск ±1500 об/мин';
+  if(d<=3000)return'близкое совпадение';
+  return'обороты существенно отличаются';
+ }
+ if(k==='planing_depth_mm'){
+  if(d<=.5)return'полное совпадение · допуск ±0,5 мм';
+  return av>bv?'у нас глубина строгания больше':'у конкурента глубина строгания больше';
+ }
+ if(k==='planing_width_mm'){
+  if(d<=2)return'один класс · допуск ±2 мм';
+  return'разная ширина строгания — не прямой аналог';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
 
 function rotaryHammerChuck(v){
  if(v==null)return'нет данных';
@@ -1602,6 +1637,22 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='planer'){
+  const keys=[
+   ['motor_type','Тип двигателя'],['max_rpm','Максимальные обороты'],
+   ['planing_depth_mm','Глубина строгания'],['planing_width_mm','Ширина строгания']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+planerValue(k,b[k])+'</td><td>'+planerValue(k,a[k])+'</td><td>'+E(planerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Рубанки:</b> тип двигателя нормализуется как щеточный/бесщеточный; бесщеточный считается преимуществом, но оба типа могут быть аналогами. Максимальные обороты сравниваются с допуском ±1500 об/мин, при этом больше оборотов само по себе не считается преимуществом. Глубина строгания — допуск ±0,5 мм, а большая глубина за пределами допуска считается преимуществом. Ширина строгания задает класс инструмента: допуск ±2 мм; если разница больше, товары не считаются прямыми аналогами. Если не подтверждена хотя бы одна из четырех характеристик — вывод «сильнее/слабее» блокируется.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
+
  if(r.profile_key==='rotary_hammer'){
   const keys=[
    ['chuck_type','Тип патрона'],['input_power_w','Мощность'],
@@ -2075,5 +2126,5 @@ async function open(panel,ctx,force=false){
   render(panel,dash,listing);
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
