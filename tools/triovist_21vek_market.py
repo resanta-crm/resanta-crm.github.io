@@ -216,7 +216,7 @@ def query_for(label: str, profile: str) -> str:
       "paint_sprayer":"краскопульт",
       "jigsaw":"лобзик",
       "rotary_hammer":"перфоратор",
-      "planer":"рубанок",
+      "planer":"электрорубанок",
     }.get(profile)
     return q or clean_label(label)
 
@@ -351,6 +351,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and not sku.startswith("900/"))
             elif profile=="planer":
                 matched=("рубан" in pn
+                         and "ручн" not in pn and "рашпил" not in pn and "гипсокарт" not in pn
                          and "нож для" not in pn and "ножи для" not in pn and "лезв" not in pn
                          and "ремень для" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
@@ -2228,7 +2229,7 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                         continue
                 if scope.get("profile_key")=="planer":
                     pn=norm(name)
-                    if "рубан" not in pn or any(x in pn for x in ("нож для","ножи для","лезв","ремень для","запчаст")):
+                    if "рубан" not in pn or any(x in pn for x in ("ручн","рашпил","гипсокарт","нож для","ножи для","лезв","ремень для","запчаст")):
                         continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
