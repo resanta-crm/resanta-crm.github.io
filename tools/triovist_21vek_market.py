@@ -739,6 +739,35 @@ def leaf_blower_noise_similarity(a: float,b: float) -> float:
 
 
 
+
+def construction_heat_gun_required_missing(ours: dict,comp: dict) -> bool:
+    return any(ours.get(k) is None or comp.get(k) is None for k in ("airflow_lmin","heating_time_sec","input_power_w"))
+
+
+def construction_heat_gun_abs_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def construction_heat_gun_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    av=float(a);bv=float(b)
+    if k=="airflow_lmin":
+        if abs(av-bv)<=50:return 50
+        return 68 if av>bv else 32
+    if k=="heating_time_sec":
+        if abs(av-bv)<=10:return 50
+        return 70 if av<bv else 30
+    if k=="input_power_w":
+        if abs(av-bv)<=150:return 50
+        return 66 if av>bv else 34
+    return directional(rule,a,b)
+
+
 def construction_vacuum_cleaning_family(v: Any) -> str:
     n=norm(v)
     has_dry=any(x in n for x in ("сух", "dry"))
@@ -1625,6 +1654,17 @@ def earth_auger_relative_similarity(a: float,b: float,full: float,close: float,p
 
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
+    if key=="airflow_lmin":
+        vals=[]
+        vals.extend(float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:л\s*/\s*мин|л/мин|l\s*/\s*min|l/min)\b",low,re.I))
+        vals.extend(float(x.replace(",","."))*1000/60 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:м3\s*/\s*ч|м³\s*/\s*ч|m3\s*/\s*h|m³/h)\b",low,re.I))
+        vals.extend(float(x.replace(",","."))*60 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:л\s*/\s*с|л/с|l\s*/\s*s|l/s)\b",low,re.I))
+        return round(max(vals),3) if vals else (round(max(ns),3) if ns else None)
+    if key=="heating_time_sec":
+        vals=[]
+        vals.extend(float(x.replace(",","."))*60 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:мин|min)\b",low,re.I))
+        vals.extend(float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:сек|секунд|с|sec|second(?:s)?)\b",low,re.I))
+        return round(min(vals),3) if vals else (round(min(ns),3) if ns else None)
     if key=="energy_type":
         n=norm(text)
         if any(x in n for x in ("газов","пропан","бутан","сжиженн газ")): return "gas"
@@ -2032,6 +2072,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     planer_mode={"motor_type","max_rpm","planing_depth_mm","planing_width_mm"}.issubset(rule_keys)
     reciprocating_saw_mode={"power_source","input_power_w","motor_type","cut_depth_wood_mm","cut_depth_metal_mm","strokes_per_min"}.issubset(rule_keys)
     construction_vacuum_mode={"input_power_w","tank_capacity_l","vacuum_cleaning_type","vacuum_body_material"}.issubset(rule_keys)
+    construction_heat_gun_mode={"airflow_lmin","heating_time_sec","input_power_w"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -2057,6 +2098,19 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
 
 
+
+
+    def construction_heat_gun_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not construction_heat_gun_mode:return None
+        ln=norm(label)
+        if not ln:return None
+        if "мощност" in ln and not any(x in ln for x in ("поток","нагрев","выходн")):
+            return "input_power_w"
+        if any(x in ln for x in ("производитель","воздушн поток","поток воздуха","расход воздуха","подача воздуха")):
+            return "airflow_lmin"
+        if ("время" in ln and any(x in ln for x in ("нагрев","разогрев","выход"))) or "скорост нагрева" in ln:
+            return "heating_time_sec"
+        return None
 
     def construction_vacuum_fuzzy_key(label: Any,value: Any) -> str|None:
         if not construction_vacuum_mode:return None
@@ -2163,7 +2217,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -2412,6 +2466,11 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     if ("пылесос" not in vn or not vacuum_class
                         or any(x in vn for x in ("робот","вертикальн","ручной","автомобильн","моющ","мешок для","фильтр для","шланг для","насадк"))):
                         continue
+                if scope.get("profile_key")=="construction_heat_gun":
+                    hn=norm(name)
+                    heatgun_class=(("фен" in hn and any(x in hn for x in ("строительн","техническ"))) or "термофен" in hn or "термопистолет" in hn)
+                    if not heatgun_class or any(x in hn for x in ("клеев","термокле","для волос","парикмах")):
+                        continue
                 position=(page-1)*60+i+1
                 key=meta.get("external_id") or (
                   hashlib.sha1(url.encode("utf-8")).hexdigest() if url
@@ -2509,6 +2568,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-screwdriver2"
     if "pressure_bar" in keys and "tank_position" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-paintsprayer2"
+    if "airflow_lmin" in keys and "heating_time_sec" in keys and "input_power_w" in keys:
+        return RULESET_VERSION+"-constructionheatgun1"
     if "tank_capacity_l" in keys and "vacuum_cleaning_type" in keys and "vacuum_body_material" in keys:
         return RULESET_VERSION+"-vacuum1"
     if "cut_depth_metal_mm" in keys and "cut_depth_wood_mm" in keys and "strokes_per_min" in keys and "motor_type" in keys:
@@ -2713,6 +2774,20 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
 
 
 
+
+
+    heatgun_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
+    if any(r.get("spec_key")=="airflow_lmin" for r in rules) and any(r.get("spec_key")=="heating_time_sec" for r in rules):
+        desc=str(extra.get("description_text") or "")
+        if specs.get("airflow_lmin") is None:
+            vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:л\s*/\s*мин|л/мин|l\s*/\s*min|l/min)\b",desc.lower(),re.I)]
+            if vals:specs["airflow_lmin"]=max(vals)
+        if specs.get("heating_time_sec") is None:
+            hm=re.search(r"(?:время\s+)?(?:нагрев\w*|разогрев\w*)[^0-9]{0,40}(\d+(?:[.,]\d+)?)\s*(сек|секунд|с|min|мин)",desc.lower(),re.I)
+            if hm:
+                hv=float(hm.group(1).replace(",","."))
+                if hm.group(2) in ("min","мин"):hv*=60
+                specs["heating_time_sec"]=hv
 
     reciprocating_name=card.get("product_name") or base.get("model") or base.get("product_name") or ""
     if any(r.get("spec_key")=="cut_depth_metal_mm" for r in rules) and any(r.get("spec_key")=="strokes_per_min" for r in rules):
@@ -3231,6 +3306,31 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+
+
+
+    if profile=="construction_heat_gun":
+        weights={"airflow_lmin":0.40,"heating_time_sec":0.25,"input_power_w":0.35}
+        critical_missing=construction_heat_gun_required_missing(ours,comp)
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="airflow_lmin":
+                    s=construction_heat_gun_abs_similarity(float(a),float(b),50,100,150)
+                elif k=="heating_time_sec":
+                    s=construction_heat_gun_abs_similarity(float(a),float(b),10,20,30)
+                elif k=="input_power_w":
+                    s=construction_heat_gun_abs_similarity(float(a),float(b),150,300,450)
+                else:s=0.0
+            except Exception:s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        return round(max(0,min(100,score)),2)
 
 
     if profile=="construction_vacuum":
@@ -4405,6 +4505,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=reciprocating_saw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="construction_vacuum":
             z=construction_vacuum_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="construction_heat_gun":
+            z=construction_heat_gun_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         else:
             z=directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         if z is None: continue
@@ -4459,6 +4561,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=reciprocating_saw_directional(rule,a,b)
         elif profile=="construction_vacuum":
             z=construction_vacuum_directional(rule,a,b)
+        elif profile=="construction_heat_gun":
+            z=construction_heat_gun_directional(rule,a,b)
         else:
             z=directional(rule,a,b)
         if z is None or abs(z-50)<4: continue
@@ -4507,7 +4611,9 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения сабельных пил. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, тип двигателя, глубина пропила по дереву и металлу, число ходов в минуту и тип питания."
     if profile=="construction_vacuum" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения строительных пылесосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, объем бака, тип уборки и материал корпуса."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    if profile=="construction_heat_gun" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения термопистолетов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены производительность воздушного потока, время нагрева и мощность."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -4717,7 +4823,7 @@ def main() -> None:
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
             gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -4734,6 +4840,11 @@ def main() -> None:
                     )
                 if profile=="construction_vacuum" and scored:
                     gap_confirmed=not construction_vacuum_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="construction_heat_gun" and scored:
+                    gap_confirmed=not construction_heat_gun_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -4794,6 +4905,8 @@ def main() -> None:
                         status="data_incomplete"
                     if profile=="construction_vacuum" and construction_vacuum_required_missing(ours["specs_normalized"],comp_specs):
                         status="data_incomplete"
+                    if profile=="construction_heat_gun" and construction_heat_gun_required_missing(ours["specs_normalized"],comp_specs):
+                        status="data_incomplete"
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
@@ -4833,6 +4946,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по мощности, типу двигателя, пропилу дерева/металла, числу ходов или типу питания сабельной пилы — вывод сильнее/слабее заблокирован")
                     if profile=="construction_vacuum" and construction_vacuum_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по мощности, объему бака, типу уборки или материалу корпуса строительного пылесоса — вывод сильнее/слабее заблокирован")
+                    if profile=="construction_heat_gun" and construction_heat_gun_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по производительности воздушного потока, времени нагрева или мощности термопистолета — вывод сильнее/слабее заблокирован")
                     analyses.append({
                       "scope_key":skey,"product_key":p["product_key"],"our_sku":ours["sku"],
                       "similarity_score":round(sim,2),"analog_grade":analog_grade(sim,profile),"is_primary":idx==0,
