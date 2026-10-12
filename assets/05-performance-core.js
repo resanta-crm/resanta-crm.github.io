@@ -610,7 +610,7 @@ async function refreshDirtyForPage(p){
     if(dirty.has(key))await refreshKey(key);
   }
 }
-let responsiveRefreshTimer=0,responsiveRefreshSeq=0;
+let responsiveRefreshTimer=0,responsiveRefreshSeq=0,versionPollFlight=null,lastVersionPollAt=0;
 function scheduleDirtyRefresh(p,delay=650){
   const seq=++responsiveRefreshSeq;
   if(responsiveRefreshTimer)clearTimeout(responsiveRefreshTimer);
@@ -630,9 +630,14 @@ function scheduleDirtyRefresh(p,delay=650){
   responsiveRefreshTimer=setTimeout(attempt,Math.max(0,delay));
 }
 
-async function poll(){
+async function poll(force=false){
   if(disabled||document.visibilityState!=='visible'||typeof db==='undefined'||!currentProfile)return;
+  const now=Date.now();
+  if(versionPollFlight)return versionPollFlight;
+  if(!force&&now-lastVersionPollAt<5000)return;
+  versionPollFlight=(async()=>{
   try{
+    lastVersionPollAt=Date.now();
     const {data,error}=await db.from('crm_data_versions').select('resource_key,version,changed_at');
     if(error)throw error;
     const rows=data||[];
@@ -656,7 +661,9 @@ async function poll(){
       disabled=true;
       console.warn(VERSION+' version watcher disabled: run the package SQL first.',e);
     }else console.warn(VERSION+' version watcher',e);
-  }
+  }finally{versionPollFlight=null;}
+  })();
+  return versionPollFlight;
 }
 function acceptRealtimeVersion(row){
   const k=String(row?.resource_key||''),v=Number(row?.version)||0;
@@ -699,7 +706,7 @@ window.crmResponsivePageOpenedV227325=function(p){
   // Navigation stays instant. One tiny version check on page entry is the
   // fallback if realtime was temporarily unavailable.
   scheduleDirtyRefresh(p,700);
-  setTimeout(poll,120);
+  setTimeout(()=>poll(false),120);
 };
 window.crmResponsiveMarkDirtyV227325=function(...keys){
   keys.flat().filter(Boolean).forEach(k=>dirty.add(String(k)));
@@ -707,13 +714,13 @@ window.crmResponsiveMarkDirtyV227325=function(...keys){
 };
 window.crmResponsiveStartV227325=function(){
   if(disabled)return;
-  if(!started){started=true;setTimeout(poll,900);}
+  if(!started){started=true;setTimeout(()=>poll(false),900);}
   startRealtime();
 };
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'){window.crmResponsiveStartV227325();setTimeout(poll,120);}
+  if(document.visibilityState==='visible'){window.crmResponsiveStartV227325();setTimeout(()=>poll(false),120);}
 });
-window.addEventListener('focus',()=>{window.crmResponsiveStartV227325();setTimeout(poll,120)});
+window.addEventListener('focus',()=>{window.crmResponsiveStartV227325();setTimeout(()=>poll(false),120)});
 setTimeout(()=>window.crmResponsiveStartV227325(),1800);
 
 window.RESANTA_CRM_RESPONSIVE_CORE_V227325=Object.freeze({
