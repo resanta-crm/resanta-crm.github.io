@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.319 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.322 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.319',TTL=30000;
+const V='v23.6.322',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -392,13 +392,22 @@ function rotaryHammerResult(k,a,b){
 
 function drainagePumpMaterial(v){
  if(v==null)return'нет данных';
- const s=String(v).toLowerCase();
- if(/stainless|нержав/.test(s))return'нержавеющая сталь';
- if(/cast_iron|чугун|cast iron/.test(s))return'чугун';
- if(/metal_plastic/.test(s))return'металл + пластик';
- if(/^metal$|металл|сталь|алюмин|steel|aluminium|aluminum/.test(s))return'металл';
- if(/plastic|пластик|пластмасс|polymer|полимер|технополимер/.test(s))return'пластик / технополимер';
- return E(v);
+ const raw=String(v).trim(),s=raw.toLowerCase();
+ const one=x=>{
+  const t=String(x||'').trim().toLowerCase();
+  if(t==='stainless'||/нержав|stainless|inox/.test(t))return'нержавеющая сталь';
+  if(t==='cast_iron'||/чугун|cast iron/.test(t))return'чугун';
+  if(t==='aluminum'||/алюмин|aluminium|aluminum/.test(t))return'алюминий';
+  if(t==='steel'||(/^|\s)сталь(\s|$)|(^|\s)steel(\s|$)/.test(t))return'сталь';
+  if(t==='technopolymer'||/технополимер|technopolymer/.test(t))return'технополимер';
+  if(t==='polymer'||/(^|\s)полимер(\s|$)|(^|\s)polymer(\s|$)/.test(t))return'полимер';
+  if(t==='plastic'||/пластик|пластмасс|plastic/.test(t))return'пластик';
+  if(t==='metal'||/(^|\s)металл(\s|$)|(^|\s)metal(\s|$)/.test(t))return'металл';
+  return E(x);
+ };
+ if(s==='metal_plastic')return'металл + пластик';
+ if(raw.includes('+'))return raw.split('+').map(one).filter(Boolean).join(' + ');
+ return one(raw);
 }
 function drainagePumpValue(k,v){
  if(v==null)return'нет данных';
@@ -414,10 +423,7 @@ function drainagePumpResult(k,a,b){
  if(k==='pump_body_material'){
   const aa=drainagePumpMaterial(a),bb=drainagePumpMaterial(b);
   if(aa===bb)return'совпадает';
-  const rank=x=>/нержав|чугун|^металл$/.test(x)?3:(/металл \+ пластик/.test(x)?2:1);
-  const ra=rank(aa),rb=rank(bb);
-  if(ra===rb)return'материал корпуса отличается · без решающего перевеса';
-  return ra>rb?'наш корпус прочнее · умеренное преимущество':'корпус конкурента прочнее · умеренное преимущество';
+  return'материал корпуса отличается · наш: '+aa+' · конкурент: '+bb;
  }
  const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
  const d=Math.abs(av-bv),rel=d/Math.max(Math.abs(av),Math.abs(bv),1e-9);
@@ -2005,7 +2011,7 @@ function details(r,l){
    ['filter_particle_mm','Размер фильтрующих частиц']
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+drainagePumpValue(k,b[k])+'</td><td>'+drainagePumpValue(k,a[k])+'</td><td>'+E(drainagePumpResult(k,a[k],b[k]))+'</td></tr>').join('');
-  const ref='<div class="tm224-ref"><b>Дренажные насосы:</b> производительность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%. Материал корпуса учитывается с ограниченным весом 15% и сам по себе не переворачивает общий итог. Больший допустимый размер фильтрующих частиц считается преимуществом. При отсутствии части характеристик итог «Мы сильнее / Паритет / Конкурент сильнее» сохраняется, а расчёт отмечается как предварительный.</div>';
+  const ref='<div class="tm224-ref"><b>Дренажные насосы:</b> производительность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%. Материал корпуса сравнивается как точная техническая характеристика: пластик, технополимер, нержавеющая сталь, чугун, алюминий и сталь не сводятся в один «металл». Для материала нет выдуманной шкалы «лучше/хуже»: различие влияет на подбор аналога, но само по себе не делает наш товар или конкурента сильнее. Больший допустимый размер фильтрующих частиц считается преимуществом. При отсутствии части характеристик итог «Мы сильнее / Паритет / Конкурент сильнее» сохраняется, а расчёт отмечается как предварительный.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +listingHistoryBlock(l)
