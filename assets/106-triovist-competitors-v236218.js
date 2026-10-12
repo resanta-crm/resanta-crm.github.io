@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.324 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.325 · TRIOVIST / 21VEK AUTOMATIC MARKET
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.324',TTL=30000;
+const V='v23.6.325',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -102,7 +102,7 @@ function specLine(k,v){
   collector_present:'Бункер/травосборник',collector_type:'Тип бункера/травосборника',
   tool_type:'Тип инструмента',knife_type:'Тип ножа',blade_type:'Тип лезвия',max_cut_diameter_mm:'Максимальная толщина среза',
   application_area:'Область применения',carry_type:'Вид переноски',flow_rate_lmin:'Производительность',
-  max_head_m:'Максимальный напор',pump_body_material:'Материал корпуса',filter_particle_mm:'Размер фильтрующих частиц',
+  max_head_m:'Максимальный напор',pump_body_material:'Материал корпуса',filter_particle_mm:'Размер фильтрующих частиц',max_water_temp_c:'Максимальная температура воды',
   tank_capacity_l:'Объем емкости',fuel_engine_type:'Тип бензинового двигателя',spray_radius_m:'Радиус опрыскивания',
   wrench_type:'Тип гайковерта',motor_type:'Тип электродвигателя',reverse_present:'Реверс',operating_modes:'Режимы',
   chuck_type:'Тип патрона',drive_size_in:'Посадочный квадрат/шестигранник',rotation_adjustment:'Регулировка вращения',
@@ -122,7 +122,7 @@ function specLine(k,v){
   battery_capacity_ah:' А·ч',battery_voltage_v:' В',starter_voltage_v:' В',clearing_width_cm:' см',intake_height_cm:' см',throw_distance_m:' м',motor_power_w:' Вт',
   air_speed_ms:' м/с',rpm:' об/мин',fuel_power_w:' Вт',max_auger_diameter_mm:' мм',shaft_diameter_mm:' мм',
   input_power_w:' Вт',cutting_speed_rpm:' об/мин',max_branch_diameter_mm:' мм',collector_capacity_l:' л',feed_openings_count:' шт.',
-  max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',max_head_m:' м',filter_particle_mm:' мм',tank_capacity_l:' л',spray_radius_m:' м',
+  max_cut_diameter_mm:' мм',flow_rate_lmin:' л/мин',max_head_m:' м',filter_particle_mm:' мм',max_water_temp_c:' °C',tank_capacity_l:' л',spray_radius_m:' м',
   drive_size_in:'"',max_rpm:' об/мин',max_torque_nm:' Н·м',charging_time_min:' мин',
   cut_depth_90_mm:' мм',cut_depth_45_mm:' мм',blade_diameter_mm:' мм',arbor_diameter_mm:' мм',tilt_angle_deg:'°',
   speed_count:' шт.',battery_count:' шт.',pressure_bar:' бар',cut_depth_wood_mm:' мм',cut_depth_metal_mm:' мм',strokes_per_min:' ход/мин',planing_depth_mm:' мм',planing_width_mm:' мм',grinding_wheel_diameter_mm:' мм',grinder_disc_diameter_mm:' мм',airflow_lmin:' л/мин',heating_time_sec:' с',
@@ -442,6 +442,42 @@ function drainagePumpResult(k,a,b){
  if(k==='filter_particle_mm'){
   if(d<=1||rel<=.10)return'паритет · близкий размер частиц';
   return av>bv?'мы пропускаем более крупные частицы — преимущество':'конкурент пропускает более крупные частицы';
+ }
+ return String(a)===String(b)?'совпадает':'отличается';
+}
+
+function sewageStationValue(k,v){
+ if(v==null)return'нет данных';
+ if(k==='flow_rate_lmin')return E(v)+' л/мин';
+ if(k==='max_head_m')return E(v)+' м';
+ if(k==='filter_particle_mm')return E(v)+' мм';
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='max_water_temp_c')return E(v)+' °C';
+ return E(v);
+}
+function sewageStationResult(k,a,b){
+ if(a==null||b==null)return'недостаточно данных';
+ const av=N(a),bv=N(b);if(av==null||bv==null)return'недостаточно данных';
+ const d=Math.abs(av-bv),rel=d/Math.max(Math.abs(av),Math.abs(bv),1e-9);
+ if(k==='flow_rate_lmin'){
+  if(rel<=.10)return'паритет · допуск ±10%';
+  return av>bv?'наша пропускная способность выше':'пропускная способность конкурента выше';
+ }
+ if(k==='max_head_m'){
+  if(d<=1||rel<=.10)return'паритет · допуск ±1 м или ±10%';
+  return av>bv?'наш максимальный напор выше':'максимальный напор конкурента выше';
+ }
+ if(k==='filter_particle_mm'){
+  if(d<=1||rel<=.10)return'паритет · близкий размер частиц';
+  return av>bv?'мы пропускаем более крупные частицы — преимущество':'конкурент пропускает более крупные частицы';
+ }
+ if(k==='input_power_w'){
+  if(rel<=.10)return'паритет · допуск ±10%';
+  return av>bv?'наша мощность выше':'мощность конкурента выше';
+ }
+ if(k==='max_water_temp_c'){
+  if(d<=5)return'паритет · допуск ±5 °C';
+  return av>bv?'у нас выше допустимая температура воды':'у конкурента выше допустимая температура воды';
  }
  return String(a)===String(b)?'совпадает':'отличается';
 }
@@ -2001,6 +2037,24 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='sewage_station'){
+  const keys=[
+   ['flow_rate_lmin','Пропускная способность'],
+   ['max_head_m','Максимальный напор'],
+   ['filter_particle_mm','Размер фильтрующих частиц'],
+   ['input_power_w','Мощность'],
+   ['max_water_temp_c','Максимальная температура воды']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+sewageStationValue(k,b[k])+'</td><td>'+sewageStationValue(k,a[k])+'</td><td>'+E(sewageStationResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Канализационные станции:</b> сравниваются только 5 согласованных характеристик. Пропускная способность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%; размер частиц — до ±1 мм или ±10%; максимальная температура воды — до ±5 °C. При неполных данных итог остаётся видимым и помечается как предварительный.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
 
  if(r.profile_key==='drainage_pump'){
   const keys=[
