@@ -132,6 +132,27 @@ def rest_delete(table: str, filt: dict[str,str], timeout: int=60) -> None:
         raise RuntimeError(f"DELETE {table}: {r.status_code} {r.text[:1000]}")
 
 
+
+def rest_rpc(name: str, payload: dict|None=None, timeout: int=60, attempts: int=3) -> Any:
+    last=None
+    for attempt in range(1,max(1,attempts)+1):
+        try:
+            r=requests.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/{name}",
+                headers=api_headers(True),
+                json=payload or {},
+                timeout=timeout
+            )
+            if r.status_code not in (200,201,204):
+                raise RuntimeError(f"RPC {name}: {r.status_code} {r.text[:1200]}")
+            return None if r.status_code==204 or not r.text.strip() else r.json()
+        except Exception as exc:
+            last=exc
+            if attempt>=attempts:break
+            time.sleep(1.2*attempt)
+    raise last
+
+
 def norm(v: Any) -> str:
     s=str(v or "").strip().lower().replace("ё","е")
     s=re.sub(r"[^0-9a-zа-я./]+"," ",s)
@@ -5228,6 +5249,14 @@ def main() -> None:
             "own_parser_untouched":True
           }
         })
+        # Publish one stable dashboard snapshot only after the market cycle finishes.
+        # The UI reads this cache instantly and never competes with parser writes.
+        try:
+            cache_info=rest_rpc("triovist_market_dashboard_refresh_v236313",{},timeout=45,attempts=3)
+            print(f"DASHBOARD CACHE REFRESHED: {cache_info}",flush=True)
+        except Exception as cache_exc:
+            print(f"DASHBOARD CACHE WARNING: {cache_exc}",flush=True)
+
         print(f"DONE {status}: scopes={len(scopes)} competitors={competitor_total} comparisons={comparison_total} gaps={gap_total} errors={errors}",flush=True)
         if competitor_total==0: raise SystemExit(2)
     except Exception as exc:
