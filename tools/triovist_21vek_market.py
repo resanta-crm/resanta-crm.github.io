@@ -246,7 +246,7 @@ def query_for(label: str, profile: str) -> str:
       "bench_grinder":"точильный станок",
       "angle_grinder":"угловая шлифовальная машина",
       "drainage_pump":"дренажный насос",
-      "sewage_station":"канализационная станция",
+      "sewage_station":"канализационный насос",
       "impact_drill":"дрель ударная",
       "cordless_screwdriver":"аккумуляторный шуруповерт",
       "paint_sprayer":"краскопульт",
@@ -394,7 +394,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "переходник" not in pn and "фильтр для" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
             elif profile=="sewage_station":
-                matched=("канализац" in pn and any(x in pn for x in ("станц","установ"))
+                matched=("канализац" in pn and any(x in pn for x in ("насос","станц","установ"))
                          and "запчаст" not in pn and "шланг" not in pn and "муфт" not in pn
                          and "патруб" not in pn and "переходник" not in pn
                          and not sku.startswith("900/"))
@@ -2865,7 +2865,7 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
     q=scope["search_query"]
     candidates=[q]
     if scope.get("profile_key")=="sewage_station":
-        for alt in ("канализационная насосная станция","канализационная насосная установка","канализационная установка","станция принудительной канализации"):
+        for alt in ("канализационная станция","канализационная насосная станция","канализационная насосная установка","канализационная установка","станция принудительной канализации"):
             if norm(alt)!=norm(q): candidates.append(alt)
     if scope.get("profile_key")=="infrared_heater":
         for alt in ("обогреватель инфракрасный","инфракрасный","инфрак"):
@@ -2949,7 +2949,7 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                         continue
                 if scope.get("profile_key")=="sewage_station":
                     sn=norm(name)
-                    station_class=("канализац" in sn and any(x in sn for x in ("станц","установ")))
+                    station_class=("канализац" in sn and any(x in sn for x in ("насос","станц","установ")))
                     if not station_class or any(x in sn for x in ("запчаст","шланг","муфт","патруб","переходник")):
                         continue
                 if scope.get("profile_key")=="angle_grinder":
