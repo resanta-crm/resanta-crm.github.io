@@ -27,7 +27,7 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.320"
+VERSION = "v23.6.321"
 MINSK = ZoneInfo("Europe/Minsk")
 TARGET_HOURS = set(range(9, 19))
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
@@ -277,7 +277,7 @@ def unified_replace(
         f"Triovist {len(tri_rows)} SKU / {tri_qty} шт. / {tri_revenue} BYN; "
         f"файл {filename}; {VERSION}"
     )
-    source = f"email · {filename} · {sent.isoformat()} · {VERSION}"
+    source = f"unified-hourly · email · {filename} · {sent.isoformat()} · {VERSION}"
     payload = {
         "p_month": month,
         "p_field_rows": clean_field_rows(field_rows),
@@ -320,6 +320,32 @@ def mark_pair_error(message: str, *, report_period: str | None = None, report_da
             details=f"Единый импорт {VERSION}",
             error_text=message[:2000],
         )
+
+
+def reconcile_triovist_tasks_after_commit(month: str) -> None:
+    """Тяжёлая сверка ИИ-задач выполняется отдельно и не может откатить продажи."""
+    manager_emails = ("aleksandrenko_av@resanta.ru", "krishtal_na@resanta.ru")
+    for manager_email in manager_emails:
+        try:
+            response = requests.post(
+                f"{field.SUPABASE_URL}/rest/v1/rpc/triovist_tasks_reconcile_sales_v23651",
+                headers=api_headers(),
+                json={
+                    "p_month": month[:7] + "-01",
+                    "p_finalize": False,
+                    "p_manager_email": manager_email,
+                },
+                timeout=45,
+            )
+            if response.status_code not in (200, 201, 204):
+                log(
+                    f"⚠️ Автопроверка ИИ-задач {manager_email} отложена: "
+                    f"{response.status_code} {response.text[:300]}"
+                )
+            else:
+                log(f"  ✅ Автопроверка ИИ-задач {manager_email} завершена после commit продаж.")
+        except Exception as exc:
+            log(f"⚠️ Автопроверка ИИ-задач {manager_email} отложена: {exc}")
 
 
 def refresh_secondary_data(report_end: date, month: str, sent: datetime, rows: list[dict]) -> None:
@@ -412,6 +438,7 @@ def main() -> None:
         )
         log(f"✅ Единая транзакция подтверждена: {result}")
 
+        reconcile_triovist_tasks_after_commit(month)
         refresh_secondary_data(report_end, month, sent, field_rows)
         record_hourly_check(f"imported: {local:%d.%m.%Y %H:%M}")
         log(f"ГОТОВО: один срез {local:%d.%m.%Y %H:%M} применён к полевым и Triovist.")
