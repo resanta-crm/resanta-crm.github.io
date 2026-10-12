@@ -2168,13 +2168,16 @@ function render(panel,d,listing){
  panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();panel.dataset.tm224Limit='120';await open(panel,null,true)});
  panel.querySelector('[data-tm224-export]')?.addEventListener('click',e=>exportExcel(e.currentTarget));
 
- panel.addEventListener('click',e=>{
+ if(panel.__tm224MoreHandler)panel.removeEventListener('click',panel.__tm224MoreHandler);
+ panel.__tm224MoreHandler=e=>{
    const more=e.target.closest?.('[data-tm224-more]');
    if(!more)return;
    panel.dataset.tm224Limit=String((Number(panel.dataset.tm224Limit)||120)+120);
    applyFilters(panel,d,listing);
- });
- panel.addEventListener('toggle',async e=>{
+ };
+ panel.addEventListener('click',panel.__tm224MoreHandler);
+ if(panel.__tm224DetailHandler)panel.removeEventListener('toggle',panel.__tm224DetailHandler,true);
+ panel.__tm224DetailHandler=async e=>{
    const el=e.target?.closest?.('[data-tm224-detail]');
    if(!el||!el.open||el.dataset.loading==='1')return;
    const scope=el.dataset.scope||'',product=el.dataset.product||'';
@@ -2193,7 +2196,8 @@ function render(panel,d,listing){
      el.dataset.loading='0';
      if(body)body.textContent='Не удалось загрузить характеристики: '+(err?.message||err);
    }
- },true);
+ };
+ panel.addEventListener('toggle',panel.__tm224DetailHandler,true);
 
 }
 async function open(panel,ctx,force=false){
