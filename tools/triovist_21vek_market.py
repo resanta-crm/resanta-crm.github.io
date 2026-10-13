@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.327.
+"""Triovist / 21vek automatic market analysis v23.6.328.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.7"
+PARSER_VERSION="market-auto-v6.8"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -208,6 +208,7 @@ def profile_for(label: str) -> str:
     if "углошлиф" in n or ("болгар" in n and "машин" in n) or re.search(r"\bа?ушм\b",n): return "angle_grinder"
     if "канализац" in n and any(x in n for x in ("станц","установ")): return "sewage_station"
     if "поверхност" in n and "насос" in n: return "surface_pump"
+    if "скважин" in n and "насос" in n: return "borehole_pump"
     if "дренаж" in n and "насос" in n: return "drainage_pump"
     if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     if "шуруповерт" in n and "аккумулятор" in n: return "cordless_screwdriver"
@@ -249,6 +250,7 @@ def query_for(label: str, profile: str) -> str:
       "drainage_pump":"дренажный насос",
       "sewage_station":"канализационный насос",
       "surface_pump":"поверхностный насос",
+      "borehole_pump":"скважинный насос",
       "impact_drill":"дрель ударная",
       "cordless_screwdriver":"аккумуляторный шуруповерт",
       "paint_sprayer":"краскопульт",
@@ -326,6 +328,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Дренажные насосы","drainage_pump","дренаж"),
       ("Канализационные станции","sewage_station","канализац"),
       ("Поверхностные насосы","surface_pump","поверхност"),
+      ("Скважинные насосы","borehole_pump","скважин"),
       ("Дрели ударные","impact_drill","дрел"),
       ("Шуруповерты аккумуляторные","cordless_screwdriver","шуруповерт"),
       ("Краскопульты","paint_sprayer","краскопульт"),
@@ -338,7 +341,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -407,6 +410,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "запчаст" not in pn and "шланг" not in pn and "муфт" not in pn
                          and "патруб" not in pn and "переходник" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="borehole_pump":
+                matched=("скважин" in pn and "насос" in pn
+                         and "ремкомплект" not in pn and "запчаст" not in pn
+                         and "винт и корпус" not in pn
+                         and not sku.startswith("900/"))
             elif profile=="impact_drill":
                 matched=("дрел" in pn and "удар" in pn
                          and "шуруповерт" not in pn and "миксер" not in pn and "перфоратор" not in pn
@@ -456,7 +464,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Насосы" if profile in ("drainage_pump","sewage_station","surface_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника")),"source_subgroup":label,
+              "scope_key":key,"source_category":("Насосы" if profile in ("drainage_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника")),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -1315,6 +1323,58 @@ def drainage_pump_directional(rule: dict,a: Any,b: Any) -> float|None:
     return directional(rule,a,b)
 
 
+def borehole_pump_principle_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    if any(x in n for x in ("центробеж","centrifugal")):return "centrifugal"
+    if any(x in n for x in ("винтов","шнек","screw","auger")):return "screw"
+    if any(x in n for x in ("вихрев","vortex")):return "vortex"
+    if any(x in n for x in ("вибрац","vibrat")):return "vibration"
+    return n[:120]
+
+
+def borehole_pump_required_missing(ours: dict,comp: dict) -> bool:
+    required=("water_type","operating_principle","max_head_m","max_pumping_depth_m",
+              "max_immersion_depth_m","well_diameter_mm","flow_rate_lmin")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def borehole_pump_depth_similarity(a: float,b: float) -> float:
+    av=float(a);bv=float(b)
+    d=abs(av-bv);rel=d/max(abs(av),abs(bv),1e-9)
+    if d<=1 or rel<=0.10:return 1.0
+    if d<=2 or rel<=0.20:return 0.85
+    if d<=3 or rel<=0.30:return 0.65
+    return 0.0
+
+
+def borehole_pump_diameter_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b))
+    if d<=5:return 1.0
+    if d<=10:return 0.85
+    if d<=20:return 0.65
+    return 0.0
+
+
+def borehole_pump_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="flow_rate_lmin":
+        av=float(a);bv=float(b)
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if rel<=0.10:return 50
+        return 66 if av>bv else 34
+    if k in ("max_head_m","max_pumping_depth_m","max_immersion_depth_m"):
+        av=float(a);bv=float(b)
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if abs(av-bv)<=1 or rel<=0.10:return 50
+        return 68 if av>bv else 32
+    if k in ("water_type","operating_principle","well_diameter_mm"):
+        # Совместимость, а не шкала "сильнее/слабее".
+        return 50
+    return directional(rule,a,b)
+
+
 def surface_pump_water_tokens(v: Any) -> set[str]:
     n=norm(v)
     out=set()
@@ -2032,8 +2092,26 @@ def normalize_value(key: str, text: str) -> Any:
         vals.extend(float(x.replace(",","."))*60 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:мин|min)\b",low,re.I))
         vals.extend(float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:сек|секунд|с|sec|second(?:s)?)\b",low,re.I))
         return round(min(vals),3) if vals else (round(min(ns),3) if ns else None)
+    if key=="operating_principle":
+        return borehole_pump_principle_family(text)[:120] or None
     if key=="water_type":
         return surface_pump_water_family(text)[:120] or None
+    if key in ("max_pumping_depth_m","max_immersion_depth_m"):
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/100,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/1000,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        return round(ns[0],3) if ns else None
+    if key=="well_diameter_mm":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*10,3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*1000,3)
+        return round(ns[0],3) if ns else None
     if key=="max_suction_depth_m":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))/100,3)
@@ -2482,6 +2560,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     drainage_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","pump_body_material","filter_particle_mm"}.issubset(rule_keys)
     sewage_station_mode={"flow_rate_lmin","input_power_w","max_head_m","filter_particle_mm","max_water_temp_c"}.issubset(rule_keys)
     surface_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","max_suction_depth_m","water_type"}.issubset(rule_keys)
+    borehole_pump_mode={"water_type","operating_principle","max_head_m","max_pumping_depth_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin"}.issubset(rule_keys)
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -2532,6 +2611,36 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             and any(x in ln for x in ("размер","диаметр","пропуск","макс","фильтр"))
         ):
             return "filter_particle_mm"
+        return None
+
+
+    def borehole_pump_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not borehole_pump_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if any(x in ln for x in ("производительн","пропускн способн","максимальн подач","макс подач","расход вод","расход жидк")):
+            return "flow_rate_lmin"
+        if ln=="подача" or ("подач" in ln and "высот" not in ln):
+            return "flow_rate_lmin"
+        if "напор" in ln or ("высот" in ln and any(x in ln for x in ("подъем","подъём","подач"))):
+            return "max_head_m"
+        if "глубин" in ln and "погруж" in ln:
+            return "max_immersion_depth_m"
+        if "глубин" in ln and ("откач" in ln or "забор" in ln):
+            return "max_pumping_depth_m"
+        if ("диаметр" in ln and "скваж" in ln) or ("диаметр" in ln and "обсад" in ln):
+            return "well_diameter_mm"
+        if ("принцип" in ln and any(x in ln for x in ("действ","работ"))) or (
+            "тип насоса" in ln and any(x in vn for x in ("центробеж","винтов","шнек","вихрев","вибрац","centrifugal","screw","vortex"))
+        ):
+            return "operating_principle"
+        if (
+            ("тип" in ln or "вид" in ln or "качест" in ln or "перекач" in ln)
+            and ("вод" in ln or "жидк" in ln)
+        ):
+            return "water_type"
+        if "вод" in ln and any(x in vn for x in ("чист","гряз","загряз","сточ","канализац","морск","солен","пресн")):
+            return "water_type"
         return None
 
 
@@ -2764,7 +2873,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -2954,6 +3063,9 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
 
     q=scope["search_query"]
     candidates=[q]
+    if scope.get("profile_key")=="borehole_pump":
+        for alt in ("насос скважинный","погружной скважинный насос","глубинный насос"):
+            if norm(alt)!=norm(q): candidates.append(alt)
     if scope.get("profile_key")=="surface_pump":
         for alt in ("насос поверхностный","садовый поверхностный насос","самовсасывающий поверхностный насос"):
             if norm(alt)!=norm(q): candidates.append(alt)
@@ -3050,6 +3162,12 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     surface_class=("поверхност" in pn2 and "насос" in pn2)
                     if not surface_class or any(x in pn2 for x in ("насосная станц","станция водоснабж","шланг","муфт","патруб","переходник","запчаст")):
                         continue
+                if scope.get("profile_key")=="borehole_pump":
+                    bn=norm(name)
+                    borehole_class=("насос" in bn and ("скважин" in bn or "глубинн" in bn))
+                    if (not borehole_class
+                        or any(x in bn for x in ("дренаж","фекаль","канализац","сточн","поверхност","насосная станц","ремкомплект","запчаст","шланг","муфт","патруб","переходник"))):
+                        continue
                 if scope.get("profile_key")=="angle_grinder":
                     an=norm(name)
                     grinder_class=(("углов" in an and "шлиф" in an and "машин" in an) or "болгарк" in an or re.search(r"\bа?ушм\b",an))
@@ -3144,6 +3262,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-sprayer2"
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
+    if {"water_type","operating_principle","max_head_m","max_pumping_depth_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin"}.issubset(keys):
+        return RULESET_VERSION+"-boreholepump1"
     if "max_head_m" in keys and "max_suction_depth_m" in keys and "water_type" in keys and "flow_rate_lmin" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-surfacepump1"
     if "max_head_m" in keys and "max_water_temp_c" in keys and "filter_particle_mm" in keys and "flow_rate_lmin" in keys and "input_power_w" in keys:
@@ -4250,6 +4370,37 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+    if profile=="borehole_pump":
+        weights={"water_type":1/7,"operating_principle":1/7,"max_head_m":1/7,"max_pumping_depth_m":1/7,
+                 "max_immersion_depth_m":1/7,"well_diameter_mm":1/7,"flow_rate_lmin":1/7}
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="flow_rate_lmin":
+                    s=drainage_pump_relative_similarity(float(a),float(b))
+                elif k in ("max_head_m","max_pumping_depth_m","max_immersion_depth_m"):
+                    s=borehole_pump_depth_similarity(float(a),float(b))
+                elif k=="well_diameter_mm":
+                    s=borehole_pump_diameter_similarity(float(a),float(b))
+                elif k=="water_type":
+                    aa=surface_pump_water_tokens(a);bb=surface_pump_water_tokens(b)
+                    if aa and bb:s=1.0 if aa==bb else (0.75 if aa.intersection(bb) else 0.35)
+                    else:s=categorical_similarity(a,b)
+                elif k=="operating_principle":
+                    aa=borehole_pump_principle_family(a);bb=borehole_pump_principle_family(b)
+                    s=1.0 if aa and aa==bb else 0.35
+                else:s=0.0
+            except Exception:s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        return round(max(0,min(100,score)),2)
+
+
     if profile=="surface_pump":
         weights={"flow_rate_lmin":0.20,"input_power_w":0.20,"max_head_m":0.20,"max_suction_depth_m":0.20,"water_type":0.20}
         total=used=0.0
@@ -5309,6 +5460,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=miter_saw_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="bench_grinder":
             z=bench_grinder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="borehole_pump":
+            z=borehole_pump_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="surface_pump":
             z=surface_pump_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="sewage_station":
@@ -5377,6 +5530,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=miter_saw_directional(rule,a,b)
         elif profile=="bench_grinder":
             z=bench_grinder_directional(rule,a,b)
+        elif profile=="borehole_pump":
+            z=borehole_pump_directional(rule,a,b)
         elif profile=="surface_pump":
             z=surface_pump_directional(rule,a,b)
         elif profile=="sewage_station":
@@ -5668,8 +5823,8 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -5701,6 +5856,11 @@ def main() -> None:
                     )
                 if profile=="bench_grinder" and scored:
                     gap_confirmed=not bench_grinder_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="borehole_pump" and scored:
+                    gap_confirmed=not borehole_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -5770,6 +5930,8 @@ def main() -> None:
                         data_incomplete=True
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
+                    if profile=="borehole_pump" and borehole_pump_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
                     if profile=="surface_pump" and surface_pump_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="sewage_station" and sewage_station_required_missing(ours["specs_normalized"],comp_specs):
@@ -5823,6 +5985,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по мощности, диаметру диска, протяжке, глубине реза 90°/45° или скорости вращения торцовочной пилы — итог предварительный, часть характеристик не подтверждена")
                     if profile=="bench_grinder" and bench_grinder_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по типу двигателя, мощности, скорости вращения или диаметру круга точильного станка — итог предварительный, часть характеристик не подтверждена")
+                    if profile=="borehole_pump" and borehole_pump_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по типу воды, принципу действия, максимальному напору, глубине откачки, глубине погружения, диаметру скважины или пропускной способности скважинного насоса — итог предварительный, часть характеристик не подтверждена")
                     if profile=="surface_pump" and surface_pump_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по пропускной способности, мощности, максимальному напору воды, глубине откачки или типу воды поверхностного насоса — итог предварительный, часть характеристик не подтверждена")
                     if profile=="sewage_station" and sewage_station_required_missing(ours["specs_normalized"],comp_specs):
