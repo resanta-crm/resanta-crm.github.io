@@ -127,14 +127,19 @@ function placementsHtml(){
  return '<div class="st346-list">'+rows.map(p=>{
    const c=contractFor(p.contract_id),its=itemsForPlacement(p.id),legacy=p.status==='legacy_unreconciled';
    let actions='';
-   if((isManager()||isDF())&&p.status==='active'){
-     actions+='<button class="btn-secondary" data-st346-control="'+p.id+'">Контроль / фото / SKU</button><button class="btn-secondary" data-st346-assess-placement="'+p.id+'">ИИ-анализ</button><button class="btn-secondary" data-st346-return="'+p.id+'">Возврат</button>';
+   if((isManager()||isDF())&&['active','legacy_unreconciled'].includes(p.status)){
+     actions+='<button class="btn-secondary" data-st346-control="'+p.id+'">Контроль / фото / SKU</button><button class="btn-secondary" data-st346-assess-placement="'+p.id+'">ИИ-анализ</button>';
+     if(isDF())actions+='<button class="btn-secondary" data-st346-return-decision="'+p.id+'">Решение ДФ: забрать</button>';
+   }
+   if((isManager()||isDF())&&p.status==='return_requested'){
+     actions+='<button class="btn-primary" data-st346-return="'+p.id+'">Оформить возврат</button>';
    }
    if(c?.contract_path)actions+='<button class="btn-secondary" data-st346-file="'+esc(c.contract_path)+'">Договор</button>';
    if(c?.act_transfer_path)actions+='<button class="btn-secondary" data-st346-file="'+esc(c.act_transfer_path)+'">Акт передачи</button>';
    return '<div class="st346-card '+(legacy?'badline':p.ai_status==='return'?'badline':'')+'"><div class="st346-row"><div><div class="st346-title">'+esc(p.client_name)+' · '+esc(typeName(p.asset_type_id))+'</div><div class="st346-meta">'+placementStatus(p)+' '+(p.asset_id?'ОС: '+esc(assetCode(p.asset_id)):'ОС: не сопоставлено')+' · '+esc(p.manager_name)+' · с '+esc(p.installed_at)+'<br>'+esc(p.address)+'</div></div><div>'+(p.ai_score!=null?badge('ИИ '+p.ai_score+'/100',aiTone(p.ai_status)):'')+(p.ai_status?badge(aiLabel(p.ai_status),aiTone(p.ai_status)):'')+'</div></div>'+
    (legacy?'<div class="st346-alert bad"><b>Расхождение ОС:</b> размещение есть в Excel ДФ, но соответствующая физическая единица Resanta отсутствует в предоставленном реестре ОС. Автоматически к стенду Вихрь не привязываю.</div>':'')+
    (p.ai_public_summary?'<div class="st346-ai"><strong>'+esc(aiLabel(p.ai_status))+'</strong><p>'+esc(p.ai_public_summary)+'</p></div>':'')+
+   (p.return_comment?'<div class="st346-alert warn"><b>Решение ДФ о возврате:</b> '+esc(p.return_comment)+(p.return_requested_by?' · '+esc(p.return_requested_by):'')+'</div>':'')+
    '<div class="st346-note"><b>Договор:</b> '+(c?esc(c.contract_no||'без номера')+' · '+esc(c.status):'не привязан')+(its.length?' · <b>SKU:</b> '+its.map(x=>esc(x.sku)).join(', '):' · SKU пока не зафиксированы')+'</div>'+
    '<div class="st346-buttons"><button class="btn-secondary" data-st346-sales-client="'+p.client_id+'">Продажи клиента</button>'+actions+'</div></div>';
  }).join('')+'</div>';
@@ -304,6 +309,12 @@ async function saveControl(id){
  }catch(e){alert('Не удалось выполнить контроль: '+safe(e?.message||e))}
  finally{if(btn){btn.disabled=false;btn.textContent='Сохранить и проверить ИИ'}}
 }
+async function requestReturnDecision(id){
+ const comment=prompt('Почему стенд нужно забрать? Комментарий ДФ обязателен:')||'';
+ if(!comment.trim())return alert('Комментарий ДФ обязателен');
+ try{await rpc('crm_stands_request_return_v236346',{p_placement_id:id,p_comment:comment});await reload();state.tab='placements';render();alert('Решение ДФ сохранено. Менеджеру доступно оформление фактического возврата.')}
+ catch(e){alert('Не удалось запустить возврат: '+safe(e?.message||e))}
+}
 function returnForm(p){
  const html='<div class="st346-field"><label>Фото при возврате</label><input id="st346-return-photo" type="file" accept="image/*"></div><div class="st346-formgrid"><div class="st346-field"><label>Состояние</label><select id="st346-return-condition"><option value="ok">Исправен</option><option value="repair">Требует ремонта</option><option value="damaged">Повреждён</option></select></div><div class="st346-field"><label>Акт возврата (если есть)</label><input id="st346-return-act" type="file" accept="application/pdf,image/*"></div></div><div class="st346-field"><label>Комментарий</label><textarea id="st346-return-comment" rows="3"></textarea></div>';
  openModal('Возврат стенда',p.client_name+' · '+assetCode(p.asset_id),html,'<button class="btn-secondary" data-st346-close>Отмена</button><button class="btn-primary" data-st346-save-return="'+p.id+'">Подтвердить возврат</button>');
@@ -373,6 +384,7 @@ function bind(){
    const ctl=e.target.closest?.('[data-st346-control]');if(ctl)return controlForm(byId(state.boot?.placements,ctl.dataset.st346Control));
    const sctl=e.target.closest?.('[data-st346-save-control]');if(sctl)return saveControl(sctl.dataset.st346SaveControl);
    const ap=e.target.closest?.('[data-st346-assess-placement]');if(ap)return assessPlacement(ap.dataset.st346AssessPlacement);
+   const rd=e.target.closest?.('[data-st346-return-decision]');if(rd)return requestReturnDecision(rd.dataset.st346ReturnDecision);
    const ret=e.target.closest?.('[data-st346-return]');if(ret)return returnForm(byId(state.boot?.placements,ret.dataset.st346Return));
    const sret=e.target.closest?.('[data-st346-save-return]');if(sret)return saveReturn(sret.dataset.st346SaveReturn);
    const sc=e.target.closest?.('[data-st346-sales-client]');if(sc)return showSales(sc.dataset.st346SalesClient);
