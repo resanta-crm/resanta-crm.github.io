@@ -7,7 +7,7 @@
 'use strict';
 if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203)return;
 
-const V='v23.6.217';
+const V='v23.6.345';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -17,6 +17,7 @@ const currentMonth=()=>today().slice(0,7);
 const state={view:'active',manager:'all',client:'',group:'',sku:'',month:currentMonth(),bound:false,rendering:false};
 const views=[
   ['decision','Нужно моё решение','decision'],
+  ['pending','На согласовании',''],
   ['needs_close','Нужно закрыть','bad'],
   ['attention','Требуют внимания','warn'],
   ['active','Идут сейчас','good'],
@@ -87,6 +88,10 @@ function passesCommon(x,view=state.view){
 }
 function inView(x,view=state.view){
   if(view==='decision')return x.decision;
+  if(view==='pending'){
+    const a=actor(),role=safe(a?.role).toLowerCase(),mine=norm(x.p?.manager_name)===norm(a?.name);
+    return ['pending_df','pending_dfs'].includes(x.raw)&&(role==='boss'||mine);
+  }
   if(view==='needs_close')return x.needsClose;
   if(view==='attention')return x.attention;
   if(view==='active')return x.st==='active'&&!x.needsClose&&!['rejected','completed'].includes(x.raw);
@@ -191,7 +196,7 @@ function rerender(scroll=false){
 function setView(v,{scroll=true}={}){
   if(!views.some(x=>x[0]===v))return;
   state.view=v;
-  if(v==='needs_close'||v==='decision')state.month='all';
+  if(v==='needs_close'||v==='decision'||v==='pending')state.month='all';
   rerender(scroll);
 }
 function setClient(v){state.client=safe(v);rerender(true)}
