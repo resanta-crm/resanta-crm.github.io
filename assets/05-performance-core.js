@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.330
+/* RESANTA CRM v23.6.338
  * Ultra-fast core, data-version watcher, single-render navigation
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 55-57
@@ -379,7 +379,9 @@ function prefetchFeatureForPage(page,priority=65){
   }else if(page==='vip'){
     queueResource('vips',priority);
     featureJob('history',priority-2,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-vip'});});
-  }else if(page==='sales'||page==='falling'){
+  }else if(page==='sales'){
+    featureJob('sales-fast',priority,async()=>{await window.crmFastSalesReloadV236338?.();});
+  }else if(page==='falling'){
     featureJob('history',priority,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-'+page});});
   }else if(page==='abc'){
     featureJob('history',priority,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-abc'});});
@@ -563,6 +565,11 @@ async function refreshKey(key){
       }else if(key==='users'){
         await freshUsers();
       }else if(key==='sales'){
+        if(active==='sales'&&typeof window.crmFastSalesReloadV236338==='function'){
+          await window.crmFastSalesReloadV236338();
+          dirty.delete(key);
+          return true;
+        }
         if(active==='managers'){
           dirty.delete(key);
           renderActive();
@@ -570,7 +577,7 @@ async function refreshKey(key){
         }
         if(active==='alerts'&&typeof window.crmSignalsRefreshV227329==='function'){
           await window.crmSignalsRefreshV227329('sales');
-        }else if(['sales','falling','abc','vip','managers'].includes(active)&&typeof window.v22722EnsureHistory==='function'){
+        }else if(['falling','abc','vip'].includes(active)&&typeof window.v22722EnsureHistory==='function'){
           await window.v22722EnsureHistory({force:true,reason:'responsive-version'});
         }else return false;
       }else if(key==='payments'){
