@@ -858,3 +858,52 @@ analyze public.triovist_ai_tasks;
 analyze public.triovist_ai_task_items;
 analyze public.triovist_sales_resolved_cache;
 analyze public.triovist_plans;
+
+
+-- v23.6.340 · finish RLS InitPlan optimization across user-facing modules.
+alter policy client_aliases_write_boss on public.client_aliases
+  using (exists(select 1 from public.users u where u.id=(select auth.uid()) and u.role='boss'))
+  with check (exists(select 1 from public.users u where u.id=(select auth.uid()) and u.role='boss'));
+alter policy client_debt_write_service_role on public.client_debt using ((select auth.role())='service_role');
+alter policy client_photos_delete_authenticated on public.client_photos using ((select auth.role())='authenticated');
+alter policy client_photos_write_authenticated on public.client_photos with check ((select auth.role())='authenticated');
+alter policy authenticated_select_client_purchase_items on public.client_purchase_items using ((select auth.role())='authenticated');
+alter policy authenticated_select_client_purchases on public.client_purchases using ((select auth.role())='authenticated');
+alter policy falling_client_notes_boss_all on public.falling_client_notes
+  using (exists(select 1 from public.users u where u.id=(select auth.uid()) and u.role='boss'))
+  with check (exists(select 1 from public.users u where u.id=(select auth.uid()) and u.role='boss'));
+alter policy gps_points_own_insert on public.gps_track_points with check (user_id=(select auth.uid()));
+alter policy authenticated_all_negotiations on public.negotiations
+  using ((select auth.role())='authenticated') with check ((select auth.role())='authenticated');
+alter policy pdz_legal_actions_write_service_role on public.pdz_legal_actions
+  using ((select auth.role())='service_role') with check ((select auth.role())='service_role');
+alter policy route_network_points_update_boss on public.route_network_points
+  using (exists(select 1 from public.users u where lower(coalesce(u.email,''))=lower(coalesce(((select auth.jwt())->>'email'),'')) and public.crm_v2271_norm(u.role)='boss'))
+  with check (exists(select 1 from public.users u where lower(coalesce(u.email,''))=lower(coalesce(((select auth.jwt())->>'email'),'')) and public.crm_v2271_norm(u.role)='boss'));
+alter policy route_physical_point_clients_write_boss on public.route_physical_point_clients
+  using (exists(select 1 from public.users u where u.id=(select auth.uid()) and u.role='boss'))
+  with check (exists(select 1 from public.users u where u.id=(select auth.uid()) and u.role='boss'));
+alter policy triovist_assignments_select on public.triovist_group_assignments
+  using ((select public.triovist_is_boss()) or ((select public.triovist_is_member()) and lower(manager_email)=lower(coalesce(((select auth.jwt())->>'email'),''))));
+alter policy triovist_plans_select on public.triovist_plans
+  using ((select public.triovist_is_boss()) or ((select public.triovist_is_member()) and lower(manager_email)=lower(coalesce(((select auth.jwt())->>'email'),''))));
+alter policy vip_promotions_select_authenticated on public.vip_promotions using ((select auth.role())='authenticated');
+alter policy vip_promotions_write_authenticated on public.vip_promotions
+  using ((select auth.role())='authenticated') with check ((select auth.role())='authenticated');
+alter policy vip_sales_select_authenticated on public.vip_sales using ((select auth.role())='authenticated');
+alter policy visits_delete_authenticated on public.visits using ((select auth.role())='authenticated');
+alter policy visits_update_authenticated on public.visits
+  using ((select auth.role())='authenticated') with check ((select auth.role())='authenticated');
+alter policy visits_write_authenticated on public.visits with check ((select auth.role())='authenticated');
+
+-- Cover only active/non-trivial FK paths reported by Performance Advisor.
+create index if not exists triovist_content_issues_first_import_v236340_idx on public.triovist_content_issues(first_seen_import_id);
+create index if not exists triovist_content_issues_last_import_v236340_idx on public.triovist_content_issues(last_seen_import_id);
+create index if not exists triovist_market_products_run_v236340_idx on public.triovist_market_products_current_v1(run_id);
+create index if not exists triovist_top_current_run_v236340_idx on public.triovist_21vek_top_current(run_id);
+create index if not exists warehouse_pick_scan_item_v236340_idx on public.warehouse_pick_scan_events_v1(item_id);
+create index if not exists triovist_ai_item_baseline_import_v236340_idx on public.triovist_ai_task_items(baseline_import_id);
+create index if not exists triovist_ai_item_check_import_v236340_idx on public.triovist_ai_task_items(last_check_import_id);
+create index if not exists triovist_ai_task_check_import_v236340_idx on public.triovist_ai_tasks(last_check_import_id);
+create index if not exists triovist_ai_task_source_import_v236340_idx on public.triovist_ai_tasks(source_import_id);
+create index if not exists warehouse_pick_tg_order_v236340_idx on public.warehouse_pick_telegram_queue_v2(order_id);
