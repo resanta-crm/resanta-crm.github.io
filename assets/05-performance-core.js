@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.329
+/* RESANTA CRM v23.6.330
  * Ultra-fast core, data-version watcher, single-render navigation
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 55-57
@@ -379,7 +379,7 @@ function prefetchFeatureForPage(page,priority=65){
   }else if(page==='vip'){
     queueResource('vips',priority);
     featureJob('history',priority-2,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-vip'});});
-  }else if(page==='sales'||page==='falling'||page==='managers'){
+  }else if(page==='sales'||page==='falling'){
     featureJob('history',priority,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-'+page});});
   }else if(page==='abc'){
     featureJob('history',priority,async()=>{if(typeof window.v22722EnsureHistory==='function')await window.v22722EnsureHistory({reason:'ultra-prefetch-abc'});});
@@ -506,7 +506,7 @@ function pageKeys(p){
     route:['routes','visits','tasks'],
     control:['tasks','visits','routes','absences'],
     alerts:['tasks','promotions','sales','vips'],
-    managers:['tasks','visits','routes','absences','users','kpi','imports','sales'],
+    managers:['tasks','visits','absences','users','kpi','imports','sales'],
     users:['users'],
     vip:['vips','sales'],
     sales:['sales'],
@@ -563,6 +563,11 @@ async function refreshKey(key){
       }else if(key==='users'){
         await freshUsers();
       }else if(key==='sales'){
+        if(active==='managers'){
+          dirty.delete(key);
+          renderActive();
+          return true;
+        }
         if(active==='alerts'&&typeof window.crmSignalsRefreshV227329==='function'){
           await window.crmSignalsRefreshV227329('sales');
         }else if(['sales','falling','abc','vip','managers'].includes(active)&&typeof window.v22722EnsureHistory==='function'){
