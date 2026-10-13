@@ -16,8 +16,10 @@ on:
       - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
       - '.github/workflows/triovist-21vek-competitors.yml'
   schedule:
-    # После основного собственного парсера 21vek. Позиция/цена фиксируются ежедневно.
-    - cron: '47 3 * * *'
+    # Полный рынок — только ночью. GitHub schedule может стартовать с задержкой,
+    # поэтому ставим 18:17 UTC (21:17 Минск): даже при большой задержке не попадаем
+    # в основной рабочий день. Ручной workflow_dispatch остаётся доступен.
+    - cron: '17 18 * * *'
   workflow_dispatch:
 
 concurrency:
