@@ -79,7 +79,7 @@ function header(){
  '<button class="btn-secondary" data-st346-refresh>↻ Обновить</button></div></div>'+
  '<div class="st346-kpis">'+
  kpi('ОС по реестру',s.os_units||0,'единиц')+
- kpi('Физически заведено',s.physical_assets||0,'единиц')+
+ kpi(isManager()?'Доступно / мои ОС':'Физически заведено',s.physical_assets||0,isManager()?'видимые единицы':'единиц')+
  kpi('У клиентов',s.installed||0,'сверено с ОС')+
  kpi('Свободно',s.free||0,'можно резервировать')+
  kpi('Не сверено',s.legacy_unreconciled||0,'факт из Excel')+
@@ -89,8 +89,8 @@ function header(){
  '</div>';
 }
 function tabs(){
- const a=[['placements','У клиентов'],['requests','Заявки'],['os','ОС / реестр']];
- if(isDF()||isDFS())a.push(['recommendations','ИИ · кандидаты']);
+ const a=[['placements','У клиентов'],['requests','Заявки']];
+ if(isDF()||isDFS())a.push(['os','ОС / реестр'],['recommendations','ИИ · кандидаты']);
  if(isDFS())a.push(['internal','Логика ИИ · ДФС']);
  return '<div class="st346-tabs">'+a.map(x=>'<button class="st346-tab '+(state.tab===x[0]?'active':'')+'" data-st346-tab="'+x[0]+'">'+x[1]+'</button>').join('')+'</div>';
 }
