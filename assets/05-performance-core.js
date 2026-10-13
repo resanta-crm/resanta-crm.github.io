@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.339
+/* RESANTA CRM v23.6.341
  * Ultra-fast core, data-version watcher, single-render navigation
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 55-57
@@ -118,6 +118,11 @@ function persistSnapshot(){
 }
 
 async function fullRows(table){return await (window.loadAllRows||loadAllRows)(table);}
+async function coreRpcRows(fn){
+  const {data,error}=await db.rpc(fn);
+  if(error)throw error;
+  return Array.isArray(data)?data:[];
+}
 function sortTasks(rows){
   const ids=activeClientIds();
   return (rows||[]).filter(t=>!t.client_id||ids.has(String(t.client_id))).sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||'')));
@@ -138,9 +143,9 @@ function apply(name,data){
   return data;
 }
 const resourceLoaders={
-  tasks:()=>fullRows('tasks'),
-  visits:()=>fullRows('visits'),
-  routes:()=>fullRows('route_plans'),
+  tasks:()=>coreRpcRows('crm_core_tasks_v236341'),
+  visits:()=>coreRpcRows('crm_core_visits_v236341'),
+  routes:()=>coreRpcRows('crm_core_routes_v236341'),
   negotiations:()=>fullRows('negotiations'),
   aliases:()=>fullRows('client_aliases'),
   quality:()=>fullRows('visit_quality_reviews'),
