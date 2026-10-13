@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-10-13-resanta-crm-v23.6.340-performance';
+const APP_VERSION = '2026-10-13-resanta-crm-v23.6.342-analytics';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -66,7 +66,7 @@ const APP_VERSION = '2026-10-13-resanta-crm-v23.6.340-performance';
 <script defer src="./assets/95-warehouse-orders-v1.js?v=23.6.242"></script>
 <script defer src="./assets/96-warehouse-orders-tab-v1.js?v=23.6.242"></script>
 <script defer src="./assets/69-data-freshness-v23660.js?v=23.6.338"></script>
-<script defer src="./assets/77-sales-freshness-alert-v23698.js?v=23.6.167"></script>\n<script defer src="./assets/112-sales-fast-v236338.js?v=23.6.338"></script>
+<script defer src="./assets/77-sales-freshness-alert-v23698.js?v=23.6.167"></script>\n<script defer src="./assets/112-sales-fast-v236338.js?v=23.6.338"></script>\n<script defer src="./assets/113-analytics-aggregates-v236342.js?v=23.6.342"></script>
 <script defer src="./assets/70-vip-period-compare-v23662.js?v=23.6.64"></script>
 <script defer src="./assets/98-period-filters-v236198.js?v=23.6.277"></script>
 <style>
