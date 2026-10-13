@@ -4089,10 +4089,12 @@ window.addEventListener('pageshow',function(){
     const p=num(t.priority_score),pc=p>=90?'tri-task-p100':p>=75?'tri-task-p75':p>=50?'tri-task-p50':'tri-task-p0',ctx=t._ctx||t.commercial_context||{},manager=String(t.manager_email||'').toLowerCase();
     let items=(t.items||[]).length?(t.items||[]):(Array.isArray(ctx.plan_items)?ctx.plan_items:[]);
     if(ctx.task_scope==='subgroup'){
-      const listingBySku=new Map((Array.isArray(ctx.listing_actions)?ctx.listing_actions:[]).map(a=>[skuKey(a?.sku),a]));
+      const listingBySku=new Map();
+      (Array.isArray(ctx.listing_actions)?ctx.listing_actions:[]).forEach(a=>{const k=skuKey(a?.sku);if(k)listingBySku.set(k,a)});
+      (Array.isArray(ctx.listing_progress?.actions)?ctx.listing_progress.actions:[]).forEach(a=>{const k=skuKey(a?.sku);if(k)listingBySku.set(k,a)});
       items=items.map(x=>{
         const live=triPlanItemLiveV227319(x,manager),la=listingBySku.get(skuKey(x?.sku))||{};
-        return {...live,_listing_action:la,listing_target:live.listing_target||la.action_label||'',listing_current_position:la.current_position??live.listing_position??null,listing_target_position:la.target_position??null};
+        return {...live,_listing_action:la,listing_target:live.listing_target||la.action_label||'',listing_current_position:la.current_position_now??la.current_position??live.listing_position??null,listing_target_position:la.target_position??null,listing_checked_at:la.checked_observed_at||la.observed_at||''};
       });
     }
     else if(!items.length){const fallbackSku=ctx.sku||t.sku||'';if(fallbackSku)items=[{sku:fallbackSku,product_name:ctx.product_name||t.product_name||'',issue_title:ctx.content_issue_title||ctx.strategy_label||t.title,current_value:ctx.current_value||('21vek '+qty(ctx.partner_total)+' шт.'),target_value:ctx.target_value||ctx.target_metric||t.expected_result,item_status:'open',donor_article:ctx.donor_article||'',product_url:ctx.product_url||''}];}
