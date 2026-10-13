@@ -1,8 +1,8 @@
-/* RESANTA CRM v23.6.79 · SALES FRESHNESS + VIP SIGNAL */
+/* RESANTA CRM v23.6.338 · SALES FRESHNESS + VIP SIGNAL */
 (function(){
 'use strict';
 if(window.RESANTA_DATA_FRESHNESS_V23660)return;
-const VERSION='v23.6.79';
+const VERSION='v23.6.338';
 let channel=null,salesFlight=null,triFlight=null;
 
 function page(){return document.getElementById('app')?.dataset?.activePage||'';}
@@ -27,12 +27,17 @@ async function onSales(row){
   statusReplace(row);
   try{v2273HistoryNeedsRefresh=true;}catch(_){}
   const p=page(),targets=new Set(['vip','falling','sales','abc','managers','promotions']);
-  if(!targets.has(p)||typeof window.v22722EnsureHistory!=='function')return;
+  if(!targets.has(p))return;
   if(salesFlight)return salesFlight;
   salesFlight=(async()=>{
     try{
-      await window.v22722EnsureHistory({force:true,reason:'realtime-v23660'});
-      if(page()===p)renderSalesPage(p);
+      if(p==='sales'&&typeof window.crmFastSalesReloadV236338==='function'){
+        await window.crmFastSalesReloadV236338();
+      }else{
+        if(typeof window.v22722EnsureHistory!=='function')return;
+        await window.v22722EnsureHistory({force:true,reason:'realtime-v23660'});
+        if(page()===p)renderSalesPage(p);
+      }
       try{window.crmVipActionsSourceChangedV23679?.('sales')}catch(_){}
     }catch(e){console.warn(VERSION+' sales realtime refresh',e);}
     finally{salesFlight=null;}
