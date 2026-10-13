@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221)return;
-const V='v23.6.221';
+const V='v23.6.326';
 let xlsxFlight=null,exportFlight=null;
 const width=n=>({wch:n});
 const toBool=v=>v===true?'Да':v===false?'Нет':'—';
@@ -45,12 +45,19 @@ async function currentCards(){
   return {cards:all,snapshot};
 }
 function safeSheetName(v){return String(v||'21vek').replace(/[\\/?*\[\]:]/g,' ').trim().slice(0,31)||'21vek';}
-function topPosition(c){const n=Number(c?.listing_position||0);return n>0?n:'';}
+function normalizedTopPosition(c){
+  const raw=c?.listing_position??c?.top_position??c?.position??null;
+  const n=Number(raw);
+  return Number.isFinite(n)&&n>0?n:0;
+}
+function topPosition(c){const n=normalizedTopPosition(c);return n||'';}
 function topLabel(c){
-  const n=Number(c?.listing_position||0);
+  const n=normalizedTopPosition(c);
   if(n>0&&n<=30)return'TOP-30';
   if(n>30&&n<=60)return'TOP-60';
   if(n>60)return'Вне TOP-60';
+  const s=String(c?.top_status||'').trim();
+  if(['TOP-30','TOP-60','Вне TOP-60','Ошибка'].includes(s))return s;
   return'Не проверено';
 }
 function row(c){
@@ -119,8 +126,8 @@ async function exportExcel(){
           'С МРЦ':x.filter(c=>c.mrc_byn!=null).length,
           'Ниже МРЦ (в наличии)':x.filter(c=>c.in_stock===true&&Number(c.mrc_delta_pct)<0).length,
           'Ниже МРЦ >5% (в наличии)':x.filter(c=>c.in_stock===true&&Number(c.mrc_delta_pct)<-5).length,
-          'TOP-30':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=30).length,
-          'TOP-60':x.filter(c=>Number(c.listing_position||0)>0&&Number(c.listing_position)<=60).length,
+          'TOP-30':x.filter(c=>{const n=normalizedTopPosition(c);return n>0&&n<=30}).length,
+          'TOP-60':x.filter(c=>{const n=normalizedTopPosition(c);return n>0&&n<=60}).length,
           'Источник':'Собственный парсер 21vek'
         };
       });
@@ -140,7 +147,7 @@ async function exportExcel(){
       XLSX.writeFile(wb,'Triovist_21vek_MRC_'+snapshot+who+'.xlsx',{compression:true});
       if(typeof showToast==='function')showToast('✅ Excel выгружен: '+cards.length.toLocaleString('ru-RU')+' карточек');
     }catch(e){
-      console.error('21vek export v23.6.221',e);
+      console.error('21vek export v23.6.326',e);
       alert('Не удалось выгрузить Excel: '+(e?.message||e));
     }finally{
       const b=document.getElementById('tri21-export-xlsx-v236109');
@@ -151,5 +158,5 @@ async function exportExcel(){
 }
 function install(){window.triovist21vekExportExcelV236109=exportExcel;}
 install();[250,900,2200].forEach(ms=>setTimeout(install,ms));
-window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221=Object.freeze({version:V,fastExport:true,mrc:true,authRetry:true});
+window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221=Object.freeze({version:V,fastExport:true,mrc:true,authRetry:true,topConsistency:true});
 })();
