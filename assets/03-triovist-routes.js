@@ -4088,10 +4088,28 @@ window.addEventListener('pageshow',function(){
   function taskHtml(t){
     const p=num(t.priority_score),pc=p>=90?'tri-task-p100':p>=75?'tri-task-p75':p>=50?'tri-task-p50':'tri-task-p0',ctx=t._ctx||t.commercial_context||{},manager=String(t.manager_email||'').toLowerCase();
     let items=(t.items||[]).length?(t.items||[]):(Array.isArray(ctx.plan_items)?ctx.plan_items:[]);
-    if(ctx.task_scope==='subgroup')items=items.map(x=>triPlanItemLiveV227319(x,manager));
+    if(ctx.task_scope==='subgroup'){
+      const listingBySku=new Map((Array.isArray(ctx.listing_actions)?ctx.listing_actions:[]).map(a=>[skuKey(a?.sku),a]));
+      items=items.map(x=>{
+        const live=triPlanItemLiveV227319(x,manager),la=listingBySku.get(skuKey(x?.sku))||{};
+        return {...live,_listing_action:la,listing_target:live.listing_target||la.action_label||'',listing_current_position:la.current_position??live.listing_position??null,listing_target_position:la.target_position??null};
+      });
+    }
     else if(!items.length){const fallbackSku=ctx.sku||t.sku||'';if(fallbackSku)items=[{sku:fallbackSku,product_name:ctx.product_name||t.product_name||'',issue_title:ctx.content_issue_title||ctx.strategy_label||t.title,current_value:ctx.current_value||('21vek '+qty(ctx.partner_total)+' шт.'),target_value:ctx.target_value||ctx.target_metric||t.expected_result,item_status:'open',donor_article:ctx.donor_article||'',product_url:ctx.product_url||''}];}
     const verified=items.filter(x=>x.item_status==='verified').length;
-    const itemHtml=items.map((x,i)=>{const cls=x.item_status==='verified'?'tri-task-ok':x.item_status==='missing'?'tri-task-wait':'tri-task-bad',label=x.item_status==='verified'?'Цель достигнута':x.item_status==='missing'?'Нет в новом отчёте':'В работе';return '<div class="tri-task-item"><div><b>'+(i+1)+'. '+h(x.sku||'—')+'</b><div class="tri-task-note">21vek '+h(x.donor_article||'—')+'</div></div><div>'+h(x.product_name||'Товар')+'<div class="tri-task-note"><b>'+h(x.reason_label||x.issue_title||'Приоритетный SKU')+'</b></div>'+(x.content_issue_title?'<div class="tri-task-note">Карточка: '+h(x.content_issue_title)+'</div>':'')+(x.product_url?'<a href="'+ha(x.product_url)+'" target="_blank" rel="noopener">Открыть карточку</a>':'')+'</div><div><span class="'+cls+' tri-task-item-status">'+label+'</span><div class="tri-task-note">Сейчас: '+h(x.current_value||'—')+'</div></div><div><b>Цель SKU</b><div class="tri-task-note">'+h(x.target_value||'—')+'</div></div></div>';}).join('');
+    const itemHtml=items.map((x,i)=>{
+      const cls=x.item_status==='verified'?'tri-task-ok':x.item_status==='missing'?'tri-task-wait':'tri-task-bad';
+      const label=x.item_status==='verified'?'Цель достигнута':x.item_status==='missing'?'Нет в новом отчёте':'В работе';
+      const la=x._listing_action||{};
+      const action=x.listing_target||la.action_label||x.target_value||'';
+      const curPos=x.listing_current_position;
+      const targetPos=x.listing_target_position;
+      const posNow=curPos!=null?'#'+h(curPos):(la.action_code?'вне TOP-60':'—');
+      const posGoal=targetPos!=null?(targetPos===60?'≤ #60':targetPos===30?'≤ #30':'≤ #'+h(targetPos)):'';
+      const actionText=action||'Контролировать продажи, наличие и карточку SKU';
+      const listingLine=(la.action_code||curPos!=null||targetPos!=null)?'<div class="tri-task-note"><b>Листинг:</b> сейчас '+posNow+(posGoal?' · цель '+posGoal:'')+'</div>':'';
+      return '<div class="tri-task-item"><div><b>'+(i+1)+'. '+h(x.sku||'—')+'</b><div class="tri-task-note">21vek '+h(x.donor_article||'—')+'</div></div><div>'+h(x.product_name||'Товар')+'<div class="tri-task-note"><b>'+h(x.reason_label||x.issue_title||'Приоритетный SKU')+'</b></div>'+(x.content_issue_title?'<div class="tri-task-note">Карточка: '+h(x.content_issue_title)+'</div>':'')+(x.product_url?'<a href="'+ha(x.product_url)+'" target="_blank" rel="noopener">Открыть карточку</a>':'')+'</div><div><span class="'+cls+' tri-task-item-status">'+label+'</span><div class="tri-task-note">Сейчас: '+h(x.current_value||'—')+'</div>'+listingLine+'</div><div><b>Что сделать по SKU</b><div class="tri-task-note"><b>'+h(actionText)+'</b></div>'+(posGoal?'<div class="tri-task-note">Целевая позиция: '+posGoal+'</div>':'')+'</div></div>';
+    }).join('');
     const reasonLabel=ctx.task_scope==='subgroup'?(ctx.strategy_label||'План подгруппы'):(({lost_sales:'Возврат продаж',no_stock_21vek:'Нет наличия 21vek',novelty:'Новинка',falling_sales:'Падение SKU',low_stock_21vek:'Низкий запас'}[ctx.reason_code]||ctx.content_issue_title||ctx.reason_code));
     const parentPill=ctx.parent_group&&norm(ctx.parent_group)!==norm(t.group_name)?'<span class="tri-task-pill">'+h(ctx.parent_group)+'</span>':'';
     const cur=ctx.subgroup_current_revenue==null?ctx.current_revenue:ctx.subgroup_current_revenue,prev=ctx.subgroup_previous_revenue==null?ctx.previous_revenue:ctx.subgroup_previous_revenue,loss=ctx.subgroup_loss==null?ctx.loss:ctx.subgroup_loss;
