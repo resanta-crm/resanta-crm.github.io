@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-10-13-resanta-crm-v23.6.345-promotion-ai';
+const APP_VERSION = '2026-10-13-resanta-crm-v23.6.346-stands';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -452,6 +452,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')"><span class="icon">📝</span> Визиты</button>
       <button class="nav-item" id="nav-vip" onclick="goPage('vip','ВИП клиенты')"><span class="icon">💎</span> ВИП клиенты</button>
       <button class="nav-item" id="nav-promotions" onclick="goPage('promotions','Акции')"><span class="icon">🎯</span> Акции <span class="alert-dot" id="promotions-alert-dot" style="display:none"></span></button>
+      <button class="nav-item" id="nav-stands" onclick="goPage('stands','Стенды')"><span class="icon">🧱</span> Стенды</button>
       <button class="nav-item" id="nav-vip-actions" onclick="window.crmVipActionsNavOpenV23673&&window.crmVipActionsNavOpenV23673()" style="display:none"><span class="icon">🎯</span> Акции VIP</button>
       <button class="nav-item" id="nav-budgets" onclick="goPage('budgets','Бюджеты клиентов')"><span class="icon">💼</span> Бюджеты</button>
       <button class="nav-item" id="nav-debt" onclick="goPage('debt','Задолженность')"><span class="icon">💰</span> Задолженность</button>
@@ -579,6 +580,12 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
           <div id="vip-decliners"></div>
         </div>
         <div id="vip-list"></div>
+      </div>
+      <div class="page" id="page-stands">
+        <div id="stands-v236346-root">
+          <div class="page-title">🧱 Стенды / ОС</div>
+          <div class="card" style="font-size:12px;color:var(--sub)">Загружаю модуль стендов…</div>
+        </div>
       </div>
       <div class="page" id="page-promotions">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px">
@@ -873,6 +880,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     <button class="bn-item" id="bn-visits" onclick="goPage('visits','Визиты')">📝<span>Визиты</span></button>
     <button class="bn-item" id="bn-vip" onclick="goPage('vip','ВИП клиенты')">💎<span>ВИП</span></button>
     <button class="bn-item" id="bn-promotions" onclick="goPage('promotions','Акции')">🎯<span>Акции</span></button>
+    <button class="bn-item" id="bn-stands" onclick="goPage('stands','Стенды')">🧱<span>Стенды</span></button>
     <button class="bn-item" id="bn-budgets" onclick="goPage('budgets','Бюджеты')">💼<span>Бюджеты</span></button>
     <button class="bn-item" id="bn-debt" onclick="goPage('debt','Задолженность')">💰<span>Долги</span></button>
     <button class="bn-item" id="bn-sales" onclick="goPage('sales','Продажи')">📈<span>Продажи</span></button>
@@ -1699,6 +1707,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 
 
 
-<script defer src="./assets/100-safe-upgrades-loader-v236272.js?v=23.6.345"></script>
+<script defer src="./assets/100-safe-upgrades-loader-v236272.js?v=23.6.346"></script>
 </body>
 </html>
