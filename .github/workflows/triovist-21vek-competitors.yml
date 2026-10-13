@@ -43,10 +43,13 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
 
       - name: Установить зависимости
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pip install requests beautifulsoup4
 
       - name: Проверка рынка — Конвекторы + Масляные радиаторы + Тепловентиляторы + Тепловые пушки + Увлажнители + Электропилы + Снегоуборщики + Воздуходувки + Бензопилы + Инфракрасные
-        if: github.event_name != 'pull_request'
+        # Тяжёлый рыночный пересчёт не запускаем на каждом push в рабочее время:
+        # push проверяет синтаксис, полный рынок — только по расписанию или вручную.
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
