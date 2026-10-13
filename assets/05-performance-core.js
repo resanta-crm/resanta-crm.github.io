@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.338
+/* RESANTA CRM v23.6.339
  * Ultra-fast core, data-version watcher, single-render navigation
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 55-57
@@ -27,9 +27,9 @@ const CACHE_STORE='datasets';
 const CACHE_SCHEMA=1;
 const PERSIST_MAX_AGE=12*60*60*1000;
 const TTL={
-  tasks:45*1000,
-  visits:90*1000,
-  routes:90*1000,
+  tasks:5*60*1000,
+  visits:5*60*1000,
+  routes:5*60*1000,
   absences:3*60*1000,
   negotiations:5*60*1000,
   aliases:30*60*1000,
