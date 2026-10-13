@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.328',TTL=30000;
+const V='v23.6.343',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -2774,16 +2774,16 @@ function loadXlsx(){
  return xlsxFlight;
 }
 async function exportKind(kind){
- const all=[];for(let off=0;;off+=500){const d=await rpc('triovist_market_export_v236224',{p_kind:kind,p_offset:off,p_limit:500});const rows=Array.isArray(d.rows)?d.rows:[];all.push(...rows);if(!d.has_more||!rows.length)break}return all;
+ const all=[];for(let off=0;;off+=500){const d=await rpc('triovist_market_export_v236343',{p_kind:kind,p_offset:off,p_limit:500});const rows=Array.isArray(d.rows)?d.rows:[];all.push(...rows);if(!d.has_more||!rows.length)break}return all;
 }
 async function exportExcel(btn){
  if(exportFlight)return exportFlight;
  exportFlight=(async()=>{
   const old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='⏳ Готовлю Excel…'}
   try{
-   const [XLSX,summary,comparison,raw,gaps,errors]=await Promise.all([loadXlsx(),exportKind('summary'),exportKind('comparison'),exportKind('raw'),exportKind('gaps'),exportKind('errors')]);
+   const [XLSX,summary,comparison,ownListing,raw,gaps,errors]=await Promise.all([loadXlsx(),exportKind('summary'),exportKind('comparison'),exportKind('own_listing'),exportKind('raw'),exportKind('gaps'),exportKind('errors')]);
    const wb=XLSX.utils.book_new();
-   for(const [name,rows] of [['Сводка',summary],['Сравнение',comparison],['Конкуренты RAW',raw],['Пробелы ассортимента',gaps],['Ошибки данных',errors]]){
+   for(const [name,rows] of [['Сводка',summary],['Сравнение',comparison],['Наш листинг',ownListing],['Конкуренты RAW',raw],['Пробелы ассортимента',gaps],['Ошибки данных',errors]]){
     const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=Object.keys(rows[0]||{}).map(k=>({wch:Math.min(55,Math.max(12,String(k).length+4))}));if(rows.length)ws['!autofilter']={ref:ws['!ref']};XLSX.utils.book_append_sheet(wb,ws,name);
    }
    XLSX.writeFile(wb,'Triovist_21vek_Конкуренты_'+new Date().toISOString().slice(0,10)+'.xlsx',{compression:true});
