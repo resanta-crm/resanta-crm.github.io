@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.316
+/* RESANTA CRM v23.6.329
  * Ultra-fast core, data-version watcher, single-render navigation
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 55-57
@@ -162,7 +162,7 @@ function pageNeeds(page){
   if(page==='my-routes'||page==='route'||page==='routes-boss')return['routes','visits','tasks','absences'];
   if(page==='alerts')return['tasks','partial','absences'];
   if(page==='control')return['tasks','visits','routes','absences'];
-  if(page==='managers')return['tasks','visits','routes','absences','kpi','imports'];
+  if(page==='managers')return['tasks','visits','absences','kpi','imports'];
   if(page==='vip')return['vips'];
   if(page==='falling'||page==='sales'||page==='abc'||page==='payments')return['imports'];
   return[];
