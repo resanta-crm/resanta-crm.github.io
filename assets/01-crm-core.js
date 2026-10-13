@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.0.0
+/* RESANTA CRM v23.6.339
  * Base CRM: data model, UI, auth, primary renderers
  * Extracted from v22.7.32.2.17 without business-logic changes.
  * Original inline script range: 3-3
@@ -2431,37 +2431,72 @@ async function deleteUserAccess(email){
 // каждую страницу пробуем несколько раз, а если так и не вышло — бросаем ошибку,
 // чтобы наверху показать понятное сообщение "обновите страницу", а не тишину.
 async function loadAllRows(table){
-  let all=[], from=0;
   const pageSize=1000;
+
+  // v23.6.339: purchase_history is the only very large table in the interactive CRM.
+  // Preserve the exact same rows/business logic, but fetch deterministic id pages
+  // four at a time instead of ~45 sequential network round-trips.
+  if(table==='purchase_history'){
+    const fetchPage=async(from,withCount=false)=>{
+      let lastErr=null;
+      for(let attempt=0;attempt<3;attempt++){
+        try{
+          const factory=()=>db.from(table)
+            .select('*',withCount?{count:'exact'}:undefined)
+            .order('id',{ascending:true})
+            .range(from,from+pageSize-1);
+          const res=await withTimeout(crmAuthRetryV236166(factory),20000,'таблица '+table);
+          if(res.error){lastErr=res.error;await new Promise(r=>setTimeout(r,600*(attempt+1)));continue;}
+          return {data:res.data||[],count:res.count};
+        }catch(e){
+          lastErr=e;
+          if(/Сессия CRM завершена|Не удалось обновить сессию CRM|refresh token/i.test(String(e?.message||e)))break;
+          await new Promise(r=>setTimeout(r,600*(attempt+1)));
+        }
+      }
+      console.error('loadAllRows('+table+') не догрузилась на смещении '+from,lastErr);
+      const msg=lastErr?.message||lastErr?.hint||JSON.stringify(lastErr);
+      const err=new Error('Таблица "'+table+'": '+msg);err.table=table;err.dbError=lastErr;throw err;
+    };
+
+    const first=await fetchPage(0,true);
+    const total=Number(first.count);
+    if(!Number.isFinite(total)||total<=pageSize)return first.data;
+    const offsets=[];for(let from=pageSize;from<total;from+=pageSize)offsets.push(from);
+    const pages=[first.data],CONCURRENCY=4;
+    for(let i=0;i<offsets.length;i+=CONCURRENCY){
+      const batch=offsets.slice(i,i+CONCURRENCY);
+      const got=await Promise.all(batch.map(from=>fetchPage(from,false)));
+      got.forEach(x=>pages.push(x.data));
+      // Yield between batches so navigation/taps stay responsive on tablets.
+      await new Promise(r=>setTimeout(r,0));
+    }
+    const rows=pages.flat();
+    if(rows.length<total)throw new Error('Таблица "'+table+'": ожидалось '+total+' строк, получено '+rows.length);
+    return rows;
+  }
+
+  let all=[],from=0;
   while(true){
     let data=null,lastErr=null;
     for(let attempt=0;attempt<3;attempt++){
       try{
-        // v23.6.166: запрос строится заново после автоматического refreshSession,
-        // если access JWT протух, пока вкладка была открыта/устройство спало.
         const res=await withTimeout(
           crmAuthRetryV236166(()=>db.from(table).select('*').range(from,from+pageSize-1)),
-          20000, 'таблица '+table
+          20000,'таблица '+table
         );
         if(res.error){lastErr=res.error;await new Promise(r=>setTimeout(r,600*(attempt+1)));continue;}
         data=res.data;lastErr=null;break;
       }catch(e){
         lastErr=e;
-        // Если refresh token тоже уже недействителен, бессмысленно ещё два раза
-        // повторять тяжёлый запрос: покажем понятную ошибку входа сразу.
         if(/Сессия CRM завершена|Не удалось обновить сессию CRM|refresh token/i.test(String(e?.message||e)))break;
         await new Promise(r=>setTimeout(r,600*(attempt+1)));
       }
     }
     if(lastErr){
       console.error('loadAllRows('+table+') не догрузилась на смещении '+from,lastErr);
-      // Пробрасываем настоящий текст ошибки от базы — иначе на телефоне
-      // невозможно понять, что именно сломалось (нет доступа к консоли).
       const msg=lastErr.message||lastErr.hint||JSON.stringify(lastErr);
-      const err=new Error('Таблица "'+table+'": '+msg);
-      err.table=table;
-      err.dbError=lastErr;
-      throw err;
+      const err=new Error('Таблица "'+table+'": '+msg);err.table=table;err.dbError=lastErr;throw err;
     }
     if(!data||!data.length)break;
     all=all.concat(data);
