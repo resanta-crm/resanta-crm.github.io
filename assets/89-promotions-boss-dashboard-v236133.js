@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_BOSS_DASHBOARD_V236133)return;
-const V='v23.6.203';
+const V='v23.6.360';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -26,7 +26,10 @@ function missingExpected(p,st,elapsed){const m=photos(p)?.missing||[];if(!m.leng
 function stageLabel(x){return({before:'До акции',start:'Старт',during:'В процессе',after:'После'})[x]||safe(x)}
 function effApi(){return window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132||null}
 function effRow(id){try{return effApi()?.getRow?.(id)||null}catch(_){return null}}
-function actualSales(p,e){return p?.confirmed_sales!==null&&p?.confirmed_sales!==undefined&&p?.confirmed_sales!==''?num(p.confirmed_sales):num(e?.current_sales_1c)}
+function actualSales(p,e){
+  if(e&&e.effective_sales!==null&&e.effective_sales!==undefined&&e.effective_sales!=='')return num(e.effective_sales);
+  return p?.confirmed_sales!==null&&p?.confirmed_sales!==undefined&&p?.confirmed_sales!==''?num(p.confirmed_sales):num(e?.current_sales_1c);
+}
 function currentDecisionStatus(st){const n=safe(currentProfile?.name).toLowerCase().replace(/ё/g,'е');if(n.includes('паюш'))return st==='pending_dfs';if(n.includes('сидор'))return st==='pending_df';return st==='pending_df'||st==='pending_dfs'}
 function actionFor(p,st,pr,pace,missing){const manager=safe(p.manager_name||'Менеджер');if(st==='draft_manager')return manager+': отправить на согласование';if(st==='pending_df')return'Сидорович: согласовать или вернуть';if(st==='pending_dfs')return'Паюшин: выполнить финальное согласование';if(st==='waiting_manager')return manager+': взять акцию в работу';if(st==='planned'&&missing)return manager+': загрузить фото «'+stageLabel(missing)+'»';if(st==='active'&&missing)return manager+': загрузить фото «'+stageLabel(missing)+'»';if(st==='active'&&pace!=null&&pace<=-15)return manager+': отставание '+Math.abs(Math.round(pace))+' п.п. — требуется отработка';if(st==='active'&&pr.left!=null&&pr.left<=3)return'До окончания '+pr.left+' дн. — проверить результат';if(st==='awaiting'&&missing)return manager+': загрузить фото «'+stageLabel(missing)+'»';if(st==='awaiting'&&!safe(p.manager_report).trim())return manager+': заполнить итоговый отчёт';if(st==='awaiting')return'Паюшин: проверить и закрыть акцию';if(st==='completed')return'Акция закрыта';return'Контроль: отклонений нет'}
 function rowData(p){const e=effRow(p.id),st=status(p),pr=progress(p),sales=actualSales(p,e),plan=num(p.sales_plan),completion=plan>0?sales/plan*100:null,pace=completion==null?null:completion-pr.elapsed,missing=missingExpected(p,st,pr.elapsed);let bucket='';if(st==='completed')bucket='completed';else if(currentDecisionStatus(st))bucket='decision';else if(st==='awaiting'||(['approved','in_work'].includes(safe(p.status))&&safe(p.end_date)<today()))bucket='overdue';else if((st==='active'||st==='planned')&&(!!missing||(pace!=null&&pace<=-15)))bucket='attention';else if(st==='active'&&pr.left!=null&&pr.left<=3)bucket='ending';return{p,e,st,pr,sales,plan,completion,pace,missing,bucket,action:actionFor(p,st,pr,pace,missing)}}
