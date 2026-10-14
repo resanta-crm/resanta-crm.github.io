@@ -164,7 +164,7 @@ def movement(old: dict | None, state: str, position: int | None) -> tuple[str, i
         (state == "top120" and old_position == position)
     )
     if same:
-        return str(old.get("movement") or "same"), 0 if state == "top120" else None, str(old.get("changed_at") or utcnow())
+        return ("same" if state == "top120" else "outside"), 0 if state == "top120" else None, str(old.get("changed_at") or utcnow())
     if old_state == "outside_top120" and state == "top120":
         return "entered", None, utcnow()
     if old_state == "top120" and state == "outside_top120":
