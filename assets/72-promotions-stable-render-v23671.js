@@ -9,7 +9,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_STABLE_RENDER_V23671)return;
-const V='v23.6.203';
+const V='v23.6.360';
 const base=window.renderPromotions;
 if(typeof base!=='function')return;
 
