@@ -1,12 +1,12 @@
-/* RESANTA CRM v23.6.328 · TRIOVIST / 21VEK AUTOMATIC MARKET
+/* RESANTA CRM v23.6.352 · TRIOVIST / 21VEK AUTOMATIC MARKET + LIVE COMPETITOR POSITIONS
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.343',TTL=30000;
-let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),exportFlight=null,xlsxFlight=null;
+const V='v23.6.352',TTL=30000;
+let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),positionFlight=null,positionCache=null,positionCacheAt=0,positionHistoryFlights=new Map(),positionHistoryCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
 const money=v=>N(v)==null||N(v)<=0?'нет данных':N(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -44,6 +44,90 @@ async function loadCompetitorHistory(days=7,force=false){
   .then(data=>{historyCache.set(d,{data,at:Date.now()});return data})
   .finally(()=>historyFlight=null);
  return historyFlight;
+}
+async function loadCompetitorPositions(force=false){
+ if(positionCache&&!force&&Date.now()-positionCacheAt<TTL)return positionCache;
+ if(positionFlight)return positionFlight;
+ positionFlight=rpc('triovist_market_competitor_positions_v236352',{p_scope_key:null})
+  .then(data=>{positionCache=data||{};positionCacheAt=Date.now();return positionCache})
+  .finally(()=>positionFlight=null);
+ return positionFlight;
+}
+function posKey(scope,product){return String(scope||'')+'|'+String(product||'')}
+function mergeCompetitorPositions(d,p){
+ const rows=Array.isArray(d?.rows)?d.rows:[],live=Array.isArray(p?.rows)?p.rows:[];
+ const map=new Map(live.map(x=>[posKey(x.scope_key,x.product_key),x]));
+ for(const r of rows){
+  const x=map.get(posKey(r.scope_key,r.product_key));if(!x)continue;
+  r.__positionWatch=x;
+  if(x.listing_state==='top120'&&N(x.position)!=null){
+    r.position=N(x.position);r.page_no=N(x.page_no);
+    if(N(x.current_price)!=null&&N(x.current_price)>0)r.competitor_price=N(x.current_price);
+  }
+ }
+ d.__positionWatchMeta=p||{};
+ return d;
+}
+async function loadCompetitorPositionHistory(scope,product,force=false){
+ const key=posKey(scope,product);
+ if(!force&&positionHistoryCache.has(key))return positionHistoryCache.get(key);
+ if(positionHistoryFlights.has(key))return positionHistoryFlights.get(key);
+ const p=rpc('triovist_market_competitor_position_history_v236352',{p_scope_key:String(scope||''),p_product_key:String(product||''),p_days:30})
+  .then(data=>{positionHistoryCache.set(key,data||{});return data||{}})
+  .finally(()=>positionHistoryFlights.delete(key));
+ positionHistoryFlights.set(key,p);return p;
+}
+function positionLabel(r){
+ const w=r?.__positionWatch;
+ if(w?.listing_state==='outside_top120')return '>120';
+ const p=N(w?.position??r?.position);return p==null?'—':'#'+p;
+}
+function livePosition(r){
+ const w=r?.__positionWatch;
+ if(w?.listing_state==='outside_top120')return null;
+ return N(w?.position??r?.position);
+}
+function positionMovementText(r){
+ const w=r?.__positionWatch;if(!w)return positionHistoryTextLegacy(r);
+ const d=N(w.position_delta),m=String(w.movement||'');
+ if(m==='up')return '↑ +'+Math.abs(d||0)+' к прошлой проверке';
+ if(m==='down')return '↓ '+Math.abs(d||0)+' к прошлой проверке';
+ if(m==='entered')return '↑ вернулся в TOP-120';
+ if(m==='exited')return '↓ вышел из TOP-120';
+ if(m==='same')return '→ без изменений';
+ if(m==='outside')return '→ остаётся вне TOP-120';
+ if(m==='new')return 'новая точка контроля';
+ return 'позиция проверена';
+}
+function freshnessInfo(r){
+ const w=r?.__positionWatch;if(!w)return{cls:'stale',text:'нет свежего контроля'};
+ const mins=N(w.freshness_minutes);
+ const cls=w.freshness==='fresh'?'fresh':w.freshness==='aging'?'aging':'stale';
+ let text='проверено '+dt(w.observed_at);
+ if(mins!=null)text+=' · '+(mins<60?Math.round(mins)+' мин назад':(mins/60).toFixed(mins<600?1:0).replace('.',',')+' ч назад');
+ if(w.last_attempt_status==='error'&&w.last_attempt_at&&new Date(w.last_attempt_at)>new Date(w.observed_at)){
+   return{cls:'stale',text:'⚠ свежая проверка не удалась · последняя успешная '+dt(w.observed_at)};
+ }
+ return{cls,text};
+}
+function competitorPositionHistoryBlock(r){
+ const h=r?.__positionWatchHistory;if(!h)return '';
+ const s=h.summary||{},rows=Array.isArray(h.rows)?h.rows:[],cur=h.current||{};
+ const chips=rows.filter(x=>x.attempt_status==='success').slice(-12).reverse().map(x=>'<span><b>'+E(dt(x.observed_at))+'</b> '+E(x.position_label||'—')+(N(x.current_price)!=null?' · '+E(money(x.current_price)):'')+'</span>').join('');
+ return '<div class="tm224-comp-pos-history"><b>История позиции конкурента 21vek</b>'+
+   '<div class="tm224-comp-pos-summary">сейчас <b>'+E(cur.listing_state==='outside_top120'?'>120':('#'+(cur.position??'—')))+'</b> · 1д '+E(s.position_1d||'—')+' · 3д '+E(s.position_3d||'—')+' · 7д '+E(s.position_7d||'—')+' · 14д '+E(s.position_14d||'—')+' · 30д '+E(s.position_30d||'—')+' · лучшая '+E(s.best??'—')+' · худшая '+E(s.worst||'—')+'</div>'+
+   (chips?'<div class="tm224-comp-pos-points">'+chips+'</div>':'<small>История ещё накапливается.</small>')+
+   '<small>Каждая точка — отдельный реальный запрос к 21vek. Ошибка запроса не обновляет время успешной позиции.</small></div>';
+}
+async function manualPositionRefresh(scope,btn){
+ const d=dbx();if(!d?.functions?.invoke)throw Error('Серверная проверка сейчас недоступна');
+ const old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='⏳ Проверяю 21vek…'}
+ try{
+  const {data,error}=await d.functions.invoke('triovist-competitor-position-refresh-v236352',{body:{scope_key:scope}});
+  if(error)throw error;if(!data?.ok)throw Error(data?.message||data?.error||'Проверка не выполнена');
+  positionCache=null;positionCacheAt=0;positionHistoryCache.clear();
+  return data;
+ }finally{if(btn){btn.disabled=false;btn.textContent=old||'↻ Проверить позиции сейчас'}}
 }
 function mergeCompetitorHistory(d,h){
  const days=N(h?.days)||7,rows=Array.isArray(d?.rows)?d.rows:[],hist=Array.isArray(h?.rows)?h.rows:[];
@@ -2018,7 +2102,7 @@ function details(r,l){
   const area='<div class="tm224-ref"><b>Справочно — площадь обогрева:</b> конкурент '+(b.area_m2==null?'нет данных':E(b.area_m2)+' м²')+' · наш товар '+(a.area_m2==null?'нет данных':E(a.area_m2)+' м²')+'. <b>В сопоставимости не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+area
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2039,7 +2123,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип 10% · технологии 20% · макс. расход воды 20% · площадь 15% · резервуар 15% · потребляемая мощность 7% · питание 5% · управление 5% · дистанционное управление 3%. Тип увлажнителя — критический фильтр: ультразвуковой, традиционный и паровой между собой не считаются аналогами. Технологии/функции участвуют с весом 20%. <b>Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2077,7 +2161,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Цена в подборе технического аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2097,7 +2181,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 15% · секции 25% · мощность 25% · регулировка мощности 10% · регулировка температуры 7% · управление 7% · колеса 4% · термостат 7%. <b>Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2120,7 +2204,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Формула сопоставимости:</b> тип устройства 12% · нагревательный элемент 18% · мощность 22% · регулировка мощности 10% · термостат 8% · управление 7% · пульт ДУ 5% · встроенный вентилятор 4% · обдув без нагрева 5% · световой индикатор 3% · дисплей 6%. <b>Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2158,7 +2242,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Скважинные насосы:</b> сравниваются только 7 согласованных характеристик. Максимальный напор, глубина откачки и глубина погружения — паритет при разнице до ±1 м или ±10%; пропускная способность — до ±10%. Тип воды, принцип действия и диаметр скважины используются для совместимости аналога и сами по себе не дают статус «сильнее/слабее». Диаметр насоса не подменяет диаметр скважины. При неполных данных итог остаётся видимым и помечается как предварительный.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+(adv.length?'<ul>'+adv.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+(bad.length?'<ul>'+bad.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2179,7 +2263,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Поверхностные насосы:</b> сравниваются только 5 согласованных характеристик. Пропускная способность и мощность — паритет при разнице до ±10%; максимальный напор воды и глубина откачки — до ±1 м или ±10%. Тип воды сравнивается как характеристика совместимости и сам по себе не делает один насос сильнее другого. При неполных данных итог остаётся видимым и помечается как предварительный.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+(adv.length?'<ul>'+adv.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+(bad.length?'<ul>'+bad.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2197,7 +2281,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Канализационные станции:</b> сравниваются только 5 согласованных характеристик. Пропускная способность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%; размер частиц — до ±1 мм или ±10%; максимальная температура воды — до ±5 °C. При неполных данных итог остаётся видимым и помечается как предварительный.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2218,7 +2302,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Дренажные насосы:</b> производительность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%. Материал корпуса сравнивается как точная техническая характеристика: пластик, технополимер, нержавеющая сталь, чугун, алюминий и сталь не сводятся в один «металл». Для материала нет выдуманной шкалы «лучше/хуже»: различие влияет на подбор аналога, но само по себе не делает наш товар или конкурента сильнее. Больший допустимый размер фильтрующих частиц считается преимуществом. При отсутствии части характеристик итог «Мы сильнее / Паритет / Конкурент сильнее» сохраняется, а расчёт отмечается как предварительный.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+(drainageAdv.length?'<ul>'+drainageAdv.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+(drainageBad.length?'<ul>'+drainageBad.map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2236,7 +2320,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>УШМ / болгарки:</b> сетевые и аккумуляторные модели разделяются строго. Для сетевых мощность сравнивается с допуском ±150 Вт; для аккумуляторных емкость АКБ — ±0,5 А·ч. Тип двигателя нормализуется как щеточный/бесщеточный, бесщеточный считается преимуществом. Плавный пуск и регулировка оборотов — функциональные преимущества. Диаметр диска — строгий класс инструмента: допуск только ±2 мм; 115, 125, 150, 180 и 230 мм между собой не смешиваются. При отсутствии характеристики процент считается по доступным данным, а итог отмечается как «Недостаточно данных».</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2251,7 +2335,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Точильные станки:</b> асинхронный и индукционный двигатель считаются одним типом; тип двигателя учитывается в сопоставимости, но не является жёстким отсечением. Мощность — допуск ±50 Вт; скорость вращения — ±300 об/мин и сама по себе не считается преимуществом. Диаметр круга — допуск ±5 мм и используется как класс станка: если разница больше, товары не считаются прямыми аналогами. При отсутствии одной из характеристик процент считается по доступным данным, а итог отмечается как «Недостаточно данных».</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2266,7 +2350,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Торцовочные пилы:</b> мощность ±200 Вт; диаметр диска ±10 мм и используется как класс инструмента; наличие протяжки — строгий признак. Глубина реза под 90° и 45° — допуск ±5 мм, большая глубина за пределами допуска считается преимуществом. Скорость вращения — ±500 об/мин и сама по себе не считается преимуществом. Пилы с протяжкой и без протяжки, а также с дисками разных классов, не считаются прямыми аналогами. Если не подтверждена хотя бы одна согласованная характеристика, процент считается по доступным данным, а итог отмечается как «Недостаточно данных».</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2280,7 +2364,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Термопистолеты / строительные фены:</b> на 21vek наши ТП-2000 относятся к категории строительных фенов, поэтому производительность считается как максимальный воздушный поток в л/мин. Полное совпадение: поток ±50 л/мин, время нагрева ±10 с, мощность ±150 Вт. Чем меньше время нагрева — тем лучше; больший воздушный поток и мощность учитываются как преимущество за пределами допуска. Если характеристика отсутствует, процент считается по подтвержденным данным, но итог отмечается как «Недостаточно данных».</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2295,7 +2379,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Строительные пылесосы:</b> мощность сравнивается с допуском ±150 Вт, объем бака — ±5 л. Тип уборки нормализуется как сухая / влажная / сухая + влажная; комбинированная сухая + влажная считается функциональным преимуществом, но не отдельным классом. Материал корпуса нормализуется как пластик / металл / нержавеющая сталь; металл и нержавейка считаются конструктивным преимуществом над пластиком. Если не подтверждена хотя бы одна из четырех характеристик — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2311,7 +2395,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Сабельные пилы:</b> сетевые и аккумуляторные модели не смешиваются между собой. Мощность — допуск ±150 Вт; тип двигателя нормализуется как щеточный/бесщеточный, бесщеточный считается преимуществом. Глубина пропила по дереву — ±20 мм, по металлу — ±2 мм; за пределами допуска большая глубина считается преимуществом. Число ходов — ±300 ход/мин, но больше ходов само по себе не означает более сильную пилу. Если не подтверждена хотя бы одна согласованная характеристика или тип питания — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2326,7 +2410,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Рубанки:</b> тип двигателя нормализуется как щеточный/бесщеточный; бесщеточный считается преимуществом, но оба типа могут быть аналогами. Максимальные обороты сравниваются с допуском ±1500 об/мин, при этом больше оборотов само по себе не считается преимуществом. Глубина строгания — допуск ±0,5 мм, а большая глубина за пределами допуска считается преимуществом. Ширина строгания задает класс инструмента: допуск ±2 мм; если разница больше, товары не считаются прямыми аналогами. Если не подтверждена хотя бы одна из четырех характеристик — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2341,7 +2425,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Перфораторы:</b> тип патрона сравнивается строго: SDS-Plus, SDS-Max и другие системы не смешиваются между собой. По мощности полное совпадение — ±150 Вт; по энергии удара — ±0,5 Дж; по максимальной скорости вращения — ±150 об/мин. Более высокая энергия удара учитывается как силовое преимущество, а более высокие обороты сами по себе преимуществом не считаются. Если не подтверждена хотя бы одна из четырех согласованных характеристик — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2356,7 +2440,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Лобзики:</b> сетевые и аккумуляторные модели не смешиваются между собой. По мощности для сетевых полное совпадение — ±100 Вт. Максимальная глубина пропила берется именно по дереву и сравнивается с допуском ±10%; большая глубина считается преимуществом. Количество ходов в минуту — допуск ±10%, но больше ходов само по себе не означает лучший лобзик. Бесщеточный двигатель считается преимуществом над щеточным. Если не подтверждены глубина пропила по дереву или количество ходов, а для сетевого лобзика также мощность — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2369,7 +2453,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Краскопульты:</b> сравниваются электрические и аккумуляторные краскопульты. Пневматические модели, аэрографы и отдельные окрасочные станции исключаются из прямого рынка. По мощности полное совпадение — ±100 Вт. Давление приводится к барам: МПа и PSI автоматически пересчитываются, полное совпадение — ±10%; при большей разнице более высокое давление фиксируется как преимущество. Верхнее, нижнее и выносное расположение бачка считаются разными конструктивными вариантами, но само по себе не делает модель сильнее. Если не подтверждены мощность или давление — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2384,7 +2468,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Шуруповерты:</b> в этом профиле сравниваются аккумуляторные шуруповерты и дрели-шуруповерты. Гайковерты, перфораторы, обычные дрели и отдельные ударные винтоверты исключаются. Емкость АКБ сравнивается с допуском ±15%, крутящий момент — ±10% и является главным силовым параметром. Бесщеточный двигатель считается преимуществом над щеточным. Наличие удара, количество АКБ и кейс учитываются как преимущества комплектации/функциональности. Значение 0 АКБ ставится только когда отсутствие аккумулятора прямо подтверждено. Если не подтверждены емкость АКБ или крутящий момент — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2398,7 +2482,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Ударные дрели:</b> сравниваются только ударные дрели; перфораторы, дрели-шуруповерты, дрели-миксеры и безударные дрели не считаются прямыми аналогами. По мощности полное совпадение — ±100 Вт. Количество скоростей сравнивается по фактическому числу; больше скоростей — функциональное преимущество, но не другой класс. Максимальные обороты — допуск ±10%, при этом больше оборотов само по себе не означает лучший инструмент. Наличие удара — жесткое условие. Если не подтверждены мощность, максимальные обороты или наличие удара — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2416,7 +2500,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Дисковые пилы:</b> обычные, погружные и мини-дисковые пилы разделяются по типу; сетевые и аккумуляторные не смешиваются. Диаметр диска задает класс: 160/165, 185/190 и 200/210 объединяются как соседние стандартные размеры, а существенно разные классы не сравниваются напрямую. Посадочное отверстие сравнивается строго. По потребляемой мощности допуск ±150 Вт; глубина реза 90° и 45° и обороты — ±10%; угол наклона — до ±5° считается сопоставимым. Для аккумуляторных напряжение сравнивается по классу, емкость АКБ — ±15%. Бесщеточный двигатель считается преимуществом. Если нет типа, питания, диаметра диска, посадки или глубины реза 90°, а для аккумуляторной еще и напряжения АКБ — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2434,7 +2518,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Гайковерты:</b> тип инструмента, ударный/безударный тип, питание и посадочный квадрат/шестигранник — жесткие границы класса. 1/4″, 3/8″, 1/2″, 3/4″ и 1″ сравниваются строго. Максимальный крутящий момент — ключевой параметр, прямое совпадение ±10%; скорость вращения и потребляемая мощность — ±10%, но больше оборотов само по себе не означает лучший инструмент. Для аккумуляторных 10,8/12 В и 18/20 В нормализуются по классу; емкость АКБ и время зарядки — ±15%. Бесщеточный двигатель считается преимуществом над щеточным. Если нет типа гайковерта, питания, посадки или максимального момента, а для аккумуляторного еще и напряжения АКБ — вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2451,7 +2535,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Опрыскиватели:</b> тип питания — жёсткий фильтр: ручные, аккумуляторные, сетевые и бензиновые между собой не смешиваются. У аккумуляторных напряжение сравнивается по классу АКБ; производительность, емкость аккумулятора, объем емкости и радиус — допуск ±15%. У бензиновых 2Т/4Т не считаются прямыми аналогами, мощность и объем двигателя — ±10%, топливный бак — ±15%. Разный вид переноски оставляет товар близким, но не прямым аналогом. Критические параметры зависят от типа питания; при их отсутствии вывод «сильнее/слабее» блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2466,7 +2550,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Аккумуляторные секаторы:</b> тип, тип инструмента и аккумуляторное питание должны совпадать. Напряжение сравнивается по классу АКБ: 18/20 В — один класс, 36/40 В — другой. Емкость аккумулятора — допуск ±15%; максимальная толщина среза — ключевой параметр с допуском ±10%. Тип ножа и тип лезвия сравниваются отдельно: различие не делает инструмент автоматически сильнее, но не дает прямое совпадение. Если нет типа инструмента, питания, напряжения или максимальной толщины среза — вывод «сильнее/слабее» блокируется как недостаточно данных.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2484,7 +2568,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Садовые измельчители:</b> тип устройства и тип двигателя/питания — жесткие фильтры; 220/230 В считается одним сетевым классом. Режущий механизм — ключевой параметр: разные механизмы не получают прямой аналог. Входная мощность, скорость резания и максимальный диаметр веток — допуск ±10%; уровень шума — сопоставим при разнице до 3 дБ; емкость бункера — ±15%. Количество загрузочных отверстий сравнивается точно. Основные параметры класса: режущий механизм + тип двигателя + максимальный диаметр веток + мощность. Если нет режущего механизма, типа двигателя, мощности или максимального диаметра веток — вывод «сильнее/слабее» блокируется как недостаточно данных.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2499,7 +2583,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Мотобуры:</b> тип и тип двигателя должны совпадать; посадочный диаметр сравнивается строго после нормализации (например, 1″ = 25,4 мм). Мощность, бак, обороты и максимальный диаметр бура — допуск ±10%; объем двигателя — ±5%. Основные параметры класса: мощность + объем двигателя + максимальный диаметр бура. Если нет типа двигателя, мощности, максимального диаметра бура или посадочного диаметра — вывод «сильнее/слабее» блокируется как недостаточно данных. Больше оборотов само по себе не означает лучший мотобур.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2534,7 +2618,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Бензиновые, аккумуляторные и сетевые воздуходувки между собой не аналоги. Разная конструкция не может получить прямой аналог. Для потока, расхода, мощности, оборотов, АКБ и бака действуют согласованные допуски. Цена в подборе технического аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2582,7 +2666,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>'+E(formula)+'</b> <b>Бензиновые, сетевые и аккумуляторные между собой не аналоги. Для ширины/высоты/дальности и мощности действуют согласованные допуски. Цена в подборе технического аналога не участвует.</b></div>'+missingStart;
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2603,7 +2687,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Формула сопоставимости электропил:</b> тип 10% · назначение 10% · тип питания 20% · длина шины 20% · мощность 18% · тормоз цепи 7% · быстрое натяжение 5% · автоматическая смазка 5% · расположение двигателя 5%. <b>Сетевая и аккумуляторная пила между собой не аналоги. Цена в подборе аналога не участвует.</b></div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2621,7 +2705,7 @@ function details(r,l){
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'
    +'<div class="tm224-ref"><b>Техническая сопоставимость бензопил:</b> только объём двигателя 50% + мощность 50%. Остальные характеристики на процент не влияют.</div>'
    +marketNote
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(rec)+'</div></details>';
@@ -2643,7 +2727,7 @@ function details(r,l){
   const ref='<div class="tm224-ref"><b>Не участвуют в проценте:</b> площадь обогрева и вес. Газовые и электрические инфракрасные обогреватели между собой не сопоставляются.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
-   +listingHistoryBlock(l)
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
    +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
    +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
    +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2652,7 +2736,7 @@ function details(r,l){
  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
   +'<div class="tm224-compare"><div><b>Наш товар</b>'+keys.map(k=>specLine(k,a[k])).filter(Boolean).join('')+'</div>'
   +'<div><b>Конкурент</b>'+keys.map(k=>specLine(k,b[k])).filter(Boolean).join('')+'</div></div>'
-  +listingHistoryBlock(l)
+  +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
@@ -2671,12 +2755,13 @@ async function loadCompetitorDetail(scope,product,force=false){
 function lazyDetails(r){
  return '<details class="tm224-details" data-tm224-detail data-scope="'+E(r.scope_key||'')+'" data-product="'+E(r.product_key||'')+'"><summary>Характеристики и аргументы</summary><div data-detail-body class="tm224-note" style="padding:8px 0">Откройте — характеристики загрузятся отдельно.</div></details>';
 }
-function positionHistoryText(r){
+function positionHistoryTextLegacy(r){
  const x7=N(r.position_7d),x30=N(r.position_30d),xs=[];
  if(x7!=null)xs.push('7д: #'+x7);
  if(x30!=null)xs.push('30д: #'+x30);
  return xs.length?'было '+xs.join(' · '):'история позиции накапливается';
 }
+function positionHistoryText(r){return positionMovementText(r)}
 function competitorPriceTrend(r,days){
  const d=[3,7,10,14,20,30].includes(Number(days))?Number(days):7;
  const current=N(r.competitor_price),past=N(r['price_'+d+'d']);
@@ -2688,10 +2773,10 @@ function competitorPriceTrend(r,days){
  return{kind:'up',className:'good',delta,pct:p,past,text:'↑ поднял на '+money(Math.abs(delta))+' ('+pct(p)+') за '+d+'д · было '+money(past)};
 }
 function rowHtml(r,ownMap,days,priceDays){
- const gap=!!r.is_gap,[sl,sc]=rowStatus(r),pos=N(r.position),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays);
+ const gap=!!r.is_gap,[sl,sc]=rowStatus(r),pos=livePosition(r),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays),fresh=freshnessInfo(r),w=r.__positionWatch;
  const lp=gap?null:ownMap.get(listingKey(r.scope_key,r.our_sku));
  return '<div class="tm224-row '+(gap?'gap':'')+'"><div class="tm224-main">'
-  +'<div><small>Позиция 21vek</small><b class="'+(pos!=null&&pos<=10?'bad':'')+'">#'+E(pos??'—')+'</b><span>страница '+E(r.page_no??'—')+'</span><span>'+E(positionHistoryText(r))+'</span></div>'
+  +'<div><small>Позиция 21vek</small><b class="'+(pos!=null&&pos<=10?'bad':'')+'">'+E(positionLabel(r))+'</b><span>'+(w?.listing_state==='outside_top120'?'вне первых 120':'страница '+E(w?.page_no??r.page_no??'—'))+'</span><span class="'+E(w?.movement==='up'||w?.movement==='entered'?'good':w?.movement==='down'||w?.movement==='exited'?'bad':'')+'">'+E(positionHistoryText(r))+'</span><span class="tm224-fresh '+E(fresh.cls)+'">'+E(fresh.text)+'</span></div>'
   +'<div><small>Конкурент</small><b>'+E(r.brand||'—')+'</b>'+competitorBadge(r)+'<span>'+E(r.model||'')+'</span>'+(r.product_url?'<a target="_blank" rel="noopener" href="'+E(r.product_url)+'">21vek ↗</a>':'')+'</div>'
   +'<div><small>Цена конкурента</small><b>'+money(r.competitor_price)+'</b><span class="'+E(pt.className)+'">'+E(pt.text)+'</span></div>'
   +(gap?'<div class="tm224-gapbox"><small>Наша матрица</small><b>⚠ Пробел в ассортименте</b><span>лучшее совпадение '+pct(r.best_similarity).replace('+','')+'</span></div>'
@@ -2708,9 +2793,9 @@ function css(){
  .tm224-kpi{display:grid;grid-template-columns:repeat(8,minmax(95px,1fr));gap:7px;margin:12px 0}.tm224-kpi>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px}.tm224-kpi span{font-size:8px;color:#64748b;text-transform:uppercase;display:block}.tm224-kpi b{font-size:16px;display:block;margin-top:3px}
  .tm224-filters{display:grid;grid-template-columns:repeat(4,minmax(155px,1fr));gap:8px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;margin-bottom:10px}.tm224-filters select,.tm224-filters input{min-height:38px;border:1px solid #cbd5e1;border-radius:8px;padding:7px;background:#fff}
  .tm224-toggles{display:flex;gap:12px;flex-wrap:wrap;grid-column:1/-1;font-size:11px}.tm224-toggles label{display:flex;gap:5px;align-items:center}
- .tm224-scope{border:1px solid #dbe4ee;border-radius:12px;padding:10px;margin:10px 0;background:#fbfdff}.tm224-scope-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.tm224-brands{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.tm224-brand{font-size:10px;padding:5px 7px;border-radius:99px;background:#fff;border:1px solid #dbe4ee}.tm224-brand b{color:#0c447c}
+ .tm224-scope{border:1px solid #dbe4ee;border-radius:12px;padding:10px;margin:10px 0;background:#fbfdff}.tm224-scope-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.tm224-scope-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tm224-scope-actions button{min-height:34px}.tm224-brands{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.tm224-brand{font-size:10px;padding:5px 7px;border-radius:99px;background:#fff;border:1px solid #dbe4ee}.tm224-brand b{color:#0c447c}
  .tm224-row{border:1px solid #e5e7eb;border-radius:12px;margin:9px 0;background:#fff;overflow:hidden}.tm224-row.gap{border-color:#fbbf24;background:#fffdf5}.tm224-main{display:grid;grid-template-columns:85px minmax(220px,1.8fr) 150px minmax(220px,1.6fr) 165px 130px 145px;gap:9px;padding:11px;align-items:start}.tm224-main small{display:block;color:#64748b;font-size:8px;text-transform:uppercase;margin-bottom:3px}.tm224-main b{display:block;font-size:11px}.tm224-main span{display:block;font-size:9px;color:#64748b;margin-top:3px}.tm224-main a{font-size:10px;color:#185fa5;text-decoration:none;display:inline-block;margin-top:4px}.tm224-gapbox{grid-column:4/8}
- .tm224-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:7px 11px}.tm224-details summary{cursor:pointer;font-size:10px;font-weight:800;color:#0c447c}.tm224-compare,.tm224-ab{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}.tm224-compare>div,.tm224-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:8px}.tm224-compare span{display:block;font-size:10px;margin:2px 0}.tm224-ab{font-size:10px}.tm224-ab ul{margin:5px 0 0 16px}.tm224-conv-table{overflow:auto;margin-top:8px}.tm224-conv-table table{width:100%;border-collapse:collapse;background:#fff;font-size:10px}.tm224-conv-table th,.tm224-conv-table td{padding:7px;border:1px solid #e5e7eb;text-align:left;vertical-align:top}.tm224-conv-table th{background:#f8fafc}.tm224-ref{margin-top:7px;padding:7px 8px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:10px}.tm224-own-pos{margin-top:5px!important;color:#0c447c!important}.tm224-listing-history{margin-top:8px;padding:8px;border:1px solid #dbeafe;background:#f8fbff;border-radius:8px;font-size:10px}.tm224-listing-history>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.tm224-listing-history span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-own-summary{font-size:10px;margin-top:6px;color:#334155}.tm224-main-badge,.tm224-market-badge{display:inline-block!important;width:max-content;padding:2px 6px;border-radius:999px;font-size:8px!important;font-weight:800;margin-top:4px!important}.tm224-main-badge{background:#fef3c7;color:#92400e!important;border:1px solid #fcd34d}.tm224-market-badge{background:#f1f5f9;color:#475569!important;border:1px solid #cbd5e1}.tm224-market-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#f8fafc;border:1px solid #cbd5e1;font-size:10px;color:#475569}.tm224-rec{margin-top:8px;padding:8px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;font-size:10px}.tm224-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}.tm224-meta{font-size:9px;color:#64748b;margin-top:9px}
+ .tm224-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:7px 11px}.tm224-details summary{cursor:pointer;font-size:10px;font-weight:800;color:#0c447c}.tm224-fresh{font-weight:800!important}.tm224-fresh.fresh{color:#166534!important}.tm224-fresh.aging{color:#92400e!important}.tm224-fresh.stale{color:#b91c1c!important}.tm224-comp-pos-history{margin-top:8px;padding:8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;font-size:10px}.tm224-comp-pos-summary{margin:5px 0;color:#334155}.tm224-comp-pos-points{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}.tm224-comp-pos-points span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-compare,.tm224-ab{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}.tm224-compare>div,.tm224-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:8px}.tm224-compare span{display:block;font-size:10px;margin:2px 0}.tm224-ab{font-size:10px}.tm224-ab ul{margin:5px 0 0 16px}.tm224-conv-table{overflow:auto;margin-top:8px}.tm224-conv-table table{width:100%;border-collapse:collapse;background:#fff;font-size:10px}.tm224-conv-table th,.tm224-conv-table td{padding:7px;border:1px solid #e5e7eb;text-align:left;vertical-align:top}.tm224-conv-table th{background:#f8fafc}.tm224-ref{margin-top:7px;padding:7px 8px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:10px}.tm224-own-pos{margin-top:5px!important;color:#0c447c!important}.tm224-listing-history{margin-top:8px;padding:8px;border:1px solid #dbeafe;background:#f8fbff;border-radius:8px;font-size:10px}.tm224-listing-history>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.tm224-listing-history span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-own-summary{font-size:10px;margin-top:6px;color:#334155}.tm224-main-badge,.tm224-market-badge{display:inline-block!important;width:max-content;padding:2px 6px;border-radius:999px;font-size:8px!important;font-weight:800;margin-top:4px!important}.tm224-main-badge{background:#fef3c7;color:#92400e!important;border:1px solid #fcd34d}.tm224-market-badge{background:#f1f5f9;color:#475569!important;border:1px solid #cbd5e1}.tm224-market-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#f8fafc;border:1px solid #cbd5e1;font-size:10px;color:#475569}.tm224-rec{margin-top:8px;padding:8px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;font-size:10px}.tm224-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}.tm224-meta{font-size:9px;color:#64748b;margin-top:9px}
  .good{color:#166534!important}.warn{color:#92400e!important}.bad{color:#b91c1c!important}
  @media(max-width:1250px){.tm224-kpi{grid-template-columns:repeat(4,1fr)}.tm224-filters{grid-template-columns:repeat(3,minmax(150px,1fr))}.tm224-main{grid-template-columns:repeat(3,minmax(0,1fr))}.tm224-gapbox{grid-column:auto}}
  @media(max-width:760px){.tm224-kpi,.tm224-filters,.tm224-main,.tm224-compare,.tm224-ab{grid-template-columns:1fr}.tm224-toggles{grid-column:auto}}
@@ -2722,7 +2807,7 @@ function scopeHtml(s,summaryMap){
  const q=summaryMap.get(String(s.scope_key||''))||{};
  const ownSummary='<div class="tm224-own-summary"><b>Наш листинг:</b> TOP-10 — '+E(q.top10??0)+' · TOP-30 — '+E(q.top30??0)+' · TOP-60 — '+E(q.top60??0)+' · TOP-120 — '+E(q.top120??0)+' · вне TOP-120 — '+E(q.outside_top120??0)+(N(q.no_card)>0?' · без карточки — '+E(q.no_card):'')+'</div>';
  const marketSummary=configured?'<div class="tm224-own-summary"><b>Основные конкуренты:</b> '+E(s.main_competitors??0)+' товаров из '+E(s.competitors??0)+' в полном рынке.</div>':'';
- return '<div class="tm224-scope" data-scope-card="'+E(s.scope_key)+'"><div class="tm224-scope-head"><div><b>'+E(s.subgroup)+'</b><div class="tm224-note">TOP-2 21vek · запрос «'+E(s.search_query)+'» · наших SKU '+E(s.own_sku_count??0)+' · конкурентов '+E(s.competitors??0)+'</div>'+marketSummary+ownSummary+'</div><b class="'+((s.gaps||0)>0?'warn':'good')+'">пробелы '+E(s.gaps??0)+'</b></div><div class="tm224-brands">'+brands+'</div></div>';
+ return '<div class="tm224-scope" data-scope-card="'+E(s.scope_key)+'"><div class="tm224-scope-head"><div><b>'+E(s.subgroup)+'</b><div class="tm224-note">TOP-2 21vek · запрос «'+E(s.search_query)+'» · наших SKU '+E(s.own_sku_count??0)+' · конкурентов '+E(s.competitors??0)+'</div>'+marketSummary+ownSummary+'</div><div class="tm224-scope-actions"><b class="'+((s.gaps||0)>0?'warn':'good')+'">пробелы '+E(s.gaps??0)+'</b><button type="button" class="tr14-refresh" data-tm224-check-scope="'+E(s.scope_key)+'">↻ Проверить позиции сейчас</button></div></div><div class="tm224-brands">'+brands+'</div></div>';
 }
 function refreshBrandOptions(panel,d){
  const scope=panel.querySelector('[data-f-scope]')?.value||'',sel=panel.querySelector('[data-f-brand]');
@@ -2746,7 +2831,7 @@ function applyFilters(panel,d,listing){
   if(competitorKind==='market'&&r.is_main_competitor!==false)return false;
   if(status&&(r.is_main_competitor===false||r.status!==status))return false;
   if(sku&&!String(r.our_sku||'').toLowerCase().includes(sku))return false;
-  if(top10&&N(r.position)>10)return false;
+  if(top10&&(livePosition(r)==null||livePosition(r)>10))return false;
   if(gaps&&!r.is_gap)return false;
   if(mrc&&!(N(r.mrc_delta_pct)<0))return false;
   if(priceTrend&&competitorPriceTrend(r,priceDays).kind!==priceTrend)return false;
@@ -2821,8 +2906,16 @@ function render(panel,d,listing){
    catch(err){alert('Не удалось загрузить историю нашего листинга: '+(err?.message||err))}
    finally{e.currentTarget.disabled=false}
  });
- panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();panel.dataset.tm224Limit='120';await open(panel,null,true)});
+ panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();positionCache=null;positionCacheAt=0;positionHistoryCache.clear();panel.dataset.tm224Limit='120';await open(panel,null,true)});
  panel.querySelector('[data-tm224-export]')?.addEventListener('click',e=>exportExcel(e.currentTarget));
+ panel.querySelectorAll('[data-tm224-check-scope]').forEach(btn=>btn.addEventListener('click',async()=>{
+   const scope=btn.dataset.tm224CheckScope||'';
+   try{
+     const res=await manualPositionRefresh(scope,btn);
+     const p=await loadCompetitorPositions(true);mergeCompetitorPositions(d,p);applyFilters(panel,d,listing);
+     alert(res?.skipped?(res.message||'Категория уже проверена недавно.'):'Позиции реально перепроверены на 21vek. Успешных наблюдений: '+E(res?.success_count??0)+(N(res?.error_count)>0?' · ошибок: '+E(res.error_count):''));
+   }catch(err){alert('Не удалось перепроверить позиции: '+(err?.message||err))}
+ }));
 
  if(panel.__tm224MoreHandler)panel.removeEventListener('click',panel.__tm224MoreHandler);
  panel.__tm224MoreHandler=e=>{
@@ -2842,8 +2935,11 @@ function render(panel,d,listing){
    el.dataset.loading='1';
    const body=el.querySelector('[data-detail-body]');if(body)body.textContent='Загружаю характеристики…';
    try{
-     const detail=await loadCompetitorDetail(scope,product,false);
-     Object.assign(row,detail||{}, {__detailLoaded:true});
+     const [detail,posHistory]=await Promise.all([
+       loadCompetitorDetail(scope,product,false),
+       loadCompetitorPositionHistory(scope,product,false)
+     ]);
+     Object.assign(row,detail||{}, {__detailLoaded:true,__positionWatchHistory:posHistory||{}});
      const lp=listingRowsMap(listing).get(listingKey(row.scope_key,row.our_sku));
      const box=document.createElement('div');box.innerHTML=details(row,lp);
      const fresh=box.firstElementChild;
@@ -2857,12 +2953,13 @@ function render(panel,d,listing){
 
 }
 async function open(panel,ctx,force=false){
- if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю автоматический анализ рынка и наш листинг 21vek…</div>';
+ if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю автоматический анализ рынка, реальные позиции конкурентов и наш листинг 21vek…</div>';
  try{
-  const [dash,listing]=await Promise.all([load(force),loadListing(7,force)]);
+  const [dash,listing,positions]=await Promise.all([load(force),loadListing(7,force),loadCompetitorPositions(force)]);
+  mergeCompetitorPositions(dash,positions);
   render(panel,dash,listing);
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();return Promise.all([load(true),loadListing(7,true)])},automaticMarket:true,positionHistory:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,drainagePumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();positionCache=null;positionCacheAt=0;positionHistoryCache.clear();return Promise.all([load(true),loadListing(7,true),loadCompetitorPositions(true)])},automaticMarket:true,positionHistory:true,liveCompetitorPositionWatch:true,livePositionDepth:120,livePositionTargetHours:3,manualScopeRefresh:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,drainagePumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
