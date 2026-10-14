@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.10"
+PARSER_VERSION="market-auto-v6.11"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -40,10 +40,11 @@ SPEC_TTL_DAYS=max(1,int(os.environ.get("MARKET_SPEC_TTL_DAYS","30")))
 VALIDATE_PROFILES={
     x.strip() for x in os.environ.get("MARKET_VALIDATE_PROFILES","").split(",") if x.strip()
 }
-# The production GitHub workflow predates the newer approved product profiles.
-# Keep those profiles in the daily market cycle even when the workflow supplies
-# its older validation list, so price/position/spec history continues automatically.
-if VALIDATE_PROFILES:
+VALIDATE_EXACT=str(os.environ.get("MARKET_VALIDATE_EXACT","")).strip().lower() in {"1","true","yes","on"}
+# Scheduled production runs keep every approved profile. For a deliberate
+# targeted maintenance run, MARKET_VALIDATE_EXACT=1 limits work strictly to
+# the named profiles so working-hours fixes do not recalculate the whole market.
+if VALIDATE_PROFILES and not VALIDATE_EXACT:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
         "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
@@ -6333,7 +6334,7 @@ def main() -> None:
         # Publish one stable dashboard snapshot only after the market cycle finishes.
         # The UI reads this cache instantly and never competes with parser writes.
         try:
-            cache_info=rest_rpc("triovist_market_dashboard_refresh_v236313",{},timeout=45,attempts=3)
+            cache_info=rest_rpc("triovist_market_dashboard_refresh_v236357",{},timeout=45,attempts=3)
             print(f"DASHBOARD CACHE REFRESHED: {cache_info}",flush=True)
         except Exception as cache_exc:
             print(f"DASHBOARD CACHE WARNING: {cache_exc}",flush=True)
