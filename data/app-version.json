@@ -1,6 +1,6 @@
 {
-  "version": "23.6.273",
-  "released_at": "2026-10-08",
-  "purpose": "Triovist competitors: final leaf-blower matching with corrected airflow normalization, construction parsing and petrol-engine power mapping.",
-  "deploy_trigger": "2026-10-08T15:35:00+03:00"
+  "version": "23.6.360",
+  "released_at": "2026-10-14",
+  "purpose": "Promotions: exact 1C sales truth, manual-confirmation reconciliation and exact-SKU snapshots.",
+  "deploy_trigger": "2026-10-14T14:25:00+03:00"
 }
