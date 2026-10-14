@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.221 · TRIOVIST 21VEK AUTH/EXCEL HOTFIX
+/* RESANTA CRM v23.6.351 · TRIOVIST 21VEK POSITIONAL EXCEL
  * Replaces only the user-facing Excel action. Uses the fast paged RPC with MRC.
  * Keeps the existing parser UI/data flow untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221)return;
-const V='v23.6.326';
+const V='v23.6.351';
 let xlsxFlight=null,exportFlight=null;
 const width=n=>({wch:n});
 const toBool=v=>v===true?'Да':v===false?'Нет':'—';
@@ -60,6 +60,19 @@ function topLabel(c){
   if(['TOP-30','TOP-60','Вне TOP-60','Ошибка'].includes(s))return s;
   return'Не проверено';
 }
+function movementLabel(c){
+  const m=String(c?.position_movement||'');
+  const d=Number(c?.position_delta);
+  if(m==='up')return '↑ +'+Math.abs(Number.isFinite(d)?d:0);
+  if(m==='down')return '↓ '+Math.abs(Number.isFinite(d)?d:0);
+  if(m==='entered')return 'Вошёл ≤60';
+  if(m==='exited')return 'Вылетел >60';
+  if(m==='same')return 'Без изменений';
+  if(m==='outside')return 'Остаётся >60';
+  if(m==='new')return 'NEW';
+  if(m==='error')return 'Ошибка';
+  return '—';
+}
 function row(c){
   return {
     'Менеджер':c.manager_name||'',
@@ -74,8 +87,18 @@ function row(c){
     'Статус МРЦ':c.mrc_status||'',
     'В наличии':toBool(c.in_stock),
     'Поисковая фраза':c.keyword||'',
-    'Позиция':topPosition(c),
-    'TOP':topLabel(c),
+    'Позиция сейчас':c.position_now||'—',
+    'Предыдущая позиция':c.position_previous||'—',
+    'Изменение':movementLabel(c),
+    '1 день':c.position_1d||'—',
+    '3 дня':c.position_3d||'—',
+    '7 дней':c.position_7d||'—',
+    '14 дней':c.position_14d||'—',
+    '30 дней':c.position_30d||'—',
+    'Лучшая за 30д':c.position_best_30d==null?'—':Number(c.position_best_30d),
+    'Худшая за 30д':c.position_worst_30d||'—',
+    'Изменение обнаружено':c.position_changed_at||'',
+    'Последняя проверка позиции':c.position_checked_at||'',
     'Рейтинг':c.product_rating==null?'':Number(c.product_rating),
     'Отзывы':Number(c.review_count||0),
     'Негативные отзывы':Number(c.negative_reviews||0),
@@ -93,11 +116,13 @@ function format(ws,rows){
   ws['!cols']=[
     width(18),width(17),width(45),width(24),width(24),
     width(14),width(14),width(18),width(18),width(24),
-    width(12),width(30),width(10),width(12),width(10),
-    width(10),width(15),width(16),width(14),width(20),
+    width(12),width(30),width(14),width(16),width(18),
+    width(10),width(10),width(10),width(10),width(10),
+    width(16),width(16),width(22),width(24),
+    width(10),width(10),width(15),width(16),width(14),width(20),
     width(9),width(9),width(12),width(12),width(55)
   ];
-  if(rows.length)ws['!autofilter']={ref:'A1:Y'+(rows.length+1)};
+  if(rows.length)ws['!autofilter']={ref:'A1:AI'+(rows.length+1)};
   ws['!freeze']={xSplit:0,ySplit:1,topLeftCell:'A2',activePane:'bottomLeft',state:'frozen'};
 }
 async function exportExcel(){
@@ -126,13 +151,17 @@ async function exportExcel(){
           'С МРЦ':x.filter(c=>c.mrc_byn!=null).length,
           'Ниже МРЦ (в наличии)':x.filter(c=>c.in_stock===true&&Number(c.mrc_delta_pct)<0).length,
           'Ниже МРЦ >5% (в наличии)':x.filter(c=>c.in_stock===true&&Number(c.mrc_delta_pct)<-5).length,
-          'TOP-30':x.filter(c=>{const n=normalizedTopPosition(c);return n>0&&n<=30}).length,
-          'TOP-60':x.filter(c=>{const n=normalizedTopPosition(c);return n>0&&n<=60}).length,
-          'Источник':'Собственный парсер 21vek'
+          'Позиция выросла':x.filter(c=>c.position_movement==='up').length,
+          'Позиция упала':x.filter(c=>c.position_movement==='down').length,
+          'Вошли ≤60':x.filter(c=>c.position_movement==='entered').length,
+          'Вылетели >60':x.filter(c=>c.position_movement==='exited').length,
+          'Падение ≥10 поз.':x.filter(c=>c.position_movement==='down'&&Number(c.position_delta)<=-10).length,
+          'Сейчас >60':x.filter(c=>c.position_now==='>60').length,
+          'Источник':'Собственный парсер 21vek · позиционная история'
         };
       });
       const sws=XLSX.utils.json_to_sheet(summary);
-      sws['!cols']=[width(22),width(22),width(12),width(12),width(12),width(22),width(26),width(12),width(12),width(28)];
+      sws['!cols']=[width(22),width(22),width(12),width(12),width(12),width(22),width(26),width(18),width(18),width(16),width(16),width(18),width(14),width(38)];
       XLSX.utils.book_append_sheet(wb,sws,'Сводка');
       for(const name of managers){
         const rows=cards.filter(c=>String(c.manager_name||c.manager_email||'Менеджер')===name).map(row);
@@ -144,10 +173,10 @@ async function exportExcel(){
         XLSX.utils.book_append_sheet(wb,ws,'Все карточки');
       }
       const who=managers.length===1?'_'+String(managers[0]).replace(/[^0-9A-Za-zА-Яа-я_-]+/g,'_'):'';
-      XLSX.writeFile(wb,'Triovist_21vek_MRC_'+snapshot+who+'.xlsx',{compression:true});
+      XLSX.writeFile(wb,'Triovist_21vek_Positions_'+snapshot+who+'.xlsx',{compression:true});
       if(typeof showToast==='function')showToast('✅ Excel выгружен: '+cards.length.toLocaleString('ru-RU')+' карточек');
     }catch(e){
-      console.error('21vek export v23.6.326',e);
+      console.error('21vek export v23.6.351',e);
       alert('Не удалось выгрузить Excel: '+(e?.message||e));
     }finally{
       const b=document.getElementById('tri21-export-xlsx-v236109');
@@ -158,5 +187,5 @@ async function exportExcel(){
 }
 function install(){window.triovist21vekExportExcelV236109=exportExcel;}
 install();[250,900,2200].forEach(ms=>setTimeout(install,ms));
-window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221=Object.freeze({version:V,fastExport:true,mrc:true,authRetry:true,topConsistency:true});
+window.RESANTA_TRIOVIST_AUTH_EXPORT_V236221=Object.freeze({version:V,fastExport:true,mrc:true,authRetry:true,positionHistory:true,historyDays:[1,3,7,14,30]});
 })();
