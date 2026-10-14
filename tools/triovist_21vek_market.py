@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.9"
+PARSER_VERSION="market-auto-v6.10"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -46,7 +46,7 @@ VALIDATE_PROFILES={
 if VALIDATE_PROFILES:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -210,6 +210,7 @@ def profile_for(label: str) -> str:
     if "канализац" in n and any(x in n for x in ("станц","установ")): return "sewage_station"
     if "поверхност" in n and "насос" in n: return "surface_pump"
     if "скважин" in n and "насос" in n: return "borehole_pump"
+    if "циркуляц" in n and "насос" in n: return "circulation_pump"
     if "дренаж" in n and "насос" in n: return "drainage_pump"
     if ("дисков" in n and "пил" in n) or "циркуляр" in n: return "circular_saw"
     if "шуруповерт" in n and "аккумулятор" in n: return "cordless_screwdriver"
@@ -248,6 +249,7 @@ def query_for(label: str, profile: str) -> str:
       "miter_saw":"торцовочная пила",
       "bench_grinder":"точильный станок",
       "angle_grinder":"угловая шлифовальная машина",
+      "circulation_pump":"циркуляционный насос",
       "drainage_pump":"дренажный насос",
       "fecal_pump":"фекальный насос",
       "sewage_station":"канализационный насос",
@@ -327,6 +329,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
       ("Торцовочные пилы","miter_saw","торцов"),
       ("Точильные станки","bench_grinder","точильн"),
       ("Углошлифовальные машины","angle_grinder","углошлиф"),
+      ("Циркуляционные насосы","circulation_pump","циркуляц"),
       ("Дренажные насосы","drainage_pump","дренаж"),
       ("Фекальные насосы","fecal_pump","фекал"),
       ("Канализационные станции","sewage_station","канализац"),
@@ -344,7 +347,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -396,6 +399,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
                          and "полировальн" not in pn
                          and "диск для" not in pn and "щетк" not in pn and "щёт" not in pn
                          and "ручк" not in pn and "ключ для" not in pn and "запчаст" not in pn
+                         and not sku.startswith("900/"))
+            elif profile=="circulation_pump":
+                matched=("циркуляц" in pn and "насос" in pn
+                         and "шланг" not in pn and "муфт" not in pn and "патруб" not in pn
+                         and "переходник" not in pn and "фильтр для" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
             elif profile=="drainage_pump":
                 matched=("дренаж" in pn and "насос" in pn
@@ -472,7 +480,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Насосы" if profile in ("drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника")),"source_subgroup":label,
+              "scope_key":key,"source_category":("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника")),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -1281,6 +1289,75 @@ def drainage_pump_body_family(v: Any) -> str:
     for x in tokens:
         if x not in uniq:uniq.append(x)
     return "+".join(uniq) if uniq else n[:120]
+
+
+def circulation_pump_required_missing(ours: dict,comp: dict) -> bool:
+    # Particle size is optional by the approved business rule: its absence must not
+    # mark the comparison incomplete or lower the result.
+    required=("max_head_m","flow_rate_m3h","input_power_w","pressure_bar")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def circulation_pump_relative_similarity(a: float,b: float,full: float=0.10,close: float=0.20,partial: float=0.30) -> float:
+    d=abs(float(a)-float(b))/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def circulation_pump_head_similarity(a: float,b: float) -> float:
+    av=float(a);bv=float(b)
+    d=abs(av-bv);rel=d/max(abs(av),abs(bv),1e-9)
+    if d<=0.5 or rel<=0.10:return 1.0
+    if d<=1.0 or rel<=0.20:return 0.85
+    if d<=1.5 or rel<=0.30:return 0.65
+    return 0.0
+
+
+def circulation_pump_particle_similarity(a: float,b: float) -> float:
+    av=float(a);bv=float(b)
+    d=abs(av-bv);rel=d/max(abs(av),abs(bv),1e-9)
+    if d<=1 or rel<=0.10:return 1.0
+    if d<=2 or rel<=0.20:return 0.85
+    if d<=3 or rel<=0.30:return 0.65
+    return 0.0
+
+
+def circulation_pump_directional(rule: dict,a: Any,b: Any,ours: dict|None=None,comp: dict|None=None) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    av=float(a);bv=float(b)
+    if k=="max_head_m":
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if abs(av-bv)<=0.5 or rel<=0.10:return 50
+        return 68 if av>bv else 32
+    if k=="flow_rate_m3h":
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if rel<=0.10:return 50
+        return 66 if av>bv else 34
+    if k=="pressure_bar":
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if rel<=0.10:return 50
+        return 68 if av>bv else 32
+    if k=="filter_particle_mm":
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if abs(av-bv)<=1 or rel<=0.10:return 50
+        return 66 if av>bv else 34
+    if k=="input_power_w":
+        rel=abs(av-bv)/max(abs(av),abs(bv),1e-9)
+        if rel<=0.10:return 50
+        # Lower power is an advantage only when hydraulic performance is comparable.
+        if not ours or not comp:return 50
+        ah=ours.get("max_head_m");bh=comp.get("max_head_m")
+        af=ours.get("flow_rate_m3h");bf=comp.get("flow_rate_m3h")
+        if None in (ah,bh,af,bf):return 50
+        head_rel=abs(float(ah)-float(bh))/max(abs(float(ah)),abs(float(bh)),1e-9)
+        flow_rel=abs(float(af)-float(bf))/max(abs(float(af)),abs(float(bf)),1e-9)
+        comparable=(abs(float(ah)-float(bh))<=0.5 or head_rel<=0.10) and flow_rel<=0.10
+        if not comparable:return 50
+        return 68 if av<bv else 32
+    return directional(rule,a,b)
 
 
 def drainage_pump_required_missing(ours: dict,comp: dict) -> bool:
@@ -2452,6 +2529,18 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))*10,3)
         return round(ns[0],3) if ns else None
+    if key=="flow_rate_m3h":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:ч|h|hour)",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*60,4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*0.06,4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\s*/\s*(?:ч|h|hour)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/1000,4)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мл|ml)\s*/\s*(?:мин|min)",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*0.00006,4)
+        return round(ns[0],4) if ns else None
     if key=="flow_rate_lmin":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:ч|h|hour)",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))*1000/60,3)
@@ -2623,6 +2712,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
     angle_grinder_mode={"power_source","motor_type","battery_capacity_ah","input_power_w","soft_start_present","speed_adjustment_present","grinder_disc_diameter_mm"}.issubset(rule_keys)
+    circulation_pump_mode={"max_head_m","flow_rate_m3h","input_power_w","pressure_bar","filter_particle_mm"}.issubset(rule_keys)
     drainage_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","pump_body_material","filter_particle_mm"}.issubset(rule_keys)
     sewage_station_mode={"flow_rate_lmin","input_power_w","max_head_m","filter_particle_mm","max_water_temp_c"}.issubset(rule_keys)
     surface_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","max_suction_depth_m","water_type"}.issubset(rule_keys)
@@ -2656,6 +2746,28 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
 
 
+
+
+    def circulation_pump_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not circulation_pump_mode:return None
+        ln=norm(label)
+        if not ln:return None
+        if any(x in ln for x in ("производительн","пропускн способн","максимальн подач","макс подач","расход вод","расход жидк")):
+            return "flow_rate_m3h"
+        if ln=="подача" or ("подач" in ln and "высот" not in ln):
+            return "flow_rate_m3h"
+        if "мощност" in ln and not any(x in ln for x in ("выходн","акуст")):
+            return "input_power_w"
+        if "напор" in ln or ("высот" in ln and any(x in ln for x in ("подъем","подъём","подач"))):
+            return "max_head_m"
+        if "давлен" in ln and "напор" not in ln:
+            return "pressure_bar"
+        if (
+            ("частиц" in ln or "загрязнен" in ln or "загрязнён" in ln or "примес" in ln)
+            and any(x in ln for x in ("размер","диаметр","пропуск","макс","фильтр"))
+        ):
+            return "filter_particle_mm"
+        return None
 
 
     def drainage_pump_fuzzy_key(label: Any,value: Any) -> str|None:
@@ -2939,7 +3051,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -3213,6 +3325,12 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     grinder_class=(("точильн" in gn and "станок" in gn) or ("точильно шлифовальн" in gn and "станок" in gn) or "bench grinder" in gn)
                     if not grinder_class or any(x in gn for x in ("камень для","круг для","диск для","заточный многофункцион","для цеп","запчаст")):
                         continue
+                if scope.get("profile_key")=="circulation_pump":
+                    cn=norm(name)
+                    circulation_class=("циркуляц" in cn and "насос" in cn)
+                    if (not circulation_class
+                        or any(x in cn for x in ("дренаж","фекаль","канализац","скважин","поверхност","шланг","муфт","патруб","переходник","фильтр для","запчаст"))):
+                        continue
                 if scope.get("profile_key")=="drainage_pump":
                     dn=norm(name)
                     pump_class=("дренаж" in dn and "насос" in dn)
@@ -3328,6 +3446,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-sprayer2"
     if "max_torque_nm" in keys and "drive_size_in" in keys and "wrench_type" in keys:
         return RULESET_VERSION+"-wrench2"
+    if {"max_head_m","flow_rate_m3h","input_power_w","pressure_bar","filter_particle_mm"}.issubset(keys):
+        return RULESET_VERSION+"-circulationpump1"
     if {"water_type","operating_principle","max_head_m","max_pumping_depth_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin"}.issubset(keys):
         return RULESET_VERSION+"-boreholepump1"
     if "max_head_m" in keys and "max_suction_depth_m" in keys and "water_type" in keys and "flow_rate_lmin" in keys and "input_power_w" in keys:
@@ -4558,6 +4678,32 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         return round(max(0,min(100,score)),2)
 
 
+    if profile=="circulation_pump":
+        weights={"max_head_m":0.30,"flow_rate_m3h":0.25,"pressure_bar":0.20,"input_power_w":0.15,"filter_particle_mm":0.10}
+        critical_missing=circulation_pump_required_missing(ours,comp)
+        total=used=0.0
+        # Particle size is optional; exclude it from coverage when absent.
+        allw=sum(w for k,w in weights.items() if k!="filter_particle_mm" or (ours.get(k) is not None and comp.get(k) is not None))
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="max_head_m":
+                    s=circulation_pump_head_similarity(float(a),float(b))
+                elif k=="filter_particle_mm":
+                    s=circulation_pump_particle_similarity(float(a),float(b))
+                else:
+                    s=circulation_pump_relative_similarity(float(a),float(b))
+            except Exception:s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if critical_missing:score=min(score,54.0)
+        return round(max(0,min(100,score)),2)
+
+
     if profile=="drainage_pump":
         weights={"flow_rate_lmin":0.25,"input_power_w":0.20,"max_head_m":0.25,"pump_body_material":0.15,"filter_particle_mm":0.15}
         total=used=0.0
@@ -5575,6 +5721,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=sewage_station_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="fecal_pump":
             z=fecal_pump_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="circulation_pump":
+            z=circulation_pump_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]),ours,comp)
         elif profile=="drainage_pump":
             z=drainage_pump_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="angle_grinder":
@@ -5647,6 +5795,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=sewage_station_directional(rule,a,b)
         elif profile=="fecal_pump":
             z=fecal_pump_directional(rule,a,b)
+        elif profile=="circulation_pump":
+            z=circulation_pump_directional(rule,a,b,ours,comp)
         elif profile=="drainage_pump":
             z=drainage_pump_directional(rule,a,b)
         elif profile=="angle_grinder":
@@ -5725,6 +5875,8 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения строительных пылесосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, объем бака, тип уборки и материал корпуса."
     if profile=="construction_heat_gun" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения термопистолетов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены производительность воздушного потока, время нагрева и мощность."
+    if profile=="circulation_pump" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения фекальных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены материал корпуса, пропускная способность, максимальный напор, диаметр соединения, размер фильтруемых частиц, наличие измельчителя и тип воды."
     min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
@@ -5992,6 +6144,11 @@ def main() -> None:
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
+                if profile=="circulation_pump" and scored:
+                    gap_confirmed=not circulation_pump_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
                 if profile=="drainage_pump" and scored:
                     gap_confirmed=not drainage_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
@@ -6056,6 +6213,8 @@ def main() -> None:
                         data_incomplete=True
                     if profile=="fecal_pump" and fecal_pump_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
+                    if profile=="circulation_pump" and circulation_pump_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
                     if profile=="drainage_pump" and drainage_pump_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
@@ -6113,6 +6272,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по пропускной способности, максимальному напору, размеру фильтрующих частиц, мощности или максимальной температуре воды канализационной станции — итог предварительный, часть характеристик не подтверждена")
                     if profile=="fecal_pump" and fecal_pump_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по материалу корпуса, пропускной способности, максимальному напору, диаметру соединения, размеру фильтруемых частиц, измельчителю или типу воды фекального насоса — итог предварительный, часть характеристик не подтверждена")
+                    if profile=="circulation_pump" and circulation_pump_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по максимальному напору, пропускной способности, мощности или максимальному давлению циркуляционного насоса — итог предварительный, часть характеристик не подтверждена")
                     if profile=="drainage_pump" and drainage_pump_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по производительности, мощности, максимальному напору, материалу корпуса или размеру фильтрующих частиц дренажного насоса — итог предварительный, часть характеристик не подтверждена")
                     if profile=="angle_grinder" and angle_grinder_required_missing(ours["specs_normalized"],comp_specs):
