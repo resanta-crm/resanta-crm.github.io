@@ -7,7 +7,7 @@
 'use strict';
 if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203)return;
 
-const V='v23.6.345';
+const V='v23.6.360';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -61,11 +61,11 @@ function isDecisionForMe(st){
 }
 function rowMeta(p){
   const st=actualStatus(p),raw=safe(p?.status),pr=progress(p),e=effRow(p?.id);
-  const sales=p?.confirmed_sales!==null&&p?.confirmed_sales!==undefined&&p?.confirmed_sales!==''?num(p.confirmed_sales):num(e?.current_sales_1c);
+  const sales=e&&e.effective_sales!==null&&e.effective_sales!==undefined&&e.effective_sales!==''?num(e.effective_sales):(p?.confirmed_sales!==null&&p?.confirmed_sales!==undefined&&p?.confirmed_sales!==''?num(p.confirmed_sales):num(e?.current_sales_1c));
   const plan=num(p?.sales_plan),completion=plan>0?sales/plan*100:null,pace=completion==null?null:completion-pr.elapsed;
   const ended=safe(p?.end_date)<today();
   const needsClose=!['completed','rejected'].includes(raw)&&(st==='awaiting'||(ended&&['approved','in_work'].includes(raw)));
-  const badData=['client_match_ambiguous'].includes(safe(e?.data_quality));
+  const badData=['client_match_ambiguous'].includes(safe(e?.data_quality))||!!e?.manual_conflict;
   const attention=!needsClose&&!['completed','rejected'].includes(raw)&&(
     ((st==='active'||st==='planned')&&photoMissing(p,st,pr.elapsed))||
     (st==='active'&&pace!=null&&pace<=-15)||
@@ -127,7 +127,7 @@ function managers(){return[...new Set(promos().map(p=>safe(p.manager_name)).filt
 function toneClass(t){return t?(' pcc203-'+t):''}
 function qualitySummary(){
   const rows=filteredBase(state.view).filter(x=>inView(x));
-  const warn=rows.filter(x=>x.e?.client_match_warning||['preliminary_month','client_match_ambiguous'].includes(safe(x.e?.data_quality))).length;
+  const warn=rows.filter(x=>x.e?.client_match_warning||x.e?.manual_conflict||['preliminary_month','client_match_ambiguous'].includes(safe(x.e?.data_quality))).length;
   return warn?(' · '+warn+' с предупреждением по данным'):'';
 }
 function style(){
