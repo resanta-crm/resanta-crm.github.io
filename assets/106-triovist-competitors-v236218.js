@@ -152,7 +152,7 @@ async function manualPositionRefresh(scope,btn){
  try{
   const {data,error}=await d.functions.invoke('triovist-competitor-position-refresh-v236352',{body:{scope_key:scope}});
   if(error)throw error;if(!data?.ok)throw Error(data?.message||data?.error||'Проверка не выполнена');
-  positionCache=null;positionCacheAt=0;positionHistoryCache.clear();
+  positionCache.clear();positionFlights.clear();positionHistoryCache.clear();
   return data;
  }finally{if(btn){btn.disabled=false;btn.textContent=old||'↻ Проверить позиции сейчас'}}
 }
