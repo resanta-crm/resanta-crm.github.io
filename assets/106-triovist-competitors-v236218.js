@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.357 · TRIOVIST / 21VEK LAZY MARKET + LIVE COMPETITOR POSITIONS
+/* RESANTA CRM v23.6.358 · TRIOVIST / 21VEK LAZY MARKET + LIVE COMPETITOR POSITIONS
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.357',TTL=30000;
+const V='v23.6.358',TTL=30000;
 let flight=null,last=null,lastAt=0,
     scopeFlights=new Map(),scopeCache=new Map(),
     listingFlights=new Map(),listingCache=new Map(),
