@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.353',TTL=30000;
+const V='v23.6.354',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),positionFlight=null,positionCache=null,positionCacheAt=0,positionHistoryFlights=new Map(),positionHistoryCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -45,7 +45,9 @@ async function loadCompetitorHistory(days=7,force=false){
   .finally(()=>historyFlight=null);
  return historyFlight;
 }
-async function loadCompetitorPositions(force=false){
+async function loadCompetitorPositions(force=false,scope=''){
+ const sk=String(scope||'').trim();
+ if(sk)return rpc('triovist_market_competitor_positions_v236352',{p_scope_key:sk});
  if(positionCache&&!force&&Date.now()-positionCacheAt<TTL)return positionCache;
  if(positionFlight)return positionFlight;
  positionFlight=rpc('triovist_market_competitor_positions_v236352',{p_scope_key:null})
@@ -2912,7 +2914,7 @@ function render(panel,d,listing){
    const scope=btn.dataset.tm224CheckScope||'';
    try{
      const res=await manualPositionRefresh(scope,btn);
-     const p=await loadCompetitorPositions(true);mergeCompetitorPositions(d,p);applyFilters(panel,d,listing);
+     const p=await loadCompetitorPositions(true,scope);mergeCompetitorPositions(d,p);applyFilters(panel,d,listing);
      alert(res?.skipped?(res.message||'Категория уже проверена недавно.'):'Позиции реально перепроверены на 21vek. Успешных наблюдений: '+E(res?.success_count??0)+(N(res?.error_count)>0?' · ошибок: '+E(res.error_count):''));
    }catch(err){alert('Не удалось перепроверить позиции: '+(err?.message||err))}
  }));
@@ -2962,9 +2964,11 @@ async function open(panel,ctx,force=false){
 
   // Live competitor positions are progressive enhancement. As soon as the
   // real 21vek checks arrive, replace rank/price/freshness in-place.
-  loadCompetitorPositions(force)
+  const loadLive=()=>loadCompetitorPositions(force)
     .then(positions=>{mergeCompetitorPositions(dash,positions||{rows:[]});applyFilters(panel,dash,listing)})
     .catch(err=>console.warn('Живые позиции конкурентов догружаются отдельно',err));
+  if('requestIdleCallback' in window)window.requestIdleCallback(loadLive,{timeout:800});
+  else setTimeout(loadLive,80);
 
   // Historical price deltas are also non-blocking.
   loadCompetitorHistory(7,force)
@@ -2972,5 +2976,5 @@ async function open(panel,ctx,force=false){
     .catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();positionCache=null;positionCacheAt=0;positionHistoryCache.clear();return Promise.all([load(true),loadListing(7,true),loadCompetitorPositions(true)])},automaticMarket:true,positionHistory:true,liveCompetitorPositionWatch:true,livePositionDepth:120,livePositionTargetHours:3,manualScopeRefresh:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,drainagePumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();positionCache=null;positionCacheAt=0;positionHistoryCache.clear();const critical=Promise.all([load(true),loadListing(7,true)]);setTimeout(()=>loadCompetitorPositions(true).catch(err=>console.warn('Живые позиции обновляются отдельно',err)),50);return critical},automaticMarket:true,positionHistory:true,liveCompetitorPositionWatch:true,livePositionDepth:120,livePositionTargetHours:3,manualScopeRefresh:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,drainagePumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
