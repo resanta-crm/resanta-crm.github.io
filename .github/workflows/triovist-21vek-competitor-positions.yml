@@ -1,6 +1,11 @@
 name: Триовист — 21vek · позиции конкурентов
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/triovist_21vek_competitor_positions.py'
+      - '.github/workflows/triovist-21vek-competitor-positions.yml'
   schedule:
     # Лёгкий монитор позиций каждые 3 часа. Сдвинут относительно ночного полного рынка.
     - cron: '47 */3 * * *'
@@ -33,9 +38,11 @@ jobs:
           python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_competitor_positions.py
 
       - name: Установить зависимости
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pip install requests beautifulsoup4
 
       - name: Реально проверить позиции 21vek
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
