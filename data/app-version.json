@@ -1,6 +1,6 @@
 {
-  "version": "23.6.360",
+  "version": "23.6.361",
   "released_at": "2026-10-14",
-  "purpose": "Promotions: exact 1C sales truth, manual-confirmation reconciliation and exact-SKU snapshots.",
-  "deploy_trigger": "2026-10-14T14:25:00+03:00"
+  "purpose": "Promotions: exact 1C sales truth, manual reconciliation, exact-SKU snapshots and race-free closing flow.",
+  "deploy_trigger": "2026-10-14T14:29:00+03:00"
 }
