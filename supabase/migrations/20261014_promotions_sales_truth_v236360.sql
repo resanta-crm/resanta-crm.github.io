@@ -873,3 +873,14 @@ begin
 end;
 $function$
 ;
+
+-- Restrict RPC execution to the intended callers.
+revoke all on function public.promotion_capture_sales_snapshots_v23654(date,timestamp with time zone) from public,anon,authenticated;
+grant execute on function public.promotion_capture_sales_snapshots_v23654(date,timestamp with time zone) to service_role;
+
+revoke all on function public.crm_promotions_effectiveness_v236203() from public,anon;
+grant execute on function public.crm_promotions_effectiveness_v236203() to authenticated,service_role;
+
+revoke all on function public.crm_promotion_close_summary_v1(uuid) from public,anon;
+grant execute on function public.crm_promotion_close_summary_v1(uuid) to authenticated,service_role;
+
