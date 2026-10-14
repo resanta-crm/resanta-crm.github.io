@@ -2885,7 +2885,7 @@ function render(panel,d,listing){
   +'<div class="tm224-kpi"><div><span>Категорий</span><b>'+E(s.scopes??0)+'</b></div><div><span>Товаров конкурентов</span><b>'+E(s.products??0)+'</b></div><div><span>Брендов</span><b>'+E(s.brands??0)+'</b></div><div><span>Мы сильнее</span><b class="good">'+E(s.ours_stronger??0)+'</b></div><div><span>Паритет</span><b class="warn">'+E(s.parity??0)+'</b></div><div><span>Конкурент сильнее</span><b class="bad">'+E(s.competitor_stronger??0)+'</b></div><div><span>Пробелы</span><b class="warn">'+E(s.gaps??0)+'</b></div><div><span>Ниже МРЦ</span><b class="'+((s.below_mrc||0)>0?'bad':'good')+'">'+E(s.below_mrc??0)+'</b></div></div>'
   +'<div class="tm224-filters"><select data-f-scope><option value="">Все подгруппы</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-brand><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><input data-f-sku placeholder="Наш SKU"><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><b data-tm224-count></b></div></div>'
   +scopes.map(x=>scopeHtml(x,summaryMap)).join('')+'<div data-tm224-rows></div>'
-  +'<div class="tm224-meta">Последний сбор: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · конкурентных товаров '+E(run.competitor_count??0)+' · сравнений '+E(run.comparison_count??0)+' · пробелов '+E(run.gap_count??0)+' · ошибок '+E(run.error_count??0)+'. Наш листинг: страница 1 = места 1–60, страница 2 = 61–120; если карточка есть, но товар не найден на двух страницах, показываем >120.</div>';
+  +'<div class="tm224-meta">Последний полный анализ: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · конкурентных товаров '+E(run.competitor_count??0)+' · сравнений '+E(run.comparison_count??0)+' · пробелов '+E(run.gap_count??0)+' · ошибок '+E(run.error_count??0)+'. <b>Позиции конкурентов обновляются отдельным лёгким монитором каждые 3 часа реальным запросом к 21vek.</b> 🟢 до 4 ч · 🟡 4–8 ч · 🔴 старше 8 ч. Глубина — первые 120 позиций.</div>';
  const daySel=panel.querySelector('[data-f-days]');if(daySel)daySel.value=String(pd);
  refreshBrandOptions(panel,{...d,rows});
  applyFilters(panel,{...d,rows},listing);
@@ -2935,10 +2935,9 @@ function render(panel,d,listing){
    el.dataset.loading='1';
    const body=el.querySelector('[data-detail-body]');if(body)body.textContent='Загружаю характеристики…';
    try{
-     const [detail,posHistory]=await Promise.all([
-       loadCompetitorDetail(scope,product,false),
-       loadCompetitorPositionHistory(scope,product,false)
-     ]);
+     const detail=await loadCompetitorDetail(scope,product,false);
+     let posHistory={};
+     try{posHistory=await loadCompetitorPositionHistory(scope,product,false)}catch(err){console.warn('История позиции конкурента недоступна отдельно',err)}
      Object.assign(row,detail||{}, {__detailLoaded:true,__positionWatchHistory:posHistory||{}});
      const lp=listingRowsMap(listing).get(listingKey(row.scope_key,row.our_sku));
      const box=document.createElement('div');box.innerHTML=details(row,lp);
@@ -2955,8 +2954,12 @@ function render(panel,d,listing){
 async function open(panel,ctx,force=false){
  if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю автоматический анализ рынка, реальные позиции конкурентов и наш листинг 21vek…</div>';
  try{
-  const [dash,listing,positions]=await Promise.all([load(force),loadListing(7,force),loadCompetitorPositions(force)]);
-  mergeCompetitorPositions(dash,positions);
+  const [dash,listing,positions]=await Promise.all([
+    load(force),
+    loadListing(7,force),
+    loadCompetitorPositions(force).catch(err=>{console.warn('Живые позиции конкурентов временно недоступны',err);return{rows:[]}})
+  ]);
+  mergeCompetitorPositions(dash,positions||{rows:[]});
   render(panel,dash,listing);
   loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
