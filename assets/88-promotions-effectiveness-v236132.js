@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132)return;
-const V='v23.6.203',TTL=60000,S={rows:new Map(),loaded:false,flight:null,at:0};
+const V='v23.6.360',TTL=60000,S={rows:new Map(),loaded:false,flight:null,at:0};
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' BYN';
@@ -16,7 +16,10 @@ function active(){return document.getElementById('page-promotions')?.classList.c
 function row(p){return S.rows.get(safe(p?.id))||null}
 function promotion(id){try{return (allPromotions||[]).find(x=>safe(x.id)===safe(id))||null}catch(_){return null}}
 function confirmed(p){return p?.confirmed_sales!==null&&p?.confirmed_sales!==undefined&&p?.confirmed_sales!==''}
-function actualSales(p,e){return confirmed(p)?num(p.confirmed_sales):num(e?.current_sales_1c)}
+function actualSales(p,e){
+  if(e&&e.effective_sales!==null&&e.effective_sales!==undefined&&e.effective_sales!=='')return num(e.effective_sales);
+  return confirmed(p)?num(p.confirmed_sales):num(e?.current_sales_1c);
+}
 function cardId(card){
   const d=card?.querySelector?.('[data-v2368-id]')?.dataset?.v2368Id;if(d)return safe(d);
   const b=[...(card?.querySelectorAll?.('button')||[])].find(x=>/Открыть/i.test(safe(x.textContent)));
@@ -30,6 +33,7 @@ function deltaInfo(e,p){
 }
 function qualityInfo(e){
   const q=safe(e?.data_quality),m=safe(e?.client_match_mode);
+  if(e?.manual_conflict)return{html:'🔴 Ручной итог конфликтует с подтверждёнными данными 1С',tone:'bad'};
   if(q==='client_match_ambiguous')return{html:'🔴 Неоднозначное сопоставление клиента 1С',tone:'bad'};
   if(m==='name_unique_fallback'||m==='name_only')return{html:'🟠 Клиент сопоставлен по названию',tone:'warn'};
   if(q==='exact_closed_month')return{html:'✅ Точный закрытый месяц 1С',tone:'good'};
@@ -67,7 +71,7 @@ function patchBridges(){
   }catch(_){}
   try{
     const old=window.RESANTA_PROMOTIONS_MANAGEMENT_V23654;
-    if(old&&!old.serverEffectivenessV236132){const baseTruth=old.salesTruth;const truth=function(p){const e=row(p);if(!e)return typeof baseTruth==='function'?baseTruth(p):null;if(confirmed(p))return{kind:'confirmed',sales:num(p.confirmed_sales),label:'подтверждено руководителем',exact:true};const exact=['exact_closed_month','exact_snapshots'].includes(safe(e.data_quality));return{kind:exact?'server_exact':'server_preliminary',sales:num(e.current_sales_1c),label:safe(e.sales_label),exact}};window.RESANTA_PROMOTIONS_MANAGEMENT_V23654=Object.freeze({...old,salesTruth:truth,serverEffectivenessV236132:true});}
+    if(old&&!old.serverEffectivenessV236132){const baseTruth=old.salesTruth;const truth=function(p){const e=row(p);if(!e)return typeof baseTruth==='function'?baseTruth(p):null;const exact=!!e.sales_exact;return{kind:safe(e.sales_source)|| (exact?'server_exact':'server_preliminary'),sales:actualSales(p,e),label:safe(e.sales_label),exact,manualConflict:!!e.manual_conflict,confirmed:e.confirmed_sales,calendarSales:num(e.current_sales_calendar_month),coveredFullMonthSales:num(e.covered_full_month_sales)}};window.RESANTA_PROMOTIONS_MANAGEMENT_V23654=Object.freeze({...old,salesTruth:truth,serverEffectivenessV236132:true});}
   }catch(_){}
 }
 function patchCard(card,p,e){
@@ -109,6 +113,9 @@ function patchCards(){
 }
 function detailHtml(p,e){
   const sales=actualSales(p,e),plan=num(p.sales_plan),completion=plan>0?sales/plan*100:null,d=deltaInfo(e,p),q=qualityInfo(e),fin=financeInfo(e),exact=e.scope_mode==='exact_sku';
+  const recon=e.manual_conflict
+    ?'<div class="promo-eff-note-v236132" style="color:var(--r);font-weight:700">Сверка: руководителем подтверждено '+money(e.confirmed_sales)+'; минимум, который точно подтверждён 1С внутри акции, '+money(e.covered_full_month_sales)+'. Продажи по всем затронутым календарным месяцам: '+money(e.current_sales_calendar_month)+'.</div>'
+    :(safe(e.sales_source)==='confirmed_manual'?'<div class="promo-eff-note-v236132">Подтверждено руководителем: <b>'+money(e.confirmed_sales)+'</b>. 1С по затронутым календарным месяцам: <b>'+money(e.current_sales_calendar_month)+'</b> — справочно, пока границы неполного периода не восстановлены точными снимками.</div>':'');
   let h='<div class="promo-eff-detail-v236132" id="promo-eff-detail-v236132"><b>📈 Эффективность акции</b><div class="promo-eff-detail-grid-v236132">'
    +'<div class="promo-eff-detail-cell-v236132"><small>Оборот акции</small><b>'+money(sales)+'</b></div>'
    +'<div class="promo-eff-detail-cell-v236132"><small>База</small><b>'+money(e.baseline_sales)+'</b></div>'
@@ -117,12 +124,13 @@ function detailHtml(p,e){
    +'<div class="promo-eff-detail-cell-v236132"><small>План</small><b>'+(completion==null?'Не задан':completion.toFixed(1)+'%')+'</b></div>'
    +'<div class="promo-eff-detail-cell-v236132"><small>Охват</small><b>'+(exact?num(e.item_count)+' точных SKU':'Исторический')+'</b></div></div>'
    +'<div class="promo-eff-note-v236132"><b>'+esc(q.html)+'</b> · '+esc(e.sales_label)+'</div>'
+   +recon
    +'<div class="promo-eff-note-v236132"><b>'+esc(d.html)+'</b></div>'
    +'<div class="promo-eff-note-v236132"><b>'+esc(fin.html)+'</b></div>'
    +'<div class="promo-eff-note-v236132">'+esc(e.financial_note||'Для точного ROI нужна себестоимость или валовая прибыль.')+'</div>';
   const items=Array.isArray(e.items)?e.items:[];
   if(exact&&items.length){
-    h+='<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">SKU акции · '+items.length+'</summary><div style="overflow:auto"><table class="promo-eff-table-v236132"><thead><tr><th>SKU</th><th>Товар</th><th>Цена до</th><th>Скидка</th><th>Цена акции</th><th>Продажи календарного месяца</th></tr></thead><tbody>'
+    h+='<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">SKU акции · '+items.length+'</summary><div style="overflow:auto"><table class="promo-eff-table-v236132"><thead><tr><th>SKU</th><th>Товар</th><th>Цена до</th><th>Скидка</th><th>Цена акции</th><th>Продажи по затронутым месяцам 1С</th></tr></thead><tbody>'
       +items.map(x=>'<tr><td><b>'+esc(x.sku)+'</b></td><td>'+esc(x.product_name||'—')+'</td><td>'+money(x.base_price_vat)+'</td><td>'+num(x.discount_pct).toLocaleString('ru-RU',{maximumFractionDigits:2})+'%</td><td>'+money(x.promo_price_vat)+'</td><td><b>'+money(x.current_sales_calendar_month)+'</b></td></tr>').join('')
       +'</tbody></table></div></details>';
   }else if(!exact){h+='<div class="promo-eff-note-v236132">Старая акция: товарный охват сохранён по историческим фильтрам. Новые акции считаются строго по выбранным SKU.</div>'}
