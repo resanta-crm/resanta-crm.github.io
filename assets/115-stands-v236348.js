@@ -62,9 +62,10 @@ async function viewStandPhoto(p){
  const m=openModal('Фото стенда',safe(p.client_name)+' · '+typeName(p.asset_type_id),'<div class="st346-alert info">Загружаю фотографию…</div>','<button class="btn-secondary" data-st346-close>Закрыть</button><button class="btn-secondary" data-st348-open-original="'+esc(path)+'">Открыть оригинал</button>');
  const body=m.querySelector('[data-st346-modal-body]');
  try{
-   const {data,error}=await dbc().storage.from('stand-files').createSignedUrl(path,1800,{transform:{width:1400,height:1050,resize:'contain',quality:82}});
-   if(error)throw error;
-   const url=data?.signedUrl;
+   let signed=await dbc().storage.from('stand-files').createSignedUrl(path,1800,{transform:{width:1400,height:1050,resize:'contain',quality:82}});
+   if(signed.error||!signed.data?.signedUrl)signed=await dbc().storage.from('stand-files').createSignedUrl(path,1800);
+   if(signed.error)throw signed.error;
+   const url=signed.data?.signedUrl;
    if(!url)throw new Error('Не удалось получить ссылку на фото');
    body.innerHTML='<div style="display:flex;justify-content:center;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:8px"><img src="'+esc(url)+'" alt="Фото стенда" style="display:block;max-width:100%;max-height:72vh;object-fit:contain;border-radius:9px"></div>'+
      '<div class="st346-meta" style="margin-top:8px">Последнее актуальное фото. '+(p.vision_checked_at?'Vision проверен: '+esc(new Date(p.vision_checked_at).toLocaleString('ru-RU')):'Vision ещё не запускался по этому фото.')+'</div>';
