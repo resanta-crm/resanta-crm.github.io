@@ -220,8 +220,7 @@ select
   c.current_error
 from curr c
 left join agg a on a.manager_email=c.manager_email and a.card_key=c.card_key
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION private.triovist_position_label_v236351(p_position integer, p_position_exact boolean, p_top60 boolean, p_error text)
  RETURNS text
@@ -235,8 +234,7 @@ AS $function$
     when p_top60 is false then '>60'
     else 'Не проверено'
   end
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION private.triovist_refresh_position_metrics_trigger_v236351()
  RETURNS trigger
@@ -259,8 +257,7 @@ begin
   end if;
   return new;
 end;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION private.triovist_refresh_position_metrics_v236351(p_manager_email text)
  RETURNS integer
@@ -305,8 +302,7 @@ begin
   get diagnostics v_count=row_count;
   return v_count;
 end;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.triovist_content_export_v236221(p_manager_email text DEFAULT NULL::text, p_offset integer DEFAULT 0, p_limit integer DEFAULT 500)
  RETURNS jsonb
@@ -470,8 +466,7 @@ begin
     'listing_mode','position_history'
   );
 end;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.triovist_own_listing_history_v236351(p_manager_email text, p_card_key text, p_days integer DEFAULT 30)
  RETURNS jsonb
@@ -586,8 +581,7 @@ begin
     'change_semantics','Изменение обнаружено во время очередного запуска; фактически оно произошло между предыдущей и этой проверкой.'
   );
 end;
-$function$
-
+$function$;
 
 CREATE OR REPLACE FUNCTION public.triovist_own_listing_positions_v236351(p_manager_email text DEFAULT NULL::text, p_search text DEFAULT NULL::text, p_movement text DEFAULT NULL::text, p_offset integer DEFAULT 0, p_limit integer DEFAULT 200)
  RETURNS jsonb
@@ -690,9 +684,7 @@ begin
     'change_semantics','Время изменения = первый запуск парсера, на котором новое значение было обнаружено.'
   );
 end;
-$function$
-
-
+$function$;
 
 drop trigger if exists triovist_refresh_position_metrics_v236351 on public.triovist_content_imports;
 create trigger triovist_refresh_position_metrics_v236351
@@ -714,6 +706,3 @@ grant execute on function public.triovist_content_export_v236221(text,integer,in
 
 comment on table public.triovist_21vek_position_metrics_v236351 is
 'v23.6.351 cached exact-position metrics for own 21vek listing; reason_context reserves current price/MRC/stock for future reason analysis';
-
-select private.triovist_refresh_position_metrics_v236351('aleksandrenko_av@resanta.ru');
-select private.triovist_refresh_position_metrics_v236351('krishtal_na@resanta.ru');
