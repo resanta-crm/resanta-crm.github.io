@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.352',TTL=30000;
+const V='v23.6.353',TTL=30000;
 let flight=null,last=null,lastAt=0,listingFlight=null,listingCache=new Map(),historyFlight=null,historyCache=new Map(),detailFlights=new Map(),detailCache=new Map(),positionFlight=null,positionCache=null,positionCacheAt=0,positionHistoryFlights=new Map(),positionHistoryCache=new Map(),exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -2952,16 +2952,24 @@ function render(panel,d,listing){
 
 }
 async function open(panel,ctx,force=false){
- if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю автоматический анализ рынка, реальные позиции конкурентов и наш листинг 21vek…</div>';
+ if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю конкурентный анализ 21vek…</div>';
  try{
-  const [dash,listing,positions]=await Promise.all([
-    load(force),
-    loadListing(7,force),
-    loadCompetitorPositions(force).catch(err=>{console.warn('Живые позиции конкурентов временно недоступны',err);return{rows:[]}})
-  ]);
-  mergeCompetitorPositions(dash,positions||{rows:[]});
+  // Critical path stays exactly as before live-position monitoring:
+  // dashboard + our listing render first. The 3,125-row live-position packet
+  // must never block the screen.
+  const [dash,listing]=await Promise.all([load(force),loadListing(7,force)]);
   render(panel,dash,listing);
-  loadCompetitorHistory(7,force).then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)}).catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
+
+  // Live competitor positions are progressive enhancement. As soon as the
+  // real 21vek checks arrive, replace rank/price/freshness in-place.
+  loadCompetitorPositions(force)
+    .then(positions=>{mergeCompetitorPositions(dash,positions||{rows:[]});applyFilters(panel,dash,listing)})
+    .catch(err=>console.warn('Живые позиции конкурентов догружаются отдельно',err));
+
+  // Historical price deltas are also non-blocking.
+  loadCompetitorHistory(7,force)
+    .then(h=>{mergeCompetitorHistory(dash,h);applyFilters(panel,dash,listing)})
+    .catch(err=>console.warn('История цен конкурентов загружается отдельно',err));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
 window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{last=null;lastAt=0;listingCache.clear();historyCache.clear();detailCache.clear();positionCache=null;positionCacheAt=0;positionHistoryCache.clear();return Promise.all([load(true),loadListing(7,true),loadCompetitorPositions(true)])},automaticMarket:true,positionHistory:true,liveCompetitorPositionWatch:true,livePositionDepth:120,livePositionTargetHours:3,manualScopeRefresh:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,drainagePumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
