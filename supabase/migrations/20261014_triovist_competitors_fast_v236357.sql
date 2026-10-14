@@ -48,7 +48,8 @@ begin
   on conflict (cache_key) do update
     set payload=excluded.payload,refreshed_at=excluded.refreshed_at;
 
-  delete from public.triovist_market_dashboard_scope_cache_v236357;
+  delete from public.triovist_market_dashboard_scope_cache_v236357
+  where scope_key is not null;
 
   with row_groups as (
     select r->>'scope_key' as scope_key,
