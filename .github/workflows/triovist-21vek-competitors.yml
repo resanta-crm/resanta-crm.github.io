@@ -7,6 +7,7 @@ on:
       - 'tools/triovist_21vek_market.py'
       - 'tools/triovist_21vek_parser.py'
       - 'supabase/migrations/20261006_triovist_market_auto_v236224.sql'
+      - '.github/workflows/triovist-21vek-competitors.yml'
   pull_request:
     branches: [main]
     paths:
@@ -21,6 +22,12 @@ on:
     # в основной рабочий день. Ручной workflow_dispatch остаётся доступен.
     - cron: '17 18 * * *'
   workflow_dispatch:
+    inputs:
+      profiles:
+        description: 'Необязательно: точный список profile_key через запятую'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: triovist-21vek-market
@@ -45,18 +52,30 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
 
       - name: Установить зависимости
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-pumps]'))
         run: pip install requests beautifulsoup4
 
-      - name: Проверка рынка — Конвекторы + Масляные радиаторы + Тепловентиляторы + Тепловые пушки + Увлажнители + Электропилы + Снегоуборщики + Воздуходувки + Бензопилы + Инфракрасные
-        # Тяжёлый рыночный пересчёт не запускаем на каждом push в рабочее время:
-        # push проверяет синтаксис, полный рынок — только по расписанию или вручную.
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      - name: Проверка рынка 21vek
+        # Обычный push проверяет только синтаксис. Полный рынок идёт ночью.
+        # Маркер [market-target-pumps] запускает один точный рабочий прогон двух новых насосных профилей.
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-pumps]'))
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          MARKET_VALIDATE_PROFILES: 'convector,oil_radiator,fan_heater,heat_gun,humidifier,chainsaw_electric,snow_blower,leaf_blower,chainsaw_gas,infrared_heater'
+          MANUAL_PROFILES: ${{ inputs.profiles }}
+          TARGET_PUMPS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-pumps]') }}
           MARKET_DELAY_SECONDS: '0.22'
           MARKET_HTTP_TIMEOUT: '30'
           MARKET_SPEC_TTL_DAYS: '30'
-        run: python tools/triovist_21vek_market.py
+        run: |
+          if [ "$TARGET_PUMPS" = "true" ]; then
+            export MARKET_VALIDATE_PROFILES='fecal_pump,circulation_pump'
+            export MARKET_VALIDATE_EXACT='1'
+          elif [ -n "$MANUAL_PROFILES" ]; then
+            export MARKET_VALIDATE_PROFILES="$MANUAL_PROFILES"
+            export MARKET_VALIDATE_EXACT='1'
+          else
+            export MARKET_VALIDATE_PROFILES='convector,oil_radiator,fan_heater,heat_gun,humidifier,chainsaw_electric,snow_blower,leaf_blower,chainsaw_gas,infrared_heater'
+            export MARKET_VALIDATE_EXACT='0'
+          fi
+          python tools/triovist_21vek_market.py
