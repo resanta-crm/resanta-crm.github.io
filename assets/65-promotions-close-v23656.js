@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_CLOSE_V23656)return;
-const V='v23.6.360';
+const V='v23.6.361';
 const financeConfirmed=new Set();
 const ignoredByPromotion=new Map();
 const discountCalcByPromotion=new Map();
@@ -25,8 +25,25 @@ function currentPromotion(){return promotionById(document.getElementById('promot
 function budgetFor(p){if(!p)return null;const exact=(allPromotionBudgets||[]).find(b=>String(b.id)===String(p.budget_id||''));if(exact)return exact;const rows=(allPromotionBudgets||[]).filter(b=>String(b.client_id||'')===String(p.client_id||'')||String(b.client_name||'').trim().toLowerCase()===String(p.client_name||'').trim().toLowerCase());return rows.sort((a,b)=>(String(b.balance_as_of||'')+'|'+String(b.updated_at||'')).localeCompare(String(a.balance_as_of||'')+'|'+String(a.updated_at||'')))[0]||null}
 function linkedExpenses(p){return (allPromotionBudgetMovements||[]).filter(x=>x.movement_type==='expense'&&String(x.promotion_id||'')===String(p?.id||''))}
 function expenseTotal(p){return linkedExpenses(p).reduce((s,x)=>s+num(x.amount),0)}
-function salesTruth(p){try{return window.RESANTA_PROMOTIONS_MANAGEMENT_V23654?.salesTruth?.(p)||null}catch(_){return null}}
 function effRow(p){try{return window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132?.getRow?.(p?.id)||null}catch(_){return null}}
+function salesTruth(p){
+  try{
+    const e=effRow(p);
+    if(e){
+      return{
+        kind:String(e.sales_source||'server'),
+        sales:num(e.effective_sales),
+        label:String(e.sales_label||''),
+        exact:!!e.sales_exact,
+        manualConflict:!!e.manual_conflict,
+        confirmed:e.confirmed_sales,
+        calendarSales:num(e.current_sales_calendar_month),
+        coveredFullMonthSales:num(e.covered_full_month_sales)
+      };
+    }
+    return window.RESANTA_PROMOTIONS_MANAGEMENT_V23654?.salesTruth?.(p)||null;
+  }catch(_){return null}
+}
 function isPartial(p){try{return promoIsPartialDates(p)}catch(_){return false}}
 function addDays(s,n){const d=new Date(String(s||'')+'T12:00:00');if(Number.isNaN(d.getTime()))return String(s||'');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 function ignoredSet(p){const k=String(p?.id||'');if(!ignoredByPromotion.has(k))ignoredByPromotion.set(k,new Set());return ignoredByPromotion.get(k)}
