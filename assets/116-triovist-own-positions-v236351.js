@@ -13,7 +13,7 @@ const dt=v=>{if(!v)return'—';try{return new Date(v).toLocaleString('ru-RU',{da
 const fullDt=v=>{if(!v)return'—';try{return new Date(v).toLocaleString('ru-RU')}catch(_){return String(v)}};
 const money=v=>N(v)==null?'—':N(v).toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN';
 let state={manager:'',movement:'',search:'',offset:0,limit:200,data:null,loading:false};
-let searchTimer=null;
+let searchTimer=null,controlSummary=null,controlAt=0,controlFlight=null;
 
 async function rpc(name,args={}){
  const call=()=>db.rpc(name,args);
@@ -120,13 +120,15 @@ async function showHistory(manager,cardKey){
    '<div class="tp351-note" style="margin-top:8px">'+E(d.change_semantics||'')+'</div></div>';
  }catch(e){host.innerHTML='<button class="btn-secondary" data-tp351-back>← Все позиции</button><div style="padding:14px;color:#b91c1c">История не загрузилась: '+E(e?.message||e)+'</div>'}
 }
-async function patchControl(){
+async function patchControl(force=false){
  const panel=document.getElementById('tri21-control-v236107');if(!panel)return;
- let d=state.data;
- if(!d){
-  try{d=await rpc('triovist_own_listing_positions_v236351',{p_manager_email:null,p_search:null,p_movement:null,p_offset:0,p_limit:20})}catch(_){return}
- }
- const s=d?.summary||{};
+ try{
+  if(force||!controlSummary||Date.now()-controlAt>10000){
+   if(!controlFlight)controlFlight=rpc('triovist_own_listing_positions_v236351',{p_manager_email:null,p_search:null,p_movement:null,p_offset:0,p_limit:20}).finally(()=>controlFlight=null);
+   const d=await controlFlight;controlSummary=d?.summary||{};controlAt=Date.now();
+  }
+ }catch(_){return}
+ const s=controlSummary||{};
  const kpis=[...panel.querySelectorAll('.tri21ctl-kpi')];
  const top30=kpis.find(x=>x.querySelector('span')?.textContent?.trim()==='TOP-30');
  const top60=kpis.find(x=>x.querySelector('span')?.textContent?.trim()==='TOP-60');
