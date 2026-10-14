@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.11"
+PARSER_VERSION="market-auto-v6.12"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -124,13 +124,28 @@ def rest_patch(table: str, filt: dict[str,str], values: dict, timeout: int=60) -
         raise RuntimeError(f"PATCH {table}: {r.status_code} {r.text[:1000]}")
 
 
-def rest_delete(table: str, filt: dict[str,str], timeout: int=60) -> None:
-    r=requests.delete(
-        f"{SUPABASE_URL}/rest/v1/{table}",
-        headers=api_headers(False,"return=minimal"),params=filt,timeout=timeout
-    )
-    if r.status_code not in (200,204):
-        raise RuntimeError(f"DELETE {table}: {r.status_code} {r.text[:1000]}")
+def rest_delete(table: str, filt: dict[str,str], timeout: int=20, attempts: int=3) -> None:
+    # DELETEs are idempotent here. A busy PostgREST/Supabase connection must not
+    # destroy a whole market run: retry short transient waits instead of hanging
+    # for a minute and failing after all 21vek cards have already been parsed.
+    last=None
+    for attempt in range(1,max(1,attempts)+1):
+        try:
+            r=requests.delete(
+                f"{SUPABASE_URL}/rest/v1/{table}",
+                headers=api_headers(False,"return=minimal"),params=filt,timeout=timeout
+            )
+            if r.status_code in (200,204):
+                return
+            body=r.text[:1000]
+            if r.status_code not in (408,409,423,429,500,502,503,504):
+                raise RuntimeError(f"DELETE {table}: {r.status_code} {body}")
+            last=RuntimeError(f"DELETE {table}: transient {r.status_code} {body}")
+        except (requests.Timeout,requests.ConnectionError) as exc:
+            last=exc
+        if attempt<attempts:
+            time.sleep(1.5*attempt)
+    raise RuntimeError(f"DELETE {table} failed after {attempts} attempts: {last}")
 
 
 
@@ -6078,11 +6093,19 @@ def main() -> None:
                             row.update({"specs_raw":[],"specs_normalized":{}})
                         row["error_text"]=str(exc)[:1200];errors+=1
                 own_rows.append(row)
-            # Current own-specs table must mirror the live matrix exactly.
-            # Load/cache happened above, so deleting this scope here does not cause refetches,
-            # but it prevents discontinued or misclassified SKUs from remaining in analytics.
-            rest_delete("triovist_market_own_specs_current_v1",{"scope_key":"eq."+skey})
+            # Publish fresh own specs first. The old delete-first sequence could leave
+            # a category empty when Supabase was busy between DELETE and UPSERT.
+            # Upsert-first preserves the last good data even during transient DB load.
             rest_upsert("triovist_market_own_specs_current_v1",own_rows,"sku")
+            live_skus={str(x.get("sku") or "") for x in own_rows if x.get("sku")}
+            stale_skus=[sku for sku in own_existing if sku not in live_skus]
+            for stale_sku in stale_skus:
+                try:
+                    rest_delete("triovist_market_own_specs_current_v1",{"sku":"eq."+stale_sku},timeout=12,attempts=2)
+                except Exception as cleanup_exc:
+                    # Stale cleanup is secondary to publishing current data. Do not
+                    # abort the market run; the next successful cycle retries cleanup.
+                    print(f"  WARN stale own-spec cleanup {stale_sku}: {cleanup_exc}",flush=True)
 
             # Rebuild only this scope's current analysis/gaps.
             rest_delete("triovist_market_analysis_current_v1",{"scope_key":"eq."+skey})
