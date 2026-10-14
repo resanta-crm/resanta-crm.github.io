@@ -1,0 +1,46 @@
+name: Триовист — 21vek · позиции конкурентов
+
+on:
+  schedule:
+    # Лёгкий монитор позиций каждые 3 часа. Сдвинут относительно ночного полного рынка.
+    - cron: '47 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      scope_key:
+        description: 'Необязательно: проверить только один scope_key'
+        required: false
+        type: string
+
+concurrency:
+  group: triovist-21vek-competitor-position-watch
+  cancel-in-progress: true
+
+jobs:
+  positions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Проверить синтаксис
+        run: |
+          python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_competitor_positions.py
+
+      - name: Установить зависимости
+        run: pip install requests beautifulsoup4
+
+      - name: Реально проверить позиции 21vek
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MARKET_DELAY_SECONDS: '0.18'
+          MARKET_HTTP_TIMEOUT: '30'
+          POSITION_WATCH_SOURCE: ${{ github.event_name == 'workflow_dispatch' && 'manual' || 'schedule' }}
+          POSITION_WATCH_SCOPE_KEY: ${{ inputs.scope_key || '' }}
+        run: python tools/triovist_21vek_competitor_positions.py
