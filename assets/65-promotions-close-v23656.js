@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_CLOSE_V23656)return;
-const V='v23.6.213';
+const V='v23.6.360';
 const financeConfirmed=new Set();
 const ignoredByPromotion=new Map();
 const discountCalcByPromotion=new Map();
@@ -26,6 +26,7 @@ function budgetFor(p){if(!p)return null;const exact=(allPromotionBudgets||[]).fi
 function linkedExpenses(p){return (allPromotionBudgetMovements||[]).filter(x=>x.movement_type==='expense'&&String(x.promotion_id||'')===String(p?.id||''))}
 function expenseTotal(p){return linkedExpenses(p).reduce((s,x)=>s+num(x.amount),0)}
 function salesTruth(p){try{return window.RESANTA_PROMOTIONS_MANAGEMENT_V23654?.salesTruth?.(p)||null}catch(_){return null}}
+function effRow(p){try{return window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132?.getRow?.(p?.id)||null}catch(_){return null}}
 function isPartial(p){try{return promoIsPartialDates(p)}catch(_){return false}}
 function addDays(s,n){const d=new Date(String(s||'')+'T12:00:00');if(Number.isNaN(d.getTime()))return String(s||'');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 function ignoredSet(p){const k=String(p?.id||'');if(!ignoredByPromotion.has(k))ignoredByPromotion.set(k,new Set());return ignoredByPromotion.get(k)}
@@ -92,7 +93,7 @@ function patchModal(p){
  if(!block){block=document.createElement('div');block.id='promo56-close-control';block.className='promo56-control';footer?.parentElement?.insertBefore(block,footer)}
  const calc=discountCalcByPromotion.get(String(p.id))||null;
  const loading=!calc&&discountCalcFlight.has(String(p.id));
- const reserved=num(p.budget_reserved),candidateRows=candidateUnlinked(p),confirmed=financeConfirmed.has(String(p.id)),t=salesTruth(p),sales=t?num(t.sales):num(p.confirmed_sales),report=String(document.getElementById('promotion-manager-report')?.value||'').trim(),warnings=photoWarnings(p,report),b=budgetFor(p);
+ const e=effRow(p),reserved=num(p.budget_reserved),candidateRows=candidateUnlinked(p),confirmed=financeConfirmed.has(String(p.id)),t=salesTruth(p),sales=t?num(t.sales):num(p.confirmed_sales),report=String(document.getElementById('promotion-manager-report')?.value||'').trim(),warnings=photoWarnings(p,report),b=budgetFor(p);
  const otherSpend=calc?.ok?num(calc.other_spend):manualExpenseTotal(p);
  const discountExact=!!(calc?.ok&&calc.exact);
  const discountCost=discountExact?num(calc.discount_cost):num(calc?.existing_discount_movement);
@@ -117,7 +118,21 @@ function patchModal(p){
   +(warnings.length?'<div class="promo56-warn"><b>Для принудительного закрытия:</b> '+escSafe(warnings.join('; '))+'. Заполните «Комментарий руководителя», если закрываете без этих материалов.</div>':'')
   +'<div id="promo56-inline" class="promo56-inline"></div>'
   +'<div class="promo56-sub" style="margin-top:8px">CRM списывает стоимость скидки автоматически по фактически проданному количеству SKU и согласованным ценам акции. Дополнительные расходы учитываются отдельно. В бюджет возвращается только неиспользованный остаток резерва.</div>';
- if(isPartial(p)){const cs=document.getElementById('promotion-confirmed-sales');if(cs&&cs.value===''&&t?.exact)cs.value=num(t.sales)}
+ {
+   const cs=document.getElementById('promotion-confirmed-sales');
+   if(cs){
+     if(t?.exact||e?.sales_exact){
+       cs.value='';
+       cs.disabled=true;
+       cs.placeholder='Факт берётся автоматически из 1С';
+       cs.title='Есть точный факт 1С. Ручное подтверждение не требуется и не перекрывает данные 1С.';
+     }else{
+       cs.disabled=false;
+       cs.placeholder='Подтверждённый факт для неполного периода';
+       cs.title='Для неполного периода без точных снимков укажите подтверждённый итог.';
+     }
+   }
+ }
  closeBtn.textContent='🔒 Закрыть акцию';closeBtn.style.minWidth='170px';
  if(!calc&&!discountCalcFlight.has(String(p.id)))loadDiscountCalc(p,false);
 }
@@ -130,12 +145,27 @@ const wrappedOpen=function(id){const out=oldOpen.apply(this,arguments);const p=p
 async function saveResult56(closeIt){
  const p=currentPromotion();if(!p)return;
  const isBoss=boss(),report=String(document.getElementById('promotion-manager-report')?.value||'').trim(),upd={manager_report:report||null};
- if(isBoss){const cs=document.getElementById('promotion-confirmed-sales')?.value??'';upd.confirmed_sales=cs===''?null:num(cs);upd.boss_comment=String(document.getElementById('promotion-boss-comment')?.value||'').trim()||null}
+ const e=effRow(p),truth=salesTruth(p),serverExact=!!(e?.sales_exact||truth?.exact);
+ if(isBoss){
+   const cs=document.getElementById('promotion-confirmed-sales')?.value??'';
+   upd.confirmed_sales=serverExact?null:(cs===''?null:num(cs));
+   upd.boss_comment=String(document.getElementById('promotion-boss-comment')?.value||'').trim()||null;
+ }
  if(closeIt){
    if(!isBoss){showInline('Закрыть акцию может руководитель. Менеджер сохраняет итоговый отчёт.');return}
    clearInline();
-   const truth=salesTruth({...p,...upd});
-   if(isPartial(p)&&upd.confirmed_sales==null){if(truth?.exact)upd.confirmed_sales=num(truth.sales);else{showInline('Для неполного периода нет точного снимка продаж. Укажите подтверждённые продажи по акции.','promotion-confirmed-sales');return}}
+   if(isPartial(p)&&!serverExact&&upd.confirmed_sales==null){
+     showInline('Для неполного периода пока нет точных снимков 1С. Укажите подтверждённые продажи по акции.','promotion-confirmed-sales');return;
+   }
+   if(!serverExact&&upd.confirmed_sales!=null&&e?.scope_mode==='exact_sku'){
+     const proven=num(e?.covered_full_month_sales),calendar=num(e?.current_sales_calendar_month);
+     if(proven>0&&upd.confirmed_sales+0.01<proven){
+       showInline('Подтверждённый итог не может быть ниже '+fmtSafe(proven)+' BYN: эта сумма уже точно прошла по SKU акции в полных календарных месяцах внутри периода. Проверьте факт продаж.','promotion-confirmed-sales');return;
+     }
+     if(Math.abs(upd.confirmed_sales-calendar)>0.01&&!upd.boss_comment){
+       showInline('Ручной факт отличается от продаж 1С по затронутым месяцам ('+fmtSafe(calendar)+' BYN). Укажите в «Комментарий руководителя» причину ручной корректировки.','promotion-boss-comment');return;
+     }
+   }
    const warnings=photoWarnings({...p,...upd},report);
    if(warnings.length&&!upd.boss_comment){showInline('Для принудительного закрытия заполните «Комментарий руководителя»: '+warnings.join('; ')+'.','promotion-boss-comment');return}
    if(candidateUnlinked(p).length){showInline('Есть непривязанные расходы бюджета. Сначала разберите их в блоке контроля.');return}
@@ -152,7 +182,7 @@ async function saveResult56(closeIt){
      if(discountCost<0){showInline('Стоимость скидки не может быть отрицательной.','promo56-manual-discount');return}
    }
    const additional=num(calc.other_spend),reserved=num(p.budget_reserved),projected=discountCost+additional,release=Math.max(0,reserved-projected),over=Math.max(0,projected-reserved);
-   const sales=upd.confirmed_sales!=null?upd.confirmed_sales:num(truth?.sales);
+   const sales=serverExact?num(e?.effective_sales??truth?.sales):(upd.confirmed_sales!=null?upd.confirmed_sales:num(truth?.sales));
    const msg='Закрыть акцию?\n\nФакт продаж: '+fmtSafe(sales)+' BYN'
      +'\nСтоимость скидки: '+fmtSafe(discountCost)+' BYN'
      +'\nДополнительные расходы: '+fmtSafe(additional)+' BYN'
