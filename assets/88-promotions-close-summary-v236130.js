@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_CLOSE_SUMMARY_V236130)return;
-const V='v23.6.130';
+const V='v23.6.360';
 const safe=v=>String(v??'');
 const num=v=>Number(v)||0;
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -52,11 +52,11 @@ function legacySummary(p,s){
   };
 }
 function exactSummary(p,s){
-  const partial=!s?.full_month_period;
-  const noConfirmed=partial&&(s?.confirmed_sales===null||s?.confirmed_sales===undefined||s?.confirmed_sales==='');
+  const partial=!s?.full_month_period,serverExact=!!s?.sales_exact;
+  const noConfirmed=partial&&!serverExact&&(s?.confirmed_sales===null||s?.confirmed_sales===undefined||s?.confirmed_sales==='');
   const fact=noConfirmed?null:num(s?.sales_fact);
   const completion=fact===null||num(s?.sales_plan)<=0?null:fact/num(s.sales_plan)*100;
-  return {exact:true,fact,auto:num(s?.auto_sales),plan:num(s?.sales_plan),completion,base:num(s?.previous_year_sales),delta:fact===null?null:fact-num(s?.previous_year_sales),elapsed:num(s?.elapsed_pct),pace:completion===null?null:completion-num(s?.elapsed_pct),items:Array.isArray(s?.items)?s.items:[],fullMonth:!!s?.full_month_period,confirmed:s?.confirmed_sales};
+  return {exact:true,fact,auto:num(s?.auto_sales),plan:num(s?.sales_plan),completion,base:num(s?.previous_year_sales),delta:fact===null?null:fact-num(s?.previous_year_sales),elapsed:num(s?.elapsed_pct),pace:completion===null?null:completion-num(s?.elapsed_pct),items:Array.isArray(s?.items)?s.items:[],fullMonth:!!s?.full_month_period,confirmed:s?.confirmed_sales,serverExact,manualConflict:!!s?.manual_conflict,calendar:num(s?.calendar_sales_1c),covered:num(s?.covered_full_month_sales),salesLabel:safe(s?.sales_label)};
 }
 function stat(label,value,sub){return '<div class="pcs-stat"><div class="pcs-l">'+esc(label)+'</div><div class="pcs-v">'+value+'</div>'+(sub?'<div class="pcs-sub">'+sub+'</div>':'')+'</div>'}
 function itemsHtml(rows){
@@ -77,9 +77,11 @@ function renderSummary(p,s){
   const photoClass=photosMissing.length?'pcs-pill pcs-bad':'pcs-pill pcs-ok';
   const photoText=photosReq.length?(photosMissing.length?'Фото: не хватает '+photosMissing.map(stageLabel).join(', '):'Фото: комплект полный'):'Фото не требуются';
   let warn='';
-  if(q.exact&&!q.fullMonth&&q.confirmed===null){warn='<div class="pcs-warn">Период акции не равен полному календарному месяцу. 1С хранит продажи помесячно, поэтому точный факт за даты акции должен подтвердить руководитель в поле ниже. Автоматически по затронутым месяцам сейчас: <b>'+money(q.auto)+'</b>.</div>'}
-  else if(q.exact&&!q.fullMonth){warn='<div class="pcs-warn">Для неполного периода итоговый факт взят из подтверждённой суммы руководителя. Сравнение с прошлым годом ниже остаётся помесячным — CRM не выдаёт ложную точность по дням.</div>'}
-  else if(!q.exact){warn='<div class="pcs-warn">Это старая акция. Её товарный охват и исторические правила не переписываем. Для новых акций итог будет считаться строго по SKU, выбранным из Прайса МО2.</div>'}
+  if(q.exact&&q.manualConflict){warn='<div class="pcs-warn" style="border-color:#fecaca;background:#fef2f2;color:#991b1b"><b>Конфликт факта:</b> руководителем было подтверждено '+money(q.confirmed)+', но минимум '+money(q.covered)+' уже точно прошёл по SKU акции в полных месяцах 1С. В итог берётся подтверждённый минимум 1С; требуется сверка.</div>'}
+  else if(q.exact&&q.serverExact&&!q.fullMonth){warn='<div class="pcs-warn">Факт за неполный период восстановлен по точным SKU и накопительным снимкам 1С. Ручное подтверждение не требуется.</div>'}
+  else if(q.exact&&!q.fullMonth&&q.confirmed===null){warn='<div class="pcs-warn">Точных снимков границ периода пока недостаточно. Укажите подтверждённый факт; продажи 1С по затронутым календарным месяцам сейчас: <b>'+money(q.calendar||q.auto)+'</b>.</div>'}
+  else if(q.exact&&!q.fullMonth){warn='<div class="pcs-warn">Для неполного периода итог подтверждён руководителем: <b>'+money(q.confirmed)+'</b>. Продажи 1С по затронутым календарным месяцам: <b>'+money(q.calendar||q.auto)+'</b> — справочно, пока точные границы не восстановлены снимками.</div>'}
+  else if(!q.exact){warn='<div class="pcs-warn">Это старая акция. Её товарный охват и исторические правила не переписываем. Для новых акций итог считается строго по SKU, выбранным из Прайса МО2.</div>'}
   h.innerHTML='<div class="pcs-head"><div><div class="pcs-title">Итог акции</div><div class="pcs-note">Готовая картина перед отчётом и финальным закрытием</div></div><span class="pcs-badge">'+badge+'</span></div>'+
     '<div class="pcs-grid">'+
       stat('План',money(q.plan),'согласованный план продаж')+
