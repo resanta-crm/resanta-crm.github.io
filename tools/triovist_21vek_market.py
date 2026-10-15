@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.12"
+PARSER_VERSION="market-auto-v6.13"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -986,6 +986,13 @@ def reciprocating_saw_directional(rule: dict,a: Any,b: Any) -> float|None:
 
 
 def planer_required_missing(ours: dict,comp: dict) -> bool:
+    # Motor type is useful when 21vek provides it, but must not manufacture a gap.
+    return any(ours.get(k) is None or comp.get(k) is None for k in ("max_rpm","planing_depth_mm","planing_width_mm"))
+
+
+def planer_data_incomplete(ours: dict,comp: dict) -> bool:
+    # UI still warns that motor type is missing even though the three confirmed
+    # planing metrics are sufficient to select an analogue.
     return any(ours.get(k) is None or comp.get(k) is None for k in ("motor_type","max_rpm","planing_depth_mm","planing_width_mm"))
 
 
@@ -1382,6 +1389,13 @@ def drainage_pump_required_missing(ours: dict,comp: dict) -> bool:
 
 
 def fecal_pump_required_missing(ours: dict,comp: dict) -> bool:
+    # These hydraulic parameters are sufficient to decide whether a confirmed
+    # assortment gap exists. Grinder is a strong modifier when explicitly known.
+    required=("flow_rate_lmin","max_head_m","filter_particle_mm")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def fecal_pump_data_incomplete(ours: dict,comp: dict) -> bool:
     required=("pump_body_material","flow_rate_lmin","max_head_m","connection_diameter_in",
               "filter_particle_mm","grinder_present","water_type")
     return any(ours.get(k) is None or comp.get(k) is None for k in required)
@@ -1491,8 +1505,9 @@ def borehole_pump_principle_family(v: Any) -> str:
 
 
 def borehole_pump_required_missing(ours: dict,comp: dict) -> bool:
-    required=("water_type","operating_principle","max_head_m","max_pumping_depth_m",
-              "max_immersion_depth_m","well_diameter_mm","flow_rate_lmin")
+    # Core comparison: head + flow + immersion depth + well diameter.
+    # Pumping depth is not a required market metric; water/principle refine class.
+    required=("max_head_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin")
     return any(ours.get(k) is None or comp.get(k) is None for k in required)
 
 
@@ -1577,7 +1592,8 @@ def surface_pump_directional(rule: dict,a: Any,b: Any) -> float|None:
 
 
 def sewage_station_required_missing(ours: dict,comp: dict) -> bool:
-    required=("flow_rate_lmin","max_head_m","filter_particle_mm","input_power_w","max_water_temp_c")
+    # Particle size is an additional characteristic for stations, not a blocker.
+    required=("flow_rate_lmin","max_head_m","input_power_w","max_water_temp_c")
     return any(ours.get(k) is None or comp.get(k) is None for k in required)
 
 
@@ -2264,13 +2280,22 @@ def normalize_value(key: str, text: str) -> Any:
         if m:return round(float(m.group(1).replace(",",".")),3)
         return round(ns[0],3) if ns else None
     if key=="well_diameter_mm":
+        value=None
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
-        if m:return round(float(m.group(1).replace(",",".")),3)
-        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
-        if m:return round(float(m.group(1).replace(",","."))*10,3)
-        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
-        if m:return round(float(m.group(1).replace(",","."))*1000,3)
-        return round(ns[0],3) if ns else None
+        if m:value=float(m.group(1).replace(",","."))
+        if value is None:
+            m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+            if m:value=float(m.group(1).replace(",","."))*10
+        if value is None:
+            m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
+            if m:value=float(m.group(1).replace(",","."))*1000
+        if value is None and ns:value=float(ns[0])
+        # Residential / commercial borehole pump listings cannot reasonably have
+        # a 900 mm required well diameter. Treat such source values as anomalies,
+        # never as a numeric input to similarity.
+        if value is not None and (value<30 or value>500):
+            return None
+        return round(value,3) if value is not None else None
     if key=="max_suction_depth_m":
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))/100,3)
@@ -2532,6 +2557,16 @@ def normalize_value(key: str, text: str) -> Any:
         if m:return round(float(m.group(1).replace(",","."))*60,2)
         return round(ns[0],2)
     if key=="max_head_m":
+        # 21vek may publish both horizontal transfer distance and vertical head
+        # in one field (e.g. "90 м по горизонтали; напор по вертикали 9 м").
+        # Hydraulic comparison must use the vertical head.
+        vertical_patterns=(
+            r"(?:напор\s+по\s+вертикал\w*|по\s+вертикал\w*|вертикальн\w*\s+напор)[^0-9]{0,30}(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",
+            r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b[^;,.]{0,35}(?:по\s+вертикал\w*|вертикальн\w*)",
+        )
+        for pat in vertical_patterns:
+            m=re.search(pat,low,re.I)
+            if m:return round(float(m.group(1).replace(",",".")),3)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))/100,3)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
@@ -3105,11 +3140,17 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
                 add(label,cand,"visible_html")
                 break
 
-    values={}
+    values={};anomalies=[]
     for x in raw:
         val=normalize_value(x["key"],x["value"])
         if val is not None and x["key"] not in values:
             values[x["key"]]=val
+        elif x["key"]=="well_diameter_mm":
+            raw_nums=nums(x.get("value"))
+            if raw_nums and max(raw_nums)>=500:
+                anomalies.append("Диаметр скважины в источнике выглядит аномально: "+str(x.get("value") or ""))
+    if anomalies:
+        values["_data_anomalies"]=list(dict.fromkeys(anomalies))[:5]
     return raw,values
 
 
@@ -3257,14 +3298,22 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
 
     q=scope["search_query"]
     candidates=[q]
+    # Keep the stable scope key/query in CRM, but query station-specific terms
+    # first so submerged WQ pumps do not define this market.
+    if scope.get("profile_key")=="sewage_station":
+        candidates=[
+          "канализационная установка",
+          "канализационная станция",
+          "станция принудительной канализации",
+          "канализационная насосная установка",
+          "канализационная насосная станция",
+          q
+        ]
     if scope.get("profile_key")=="borehole_pump":
         for alt in ("насос скважинный","погружной скважинный насос","глубинный насос"):
             if norm(alt)!=norm(q): candidates.append(alt)
     if scope.get("profile_key")=="surface_pump":
         for alt in ("насос поверхностный","садовый поверхностный насос","самовсасывающий поверхностный насос"):
-            if norm(alt)!=norm(q): candidates.append(alt)
-    if scope.get("profile_key")=="sewage_station":
-        for alt in ("канализационная станция","канализационная насосная станция","канализационная насосная установка","канализационная установка","станция принудительной канализации"):
             if norm(alt)!=norm(q): candidates.append(alt)
     if scope.get("profile_key")=="infrared_heater":
         for alt in ("обогреватель инфракрасный","инфракрасный","инфрак"):
@@ -3301,6 +3350,13 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
             for i,item in enumerate(data.get("products") or []):
                 raw_count+=1
                 name=item_name(item);url=item_url(item);meta=search_meta(item)
+                if scope.get("profile_key")=="sewage_station":
+                    sn=norm(name)
+                    # Exclude explicit submerged sewage/fecal pumps from the
+                    # forced-sewage-station market while keeping KN/Sanipro-like
+                    # station models that may not spell "station" in the title.
+                    if any(x in sn for x in ("погружн","фекальн","дренажн")) or re.search(r"(^|\s)wq[-\s]?\d",sn,re.I):
+                        continue
                 if scope.get("profile_key")=="paint_sprayer" and paint_sprayer_device_family(name)!="electric_spray_gun":
                     continue
                 if scope.get("profile_key")=="jigsaw":
@@ -3465,13 +3521,13 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if {"max_head_m","flow_rate_m3h","input_power_w","pressure_bar","filter_particle_mm"}.issubset(keys):
         return RULESET_VERSION+"-circulationpump1"
     if {"water_type","operating_principle","max_head_m","max_pumping_depth_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin"}.issubset(keys):
-        return RULESET_VERSION+"-boreholepump1"
+        return RULESET_VERSION+"-boreholepump2"
     if "max_head_m" in keys and "max_suction_depth_m" in keys and "water_type" in keys and "flow_rate_lmin" in keys and "input_power_w" in keys:
         return RULESET_VERSION+"-surfacepump1"
     if "max_head_m" in keys and "max_water_temp_c" in keys and "filter_particle_mm" in keys and "flow_rate_lmin" in keys and "input_power_w" in keys:
-        return RULESET_VERSION+"-sewagestation1"
+        return RULESET_VERSION+"-sewagestation2"
     if {"pump_body_material","flow_rate_lmin","max_head_m","connection_diameter_in","filter_particle_mm","grinder_present","water_type"}.issubset(keys):
-        return RULESET_VERSION+"-fecalpump1"
+        return RULESET_VERSION+"-fecalpump2"
     if "max_head_m" in keys and "pump_body_material" in keys and "filter_particle_mm" in keys and "flow_rate_lmin" in keys:
         return RULESET_VERSION+"-drainpump2"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
@@ -3499,7 +3555,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if "chuck_type" in keys and "impact_energy_j" in keys and "max_rpm" in keys:
         return RULESET_VERSION+"-rotaryhammer1"
     if "planing_depth_mm" in keys and "planing_width_mm" in keys and "motor_type" in keys:
-        return RULESET_VERSION+"-planer1"
+        return RULESET_VERSION+"-planer2"
     if "remote_control" in keys and "fan_only_mode" in keys:
         return RULESET_VERSION+"-fan2"
     return RULESET_VERSION
@@ -4365,6 +4421,9 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         weights={"motor_type":0.15,"max_rpm":0.20,"planing_depth_mm":0.35,"planing_width_mm":0.30}
         critical_missing=planer_required_missing(ours,comp)
         total=used=0.0
+        # Missing optional motor type must neither cap a good match at 54% nor
+        # lower coverage. If both sides know the motor type, it still matters.
+        allw=sum(w for k,w in weights.items() if k!="motor_type" or (ours.get(k) is not None and comp.get(k) is not None))
         for k,w in weights.items():
             a=ours.get(k);b=comp.get(k)
             if a is None or b is None:continue
@@ -4384,7 +4443,7 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
             total+=w*s;used+=w
         if used<=0:return 0.0
         score=total/used*100
-        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,54.0)
         return round(max(0,min(100,score)),2)
@@ -4575,8 +4634,13 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
     if profile=="borehole_pump":
-        weights={"water_type":1/7,"operating_principle":1/7,"max_head_m":1/7,"max_pumping_depth_m":1/7,
-                 "max_immersion_depth_m":1/7,"well_diameter_mm":1/7,"flow_rate_lmin":1/7}
+        # Core score uses the four metrics that are actually present often enough
+        # on 21vek. Water type controls class; principle is a strong modifier only
+        # when both sides explicitly provide it. "Pumping depth" is not scored.
+        wa=surface_pump_water_tokens(ours.get("water_type"));wb=surface_pump_water_tokens(comp.get("water_type"))
+        if wa and wb and not wa.intersection(wb):
+            return 0.0
+        weights={"max_head_m":0.30,"flow_rate_lmin":0.30,"max_immersion_depth_m":0.20,"well_diameter_mm":0.20}
         total=used=0.0
         for k,w in weights.items():
             a=ours.get(k);b=comp.get(k)
@@ -4584,17 +4648,10 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
             try:
                 if k=="flow_rate_lmin":
                     s=drainage_pump_relative_similarity(float(a),float(b))
-                elif k in ("max_head_m","max_pumping_depth_m","max_immersion_depth_m"):
+                elif k in ("max_head_m","max_immersion_depth_m"):
                     s=borehole_pump_depth_similarity(float(a),float(b))
                 elif k=="well_diameter_mm":
                     s=borehole_pump_diameter_similarity(float(a),float(b))
-                elif k=="water_type":
-                    aa=surface_pump_water_tokens(a);bb=surface_pump_water_tokens(b)
-                    if aa and bb:s=1.0 if aa==bb else (0.75 if aa.intersection(bb) else 0.35)
-                    else:s=categorical_similarity(a,b)
-                elif k=="operating_principle":
-                    aa=borehole_pump_principle_family(a);bb=borehole_pump_principle_family(b)
-                    s=1.0 if aa and aa==bb else 0.35
                 else:s=0.0
             except Exception:s=0.0
             total+=w*s;used+=w
@@ -4602,6 +4659,10 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         score=total/used*100
         coverage=min(1.0,used/max(sum(weights.values()),1e-9))
         score*=0.60+0.40*coverage
+        pa=borehole_pump_principle_family(ours.get("operating_principle"))
+        pb=borehole_pump_principle_family(comp.get("operating_principle"))
+        if pa and pb and pa!=pb:
+            score=min(score,65.0)
         return round(max(0,min(100,score)),2)
 
 
@@ -4633,8 +4694,9 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
     if profile=="sewage_station":
-        weights={"flow_rate_lmin":0.20,"max_head_m":0.20,"filter_particle_mm":0.20,"input_power_w":0.20,"max_water_temp_c":0.20}
+        weights={"flow_rate_lmin":0.25,"max_head_m":0.25,"filter_particle_mm":0.10,"input_power_w":0.20,"max_water_temp_c":0.20}
         total=used=0.0
+        allw=sum(w for k,w in weights.items() if k!="filter_particle_mm" or (ours.get(k) is not None and comp.get(k) is not None))
         for k,w in weights.items():
             a=ours.get(k);b=comp.get(k)
             if a is None or b is None:continue
@@ -4650,17 +4712,20 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
             total+=w*s;used+=w
         if used<=0:return 0.0
         score=total/used*100
-        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         return round(max(0,min(100,score)),2)
 
 
     if profile=="fecal_pump":
-        weights={"pump_body_material":1/7,"flow_rate_lmin":1/7,"max_head_m":1/7,
-                 "connection_diameter_in":1/7,"filter_particle_mm":1/7,
-                 "grinder_present":1/7,"water_type":1/7}
+        weights={"flow_rate_lmin":0.27,"max_head_m":0.27,"filter_particle_mm":0.22,
+                 "grinder_present":0.14,"pump_body_material":0.04,
+                 "connection_diameter_in":0.03,"water_type":0.03}
         critical_missing=fecal_pump_required_missing(ours,comp)
         total=used=0.0
+        # Optional fields affect the result when known, but absence of one must
+        # not collapse an otherwise sound hydraulic analogue to 54%.
+        allw=sum(w for k,w in weights.items() if k in ("flow_rate_lmin","max_head_m","filter_particle_mm") or (ours.get(k) is not None and comp.get(k) is not None))
         for k,w in weights.items():
             a=ours.get(k);b=comp.get(k)
             if a is None or b is None:continue
@@ -4688,7 +4753,7 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
             total+=w*s;used+=w
         if used<=0:return 0.0
         score=total/used*100
-        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        coverage=min(1.0,used/max(allw,1e-9))
         score*=0.60+0.40*coverage
         if critical_missing:score=min(score,54.0)
         return round(max(0,min(100,score)),2)
@@ -5884,7 +5949,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
     if profile=="rotary_hammer" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения перфораторов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип патрона, мощность, энергия удара и максимальная скорость вращения."
     if profile=="planer" and status=="data_incomplete":
-        return "Недостаточно подтвержденных данных для точного сравнения рубанков. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип двигателя, максимальные обороты, глубина и ширина строгания."
+        return "Аналог рассчитан по доступным данным: тип двигателя может быть не указан. Для подбора обязательны максимальные обороты, глубина и ширина строгания; тип двигателя уточняет итог, но не блокирует аналог."
     if profile=="reciprocating_saw" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения сабельных пил. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, тип двигателя, глубина пропила по дереву и металлу, число ходов в минуту и тип питания."
     if profile=="construction_vacuum" and status=="data_incomplete":
@@ -5894,8 +5959,8 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
     if profile=="circulation_pump" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
-        return "Недостаточно подтвержденных данных для точного сравнения фекальных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены материал корпуса, пропускная способность, максимальный напор, диаметр соединения, размер фильтруемых частиц, наличие измельчителя и тип воды."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+        return "Аналог рассчитан по неполным данным. Для подтверждения пробела обязательны производительность, максимальный напор и размер частиц; измельчитель сильно влияет на итог, когда он указан. Материал корпуса, подключение и тип воды уточняют сравнение."
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -6112,7 +6177,9 @@ def main() -> None:
             rest_delete("triovist_market_gaps_current_v1",{"scope_key":"eq."+skey})
             analyses=[];gaps=[]
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            expected_own_count=len(scope_skus[skey])
+            matrix_checked=expected_own_count>0 and len(usable_own)>=expected_own_count
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
             candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
@@ -6122,74 +6189,77 @@ def main() -> None:
                     scored.append((sim,ours))
                 scored.sort(key=lambda z:z[0],reverse=True)
                 best=scored[0][0] if scored else 0.0
-                gap_confirmed=True
+                gap_confirmed=bool(scored) and matrix_checked
                 if profile=="reciprocating_saw" and scored:
-                    gap_confirmed=not reciprocating_saw_required_missing(
+                    gap_confirmed=gap_confirmed and not reciprocating_saw_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="construction_vacuum" and scored:
-                    gap_confirmed=not construction_vacuum_required_missing(
+                    gap_confirmed=gap_confirmed and not construction_vacuum_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="construction_heat_gun" and scored:
-                    gap_confirmed=not construction_heat_gun_required_missing(
+                    gap_confirmed=gap_confirmed and not construction_heat_gun_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="miter_saw" and scored:
-                    gap_confirmed=not miter_saw_required_missing(
+                    gap_confirmed=gap_confirmed and not miter_saw_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="bench_grinder" and scored:
-                    gap_confirmed=not bench_grinder_required_missing(
+                    gap_confirmed=gap_confirmed and not bench_grinder_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="borehole_pump" and scored:
-                    gap_confirmed=not borehole_pump_required_missing(
+                    gap_confirmed=gap_confirmed and not borehole_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="surface_pump" and scored:
-                    gap_confirmed=not surface_pump_required_missing(
+                    gap_confirmed=gap_confirmed and not surface_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="sewage_station" and scored:
-                    gap_confirmed=not sewage_station_required_missing(
+                    gap_confirmed=gap_confirmed and not sewage_station_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="fecal_pump" and scored:
-                    gap_confirmed=not fecal_pump_required_missing(
+                    gap_confirmed=gap_confirmed and not fecal_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="circulation_pump" and scored:
-                    gap_confirmed=not circulation_pump_required_missing(
+                    gap_confirmed=gap_confirmed and not circulation_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="drainage_pump" and scored:
-                    gap_confirmed=not drainage_pump_required_missing(
+                    gap_confirmed=gap_confirmed and not drainage_pump_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
                 if profile=="angle_grinder" and scored:
-                    gap_confirmed=not angle_grinder_required_missing(
+                    gap_confirmed=gap_confirmed and not angle_grinder_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
-                if best<gap_threshold and gap_confirmed:
+                confirmed_gap=bool(best<gap_threshold and gap_confirmed)
+                if confirmed_gap:
                     gaps.append({
                       "scope_key":skey,"product_key":p["product_key"],"best_similarity":round(best,2),
-                      "reason":f"Нет нашего технически подтверждённого аналога с сопоставимостью ≥{gap_threshold}%",
+                      "reason":f"Подтверждённый пробел: матрица проверена полностью, лучшая сопоставимость ниже {gap_threshold}%",
                       "computed_at":observed
                     })
-                top=[x for x in scored if x[0]>=candidate_threshold][:3]
+                # A row cannot be both an accepted analogue and a confirmed gap.
+                # For incomplete data we still show the nearest candidate with a warning.
+                top=[] if confirmed_gap else [x for x in scored if x[0]>=candidate_threshold][:3]
                 for idx,(sim,ours) in enumerate(top):
                     op=valid_price(ours.get("current_price"))
                     cp=valid_price(p.get("current_price"))
@@ -6235,7 +6305,7 @@ def main() -> None:
                         data_incomplete=True
                     if profile=="sewage_station" and sewage_station_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
-                    if profile=="fecal_pump" and fecal_pump_required_missing(ours["specs_normalized"],comp_specs):
+                    if profile=="fecal_pump" and fecal_pump_data_incomplete(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="circulation_pump" and circulation_pump_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
@@ -6253,7 +6323,7 @@ def main() -> None:
                         data_incomplete=True
                     if profile=="rotary_hammer" and rotary_hammer_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
-                    if profile=="planer" and planer_required_missing(ours["specs_normalized"],comp_specs):
+                    if profile=="planer" and planer_data_incomplete(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="reciprocating_saw" and reciprocating_saw_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
@@ -6335,7 +6405,7 @@ def main() -> None:
             comparison_total+=len(analyses);gap_total+=len(gaps)
             run_notes.append({
               "scope":skey,"subgroup":scope["source_subgroup"],"query":scope["search_query"],
-              **discover_meta,"our_matrix":len(scope_skus[skey]),"our_21vek":len(own_rows),
+              **discover_meta,"our_matrix":len(scope_skus[skey]),"our_21vek":len(own_rows),"matrix_checked_for_gaps":matrix_checked,
               "our_listing_top120":sum(1 for x in own_position_rows if x["in_top120"]),
               "our_listing_outside_top120":sum(1 for x in own_position_rows if x["listing_state"]=="outside_top120"),
               "our_listing_no_card":sum(1 for x in own_position_rows if x["listing_state"]=="no_card"),
