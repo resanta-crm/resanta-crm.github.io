@@ -1,6 +1,6 @@
 {
-  "version": "23.6.367",
+  "version": "23.6.368",
   "released_at": "2026-10-15",
-  "purpose": "Stands: Vision creates route-bound manager tasks, auto-syncs due dates with routes, and closes tasks after successful repeat Vision.",
-  "deploy_trigger": "2026-10-15T12:30:00+03:00"
+  "purpose": "Promotions: show missing current MO2 price instead of 0 BYN. Stands: remove private-schema dependency from automatic Vision tasks and restore missing follow-up tasks.",
+  "deploy_trigger": "2026-10-15T13:00:00+03:00"
 }
