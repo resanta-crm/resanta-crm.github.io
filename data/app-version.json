@@ -1,6 +1,6 @@
 {
-  "version": "23.6.365",
+  "version": "23.6.366",
   "released_at": "2026-10-15",
-  "purpose": "Stands: manual add/archive, history, sales modal fix, primary-control guard, asset return integrity, and clearer Vision handling.",
-  "deploy_trigger": "2026-10-15T11:40:00+03:00"
+  "purpose": "Stands: robust Vision structured JSON, 55s provider timeout, 65s UI timeout and retry UX.",
+  "deploy_trigger": "2026-10-15T12:05:00+03:00"
 }
