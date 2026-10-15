@@ -54,24 +54,28 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
 
       - name: Установить зависимости
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]')))
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]') || contains(github.event.head_commit.message, '[market-target-analog-fix]')))
         run: pip install requests beautifulsoup4
 
       - name: Проверка рынка 21vek
         # Обычный push проверяет только синтаксис. Полный рынок идёт ночью.
         # Маркеры позволяют безопасно прогнать только нужные новые профили.
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]')))
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]') || contains(github.event.head_commit.message, '[market-target-analog-fix]')))
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           MANUAL_PROFILES: ${{ inputs.profiles }}
           TARGET_PUMPS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-pumps]') }}
           TARGET_CIRCULATION: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-circulation]') }}
+          TARGET_ANALOG_FIX: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-analog-fix]') }}
           MARKET_DELAY_SECONDS: '0.22'
           MARKET_HTTP_TIMEOUT: '30'
           MARKET_SPEC_TTL_DAYS: '30'
         run: |
-          if [ "$TARGET_CIRCULATION" = "true" ]; then
+          if [ "$TARGET_ANALOG_FIX" = "true" ]; then
+            export MARKET_VALIDATE_PROFILES='planer,sewage_station,borehole_pump,fecal_pump,snow_blower'
+            export MARKET_VALIDATE_EXACT='1'
+          elif [ "$TARGET_CIRCULATION" = "true" ]; then
             export MARKET_VALIDATE_PROFILES='circulation_pump'
             export MARKET_VALIDATE_EXACT='1'
           elif [ "$TARGET_PUMPS" = "true" ]; then
