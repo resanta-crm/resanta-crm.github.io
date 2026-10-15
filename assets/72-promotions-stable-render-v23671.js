@@ -9,7 +9,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_STABLE_RENDER_V23671)return;
-const V='v23.6.363';
+const V='v23.6.364';
 const base=window.renderPromotions;
 if(typeof base!=='function')return;
 
@@ -288,7 +288,7 @@ document.head.appendChild(s);
 if(window.RESANTA_PROMOTIONS_MECHANICS_GUARD_V236127)return;
 if([...document.scripts].some(s=>String(s.src||'').includes('/86-promotions-mechanics-guard-v236127.js')))return;
 const s=document.createElement('script');
-s.src='./assets/86-promotions-mechanics-guard-v236127.js?v=23.6.127';
+s.src='./assets/86-promotions-mechanics-guard-v236127.js?v=23.6.364';
 s.async=false;
 s.onerror=()=>console.warn('Не загрузилась механика новых Акций');
 document.head.appendChild(s);
