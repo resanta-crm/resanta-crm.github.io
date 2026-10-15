@@ -288,7 +288,7 @@ def scope_key(profile: str, query: str) -> str:
     return profile+"-"+hashlib.sha1(norm(query).encode("utf-8")).hexdigest()[:8]
 
 
-def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
+def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
     climate=rest_get_all("price_list",{
       "category":"eq.Климатическое оборудование",
       "select":"sku,product,category,subgroup,uploaded_at"
@@ -511,7 +511,13 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]]]:
     if VALIDATE_PROFILES:
         scopes=[x for x in scopes if x["profile_key"] in VALIDATE_PROFILES]
         own={k:v for k,v in own.items() if any(s["scope_key"]==k for s in scopes)}
-    return scopes,own
+    price_names={}
+    for x in all_price:
+        sku=str(x.get("sku") or "").strip()
+        name=str(x.get("product") or "").strip()
+        if sku and name and sku_depth(sku)>=3:
+            price_names[sku]=name
+    return scopes,own,price_names
 
 
 def load_rules(profile: str) -> list[dict]:
@@ -3278,6 +3284,45 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
     raise last or RuntimeError("21vek search failed")
 
 
+def resolve_own_card(session: requests.Session,product_name: str) -> dict|None:
+    """Resolve a missing own 21vek card using its price-list name.
+
+    Only page 1 is queried and a model token must match. A recovered card does
+    not invent a ranking position: without a ranked hit it remains outside TOP-120.
+    """
+    q=re.sub(r"^\s*sale!\s*","",str(product_name or ""),flags=re.I).strip()
+    if not q:return None
+    q=re.sub(r"\([^)]*\)"," ",q)
+    q=" ".join(q.split())
+    try:
+        data=search_page(session,q,1,"",attempts=2)
+    except Exception:
+        return None
+    src=norm(product_name)
+    model_tokens=[
+      t for t in re.findall(r"[0-9a-zа-я]+(?:[/.-][0-9a-zа-я]+)*",src,re.I)
+      if any(ch.isdigit() for ch in t) and len(t)>=2
+    ]
+    best=None;best_score=-1
+    for item in data.get("products") or []:
+        name=item_name(item);url=item_url(item)
+        if not url or not is_our_brand(item,name):continue
+        nn=norm(name)
+        hits=sum(1 for t in model_tokens if t in nn)
+        if model_tokens and hits<=0:continue
+        meta=search_meta(item)
+        score=hits*10
+        if norm(meta.get("brand")) and norm(meta.get("brand")) in src:score+=3
+        if score>best_score:
+            best={
+              "product_name":name,"product_url":url,"external_id":meta.get("external_id"),
+              "brand":meta.get("brand") or "","price":valid_price(meta.get("price")),
+              "in_stock":meta.get("in_stock")
+            }
+            best_score=score
+    return best
+
+
 def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],list[dict],dict]:
     def fetch_ranked(candidates: list[str],required: bool=True) -> tuple[str,dict,dict,str]|None:
         last_exc=None
@@ -5987,7 +6032,7 @@ def insert_run(scope_count: int) -> str:
 
 
 def main() -> None:
-    scopes,scope_skus=load_price_scope()
+    scopes,scope_skus,price_names=load_price_scope()
     if not scopes: raise RuntimeError("Seasonal market scope is empty")
     rest_upsert("triovist_market_scopes_v1",scopes,"scope_key")
     run_id=insert_run(len(scopes))
@@ -6080,6 +6125,30 @@ def main() -> None:
             if snapshot_rows: rest_post("triovist_market_product_snapshots_v1",snapshot_rows)
             # Remove products which have left TOP-2 only after a successful discovery.
             rest_delete("triovist_market_products_current_v1",{"scope_key":"eq."+skey,"run_id":"neq."+run_id})
+
+            # Recover our real 21vek cards missing from the old registry. This is a
+            # targeted fallback for the agreed categories, not a broad market crawl.
+            resolved_own_cards=0
+            if profile in ("snow_blower","borehole_pump","planer","fecal_pump"):
+                for sku in sorted(scope_skus[skey]):
+                    src=registry.get(sku) or {}
+                    if src.get("product_url"):continue
+                    pname=price_names.get(sku) or src.get("product_name")
+                    if not pname:continue
+                    resolved=resolve_own_card(session,pname)
+                    if not resolved:continue
+                    registry[sku]={
+                      **src,
+                      "sku":sku,
+                      "product_name":resolved.get("product_name") or pname,
+                      "product_url":resolved.get("product_url"),
+                      "price":resolved.get("price"),
+                      "in_stock":resolved.get("in_stock"),
+                      "category":scope.get("source_category"),
+                      "subgroup":scope.get("source_subgroup")
+                    }
+                    resolved_own_cards+=1
+                    time.sleep(DELAY)
 
             # Our brands are not competitors, but their exact ranking positions are
             # captured from the very same 21vek result set before exclusion.
@@ -6405,7 +6474,7 @@ def main() -> None:
             comparison_total+=len(analyses);gap_total+=len(gaps)
             run_notes.append({
               "scope":skey,"subgroup":scope["source_subgroup"],"query":scope["search_query"],
-              **discover_meta,"our_matrix":len(scope_skus[skey]),"our_21vek":len(own_rows),"matrix_checked_for_gaps":matrix_checked,
+              **discover_meta,"our_matrix":len(scope_skus[skey]),"our_21vek":len(own_rows),"own_cards_resolved_from_price":resolved_own_cards,"matrix_checked_for_gaps":matrix_checked,
               "our_listing_top120":sum(1 for x in own_position_rows if x["in_top120"]),
               "our_listing_outside_top120":sum(1 for x in own_position_rows if x["listing_state"]=="outside_top120"),
               "our_listing_no_card":sum(1 for x in own_position_rows if x["listing_state"]=="no_card"),
