@@ -7,13 +7,28 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_EFFECTIVENESS_V236132)return;
-const V='v23.6.362',TTL=60000,S={rows:new Map(),loaded:false,flight:null,at:0};
+const V='v23.6.363',TTL=60000,S={rows:new Map(),loaded:false,flight:null,at:0};
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' BYN';
 function monthRu(v){
   const m=safe(v).slice(5,7),n={'01':'январе','02':'феврале','03':'марте','04':'апреле','05':'мае','06':'июне','07':'июле','08':'августе','09':'сентябре','10':'октябре','11':'ноябре','12':'декабре'};
   return n[m]||'предыдущем месяце';
+}
+function monthTitle(v){
+  const m=safe(v).slice(5,7),n={'01':'Январь','02':'Февраль','03':'Март','04':'Апрель','05':'Май','06':'Июнь','07':'Июль','08':'Август','09':'Сентябрь','10':'Октябрь','11':'Ноябрь','12':'Декабрь'};
+  return n[m]||safe(v);
+}
+function shortDate(v){const s=safe(v);return /^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'.'+s.slice(5,7):s}
+function calendarBreakdown(e){return Array.isArray(e?.calendar_month_breakdown)?e.calendar_month_breakdown:[]}
+function calendarBreakdownHtml(e){
+  const a=calendarBreakdown(e);if(!a.length)return'';
+  return a.map(x=>'<b>'+esc(monthTitle(x.month))+'</b>: '+esc(money(x.sales))+' / '+esc(num(x.qty).toLocaleString('ru-RU',{maximumFractionDigits:2}))+' шт.'+(x.boundary_partial?' <span style="color:var(--am)">(граница акции '+esc(shortDate(x.period_from))+'–'+esc(shortDate(x.period_to))+')</span>':'')).join(' · ');
+}
+function calendarBoundaryNote(e){
+  const a=calendarBreakdown(e),partial=a.filter(x=>x?.boundary_partial);
+  if(!partial.length)return'';
+  return '🗓 1С по календарным месяцам: '+a.map(x=>monthTitle(x.month)+' — '+money(x.sales)+' / '+num(x.qty).toLocaleString('ru-RU',{maximumFractionDigits:2})+' шт.').join('; ')+'. Неполный месяц показан справочно: 1С не позволяет отделить продажи до/после границы акции, поэтому он не засчитывается автоматически в выполнение плана.';
 }
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function active(){return document.getElementById('page-promotions')?.classList.contains('active')}
@@ -93,6 +108,13 @@ function patchCard(card,p,e){
       pre.style.cssText='font-size:10px;color:var(--g);font-weight:700;line-height:1.35;margin-top:4px';
       pre.textContent='📦 Заранее в '+monthRu(e.prelaunch_month)+': '+money(e.prelaunch_sales)+' / '+num(e.prelaunch_qty).toLocaleString('ru-RU',{maximumFractionDigits:2})+' шт. · в план не входит';
     }else if(pre)pre.remove();
+    let cal=stats[0].querySelector('.promo54-calendar-v236363');
+    const calText=calendarBoundaryNote(e);
+    if(calText){
+      if(!cal){cal=document.createElement('div');cal.className='promo54-calendar-v236363';stats[0].appendChild(cal)}
+      cal.style.cssText='font-size:10px;color:var(--am);font-weight:700;line-height:1.35;margin-top:4px';
+      cal.textContent=calText;
+    }else if(cal)cal.remove();
   }
   if(stats[1]&&num(p.sales_plan)<=0){
     const lab=stats[1].querySelector('.promo-stat-label'),val=stats[1].querySelector('.promo-stat-value'),prog=stats[1].querySelector('.promo-progress');
@@ -135,6 +157,9 @@ function detailHtml(p,e){
   const preNote=(num(e.prelaunch_sales)>0||num(e.prelaunch_qty)>0)
     ?'<div class="promo-eff-note-v236132" style="color:var(--g);font-weight:700">📦 До старта акции, в '+esc(monthRu(e.prelaunch_month))+', клиенту уже было отгружено по тем же SKU: '+esc(money(e.prelaunch_sales))+' / '+esc(num(e.prelaunch_qty).toLocaleString('ru-RU',{maximumFractionDigits:2}))+' шт. Это подготовка менеджера и в процент выполнения плана акции не входит.</div>'
     :'';
+  const calendarNote=calendarBoundaryNote(e)
+    ?'<div class="promo-eff-note-v236132" style="color:var(--am);font-weight:700">'+esc(calendarBoundaryNote(e))+'</div>'
+    :'';
   let h='<div class="promo-eff-detail-v236132" id="promo-eff-detail-v236132"><b>📈 Эффективность акции</b><div class="promo-eff-detail-grid-v236132">'
    +'<div class="promo-eff-detail-cell-v236132"><small>Оборот акции</small><b>'+money(sales)+'</b></div>'
    +'<div class="promo-eff-detail-cell-v236132"><small>Отгружено заранее</small><b>'+money(e.prelaunch_sales)+' / '+num(e.prelaunch_qty).toLocaleString('ru-RU',{maximumFractionDigits:2})+' шт.</b></div>'
@@ -146,6 +171,7 @@ function detailHtml(p,e){
    +'<div class="promo-eff-detail-cell-v236132"><small>Охват</small><b>'+(exact?num(e.item_count)+' точных SKU':'Исторический')+'</b></div></div>'
    +'<div class="promo-eff-note-v236132"><b>'+esc(q.html)+'</b> · '+esc(e.sales_label)+'</div>'
    +preNote
+   +calendarNote
    +recon
    +'<div class="promo-eff-note-v236132"><b>'+esc(d.html)+'</b></div>'
    +'<div class="promo-eff-note-v236132"><b>'+esc(fin.html)+'</b></div>'
