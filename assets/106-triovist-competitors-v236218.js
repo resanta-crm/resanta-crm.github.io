@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.369 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
+/* RESANTA CRM v23.6.370 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.369',TTL=30000;
+const V='v23.6.370',TTL=30000;
 let flight=null,last=null,lastAt=0,
     scopeFlights=new Map(),scopeCache=new Map(),
     listingFlights=new Map(),listingCache=new Map(),
@@ -2306,7 +2306,7 @@ function details(r,l){
   const compatibilityClaim=x=>/тип воды|принцип действия|диаметр скважины/i.test(String(x||''));
   const adv=(r.advantages||[]).filter(x=>!compatibilityClaim(x));
   const bad=(r.disadvantages||[]).filter(x=>!compatibilityClaim(x));
-  const ref='<div class="tm224-ref"><b>Скважинные насосы:</b> сравниваются только 7 согласованных характеристик. Максимальный напор, глубина откачки и глубина погружения — паритет при разнице до ±1 м или ±10%; пропускная способность — до ±10%. Тип воды, принцип действия и диаметр скважины используются для совместимости аналога и сами по себе не дают статус «сильнее/слабее». Диаметр насоса не подменяет диаметр скважины. При неполных данных итог остаётся видимым и помечается как предварительный.</div>';
+  const ref='<div class="tm224-ref"><b>Скважинные насосы:</b> основа аналога — максимальный напор, производительность, глубина погружения и диаметр скважины. Глубина откачки не обязательна. Тип воды контролирует класс, принцип действия сильно уточняет аналог, когда известен у обоих. Подозрительный диаметр скважины вне здравого диапазона исключается из балла как аномалия источника.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
@@ -2345,7 +2345,7 @@ function details(r,l){
    ['max_water_temp_c','Максимальная температура воды']
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+sewageStationValue(k,b[k])+'</td><td>'+sewageStationValue(k,a[k])+'</td><td>'+E(sewageStationResult(k,a[k],b[k]))+'</td></tr>').join('');
-  const ref='<div class="tm224-ref"><b>Канализационные станции:</b> сравниваются только 5 согласованных характеристик. Пропускная способность и мощность — паритет при разнице до ±10%; максимальный напор — до ±1 м или ±10%; размер частиц — до ±1 мм или ±10%; максимальная температура воды — до ±5 °C. При неполных данных итог остаётся видимым и помечается как предварительный.</div>';
+  const ref='<div class="tm224-ref"><b>Канализационные станции:</b> станции принудительной канализации отделены от погружных WQ/фекальных насосов. Основные параметры — производительность, вертикальный напор, мощность и максимальная температура воды. Размер частиц — дополнительный параметр и не блокирует аналог. Если 21vek указывает горизонтальную дальность и вертикальный напор вместе, в расчёт берётся вертикальный напор.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
@@ -2474,7 +2474,7 @@ function details(r,l){
    ['planing_depth_mm','Глубина строгания'],['planing_width_mm','Ширина строгания']
   ];
   const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+planerValue(k,b[k])+'</td><td>'+planerValue(k,a[k])+'</td><td>'+E(planerResult(k,a[k],b[k]))+'</td></tr>').join('');
-  const ref='<div class="tm224-ref"><b>Рубанки:</b> тип двигателя нормализуется как щеточный/бесщеточный; бесщеточный считается преимуществом, но оба типа могут быть аналогами. Максимальные обороты сравниваются с допуском ±1500 об/мин, при этом больше оборотов само по себе не считается преимуществом. Глубина строгания — допуск ±0,5 мм, а большая глубина за пределами допуска считается преимуществом. Ширина строгания задает класс инструмента: допуск ±2 мм; если разница больше, товары не считаются прямыми аналогами. Если не подтверждена хотя бы одна из четырех характеристик — вывод «сильнее/слабее» блокируется.</div>';
+  const ref='<div class="tm224-ref"><b>Рубанки:</b> обязательная база аналога — максимальные обороты, глубина и ширина строгания. Тип двигателя остаётся важным уточнением: если известен у обоих, он влияет на итог; если у конкурента не указан, хороший аналог больше не режется до 54%. Ширина строгания по-прежнему задаёт класс инструмента: при расхождении более ±2 мм прямой аналог блокируется.</div>';
   return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
    +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
    +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
