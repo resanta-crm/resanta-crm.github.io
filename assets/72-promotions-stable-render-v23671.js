@@ -9,7 +9,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_STABLE_RENDER_V23671)return;
-const V='v23.6.362';
+const V='v23.6.363';
 const base=window.renderPromotions;
 if(typeof base!=='function')return;
 
@@ -314,7 +314,7 @@ document.head.appendChild(s);
 if(window.RESANTA_PROMOTIONS_CLOSE_SUMMARY_V236130)return;
 if([...document.scripts].some(s=>String(s.src||'').includes('/88-promotions-close-summary-v236130.js')))return;
 const s=document.createElement('script');
-s.src='./assets/88-promotions-close-summary-v236130.js?v=23.6.362';
+s.src='./assets/88-promotions-close-summary-v236130.js?v=23.6.363';
 s.async=false;
 s.onerror=()=>console.warn('Не загрузился итог закрытия Акций');
 document.head.appendChild(s);
