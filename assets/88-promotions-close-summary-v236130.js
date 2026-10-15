@@ -7,7 +7,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_CLOSE_SUMMARY_V236130)return;
-const V='v23.6.360';
+const V='v23.6.362';
 const safe=v=>String(v??'');
 const num=v=>Number(v)||0;
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -56,7 +56,7 @@ function exactSummary(p,s){
   const noConfirmed=partial&&!serverExact&&(s?.confirmed_sales===null||s?.confirmed_sales===undefined||s?.confirmed_sales==='');
   const fact=noConfirmed?null:num(s?.sales_fact);
   const completion=fact===null||num(s?.sales_plan)<=0?null:fact/num(s.sales_plan)*100;
-  return {exact:true,fact,auto:num(s?.auto_sales),plan:num(s?.sales_plan),completion,base:num(s?.previous_year_sales),delta:fact===null?null:fact-num(s?.previous_year_sales),elapsed:num(s?.elapsed_pct),pace:completion===null?null:completion-num(s?.elapsed_pct),items:Array.isArray(s?.items)?s.items:[],fullMonth:!!s?.full_month_period,confirmed:s?.confirmed_sales,serverExact,manualConflict:!!s?.manual_conflict,calendar:num(s?.calendar_sales_1c),covered:num(s?.covered_full_month_sales),salesLabel:safe(s?.sales_label)};
+  return {exact:true,fact,auto:num(s?.auto_sales),plan:num(s?.sales_plan),completion,base:num(s?.previous_year_sales),delta:fact===null?null:fact-num(s?.previous_year_sales),elapsed:num(s?.elapsed_pct),pace:completion===null?null:completion-num(s?.elapsed_pct),items:Array.isArray(s?.items)?s.items:[],fullMonth:!!s?.full_month_period,confirmed:s?.confirmed_sales,serverExact,manualConflict:!!s?.manual_conflict,calendar:num(s?.calendar_sales_1c),covered:num(s?.covered_full_month_sales),prelaunchSales:num(s?.prelaunch_sales),prelaunchQty:num(s?.prelaunch_qty),totalWithPrelaunch:num(s?.total_with_prelaunch),salesLabel:safe(s?.sales_label)};
 }
 function stat(label,value,sub){return '<div class="pcs-stat"><div class="pcs-l">'+esc(label)+'</div><div class="pcs-v">'+value+'</div>'+(sub?'<div class="pcs-sub">'+sub+'</div>':'')+'</div>'}
 function itemsHtml(rows){
@@ -86,6 +86,8 @@ function renderSummary(p,s){
     '<div class="pcs-grid">'+
       stat('План',money(q.plan),'согласованный план продаж')+
       stat('Факт',factText,q.exact?'по товарам акции':'по историческому охвату')+
+      (q.exact?stat('Отгружено заранее',money(q.prelaunchSales),num(q.prelaunchQty).toLocaleString('ru-RU',{maximumFractionDigits:2})+' шт. · в план не входит'):'')+
+      (q.exact?stat('Итого товар по SKU',money(q.totalWithPrelaunch),'факт акции + предварительная отгрузка'):'')+
       stat('Выполнение',compText,'план = 100%')+
       stat('К прошлому году',deltaText,'база: '+money(q.base))+
     '</div>'+
