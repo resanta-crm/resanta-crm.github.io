@@ -13,6 +13,7 @@ let flight=null,last=null,lastAt=0,
     detailFlights=new Map(),detailCache=new Map(),
     positionFlights=new Map(),positionCache=new Map(),
     positionHistoryFlights=new Map(),positionHistoryCache=new Map(),
+    stateCountsFlight=null,stateCountsCache=null,
     exportFlight=null,xlsxFlight=null;
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):null;
@@ -36,6 +37,21 @@ async function load(force=false){
    return run();
  }).then(d=>{last={...(d||{}),rows:[]};lastAt=Date.now();return last}).finally(()=>flight=null);
  return flight;
+}
+async function loadStateCounts(force=false){
+ if(stateCountsCache&&!force)return stateCountsCache;
+ if(stateCountsFlight)return stateCountsFlight;
+ stateCountsFlight=rpc('triovist_market_state_counts_v236369',{p_scope:null})
+  .then(x=>{stateCountsCache=x||{};return stateCountsCache})
+  .finally(()=>stateCountsFlight=null);
+ return stateCountsFlight;
+}
+function mergeStateCounts(d,x){
+ if(!d||!x)return d;
+ d.summary={...(d.summary||{}),...(x.summary||{})};
+ const m=new Map((x.scopes||[]).map(s=>[String(s.scope_key||''),s]));
+ d.scopes=(d.scopes||[]).map(s=>({...s,...(m.get(String(s.scope_key||''))||{})}));
+ return d;
 }
 async function loadScopeRows(scope,force=false){
  const sk=String(scope||'').trim();if(!sk)return{rows:[]};
@@ -3039,7 +3055,7 @@ function render(panel,d,listing){
  panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{
    last=null;lastAt=0;scopeCache.clear();scopeFlights.clear();listingCache.clear();listingFlights.clear();
    historyCache.clear();historyFlights.clear();detailCache.clear();positionCache.clear();positionFlights.clear();
-   positionHistoryCache.clear();panel.dataset.tm224Limit='120';await open(panel,null,true)
+   positionHistoryCache.clear();stateCountsCache=null;stateCountsFlight=null;panel.dataset.tm224Limit='120';await open(panel,null,true)
  });
  panel.querySelector('[data-tm224-export]')?.addEventListener('click',e=>exportExcel(e.currentTarget));
  panel.querySelectorAll('[data-tm224-check-scope]').forEach(btn=>btn.addEventListener('click',async()=>{
@@ -3090,13 +3106,14 @@ async function open(panel,ctx,force=false){
  try{
   // Only the 36 KB metadata cache is critical. Products, listing and history
   // are loaded after a category is selected.
-  const dash=await load(force);
+  const [dash,stateCounts]=await Promise.all([load(force),loadStateCounts(force)]);
+  mergeStateCounts(dash,stateCounts);
   render(panel,dash,emptyListing('',7));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
 window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{
  last=null;lastAt=0;scopeCache.clear();scopeFlights.clear();listingCache.clear();listingFlights.clear();
- historyCache.clear();historyFlights.clear();detailCache.clear();positionCache.clear();positionFlights.clear();positionHistoryCache.clear();
- return load(true);
+ historyCache.clear();historyFlights.clear();detailCache.clear();positionCache.clear();positionFlights.clear();positionHistoryCache.clear();stateCountsCache=null;stateCountsFlight=null;
+ return Promise.all([load(true),loadStateCounts(true)]).then(([d,s])=>mergeStateCounts(d,s));
 },automaticMarket:true,lazyMarketByScope:true,positionHistory:true,liveCompetitorPositionWatch:true,livePositionDepth:120,livePositionTargetHours:3,manualScopeRefresh:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,circulationPumpProfile:true,drainagePumpProfile:true,fecalPumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
