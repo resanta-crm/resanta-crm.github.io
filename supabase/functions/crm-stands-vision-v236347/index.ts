@@ -39,9 +39,13 @@ Deno.serve(async(req:Request)=>{
   try{
     const url=Deno.env.get("SUPABASE_URL");
     const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const aiKey=Deno.env.get("ANTHROPIC_API_KEY");
+    const anthropicKey=Deno.env.get("ANTHROPIC_API_KEY");
+    const openaiKey=Deno.env.get("OPENAI_API_KEY");
     if(!url||!serviceKey) return reply(req,500,{ok:false,error:"SUPABASE_SERVER_CONFIG_MISSING"});
-    if(!aiKey) return reply(req,503,{ok:false,error:"VISION_NOT_CONFIGURED",message:"Серверный ANTHROPIC_API_KEY не настроен."});
+    if(!anthropicKey&&!openaiKey){
+      console.error("STAND_VISION_NOT_CONFIGURED","No ANTHROPIC_API_KEY or OPENAI_API_KEY");
+      return reply(req,503,{ok:false,error:"VISION_NOT_CONFIGURED",message:"Vision временно не настроен на сервере: отсутствует AI-ключ."});
+    }
 
     const token=(req.headers.get("authorization")||"").replace(/^Bearer\s+/i,"").trim();
     if(!token) return reply(req,401,{ok:false,error:"AUTH_REQUIRED"});
@@ -144,25 +148,59 @@ Deno.serve(async(req:Request)=>{
       })
     ].join("\n");
 
-    const ar=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":aiKey,"anthropic-version":"2023-06-01"},
-      body:JSON.stringify({
-        model:"claude-sonnet-4-6",max_tokens:1800,temperature:0,
-        system:"Ты точный аудитор торговой выкладки. При сомнении не угадывай.",
-        messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:media,data:b64(bytes)}},
-          {type:"text",text:prompt}
-        ]}]
-      })
-    });
-    const ad=await ar.json().catch(()=>({}));
-    if(!ar.ok){
-      console.error("STAND_VISION_PROVIDER",ar.status,JSON.stringify(ad).slice(0,1000));
-      return reply(req,502,{ok:false,error:"VISION_PROVIDER_ERROR",message:s((ad as any)?.error?.message)||("AI HTTP "+ar.status)});
+    let raw:any;
+    let provider="anthropic";
+    let providerModel="claude-sonnet-4-6";
+    let providerUsage:any=null;
+
+    if(anthropicKey){
+      const ar=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":anthropicKey,"anthropic-version":"2023-06-01"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-6",max_tokens:1800,temperature:0,
+          system:"Ты точный аудитор торговой выкладки. При сомнении не угадывай.",
+          messages:[{role:"user",content:[
+            {type:"image",source:{type:"base64",media_type:media,data:b64(bytes)}},
+            {type:"text",text:prompt}
+          ]}]
+        })
+      });
+      const ad=await ar.json().catch(()=>({}));
+      if(!ar.ok){
+        console.error("STAND_VISION_PROVIDER","anthropic",ar.status,JSON.stringify(ad).slice(0,1000));
+        return reply(req,502,{ok:false,error:"VISION_PROVIDER_ERROR",message:s((ad as any)?.error?.message)||("Anthropic HTTP "+ar.status)});
+      }
+      const txt=Array.isArray((ad as any)?.content)?(ad as any).content.filter((x:any)=>x?.type==="text").map((x:any)=>s(x.text)).join("\n"):"";
+      raw=jsonText(txt);
+      providerUsage=(ad as any)?.usage||null;
+    }else{
+      provider="openai";
+      providerModel="gpt-5.6";
+      const or=await fetch("https://api.openai.com/v1/responses",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+openaiKey},
+        body:JSON.stringify({
+          model:providerModel,
+          instructions:"Ты точный аудитор торговой выкладки. При сомнении не угадывай. Ответ только JSON без markdown.",
+          max_output_tokens:1800,
+          input:[{role:"user",content:[
+            {type:"input_text",text:prompt},
+            {type:"input_image",image_url:"data:"+media+";base64,"+b64(bytes),detail:"high"}
+          ]}]
+        })
+      });
+      const od=await or.json().catch(()=>({}));
+      if(!or.ok){
+        console.error("STAND_VISION_PROVIDER","openai",or.status,JSON.stringify(od).slice(0,1000));
+        return reply(req,502,{ok:false,error:"VISION_PROVIDER_ERROR",message:s((od as any)?.error?.message)||("OpenAI HTTP "+or.status)});
+      }
+      const txt=Array.isArray((od as any)?.output)
+        ?(od as any).output.flatMap((x:any)=>Array.isArray(x?.content)?x.content:[]).filter((x:any)=>x?.type==="output_text").map((x:any)=>s(x.text)).join("\n")
+        :s((od as any)?.output_text);
+      raw=jsonText(txt);
+      providerUsage=(od as any)?.usage||null;
     }
-    const txt=Array.isArray((ad as any)?.content)?(ad as any).content.filter((x:any)=>x?.type==="text").map((x:any)=>s(x.text)).join("\n"):"";
-    const raw=jsonText(txt);
 
     const quality=clamp(raw?.photo_quality_score),fill=clamp(raw?.fill_pct),ownBrand=clamp(raw?.own_brand_share_pct),foreignBrand=clamp(raw?.foreign_brand_share_pct);
     const standPresent=raw?.stand_present===true;
@@ -205,7 +243,7 @@ Deno.serve(async(req:Request)=>{
     ].filter(Boolean).join(" ").slice(0,1800);
 
     const row={
-      placement_id:placementId,photo_id:photo?.id||null,storage_path:path,stage,model:"claude-sonnet-4-6",status:"completed",
+      placement_id:placementId,photo_id:photo?.id||null,storage_path:path,stage,model:providerModel,status:"completed",
       stand_present:standPresent,stand_brand_detected:s(raw?.stand_brand_detected).slice(0,120)||null,
       photo_quality_score:quality,fill_pct:fill,own_brand_share_pct:ownBrand,foreign_brand_share_pct:foreignBrand,
       visible_product_count_estimate:Math.max(0,Math.min(500,Math.round(Number(raw?.visible_product_count_estimate||0)))),
@@ -223,10 +261,10 @@ Deno.serve(async(req:Request)=>{
     if(upe)throw upe;
 
     const internal={
-      version:"v23.6.347",provider:"anthropic",model:"claude-sonnet-4-6",placement_id:placementId,photo_id:photo?.id||null,
+      version:"v23.6.365",provider,model:providerModel,placement_id:placementId,photo_id:photo?.id||null,
       stand_type:t.name,target_brand:brand,target_categories:categories,manager_skus:managerSkus,candidate_catalog_count:candidates.length,
       parsed_result:raw,normalized:{vision_status:vstatus,quality,fill,own_brand_pct:ownBrand,foreign_brand_pct:foreignBrand,matched_skus:matched,manager_not_seen_skus:notSeen,vision_only_skus:extra,match_pct:matchPct},
-      usage:(ad as any)?.usage||null,latency_ms:Date.now()-started,
+      usage:providerUsage,latency_ms:Date.now()-started,
       rule:"Exact SKU accepted only from server candidate catalog with visual confidence; uncertainty is preserved."
     };
     const {error:ae}=await admin.from("stand_ai_internal_v236346").insert({entity_type:"vision",entity_id:placementId,engine_version:"v23.6.347",internal_logic:internal});
