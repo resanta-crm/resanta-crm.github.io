@@ -1,11 +1,11 @@
-/* RESANTA CRM v23.6.358 · TRIOVIST / 21VEK LAZY MARKET + LIVE COMPETITOR POSITIONS
+/* RESANTA CRM v23.6.369 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.358',TTL=30000;
+const V='v23.6.369',TTL=30000;
 let flight=null,last=null,lastAt=0,
     scopeFlights=new Map(),scopeCache=new Map(),
     listingFlights=new Map(),listingCache=new Map(),
@@ -175,9 +175,33 @@ function statusLabel(s){
  if(s==='data_incomplete')return['🟡 Недостаточно данных','warn'];
  return['—',''];
 }
+function analysisState(r){
+ if(r?.analysis_state)return String(r.analysis_state);
+ if(r?.is_gap)return'confirmed_gap';
+ if(!r?.our_sku||r?.data_incomplete)return'insufficient_data';
+ return'analog_found';
+}
+function analysisStateLabel(r){
+ const s=analysisState(r);
+ if(s==='confirmed_gap')return['🔴 Подтверждённый пробел','bad'];
+ if(s==='insufficient_data')return['🟡 Недостаточно данных','warn'];
+ return['🟢 Аналог найден','good'];
+}
 function rowStatus(r){
  if(r?.is_main_competitor===false)return['⚪ Ориентир рынка',''];
+ if(analysisState(r)!=='analog_found')return analysisStateLabel(r);
  return statusLabel(r?.status);
+}
+function refreshSkuOptions(panel,d,listing){
+ const sel=panel.querySelector('[data-f-sku]');if(!sel)return;
+ const scope=panel.querySelector('[data-f-scope]')?.value||'',prev=sel.value||'';
+ const rows=(Array.isArray(d.rows)?d.rows:[]).filter(r=>!scope||r.scope_key===scope);
+ const skus=new Set(rows.map(r=>String(r.our_sku||'').trim()).filter(Boolean));
+ for(const x of (listing?.rows||[]))if(!scope||String(x.scope_key||'')===scope)skus.add(String(x.sku||'').trim());
+ const list=[...skus].filter(Boolean).sort((a,b)=>a.localeCompare(b,'ru',{numeric:true}));
+ sel.innerHTML='<option value="">Все наши SKU</option>'+list.map(x=>'<option value="'+E(x)+'">'+E(x)+'</option>').join('')
+  +'<option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option>';
+ sel.value=[...list,'__incomplete__','__gap__'].includes(prev)?prev:'';
 }
 function competitorBadge(r){
  if(r?.is_main_competitor===true && r?.profile_key==='chainsaw_gas')return '<span class="tm224-main-badge">⭐ Основной конкурент</span>';
@@ -2800,13 +2824,13 @@ function competitorPriceTrend(r,days){
  return{kind:'up',className:'good',delta,pct:p,past,text:'↑ поднял на '+money(Math.abs(delta))+' ('+pct(p)+') за '+d+'д · было '+money(past)};
 }
 function rowHtml(r,ownMap,days,priceDays){
- const gap=!!r.is_gap,[sl,sc]=rowStatus(r),pos=livePosition(r),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays),fresh=freshnessInfo(r),w=r.__positionWatch;
+ const state=analysisState(r),gap=state==='confirmed_gap',incomplete=state==='insufficient_data',[sl,sc]=rowStatus(r),pos=livePosition(r),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays),fresh=freshnessInfo(r),w=r.__positionWatch;
  const lp=gap?null:ownMap.get(listingKey(r.scope_key,r.our_sku));
- return '<div class="tm224-row '+(gap?'gap':'')+'"><div class="tm224-main">'
+ return '<div class="tm224-row '+(gap?'gap':incomplete?'incomplete':'')+'"><div class="tm224-main">'
   +'<div><small>Позиция 21vek</small><b class="'+(pos!=null&&pos<=10?'bad':'')+'">'+E(positionLabel(r))+'</b><span>'+(w?.listing_state==='outside_top120'?'вне первых 120':'страница '+E(w?.page_no??r.page_no??'—'))+'</span><span class="'+E(w?.movement==='up'||w?.movement==='entered'?'good':w?.movement==='down'||w?.movement==='exited'?'bad':'')+'">'+E(positionHistoryText(r))+'</span><span class="tm224-fresh '+E(fresh.cls)+'">'+E(fresh.text)+'</span></div>'
   +'<div><small>Конкурент</small><b>'+E(r.brand||'—')+'</b>'+competitorBadge(r)+'<span>'+E(r.model||'')+'</span>'+(r.product_url?'<a target="_blank" rel="noopener" href="'+E(r.product_url)+'">21vek ↗</a>':'')+'</div>'
   +'<div><small>Цена конкурента</small><b>'+money(r.competitor_price)+'</b><span class="'+E(pt.className)+'">'+E(pt.text)+'</span></div>'
-  +(gap?'<div class="tm224-gapbox"><small>Наша матрица</small><b>⚠ Пробел в ассортименте</b><span>лучшее совпадение '+pct(r.best_similarity).replace('+','')+'</span></div>'
+  +(gap?'<div class="tm224-gapbox"><small>Наша матрица</small><b>⚠ Подтверждённый пробел ассортимента</b><span>лучшее совпадение '+pct(r.best_similarity).replace('+','')+'</span></div>'
     :'<div><small>Наш SKU</small><b>'+E(r.our_sku||'—')+'</b><span>'+E(r.our_product_name||'')+'</span>'+listingInline(lp,days)+(r.our_product_url?'<a target="_blank" rel="noopener" href="'+E(r.our_product_url)+'">наша карточка ↗</a>':'')+'</div>')
   +(gap?'':('<div><small>Наша цена / МРЦ</small><b>'+money(r.our_price)+' / '+money(r.mrc_byn)+'</b><span class="'+(N(r.mrc_delta_pct)<0?'bad':'good')+'">от МРЦ '+pct(r.mrc_delta_pct)+'</span></div>'
    +'<div><small>Сопоставимость</small><b>'+pct(r.similarity_score).replace('+','')+'</b><span>'+E(r.data_incomplete?'по доступным данным':gradeLabel(r.analog_grade))+'</span>'+(r.data_incomplete?'<span class="warn">⚠️ Расчёт по неполным данным</span>':'')+'</div>'
@@ -2817,26 +2841,47 @@ function css(){
  if(document.getElementById('tm224-css'))return;
  const s=document.createElement('style');s.id='tm224-css';s.textContent=`
  .tm224-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}.tm224-note{font-size:11px;color:#64748b;line-height:1.45;max-width:900px}.tm224-actions{display:flex;gap:7px;flex-wrap:wrap}
- .tm224-kpi{display:grid;grid-template-columns:repeat(8,minmax(95px,1fr));gap:7px;margin:12px 0}.tm224-kpi>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px}.tm224-kpi span{font-size:8px;color:#64748b;text-transform:uppercase;display:block}.tm224-kpi b{font-size:16px;display:block;margin-top:3px}
+ .tm224-kpi{display:grid;grid-template-columns:repeat(9,minmax(95px,1fr));gap:7px;margin:12px 0}.tm224-kpi>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px}.tm224-kpi span{font-size:8px;color:#64748b;text-transform:uppercase;display:block}.tm224-kpi b{font-size:16px;display:block;margin-top:3px}
  .tm224-filters{display:grid;grid-template-columns:repeat(4,minmax(155px,1fr));gap:8px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;margin-bottom:10px}.tm224-filters select,.tm224-filters input{min-height:38px;border:1px solid #cbd5e1;border-radius:8px;padding:7px;background:#fff}
  .tm224-toggles{display:flex;gap:12px;flex-wrap:wrap;grid-column:1/-1;font-size:11px}.tm224-toggles label{display:flex;gap:5px;align-items:center}
  .tm224-scope{border:1px solid #dbe4ee;border-radius:12px;padding:10px;margin:10px 0;background:#fbfdff}.tm224-scope-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.tm224-scope-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tm224-scope-actions button{min-height:34px}.tm224-brands{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.tm224-brand{font-size:10px;padding:5px 7px;border-radius:99px;background:#fff;border:1px solid #dbe4ee}.tm224-brand b{color:#0c447c}
- .tm224-row{border:1px solid #e5e7eb;border-radius:12px;margin:9px 0;background:#fff;overflow:hidden}.tm224-row.gap{border-color:#fbbf24;background:#fffdf5}.tm224-main{display:grid;grid-template-columns:85px minmax(220px,1.8fr) 150px minmax(220px,1.6fr) 165px 130px 145px;gap:9px;padding:11px;align-items:start}.tm224-main small{display:block;color:#64748b;font-size:8px;text-transform:uppercase;margin-bottom:3px}.tm224-main b{display:block;font-size:11px}.tm224-main span{display:block;font-size:9px;color:#64748b;margin-top:3px}.tm224-main a{font-size:10px;color:#185fa5;text-decoration:none;display:inline-block;margin-top:4px}.tm224-gapbox{grid-column:4/8}
+ .tm224-row{border:1px solid #e5e7eb;border-radius:12px;margin:9px 0;background:#fff;overflow:hidden}.tm224-row.gap{border-color:#fbbf24;background:#fffdf5}.tm224-row.incomplete{border-color:#fdba74;background:#fffaf5}.tm224-sku-group{border:1px solid #dbe4ee;border-radius:12px;margin:10px 0;background:#fff;overflow:hidden}.tm224-sku-group.gap{border-color:#fbbf24;background:#fffdf5}.tm224-sku-group.incomplete{border-color:#fdba74;background:#fffaf5}.tm224-sku-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:11px;background:#f8fafc;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}.tm224-sku-head b{font-size:13px}.tm224-sku-head span{display:block;font-size:10px;color:#64748b;margin-top:3px}.tm224-sku-list{padding:4px 11px}.tm224-sku-competitor{display:grid;grid-template-columns:70px minmax(180px,1.6fr) 120px 120px 140px minmax(150px,1fr);gap:8px;padding:9px 0;border-bottom:1px solid #eef2f7;align-items:start}.tm224-sku-competitor:last-child{border-bottom:0}.tm224-sku-competitor small{display:block;color:#64748b;font-size:8px;text-transform:uppercase}.tm224-sku-competitor b,.tm224-sku-competitor span{display:block;font-size:10px}.tm224-sku-competitor a{font-size:9px;color:#185fa5;text-decoration:none}.tm224-main{display:grid;grid-template-columns:85px minmax(220px,1.8fr) 150px minmax(220px,1.6fr) 165px 130px 145px;gap:9px;padding:11px;align-items:start}.tm224-main small{display:block;color:#64748b;font-size:8px;text-transform:uppercase;margin-bottom:3px}.tm224-main b{display:block;font-size:11px}.tm224-main span{display:block;font-size:9px;color:#64748b;margin-top:3px}.tm224-main a{font-size:10px;color:#185fa5;text-decoration:none;display:inline-block;margin-top:4px}.tm224-gapbox{grid-column:4/8}
  .tm224-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:7px 11px}.tm224-details summary{cursor:pointer;font-size:10px;font-weight:800;color:#0c447c}.tm224-fresh{font-weight:800!important}.tm224-fresh.fresh{color:#166534!important}.tm224-fresh.aging{color:#92400e!important}.tm224-fresh.stale{color:#b91c1c!important}.tm224-comp-pos-history{margin-top:8px;padding:8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;font-size:10px}.tm224-comp-pos-summary{margin:5px 0;color:#334155}.tm224-comp-pos-points{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}.tm224-comp-pos-points span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-compare,.tm224-ab{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}.tm224-compare>div,.tm224-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:8px}.tm224-compare span{display:block;font-size:10px;margin:2px 0}.tm224-ab{font-size:10px}.tm224-ab ul{margin:5px 0 0 16px}.tm224-conv-table{overflow:auto;margin-top:8px}.tm224-conv-table table{width:100%;border-collapse:collapse;background:#fff;font-size:10px}.tm224-conv-table th,.tm224-conv-table td{padding:7px;border:1px solid #e5e7eb;text-align:left;vertical-align:top}.tm224-conv-table th{background:#f8fafc}.tm224-ref{margin-top:7px;padding:7px 8px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:10px}.tm224-own-pos{margin-top:5px!important;color:#0c447c!important}.tm224-listing-history{margin-top:8px;padding:8px;border:1px solid #dbeafe;background:#f8fbff;border-radius:8px;font-size:10px}.tm224-listing-history>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.tm224-listing-history span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-own-summary{font-size:10px;margin-top:6px;color:#334155}.tm224-main-badge,.tm224-market-badge{display:inline-block!important;width:max-content;padding:2px 6px;border-radius:999px;font-size:8px!important;font-weight:800;margin-top:4px!important}.tm224-main-badge{background:#fef3c7;color:#92400e!important;border:1px solid #fcd34d}.tm224-market-badge{background:#f1f5f9;color:#475569!important;border:1px solid #cbd5e1}.tm224-market-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#f8fafc;border:1px solid #cbd5e1;font-size:10px;color:#475569}.tm224-rec{margin-top:8px;padding:8px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;font-size:10px}.tm224-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}.tm224-meta{font-size:9px;color:#64748b;margin-top:9px}
  .good{color:#166534!important}.warn{color:#92400e!important}.bad{color:#b91c1c!important}
  @media(max-width:1250px){.tm224-kpi{grid-template-columns:repeat(4,1fr)}.tm224-filters{grid-template-columns:repeat(3,minmax(150px,1fr))}.tm224-main{grid-template-columns:repeat(3,minmax(0,1fr))}.tm224-gapbox{grid-column:auto}}
- @media(max-width:760px){.tm224-kpi,.tm224-filters,.tm224-main,.tm224-compare,.tm224-ab{grid-template-columns:1fr}.tm224-toggles{grid-column:auto}}
+ @media(max-width:760px){.tm224-kpi,.tm224-filters,.tm224-main,.tm224-compare,.tm224-ab,.tm224-sku-competitor{grid-template-columns:1fr}.tm224-toggles{grid-column:auto}}
  `;document.head.appendChild(s);
 }
+function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
+ const isGap=key==='__gap__',isIncomplete=key==='__incomplete__',first=rows[0]||{};
+ const lp=!isGap&&!isIncomplete?ownMap.get(listingKey(first.scope_key,key)):null;
+ const title=isGap?'Нет нашего аналога / пробел':isIncomplete?'Недостаточно данных':key;
+ const subtitle=isGap?'Матрица проверена, лучший кандидат ниже порога':isIncomplete?'Данных недостаточно для подтверждения аналога или пробела':(first.our_product_name||lp?.product_name||'');
+ const items=rows.map(r=>{
+   const pt=competitorPriceTrend(r,priceDays),[asl,asc]=analysisStateLabel(r),[sl,sc]=rowStatus(r);
+   return '<div class="tm224-sku-competitor">'
+    +'<div><small>Позиция</small><b>'+E(positionLabel(r))+'</b></div>'
+    +'<div><small>Конкурент</small><b>'+E(r.brand||'—')+' '+E(r.model||'')+'</b>'+(r.product_url?'<a target="_blank" rel="noopener" href="'+E(r.product_url)+'">21vek ↗</a>':'')+'</div>'
+    +'<div><small>Цена</small><b>'+money(r.competitor_price)+'</b><span class="'+E(pt.className)+'">'+E(pt.text)+'</span></div>'
+    +'<div><small>Сопоставимость</small><b>'+E(N(r.similarity_score??r.best_similarity)==null?'—':N(r.similarity_score??r.best_similarity).toFixed(1).replace('.',',')+'%')+'</b></div>'
+    +'<div><small>Статус данных</small><b class="'+asc+'">'+asl+'</b></div>'
+    +'<div><small>Итог</small><b class="'+sc+'">'+sl+'</b></div>'
+    +'</div>';
+ }).join('');
+ const listing=!isGap&&!isIncomplete&&lp?'<span>Наш листинг: '+E(lp.listing_state==='outside_top120'?'вне TOP-120':lp.position?'#'+lp.position:'нет позиции')+'</span>':'';
+ return '<div class="tm224-sku-group '+(isGap?'gap':isIncomplete?'incomplete':'')+'"><div class="tm224-sku-head"><div><b>'+E(title)+'</b><span>'+E(subtitle)+'</span>'+listing+'</div><div><b>'+E(rows.length)+'</b><span>конкурентов</span></div></div><div class="tm224-sku-list">'+items+'</div></div>';
+}
+
 function scopeHtml(s,summaryMap){
  const configured=N(s.main_competitors)!=null&&N(s.competitors)!=null&&N(s.main_competitors)<N(s.competitors);
  const brands=(s.brands||[]).map(b=>'<span class="tm224-brand"><b>'+E(b.brand)+'</b>'+(configured&&b.is_main_competitor?' ⭐':'')+' · '+E(b.models)+' мод. · лучшая #'+E(b.best_position??'—')+' · средняя '+E(b.avg_position??'—')+' · '+E(b.share_pct??0)+'%</span>').join('');
  const q=summaryMap.get(String(s.scope_key||''));
+ const confirmed=N(s.confirmed_gaps)??N(s.gaps)??0,insufficient=N(s.insufficient_data)??0;
  const ownSummary=q
    ?'<div class="tm224-own-summary" data-own-summary-scope="'+E(s.scope_key)+'"><b>Наш листинг:</b> TOP-10 — '+E(q.top10??0)+' · TOP-30 — '+E(q.top30??0)+' · TOP-60 — '+E(q.top60??0)+' · TOP-120 — '+E(q.top120??0)+' · вне TOP-120 — '+E(q.outside_top120??0)+(N(q.no_card)>0?' · без карточки — '+E(q.no_card):'')+'</div>'
    :'<div class="tm224-own-summary" data-own-summary-scope="'+E(s.scope_key)+'"><b>Наш листинг:</b> загрузится после выбора подгруппы.</div>';
  const marketSummary=configured?'<div class="tm224-own-summary"><b>Основные конкуренты:</b> '+E(s.main_competitors??0)+' товаров из '+E(s.competitors??0)+' в полном рынке.</div>':'';
- return '<div class="tm224-scope" data-scope-card="'+E(s.scope_key)+'"><div class="tm224-scope-head"><div><b>'+E(s.subgroup)+'</b><div class="tm224-note">TOP-2 21vek · запрос «'+E(s.search_query)+'» · наших SKU '+E(s.own_sku_count??0)+' · конкурентов '+E(s.competitors??0)+'</div>'+marketSummary+ownSummary+'</div><div class="tm224-scope-actions"><b class="'+((s.gaps||0)>0?'warn':'good')+'">пробелы '+E(s.gaps??0)+'</b><button type="button" class="tr14-refresh" data-tm224-check-scope="'+E(s.scope_key)+'">↻ Проверить позиции сейчас</button></div></div><div class="tm224-brands">'+brands+'</div></div>';
+ return '<div class="tm224-scope" data-scope-card="'+E(s.scope_key)+'"><div class="tm224-scope-head"><div><b>'+E(s.subgroup)+'</b><div class="tm224-note">TOP-2 21vek · запрос «'+E(s.search_query)+'» · наших SKU '+E(s.own_sku_count??0)+' · конкурентов '+E(s.competitors??0)+'</div>'+marketSummary+ownSummary+'</div><div class="tm224-scope-actions"><b class="'+(confirmed>0?'bad':'good')+'">подтверждённых пробелов '+E(confirmed)+'</b><b class="'+(insufficient>0?'warn':'good')+'">недостаточно данных '+E(insufficient)+'</b><button type="button" class="tr14-refresh" data-tm224-check-scope="'+E(s.scope_key)+'">↻ Проверить позиции сейчас</button></div></div><div class="tm224-brands">'+brands+'</div></div>';
 }
 function updateScopeOwnSummary(panel,scope,listing){
  const el=panel.querySelector('[data-own-summary-scope="'+CSS.escape(String(scope||''))+'"]');if(!el)return;
@@ -2855,8 +2900,8 @@ function refreshBrandOptions(panel,d){
  sel.value=brands.includes(prev)?prev:'';
 }
 function applyFilters(panel,d,listing){
- const scope=panel.querySelector('[data-f-scope]')?.value||'',brand=panel.querySelector('[data-f-brand]')?.value||'',status=panel.querySelector('[data-f-status]')?.value||'',sku=(panel.querySelector('[data-f-sku]')?.value||'').trim().toLowerCase();
- const competitorKind=panel.querySelector('[data-f-competitor-kind]')?.value||'all';
+ const scope=panel.querySelector('[data-f-scope]')?.value||'',brand=panel.querySelector('[data-f-brand]')?.value||'',status=panel.querySelector('[data-f-status]')?.value||'',sku=panel.querySelector('[data-f-sku]')?.value||'';
+ const competitorKind=panel.querySelector('[data-f-competitor-kind]')?.value||'all',analysis=panel.querySelector('[data-f-analysis-state]')?.value||'',view=panel.querySelector('[data-f-view]')?.value||'market';
  const trend=panel.querySelector('[data-f-trend]')?.value||'',days=N(panel.querySelector('[data-f-days]')?.value)||N(listing?.period_days)||7;
  const priceTrend=panel.querySelector('[data-f-price-trend]')?.value||'',priceDays=N(panel.querySelector('[data-f-price-days]')?.value)||7;
  const top10=!!panel.querySelector('[data-f-top10]')?.checked,gaps=!!panel.querySelector('[data-f-gaps]')?.checked,mrc=!!panel.querySelector('[data-f-mrc]')?.checked;
@@ -2866,7 +2911,11 @@ function applyFilters(panel,d,listing){
   if(competitorKind==='main'&&r.is_main_competitor!==true)return false;
   if(competitorKind==='market'&&r.is_main_competitor!==false)return false;
   if(status&&(r.is_main_competitor===false||r.status!==status))return false;
-  if(sku&&!String(r.our_sku||'').toLowerCase().includes(sku))return false;
+  const state=analysisState(r);
+  if(analysis&&state!==analysis)return false;
+  if(sku==='__gap__'&&state!=='confirmed_gap')return false;
+  if(sku==='__incomplete__'&&state!=='insufficient_data')return false;
+  if(sku&&sku!=='__gap__'&&sku!=='__incomplete__'&&String(r.our_sku||'')!==sku)return false;
   if(top10&&(livePosition(r)==null||livePosition(r)>10))return false;
   if(gaps&&!r.is_gap)return false;
   if(mrc&&!(N(r.mrc_delta_pct)<0))return false;
@@ -2893,10 +2942,22 @@ function applyFilters(panel,d,listing){
    return;
  }
  const limit=Math.max(60,Number(panel.dataset.tm224Limit||120)||120),visible=rows.slice(0,limit);
- holder.innerHTML=rows.length
-  ?visible.map(r=>rowHtml(r,ownMap,days,priceDays)).join('')+(rows.length>visible.length?'<div class="tm224-more"><button type="button" class="tr14-refresh" data-tm224-more>Показать ещё '+Math.min(120,rows.length-visible.length)+' из '+(rows.length-visible.length)+'</button></div>':'')
-  :'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
- panel.querySelector('[data-tm224-count]').textContent='Показано '+visible.length+' из '+rows.length+' · в подгруппе '+base.length;
+ if(view==='ours'){
+   const groups=new Map();
+   for(const r of rows){
+     const st=analysisState(r),key=st==='confirmed_gap'?'__gap__':(!r.our_sku?'__incomplete__':String(r.our_sku));
+     if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);
+   }
+   const rank=k=>k==='__gap__'?2:k==='__incomplete__'?1:0;
+   const ordered=[...groups.entries()].sort((a,b)=>rank(a[0])-rank(b[0])||String(a[0]).localeCompare(String(b[0]),'ru',{numeric:true}));
+   holder.innerHTML=ordered.length?ordered.map(([k,x])=>ourSkuCardHtml(k,x,ownMap,days,priceDays)).join(''):'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
+   panel.querySelector('[data-tm224-count]').textContent='Наших групп '+ordered.length+' · конкурентов '+rows.length+' · в подгруппе '+base.length;
+ }else{
+   holder.innerHTML=rows.length
+    ?visible.map(r=>rowHtml(r,ownMap,days,priceDays)).join('')+(rows.length>visible.length?'<div class="tm224-more"><button type="button" class="tr14-refresh" data-tm224-more>Показать ещё '+Math.min(120,rows.length-visible.length)+' из '+(rows.length-visible.length)+'</button></div>':'')
+    :'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
+   panel.querySelector('[data-tm224-count]').textContent='Показано '+visible.length+' из '+rows.length+' · в подгруппе '+base.length;
+ }
 }
 function loadXlsx(){
  if(window.XLSX)return Promise.resolve(window.XLSX);
