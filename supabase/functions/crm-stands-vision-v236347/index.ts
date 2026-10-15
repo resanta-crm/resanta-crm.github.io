@@ -344,8 +344,16 @@ Deno.serve(async(req:Request)=>{
     }).eq("id",placementId);
     if(upe)throw upe;
 
+    let taskInfo:any=null;
+    const {data:taskData,error:taskError}=await admin.rpc("crm_stands_vision_task_apply_v236367",{
+      p_placement_id:placementId,
+      p_vision_check_id:check.id
+    });
+    if(taskError)console.warn("STAND_VISION_TASK_WARNING",taskError.message);
+    else taskInfo=taskData;
+
     const internal={
-      version:"v23.6.365",provider,model:providerModel,placement_id:placementId,photo_id:photo?.id||null,
+      version:"v23.6.367",provider,model:providerModel,placement_id:placementId,photo_id:photo?.id||null,
       stand_type:t.name,target_brand:brand,target_categories:categories,manager_skus:managerSkus,candidate_catalog_count:candidates.length,
       parsed_result:raw,normalized:{vision_status:vstatus,quality,fill,own_brand_pct:ownBrand,foreign_brand_pct:foreignBrand,matched_skus:matched,manager_not_seen_skus:notSeen,vision_only_skus:extra,match_pct:matchPct},
       usage:providerUsage,latency_ms:Date.now()-started,
@@ -354,7 +362,7 @@ Deno.serve(async(req:Request)=>{
     const {error:ae}=await admin.from("stand_ai_internal_v236346").insert({entity_type:"vision",entity_id:placementId,engine_version:"v23.6.347",internal_logic:internal});
     if(ae)console.warn("STAND_VISION_AUDIT_WARNING",ae.message);
 
-    return reply(req,200,{ok:true,cached:false,vision_status:vstatus,result:check,manager_findings:findings});
+    return reply(req,200,{ok:true,cached:false,vision_status:vstatus,result:check,manager_findings:findings,task:taskInfo});
   }catch(e){
     const msg=e instanceof Error?e.message:String(e);
     const timedOut=(e as any)?.name==="AbortError"||msg.toLowerCase().includes("aborted");
