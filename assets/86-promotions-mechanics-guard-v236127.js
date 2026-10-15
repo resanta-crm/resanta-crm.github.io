@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.127 · STRUCTURED PROMOTION MECHANICS
+/* RESANTA CRM v23.6.364 · STRUCTURED PROMOTION MECHANICS
  * New promotions only:
  * - standard mechanics instead of free-form mechanism text;
  * - automatic photo/control stages per mechanic;
@@ -9,14 +9,28 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_MECHANICS_GUARD_V236127)return;
-const V='v23.6.127';
+const V='v23.6.364';
 const NEW_CUTOFF='2026-09-16T10:30:00Z';
 const MECH=[
-  {id:'discount',label:'Скидка / ценовая акция',stages:[],hint:'Контроль по SKU, продажам, плану и сроку. Фото не требуется.'},
-  {id:'gift_buyer',label:'Подарок покупателю за покупку',stages:['start','during'],hint:'Подтверждение запуска и фактического проведения.'},
-  {id:'advertising',label:'Рекламное размещение',stages:['start'],hint:'Фото или скрин фактического размещения.'},
-  {id:'display',label:'Выкладка / паллета / дополнительное место',stages:['start','during'],hint:'Фото размещения на старте и контроль в процессе.'},
-  {id:'coupon',label:'Чек-купон / промокод',stages:['start','during'],hint:'Подтверждение запуска и проведения механики.'}
+  {id:'discount',label:'Скидка / ценовая акция',group:'Продажи и товар',stages:[],hint:'Контроль по SKU, продажам, плану и сроку. Фото не требуется.'},
+  {id:'bundle',label:'Комплект / набор',group:'Продажи и товар',stages:[],hint:'Продажи набора контролируются по выбранным SKU и общему плану.'},
+  {id:'assortment_matrix',label:'Акция на ассортимент / матрицу',group:'Продажи и товар',stages:[],hint:'Контроль расширения ассортимента по количеству и продажам выбранных SKU.'},
+  {id:'new_product',label:'Ввод новинки',group:'Продажи и товар',stages:[],hint:'Контроль первого ввода нового SKU клиенту и дальнейших продаж.'},
+  {id:'consumer_promo',label:'Акция конечному покупателю',group:'Продажи и товар',stages:['start','during'],hint:'Подтверждение запуска механики в торговой точке и контроль проведения.'},
+  {id:'clearance',label:'Распродажа остатков / уценки',group:'Продажи и товар',stages:[],hint:'Контроль распродажи конкретных SKU и снижения остатка.'},
+  {id:'seasonal_preorder',label:'Сезонный запас / предзаказ',group:'Продажи и товар',stages:[],hint:'Отдельно учитываем предварительную отгрузку до периода акции и продажи в периоде.'},
+  {id:'test_supply',label:'Тестовая поставка',group:'Продажи и товар',stages:[],hint:'Контроль тестового объёма, продаж и решения о расширении поставок.'},
+  {id:'exclusive_price',label:'Эксклюзивная цена на период',group:'Продажи и товар',stages:[],hint:'Контроль специальных цен, срока и фактического объёма продаж.'},
+
+  {id:'gift_buyer',label:'Подарок покупателю за покупку',group:'Продвижение и торговая точка',stages:['start','during'],hint:'Подтверждение запуска и фактического проведения.'},
+  {id:'advertising',label:'Рекламное размещение',group:'Продвижение и торговая точка',stages:['start'],hint:'Фото или скрин фактического размещения.'},
+  {id:'joint_advertising',label:'Совместная реклама',group:'Продвижение и торговая точка',stages:['start'],hint:'Фото или скрин совместной рекламы: сайт, соцсети, баннеры, листовки и другие каналы.'},
+  {id:'display',label:'Выкладка / паллета / дополнительное место',group:'Продвижение и торговая точка',stages:['start','during'],hint:'Фото размещения на старте и контроль в процессе.'},
+  {id:'shelf_expansion',label:'Расширение полочного пространства',group:'Продвижение и торговая точка',stages:['before','start','during'],hint:'Фото до изменения, после расширения и контроль сохранения дополнительного места.'},
+  {id:'brand_zone',label:'Бренд-зона / стенд',group:'Продвижение и торговая точка',stages:['before','start','during'],hint:'Фото до установки, установленного стенда/бренд-зоны и контроль в процессе.'},
+  {id:'demo_sample',label:'Демонстрация / образец',group:'Продвижение и торговая точка',stages:['start','during'],hint:'Подтверждение размещения демонстрационного образца и его наличия в процессе.'},
+  {id:'coupon',label:'Чек-купон / промокод',group:'Продвижение и торговая точка',stages:['start','during'],hint:'Подтверждение запуска и проведения механики.'},
+  {id:'seller_contest',label:'Конкурс продавцов клиента',group:'Продвижение и торговая точка',stages:[],hint:'Контроль продаж за период, результатов конкурса и итогового отчёта. Фото не обязательно.'}
 ];
 const safe=v=>String(v??'');
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -32,7 +46,31 @@ function selectedDefs(){const ids=new Set(selectedIds());return MECH.filter(x=>i
 function stagesForSelected(){return [...new Set(selectedDefs().flatMap(x=>x.stages))]}
 function stageLabel(x){return{before:'До акции',start:'Старт',during:'В процессе',after:'После'}[x]||x}
 function canonicalText(){const defs=selectedDefs(),note=(document.getElementById('promo-mechanics-note-v236127')?.value||'').trim();let s=defs.map(x=>x.label).join(' + ');if(note)s+=(s?' — ':'')+note;return s}
-function inferSelected(text){const t=safe(text).toLowerCase();const out=[];if(/скид|ценов/.test(t))out.push('discount');if(/подарок/.test(t)&&!/лпр|товаровед|закупщик|др\b/.test(t))out.push('gift_buyer');if(/реклам|баннер|сайт|размещ/.test(t))out.push('advertising');if(/выклад|паллет|полетн|поддон|полк/.test(t))out.push('display');if(/купон|промокод/.test(t))out.push('coupon');return [...new Set(out)]}
+function inferSelected(text){
+  const t=safe(text).toLowerCase();
+  const exact=MECH.filter(x=>t.includes(x.label.toLowerCase())).map(x=>x.id);
+  if(exact.length)return [...new Set(exact)];
+  const out=[];
+  if(/скид|ценов/.test(t))out.push('discount');
+  if(/подарок/.test(t)&&!/лпр|товаровед|закупщик|др\b/.test(t))out.push('gift_buyer');
+  if(/реклам|баннер|сайт|размещ/.test(t))out.push('advertising');
+  if(/выклад|паллет|полетн|поддон|полк/.test(t))out.push('display');
+  if(/купон|промокод/.test(t))out.push('coupon');
+  if(/комплект|набор/.test(t))out.push('bundle');
+  if(/ассортимент|матриц/.test(t))out.push('assortment_matrix');
+  if(/новинк|новый sku|ввод sku/.test(t))out.push('new_product');
+  if(/полочн.*простран|фейсинг/.test(t))out.push('shelf_expansion');
+  if(/бренд.?зон|стенд/.test(t))out.push('brand_zone');
+  if(/демонстрац|образец/.test(t))out.push('demo_sample');
+  if(/совместн.*реклам/.test(t))out.push('joint_advertising');
+  if(/конечн.*покупател/.test(t))out.push('consumer_promo');
+  if(/конкурс.*продав/.test(t))out.push('seller_contest');
+  if(/распродаж.*остат|уцен/.test(t))out.push('clearance');
+  if(/сезонн.*запас|предзаказ/.test(t))out.push('seasonal_preorder');
+  if(/тестов.*постав/.test(t))out.push('test_supply');
+  if(/эксклюзивн.*цен/.test(t))out.push('exclusive_price');
+  return [...new Set(out)]
+}
 function ensureHost(){
   let h=document.getElementById('promo-mechanics-v236127');if(h)return h;
   const o=original();if(!o)return null;const wrap=o.closest('.form-field');if(!wrap)return null;
@@ -56,8 +94,10 @@ function renderStructured(p){
   const inferred=inferSelected(p?.mechanics||'');
   const explicitNew=!p||isNewRecord(p,p?.id);
   h.style.display='block';o.closest('.form-field').style.display='none';
+  const groups=[...new Set(MECH.map(x=>x.group||'Прочее'))];
+  const mechanicsHtml=groups.map(g=>'<div class="promo-mech-group-v236364"><div class="promo-mech-group-title-v236364">'+esc(g)+'</div><div class="promo-mech-grid-v236127">'+MECH.filter(x=>(x.group||'Прочее')===g).map(x=>'<label class="promo-mech-item-v236127"><input type="checkbox" data-mech value="'+x.id+'" '+(inferred.includes(x.id)?'checked':'')+'><span><b>'+esc(x.label)+'</b><small>'+esc(x.hint)+'</small></span></label>').join('')+'</div></div>').join('');
   h.innerHTML='<div class="promo-mech-box-v236127"><div class="promo-mech-title-v236127"><b>Механика акции</b><span>можно выбрать несколько</span></div>'
-    +'<div class="promo-mech-grid-v236127">'+MECH.map(x=>'<label class="promo-mech-item-v236127"><input type="checkbox" data-mech value="'+x.id+'" '+(inferred.includes(x.id)?'checked':'')+'><span><b>'+esc(x.label)+'</b><small>'+esc(x.hint)+'</small></span></label>').join('')+'</div>'
+    +mechanicsHtml
     +'<div class="form-field" style="margin:10px 0 0"><label class="form-label">Дополнительные условия</label><textarea class="form-input" id="promo-mechanics-note-v236127" rows="2" placeholder="Только особые условия, если они нужны"></textarea></div>'
     +'<div id="promo-mech-route-v236127" class="promo-mech-route-v236127"></div>'
     +'<div class="promo-not-action-v236127"><b>Это не акция?</b> Подарок ЛПР, одежда сотрудникам, компенсация, проверка, представительские и другие расходы не создаются здесь. <button type="button" data-budget-expense class="btn-secondary">Оформить как расход бюджета</button></div>'
@@ -86,7 +126,7 @@ function validateNew(){
   const o=original();if(o)o.value=canonicalText();applyAutoStages();return true;
 }
 function css(){if(document.getElementById('promo-mechanics-style-v236127'))return;const s=document.createElement('style');s.id='promo-mechanics-style-v236127';s.textContent=`
-#promo-mechanics-v236127{margin-bottom:14px}.promo-mech-box-v236127{border:1px solid #bfdbfe;background:#f8fbff;border-radius:12px;padding:12px}.promo-mech-title-v236127{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px;margin-bottom:8px}.promo-mech-title-v236127 span{font-size:10px;color:var(--sub)}.promo-mech-grid-v236127{display:grid;grid-template-columns:1fr 1fr;gap:7px}.promo-mech-item-v236127{display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px;cursor:pointer}.promo-mech-item-v236127 input{margin-top:2px}.promo-mech-item-v236127 b{display:block;font-size:11px}.promo-mech-item-v236127 small{display:block;font-size:9px;color:var(--sub);line-height:1.35;margin-top:2px}.promo-mech-route-v236127{margin-top:9px;background:var(--gb);color:var(--g);border-radius:8px;padding:8px 9px;font-size:10px;line-height:1.45}.promo-mech-route-v236127 span{opacity:.85}.promo-not-action-v236127{margin-top:9px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:8px 9px;font-size:10px;line-height:1.45}.promo-not-action-v236127 .btn-secondary{padding:5px 8px;font-size:10px;margin-left:5px}@media(max-width:700px){.promo-mech-grid-v236127{grid-template-columns:1fr}.promo-mech-title-v236127{align-items:flex-start;flex-direction:column}}
+#promo-mechanics-v236127{margin-bottom:14px}.promo-mech-box-v236127{border:1px solid #bfdbfe;background:#f8fbff;border-radius:12px;padding:12px}.promo-mech-title-v236127{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px;margin-bottom:8px}.promo-mech-title-v236127 span{font-size:10px;color:var(--sub)}.promo-mech-group-v236364{margin-top:10px}.promo-mech-group-v236364:first-of-type{margin-top:0}.promo-mech-group-title-v236364{font-size:10px;font-weight:800;color:var(--sub);text-transform:uppercase;letter-spacing:.03em;margin:0 0 6px}.promo-mech-grid-v236127{display:grid;grid-template-columns:1fr 1fr;gap:7px}.promo-mech-item-v236127{display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px;cursor:pointer}.promo-mech-item-v236127 input{margin-top:2px}.promo-mech-item-v236127 b{display:block;font-size:11px}.promo-mech-item-v236127 small{display:block;font-size:9px;color:var(--sub);line-height:1.35;margin-top:2px}.promo-mech-route-v236127{margin-top:9px;background:var(--gb);color:var(--g);border-radius:8px;padding:8px 9px;font-size:10px;line-height:1.45}.promo-mech-route-v236127 span{opacity:.85}.promo-not-action-v236127{margin-top:9px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:8px 9px;font-size:10px;line-height:1.45}.promo-not-action-v236127 .btn-secondary{padding:5px 8px;font-size:10px;margin-left:5px}@media(max-width:700px){.promo-mech-grid-v236127{grid-template-columns:1fr}.promo-mech-title-v236127{align-items:flex-start;flex-direction:column}}
 `;document.head.appendChild(s)}
 function patch(){
   css();
@@ -94,5 +134,5 @@ function patch(){
   const S=window.savePromotion;if(typeof S==='function'&&!S.__promoMechanicsV236127){const base=S;const wrapped=async function(){if(!validateNew())return;return base.apply(this,arguments)};wrapped.__promoMechanicsV236127=true;wrapped.__base=base;window.savePromotion=wrapped;try{savePromotion=wrapped}catch(_){} }
 }
 patch();
-window.RESANTA_PROMOTIONS_MECHANICS_GUARD_V236127=Object.freeze({version:V,newOnly:true,planRequired:true,structuredMechanics:true,expenseGuard:true,automaticPhotoStages:true,noLegacyRewrite:true});
+window.RESANTA_PROMOTIONS_MECHANICS_GUARD_V236127=Object.freeze({version:V,newOnly:true,planRequired:true,structuredMechanics:true,mechanicsCount:MECH.length,expenseGuard:true,automaticPhotoStages:true,noLegacyRewrite:true});
 })();
