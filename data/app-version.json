@@ -1,6 +1,6 @@
 {
-  "version": "23.6.362",
+  "version": "23.6.363",
   "released_at": "2026-10-15",
-  "purpose": "Promotions: prelaunch shipments, exact-zero facts, corrected SKU 72/14/8, and exact SKU selection safeguards.",
-  "deploy_trigger": "2026-10-15T12:00:00+03:00"
+  "purpose": "Promotions: show 1C calendar-month breakdown for partial periods without counting uncertain boundary-month sales into plan completion.",
+  "deploy_trigger": "2026-10-15T12:20:00+03:00"
 }
