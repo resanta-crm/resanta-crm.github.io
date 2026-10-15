@@ -18,14 +18,86 @@ function b64(bytes:Uint8Array){
   for(let i=0;i<bytes.length;i+=n) out+=String.fromCharCode(...bytes.subarray(i,i+n));
   return btoa(out);
 }
-function jsonText(v:string){
-  let x=s(v).replace(/^\x60\x60\x60(?:json)?\s*/i,"").replace(/\s*\x60\x60\x60$/i,"");
-  try{return JSON.parse(x)}catch(_){
-    const a=x.indexOf("{"),b=x.lastIndexOf("}");
-    if(a>=0&&b>a)return JSON.parse(x.slice(a,b+1));
-    throw new Error("VISION_JSON_INVALID");
+function balancedObject(x:string){
+  const start=x.indexOf("{");if(start<0)return "";
+  let depth=0,inString=false,escaped=false;
+  for(let i=start;i<x.length;i++){
+    const ch=x[i];
+    if(inString){
+      if(escaped){escaped=false;continue}
+      if(ch==="\\"){escaped=true;continue}
+      if(ch==='"')inString=false;
+      continue;
+    }
+    if(ch==='"'){inString=true;continue}
+    if(ch==="{")depth++;
+    else if(ch==="}"){
+      depth--;
+      if(depth===0)return x.slice(start,i+1);
+    }
   }
+  return "";
 }
+function cleanJsonCandidate(v:string){
+  return s(v)
+    .replace(/^\uFEFF/,"")
+    .replace(/\u200B/g,"")
+    .replace(/^\x60\x60\x60(?:json)?\s*/i,"")
+    .replace(/\s*\x60\x60\x60$/i,"")
+    .replace(/,\s*([}\]])/g,"$1")
+    .trim();
+}
+function jsonText(v:string){
+  const x=s(v),candidates:string[]=[];
+  const push=(z:string)=>{const q=cleanJsonCandidate(z);if(q&&!candidates.includes(q))candidates.push(q)};
+  push(x);
+  for(const m of x.matchAll(/\x60\x60\x60(?:json)?\s*([\s\S]*?)\x60\x60\x60/gi))push(m[1]||"");
+  push(balancedObject(x));
+  for(const candidate of candidates){
+    try{return JSON.parse(candidate)}catch(_){}
+  }
+  throw new Error("VISION_JSON_INVALID");
+}
+async function fetchWithTimeout(url:string,init:RequestInit,ms=55000){
+  const ctl=new AbortController();
+  const timer=setTimeout(()=>ctl.abort(),ms);
+  try{return await fetch(url,{...init,signal:ctl.signal})}
+  finally{clearTimeout(timer)}
+}
+const VISION_SCHEMA={
+  type:"object",
+  additionalProperties:false,
+  properties:{
+    stand_present:{type:"boolean"},
+    stand_brand_detected:{type:"string"},
+    photo_quality_score:{type:"integer",minimum:0,maximum:100},
+    quality_issues:{type:"array",items:{type:"string"},maxItems:20},
+    fill_pct:{type:"integer",minimum:0,maximum:100},
+    own_brand_share_pct:{type:"integer",minimum:0,maximum:100},
+    foreign_brand_share_pct:{type:"integer",minimum:0,maximum:100},
+    visible_product_count_estimate:{type:"integer",minimum:0,maximum:500},
+    recognized_text:{type:"array",items:{type:"string"},maxItems:30},
+    matched_products:{
+      type:"array",maxItems:30,
+      items:{
+        type:"object",additionalProperties:false,
+        properties:{sku:{type:"string"},product:{type:"string"},confidence:{type:"number",minimum:0,maximum:1},evidence:{type:"string"}},
+        required:["sku","product","confidence","evidence"]
+      }
+    },
+    manager_sku_findings:{
+      type:"array",maxItems:100,
+      items:{
+        type:"object",additionalProperties:false,
+        properties:{sku:{type:"string"},status:{type:"string",enum:["seen","not_seen","uncertain"]},confidence:{type:"number",minimum:0,maximum:1},evidence:{type:"string"}},
+        required:["sku","status","confidence","evidence"]
+      }
+    },
+    issues:{type:"array",items:{type:"string"},maxItems:30},
+    summary:{type:"string"}
+  },
+  required:["stand_present","stand_brand_detected","photo_quality_score","quality_issues","fill_pct","own_brand_share_pct","foreign_brand_share_pct","visible_product_count_estimate","recognized_text","matched_products","manager_sku_findings","issues","summary"]
+};
 function month12(){
   const d=new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()-11);
   return d.toISOString().slice(0,10);
@@ -134,7 +206,8 @@ Deno.serve(async(req:Request)=>{
       "Если товар закрыт, размыт или надпись не читается — uncertain. not_seen ставь только когда зона хорошо видна и товар явно отсутствует.",
       "Оцени заполненность полезной площади стенда, долю целевого бренда, долю чужих брендов, качество фото и видимые надписи.",
       "Сверь manager_skus с фотографией.",
-      "Ответ только JSON без markdown.",
+      "matched_products: максимум 30 наиболее уверенных позиций. recognized_text и issues: только полезные наблюдения без повторов.",
+      "Ответ должен строго соответствовать указанной JSON-схеме. Никакого markdown, пояснений до/после JSON и незавершённых полей.",
       "target_stand: "+JSON.stringify({type:t.name,brand,categories}),
       "client: "+JSON.stringify({name:p.client_name,address:p.address}),
       "manager_skus: "+JSON.stringify(managerCatalog),
@@ -154,11 +227,11 @@ Deno.serve(async(req:Request)=>{
     let providerUsage:any=null;
 
     if(anthropicKey){
-      const ar=await fetch("https://api.anthropic.com/v1/messages",{
+      const ar=await fetchWithTimeout("https://api.anthropic.com/v1/messages",{
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":anthropicKey,"anthropic-version":"2023-06-01"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:1800,temperature:0,
+          model:"claude-sonnet-4-6",max_tokens:2600,temperature:0,
           system:"Ты точный аудитор торговой выкладки. При сомнении не угадывай.",
           messages:[{role:"user",content:[
             {type:"image",source:{type:"base64",media_type:media,data:b64(bytes)}},
@@ -172,18 +245,25 @@ Deno.serve(async(req:Request)=>{
         return reply(req,502,{ok:false,error:"VISION_PROVIDER_ERROR",message:s((ad as any)?.error?.message)||("Anthropic HTTP "+ar.status)});
       }
       const txt=Array.isArray((ad as any)?.content)?(ad as any).content.filter((x:any)=>x?.type==="text").map((x:any)=>s(x.text)).join("\n"):"";
-      raw=jsonText(txt);
+      try{raw=jsonText(txt)}
+      catch(_){
+        console.error("STAND_VISION_JSON_INVALID","provider=anthropic","model="+providerModel,"chars="+txt.length,"stop_reason="+s((ad as any)?.stop_reason));
+        return reply(req,502,{ok:false,error:"VISION_JSON_INVALID",message:"Vision получил неполный или некорректный ответ модели. Повторите анализ — фото уже сохранено."});
+      }
       providerUsage=(ad as any)?.usage||null;
     }else{
       provider="openai";
       providerModel="gpt-5.6";
-      const or=await fetch("https://api.openai.com/v1/responses",{
+      const or=await fetchWithTimeout("https://api.openai.com/v1/responses",{
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+openaiKey},
         body:JSON.stringify({
           model:providerModel,
           instructions:"Ты точный аудитор торговой выкладки. При сомнении не угадывай. Ответ только JSON без markdown.",
-          max_output_tokens:1800,
+          max_output_tokens:2600,
+          reasoning:{effort:"low"},
+          store:false,
+          text:{format:{type:"json_schema",name:"stand_vision_audit",strict:true,schema:VISION_SCHEMA}},
           input:[{role:"user",content:[
             {type:"input_text",text:prompt},
             {type:"input_image",image_url:"data:"+media+";base64,"+b64(bytes),detail:"high"}
@@ -198,7 +278,11 @@ Deno.serve(async(req:Request)=>{
       const txt=Array.isArray((od as any)?.output)
         ?(od as any).output.flatMap((x:any)=>Array.isArray(x?.content)?x.content:[]).filter((x:any)=>x?.type==="output_text").map((x:any)=>s(x.text)).join("\n")
         :s((od as any)?.output_text);
-      raw=jsonText(txt);
+      try{raw=jsonText(txt)}
+      catch(_){
+        console.error("STAND_VISION_JSON_INVALID","provider=openai","model="+providerModel,"chars="+txt.length,"status="+s((od as any)?.status),"incomplete="+JSON.stringify((od as any)?.incomplete_details||null));
+        return reply(req,502,{ok:false,error:"VISION_JSON_INVALID",message:"Vision получил неполный или некорректный ответ модели. Повторите анализ — фото уже сохранено."});
+      }
       providerUsage=(od as any)?.usage||null;
     }
 
@@ -272,7 +356,13 @@ Deno.serve(async(req:Request)=>{
 
     return reply(req,200,{ok:true,cached:false,vision_status:vstatus,result:check,manager_findings:findings});
   }catch(e){
-    console.error("STAND_VISION_FAILED",e instanceof Error?e.message:String(e));
-    return reply(req,500,{ok:false,error:"VISION_FAILED",message:e instanceof Error?e.message:String(e)});
+    const msg=e instanceof Error?e.message:String(e);
+    const timedOut=(e as any)?.name==="AbortError"||msg.toLowerCase().includes("aborted");
+    console.error(timedOut?"STAND_VISION_TIMEOUT":"STAND_VISION_FAILED",msg);
+    return reply(req,timedOut?504:500,{
+      ok:false,
+      error:timedOut?"VISION_TIMEOUT":"VISION_FAILED",
+      message:timedOut?"Vision не успел завершить анализ за 55 секунд. Фото сохранено — можно повторить анализ.":msg
+    });
   }
 });
