@@ -1014,3 +1014,6 @@ grant execute on function public.crm_promotion_update_planned_qty_v236375(uuid,j
 
 revoke execute on function public.crm_promotion_confirm_quantity_v236375(uuid,jsonb,text) from public,anon;
 grant execute on function public.crm_promotion_confirm_quantity_v236375(uuid,jsonb,text) to authenticated,service_role;
+
+revoke execute on function public.crm_promotions_autolink_budget_v23630() from public,anon,authenticated;
+grant execute on function public.crm_promotions_autolink_budget_v23630() to service_role;
