@@ -139,7 +139,7 @@ Deno.serve(async(req:Request)=>{
      if(facts.length<2)throw Error("NOT_ENOUGH_VERIFIED_FACTS");
      const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
      const storyboard=await buildStoryboard(facts,product);
-     const {error:ue}=await db.from("triovist_infographic_v2_pilots").update({facts,storyboard,source_image_url:str(input.photo_url,700),status:"processing",stage:"AI storyboard",updated_at:new Date().toISOString()}).eq("id",pilot.id).eq("status","queued");
+     const {error:ue}=await db.from("triovist_infographic_v2_pilots").update({facts,storyboard,source_image_url:str(input.photo_url,700),status:"processing",stage:"AI storyboard",updated_at:new Date().toISOString()}).eq("id",pilot.id).in("status",["queued","processing"]);
      if(ue)throw ue;
      const {data:existing}=await db.from("triovist_infographic_v2_slides").select("slide_no").eq("pilot_id",pilot.id);
      if(!existing?.length){const {error:se}=await db.from("triovist_infographic_v2_slides").insert(storyboard.map((x:any)=>({pilot_id:pilot.id,slide_no:x.number,factual_ids:x.fact_ids,prompt:x.scene+" "+x.composition_note})));if(se)throw se;}
@@ -182,7 +182,7 @@ Deno.serve(async(req:Request)=>{
  if(action==="config")return make(req,200,{ok:true,version:"2.0-pilot",max_skus:1,slides:8,
   image_provider_ready:!!Deno.env.get("OPENAI_API_KEY"),
   text_provider_ready:!!(Deno.env.get("ANTHROPIC_API_KEY")||Deno.env.get("OPENAI_API_KEY")),
-  premium_model:model,bulk_release:false,requires_approval:true});
+  premium_model:model,bulk_release:false,requires_approval:true,can_start:leader});
  if(action==="list"){
   let q=db.from("triovist_infographic_v2_pilots").select("id,sku,product_name,group_name,owner_email,status,stage,completed_slides,total_slides,paid_images_started,created_at,updated_at,error_message")
    .order("created_at",{ascending:false}).limit(20);
