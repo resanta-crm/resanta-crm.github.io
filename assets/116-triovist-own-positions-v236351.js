@@ -9,6 +9,7 @@ const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const A=v=>Array.isArray(v)?v:[];
 const N=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
 const active=()=>!!document.getElementById('page-triovist')?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')==='triovist';
+const activeParser=()=>active()&&!!document.querySelector('#tr14-shell [data-tr14="parser"]')?.classList.contains('on');
 const dt=v=>{if(!v)return'—';try{return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(_){return String(v)}};
 const fullDt=v=>{if(!v)return'—';try{return new Date(v).toLocaleString('ru-RU')}catch(_){return String(v)}};
 const money=v=>N(v)==null?'—':N(v).toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN';
@@ -140,6 +141,7 @@ async function patchControl(force=false){
  }
 }
 document.addEventListener('click',e=>{
+ if(e.target.closest?.('#tr14-shell [data-tr14="parser"]')){setTimeout(watch,80);return}
  if(e.target.closest?.('[data-tp351-close]'))return close();
  if(e.target.closest?.('[data-tp351-refresh]'))return load(true);
  if(e.target.closest?.('[data-tp351-back]'))return load(false);
@@ -159,7 +161,7 @@ document.addEventListener('input',e=>{
  }
 },true);
 function watch(){
- if(!active())return;
+ if(!activeParser())return;
  patchControl();
  const root=document.getElementById('page-triovist');
  if(root&&typeof MutationObserver==='function'){
@@ -170,5 +172,5 @@ function watch(){
 }
 injectCss();
 [50,300,900,1800,3500].forEach(ms=>setTimeout(watch,ms));
-window.RESANTA_TRIOVIST_OWN_POSITIONS_V236351=Object.freeze({version:V,open,refresh:()=>load(true),exactPositions:true,historyDays:[1,3,7,14,30],futureReasonContext:true});
+window.RESANTA_TRIOVIST_OWN_POSITIONS_V236351=Object.freeze({version:V,open,refresh:()=>load(true),sync:watch,lazyByParserTab:true,exactPositions:true,historyDays:[1,3,7,14,30],futureReasonContext:true});
 })();

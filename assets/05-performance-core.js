@@ -399,7 +399,7 @@ function prefetchFeatureForPage(page,priority=65){
   }else if(page==='networks'){
     featureJob('networks',priority,async()=>{await window.crmPrefetchNetworksV22734?.();});
   }else if(page==='triovist'){
-    featureJob('triovist',priority,async()=>{await window.crmPrefetchTriovistV22734?.();});
+    // v23.6.379: Triovist owns its section-level lazy loader. Do not prefetch heavy dashboards.
   }
 }
 window.crmUltraPrefetchPageV22734=function(page,reason='manual'){
@@ -524,7 +524,7 @@ function pageKeys(p){
     budgets:['promotions'],
     debt:['debt'],
     networks:['networks','routes'],
-    triovist:['triovist'],
+    triovist:[],
     'gps-control':['gps','users'],
     workday:['gps']
   };
@@ -539,7 +539,7 @@ function renderActive(){
     }else if(p==='falling'&&typeof renderFallingClients==='function')renderFallingClients();
     else if(p==='payments'&&typeof renderPayments==='function')renderPayments();
     else if(p==='networks'&&typeof renderNetworks2273==='function')renderNetworks2273();
-    else if(p==='triovist'&&typeof renderTriovist==='function')renderTriovist();
+    else if(p==='triovist'){/* section router owns Triovist rendering */}
     else if(p==='gps-control'&&typeof v19RenderGpsControl==='function')v19RenderGpsControl(false);
     else if(p==='workday'&&typeof v19RenderManagerWorkday==='function')v19RenderManagerWorkday();
   }catch(e){console.warn(VERSION+' render active',e);}
@@ -608,9 +608,8 @@ async function refreshKey(key){
         if(active!=='networks')return false;
         await window.refreshNetworks2273?.(true);
       }else if(key==='triovist'){
-        if(active!=='triovist')return false;
-        try{window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales','stock','tasks','content');}catch(_){}
-        await window.triovistReload?.();
+        // v23.6.379: never launch a whole-Triovist refresh from the global CRM watcher.
+        return false;
       }else if(key==='gps'){
         if(active==='gps-control'){
           try{await v19LoadGpsAccess?.();}catch(_){}
@@ -809,7 +808,7 @@ const CACHEABLE=new Set([
   'dashboard','alerts','clients','tasks','visits','vip',
   'promotions','budgets','debt','managers','control',
   'sales','falling','abc','payments','users',
-  'route','routes-boss','my-routes','networks','triovist'
+  'route','routes-boss','my-routes','networks'
 ]);
 const RESOURCE_PAGES={
   clients:['dashboard','clients','vip','falling','managers','control','routes-boss','my-routes'],
@@ -820,7 +819,7 @@ const RESOURCE_PAGES={
   absences:['dashboard','tasks','managers','control','routes-boss','my-routes'],
   aliases:['clients'],negotiations:['clients'],kpi:['managers'],imports:['dashboard','payments','sales','falling','abc'],
   vips:['vip'],sales:['vip','sales','falling','abc'],payments:['payments'],promotions:['promotions','budgets'],
-  debt:['debt'],stock:['tasks','abc'],networks:['networks'],triovist:['triovist'],gps:['gps-control','workday']
+  debt:['debt'],stock:['tasks','abc'],networks:['networks'],gps:['gps-control','workday']
 };
 function active(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'');}catch(_){return'';}}
 function pageState(p){if(!state.has(p))state.set(p,{built:false,dirty:true,rendering:false,pending:false,timer:0,raf:0,idleTimer:0,idleHandle:0,seq:0,lastMs:0,lastAt:0});return state.get(p);}

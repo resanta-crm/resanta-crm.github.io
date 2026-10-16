@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_STANDS_V236367)return;
-const V='v23.6.367';
+const V='v23.6.379';
 const safe=v=>String(v??'');
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
@@ -125,8 +125,19 @@ async function rpc(name,args={}){
 async function reload(){
  if(state.loading)return;
  state.loading=true;
- try{state.boot=await rpc('crm_stands_bootstrap_v236346',{p_limit:150});render();}
- catch(e){console.error(V,e);if(root())root().innerHTML='<div class="st346-alert bad">Не удалось открыть раздел «Стенды»: '+esc(e?.message||e)+'</div>'}
+ try{
+  let lastError=null;
+  for(let attempt=0;attempt<2;attempt++){
+   try{state.boot=await rpc('crm_stands_bootstrap_v236346',{p_limit:150});render();return}
+   catch(e){
+    lastError=e;
+    const timeout=/57014|statement timeout|canceling statement/i.test(safe(e?.message||e));
+    if(!timeout||attempt>0)throw e;
+    await new Promise(r=>setTimeout(r,140));
+   }
+  }
+  if(lastError)throw lastError;
+ }catch(e){console.error(V,e);if(root())root().innerHTML='<div class="st346-alert bad">Не удалось открыть раздел «Стенды»: '+esc(e?.message||e)+'</div>'}
  finally{state.loading=false}
 }
 function kpi(label,value,sub=''){return '<div class="st346-kpi"><small>'+esc(label)+'</small><b>'+esc(value)+'</b>'+(sub?'<em>'+esc(sub)+'</em>':'')+'</div>'}
@@ -775,7 +786,7 @@ function install(){
  if(active())reload();
 }
 install();
-const STANDS_API=Object.freeze({version:V,reload,render,noPolling:true,lazy:true,serverSalesOnly:true,tabletReady:true,manualAdmin:true,history:true,primaryControlGuard:true,serverVision:true,visionFunction:'crm-stands-vision-v236347'});
+const STANDS_API=Object.freeze({version:V,reload,render,noPolling:true,lazy:true,fastBootstrap:true,timeoutRetryOnce:true,serverSalesOnly:true,tabletReady:true,manualAdmin:true,history:true,primaryControlGuard:true,serverVision:true,visionFunction:'crm-stands-vision-v236347'});
 window.RESANTA_STANDS_V236367=STANDS_API;
 window.RESANTA_STANDS_V236366=STANDS_API;
 window.RESANTA_STANDS_V236365=STANDS_API;

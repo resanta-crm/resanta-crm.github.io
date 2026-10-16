@@ -210,7 +210,7 @@ window.triovistAiSaveLeaderPlanV2348=async m=>{
     if(!database?.rpc)throw Error('Соединение с базой ещё не готово.');
     const r=await database.rpc('triovist_set_plan',{p_manager_email:m,p_period_month:selectedMonth(),p_plan_amount:Math.round(v*100)/100});if(r.error)throw r.error;
     D.delete(m);alert('✅ План '+managerName(m)+' сохранён: '+money(v));
-    if(typeof window.triovistReload==='function')await window.triovistReload();lastSig='';schedule(0);startProbe();
+    if(typeof window.triovistSalesReload==='function')await window.triovistSalesReload(true);lastSig='';schedule(0);startProbe();
   }catch(x){alert('Не удалось сохранить план: '+String(x?.message||x))}finally{saving=false}
 };
 
