@@ -186,6 +186,8 @@ Deno.serve(async(req:Request)=>{
     return send(req,200,{ok:true,groups:array(data)});
   }
   if(action==="batch-start"){
+    // V1 template rendering is deprecated after customer QA: historical jobs remain readable.
+    return send(req,409,{ok:false,error:"V1_GENERATION_RETIRED",message:"Старый генератор отключён: используйте премиальный пилот «Инфографика 2.0»."});
     const groups=[...new Set(array(input.groups).map(x=>clean(x,130)).filter(Boolean))];
     if(groups.length<1||groups.length>10)return send(req,400,{ok:false,error:"SELECT_1_TO_10_GROUPS"});
     const {data:known,error:ke}=await db.rpc("triovist_infographic_catalog_v236386",{p_manager:manager?email:null});
