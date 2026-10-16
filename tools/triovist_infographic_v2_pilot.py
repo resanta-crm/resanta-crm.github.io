@@ -106,13 +106,14 @@ def _draw_lines(draw,text,xy,width,start_size=58,max_lines=3,color="white",line_
     text=" ".join(str(text or "").split())
     if not text:return xy[1]
     size=start_size
-    while size>=24:
+    min_size=15 if start_size<=28 else 24
+    while size>=min_size:
         font=fnt(size,True)
         lines=wrap(draw,text,font,width,max_lines)
         if len(" ".join(lines))>=len(text) and all(draw.textbbox((0,0),v,font=font)[2]<=width for v in lines):
             break
         size-=3
-    if size<24:raise RuntimeError("Typography exceeds protected poster bounds")
+    if size<min_size:raise RuntimeError("Typography exceeds protected poster bounds")
     y=xy[1]
     for line in lines:
         draw.text((xy[0],y),line,font=font,fill=color,stroke_width=2,stroke_fill=(0,0,0,225))
