@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SAFE_TRIOVIST_V236200)return;
-const V='v23.6.200',KEY='resanta_tri_mot_month_v236200';
+const V='v23.6.379',KEY='resanta_tri_mot_month_v236200';
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):0;
 const money=v=>N(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -74,5 +74,5 @@ function waitForTriUi(){
  check();
 }
 setTimeout(waitForTriUi,120);
-window.RESANTA_SAFE_TRIOVIST_V236200=Object.freeze({version:V,parserOnlyInParserTab:true,motivationCompare:true,noPolling:true});
+window.RESANTA_SAFE_TRIOVIST_V236200=Object.freeze({version:V,refresh:()=>motivation(true),sync,lazyMotivation:true,independentMonth:true,parserOnlyInParserTab:true,motivationCompare:true,noPolling:true});
 })();
