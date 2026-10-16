@@ -291,7 +291,7 @@ Deno.serve(async(req:Request)=>{
   }).select("id,sku,status,product_name").single();
   if(ie)throw ie;return make(req,200,{ok:true,pilot});
  }
- if(["status","cancel","approve","preview","recover"].includes(action)){
+ if(["status","cancel","approve","preview","recover","save-copy"].includes(action)){
   const id=str(input.pilot_id,50);if(!uuid(id))return make(req,400,{ok:false,error:"BAD_ID"});
   // Use an explicit singleton array instead of .maybeSingle(): this gives us
   // separate and actionable responses for PostgREST failures versus truly missing projects.
@@ -326,10 +326,51 @@ Deno.serve(async(req:Request)=>{
     return make(req,200,{ok:true,pilot:arr(updated)[0],retry_paid_image_limit:9,
       message:"Тот же тест возвращён в очередь. Повторная генерация не запустится до фонового запуска обработчика."});
   }
+  if(action==="save-copy"){
+    if(!leader)return make(req,403,{ok:false,error:"DIRECTOR_ONLY"});
+    const audit=pilot.audit||{};
+    if(pilot.status!=="needs_review"||pilot.completed_slides!==8||
+       audit.editorial_version!=="2.1"||!audit.scene_layers_preserved)
+      return make(req,409,{ok:false,error:"COPY_ONLY_UNAVAILABLE",
+        message:"Для редактирования без оплаты нужны исходные сцены нового генератора 2.1. Старые PNG остаются без изменений."});
+    const num=Number(input.slide_no);
+    if(!Number.isInteger(num)||num<1||num>8)return make(req,400,{ok:false,error:"BAD_SLIDE"});
+    const title=checkedCaption(input.title,95),subtitle=checkedCaption(input.subtitle,120);
+    if(!title||title.length<4||/^\s*(?:обложка|преимущества|характеристики)\s*$/i.test(title))
+      return make(req,400,{ok:false,error:"BAD_TITLE",message:"Укажи конкретный заголовок без общих слов и рекламных обещаний."});
+    const story=arr(pilot.storyboard);
+    if(story.length!==8)return make(req,409,{ok:false,error:"STORYBOARD_NOT_FOUND"});
+    const {data:slideRows,error:qe}=await db.from("triovist_infographic_v2_slides")
+      .select("scene_path,status").eq("pilot_id",id).eq("slide_no",num).limit(1);
+    if(qe||arr(slideRows)[0]?.status!=="completed"||!arr(slideRows)[0]?.scene_path)
+      return make(req,409,{ok:false,error:"RAW_SCENE_NOT_AVAILABLE"});
+    const factIds=arr(story[num-1].fact_ids);
+    const linked=arr(pilot.facts).filter((f:any)=>factIds.includes(f.id));
+    const digits=new Set(
+      [...linked.map((f:any)=>String(f.value)),String(pilot.product_name),String(pilot.sku)]
+      .flatMap(v=>v.match(/\d+(?:[.,]\d+)?/g)||[]).map(v=>v.replace(",",".")));
+    if([...title.matchAll(/\d+(?:[.,]\d+)?/g),...subtitle.matchAll(/\d+(?:[.,]\d+)?/g)]
+       .some(x=>!digits.has(x[0].replace(",","."))))
+      return make(req,400,{ok:false,error:"UNVERIFIED_NUMBER",
+        message:"В тексте обнаружена цифра, не подтверждённая для этого слайда. Проверь привязанные характеристики."});
+    const pending=[...new Set([...arr(audit.pending_recompose),num])];
+    const revised=story.map((x:any,i:number)=>i===num-1?{...x,title,subtitle}:x);
+    const {error:ue}=await db.from("triovist_infographic_v2_pilots")
+      .update({storyboard:revised,
+        audit:{...audit,pending_recompose:pending,copy_revised_at:new Date().toISOString()},
+        stage:"Редактура: ожидает пересборки PNG без новых платных запросов",
+        updated_at:new Date().toISOString()})
+      .eq("id",id).eq("status","needs_review");
+    if(ue)throw ue;
+    return make(req,200,{ok:true,pending_recompose:pending,
+      message:"Текст сохранён. Фоновой обработчик обновит PNG без генерации нового изображения."});
+  }
   if(action==="approve"){
     if(!leader)return make(req,403,{ok:false,error:"LEADER_ONLY"});
     if(pilot.status!=="needs_review"||pilot.completed_slides!==8)return make(req,409,{ok:false,error:"NOT_READY"});
-    if(pilot.audit?.editorial_version!=="2.1"||!pilot.audit?.hero_verified||pilot.audit?.requires_visual_review!==true)
+    if(pilot.audit?.editorial_version!=="2.1"||!pilot.audit?.hero_verified||
+       !pilot.audit?.scene_layers_preserved||arr(pilot.audit?.pending_recompose).length||
+       pilot.audit?.requires_visual_review!==true)
       return make(req,409,{ok:false,error:"QA_V21_REQUIRED",message:"Этот комплект сделан до редакционной проверки 2.1. Не утверждайте старые изображения с ошибками; проверьте новую версию."});
     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({status:"approved",stage:"Образец утверждён",updated_at:new Date().toISOString()}).eq("id",id).eq("status","needs_review");if(e)throw e;
     return make(req,200,{ok:true,status:"approved",bulk_release:false});
