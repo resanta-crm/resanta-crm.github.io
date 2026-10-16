@@ -10,7 +10,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const text=(x,n=200)=>String(x??'').replace(/\s+/g,' ').trim().slice(0,n);
 const arr=x=>Array.isArray(x)?x:[];
 const getDb=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
-let mount=null,context=null,project=null,mode='professional',concept='rational',photo='',photoName='',items=[],saved=[],busy=false,searchTimer=null,epoch=0,started=false;
+let mount=null,context=null,project=null,mode='professional',concept='rational',photo='',photoName='',items=[],saved=[],selectedSku='',busy=false,searchTimer=null,epoch=0,started=false;
 const brandStyle=name=>{
  const n=String(name||'').toLowerCase();
  if(n.includes('huter'))return {brand:'HUTER',primary:'#f0a300',dark:'#29230c',pale:'#fff8e6'};
@@ -61,7 +61,10 @@ function errorMessage(err){
 async function invoke(action,extras={}){
  const d=getDb();if(!d?.functions)throw Error('Подключение к CRM ещё не готово');
  const {data,error}=await d.functions.invoke(FUNCTION,{body:{action,...extras}});
- if(error)throw Error('Сервер инфографики не ответил: '+errorMessage(error));
+ if(error){
+   let detail='';try{const body=await error.context?.json?.();detail=body?.message||body?.error||''}catch(_){}
+   throw Error(detail||'Сервер инфографики не ответил: '+errorMessage(error));
+ }
  if(!data?.ok)throw Error(data?.message||data?.error||'Сервер вернул ошибку');
  return data;
 }
@@ -90,6 +93,7 @@ async function search(q){
  items=d.items||[];renderResults();
 }
 function createIntro(sku){
+ selectedSku=String(sku||'');
  const selected=items.find(r=>String(r.sku)===String(sku));
  const area=mount?.querySelector('#tig385-current');
  if(!area||!selected)return;
@@ -196,7 +200,7 @@ function render(){
  if(!mount)return;
  mount.innerHTML='<div class="tig385">'+sectionIntro()+toolbar()+searchHtml()+savedHtml()+(project?projectHtml():'')+
  '<div id="tig385-status" aria-live="polite"></div></div>';
- renderResults();
+ renderResults();if(selectedSku)createIntro(selectedSku);
 }
 function status(message,isError=false){
  const el=mount?.querySelector('#tig385-status');
@@ -299,7 +303,7 @@ function handleInput(e){
  searchTimer=setTimeout(()=>search(val).catch(x=>status(errorMessage(x),true)),330);
 }
 async function open(el,ctx){
- if(!el)return;installCss();mount=el;context=ctx||{};project=null;photo='';photoName='';mode='professional';concept='rational';epoch++;
+ if(!el)return;installCss();mount=el;context=ctx||{};project=null;photo='';photoName='';mode='professional';concept='rational';selectedSku='';items=[];epoch++;
  if(!el.__tig385Bound){
   el.__tig385Bound=true;
   el.addEventListener('click',handleClick);
