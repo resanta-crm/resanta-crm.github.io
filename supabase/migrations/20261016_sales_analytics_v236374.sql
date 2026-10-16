@@ -412,8 +412,10 @@ begin
   ),
   global_diag as (
     select
-      round(coalesce(sum(revenue) filter(where resolved_client_id is null and nullif(trim(coalesce(resolved_manager,'')),'') is null),0),2) fully_unassigned_revenue,
-      count(*) filter(where resolved_client_id is null and nullif(trim(coalesce(resolved_manager,'')),'') is null)::int fully_unassigned_rows
+      round(coalesce(sum(revenue) filter(where resolved_client_id is null and nullif(trim(coalesce(resolved_manager,'')),'') is null and month between v_start and v_end),0),2) fully_unassigned_current_revenue,
+      round(coalesce(sum(revenue) filter(where resolved_client_id is null and nullif(trim(coalesce(resolved_manager,'')),'') is null and month between v_prev_start and v_prev_end),0),2) fully_unassigned_previous_revenue,
+      count(*) filter(where resolved_client_id is null and nullif(trim(coalesce(resolved_manager,'')),'') is null and month between v_start and v_end)::int fully_unassigned_current_rows,
+      count(*) filter(where resolved_client_id is null and nullif(trim(coalesce(resolved_manager,'')),'') is null and month between v_prev_start and v_prev_end)::int fully_unassigned_previous_rows
     from resolved
   ),
   freshness as (
