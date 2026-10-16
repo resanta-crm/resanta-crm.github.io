@@ -75,10 +75,6 @@ function toolbar(){
  '<button class="'+(mode==='professional'?'sel':'')+'" data-ig-mode="professional">★ Профессиональный · 7 слайдов</button>'+
  '<button class="'+(mode==='ab'?'sel':'')+'" data-ig-mode="ab">A/B · 3 концепции</button></div>';
 }
-function resultsHtml(){
- if(!items.length)return '<p class="tig385-sub">Поиск по артикулу или названию. Выберите товар из базы 21vek.</p>';
- return items.map((r,i)=>'<button class="tig385-item" data-ig-sku="'+esc(r.sku)+'"><b>'+esc(r.sku)+'</b><span>'+esc(r.product_name)+'</span><small>'+esc(r.subgroup||r.category||'')+' · '+(r.manager_email||'').includes('krishtal')?'':'').join('');
-}
 function searchHtml(){
  return '<div class="tig385-card"><h4>1. Выберите товар</h4><div class="tig385-search"><input id="tig385-q" placeholder="Артикул 67/1/44 или название товара" autocomplete="off"><button data-ig-search>Поиск</button></div><div id="tig385-results" class="tig385-results"></div><div id="tig385-current"></div></div>';
 }
@@ -225,13 +221,19 @@ async function png(number){
 async function loadPhoto(file){
  if(!file||!/^image\/(png|jpeg|webp)$/.test(file.type))throw Error('Фото должно быть JPG, PNG или WebP');
  if(file.size>8*1024*1024)throw Error('Размер фото больше 8 МБ');
- const result=await new Promise((ok,no)=>{
+ const source=await new Promise((ok,no)=>{
    const reader=new FileReader();reader.onload=()=>ok(String(reader.result||''));reader.onerror=()=>no(Error('Не удалось прочитать фото'));
    reader.readAsDataURL(file);
  });
- const im=await new Promise((ok,no)=>{const img=new Image();img.onload=()=>ok(img);img.onerror=()=>no(Error('Файл не является изображением'));img.src=result});
- if(im.naturalWidth<650||im.naturalHeight<650)throw Error('Слишком маленькое фото: необходимо хотя бы 650 × 650');
- photo=result;photoName=file.name;render();
+ const image=await new Promise((ok,no)=>{const img=new Image();img.onload=()=>ok(img);img.onerror=()=>no(Error('Файл не является изображением'));img.src=source});
+ if(image.naturalWidth<650||image.naturalHeight<650)throw Error('Слишком маленькое фото: необходимо хотя бы 650 × 650');
+ const scale=Math.min(1,1400/Math.max(image.naturalWidth,image.naturalHeight));
+ const canvas=document.createElement('canvas');canvas.width=Math.round(image.naturalWidth*scale);canvas.height=Math.round(image.naturalHeight*scale);
+ const ctx=canvas.getContext('2d');if(!ctx)throw Error('Браузер не поддерживает подготовку фото');
+ if(file.type!=='image/png'){ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height)}
+ ctx.drawImage(image,0,0,canvas.width,canvas.height);
+ photo=canvas.toDataURL(file.type==='image/png'?'image/png':'image/jpeg',0.84);
+ photoName=file.name;render();
 }
 async function doGenerate(sku){
  if(busy)return;busy=true;status('Анализируем подтверждённые характеристики и конкурентов…');
