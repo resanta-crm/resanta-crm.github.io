@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SAFE_TRIOVIST_V236200)return;
-const V='v23.6.379',KEY='resanta_tri_mot_month_v236200';
+const V='v23.6.380',KEY='resanta_tri_mot_month_v236200';
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const N=v=>Number.isFinite(Number(v))?Number(v):0;
 const money=v=>N(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -23,29 +23,37 @@ function months(){const a=[];let m='2026-08',end=currentMonth();while(m<=end){a.
 function host(){
  const shell=document.getElementById('tr14-shell');if(!shell)return null;
  let h=document.getElementById('tri-mot-compare-v236200');
- if(!h){h=document.createElement('div');h.id='tri-mot-compare-v236200';h.className='card';h.style.cssText='margin:12px 0;padding:14px;border:1px solid #bfdbfe;background:#f8fbff';shell.insertAdjacentElement('afterend',h)}
+ if(!h){h=document.createElement('div');h.id='tri-mot-compare-v236200';h.className='card';h.style.cssText='margin:16px 0 12px;padding:14px;border:1px solid #bfdbfe;background:#f8fbff;position:relative;z-index:1;clear:both';shell.insertAdjacentElement('afterend',h)}
  h.style.setProperty('display',tab()==='motivation'?'block':'none','important');return h;
 }
 function managerCard(cur,prev){
  const d=N(cur.total_rate)-N(prev?.total_rate),delta=(d>0?'+':'')+(d*100).toFixed(2).replace('.',',')+'%';
  return '<div style="background:#fff;border:1px solid #dbeafe;border-radius:12px;padding:13px"><div style="display:flex;justify-content:space-between;gap:10px"><div><b style="font-size:17px">'+E(cur.manager_name)+'</b><div style="font-size:11px;color:#64748b">'+E(label(cur.month))+' ↔ '+E(label(prev?.month||shift(cur.month,-1)))+'</div></div><div style="text-align:right"><b style="font-size:27px;color:#0b63ad">'+rate(cur.total_rate)+'</b><div style="font-size:11px;color:'+(d>0?'#166534':d<0?'#b91c1c':'#64748b')+'">изменение '+delta+'</div></div></div><div style="display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:7px;margin-top:10px"><div style="padding:8px;background:#f8fafc;border-radius:8px"><small>ПЛАН</small><br><b>'+pct(cur.plan_pct)+'</b><br><span style="font-size:10px;color:#64748b">KPI +'+rate(cur.plan_rate)+'</span></div><div style="padding:8px;background:#f8fafc;border-radius:8px"><small>РОСТ Г/Г</small><br><b>'+(N(cur.growth_pct)>0?'+':'')+pct(cur.growth_pct)+'</b><br><span style="font-size:10px;color:#64748b">KPI +'+rate(cur.growth_rate)+'</span></div><div style="padding:8px;background:#f8fafc;border-radius:8px"><small>ЗАДАЧИ</small><br><b>'+pct(cur.task_score)+'</b><br><span style="font-size:10px;color:#64748b">KPI +'+rate(cur.task_rate)+'</span></div><div style="padding:8px;background:#f8fafc;border-radius:8px"><small>ОБЩИЙ TRIOVIST</small><br><b>'+pct(cur.team_pct)+'</b><br><span style="font-size:10px;color:#64748b">KPI +'+rate(cur.team_rate)+'</span></div></div><div style="font-size:11px;color:#64748b;margin-top:8px">Продажи: <b>'+money(cur.fact)+'</b> из '+money(cur.plan)+' · предыдущий месяц: <b>'+rate(prev?.total_rate||0)+'</b></div></div>';
 }
-let flight=null;
+let flight=null,lastMonth='',lastAt=0,lastData=null;
+function paintMotivation(h,m,data){
+ const rows=Array.isArray(data?.rows)?data.rows:[],prevM=ym(data?.compare_month||shift(m,-1)),cur=rows.filter(x=>ym(x.month)===m),pr=rows.filter(x=>ym(x.month)===prevM);
+ const body=h.querySelector('[data-mbody]');
+ if(body)body.innerHTML='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'+cur.map(x=>managerCard(x,pr.find(y=>y.manager_email===x.manager_email))).join('')+'</div><div style="font-size:10px;color:#64748b;margin-top:8px">База 1,50% не уменьшается. Финальная мотивация фиксируется после закрытия месяца.</div>';
+ const base=document.getElementById('tri-period-month');if(base&&ym(base.value)!==m)base.value=m;
+}
 async function motivation(force=false){
  if(!triActive()||tab()!=='motivation')return;
- const h=host();if(!h)return;if(flight&&!force)return flight;
+ const h=host();if(!h)return;
  const m=selected(),opts=months().map(x=>'<option value="'+x+'" '+(x===m?'selected':'')+'>'+E(label(x))+'</option>').join('');
  h.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:end;flex-wrap:wrap"><div><b style="font-size:16px">🏆 Контроль мотивации</b><div style="font-size:11px;color:#64748b">Месяц и сравнение с предыдущим месяцем. Расчёт 1,5% + KPI до 0,5%.</div></div><div style="display:flex;gap:6px;align-items:end"><button type="button" class="btn-secondary" data-mprev>←</button><div><label class="form-label">Месяц</label><select class="form-input" data-mmonth>'+opts+'</select></div><button type="button" class="btn-secondary" data-mnext '+(m>=currentMonth()?'disabled':'')+'>→</button><button type="button" class="btn-secondary" data-mrefresh>↻ Обновить</button></div></div><div data-mbody style="margin-top:10px;color:#64748b">Считаю…</div>';
+ if(!force&&lastData&&lastMonth===m&&Date.now()-lastAt<60000){paintMotivation(h,m,lastData);return lastData}
+ if(flight)return flight;
  flight=(async()=>{
-   const client=typeof db!=='undefined'?db:window.db;if(!client?.rpc)return;
+   const client=typeof db!=='undefined'?db:window.db;if(!client?.rpc)return null;
    const {data,error}=await client.rpc('triovist_motivation_compare_v236199',{p_month:m+'-01'});if(error)throw error;
-   const rows=Array.isArray(data?.rows)?data.rows:[],prevM=ym(data?.compare_month||shift(m,-1)),cur=rows.filter(x=>ym(x.month)===m),pr=rows.filter(x=>ym(x.month)===prevM);
-   const body=h.querySelector('[data-mbody]');if(body)body.innerHTML='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'+cur.map(x=>managerCard(x,pr.find(y=>y.manager_email===x.manager_email))).join('')+'</div><div style="font-size:10px;color:#64748b;margin-top:8px">База 1,50% не уменьшается. Финальная мотивация фиксируется после закрытия месяца.</div>';
-   const base=document.getElementById('tri-period-month');if(base&&ym(base.value)!==m)base.value=m
- })().catch(e=>{const body=h.querySelector('[data-mbody]');if(body)body.innerHTML='<div style="color:#b91c1c">Ошибка расчёта: '+E(e.message||e)+'</div>'}).finally(()=>flight=null);
+   lastMonth=m;lastAt=Date.now();lastData=data||{};
+   paintMotivation(h,m,lastData);
+   return lastData;
+ })().catch(e=>{const body=h.querySelector('[data-mbody]');if(body)body.innerHTML='<div style="color:#b91c1c">Ошибка расчёта: '+E(e.message||e)+'</div>';return null}).finally(()=>flight=null);
  return flight;
 }
-function choose(m){if(!/^\d{4}-\d{2}$/.test(m))return;try{localStorage.setItem(KEY,m)}catch(_){};motivation(true)}
+function choose(m){if(!/^\d{4}-\d{2}$/.test(m))return;try{localStorage.setItem(KEY,m)}catch(_){};lastMonth='';lastData=null;motivation(true)}
 function sync(){
  if(!triActive())return;
  syncParser();host();
@@ -74,5 +82,5 @@ function waitForTriUi(){
  check();
 }
 setTimeout(waitForTriUi,120);
-window.RESANTA_SAFE_TRIOVIST_V236200=Object.freeze({version:V,refresh:()=>motivation(true),sync,lazyMotivation:true,independentMonth:true,parserOnlyInParserTab:true,motivationCompare:true,noPolling:true});
+window.RESANTA_SAFE_TRIOVIST_V236200=Object.freeze({version:V,refresh:()=>motivation(true),sync,lazyMotivation:true,independentMonth:true,minuteCache:true,parserOnlyInParserTab:true,motivationCompare:true,noPolling:true});
 })();
