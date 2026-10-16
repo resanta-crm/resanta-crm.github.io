@@ -174,7 +174,7 @@ async function loadInfographicBatch(){
  const found=document.querySelector('script[data-tr14-infographic-batches]');
  if(!found){
   const s=document.createElement('script');s.async=true;s.dataset.tr14InfographicBatches='1';
-  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.386';document.head.appendChild(s);
+  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.387';document.head.appendChild(s);
  }
  for(let i=0;i<50;i++){
   const mod=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(mod?.open)return mod;
