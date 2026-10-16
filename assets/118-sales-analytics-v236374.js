@@ -8,7 +8,7 @@
 if(window.RESANTA_SALES_ANALYTICS_V236374)return;
 const V='v23.6.374',TTL=60000;
 const monthCache=new Map(),yoyCache=new Map();
-let monthFlight=null,yoyFlight=null;
+const monthFlights=new Map();
 const MGRS=['Руднев','Ачинович','Шкуран'];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -98,9 +98,9 @@ async function fetchMonth(force=false){
   const d=dbx();if(!d)return null;
   const k=monthKey(),hit=monthCache.get(k);
   if(!force&&hit&&Date.now()-hit.at<TTL){renderMonth(hit.data);return hit.data}
-  if(monthFlight)return monthFlight;
+  if(monthFlights.has(k))return monthFlights.get(k);
   setMonthLoading();monthState.loading=true;
-  monthFlight=(async()=>{
+  const flight=(async()=>{
     const {data,error}=await d.rpc('crm_sales_month_dashboard_v236374',{p_month:dateArg(monthState.month),p_manager:effectiveManager()});
     if(error)throw error;
     const out=data||{};monthCache.set(k,{at:Date.now(),data:out});
@@ -113,8 +113,9 @@ async function fetchMonth(force=false){
     const x=document.getElementById('sales-server-diag-v236374');
     if(x)x.innerHTML='<div style="padding:8px 10px;border-radius:8px;background:var(--rb);color:var(--r);font-size:12px">Не удалось загрузить аналитику продаж: '+esc(e?.message||e)+'</div>';
     return null;
-  }).finally(()=>{monthFlight=null;monthState.loading=false});
-  return monthFlight;
+  }).finally(()=>{monthFlights.delete(k);monthState.loading=false});
+  monthFlights.set(k,flight);
+  return flight;
 }
 function renderSales374(){setFreshness();ensureFilter();setTimeout(()=>fetchMonth(false),0)}
 window.renderSales=renderSales374;try{renderSales=renderSales374}catch(_){}
