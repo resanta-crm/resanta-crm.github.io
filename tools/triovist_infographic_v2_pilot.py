@@ -48,8 +48,8 @@ def image_to_reference(photo):
     p=photo.convert("RGB")
     p.thumbnail((1180,1180),Image.Resampling.LANCZOS)
     b=io.BytesIO()
-    p.save(b,"PNG",optimize=True)
-    if b.tell()>4_500_000:raise RuntimeError("Reference photo too large; manual review required")
+    p.save(b,"JPEG",quality=90,optimize=True,subsampling=0)
+    if b.tell()>3_500_000:raise RuntimeError("Reference photo too large; manual review required")
     return base64.b64encode(b.getvalue()).decode("ascii")
 def brand_colors(name):
     n=(name or "").casefold()
