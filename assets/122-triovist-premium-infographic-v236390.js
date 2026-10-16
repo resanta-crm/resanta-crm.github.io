@@ -72,8 +72,12 @@ function currentHtml(){
  (['queued','processing'].includes(status)?'<button class="danger" data-v2-cancel>⏹ Остановить тест</button>':'')+
  (mimeRepair?'<button class="prime" data-v2-recover>↻ Продолжить после исправления PNG</button>':'')+
  (done?'<button class="prime" data-v2-download-all>↓ Скачать 8 PNG одним ZIP</button>':'')+
- (status==='needs_review'?'<button data-v2-approve>✓ Утвердить образец</button>':'')+'</div>'+
+ (status==='needs_review'&&x.audit?.editorial_version==='2.1'&&!a(x.audit?.pending_recompose).length&&x.audit?.hero_verified&&x.audit?.scene_layers_preserved?'<button data-v2-approve>✓ Утвердить образец</button>':'')+'</div>'+
  '<p class="tiv2390-caption">'+h(x.stage||'')+'</p>'+
+ (status==='needs_review'&&x.audit?.editorial_version!=='2.1'?
+   '<div class="tiv2390-warn">Этот комплект был создан старым движком 2.0. Сохраняем изображения и ZIP, но не утверждаем их по новому стандарту: в них нет гарантированной редакционной проверки и отдельных исходных сцен.</div>':'')+
+ (a(x.audit?.pending_recompose).length?
+   '<div class="tiv2390-note">Текстовые исправления ожидают фоновую пересборку PNG (без платных запросов к графическому ИИ).</div>':'')+
  (mimeRepair?'<div class="tiv2390-warn">Исправлена настройка PNG в хранилище. Первая платная картинка не сохранилась. Для полного комплекта из 8 PNG потребуется ещё до 8 платных запросов (до 9 всего). Повтор будет только после твоего подтверждения.</div>':'')+
  (x.error_message&&!mimeRepair?'<div class="tiv2390-warn">'+h(x.error_message)+'</div>':'')+
  (status==='approved'?'<div class="tiv2390-note">Образец утверждён директором. Автоматическая массовая генерация всё ещё закрыта до отдельного включения производственного конвейера.</div>':'')+
@@ -81,17 +85,29 @@ function currentHtml(){
 }
 function previews(){
  if(!images.length)return '';
- return '<h4>Предпросмотр реальных сохранённых изображений</h4><p>Здесь не шаблоны. Каждая картинка создана графическим ИИ и дополнена точными текстами. Перед публикацией проверь соответствие модели и комплектующих.</p>'+
- '<div class="tiv2390-grid">'+images.map(im=>'<div class="tiv2390-thumb">'+
+ const canEdit=active?.audit?.editorial_version==='2.1'&&active?.audit?.scene_layers_preserved&&
+       active?.status==='needs_review';
+ const story=a(active?.storyboard);
+ return '<h4>Предпросмотр готовых PNG</h4><p>Точные характеристики на обложке и независимые рекламные сцены. Для нового комплекта 2.1 можно исправить русские подписи без платной генерации изображений.</p>'+
+ '<div class="tiv2390-grid">'+images.map(im=>{
+ const slide=story[im.slide_no-1]||{};
+ return '<div class="tiv2390-thumb">'+
  '<a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="'+h(im.url)+'" alt="Слайд '+im.slide_no+'"></a>'+
  '<b>Слайд '+im.slide_no+' из 8</b><a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer">Открыть полностью ↗</a>'+
- '</div>').join('')+'</div>';
+ (canEdit?'<details style="margin-top:9px"><summary style="cursor:pointer;color:#145c96;font-size:12px">Редактировать подпись</summary>'+
+ '<label class="tiv2390-caption">Заголовок</label>'+
+ '<input class="tiv2390-input" maxlength="95" style="width:100%" data-v2-copy-title="'+im.slide_no+'" value="'+h(slide.title||'')+'">'+
+ '<label class="tiv2390-caption">Подзаголовок</label>'+
+ '<input class="tiv2390-input" maxlength="120" style="width:100%" data-v2-copy-subtitle="'+im.slide_no+'" value="'+h(slide.subtitle||'')+'">'+
+ '<button style="margin-top:6px" data-v2-save-copy="'+im.slide_no+'">Сохранить текст без оплаты</button>'+
+ '</details>':'')+'</div>';
+ }).join('')+'</div>';
 }
 function draw(){
  if(!root?.isConnected)return;
- root.innerHTML='<div class="tiv2390"><div class="tiv2390-header"><div><h3>✨ Инфографика 2.0 — премиальная студия</h3>'+
- '<p>Эталон: 8 разных рекламных сцен, объёмный свет, точная модель, фирменный дизайн, отдельная типографика и проверка перед массовым запуском.</p></div>'+
- '<span class="tiv2390-tag">Пилот · 1 SKU</span></div>'+banner()+
+ root.innerHTML='<div class="tiv2390"><div class="tiv2390-header"><div><h3>✨ Инфографика 2.1 — премиальная студия</h3>'+
+ '<p>Теперь: 4–5 проверенных характеристик на главной обложке, разные композиции, редактура русского текста и отдельное сохранение чистых сцен.</p></div>'+
+ '<span class="tiv2390-tag">2.1 · Пилот 1 SKU</span></div>'+banner()+
  '<div class="tiv2390-actions"><input class="tiv2390-input" data-v2-sku value="'+h(selectedSku)+'" placeholder="Введите точный артикул, например 74/1/20" aria-label="Артикул для премиального пилота">'+
  '<button class="prime" data-v2-start '+(busy||!config?.image_provider_ready||!config?.text_provider_ready||!config?.can_start||['queued','processing'].includes(active?.status)?'disabled':'')+'>🚀 Создать 8 профессиональных слайдов</button></div>'+
  '<p class="tiv2390-caption">Запуск одного SKU потребует до 8 платных операций генерации изображений. Автоповторы отключены. Ни одна карточка не публикуется автоматически.</p>'+
@@ -101,7 +117,9 @@ function draw(){
 }
 function schedule(){
  clearTimeout(timer);timer=null;
- if(!root?.isConnected||!active||!['queued','processing'].includes(active.status))return;
+ if(!root?.isConnected||!active||!
+    (['queued','processing'].includes(active.status)||
+     (active.status==='needs_review'&&a(active.audit?.pending_recompose).length)))return;
  timer=setTimeout(async()=>{try{await status()}catch(e){message=e.message;draw()}schedule()},19000);
 }
 async function status(){
@@ -169,6 +187,18 @@ async function cancel(){
  const d=await req('cancel',{pilot_id:active.id});
  active.status=d.status;message='Пилот остановлен';await status();
 }
+async function saveCopy(n){
+ if(!active||active.audit?.editorial_version!=='2.1')throw Error('Текстовый редактор доступен только для новых комплектов 2.1');
+ const title=root?.querySelector('[data-v2-copy-title="'+n+'"]')?.value||'';
+ const subtitle=root?.querySelector('[data-v2-copy-subtitle="'+n+'"]')?.value||'';
+ if(!title.trim())throw Error('Введи заголовок слайда');
+ if(!window.confirm('Сохранить исправленный русский текст на слайде '+n+'? Фоновый сервер перерисует PNG из сохранённой сцены без платной генерации новой картинки.'))return;
+ busy=true;message='Сохраняю редактуру слайда '+n+'…';
+ try{await req('save-copy',{pilot_id:active.id,slide_no:n,title,subtitle});
+ message='Текст принят. Графический ИИ повторно НЕ вызывается. Ожидаем фоновую пересборку PNG.';
+ await status();
+ }finally{busy=false;draw()}
+}
 async function approve(){
  if(!active||!window.confirm('Подтверждаешь, что все 8 изображений визуально соответствуют реальной модели, характеристики верны, комплектация не придумана и качество устраивает?'))return;
  await req('approve',{pilot_id:active.id});await status();
@@ -198,6 +228,7 @@ async function clicked(event){
   if(button.hasAttribute('data-v2-cancel')){await cancel();return}
   if(button.hasAttribute('data-v2-recover')){await recover();return}
   if(button.hasAttribute('data-v2-approve')){await approve();return}
+  if(button.hasAttribute('data-v2-save-copy')){await saveCopy(Number(button.dataset.v2SaveCopy));return}
   if(button.hasAttribute('data-v2-download-all')){await downloadAll();return}
   if(button.hasAttribute('data-v2-load')){const p=pilots.find(x=>x.id===button.dataset.v2Load);if(p){active=p;images=[];await status()}return}
  }catch(e){message=String(e.message||e);draw()}
@@ -211,5 +242,5 @@ async function open(parent){
  if(!root.dataset.bound){root.dataset.bound='1';root.addEventListener('click',clicked);root.addEventListener('input',entered)}
  message='';draw();try{await refresh()}catch(e){message=e.message;draw()}
 }
-window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:'23.6.390',open,refresh,isolated:true,requiresManualQA:true,maxPilotSku:1});
+window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:'23.6.395',open,refresh,isolated:true,requiresManualQA:true,maxPilotSku:1});
 })();
