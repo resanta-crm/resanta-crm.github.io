@@ -153,7 +153,7 @@ Deno.serve(async(req:Request)=>{
     if(!leader&&row.manager_email!==email)return send(req,403,{ok:false,error:"ACCESS_DENIED"});
     if(action==="get")return send(req,200,{ok:true,project:row});
     if(action==="approve"&&!leader)return send(req,403,{ok:false,error:"LEADER_ONLY"});
-    const changes=action==="approve"?{state:"approved"}:{concept_key:clean(input.concept_key,40)};
+    const changes=action==="approve"?{state:"approved"}:{concept_key:clean(input.concept_key,40),state:"draft"};
     if(action==="select"&&!array(row.design?.concepts).some((x:any)=>x.key===changes.concept_key))return send(req,400,{ok:false,error:"UNKNOWN_CONCEPT"});
     const {data:updated,error:ue}=await db.from("triovist_infographics_v1").update({...changes,updated_at:new Date().toISOString()}).eq("id",id).select("*").single();
     if(ue)throw ue;return send(req,200,{ok:true,project:updated});
