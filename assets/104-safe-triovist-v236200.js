@@ -41,7 +41,7 @@ async function motivation(force=false){
    const {data,error}=await client.rpc('triovist_motivation_compare_v236199',{p_month:m+'-01'});if(error)throw error;
    const rows=Array.isArray(data?.rows)?data.rows:[],prevM=ym(data?.compare_month||shift(m,-1)),cur=rows.filter(x=>ym(x.month)===m),pr=rows.filter(x=>ym(x.month)===prevM);
    const body=h.querySelector('[data-mbody]');if(body)body.innerHTML='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'+cur.map(x=>managerCard(x,pr.find(y=>y.manager_email===x.manager_email))).join('')+'</div><div style="font-size:10px;color:#64748b;margin-top:8px">База 1,50% не уменьшается. Финальная мотивация фиксируется после закрытия месяца.</div>';
-   const base=document.getElementById('tri-period-month');if(base&&ym(base.value)!==m){base.value=m;base.dispatchEvent(new Event('change',{bubbles:true}))}
+   const base=document.getElementById('tri-period-month');if(base&&ym(base.value)!==m)base.value=m
  })().catch(e=>{const body=h.querySelector('[data-mbody]');if(body)body.innerHTML='<div style="color:#b91c1c">Ошибка расчёта: '+E(e.message||e)+'</div>'}).finally(()=>flight=null);
  return flight;
 }
