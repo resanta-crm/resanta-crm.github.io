@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.14"
+PARSER_VERSION="market-auto-v6.15"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2268,14 +2268,22 @@ def earth_auger_relative_similarity(a: float,b: float,full: float,close: float,p
 def concrete_mixer_crown_family(v: Any) -> str:
     n=norm(v)
     if any(x in n for x in ("чугун","cast iron","castiron")): return "cast_iron"
-    if any(x in n for x in ("полиамид","пластик","пластмасс","полимер","polyamide","plastic","polymer")): return "polymer"
     if any(x in n for x in ("сталь","стальн","steel")): return "steel"
+    if any(x in n for x in ("полиамид","полиуретан","пластик","пластмасс","полимер","polyamide","polyurethane","plastic","polymer")): return "polymer"
+    # "Металлический" without a metal grade is not enough to call the crown
+    # steel or cast iron. Keep it visible, but mark the comparison incomplete.
+    if any(x in n for x in ("металл","металлическ","metal")): return "metal_unspecified"
     return n
 
 
 def concrete_mixer_required_missing(ours: dict,comp: dict) -> bool:
-    required=("drum_capacity_l","crown_material","input_power_w")
-    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+    for side in (ours,comp):
+        if side.get("drum_capacity_l") is None or side.get("input_power_w") is None:
+            return True
+        fam=concrete_mixer_crown_family(side.get("crown_material"))
+        if fam not in ("cast_iron","polymer","steel"):
+            return True
+    return False
 
 
 def concrete_mixer_relative_similarity(a: float,b: float,full: float,close: float,conditional: float) -> float:
