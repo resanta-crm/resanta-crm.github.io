@@ -3918,6 +3918,16 @@ window.addEventListener('pageshow',function(){
     if(manual&&!confirm('Пересобрать месячный план по подгруппам для '+name+'?\n\nЦель: до '+target+' сильных задач-подгрупп со сроком '+fmtDate(dueDate)+'.\n\nВнутри каждой задачи CRM покажет до 12 приоритетных SKU. Несогласованный старый план этого менеджера будет заменён. Согласованные и выполняемые задачи останутся без изменений.'))return;
     const btn=document.getElementById('tri-task-generate-btn');if(btn)btn.disabled=true;
     try{
+      // v23.6.379: on normal tab open we intentionally do NOT load the old heavy
+      // task/commercial bundle. Fetch the task snapshot only when the leader
+      // explicitly asks CRM to rebuild the AI plan, so duplicate/locked-task
+      // protection still has current data without slowing ordinary navigation.
+      if(!loaded){
+        const taskSnap=await window.TRIOVIST_DATA_HUB_V227315.tasks({p_manager_email:null});
+        data=taskSnap||{tasks:[],summary:{},groups:[],managers:[]};
+        data.tasks=(data.tasks||[]).filter(triTaskAllowedV22728);
+        loaded=true;
+      }
       banner('Формирую план '+name+': свежесть данных → продажи/остатки/карточки → агрегация SKU в подгруппы → денежный потенциал → '+target+' приоритетных подгрупп…');
       const pack=await triBuildFreshCandidatesV227304(manager,target),d=pack.diagnostics||{};
       const portfolio=triSubgroupPortfolioV227319(pack.candidates,manager,target);
