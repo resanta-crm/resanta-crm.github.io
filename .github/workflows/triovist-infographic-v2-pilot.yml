@@ -22,8 +22,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify premium pilot worker syntax only
+      - name: Install lightweight dependencies for OFFLINE QA
+        run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
+      - name: Verify premium pilot worker syntax
         run: python -m py_compile tools/triovist_infographic_v2_pilot.py
+      - name: V2.1 offline eight-poster typography and fact smoke test — NO IMAGE API
+        env:
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_KEY: offline-test-only
+        run: |
+          PYTHONPATH=tools python - <<'PY'
+          import io, re
+          from PIL import Image
+          from triovist_infographic_v2_pilot import premium_composite, safe_fact_caption
+          data=io.BytesIO()
+          Image.new("RGB",(1024,1536),(27,35,44)).save(data,"JPEG")
+          scene=data.getvalue()
+          facts=[
+              {"id":"F1","key":"live","label":"Объем готовой смеси","value":"140 л"},
+              {"id":"F2","key":"input_power_w","label":"Потребляемая мощность","value":"900 Вт"},
+              {"id":"F3","key":"crown_material","label":"Материал венца","value":"чугун"},
+              {"id":"F4","key":"live","label":"Частота вращения","value":"32 об/мин"},
+              {"id":"F5","key":"live","label":"Напряжение","value":"220 В"},
+          ]
+          prod={"product_name":"Бетономешалка Вихрь БМ-20АЧ (74/1/20)","sku":"74/1/20"}
+          assert safe_fact_caption(facts[0])[0]=="Объём готовой смеси"
+          for n in range(1,9):
+              fids=[f["id"] for f in facts] if n==1 else [facts[(n-2)%len(facts)]["id"]]
+              slide={"number":n,"title":"МОЩНОСТЬ 900 ВТ","subtitle":"Потребляемая мощность","fact_ids":fids}
+              blob=premium_composite(scene,slide,facts,prod)
+              image=Image.open(io.BytesIO(blob))
+              assert image.size==(1200,1500) and image.format=="PNG",n
+              assert len(blob)>10000,n
+          try:
+              premium_composite(scene,{"number":1,"fact_ids":["F1"],"title":"Обложка"},facts,prod)
+              raise AssertionError("Unverified hero was not blocked")
+          except RuntimeError:pass
+          print("Offline 8-slide poster and QA checks PASS (0 paid provider requests)")
+          PY
 
   worker:
     needs: validate
