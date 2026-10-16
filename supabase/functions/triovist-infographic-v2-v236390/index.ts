@@ -26,9 +26,11 @@ const templates=[
  {name:"Комплектация",scene:"Clean premium flat-lay catalog arrangement of ONLY physically verified components from reference images. If components are not verified, instead show whole actual product from another angle, without invented accessories.",position:"center"},
  {name:"Где использовать",scene:"Cinematic realistic product-in-context final scene based only on verified intended purpose; use an inviting but truthful real world context. Large product with reserved text area.",position:"right"}
 ];
-const factMap:Record<string,string>={power_w:"Мощность",power_kw:"Мощность",tank_l:"Объём бака",drum_l:"Объём барабана",
+const factMap:Record<string,string>={power_w:"Мощность",input_power_w:"Потребляемая мощность",power_kw:"Мощность",tank_l:"Объём бака",drum_l:"Объём барабана",drum_volume_l:"Объём барабана",
 flow_lmin:"Производительность",max_head_m:"Максимальный напор",voltage_v:"Напряжение",crown_material:"Материал венца",
 battery_ah:"Ёмкость АКБ",torque_nm:"Крутящий момент",area_m2:"Площадь",disc_diameter_mm:"Диаметр диска"};
+const normalizedWords:Record<string,string>={cast_iron:"чугун",polyamide:"полиамид",steel:"сталь",metal:"металл",plastic:"пластик",aluminium:"алюминий",aluminum:"алюминий",stainless_steel:"нержавеющая сталь"};
+const suffix:Record<string,string>={power_w:" Вт",input_power_w:" Вт",power_kw:" кВт",tank_l:" л",drum_l:" л",drum_volume_l:" л",flow_lmin:" л/мин",max_head_m:" м",voltage_v:" В",battery_ah:" А·ч",torque_nm:" Н·м",area_m2:" м²",disc_diameter_mm:" мм"};
 const sourceFacts=(spec:any,live:any[])=>{
  const facts:any[]=[];
  const raw=spec?.specs_normalized||{};
@@ -38,7 +40,7 @@ const sourceFacts=(spec:any,live:any[])=>{
    if(val===null||val===false||val===""||Array.isArray(val)||typeof val==="object")continue;
    if(typeof val==="number"&&(!Number.isFinite(val)||val<=0))continue;
    const label=factMap[key]||key.replace(/_/g," ");
-   const value=val===true?"есть":String(val);
+   const value=val===true?"есть":(normalizedWords[String(val).toLowerCase()]||String(val)+(typeof val==="number"?(suffix[key]||""):""));
    facts.push({id:"F"+(facts.length+1),key,label:str(label,72),value:str(value,72),source:"21vek exact SKU specifications",observed_at:spec?.specs_fetched_at||null});
  }}
  // Live facts from matched exact public 21vek product get precedence only when specification absent.
@@ -51,12 +53,12 @@ const sourceFacts=(spec:any,live:any[])=>{
 };
 function parseJson(s:string){s=str(s,55000).replace(/^`{3}(?:json)?\s*/i,"").replace(/\s*`{3}$/i,"");try{return JSON.parse(s)}catch(_){const a=s.indexOf("{"),b=s.lastIndexOf("}");if(a>=0&&b>a)return JSON.parse(s.slice(a,b+1));throw Error("INVALID_AI_JSON")}}
 function validateStoryboard(raw:any,facts:any[],product:any){
- const ids=new Set(facts.map(f=>f.id)), numbers=facts.flatMap(f=>String(f.value).match(/\d+(?:[,.]\d+)?/g)||[]).map(x=>x.replace(",",".")),allowedNumbers=new Set(numbers);
- const check=(t:any,max:number)=>{
+ const ids=new Set(facts.map(f=>f.id));
+ const check=(t:any,max:number,permitted:Set<string>)=>{
    const v=str(t,max).replace(/[\r\n]+/g," ");
    if(/(?:№\s*1|100\s*%|абсолютно|гарантирует|всегда|самый лучший|бесконечн)/i.test(v))return "";
    const digits=v.match(/\d+(?:[,.]\d+)?/g)||[];
-   if(digits.some(n=>!allowedNumbers.has(n.replace(",","."))))return "";
+   if(digits.some(n=>!permitted.has(n.replace(",","."))))return "";
    return v;
  };
  const used=new Set<string>();
@@ -65,8 +67,9 @@ function validateStoryboard(raw:any,facts:any[],product:any){
   let linked=[...new Set(arr(proposal.fact_ids).map(x=>str(x,12)).filter(x=>ids.has(x)))].slice(0,3);
   if(!linked.length&&facts.length){const f=facts.find(x=>!used.has(x.id))||facts[i%facts.length];linked=[f.id]}
   linked.forEach(x=>used.add(x));
-  const head=check(proposal.title,70)||tmpl.name;
-  const sub=check(proposal.subtitle,110);
+  const linkedDigits=new Set<string>(linked.flatMap(fid=>{const f=facts.find(x=>x.id===fid);return String(f?.value||"").match(/\d+(?:[,.]\d+)?/g)||[]}).map(x=>x.replace(",",".")));
+  const head=check(proposal.title,70,linkedDigits)||tmpl.name;
+  const sub=check(proposal.subtitle,110,linkedDigits);
   return {number:i+1,key:keys[i],title:head,subtitle:sub,fact_ids:linked,
     scene:tmpl.scene,placement:tmpl.position,
     composition_note:str(proposal.composition_note,240),
@@ -104,7 +107,7 @@ function artPrompt(product:any,facts:any[],slide:any){
  const selected=arr(slide.fact_ids).map(x=>facts.find(f=>f.id===x)).filter(Boolean);
  const n=low(product?.product_name),brand=n.includes("huter")?"Huter yellow/black":n.includes("вихр")?"Vikhr orange/black":n.includes("eurolux")?"Eurolux verified brand accents":"Resanta red/black";
  return [
-  "High-end PHOTOREALISTIC commercial product scene for an e-commerce marketing poster, vertical 2:3 portrait, visually rich and cinematic, polished physical lighting and intentional negative space. No writings, no logos, no letters, no symbols, no numbers, no icons: typography will be added in a later programmatic step.",
+  "High-end PHOTOREALISTIC commercial product scene for an e-commerce marketing poster, vertical 2:3 portrait, visually rich and cinematic, polished physical lighting and intentional negative space. Do not generate any NEW writings, NEW logos, artificial letters, numbers or icons in the scene: correct brand typography will be added separately. Any labels genuinely visible on the supplied exact product must remain unaltered.",
   "The UPLOADED IMAGE depicts the EXACT product SKU. Preserve its brand colors, silhouette, physical geometry, design, visible controls, labeling and proportions. Do not replace the product with a similar model; DO NOT invent handles, accessories, internal parts or product features.",
   "Product identity (for grounding only): "+str(product?.product_name,180)+". SKU "+str(product?.sku,80),
   "Brand-adjacent premium visual palette: "+brand+".",
@@ -125,7 +128,7 @@ Deno.serve(async(req:Request)=>{
  const url=Deno.env.get("SUPABASE_URL")||"",serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
  if(!url||!serviceKey)return make(req,503,{ok:false,error:"BACKEND"});
  const db=createClient(url,serviceKey,{auth:{autoRefreshToken:false,persistSession:false}});
- const jwt=str(req.headers.get("authorization")||"",1000).replace(/^Bearer\s+/i,"");
+ const jwt=str(req.headers.get("authorization")||"",8192).replace(/^Bearer\s+/i,"");
  try{
  if(worker){
    if(jwt!==serviceKey)return make(req,403,{ok:false,error:"WORKER_FORBIDDEN"});
