@@ -1,14 +1,14 @@
-/* RESANTA CRM v23.6.380 compatibility loader.
+/* RESANTA CRM v23.6.381 compatibility loader.
  * The former v23.6.12 workspace is intentionally retired: it fought with
  * legacy Triovist renders. This file remains only because permanent no-cache
  * bootstraps already point here.
  */
 (function(){
 'use strict';
-const compat=Object.freeze({version:'v23.6.380',retired:true,delegatesTo:'v23.6.380'});
+const compat=Object.freeze({version:'v23.6.381',retired:true,delegatesTo:'v23.6.381'});
 window.RESANTA_TRIOVIST_SINGLE_V23612=window.RESANTA_TRIOVIST_SINGLE_V23612||compat;
 window.RESANTA_TRIOVIST_SINGLE_V23611=window.RESANTA_TRIOVIST_SINGLE_V23611||compat;
-const cv=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.380'}catch(_){return'23.6.380'}})().replace(/^v/,'');
+const cv=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.381'}catch(_){return'23.6.381'}})().replace(/^v/,'');
 function loadRefreshGuard(){
   if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_REFRESH_V236122||document.querySelector('script[data-trgd-refresh-v236122]'))return;
   const g=document.createElement('script');
@@ -26,7 +26,7 @@ function loadGroupFix(){
   f.onerror=()=>{console.error('Triovist group dynamics fixes v23.6.121 failed to load; base analytics remains available.');loadRefreshGuard();};
   document.head.appendChild(f);
 }
-if(window.RESANTA_TRIOVIST_ROOT_V23614?.version==='v23.6.380'){loadGroupFix();return;}if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
+if(window.RESANTA_TRIOVIST_ROOT_V23614?.version==='v23.6.381'){loadGroupFix();return;}if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const stale=document.querySelector('script[data-triovist-root-v23614]');
 if(stale){const age=Date.now()-Number(stale.dataset.triovistStartedAt||0);if(stale.dataset.triovistStartedAt&&age<5000){loadGroupFix();return;}stale.remove();}
 const s=document.createElement('script');
