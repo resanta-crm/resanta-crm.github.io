@@ -1,11 +1,11 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.377',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.378',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors'],COMM=['anp','si','budget','price'];
-let ctx=null,shell=null,panel=null,active='home',busy=false,refreshBusy=false,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
+let ctx=null,shell=null,panel=null,active='home',busy=false,refreshBusy=false,navEpoch=0,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const budgetDt=v=>{if(!v)return'';const d=new Date(v);if(Number.isNaN(d.getTime()))return String(v);return d.toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});};
@@ -48,10 +48,18 @@ async function waitForDirect(test,ms=2200){
  const started=Date.now();while(Date.now()-started<ms){try{if(test())return true}catch(_){}await new Promise(r=>setTimeout(r,70))}return false;
 }
 async function prepareDirectWork(k){
- try{if(typeof window.renderTriovist==='function')window.renderTriovist()}catch(e){console.warn('Triovist direct render',e)}
- if(k==='tasks'&&typeof window.triovistTasksEnsureLoaded==='function')await window.triovistTasksEnsureLoaded();
+ if(k==='home'||k==='sales'){
+   try{if(typeof window.renderTriovist==='function')window.renderTriovist()}catch(e){console.warn('Triovist direct render',e)}
+ }
+ if(k==='tasks'){
+   try{window.triovistTasksRender?.()}catch(_){}
+   if(typeof window.triovistTasksEnsureLoaded==='function')await window.triovistTasksEnsureLoaded();
+ }
  if(k==='motivation'&&typeof window.triovistMotivationEnsureLoaded==='function')await window.triovistMotivationEnsureLoaded();
- if(k==='cards'&&typeof window.triovistContentEnsureLoaded==='function')await window.triovistContentEnsureLoaded();
+ if(k==='cards'){
+   try{window.triovistContentRender?.()}catch(_){}
+   if(typeof window.triovistContentEnsureLoaded==='function')await window.triovistContentEnsureLoaded();
+ }
  if(k==='stock'&&typeof window.renderTriovistStock==='function')window.renderTriovistStock();
  if(k==='parser'){
    await waitForDirect(()=>window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107&&document.getElementById('tri21-control-v236107'));
@@ -64,13 +72,43 @@ function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''
 function shellComplete(el=shell){if(!el?.isConnected)return false;const need=[...WORK,...COMM],keys=[...el.querySelectorAll('[data-tr14]')].map(b=>b.dataset.tr14),got=new Set(keys);return keys.length===need.length&&need.every(k=>got.has(k))}
 function repairShell(){const el=shell?.isConnected?shell:document.getElementById('tr14-shell');if(!el)return false;const orphan=el!==shell;if(orphan||!shellComplete(el)){el.remove();const pp=panel?.isConnected?panel:document.getElementById('tr14-panel');pp?.remove();shell=null;panel=null;return true}return false}
 function dom(){const p=page(),h=host();if(!p||!h)return false;repairShell();if(!shell?.isConnected){shell=document.createElement('div');shell.id='tr14-shell';const w=[['home','📊 Сводка'],['sales','💰 Продажи'],['groups','📈 Группы и динамика'],['stock','📦 Остатки и заказ'],['tasks','🤖 Задачи ИИ'],['motivation','🏆 Мотивация'],['cards','🧩 Карточки 21vek'],['parser','🌐 Парсер 21vek'],['competitors','⚔️ Конкуренты 21vek']],c=[['anp','🧾 АНП'],['si','🛠 Компенсация СИ'],['budget','💼 Бюджет'],['price','🧮 Расчёт цены']],r=a=>a.map(x=>`<button type="button" data-tr14="${x[0]}">${x[1]}</button>`).join('');shell.innerHTML=`<div class="tr14-head"><b>Triovist · рабочее меню</b><div class="tr14-head-actions"><span>${esc(ctx?.name||ctx?.email||'')}</span><button type="button" class="tr14-refresh" data-tr14-refresh>↻ Обновить</button></div></div><div class="tr14-g"><div class="tr14-box"><div class="tr14-label">РАБОТА</div><div class="tr14-row">${r(w)}</div></div><div class="tr14-box c"><div class="tr14-label">КОММЕРЦИЯ</div><div class="tr14-row">${r(c)}</div></div></div>`;shell.onclick=e=>{const rb=e.target.closest('[data-tr14-refresh]');if(rb){e.preventDefault();refreshCurrent();return}const b=e.target.closest('[data-tr14]');if(b)activate(b.dataset.tr14,true).catch(error)};h.insertBefore(shell,p)}if(!panel?.isConnected){panel=document.createElement('div');panel.id='tr14-panel';shell.insertAdjacentElement('afterend',panel);bind()}hideOld();sync();return true}
-async function refreshCurrent(){if(refreshBusy)return;const b=shell?.querySelector('[data-tr14-refresh]'),label=b?.textContent||'↻ Обновить';refreshBusy=true;if(b){b.disabled=true;b.textContent='↻ Обновляю…'}try{if(typeof window.triovistReload!=='function')throw Error('Функция обновления Triovist ещё не готова');await window.triovistReload();if([...WORK,...COMM].includes(active))await activate(active,false);sync()}catch(e){console.error('Triovist refresh',e);alert('Не удалось обновить Triovist: '+(e?.message||e))}finally{refreshBusy=false;if(b?.isConnected){b.disabled=false;b.textContent=label}}}
+async function refreshCurrent(){
+ if(refreshBusy)return;
+ const b=shell?.querySelector('[data-tr14-refresh]'),label=b?.textContent||'↻ Обновить',k=active;
+ refreshBusy=true;if(b){b.disabled=true;b.textContent='↻ Обновляю…'}
+ try{
+   if(k==='home'||k==='sales'){
+     if(typeof window.triovistSalesReload==='function')await window.triovistSalesReload(true);
+     else if(typeof window.triovistReload==='function')await window.triovistReload();
+     else throw Error('Функция обновления продаж Triovist ещё не готова');
+   }else if(k==='stock'){
+     if(typeof window.triovistStockReload==='function')await window.triovistStockReload(true);
+     else if(typeof window.triovistReload==='function')await window.triovistReload();
+     else throw Error('Функция обновления остатков Triovist ещё не готова');
+   }else if(k==='tasks')await window.triovistTasksReload?.(true);
+   else if(k==='motivation')await window.triovistMotivationReload?.(true);
+   else if(k==='cards')await window.triovistContentReload?.(true);
+   else if(k==='parser')await window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh?.();
+   else if(k==='groups'){
+     const mod=window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120;
+     if(mod?.refresh)await mod.refresh();else if(mod?.open)await mod.open(panel,ctx);
+   }else if(k==='competitors'){
+     const mod=window.RESANTA_TRIOVIST_COMPETITORS_V236218;
+     if(mod?.open)await mod.open(panel,ctx,true);
+   }else if(k==='anp'||k==='si')await expense(k,document.querySelector(`[data-tr14-month="${k}"]`)?.value||month());
+   else if(k==='budget')await budget(document.querySelector('[data-tr14-month="budget"]')?.value||month());
+   else if(k==='price')await prices();
+   if(active===k)sync();
+ }catch(e){console.error('Triovist refresh',e);alert('Не удалось обновить Triovist: '+(e?.message||e))}
+ finally{refreshBusy=false;if(b?.isConnected){b.disabled=false;b.textContent=label}}
+}
 async function applySalesImportRefresh(payload){
  const rec=payload?.new||payload?.record||{};
  if(String(rec.source||'')!=='triovist_sales'||String(rec.status||'')!=='ok')return;
  const stamp=String(rec.source_message_at||rec.updated_at||rec.last_success_at||'');
  if(stamp&&stamp===lastSalesStamp)return;
  if(stamp)lastSalesStamp=stamp;
+ try{window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales','stock','tasks')}catch(_){}
  if(page()?.classList.contains('active')){
   try{await refreshCurrent()}catch(e){console.warn('Triovist realtime refresh',e)}
  }else pendingSalesRefresh=true;
@@ -89,30 +127,42 @@ function subscribeSalesImport(){
 
 function sync(){const p=page();if(!p||!shell||!panel)return;const on=p.classList.contains('active');shell.style.setProperty('display',on?'block':'none','important');if(!on){panel.style.setProperty('display','none','important');p.style.removeProperty('display');return}if(COMM.includes(active)||active==='groups'||active==='competitors'){p.style.setProperty('display','none','important');panel.style.setProperty('display','block','important')}else{p.style.setProperty('display','block','important');panel.style.setProperty('display','none','important')}hideOld()}
 function error(e){panel.innerHTML=`<div class="tr14-warn"><b>Ошибка.</b><br>${esc(e?.message||e)}</div>`;panel.style.setProperty('display','block','important')}
-async function work(k){
-  choose(k);panel.style.setProperty('display','none','important');page().style.setProperty('display','block','important');
-  restoreDirectWork();
-  try{await prepareDirectWork(k)}catch(e){console.warn('Triovist direct section '+k,e)}
-  showDirectWork(k);hideOld();
-  [0,80,250,700].forEach(ms=>setTimeout(()=>{if(page()?.classList.contains('active')){page().style.setProperty('display','block','important');shell.style.setProperty('display','block','important');showDirectWork(k);hideOld();if(k==='parser')document.getElementById('tri21-control-v236107')?.scrollIntoView({block:'start',behavior:ms? 'auto':'smooth'})}},ms));
+async function work(k,token){
+ choose(k);panel.style.setProperty('display','none','important');page().style.setProperty('display','block','important');
+ restoreDirectWork();showDirectWork(k);hideOld();
+ [0,80,250,700].forEach(ms=>setTimeout(()=>{if(token===navEpoch&&active===k&&page()?.classList.contains('active')){page().style.setProperty('display','block','important');shell.style.setProperty('display','block','important');showDirectWork(k);hideOld();if(k==='parser')document.getElementById('tri21-control-v236107')?.scrollIntoView({block:'start',behavior:ms?'auto':'smooth'})}},ms));
+ try{await prepareDirectWork(k)}catch(e){console.warn('Triovist direct section '+k,e)}
+ if(token!==navEpoch||active!==k)return;
+ showDirectWork(k);hideOld();
 }
 async function activate(k,save=false){
-  if(![...WORK,...COMM].includes(k))k='home';
-  if(k==='competitors'){
-    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
-    for(let i=0;i<30&&!window.RESANTA_TRIOVIST_COMPETITORS_V236218;i++)await new Promise(r=>setTimeout(r,60));
-    const mod=window.RESANTA_TRIOVIST_COMPETITORS_V236218;
-    if(!mod?.open)throw Error('Модуль «Конкуренты 21vek» ещё не загрузился. Повторите через несколько секунд.');
-    await mod.open(panel,ctx);
-  }else if(k==='groups'){
-    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
-    for(let i=0;i<20&&!window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120;i++)await new Promise(r=>setTimeout(r,50));
-    const mod=window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120;
-    if(!mod?.open)throw Error('Модуль «Группы и динамика» не загрузился. Остальные разделы Triovist доступны.');
-    await mod.open(panel,ctx);
-  }else if(WORK.includes(k))await work(k);
-  else{choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');if(k==='anp'||k==='si')await expense(k,month());else if(k==='budget')await budget(month());else{price={q:'',only:false,offset:0,limit:50,last:null};await prices()}}
-  if(save)choose(k)
+ if(![...WORK,...COMM].includes(k))k='home';
+ const token=++navEpoch;
+ if(k==='competitors'){
+   choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
+   panel.innerHTML='<div class="tr14-info">Загружаю конкурентный анализ 21vek…</div>';
+   for(let i=0;i<30&&!window.RESANTA_TRIOVIST_COMPETITORS_V236218&&token===navEpoch;i++)await new Promise(r=>setTimeout(r,60));
+   if(token!==navEpoch||active!==k)return;
+   const mod=window.RESANTA_TRIOVIST_COMPETITORS_V236218;
+   if(!mod?.open)throw Error('Модуль «Конкуренты 21vek» ещё не загрузился. Повторите через несколько секунд.');
+   const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
+ }else if(k==='groups'){
+   choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
+   panel.innerHTML='<div class="tr14-info">Загружаю группы и динамику…</div>';
+   for(let i=0;i<20&&!window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120&&token===navEpoch;i++)await new Promise(r=>setTimeout(r,50));
+   if(token!==navEpoch||active!==k)return;
+   const mod=window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120;
+   if(!mod?.open)throw Error('Модуль «Группы и динамика» не загрузился. Остальные разделы Triovist доступны.');
+   const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
+ }else if(WORK.includes(k))await work(k,token);
+ else{
+   choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загрузка…</div>';
+   if(k==='anp'||k==='si')await expense(k,month());
+   else if(k==='budget')await budget(month());
+   else{price={q:'',only:false,offset:0,limit:50,last:null};await prices()}
+ }
+ if(token!==navEpoch||active!==k)return;
+ if(save)choose(k)
 }
 async function getMonth(m){return rpc('triovist_commercial_get_month',{p_month:first(m)})}
 const monthInput=(k,m)=>`<div><label class="form-label">Месяц</label><input class="form-input" type="month" data-tr14-month="${k}" value="${esc(String(m||month()).slice(0,7))}"></div>`;
@@ -240,6 +290,6 @@ async function zero(sku){const z=Number(document.getElementById('tr14-zero')?.va
 function bind(){if(panel.dataset.bound)return;panel.dataset.bound='1';panel.addEventListener('change',async e=>{try{const m=e.target.closest('[data-tr14-month]');if(m){m.dataset.tr14Month==='budget'?await budget(m.value):await expense(m.dataset.tr14Month,m.value);return}const a=e.target.closest('[data-tr14-attach]');if(a){await attach(a.dataset.tr14Attach,a);a.value='';return}const l=e.target.closest('[data-tr14-limit]');if(l){price.limit=Number(l.value);price.offset=0;await prices()}}catch(x){alert(x.message||x)}});panel.addEventListener('click',async e=>{try{const s=e.target.closest('[data-tr14-save]');if(s){await saveExpense(s.dataset.tr14Save);return}const d=e.target.closest('[data-tr14-doc]');if(d){await openDoc(d.dataset.tr14Doc);return}if(e.target.closest('[data-tr14-budget-expense-save]')){await addBudgetExpense();return}const vb=e.target.closest('[data-tr14-budget-void]');if(vb){await voidBudgetExpense(vb.dataset.tr14BudgetVoid);return}if(e.target.closest('[data-tr14-budget-save]')){await saveBudget();return}if(e.target.closest('[data-tr14-search]')){price.q=document.getElementById('tr14-q')?.value||'';price.offset=0;await prices();return}if(e.target.closest('[data-tr14-only]')){price.only=!price.only;price.offset=0;await prices();return}if(e.target.closest('[data-tr14-prev]')){price.offset=Math.max(0,price.offset-price.limit);await prices();return}if(e.target.closest('[data-tr14-next]')){price.offset+=price.limit;await prices();return}const r=e.target.closest('[data-tr14-sku]');if(r){await detail(r.dataset.tr14Sku);return}const z=e.target.closest('[data-tr14-zero]');if(z)await zero(z.dataset.tr14Zero)}catch(x){alert(x.message||x)}})}
 async function ensure(){if(busy)return false;busy=true;try{if(!ctx){ctx=await context();if(!ctx)return false}css();return dom()}finally{busy=false}}
 function watch(){if(mo)return;mo=new MutationObserver(()=>{if(page())ensure().then(async()=>{sync();if(pendingSalesRefresh&&page()?.classList.contains('active')){pendingSalesRefresh=false;await refreshCurrent()}}).catch(()=>{})});mo.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});window.addEventListener('pageshow',()=>setTimeout(()=>ensure().then(async()=>{sync();subscribeSalesImport();if(pendingSalesRefresh&&page()?.classList.contains('active')){pendingSalesRefresh=false;await refreshCurrent()}}),80));document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(()=>ensure().then(async()=>{sync();subscribeSalesImport();if(pendingSalesRefresh&&page()?.classList.contains('active')){pendingSalesRefresh=false;await refreshCurrent()}}),50)})}
-async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await work('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,directWorkspaceRouter:true,noLegacyButtonDependency:true,salesRealtimeRefresh:true,noSalesPolling:true});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
+async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await work('home',++navEpoch)}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,directWorkspaceRouter:true,instantTabSwitch:true,sectionRefreshIsolation:true,navigationEpoch:true,noLegacyButtonDependency:true,salesRealtimeRefresh:true,noSalesPolling:true});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
 let n=0,t=setInterval(async()=>{n++;try{if(await start()||n>240)clearInterval(t)}catch(_){if(n>240)clearInterval(t)}},250);
 })();
