@@ -6,7 +6,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.221',TTL=15000;
+const VERSION='v23.6.379',TTL=15000;
 let cache=null,cacheAt=0,flight=null,mrcCache=null,mrcCacheAt=0,mrcFlight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -26,6 +26,7 @@ function parserError(d){
   return String(p.error_explain||p.error_text||'Сбор завершился не полностью. Рабочий снимок не заменён; используются последние проверенные данные.');
 }
 function activeTriovist(){return document.getElementById('page-triovist')?.classList.contains('active');}
+function activeParser(){const b=document.querySelector('#tr14-shell [data-tr14="parser"]');return activeTriovist()&&!!b?.classList.contains('on');}
 function injectCss(){
   if(document.getElementById('tri21-control-css-v236107'))return;
   const s=document.createElement('style');s.id='tri21-control-css-v236107';s.textContent=`
@@ -183,10 +184,10 @@ window.triovist21vekRequestRefreshV236107=async function(){
 };
 
 const baseRender=window.renderTriovist;
-window.renderTriovist=function(){const out=baseRender?.apply(this,arguments);ensurePanel();if(activeTriovist())setTimeout(()=>load(false),0);return out;};
+window.renderTriovist=function(){const out=baseRender?.apply(this,arguments);ensurePanel();if(activeParser())setTimeout(()=>load(false),0);return out;};
 const baseReload=window.triovistReload;
-if(typeof baseReload==='function')window.triovistReload=async function(){const out=await baseReload.apply(this,arguments);cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;if(activeTriovist())await load(true);return out;};
+if(typeof baseReload==='function')window.triovistReload=async function(){const out=await baseReload.apply(this,arguments);cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;if(activeParser())await load(true);return out;};
 
-window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),mrc:()=>mrcStatus(false),registrySeparated:true,mrcControl:true});
-setTimeout(()=>{if(activeTriovist()){ensurePanel();load(false);}},0);
+window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),mrc:()=>mrcStatus(false),lazyByActiveTab:true,registrySeparated:true,mrcControl:true});
+setTimeout(()=>{if(activeParser()){ensurePanel();load(false);}},0);
 })();
