@@ -94,7 +94,7 @@ function previews(){
  return '<div class="tiv2390-thumb">'+
  '<a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="'+h(im.url)+'" alt="Слайд '+im.slide_no+'"></a>'+
  '<b>Слайд '+im.slide_no+' из 8</b><a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer">Открыть полностью ↗</a>'+
- (canEdit?'<details style="margin-top:9px"><summary style="cursor:pointer;color:#145c96;font-size:12px">Редактировать подпись</summary>'+
+ (canEdit&&im.slide_no>1?'<details style="margin-top:9px"><summary style="cursor:pointer;color:#145c96;font-size:12px">Редактировать подпись</summary>'+
  '<label class="tiv2390-caption">Заголовок</label>'+
  '<input class="tiv2390-input" maxlength="95" style="width:100%" data-v2-copy-title="'+im.slide_no+'" value="'+h(slide.title||'')+'">'+
  '<label class="tiv2390-caption">Подзаголовок</label>'+
