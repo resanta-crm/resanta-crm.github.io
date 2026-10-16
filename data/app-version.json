@@ -1,6 +1,6 @@
 {
-  "version": "23.6.368",
-  "released_at": "2026-10-15",
-  "purpose": "Promotions: show missing current MO2 price instead of 0 BYN. Stands: remove private-schema dependency from automatic Vision tasks and restore missing follow-up tasks.",
-  "deploy_trigger": "2026-10-15T13:00:00+03:00"
+  "version": "23.6.374",
+  "released_at": "2026-10-16",
+  "purpose": "Sales analytics: server-first month dashboard, complete manager AKB comparison, preserved 1C totals and visible unallocated multi-TT sales.",
+  "deploy_trigger": "2026-10-16T09:00:00+03:00"
 }
