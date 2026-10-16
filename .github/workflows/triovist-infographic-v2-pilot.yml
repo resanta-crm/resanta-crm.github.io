@@ -2,7 +2,7 @@ name: Triovist premium infographic V2 - single SKU pilot
 
 on:
   schedule:
-    - cron: '7,27,47 * * * *'
+    - cron: '3-58/5 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
