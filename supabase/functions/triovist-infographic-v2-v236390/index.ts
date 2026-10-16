@@ -226,7 +226,7 @@ Deno.serve(async(req:Request)=>{
   }).select("id,sku,status,product_name").single();
   if(ie)throw ie;return make(req,200,{ok:true,pilot});
  }
- if(["status","cancel","approve","preview"].includes(action)){
+ if(["status","cancel","approve","preview","recover"].includes(action)){
   const id=str(input.pilot_id,50);if(!uuid(id))return make(req,400,{ok:false,error:"BAD_ID"});
   // Use an explicit singleton array instead of .maybeSingle(): this gives us
   // separate and actionable responses for PostgREST failures versus truly missing projects.
@@ -245,6 +245,21 @@ Deno.serve(async(req:Request)=>{
       const {error:e}=await db.from("triovist_infographic_v2_pilots").update({status:"cancelled",stage:"Остановлено пользователем",finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",id).in("status",["queued","processing"]);if(e)throw e;
     }
     return make(req,200,{ok:true,status:"cancelled"});
+  }
+  if(action==="recover"){
+    if(!leader)return make(req,403,{ok:false,error:"DIRECTOR_ONLY"});
+    // Explicit confirmation is mandatory. A failed PNG upload consumed one paid request.
+    // Recovery may consume ONE additional image request (9 total for 8 finished slides).
+    if(input.confirm_extra_paid_image!==true)return make(req,409,{ok:false,error:"EXTRA_IMAGE_CONSENT_REQUIRED",
+      message:"Первый запрос уже оплачен, но PNG не сохранился. Для полного комплекта из 8 слайдов потребуется до 9 платных запросов. Подтвердите дополнительный запрос."});
+    const {data:ok,error:err}=await db.rpc("triovist_infographic_v2_recover_png_upload",{p_pilot_id:id});
+    if(err){console.error("TRIOVIST_V2_RECOVER",str(err.code),str(err.message));return make(req,503,{ok:false,error:"RECOVERY_DB_FAILURE",message:"Не удалось подготовить безопасный повтор"});}
+    if(!ok)return make(req,409,{ok:false,error:"RECOVERY_NOT_ALLOWED",
+      message:"Восстановление разрешено только один раз после подтверждённой ошибки MIME PNG. Проверьте статус проекта."});
+    const {data:updated,error:readErr}=await db.from("triovist_infographic_v2_pilots").select("*").eq("id",id).limit(1);
+    if(readErr||!arr(updated)[0])return make(req,503,{ok:false,error:"RECOVERY_STATUS_ERROR"});
+    return make(req,200,{ok:true,pilot:arr(updated)[0],retry_paid_image_limit:9,
+      message:"Тот же тест возвращён в очередь. Повторная генерация не запустится до фонового запуска обработчика."});
   }
   if(action==="approve"){
     if(!leader)return make(req,403,{ok:false,error:"LEADER_ONLY"});
