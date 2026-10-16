@@ -308,6 +308,14 @@ def status(batch_id):
 def finalize(batch,items,counts):
     batch_id=batch["id"]
     if counts["queued"] or counts["processing"]:return
+    if counts["completed"]==0:
+        db_update("triovist_infographic_batches_v1",{"id":"eq."+batch_id},{
+            "status":"failed","error_summary":"Ни один SKU не удалось завершить. Смотрите ошибки каждого товара и проверяйте доступ к фотографиям 21vek.",
+            "finished_at":datetime.now(timezone.utc).isoformat(),
+            "failed_items":counts["error"],"completed_items":0
+        })
+        log("FAILED all SKU",batch_id)
+        return
     manifest=[];part_number=1;bytes_used=0;count=0
     file=io.BytesIO();out=zipfile.ZipFile(file,"w",compression=zipfile.ZIP_STORED,allowZip64=True)
     def commit():
