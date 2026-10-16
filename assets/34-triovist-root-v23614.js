@@ -28,8 +28,19 @@ const DIRECT_WORK_IDS=Object.freeze({
 });
 const directHidden=new Map();
 function topPageChild(el){const p=page();let x=el;if(!p||!x)return null;while(x.parentElement&&x.parentElement!==p)x=x.parentElement;return x?.parentElement===p?x:null}
-function restoreDirectWork(){for(const [el,v] of directHidden){if(el?.isConnected)el.style.display=v}directHidden.clear()}
-function hideDirectWork(el){if(!el||directHidden.has(el))return;directHidden.set(el,el.style.display);el.style.display='none'}
+function restoreDirectWork(){
+ for(const [el,v] of directHidden){
+   if(!el?.isConnected)continue;
+   if(v?.value)el.style.setProperty('display',v.value,v.priority||'');
+   else el.style.removeProperty('display');
+ }
+ directHidden.clear();
+}
+function hideDirectWork(el){
+ if(!el||directHidden.has(el))return;
+ directHidden.set(el,{value:el.style.getPropertyValue('display'),priority:el.style.getPropertyPriority('display')});
+ el.style.setProperty('display','none','important');
+}
 function directWorkRoots(){
  const out=new Set(),p=page();if(!p)return out;
  for(const ids of Object.values(DIRECT_WORK_IDS))for(const id of ids){const el=document.getElementById(id),top=topPageChild(el);if(top)out.add(top)}
