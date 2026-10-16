@@ -7,7 +7,7 @@
 'use strict';
 if(window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203)return;
 
-const V='v23.6.360';
+const V='v23.6.382';
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -38,18 +38,24 @@ function progress(p){
   const done=t<s?0:t>e?total:Math.max(0,Math.round((t-s)/86400000)+1);
   return{elapsed:Math.min(100,done/total*100),left:t>e?0:Math.max(0,Math.round((e-t)/86400000))};
 }
-function photoMissing(p,st,elapsed){
+function relevantMissingPhotos(p,st,elapsed){
   try{
     const m=promoPhotoProgress(p)?.missing||[];
-    if(!m.length)return false;
-    if(st==='planned')return m.includes('before');
+    if(!m.length)return[];
+    if(st==='planned')return m.includes('before')?['before']:[];
     if(st==='active'){
-      if(m.includes('before')||m.includes('start'))return true;
-      return elapsed>=35&&m.includes('during');
+      const out=m.filter(x=>x==='before'||x==='start');
+      if(elapsed>=35&&m.includes('during'))out.push('during');
+      return out;
     }
-    if(st==='awaiting')return m.length>0;
+    if(st==='awaiting')return m;
   }catch(_){}
-  return false;
+  return[];
+}
+function photoMissing(p,st,elapsed){return relevantMissingPhotos(p,st,elapsed).length>0}
+function stageLabel(s){
+  try{if(typeof promoStageLabel==='function')return promoStageLabel(s)}catch(_){}
+  return({before:'до акции',start:'старт акции',during:'в ходе акции',after:'после акции'})[s]||s;
 }
 function isDecisionForMe(st){
   const n=norm(actor()?.name);
@@ -66,12 +72,12 @@ function rowMeta(p){
   const ended=safe(p?.end_date)<today();
   const needsClose=!['completed','rejected'].includes(raw)&&(st==='awaiting'||(ended&&['approved','in_work'].includes(raw)));
   const badData=['client_match_ambiguous'].includes(safe(e?.data_quality))||!!e?.manual_conflict;
-  const attention=!needsClose&&!['completed','rejected'].includes(raw)&&(
-    ((st==='active'||st==='planned')&&photoMissing(p,st,pr.elapsed))||
-    (st==='active'&&pace!=null&&pace<=-15)||
-    badData
-  );
-  return{p,e,st,raw,pr,sales,plan,completion,pace,needsClose,attention,decision:isDecisionForMe(st)};
+  const attentionReasons=[],missingPhotos=relevantMissingPhotos(p,st,pr.elapsed);
+  if((st==='active'||st==='planned')&&missingPhotos.length)attentionReasons.push('нет фото: '+missingPhotos.map(stageLabel).join(', '));
+  if(st==='active'&&pace!=null&&pace<=-15)attentionReasons.push('продажи отстают от темпа на '+Math.abs(Math.round(pace))+' п.п.');
+  if(badData)attentionReasons.push('нужно проверить привязку/данные 1С');
+  const attention=!needsClose&&!['completed','rejected'].includes(raw)&&attentionReasons.length>0;
+  return{p,e,st,raw,pr,sales,plan,completion,pace,needsClose,attention,attentionReasons,decision:isDecisionForMe(st)};
 }
 function monthEnd(ym){if(!/^\d{4}-\d{2}$/.test(safe(ym)))return'';const [y,m]=ym.split('-').map(Number);return new Date(y,m,0).toISOString().slice(0,10)}
 function overlaps(p,ym){if(!ym||ym==='all')return true;return safe(p.start_date)<=monthEnd(ym)&&safe(p.end_date)>=ym+'-01'}
@@ -130,6 +136,22 @@ function qualitySummary(){
   const warn=rows.filter(x=>x.e?.client_match_warning||x.e?.manual_conflict||['preliminary_month','client_match_ambiguous'].includes(safe(x.e?.data_quality))).length;
   return warn?(' · '+warn+' с предупреждением по данным'):'';
 }
+function cardPromotion(card){
+  const btn=[...(card?.querySelectorAll?.('button')||[])].find(b=>/Открыть/i.test(safe(b.textContent)));
+  const m=safe(btn?.getAttribute('onclick')).match(/[0-9a-f]{8}-[0-9a-f-]{27,}/i);
+  return m?promos().find(p=>safe(p.id)===m[0])||null:null;
+}
+function decorateAttentionCards(){
+  const list=document.getElementById('promo-list');if(!list)return;
+  list.querySelectorAll('.promo-card').forEach(card=>{
+    card.querySelector('.pcc203-attention-reason')?.remove();
+    const p=cardPromotion(card);if(!p)return;
+    const x=rowMeta(p);if(!x.attention||!x.attentionReasons?.length)return;
+    const n=document.createElement('div');n.className='pcc203-attention-reason';
+    n.textContent='⚠ Почему требует внимания: '+x.attentionReasons.join(' · ');
+    const head=card.firstElementChild;if(head)head.insertAdjacentElement('afterend',n);else card.prepend(n);
+  });
+}
 function style(){
   if(document.getElementById('promo-control-center-style-v236203'))return;
   const s=document.createElement('style');s.id='promo-control-center-style-v236203';s.textContent=`
@@ -142,6 +164,7 @@ function style(){
 .pcc203-tab.active{border-color:#60a5fa;box-shadow:0 0 0 1px #60a5fa inset;background:#eff6ff}.pcc203-tab b{display:block;font-size:19px}.pcc203-tab span{display:block;font-size:9px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pcc203-bad b{color:var(--r)}.pcc203-warn b{color:var(--am)}.pcc203-good b{color:var(--g)}
 .pcc203-current{margin-top:9px;font-size:11px;color:var(--sub)}.pcc203-current b{color:var(--text)}
+.pcc203-attention-reason{margin-top:9px;padding:7px 9px;border:1px solid #f6c76a;background:#fff7df;color:#8a5200;border-radius:8px;font-size:10px;font-weight:700;line-height:1.4}
 @media(max-width:1100px){.pcc203-tabs{grid-template-columns:repeat(4,minmax(120px,1fr))}.pcc203-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.pcc203-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.pcc203-filters{grid-template-columns:1fr}}
 `;document.head.appendChild(s);
@@ -191,7 +214,7 @@ function rerender(scroll=false){
   prepareDom();renderCenter();
   try{window.promoApprovalStageFilter='all'}catch(_){}
   try{renderPromotions()}catch(e){console.warn(V+' render',e)}
-  setTimeout(()=>{prepareDom();renderCenter();if(scroll)root()?.scrollIntoView({behavior:'smooth',block:'start'})},0);
+  setTimeout(()=>{prepareDom();renderCenter();decorateAttentionCards();if(scroll)root()?.scrollIntoView({behavior:'smooth',block:'start'})},0);
 }
 function setView(v,{scroll=true}={}){
   if(!views.some(x=>x[0]===v))return;
@@ -223,14 +246,14 @@ function bind(){
 }
 function installRenderHook(){
   const f=window.renderPromotions;if(typeof f!=='function'||f.__pcc203)return;
-  const base=f,fn=function(){prepareDom();renderCenter();const out=base.apply(this,arguments);setTimeout(()=>{prepareDom();renderCenter()},0);return out};
+  const base=f,fn=function(){prepareDom();renderCenter();const out=base.apply(this,arguments);setTimeout(()=>{prepareDom();renderCenter();decorateAttentionCards()},0);return out};
   fn.__pcc203=true;fn.__base=base;window.renderPromotions=fn;try{renderPromotions=fn}catch(_){}
 }
 function install(){
   bind();style();prepareDom();installRenderHook();if(active())renderCenter();
 }
 window.RESANTA_PROMOTIONS_CONTROL_CENTER_V236203=Object.freeze({
-  version:V,enabled:true,state,matches,sort:sortRows,setView,setClient,repaint:renderCenter,
+  version:V,enabled:true,state,matches,sort:sortRows,setView,setClient,repaint:()=>{renderCenter();decorateAttentionCards()},
   views:views.map(x=>x[0]),singleSourceOfTruth:true,noPolling:true,noMutationObserver:true,noDataWrites:true
 });
 window.addEventListener('resanta:promotions-effectiveness',()=>{if(active()){renderCenter();try{renderPromotions()}catch(_){}}});
