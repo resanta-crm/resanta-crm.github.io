@@ -1,10 +1,10 @@
-/* RESANTA CRM v23.6.383 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
+/* RESANTA CRM v23.6.384 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
-const V='v23.6.383',TTL=30000;
+const V='v23.6.384',TTL=30000;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
@@ -463,8 +463,9 @@ function concreteMixerMaterial(v){
  if(v==null||v==='')return 'нет данных';
  const x=String(v).toLowerCase();
  if(x==='cast_iron'||x.includes('чугун'))return 'чугун';
- if(x==='polymer'||x.includes('полиамид')||x.includes('пласт')||x.includes('полимер'))return 'полиамид / пластик';
  if(x==='steel'||x.includes('сталь'))return 'сталь';
+ if(x==='polymer'||x.includes('полиамид')||x.includes('полиуретан')||x.includes('пласт')||x.includes('полимер'))return 'полимер / пластик';
+ if(x==='metal_unspecified'||x==='metal'||x.includes('металличес'))return 'металл (без уточнения)';
  return String(v);
 }
 function concreteMixerValue(k,v){
