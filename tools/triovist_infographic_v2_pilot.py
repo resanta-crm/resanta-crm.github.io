@@ -44,6 +44,20 @@ def slides(pilot_id):
 def still_active(pid):
     rows=db_get("triovist_infographic_v2_pilots",{"id":"eq."+pid,"select":"status,completed_slides,paid_images_started","limit":"1"})
     return rows and rows[0]["status"] in ("queued","processing")
+def preflight_png_storage():
+    """Fail BEFORE any paid image call if the private archive bucket refuses PNG."""
+    endpoint=f"{SUPABASE_URL}/storage/v1/bucket/{BUCKET}"
+    reply=request("GET",endpoint,headers=headers(),timeout=25)
+    if reply.status_code!=200:
+        raise RuntimeError(f"Storage preflight failed (HTTP {reply.status_code}); no paid generation started")
+    meta=reply.json()
+    allowed=meta.get("allowed_mime_types")
+    if allowed and "image/png" not in allowed:
+        raise RuntimeError("Storage preflight: image/png is not permitted; no paid generation started")
+    if meta.get("public") is True:
+        raise RuntimeError("Storage preflight: private bucket is unexpectedly public")
+    log("V2 storage preflight OK: image/png, private bucket")
+
 def image_to_reference(photo):
     p=photo.convert("RGB")
     p.thumbnail((1180,1180),Image.Resampling.LANCZOS)
@@ -156,6 +170,7 @@ def build(pilot):
     if not still_active(id):return
     story=plan["storyboard"];facts=plan["facts"];product=plan["product"]
     if len(story)!=8:raise RuntimeError("Storyboard is not eight scenes")
+    preflight_png_storage()
     log("V2 Pilot",id,"source",url,"verified facts",len(facts))
     for slide in story:
         if time.monotonic()-START>MAX_RUNTIME:break
