@@ -160,7 +160,7 @@ Deno.serve(async(req:Request)=>{
      if(reserveError||!reserved)return make(req,409,{ok:false,error:"IMAGE_BUDGET_OR_DUPLICATE"});
      // Exact-SKU photo bytes originate from server worker, not public URL or user-controlled fetch.
      const bytes=Uint8Array.from(atob(photoB64.replace(/\s/g,"")),c=>c.charCodeAt(0));
-     const form=new FormData();form.set("model",model);form.set("image",new File([bytes],"source.png",{type:"image/png"}));
+     const form=new FormData();form.set("model",model);form.set("image",new File([bytes],"source.jpg",{type:"image/jpeg"}));
      form.set("prompt",artPrompt({sku:pilot.sku,product_name:pilot.product_name},pilot.facts,scene));
      form.set("size","1024x1536");form.set("quality","high");form.set("output_format","jpeg");form.set("output_compression","88");
      const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),165000);
