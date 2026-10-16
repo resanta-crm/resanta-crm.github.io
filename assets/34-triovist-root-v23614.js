@@ -108,6 +108,7 @@ async function applySalesImportRefresh(payload){
  const stamp=String(rec.source_message_at||rec.updated_at||rec.last_success_at||'');
  if(stamp&&stamp===lastSalesStamp)return;
  if(stamp)lastSalesStamp=stamp;
+ try{window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales','stock','tasks')}catch(_){}
  if(page()?.classList.contains('active')){
   try{await refreshCurrent()}catch(e){console.warn('Triovist realtime refresh',e)}
  }else pendingSalesRefresh=true;
