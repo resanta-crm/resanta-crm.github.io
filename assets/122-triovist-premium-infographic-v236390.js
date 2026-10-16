@@ -103,9 +103,28 @@ function schedule(){
 async function status(){
  if(!active)return;
  const id=active.id;
- const data=await req('status',{pilot_id:id});
+ let data;
+ try{
+   data=await req('status',{pilot_id:id});
+ }catch(err){
+   // The status endpoint may temporarily fail even while the saved project exists.
+   // Reconcile against the canonical list; NEVER create a replacement paid pilot.
+   const l=await req('list');
+   if(!root?.isConnected)return;
+   pilots=a(l.pilots);
+   const actual=pilots.find(p=>p.id===id)||pilots.find(p=>p.sku===active?.sku);
+   if(!actual){
+     message='Текущий тест не найден в списке проектов. Обновите страницу; новый платный запуск не создавайте.';
+     draw();return;
+   }
+   active=actual;
+   slides=[];
+   images=[];
+   message='Тест сохранён. Подробный статус временно не получен ('+String(err?.message||err).slice(0,130)+'). Повторите проверку немного позже.';
+   draw();schedule();return;
+ }
  if(!root?.isConnected||active?.id!==id)return;
- active=data.pilot;slides=a(data.slides);
+ active=data.pilot;slides=a(data.slides);message='';
  if(slides.some(s=>s.status==='completed')){
   try{const p=await req('preview',{pilot_id:id});if(active?.id===id)images=a(p.images)}catch(e){message='Предпросмотр временно недоступен: '+e.message}
  }
@@ -116,7 +135,9 @@ async function refresh(){
  const [c,list]=await Promise.all([req('config'),req('list')]);
  if(parent!==root||!root?.isConnected)return;
  config=c;pilots=a(list.pilots);
- if(!active&&pilots.length)active=pilots[0];
+ // Always restore a full current row instead of retaining a partial object from start().
+ const persisted=active?pilots.find(p=>p.id===active.id):null;
+ active=persisted||pilots[0]||null;
  if(active)await status();else draw();
 }
 async function start(){
@@ -125,7 +146,7 @@ async function start(){
  if(!sku)throw Error('Укажи артикул товара');
  if(!window.confirm('Запустить пробную премиальную генерацию для SKU '+sku+'? Это до 8 платных изображений через Image API. Массовая генерация останется выключенной.'))return;
  busy=true;message='Сохраняю тестовый проект…';draw();
- try{const d=await req('start',{sku});active=d.pilot;images=[];selectedSku='';message='Тест создан. Фоновый обработчик автоматически приступит к нему по расписанию.';await refresh()}
+ try{const d=await req('start',{sku});active=d.pilot;images=[];selectedSku='';message='Тест сохранён. Дожидаемся фонового запуска — повторно создавать его не требуется.';await refresh()}
  finally{busy=false;draw()}
 }
 async function cancel(){
