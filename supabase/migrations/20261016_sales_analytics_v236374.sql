@@ -4,6 +4,7 @@ CREATE OR REPLACE FUNCTION public.crm_client_legal_key_v236374(p_value text)
  RETURNS text
  LANGUAGE sql
  IMMUTABLE PARALLEL SAFE
+ SET search_path TO 'public', 'pg_catalog'
 AS $function$
   select public.crm_client_canonical_key_v236204(
     regexp_replace(coalesce(p_value,''), '\s*\([^)]*\)\s*$', '', 'g')
