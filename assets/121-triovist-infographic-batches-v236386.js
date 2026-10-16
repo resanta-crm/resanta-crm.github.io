@@ -9,7 +9,8 @@ const list=x=>Array.isArray(x)?x:[];
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
 const pretty=x=>x==='Бетоносмесители'?'Бетономешалки':x;
 const stateLabels={queued:'В очереди',processing:'В работе',completed:'Готово',completed_with_errors:'Готово с замечаниями',failed:'Ошибка'};
-let root=null,groups=[],selected=new Set(),jobs=[],current=null,filter='',working=false,downloading=false,timer=null,banner='',bannerError=false;
+let root=null,groups=[],selected=new Set(),jobs=[],current=null,filter='',readyFilter='',working=false,downloading=false,timer=null,banner='',bannerError=false;
+let previewOverlay=null,previewUrls=[],previewZipBlob=null,previewSku='',previewSequence=0;
 async function invoke(action,args={}){
  const d=dbx();if(!d?.functions)throw Error('База CRM пока не подключена');
  const {data,error}=await d.functions.invoke(FN,{body:{action,...args}});
@@ -48,6 +49,23 @@ function css(){
  '.tib386-note.err{color:#9b2d27;background:#fff1f2}',
  '.tib386-jobs{display:grid;gap:7px;max-height:190px;overflow:auto}',
  '.tib386-jobs button{display:flex;align-items:center;justify-content:space-between;gap:14px;text-align:left}',
+ '.tib386-ready{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:7px;max-height:250px;overflow:auto;margin:9px 0}',
+ '.tib386-ready button{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left}',
+ '.tib386-ready button b{color:#176343}.tib386-ready button small{color:#64748b}',
+ '.tib386-ready-filter{width:100%;max-width:460px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 12px;font:inherit;margin:8px 0}',
+ '.tib386-modal-shade{position:fixed;inset:0;background:rgba(8,23,44,.78);z-index:1000000;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}',
+ '.tib386-modal{background:#fff;color:#1e293b;width:min(1120px,100%);max-height:95vh;overflow:auto;border-radius:15px;box-sizing:border-box;padding:18px 20px;font:inherit}',
+ '.tib386-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}',
+ '.tib386-modal button{background:#fff;border:1px solid #cbd5e1;border-radius:9px;padding:8px 12px;cursor:pointer;font:inherit;font-size:12px}',
+ '.tib386-modal .tib386-primary{background:#1765ac;color:#fff;border-color:#1765ac}',
+ '.tib386-preview-main{display:flex;justify-content:center;align-items:center;background:#eef2f6;padding:9px;border-radius:11px;margin:10px 0;min-height:160px}',
+ '.tib386-preview-main img{width:auto;max-width:100%;max-height:53vh;object-fit:contain;border-radius:8px}',
+ '.tib386-thumbs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:10px 0}',
+ '.tib386-thumbs button{padding:4px;border:2px solid transparent;border-radius:8px;background:#eef2f6;min-width:0}',
+ '.tib386-thumbs button.active{border-color:#2f83bf}',
+ '.tib386-thumbs img{display:block;width:100%;aspect-ratio:4/5;object-fit:contain}',
+ '.tib386-preview-warning{background:#fff5dc;color:#855d10;padding:8px;border-radius:8px;margin:6px 0;font-size:12px}',
+ '@media(max-width:650px){.tib386-thumbs{grid-template-columns:repeat(4,minmax(0,1fr))}}',
  '#tib386 h4{margin:6px 0 9px;font-size:14px}',
  '@media(max-width:650px){.tib386-controls{grid-template-columns:1fr}.tib386-counter{white-space:normal}}'
  ].join('');
@@ -63,6 +81,19 @@ function cardsHtml(){
  '<button type="button" class="tib386-choice '+(selected.has(x.name)?'picked':'')+'" data-tib-group="'+esc(x.name)+'">'+
  '<span>'+(selected.has(x.name)?'☑ ':'☐ ')+esc(pretty(x.name))+'</span><small>'+Number(x.sku_count)+' SKU</small></button>').join(''):
  '<p class="tib386-muted">'+(groups.length?'По вашему запросу групп нет.':'Каталог групп загружается…')+'</p>';
+}
+function readyHtml(){
+ if(!current)return '';
+ const all=list(current.items).filter(x=>x.status==='completed');
+ if(!all.length)return '';
+ const q=readyFilter.toLowerCase().trim();
+ const matches=all.filter(x=>!q||String(x.sku).toLowerCase().includes(q)||String(x.group_name).toLowerCase().includes(q));
+ return '<div class="tib386-sep"></div><h4>✅ Готовые товары — посмотреть прямо сейчас ('+all.length+')</h4>'+
+ '<p class="tib386-muted">Можно открыть все 7 слайдов любого готового SKU и скачать его ZIP, пока другие продолжают обрабатываться. Открытие не останавливает очередь.</p>'+
+ '<input class="tib386-ready-filter" data-tib-ready-filter placeholder="Найти готовый артикул или группу…" value="'+esc(readyFilter)+'">'+
+ '<div class="tib386-ready">'+
+ (matches.length?matches.map(x=>'<button data-tib-preview="'+esc(x.sku)+'"><span><b>'+esc(x.sku)+'</b><br><small>'+esc(pretty(x.group_name))+'</small></span><span>👁 Посмотреть</span></button>').join(''):
+ '<p class="tib386-muted">В готовых пока нет совпадений.</p>')+'</div>';
 }
 function jobHtml(){
  if(!current)return '';
@@ -92,10 +123,10 @@ function draw(){
  '<div class="tib386-actions"><button class="blue" data-tib-start '+(working||n.count===0||n.count>10||n.sku>300?'disabled':'')+'>'+
  (working?'Создаю задание…':'🚀 Запустить '+n.sku+' SKU')+'</button>'+
  '<span class="tib386-muted">Фото только из карточки нужной модели; неизвестные факты не придумываются.</span></div>'+
- jobHtml()+
+ jobHtml()+readyHtml()+
  (jobs.length?'<div class="tib386-sep"></div><h4>Последние задания</h4><div class="tib386-jobs">'+jobs.slice(0,8).map(j=>
  '<button data-tib-status="'+esc(j.id)+'" class="'+(current?.id===j.id?'picked':'')+'"><span>'+list(j.groups).map(pretty).slice(0,3).map(esc).join(' · ')+'</span>'+
- '<small>'+esc(stateLabels[j.status]||j.status)+' · '+Number(j.completed_items||0)+'/'+Number(j.total_items||0)+'</small></button>').join('')+'</div>':'')+
+ '<small>'+esc(stateLabels[(current?.id===j.id?current:j).status]||(current?.id===j.id?current:j).status)+' · '+Number((current?.id===j.id?current:j).completed_items||0)+'/'+Number(j.total_items||0)+'</small></button>').join('')+'</div>':'')+
  (banner?'<div class="tib386-note '+(bannerError?'err':'')+'">'+esc(banner)+'</div>':'')+
  '<p class="tib386-muted" style="margin-top:13px">Ниже сохранён ручной редактор отдельного SKU. Публикация на 21vek автоматически не выполняется.</p>';
 }
@@ -154,6 +185,81 @@ async function zipLib(){
  }).finally(()=>{zipLibPromise=null});
  return zipLibPromise;
 }
+function closePreview(){
+ previewSequence++;
+ for(const url of previewUrls){try{URL.revokeObjectURL(url)}catch(_){}}
+ previewUrls=[];previewZipBlob=null;previewSku='';
+ if(previewOverlay){previewOverlay.remove();previewOverlay=null;}
+ document.removeEventListener('keydown',previewOnEscape);
+}
+function previewOnEscape(e){if(e.key==='Escape')closePreview()}
+function previewShell(sku){
+ closePreview();
+ previewSku=sku;
+ const shade=document.createElement('div');
+ shade.className='tib386-modal-shade';
+ shade.innerHTML='<div class="tib386-modal" role="dialog" aria-modal="true" aria-label="Предпросмотр готового SKU">'+
+ '<div class="tib386-modal-head"><div><h3 style="margin:0">👁 Предпросмотр '+esc(sku)+'</h3><p class="tib386-muted">Готовая инфографика из фоновой очереди</p></div>'+
+ '<button data-tib-preview-close aria-label="Закрыть предпросмотр">✕ Закрыть</button></div>'+
+ '<div id="tib386-preview-body" class="tib386-muted" aria-live="polite">Открываю сохранённые PNG…</div></div>';
+ shade.addEventListener('click',async e=>{
+   if(e.target===shade||e.target.closest('[data-tib-preview-close]')){closePreview();return}
+   const button=e.target.closest('button');
+   if(!button)return;
+   if(button.hasAttribute('data-tib-preview-slide')){
+     const no=Number(button.dataset.tibPreviewSlide),img=shade.querySelector('#tib386-main-img');
+     if(!img||!previewUrls[no])return;
+     img.src=previewUrls[no];
+     shade.querySelectorAll('[data-tib-preview-slide]').forEach(x=>x.classList.toggle('active',Number(x.dataset.tibPreviewSlide)===no));
+   }else if(button.hasAttribute('data-tib-preview-zip')&&previewZipBlob){
+     downloadBlob('21vek_'+previewSku.replace(/[^a-zA-Z0-9_-]/g,'_')+'_7slides.zip',previewZipBlob);
+   }
+ });
+ document.body.appendChild(shade);previewOverlay=shade;
+ document.addEventListener('keydown',previewOnEscape);
+}
+async function previewSkuNow(sku){
+ const batchId=current?.id;
+ if(!batchId||!list(current.items).some(x=>x.status==='completed'&&x.sku===sku))throw Error('Нужный SKU ещё не готов');
+ previewShell(sku);
+ const epoch=previewSequence;
+ const body=previewOverlay?.querySelector('#tib386-preview-body');
+ try{
+   const [meta,JSZip]=await Promise.all([invoke('batch-preview',{batch_id:batchId,sku}),zipLib()]);
+   if(epoch!==previewSequence||!previewOverlay)return;
+   const response=await fetch(meta.url);
+   if(!response.ok)throw Error('Не удалось открыть сохранённые файлы: HTTP '+response.status);
+   const buffer=await response.arrayBuffer();
+   if(buffer.byteLength>50*1024*1024)throw Error('Комплект слишком велик для просмотра в браузере');
+   const zip=await JSZip.loadAsync(buffer);
+   if(epoch!==previewSequence||!previewOverlay)return;
+   const slides=Object.keys(zip.files).filter(x=>/^slide_\d{2}\.png$/i.test(x)).sort();
+   if(!slides.length)throw Error('В сохранённом комплекте пока нет PNG');
+   const urls=[];
+   for(const file of slides.slice(0,7)){
+     const blob=await zip.files[file].async('blob');
+     const url=URL.createObjectURL(new Blob([blob],{type:'image/png'}));
+     urls.push(url);
+   }
+   if(epoch!==previewSequence||!previewOverlay){urls.forEach(x=>URL.revokeObjectURL(x));return}
+   previewUrls=urls;previewZipBlob=new Blob([buffer],{type:'application/zip'});
+   let audit=null;
+   try{if(zip.files['audit.json'])audit=JSON.parse(await zip.files['audit.json'].async('string'))}catch(_){}
+   if(epoch!==previewSequence||!previewOverlay)return;
+   const auditInfo=audit&&Array.isArray(audit.warnings)?audit.warnings.slice(0,5):[];
+   const trustedUrl=typeof meta.product_url==='string'&&/^https:\/\/(?:www\.)?21vek\.by\//i.test(meta.product_url)?meta.product_url:'';
+   body.innerHTML='<div class="tib386-actions"><b>'+esc(meta.product_name||meta.sku)+'</b>'+
+   '<button class="tib386-primary" data-tib-preview-zip>↓ Скачать 7 слайдов (ZIP)</button>'+
+   (trustedUrl?'<a href="'+esc(trustedUrl)+'" target="_blank" rel="noopener noreferrer">Карточка 21vek ↗</a>':'')+'</div>'+
+   '<div class="tib386-preview-main"><img id="tib386-main-img" src="'+urls[0]+'" alt="Слайд 1"></div>'+
+   '<div class="tib386-thumbs">'+urls.map((url,i)=>'<button data-tib-preview-slide="'+i+'" class="'+(i===0?'active':'')+'" title="Слайд '+(i+1)+'"><img src="'+url+'" alt="Слайд '+(i+1)+'"></button>').join('')+'</div>'+
+   '<p class="tib386-muted">Слайды отображаются из готового ZIP, который уже сохранил сервер. Это не повторная генерация.</p>'+
+   (auditInfo.length?auditInfo.map(w=>'<div class="tib386-preview-warning">⚠ '+esc(w)+'</div>').join(''):'')+
+   '<div class="tib386-preview-warning">Перед публикацией проверь, что характеристики и модель на всех слайдах правильные.</div>';
+ }catch(err){
+   if(epoch===previewSequence&&previewOverlay&&body)body.innerHTML='<div class="tib386-note err">'+esc(err?.message||err)+'</div>';
+ }
+}
 async function download(id){
  if(downloading)return;
  downloading=true;banner='Готовлю архив для скачивания…';bannerError=false;draw();
@@ -189,6 +295,7 @@ async function click(e){
   if(b.hasAttribute('data-tib-group')){
    const x=b.dataset.tibGroup;if(selected.has(x))selected.delete(x);else selected.add(x);draw();return;
   }
+  if(b.hasAttribute('data-tib-preview')){await previewSkuNow(b.dataset.tibPreview);return}
   if(b.hasAttribute('data-tib-start')){await start();return}
   if(b.hasAttribute('data-tib-refresh')){await refresh();return}
   if(b.hasAttribute('data-tib-status')){await showJob(b.dataset.tibStatus);return}
@@ -196,6 +303,12 @@ async function click(e){
  }catch(err){banner=String(err.message||err);bannerError=true;draw()}
 }
 function input(e){
+ if(e.target.matches('[data-tib-ready-filter]')){
+  readyFilter=e.target.value;const caret=e.target.selectionStart;
+  draw();const next=root?.querySelector('[data-tib-ready-filter]');
+  if(next){next.focus();try{next.setSelectionRange(caret,caret)}catch(_){}}
+  return;
+ }
  if(!e.target.matches('[data-tib-filter]'))return;
  filter=e.target.value;
  const caret=e.target.selectionStart;
@@ -205,6 +318,7 @@ function input(e){
 }
 async function open(parent){
  if(!parent)return;
+ closePreview();
  css();clearTimeout(timer);
  root=parent.querySelector('#tib386');
  if(!root){root=document.createElement('section');root.id='tib386';parent.insertBefore(root,parent.firstChild);}
