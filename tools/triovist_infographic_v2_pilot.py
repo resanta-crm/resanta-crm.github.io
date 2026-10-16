@@ -41,7 +41,7 @@ def call(action,args,timeout=200):
 def update(pilot,fields):
     db_update("triovist_infographic_v2_pilots",{"id":"eq."+pilot["id"],"status":"in.(queued,processing)"},fields)
 def slides(pilot_id):
-    return db_get("triovist_infographic_v2_slides",{"pilot_id":"eq."+pilot_id,"select":"id,slide_no,status,final_path,error_message","order":"slide_no.asc","limit":"8"})
+    return db_get("triovist_infographic_v2_slides",{"pilot_id":"eq."+pilot_id,"select":"id,slide_no,status,scene_path,final_path,error_message","order":"slide_no.asc","limit":"8"})
 def still_active(pid):
     rows=db_get("triovist_infographic_v2_pilots",{"id":"eq."+pid,"select":"status,completed_slides,paid_images_started","limit":"1"})
     return rows and rows[0]["status"] in ("queued","processing")
@@ -236,6 +236,11 @@ def build(pilot):
             result=call("worker-image",{"pilot_id":id,"slide_no":nr,"photo_base64":ref},timeout=235)
             raw=base64.b64decode(result["image_base64"],validate=True)
             if len(raw)<12000 or len(raw)>22_000_000:raise RuntimeError("Image size invalid")
+            # Preserve the untouched AI scene so editorial changes never require a NEW image API call.
+            scene_path=f"premium-v2/{id}/scene_{nr:02}.jpg"
+            storage_put(scene_path,raw,content_type="image/jpeg")
+            db_update("triovist_infographic_v2_slides",{"pilot_id":"eq."+id,"slide_no":"eq."+str(nr)},
+                      {"scene_path":scene_path,"updated_at":now()})
             final=premium_composite(raw,slide,facts,product)
             path=f"premium-v2/{id}/slide_{nr:02}.png"
             storage_put(path,final,content_type="image/png")
@@ -248,16 +253,62 @@ def build(pilot):
                       {"status":"failed","error_message":str(exc)[:270],"updated_at":now()})
             raise
     if len([s for s in slides(id) if s["status"]=="completed"])==8 and still_active(id):
-        update(pilot,{"status":"needs_review","completed_slides":8,"stage":"8 слайдов готовы — требуется утверждение директора",
+        hero_refs=story[0].get("fact_ids") or []
+        coverage=len({x for x in hero_refs if any(f["id"]==x for f in facts)})
+        saved=slides(id)
+        scenes_saved=all(row.get("scene_path") for row in saved)
+        update(pilot,{"status":"needs_review","completed_slides":8,
+                      "stage":"8 слайдов готовы — обязательная визуальная проверка директора",
                 "audit":{"source_url":url,"provider":"OpenAI Image API","model":"gpt-image-2.5-sunburst",
-                         "automatically_publishable":False,"manual_review_required":True,"generated_at":now()},
+                         "editorial_version":"2.1","hero_verified":coverage>=3,
+                         "hero_fact_count":coverage,"scene_layers_preserved":scenes_saved,
+                         "russian_text_from_verified_facts":True,"requires_visual_review":True,
+                         "automatically_publishable":False,"manual_review_required":True,
+                         "pending_recompose":[],"generated_at":now()},
                 "finished_at":now(),"updated_at":now()})
         log("V2 pilot needs review",id)
+def recompose_text_only(pilot):
+    """Re-render signed-off factual text from stored source scene. ZERO Image API requests."""
+    if pilot.get("status")!="needs_review":return
+    audit=pilot.get("audit") or {}
+    if audit.get("editorial_version")!="2.1":return
+    pending=[x for x in audit.get("pending_recompose",[]) if isinstance(x,int) and 1<=x<=8]
+    if not pending:return
+    id=pilot["id"]
+    story=pilot.get("storyboard") or []
+    facts=pilot.get("facts") or []
+    product={"sku":pilot["sku"],"product_name":pilot["product_name"]}
+    if len(story)!=8:raise RuntimeError("Stored storyboard invalid, no paid calls")
+    for nr in pending:
+        item=next((x for x in slides(id) if x["slide_no"]==nr),None)
+        if not item or not item.get("scene_path") or item.get("status")!="completed":
+            raise RuntimeError("Original scene unavailable: copy-only corrections cannot run")
+        # Never re-run image generator on corrections.
+        src=storage_get(item["scene_path"])
+        final=premium_composite(src,story[nr-1],facts,product)
+        storage_put(item["final_path"],final,content_type="image/png")
+        log("V2.1 text-only recompose:",id,nr,"no paid image request")
+        new_rows=db_get("triovist_infographic_v2_pilots",{"id":"eq."+id,"select":"audit,status","limit":"1"})
+        if not new_rows or new_rows[0]["status"]!="needs_review":return
+        current=new_rows[0].get("audit") or {}
+        if nr in current.get("pending_recompose",[]):
+            current["pending_recompose"]=[n for n in current["pending_recompose"] if n!=nr]
+            current["last_text_recomposed"]=now()
+            db_update("triovist_infographic_v2_pilots",
+                      {"id":"eq."+id,"status":"eq.needs_review"},
+                      {"audit":current,"stage":"Подписи пересобраны без новых платных изображений","updated_at":now()})
+
 def main():
     pilots=db_get("triovist_infographic_v2_pilots",{
      "status":"in.(queued,processing)","select":"*","order":"created_at.asc","limit":"1"})
     if not pilots:
-        log("V2 no active pilots")
+        review=db_get("triovist_infographic_v2_pilots",{
+            "status":"eq.needs_review","select":"*","order":"updated_at.desc","limit":"10"})
+        for pilot in review:
+            if (pilot.get("audit") or {}).get("pending_recompose"):
+                recompose_text_only(pilot)
+                return
+        log("V2 no paid-generation or text-only jobs")
         return
     pilot=pilots[0]
     try:build(pilot)
