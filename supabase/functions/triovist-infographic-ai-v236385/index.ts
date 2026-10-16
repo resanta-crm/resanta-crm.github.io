@@ -219,12 +219,28 @@ Deno.serve(async(req:Request)=>{
     const {data,error}=await q;if(error)throw error;
     return send(req,200,{ok:true,batches:data||[]});
   }
-  if(action==="batch-status"||action==="batch-download"||action==="batch-preview"){
+  if(action==="batch-status"||action==="batch-download"||action==="batch-preview"||action==="batch-stop"){
     const batchId=clean(input.batch_id,48);
     if(!/^[a-f0-9-]{36}$/i.test(batchId))return send(req,400,{ok:false,error:"INVALID_BATCH_ID"});
     const {data:batch,error}=await db.from("triovist_infographic_batches_v1").select("*").eq("id",batchId).maybeSingle();
     if(error||!batch)return send(req,404,{ok:false,error:"BATCH_NOT_FOUND"});
     if(!leader&&batch.owner_user_id!==au.user.id)return send(req,403,{ok:false,error:"ACCESS_DENIED"});
+    if(action==="batch-stop"){
+      // Cancellation is idempotent, scoped to authenticated owner or Triovist leader.
+      // Already generated per-SKU ZIPs remain in private Storage and can be previewed.
+      if(!["queued","processing"].includes(batch.status))return send(req,200,{ok:true,batch,status:batch.status,already_stopped:true});
+      const {data:stopped,error:stopError}=await db.from("triovist_infographic_batches_v1")
+        .update({status:"cancelled",finished_at:new Date().toISOString(),updated_at:new Date().toISOString(),
+          error_summary:"Остановлено пользователем. Уже созданные слайды сохранены."})
+        .eq("id",batchId).in("status",["queued","processing"])
+        .select("*").maybeSingle();
+      if(stopError)throw stopError;
+      if(!stopped){
+        const {data:fresh}=await db.from("triovist_infographic_batches_v1").select("*").eq("id",batchId).maybeSingle();
+        return send(req,200,{ok:true,batch:fresh||batch,already_stopped:true});
+      }
+      return send(req,200,{ok:true,batch:stopped,stopped:true});
+    }
     if(action==="batch-preview"){
       // Preview an already saved exact-SKU ZIP, while other items continue in the worker.
       // The caller must own this batch (checked above); no arbitrary Storage path is accepted.
