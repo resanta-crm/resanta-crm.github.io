@@ -61,17 +61,21 @@ function currentHtml(){
  const x=active,ready=Number(x.completed_slides||0),status=x.status;
  const state={queued:'В очереди',processing:'Генерация',needs_review:'Готово к проверке',approved:'Утверждено',cancelled:'Остановлено',failed:'Ошибка'};
  const done=ready===8&&['needs_review','approved'].includes(status);
+ const mimeRepair=status==='failed'&&!x.recovery_approved&&Number(x.paid_images_started||0)===1&&
+   /mime type image\/png is not supported/i.test(x.error_message||'');
  return '<div style="border-top:1px solid #cbdcec;margin-top:12px;padding-top:12px">'+
  '<div class="tiv2390-header"><div><h4>Тестовый SKU: '+h(x.sku)+'</h4><p>'+h(x.product_name)+'</p></div>'+
  '<span class="tiv2390-tag">'+h(state[status]||status)+'</span></div>'+
  '<div class="tiv2390-progress"><span style="width:'+(ready/8*100)+'%"></span></div>'+
- '<div class="tiv2390-actions"><b>'+ready+'/8 слайдов</b><span class="tiv2390-caption">Платных запросов: '+Number(x.paid_images_started||0)+' / 8</span>'+
+ '<div class="tiv2390-actions"><b>'+ready+'/8 слайдов</b><span class="tiv2390-caption">Платных запросов: '+Number(x.paid_images_started||0)+' / '+Number(x.max_paid_images||8)+'</span>'+
  '<button data-v2-status>↻ Проверить результат</button>'+
  (['queued','processing'].includes(status)?'<button class="danger" data-v2-cancel>⏹ Остановить тест</button>':'')+
+ (mimeRepair?'<button class="prime" data-v2-recover>↻ Продолжить после исправления PNG</button>':'')+
  (done?'<button class="prime" data-v2-download-all>↓ Скачать 8 PNG одним ZIP</button>':'')+
  (status==='needs_review'?'<button data-v2-approve>✓ Утвердить образец</button>':'')+'</div>'+
  '<p class="tiv2390-caption">'+h(x.stage||'')+'</p>'+
- (x.error_message?'<div class="tiv2390-warn">'+h(x.error_message)+'</div>':'')+
+ (mimeRepair?'<div class="tiv2390-warn">Исправлена настройка PNG в хранилище. Первая платная картинка не сохранилась. Для полного комплекта из 8 PNG потребуется ещё до 8 платных запросов (до 9 всего). Повтор будет только после твоего подтверждения.</div>':'')+
+ (x.error_message&&!mimeRepair?'<div class="tiv2390-warn">'+h(x.error_message)+'</div>':'')+
  (status==='approved'?'<div class="tiv2390-note">Образец утверждён директором. Автоматическая массовая генерация всё ещё закрыта до отдельного включения производственного конвейера.</div>':'')+
  previews()+'</div>';
 }
@@ -149,6 +153,17 @@ async function start(){
  try{const d=await req('start',{sku});active=d.pilot;images=[];selectedSku='';message='Тест сохранён. Дожидаемся фонового запуска — повторно создавать его не требуется.';await refresh()}
  finally{busy=false;draw()}
 }
+async function recover(){
+ if(!active||busy)return;
+ if(!window.confirm('Хранилище PNG исправлено. Первый платный запрос уже был выполнен, но результат потерялся при сохранении. Восстановление этого же теста означает до 8 НОВЫХ платных генераций (всего до 9 платных вызовов за 8 слайдов). Подтверждаешь дополнительный платный запрос?'))return;
+ busy=true;message='Восстанавливаю существующее задание, новый SKU не создаю…';draw();
+ try{
+  const d=await req('recover',{pilot_id:active.id,confirm_extra_paid_image:true});
+  active=d.pilot;
+  message='Тот же тест снова в очереди. Хранилище PNG исправлено, ожидаем фоновый запуск.';
+  await status();
+ }finally{busy=false;draw()}
+}
 async function cancel(){
  if(!active||!window.confirm('Остановить пилот? Готовые слайды сохранятся, новые платные запросы не будут запускаться.'))return;
  const d=await req('cancel',{pilot_id:active.id});
@@ -181,6 +196,7 @@ async function clicked(event){
   if(button.hasAttribute('data-v2-start')){await start();return}
   if(button.hasAttribute('data-v2-status')){await status();return}
   if(button.hasAttribute('data-v2-cancel')){await cancel();return}
+  if(button.hasAttribute('data-v2-recover')){await recover();return}
   if(button.hasAttribute('data-v2-approve')){await approve();return}
   if(button.hasAttribute('data-v2-download-all')){await downloadAll();return}
   if(button.hasAttribute('data-v2-load')){const p=pilots.find(x=>x.id===button.dataset.v2Load);if(p){active=p;images=[];await status()}return}
