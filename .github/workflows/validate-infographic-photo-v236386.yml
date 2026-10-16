@@ -27,7 +27,18 @@ jobs:
           python - <<'PY'
           import sys
           sys.path.insert(0,"tools")
+          import json,requests
+          from triovist_21vek_parser import next_state
           from triovist_infographic_batch import fetch_photo
+          url="https://www.21vek.by/concrete_mixers/20_vihr.html"
+          r=requests.get(url,timeout=25,headers={"User-Agent":"ResantaCRM-InfographicBatch/1.0 (+https://resanta-crm.by)"})
+          print("CARD HTTP",r.status_code,"html bytes",len(r.content))
+          state=next_state(r.text)
+          fd=(state.get("productCard") or {}).get("fullProductData") or {}
+          print("MODEL",fd.get("name"))
+          gallery=fd.get("gallery") or []
+          print("GALLERY TYPE",type(gallery).__name__,"LEN",len(gallery))
+          print("GALLERY SAMPLE",json.dumps(gallery[:3],ensure_ascii=False)[:5000] if isinstance(gallery,list) else json.dumps(gallery,ensure_ascii=False)[:5000])
           item={"sku":"74/1/20","product_name":"Бетономешалка Вихрь БМ-20АЧ (74/1/20)",
                 "product_url":"https://www.21vek.by/concrete_mixers/20_vihr.html"}
           image,url,name,facts=fetch_photo(item)
