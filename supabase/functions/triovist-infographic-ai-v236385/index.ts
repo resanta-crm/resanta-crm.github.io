@@ -219,12 +219,29 @@ Deno.serve(async(req:Request)=>{
     const {data,error}=await q;if(error)throw error;
     return send(req,200,{ok:true,batches:data||[]});
   }
-  if(action==="batch-status"||action==="batch-download"){
+  if(action==="batch-status"||action==="batch-download"||action==="batch-preview"){
     const batchId=clean(input.batch_id,48);
     if(!/^[a-f0-9-]{36}$/i.test(batchId))return send(req,400,{ok:false,error:"INVALID_BATCH_ID"});
     const {data:batch,error}=await db.from("triovist_infographic_batches_v1").select("*").eq("id",batchId).maybeSingle();
     if(error||!batch)return send(req,404,{ok:false,error:"BATCH_NOT_FOUND"});
     if(!leader&&batch.owner_user_id!==au.user.id)return send(req,403,{ok:false,error:"ACCESS_DENIED"});
+    if(action==="batch-preview"){
+      // Preview an already saved exact-SKU ZIP, while other items continue in the worker.
+      // The caller must own this batch (checked above); no arbitrary Storage path is accepted.
+      const requestedSku=clean(input.sku,80);
+      if(!requestedSku||requestedSku.length>80)return send(req,400,{ok:false,error:"INVALID_PREVIEW_SKU"});
+      const {data:item,error:previewError}=await db.from("triovist_infographic_batch_items_v1")
+        .select("sku,group_name,product_name,product_url,status")
+        .eq("batch_id",batchId).eq("sku",requestedSku).eq("status","completed").maybeSingle();
+      if(previewError||!item)return send(req,404,{ok:false,error:"SKU_NOT_READY",message:"Этот артикул ещё обрабатывается или недоступен."});
+      const safeSku=String(item.sku).replace(/[<>:"/\\|?*\x00-\x1f]+/g,"_").replace(/^[ ._]+|[ ._]+$/g,"").slice(0,105);
+      if(!safeSku)return send(req,400,{ok:false,error:"INVALID_SKU_PATH"});
+      const path="batches/"+batchId+"/items/"+safeSku+".zip";
+      const {data:signed,error:signError}=await db.storage.from("triovist-infographic-archives").createSignedUrl(path,600);
+      if(signError||!signed?.signedUrl)return send(req,409,{ok:false,error:"PREVIEW_NOT_READY",message:"Файлы уже готовятся. Повторите просмотр чуть позже."});
+      return send(req,200,{ok:true,sku:item.sku,group_name:item.group_name,product_name:item.product_name,
+        product_url:item.product_url,url:signed.signedUrl,expires_seconds:600});
+    }
     if(action==="batch-download"){
       if(!["completed","completed_with_errors"].includes(batch.status))return send(req,409,{ok:false,error:"BATCH_NOT_READY"});
       const paths=array(batch.archive_manifest).map((x:any)=>clean(x.path,300)).filter(Boolean);
