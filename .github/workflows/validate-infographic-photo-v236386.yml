@@ -1,0 +1,40 @@
+name: Validate Triovist source photo (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-infographic-photo-v236386.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read_public_card:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
+      - name: Verify exact SKU 74/1/20 public product photo and public specs
+        env:
+          SUPABASE_URL: https://example.com
+          SUPABASE_KEY: validation_only
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0,"tools")
+          from triovist_infographic_batch import fetch_photo
+          item={"sku":"74/1/20","product_name":"Бетономешалка Вихрь БМ-20АЧ (74/1/20)",
+                "product_url":"https://www.21vek.by/concrete_mixers/20_vihr.html"}
+          image,url,name,facts=fetch_photo(item)
+          print("Verified model:",name)
+          print("Image dimensions:",image.size)
+          print("Original image host:",url.split("/")[2])
+          print("Live fact count:",len(facts))
+          assert image.width>=450 and image.height>=450
+          assert "21vek.by" in url.split("/")[2]
+          PY
