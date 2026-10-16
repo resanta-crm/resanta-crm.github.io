@@ -286,7 +286,7 @@ async function loadForPage(page,epoch){
       await load('assets/08-manager-gap-sources.js','perf-manager-gap-v23671','RESANTA_MANAGER_GAP_SOURCES_V2322');
       return await load('assets/10-manager-plans-root-v2330.js','perf-manager-plans-v23671','RESANTA_MANAGER_PLANS_ROOT_V2330');
     }
-    if(p==='sales')return await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23671','RESANTA_MANAGER_SALES_YOY_V23634');
+    if(p==='sales'){await load('assets/49-manager-sales-yoy-v23634.js','perf-manager-yoy-v23671','RESANTA_MANAGER_SALES_YOY_V23634');return await load('assets/118-sales-analytics-v236374.js','perf-sales-analytics-v236374','RESANTA_SALES_ANALYTICS_V236374');}
     if(p==='markdown'){
       const ok=await load('assets/74-markdown-v23687.js','perf-markdown-v23687','RESANTA_MARKDOWN_V23687');
       if(ok&&activePage()==='markdown')await window.crmMarkdownOpenV23687?.(false);
