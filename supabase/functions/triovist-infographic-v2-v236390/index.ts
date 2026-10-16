@@ -343,7 +343,7 @@ Deno.serve(async(req:Request)=>{
       return make(req,409,{ok:false,error:"COPY_ONLY_UNAVAILABLE",
         message:"Для редактирования без оплаты нужны исходные сцены нового генератора 2.1. Старые PNG остаются без изменений."});
     const num=Number(input.slide_no);
-    if(!Number.isInteger(num)||num<1||num>8)return make(req,400,{ok:false,error:"BAD_SLIDE"});
+    if(!Number.isInteger(num)||num<2||num>8)return make(req,400,{ok:false,error:"BAD_SLIDE",message:"Главная обложка формируется строго из подтверждённого названия модели и приоритетных характеристик."});
     const title=checkedCaption(input.title,95),subtitle=checkedCaption(input.subtitle,120);
     if(!title||title.length<4||/^\s*(?:обложка|преимущества|характеристики)\s*$/i.test(title))
       return make(req,400,{ok:false,error:"BAD_TITLE",message:"Укажи конкретный заголовок без общих слов и рекламных обещаний."});
