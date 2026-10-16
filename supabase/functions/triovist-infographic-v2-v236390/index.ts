@@ -228,8 +228,16 @@ Deno.serve(async(req:Request)=>{
  }
  if(["status","cancel","approve","preview"].includes(action)){
   const id=str(input.pilot_id,50);if(!uuid(id))return make(req,400,{ok:false,error:"BAD_ID"});
-  const {data:pilot,error:pe}=await db.from("triovist_infographic_v2_pilots").select("*").eq("id",id).maybeSingle();
-  if(pe||!pilot)return make(req,404,{ok:false,error:"NOT_FOUND"});
+  // Use an explicit singleton array instead of .maybeSingle(): this gives us
+  // separate and actionable responses for PostgREST failures versus truly missing projects.
+  const {data:pilotRows,error:pe}=await db.from("triovist_infographic_v2_pilots")
+    .select("*").eq("id",id).limit(1);
+  if(pe){
+    console.error("TRIOVIST_V2_PILOT_READ",str(pe.code,36),str(pe.message,160));
+    return make(req,503,{ok:false,error:"PROJECT_READ_FAILED",message:"Не удалось прочитать проект из базы. Повторите проверку статуса. Код: "+str(pe.code||"UNKNOWN",30)});
+  }
+  const pilot=arr(pilotRows)[0];
+  if(!pilot)return make(req,404,{ok:false,error:"PILOT_ID_NOT_FOUND",message:"Запрошенный идентификатор теста не найден. Обновите список проектов, повторный запуск не нужен."});
   if(!leader&&pilot.owner_user_id!==auth.user.id)return make(req,403,{ok:false,error:"NOT_OWNER"});
   if(action==="cancel"){
     if(!leader&&pilot.owner_user_id!==auth.user.id)return make(req,403,{ok:false,error:"NOT_OWNER"});
