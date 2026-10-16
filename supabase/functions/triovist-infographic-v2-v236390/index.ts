@@ -181,6 +181,14 @@ async function buildStoryboard(facts:any[],product:any){
  return validateStoryboard(parseJson(answer),facts,product);
 }
 function artPrompt(product:any,facts:any[],slide:any){
+ const nSlide=Number(slide.number||0);
+ const emptySpace=nSlide===1?
+   "STRICT HERO COMPOSITION: place the entire exact product prominently in the RIGHT 55% of the frame, preserve its complete physical silhouette. The LEFT 45% from 15% to 90% height MUST be dark, clean and empty for a 5-row factual infographic panel. No generated glyphs. Aim for a cinematic Ozon-grade hero shot.":
+   ([4,6].includes(nSlide)?"Product or verified close-up on the LEFT and generous dark negative space at top RIGHT for large typography.":
+   [3,5].includes(nSlide)?"Use confirmed visible macro-details and a radically different composition to other slides; no fictional internal diagrams. Negative space top left.":
+   nSlide===7?"Premium factual feature photograph, NO fake contents, accessories, warranty documents, or unsupported packaging; unusual top-down angle only if possible without changing the model.":
+   "Strong unique campaign photography; different angle, scene and framing from the hero. Keep the upper quarter text-free.");
+
  const selected=arr(slide.fact_ids).map(x=>facts.find(f=>f.id===x)).filter(Boolean);
  const n=low(product?.product_name),brand=n.includes("huter")?"Huter yellow/black":n.includes("вихр")?"Vikhr orange/black":n.includes("eurolux")?"Eurolux verified brand accents":"Resanta red/black";
  return [
@@ -188,10 +196,11 @@ function artPrompt(product:any,facts:any[],slide:any){
   "The UPLOADED IMAGE depicts the EXACT product SKU. Preserve its brand colors, silhouette, physical geometry, design, visible controls, labeling and proportions. Do not replace the product with a similar model; DO NOT invent handles, accessories, internal parts or product features.",
   "Product identity (for grounding only): "+str(product?.product_name,180)+". SKU "+str(product?.sku,80),
   "Brand-adjacent premium visual palette: "+brand+".",
+  "Dedicated composition: "+emptySpace,
   "Scene design: "+slide.scene,
   "Specific safe photographic direction: "+slide.composition_note,
   "Grounded visual context facts: "+JSON.stringify(selected.map(x=>x.label+" "+x.value)),
-  "Render impressive cinematic advertising photography, sharp real product, tasteful realistic contextual background and authentic shadows. Leave at least upper 25% and one side as uncluttered NEGATIVE SPACE for overlaying separate real text.",
+  "Render impressive cinematic advertising photography. Preserve exact actual SKU and all visible proportions. Follow the dedicated composition above, including protected text-free areas.",
   "No packaging, consumables, nozzle, motor cross section, instruction document, people, animals, explosive effects, impossible water flows, comparatives or illustrative made-up mechanisms unless explicitly confirmed and visible in the provided photograph.",
   "If the requested conceptual scene would alter the product, choose a professional studio background instead. Do not draw typography."
  ].join("\n");
