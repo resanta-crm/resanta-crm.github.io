@@ -3351,6 +3351,8 @@ window.addEventListener('pageshow',function(){
   const isLeader=()=>currentProfile?.role==='boss'&&LEADERS.includes(email());
   const isTriManager=()=>String(currentProfile?.access_scope||'').toLowerCase()==='triovist'&&MANAGERS.includes(email());
   const canSee=()=>isLeader()||isTriManager();
+  const cardsTabActive=()=>!!document.querySelector('#tr14-shell [data-tr14="cards"]')?.classList.contains('on');
+  const showCardsRoot=()=>{const c=document.getElementById('tri21-card');if(c&&cardsTabActive())c.style.setProperty('display','block','important');return c};
   const managerName=e=>String(e||'').toLowerCase()===ALEKS?'Александренко':String(e||'').toLowerCase()===KRISHTAL?'Кришталь':'Не распределено';
   const h=v=>typeof esc==='function'?esc(v):String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const ha=v=>h(v).replace(/`/g,'&#96;');
@@ -3600,8 +3602,8 @@ window.addEventListener('pageshow',function(){
     }finally{tri21Loading=false;}
   }
 
-  window.triovistContentReload=async function(force=true){if(force)window.TRIOVIST_DATA_HUB_V227315?.invalidate('content');await loadDashboard(force);window.triovistContentRender();};
-  window.triovistContentEnsureLoaded=async function(){await loadDashboard(false);window.triovistContentRender();};
+  window.triovistContentReload=async function(force=true){showCardsRoot();if(force)window.TRIOVIST_DATA_HUB_V227315?.invalidate('content');await loadDashboard(force);showCardsRoot();window.triovistContentRender();showCardsRoot();};
+  window.triovistContentEnsureLoaded=async function(){showCardsRoot();await loadDashboard(false);showCardsRoot();window.triovistContentRender();showCardsRoot();};
 
   function filteredIssues(){
     const manager=document.getElementById('tri21-manager')?.value||'all',status=document.getElementById('tri21-status')?.value||'active',type=document.getElementById('tri21-type')?.value||'all',q=norm(document.getElementById('tri21-search')?.value||'');
@@ -3612,7 +3614,7 @@ window.addEventListener('pageshow',function(){
   }
 
   window.triovistContentRender=function(){
-    if(!canSee())return;injectUi();applyAccess();removeLostGroups();
+    if(!canSee())return;injectUi();showCardsRoot();applyAccess();removeLostGroups();
     const meta=document.getElementById('tri21-meta'),kpis=document.getElementById('tri21-kpis'),mgrBox=document.getElementById('tri21-managers'),list=document.getElementById('tri21-list');
     if(!meta||!kpis||!mgrBox||!list)return;
     if(tri21Loading){meta.textContent='Загрузка контроля карточек…';return;}
@@ -3641,7 +3643,7 @@ window.addEventListener('pageshow',function(){
   window.goPage=function(page,title){return baseGo.apply(this,arguments);};
 
   injectUi();removeLostGroups();
-  window.RESANTA_V2265=Object.freeze({version:VERSION,excelSnapshots:true,automaticIssueOpenClose:true,missingCardNeedsReview:true,lostGroupsRemoved:true});
+  window.RESANTA_V2265=Object.freeze({version:VERSION+'-v23.6.380',excelSnapshots:true,automaticIssueOpenClose:true,missingCardNeedsReview:true,lostGroupsRemoved:true,rootVisibilityGuard:true});
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 25 ===== */
