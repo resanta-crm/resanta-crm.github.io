@@ -99,7 +99,7 @@ install();
   const TRI_ALEKS_EMAIL='aleksandrenko_av@resanta.ru',TRI_KRISHTAL_EMAIL='krishtal_na@resanta.ru';
   const TRI_LEADER_EMAILS=Object.freeze(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
   let triItems=[],triAssignments=[],triPeriodPlans=[],triSelectedMonthPlans=[],triHistory={},triDashboard=null;
-  let triStockItems=[],triStockMeta={},triStockDays=45,triStockError='',triLoading=false,triLoaded=false;
+  let triStockItems=[],triStockMeta={},triStockDays=45,triStockError='',triLoading=false,triLoaded=false,triStockLoaded=false,triSalesFlight=null,triStockFlight=null;
   const triNorm=v=>String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ').trim();
   const triCompact=v=>String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,'');
   const triNum=v=>Number(v)||0,triEmail=()=>String(currentProfile?.email||currentUser?.email||'').trim().toLowerCase();
@@ -154,14 +154,54 @@ install();
   const triSelectedStart=()=>document.getElementById('tri-period-start')?.value||'';
   const triSelectedMode=()=>document.getElementById('tri-period-mode')?.value||'month';
   window.triovistPeriodModeChanged=function(){const custom=triSelectedMode()==='custom';const w=document.getElementById('tri-start-wrap');if(w)w.style.display=custom?'block':'none';if(custom&&!triSelectedStart()){const end=triSelectedEnd();document.getElementById('tri-period-start').value=end?end.slice(0,4)+'-01':'';}triovistPeriodChanged();};
-  window.triovistPeriodChanged=async function(){await triovistReload();};
+  window.triovistPeriodChanged=async function(){await window.triovistSalesReload?.(true);};
 
-  async function triLoadData(){if(!triCanSee()){triLoaded=true;return;}triLoading=true;try{const payload={p_end_month:triSelectedEnd()||null,p_mode:triSelectedMode(),p_start_month:triSelectedMode()==='custom'?(triSelectedStart()||null):null};const hub=window.TRIOVIST_DATA_HUB_V227315;const [dashboard,a]=await Promise.all([withTimeout(hub.sales(payload),95000,'аналитика Триовист'),withTimeout(db.from('triovist_group_assignments').select('*').eq('active',true).order('priority').order('group_name'),20000,'закрепление групп')]);if(a.error)throw a.error;triDashboard=dashboard||{};triItems=Array.isArray(triDashboard.items)?triDashboard.items:[];triPeriodPlans=triDashboard.period_plans||[];triSelectedMonthPlans=triDashboard.selected_month_plans||[];triHistory=triDashboard.history||{};triAssignments=a.data||[];const e=document.getElementById('tri-period-month');if(e&&!e.value)e.value=triDashboard.end_month||'';const st=document.getElementById('tri-period-start');if(st&&!st.value)st.value=triDashboard.current_from||'';triLoaded=true;}finally{triLoading=false;}}
-  async function triLoadStock(){triStockError='';try{const hub=window.TRIOVIST_DATA_HUB_V227315,d=await withTimeout(hub.stock({p_target_days:Number(document.getElementById('tri-stock-days')?.value)||45}),95000,'остатки Триовиста');const data=d||{};triStockItems=Array.isArray(data.items)?data.items:[];triStockMeta=data.imports||{};triStockDays=Number(data.target_days)||45;const s=document.getElementById('tri-stock-days');if(s)s.value=String(triStockDays);}catch(e){triStockItems=[];triStockError=e.message||String(e);}}
-  window.crmPrefetchTriovistV22734=async function(){if(!triCanSee())return false;try{await Promise.allSettled([triLoadData(),triLoadStock()]);return true;}catch(_){return false;}};
-  window.triovistReload=async function(){try{window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales','stock');triLoaded=false;renderTriovist();await Promise.all([triLoadData(),triLoadStock()]);renderTriovist();}catch(e){console.error(e);const w=document.getElementById('triovist-warning');if(w)w.innerHTML='<div class="tri-warning">Не удалось загрузить Триовист: '+esc(e.message||String(e))+'</div>';}};
-  window.triovistSalesReload=async function(force=true){try{if(force)window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales');await triLoadData();renderTriovist();return true;}catch(e){console.error(e);const w=document.getElementById('triovist-warning');if(w)w.innerHTML='<div class="tri-warning">Не удалось обновить продажи Триовист: '+esc(e.message||String(e))+'</div>';throw e;}};
-  window.triovistStockReload=async function(force=true){try{if(force)window.TRIOVIST_DATA_HUB_V227315?.invalidate('stock');await triLoadStock();renderTriovistStock();return true;}catch(e){console.error(e);throw e;}};
+  async function triLoadData(force=false){
+    if(!triCanSee()){triLoaded=true;return triDashboard;}
+    if(triLoaded&&!force)return triDashboard;
+    if(triSalesFlight)return triSalesFlight;
+    triSalesFlight=(async()=>{
+      triLoading=true;
+      try{
+        const payload={p_end_month:triSelectedEnd()||null,p_mode:triSelectedMode(),p_start_month:triSelectedMode()==='custom'?(triSelectedStart()||null):null};
+        const hub=window.TRIOVIST_DATA_HUB_V227315;
+        const [dashboard,a]=await Promise.all([
+          withTimeout(hub.sales(payload),95000,'аналитика Триовист'),
+          withTimeout(db.from('triovist_group_assignments').select('*').eq('active',true).order('priority').order('group_name'),20000,'закрепление групп')
+        ]);
+        if(a.error)throw a.error;
+        triDashboard=dashboard||{};triItems=Array.isArray(triDashboard.items)?triDashboard.items:[];
+        triPeriodPlans=triDashboard.period_plans||[];triSelectedMonthPlans=triDashboard.selected_month_plans||[];
+        triHistory=triDashboard.history||{};triAssignments=a.data||[];
+        const e=document.getElementById('tri-period-month');if(e&&!e.value)e.value=triDashboard.end_month||'';
+        const st=document.getElementById('tri-period-start');if(st&&!st.value)st.value=triDashboard.current_from||'';
+        triLoaded=true;return triDashboard;
+      }finally{triLoading=false}
+    })().finally(()=>{triSalesFlight=null});
+    return triSalesFlight;
+  }
+  async function triLoadStock(force=false){
+    if(triStockLoaded&&!force)return{items:triStockItems,imports:triStockMeta,target_days:triStockDays};
+    if(triStockFlight)return triStockFlight;
+    triStockFlight=(async()=>{
+      triStockError='';
+      try{
+        const hub=window.TRIOVIST_DATA_HUB_V227315;
+        const d=await withTimeout(hub.stock({p_target_days:Number(document.getElementById('tri-stock-days')?.value)||45}),95000,'остатки Триовиста');
+        const data=d||{};triStockItems=Array.isArray(data.items)?data.items:[];triStockMeta=data.imports||{};
+        triStockDays=Number(data.target_days)||45;triStockLoaded=true;
+        const sel=document.getElementById('tri-stock-days');if(sel)sel.value=String(triStockDays);
+        return data;
+      }catch(e){triStockItems=[];triStockError=e.message||String(e);triStockLoaded=true;return null}
+    })().finally(()=>{triStockFlight=null});
+    return triStockFlight;
+  }
+  window.crmPrefetchTriovistV22734=async function(){return true;};
+  window.triovistReload=async function(){try{window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales','stock');triLoaded=false;triStockLoaded=false;renderTriovist();await Promise.all([triLoadData(true),triLoadStock(true)]);renderTriovist();}catch(e){console.error(e);const w=document.getElementById('triovist-warning');if(w)w.innerHTML='<div class="tri-warning">Не удалось загрузить Триовист: '+esc(e.message||String(e))+'</div>';}};
+  window.triovistSalesEnsureLoaded=async function(){try{await triLoadData(false);renderTriovist();return true}catch(e){console.error(e);const w=document.getElementById('triovist-warning');if(w)w.innerHTML='<div class="tri-warning">Не удалось загрузить продажи Триовист: '+esc(e.message||String(e))+'</div>';throw e}};
+  window.triovistStockEnsureLoaded=async function(){await triLoadStock(false);renderTriovistStock();return !triStockError;};
+  window.triovistSalesReload=async function(force=true){try{if(force){window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales');triLoaded=false}await triLoadData(force);renderTriovist();return true;}catch(e){console.error(e);const w=document.getElementById('triovist-warning');if(w)w.innerHTML='<div class="tri-warning">Не удалось обновить продажи Триовист: '+esc(e.message||String(e))+'</div>';throw e;}};
+  window.triovistStockReload=async function(force=true){try{if(force){window.TRIOVIST_DATA_HUB_V227315?.invalidate('stock');triStockLoaded=false}await triLoadStock(force);renderTriovistStock();return !triStockError;}catch(e){console.error(e);throw e;}};
 
   function triPeriodLabel(){const cf=triDashboard?.current_from,ct=triDashboard?.current_to,pf=triDashboard?.previous_from,pt=triDashboard?.previous_to;return{label:cf===ct?'месяц '+ct:cf+' — '+ct,prevLabel:pf===pt?'месяц '+pt:pf+' — '+pt};}
   function triFilteredItems(){let mgr=document.getElementById('tri-manager-filter')?.value||'all';if(triIsManager())mgr=triEmail();const q=triSearchValue();return triItems.filter(r=>(mgr==='all'||String(r.manager_email||'').toLowerCase()===mgr)&&(!q||triNorm([r.assigned_group,r.category,r.subgroup,r.sku,r.product].join(' ')).includes(q)));}
@@ -170,10 +210,10 @@ install();
   const triSelectedPlanFor=e=>{const x=triSelectedMonthPlans.find(p=>String(p.manager_email||'').toLowerCase()===e);return x?.plan_amount==null?'':(triCents(x.plan_amount)/100).toFixed(2).replace('.',',');};
   function triManagerSummary(items,e){const x=triAggregate(items.filter(r=>String(r.manager_email||'').toLowerCase()===e),()=>e)[0]||{cur:0,prev:0};return{...x,email:e,name:triManagerName(e),plan:triPlanFor(e)};}
   function triRenderPlanEditor(){const root=document.getElementById('tri-plan-editor');if(!root||!triIsBoss())return;const month=triDashboard?.end_month||triSelectedEnd();root.innerHTML=[TRI_ALEKS_EMAIL,TRI_KRISHTAL_EMAIL].map(e=>'<div class="tri-plan-box"><label class="form-label">'+triManagerName(e)+' · '+esc(month)+'</label><input class="form-input tri-plan-input" inputmode="decimal" data-email="'+e+'" value="'+escAttr(triSelectedPlanFor(e))+'" placeholder="0,00"></div>').join('');}
-  window.triovistSavePlans=async function(){if(!triIsBoss())return;const month=triDashboard?.end_month||triSelectedEnd();try{for(const input of document.querySelectorAll('.tri-plan-input')){const raw=String(input.value||'').trim().replace(/\s/g,'').replace(',','.');if(raw==='')continue;const n=Number(raw);if(!Number.isFinite(n)||n<0)throw new Error('Некорректный план');const r=await db.rpc('triovist_set_plan',{p_manager_email:input.dataset.email,p_period_month:month,p_plan_amount:Math.round(n*100)/100});if(r.error)throw r.error;}alert('✅ Планы сохранены');await triovistReload();}catch(e){alert('Не удалось сохранить планы: '+(e.message||e));}};
+  window.triovistSavePlans=async function(){if(!triIsBoss())return;const month=triDashboard?.end_month||triSelectedEnd();try{for(const input of document.querySelectorAll('.tri-plan-input')){const raw=String(input.value||'').trim().replace(/\s/g,'').replace(',','.');if(raw==='')continue;const n=Number(raw);if(!Number.isFinite(n)||n<0)throw new Error('Некорректный план');const r=await db.rpc('triovist_set_plan',{p_manager_email:input.dataset.email,p_period_month:month,p_plan_amount:Math.round(n*100)/100});if(r.error)throw r.error;}alert('✅ Планы сохранены');await window.triovistSalesReload?.(true);}catch(e){alert('Не удалось сохранить планы: '+(e.message||e));}};
   function triRenderMyGroups(){const root=document.getElementById('tri-my-groups');if(!root||!triIsManager())return;const rows=triAssignments.filter(a=>String(a.manager_email).toLowerCase()===triEmail());root.className='tri-my-groups';root.innerHTML=rows.map(a=>'<span class="tri-group-chip">'+esc(a.group_name)+'</span>').join('')||'<div class="tri-empty">Группы не закреплены.</div>';}
   function triRenderAssignments(){const root=document.getElementById('tri-assignments');if(!root||!triIsBoss())return;root.innerHTML=triAssignments.map(a=>'<div class="tri-assignment-row"><div><b>'+esc(a.group_name)+'</b></div><select class="form-input" onchange="triovistChangeAssignment(\''+escAttr(a.id)+'\',this.value)" '+(Number(a.priority)===1?'disabled':'')+'><option value="'+TRI_ALEKS_EMAIL+'" '+(String(a.manager_email).toLowerCase()===TRI_ALEKS_EMAIL?'selected':'')+'>Александренко</option><option value="'+TRI_KRISHTAL_EMAIL+'" '+(String(a.manager_email).toLowerCase()===TRI_KRISHTAL_EMAIL?'selected':'')+'>Кришталь</option></select></div>').join('');}
-  window.triovistChangeAssignment=async function(id,email){if(!triIsBoss())return;const r=await db.from('triovist_group_assignments').update({manager_email:email,manager_name:triManagerName(email),updated_at:new Date().toISOString()}).eq('id',id);if(r.error)alert(r.error.message);await triovistReload();};
+  window.triovistChangeAssignment=async function(id,email){if(!triIsBoss())return;const r=await db.from('triovist_group_assignments').update({manager_email:email,manager_name:triManagerName(email),updated_at:new Date().toISOString()}).eq('id',id);if(r.error)alert(r.error.message);await window.triovistSalesReload?.(true);};
   window.triovistOpenGroup=i=>{const e=document.getElementById('tri-detail-'+i);if(e){e.open=true;setTimeout(()=>e.scrollIntoView({behavior:'smooth',block:'start'}),30);}};
 
   async function triEnsureXlsx(){if(window.XLSX)return window.XLSX;if(typeof window._loadSheetJS==='function')return window._loadSheetJS();return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>resolve(window.XLSX);s.onerror=()=>reject(new Error('Не удалось загрузить модуль Excel'));document.head.appendChild(s);});}
@@ -367,7 +407,7 @@ install();
     })
   });
 
-  triInjectUi();const baseLoadData=loadData;loadData=async function(){if(triIsManager()){allClients=[];allTasks=[];allVisits=[];allUsers=currentProfile?[currentProfile]:[];allRoutePlans=[];allNegotiations=[];allPurchases=[];allPurchaseItems=[];allPurchaseHistory=[];allClientPhotos=[];allVipSales=[];allPromotions=[];allPromotionBudgets=[];allPromotionBudgetMovements=[];allPromotionPhotos=[];allClientDebt=[];allStock=[];allPrice=[];allImportStatus=[];allCashReceipts=[];await Promise.all([triLoadData(),triLoadStock()]);return;}await baseLoadData();};const baseStartApp=startApp;startApp=function(){baseStartApp();triApplyAccessUi();};const baseGoPage=goPage;goPage=function(p,title){if(triIsManager()&&p!=='triovist'){p='triovist';title='Триовист / 21vek.by';}baseGoPage(p,title);triApplyAccessUi();if(p==='triovist')crmSchedulePageHook('triovist',async()=>{if(!triLoaded||!triStockItems.length)try{await Promise.all([triLoadData(),triLoadStock()]);}catch(e){console.warn(e);}if(crmActivePage()==='triovist')renderTriovist();},0);};const baseBuildDashboard=buildDashboard;buildDashboard=function(){if(triIsManager()){triApplyAccessUi();document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-triovist')?.classList.add('active');renderTriovist();return;}baseBuildDashboard();triApplyAccessUi();};window.RESANTA_TRIOVIST=Object.freeze({version:'22.7.31.5',client:TRI_CLIENT,salesWithVat:true,customPeriods:true,stockRecommendations:true,fullAccessEmails:TRI_LEADER_EMAILS});
+  triInjectUi();const baseLoadData=loadData;loadData=async function(){if(triIsManager()){allClients=[];allTasks=[];allVisits=[];allUsers=currentProfile?[currentProfile]:[];allRoutePlans=[];allNegotiations=[];allPurchases=[];allPurchaseItems=[];allPurchaseHistory=[];allClientPhotos=[];allVipSales=[];allPromotions=[];allPromotionBudgets=[];allPromotionBudgetMovements=[];allPromotionPhotos=[];allClientDebt=[];allStock=[];allPrice=[];allImportStatus=[];allCashReceipts=[];return;}await baseLoadData();};const baseStartApp=startApp;startApp=function(){baseStartApp();triApplyAccessUi();};const baseGoPage=goPage;goPage=function(p,title){if(triIsManager()&&p!=='triovist'){p='triovist';title='Триовист / 21vek.by';}baseGoPage(p,title);triApplyAccessUi();if(p==='triovist'&&triLoaded)try{renderTriovist()}catch(e){console.warn(e)}};const baseBuildDashboard=buildDashboard;buildDashboard=function(){if(triIsManager()){triApplyAccessUi();document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-triovist')?.classList.add('active');if(triLoaded)renderTriovist();return;}baseBuildDashboard();triApplyAccessUi();};window.RESANTA_TRIOVIST=Object.freeze({version:'22.7.31.5-v23.6.379',client:TRI_CLIENT,salesWithVat:true,customPeriods:true,stockRecommendations:true,lazySectionLoads:true,fullAccessEmails:TRI_LEADER_EMAILS});
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 11 ===== */
