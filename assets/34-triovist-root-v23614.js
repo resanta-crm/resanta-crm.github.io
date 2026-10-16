@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.396',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.397',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
@@ -174,7 +174,7 @@ async function loadPremiumInfographics(){
  const existing=window.RESANTA_TRIOVIST_PREMIUM_V236390;if(existing?.open)return existing;
  const found=document.querySelector('script[data-tr14-premium-infographics]');
  if(!found){const script=document.createElement('script');script.async=true;script.dataset.tr14PremiumInfographics='1';
- script.src='./assets/122-triovist-premium-infographic-v236390.js?v=23.6.396';document.head.appendChild(script)}
+ script.src='./assets/122-triovist-premium-infographic-v236390.js?v=23.6.397';document.head.appendChild(script)}
  for(let i=0;i<60;i++){
    const obj=window.RESANTA_TRIOVIST_PREMIUM_V236390;if(obj?.open)return obj;
    await new Promise(resolve=>setTimeout(resolve,100));
