@@ -1,10 +1,10 @@
-/* RESANTA CRM v23.6.377 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
+/* RESANTA CRM v23.6.383 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
-const V='v23.6.377',TTL=30000;
+const V='v23.6.383',TTL=30000;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
@@ -458,6 +458,44 @@ function humidifierResult(k,a,b){
 
 
 
+
+function concreteMixerMaterial(v){
+ if(v==null||v==='')return 'нет данных';
+ const x=String(v).toLowerCase();
+ if(x==='cast_iron'||x.includes('чугун'))return 'чугун';
+ if(x==='polymer'||x.includes('полиамид')||x.includes('пласт')||x.includes('полимер'))return 'полиамид / пластик';
+ if(x==='steel'||x.includes('сталь'))return 'сталь';
+ return String(v);
+}
+function concreteMixerValue(k,v){
+ if(v==null||v==='')return '<span class="muted">нет данных</span>';
+ if(k==='drum_capacity_l')return E(v)+' л';
+ if(k==='input_power_w')return E(v)+' Вт';
+ if(k==='crown_material')return E(concreteMixerMaterial(v));
+ return E(v);
+}
+function concreteMixerResult(k,a,b){
+ if(a==null||b==null)return 'нет данных — не считаем проигрышем';
+ if(k==='drum_capacity_l'){
+  const x=N(a),y=N(b);if(x==null||y==null)return 'нет данных';
+  const d=Math.abs(x-y)/Math.max(Math.abs(x),Math.abs(y),1);
+  return d<=0.10?'паритет (±10%)':'разный класс объёма';
+ }
+ if(k==='input_power_w'){
+  const x=N(a),y=N(b);if(x==null||y==null)return 'нет данных';
+  const d=Math.abs(x-y)/Math.max(Math.abs(x),Math.abs(y),1);
+  if(d<=0.15)return 'паритет (±15%)';
+  return x>y?'мы мощнее':'конкурент мощнее';
+ }
+ if(k==='crown_material'){
+  const aa=concreteMixerMaterial(a),bb=concreteMixerMaterial(b);
+  if(aa===bb)return 'паритет';
+  if(aa==='чугун'&&bb==='полиамид / пластик')return 'наш венец сильнее';
+  if(bb==='чугун'&&aa==='полиамид / пластик')return 'венец конкурента сильнее';
+  return 'другой материал — оценивается отдельно';
+ }
+ return '—';
+}
 
 function planerValue(k,v){
  if(v==null)return'нет данных';
@@ -2292,6 +2330,22 @@ function details(r,l){
 
 
 
+
+ if(r.profile_key==='concrete_mixer'){
+  const keys=[
+   ['drum_capacity_l','Объём барабана'],
+   ['crown_material','Материал венца'],
+   ['input_power_w','Мощность']
+  ];
+  const body=keys.map(([k,n])=>'<tr><td><b>'+E(n)+'</b></td><td>'+concreteMixerValue(k,b[k])+'</td><td>'+concreteMixerValue(k,a[k])+'</td><td>'+E(concreteMixerResult(k,a[k],b[k]))+'</td></tr>').join('');
+  const ref='<div class="tm224-ref"><b>Бетономешалки:</b> объём барабана 45% · материал венца 30% · мощность 25%. Объём считается паритетом при ±10%, мощность — при ±15%. Разный известный материал венца не получает прямой аналог. Чугун считается преимуществом относительно полиамида/пластика; сталь оценивается отдельно. Если характеристика на 21vek не указана, это <b>не считается проигрышем</b> — итог остаётся предварительным.</div>';
+  return '<details class="tm224-details"><summary>Характеристики и аргументы</summary>'
+   +'<div class="tm224-conv-table"><table><thead><tr><th>Характеристика</th><th>Конкурент</th><th>Наш товар</th><th>Результат</th></tr></thead><tbody>'+body+'</tbody></table></div>'+ref
+   +competitorPositionHistoryBlock(r)+listingHistoryBlock(l)
+   +'<div class="tm224-ab"><div><b>Наши подтверждённые преимущества</b>'+((r.advantages||[]).length?'<ul>'+(r.advantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div>'
+   +'<div><b>Где конкурент сильнее</b>'+((r.disadvantages||[]).length?'<ul>'+(r.disadvantages||[]).map(x=>'<li>'+E(x)+'</li>').join('')+'</ul>':'<span>—</span>')+'</div></div>'
+   +'<div class="tm224-rec"><b>Что делать:</b> '+E(r.recommendation||r.gap_reason||'—')+'</div></details>';
+ }
 
  if(r.profile_key==='borehole_pump'){
   const keys=[

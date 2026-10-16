@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.328.
+"""Triovist / 21vek automatic market analysis v23.6.383.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.13"
+PARSER_VERSION="market-auto-v6.14"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -47,7 +47,7 @@ VALIDATE_EXACT=str(os.environ.get("MARKET_VALIDATE_EXACT","")).strip().lower() i
 if VALIDATE_PROFILES and not VALIDATE_EXACT:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -222,6 +222,7 @@ def profile_for(label: str) -> str:
     if "точильн" in n and "станок" in n: return "bench_grinder"
     if "точильно шлифовальн" in n and "станок" in n: return "bench_grinder"
     if "углошлиф" in n or ("болгар" in n and "машин" in n) or re.search(r"\bа?ушм\b",n): return "angle_grinder"
+    if "бетономеш" in n or "бетоносмес" in n: return "concrete_mixer"
     if ("фекаль" in n or "фекал" in n) and "насос" in n: return "fecal_pump"
     if "канализац" in n and any(x in n for x in ("станц","установ")): return "sewage_station"
     if "поверхност" in n and "насос" in n: return "surface_pump"
@@ -265,6 +266,7 @@ def query_for(label: str, profile: str) -> str:
       "miter_saw":"торцовочная пила",
       "bench_grinder":"точильный станок",
       "angle_grinder":"угловая шлифовальная машина",
+      "concrete_mixer":"бетономешалка",
       "circulation_pump":"циркуляционный насос",
       "drainage_pump":"дренажный насос",
       "fecal_pump":"фекальный насос",
@@ -345,6 +347,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
       ("Торцовочные пилы","miter_saw","торцов"),
       ("Точильные станки","bench_grinder","точильн"),
       ("Углошлифовальные машины","angle_grinder","углошлиф"),
+      ("Бетономешалки","concrete_mixer","бетономеш"),
       ("Циркуляционные насосы","circulation_pump","циркуляц"),
       ("Дренажные насосы","drainage_pump","дренаж"),
       ("Фекальные насосы","fecal_pump","фекал"),
@@ -363,7 +366,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -416,6 +419,10 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
                          and "диск для" not in pn and "щетк" not in pn and "щёт" not in pn
                          and "ручк" not in pn and "ключ для" not in pn and "запчаст" not in pn
                          and not sku.startswith("900/"))
+            elif profile=="concrete_mixer":
+                matched=(sku.startswith("74/1/")
+                         and ("бетономеш" in pn or "бетоносмес" in pn)
+                         and not any(x in pn for x in ("венец для","двигатель для","лопасть для","ремень для","запчаст","шестерн для")))
             elif profile=="circulation_pump":
                 matched=("циркуляц" in pn and "насос" in pn
                          and "шланг" not in pn and "муфт" not in pn and "патруб" not in pn
@@ -496,7 +503,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника")),"source_subgroup":label,
+              "scope_key":key,"source_category":("Оборудование" if profile=="concrete_mixer" else ("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"))),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -2258,8 +2265,59 @@ def earth_auger_relative_similarity(a: float,b: float,full: float,close: float,p
     return 0.0
 
 
+def concrete_mixer_crown_family(v: Any) -> str:
+    n=norm(v)
+    if any(x in n for x in ("чугун","cast iron","castiron")): return "cast_iron"
+    if any(x in n for x in ("полиамид","пластик","пластмасс","полимер","polyamide","plastic","polymer")): return "polymer"
+    if any(x in n for x in ("сталь","стальн","steel")): return "steel"
+    return n
+
+
+def concrete_mixer_required_missing(ours: dict,comp: dict) -> bool:
+    required=("drum_capacity_l","crown_material","input_power_w")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def concrete_mixer_relative_similarity(a: float,b: float,full: float,close: float,conditional: float) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.80
+    if d<=conditional:return 0.60
+    return 0.0
+
+
+def concrete_mixer_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="drum_capacity_l":
+        # Drum size defines the capacity class; a larger drum is not automatically "better".
+        return 50
+    if k=="crown_material":
+        aa=concrete_mixer_crown_family(a);bb=concrete_mixer_crown_family(b)
+        if not aa or not bb:return None
+        if aa==bb:return 50
+        if aa=="cast_iron" and bb=="polymer":return 75
+        if aa=="polymer" and bb=="cast_iron":return 25
+        # Steel is evaluated separately and is not auto-equated to cast iron.
+        return 50
+    if k=="input_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.15:return 50
+        return directional(rule,av,bv)
+    return directional(rule,a,b)
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
+    if key=="drum_capacity_l":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:л|l)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),3)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*1000,3)
+        return round(max(ns),3) if ns else None
+    if key=="crown_material":
+        v=concrete_mixer_crown_family(text)
+        return v[:120] if v else None
     if key=="airflow_lmin":
         vals=[]
         vals.extend(float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:л\s*/\s*мин|л/мин|l\s*/\s*min|l/min)\b",low,re.I))
@@ -2766,6 +2824,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     reciprocating_saw_mode={"power_source","input_power_w","motor_type","cut_depth_wood_mm","cut_depth_metal_mm","strokes_per_min"}.issubset(rule_keys)
     construction_vacuum_mode={"input_power_w","tank_capacity_l","vacuum_cleaning_type","vacuum_body_material"}.issubset(rule_keys)
     construction_heat_gun_mode={"airflow_lmin","heating_time_sec","input_power_w"}.issubset(rule_keys)
+    concrete_mixer_mode={"drum_capacity_l","crown_material","input_power_w"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
     angle_grinder_mode={"power_source","motor_type","battery_capacity_ah","input_power_w","soft_start_present","speed_adjustment_present","grinder_disc_diameter_mm"}.issubset(rule_keys)
@@ -2774,6 +2833,19 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     sewage_station_mode={"flow_rate_lmin","input_power_w","max_head_m","filter_particle_mm","max_water_temp_c"}.issubset(rule_keys)
     surface_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","max_suction_depth_m","water_type"}.issubset(rule_keys)
     borehole_pump_mode={"water_type","operating_principle","max_head_m","max_pumping_depth_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin"}.issubset(rule_keys)
+
+    def concrete_mixer_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not concrete_mixer_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if any(x in ln for x in ("объем","обьем","ёмкост","емкост","вместим")) and "барабан" in ln:
+            return "drum_capacity_l"
+        if "венец" in ln and ("материал" in ln or any(x in vn for x in ("чугун","полиамид","пласт","полимер","сталь"))):
+            return "crown_material"
+        if "мощност" in ln and not any(x in ln for x in ("выходн","акуст")):
+            return "input_power_w"
+        return None
+
 
     def impact_drill_fuzzy_key(label: Any,value: Any) -> str|None:
         if not impact_drill_mode:return None
@@ -3108,7 +3180,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -3442,6 +3514,11 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     grinder_class=(("точильн" in gn and "станок" in gn) or ("точильно шлифовальн" in gn and "станок" in gn) or "bench grinder" in gn)
                     if not grinder_class or any(x in gn for x in ("камень для","круг для","диск для","заточный многофункцион","для цеп","запчаст")):
                         continue
+                if scope.get("profile_key")=="concrete_mixer":
+                    mn=norm(name)
+                    mixer_class=("бетономеш" in mn or "бетоносмес" in mn)
+                    if not mixer_class or any(x in mn for x in ("венец для","двигатель для","лопасть для","ремень для","запчаст","шестерн для","насадка миксер","дрель миксер")):
+                        continue
                 if scope.get("profile_key")=="circulation_pump":
                     cn=norm(name)
                     circulation_class=("циркуляц" in cn and "насос" in cn)
@@ -3575,6 +3652,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-fecalpump2"
     if "max_head_m" in keys and "pump_body_material" in keys and "filter_particle_mm" in keys and "flow_rate_lmin" in keys:
         return RULESET_VERSION+"-drainpump2"
+    if {"drum_capacity_l","crown_material","input_power_w"}.issubset(keys):
+        return RULESET_VERSION+"-concretemixer1"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
         return RULESET_VERSION+"-anglegrinder1"
     if "grinding_wheel_diameter_mm" in keys and "motor_type" in keys and "max_rpm" in keys and "input_power_w" in keys:
@@ -4359,6 +4438,33 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+
+
+    if profile=="concrete_mixer":
+        weights={"drum_capacity_l":0.45,"crown_material":0.30,"input_power_w":0.25}
+        total=used=0.0
+        material_mismatch=False
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="drum_capacity_l":
+                    z=concrete_mixer_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="input_power_w":
+                    z=concrete_mixer_relative_similarity(float(a),float(b),0.15,0.30,0.45)
+                else:
+                    aa=concrete_mixer_crown_family(a);bb=concrete_mixer_crown_family(b)
+                    z=1.0 if aa and bb and aa==bb else 0.55
+                    if aa and bb and aa!=bb:material_mismatch=True
+            except Exception:z=0.0
+            total+=w*z;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        # Different known crown materials cannot be a "direct" analogue.
+        if material_mismatch:score=min(score,84.0)
+        return round(max(0,min(100,score)),2)
 
 
     if profile=="construction_heat_gun":
@@ -5823,7 +5929,9 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
     else: price_score=50
     s=w=0.0
     for rule in rules:
-        if profile=="snow_blower":
+        if profile=="concrete_mixer":
+            z=concrete_mixer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="snow_blower":
             z=snow_blower_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="garden_shredder":
             z=garden_shredder_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
@@ -5899,7 +6007,9 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
         if float(rule.get("weight") or 0)<=0: continue
         k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
         if a is None or b is None: continue
-        if profile=="garden_shredder":
+        if profile=="concrete_mixer":
+            z=concrete_mixer_directional(rule,a,b)
+        elif profile=="garden_shredder":
             z=garden_shredder_directional(rule,a,b)
         elif profile=="battery_pruner":
             z=battery_pruner_directional(rule,a,b)
@@ -6001,11 +6111,13 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения строительных пылесосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены мощность, объем бака, тип уборки и материал корпуса."
     if profile=="construction_heat_gun" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения термопистолетов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены производительность воздушного потока, время нагрева и мощность."
+    if profile=="concrete_mixer" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных по бетономешалке. Отсутствующую характеристику не считать проигрышем: сравнивать только подтвержденные объём барабана, материал венца и мощность."
     if profile=="circulation_pump" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
         return "Аналог рассчитан по неполным данным. Для подтверждения пробела обязательны производительность, максимальный напор и размер частиц; измельчитель сильно влияет на итог, когда он указан. Материал корпуса, подключение и тип воды уточняют сравнение."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -6248,8 +6360,8 @@ def main() -> None:
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
             expected_own_count=len(scope_skus[skey])
             matrix_checked=expected_own_count>0 and len(usable_own)>=expected_own_count
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -6259,6 +6371,11 @@ def main() -> None:
                 scored.sort(key=lambda z:z[0],reverse=True)
                 best=scored[0][0] if scored else 0.0
                 gap_confirmed=bool(scored) and matrix_checked
+                if profile=="concrete_mixer" and scored:
+                    gap_confirmed=gap_confirmed and not concrete_mixer_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
                 if profile=="reciprocating_saw" and scored:
                     gap_confirmed=gap_confirmed and not reciprocating_saw_required_missing(
                       scored[0][1].get("specs_normalized") or {},
@@ -6341,6 +6458,8 @@ def main() -> None:
                     status="ours_stronger" if comp_score>=65 else ("parity" if comp_score>=45 else "competitor_stronger")
                     data_incomplete=False
                     comp_specs=p.get("specs_normalized") or {}
+                    if profile=="concrete_mixer" and concrete_mixer_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
                     if profile=="snow_blower":
                         our_start=snow_blower_start_family(ours["specs_normalized"].get("engine_start_type"))
                         comp_start=comp_specs.get("engine_start_type")
@@ -6403,6 +6522,8 @@ def main() -> None:
                     adv,bad=compare_texts(
                       ours["specs_normalized"],comp_specs,rules,op,cp,p.get("position"),mr,profile
                     )
+                    if profile=="concrete_mixer" and concrete_mixer_required_missing(ours["specs_normalized"],comp_specs):
+                        bad.append("Недостаточно данных по объёму барабана, материалу венца или мощности бетономешалки — отсутствующие данные не считаются проигрышем, итог предварительный")
                     if profile=="snow_blower" and "electric" in snow_blower_start_family(ours["specs_normalized"].get("engine_start_type")) and comp_specs.get("engine_start_type") is None:
                         bad.append("У конкурента нет данных по типу запуска: нельзя считать электростартер равным отсутствующим данным")
                     if profile=="earth_auger":
