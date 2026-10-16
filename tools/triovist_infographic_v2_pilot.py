@@ -9,11 +9,12 @@ import io
 import json
 import os
 import time
+import re
 from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from triovist_infographic_batch import (
     SUPABASE_URL, KEY, BUCKET, db_get, db_update, storage_put, fetch_photo,
-    headers, request, log
+    headers, request, log, storage_get
 )
 
 EDGE=SUPABASE_URL+"/functions/v1/triovist-infographic-v2-v236390"
@@ -52,8 +53,8 @@ def preflight_png_storage():
         raise RuntimeError(f"Storage preflight failed (HTTP {reply.status_code}); no paid generation started")
     meta=reply.json()
     allowed=meta.get("allowed_mime_types")
-    if allowed and "image/png" not in allowed:
-        raise RuntimeError("Storage preflight: image/png is not permitted; no paid generation started")
+    if allowed and ("image/png" not in allowed or "image/jpeg" not in allowed):
+        raise RuntimeError("Storage preflight: image/png or image/jpeg not permitted; no paid generation started")
     if meta.get("public") is True:
         raise RuntimeError("Storage preflight: private bucket is unexpectedly public")
     log("V2 storage preflight OK: image/png, private bucket")
@@ -85,78 +86,130 @@ def wrap(d,text,font,max_width,maxlines):
     return result
 def is_dark(rgba):
     r,g,b=rgba[:3];return (r*299+g*587+b*114)/1000<120
-def premium_composite(scene_bytes,slide,facts,product):
-    W,H=1200,1500
-    bg=Image.open(io.BytesIO(scene_bytes)).convert("RGB")
-    image=ImageOps.fit(bg,(W,H),method=Image.Resampling.LANCZOS,centering=(.5,.48)).convert("RGBA")
-    brand,accent,dark=brand_colors(product["product_name"])
-    num=slide["number"]
-    # Eight intentionally different layouts; generated photographic scene is unique per slide.
-    styles=[
-        (55,132,780,"top_left"),(65,120,1010,"top_left"),
-        (65,120,1050,"top_left"),(380,108,770,"top_right"),
-        (54,115,1100,"top_left"),(340,110,780,"top_right"),
-        (65,110,1050,"top_left"),(55,110,1010,"top_left")
-    ]
-    x,y,mw,layout=styles[num-1]
-    if num in (4,6):x=W-mw-55
-    # Gradient behind the headline that does not cover the product/scene globally.
-    shade=Image.new("RGBA",(W,H),(0,0,0,0));overlay=ImageDraw.Draw(shade)
-    for step in range(730):
-        a=int(200*(1-step/730)**1.75)
-        overlay.line((0,step,W,step),fill=(0,0,0,a),width=1)
-    if num in (4,6):
-        for step in range(660):
-            a=int(105*(1-step/660)**1.4)
-            overlay.line((W-step,60,W-step,H-180),fill=(0,0,0,a),width=1)
-    image=Image.alpha_composite(image,shade)
-    d=ImageDraw.Draw(image)
-    # Brand header and actual SKU text supplied programmatically; no generative brand distortion.
-    bf=fnt(35,True);sf=fnt(27,True)
-    d.rounded_rectangle((52,37,285,100),radius=13,fill=(0,0,0,216),outline=accent,width=3)
-    d.text((70,51),brand,fill=accent,font=bf)
-    d.rounded_rectangle((915,40,1145,94),radius=12,fill=(0,0,0,215))
-    d.text((935,50),str(product["sku"])[:19],font=sf,fill="white")
-    title=str(slide.get("title") or slide.get("key") or "Преимущества товара")
-    if len(title)>54:size=57
-    elif len(title)>32:size=65
-    else:size=82
-    tf=fnt(size,True)
-    lines=wrap(d,title.upper(),tf,mw,min(3,4 if len(title)>40 else 3))
-    # Handle long words without printing outside bounds.
-    if lines and any(d.textbbox((0,0),line,font=tf)[2]>mw+30 for line in lines):
-        tf=fnt(max(39,size-16),True);lines=wrap(d,title.upper(),tf,mw,3)
-    t_y=y
+def safe_fact_caption(f):
+    """Verified source text only. Normalize orthography; never invent a selling claim."""
+    key=str(f.get("key") or "").lower()
+    label=str(f.get("label") or "").strip()
+    value=str(f.get("value") or "").strip()
+    replacements={"Объем":"Объём","объем":"объём","Емкость":"Ёмкость","емкость":"ёмкость","Съем":"Съём","съем":"съём"}
+    for a,b in replacements.items():label=label.replace(a,b)
+    if key=="input_power_w":label="Потребляемая мощность"
+    if key=="crown_material":label="Материал венца"
+    if re.search(r"диаметр отверстия барабана",value,re.IGNORECASE):
+        label="Диаметр отверстия барабана"
+        value=re.sub(r"\s*\(.*?\)","",value).strip()
+    if re.search(r"готовой смеси",label,re.IGNORECASE):label="Объём готовой смеси"
+    return label[:75],value[:55]
+
+def _draw_lines(draw,text,xy,width,start_size=58,max_lines=3,color="white",line_height=1.15):
+    """Use pixel-width bounds; shrink instead of cropping Cyrillic or oversized SKU."""
+    text=" ".join(str(text or "").split())
+    if not text:return xy[1]
+    size=start_size
+    while size>=24:
+        font=fnt(size,True)
+        lines=wrap(draw,text,font,width,max_lines)
+        if len(" ".join(lines))>=len(text) and all(draw.textbbox((0,0),v,font=font)[2]<=width for v in lines):
+            break
+        size-=3
+    if size<24:raise RuntimeError("Typography exceeds protected poster bounds")
+    y=xy[1]
     for line in lines:
-        d.text((x+3,t_y+4),line,font=tf,fill=(0,0,0,125),stroke_width=2,stroke_fill=(0,0,0,125))
-        d.text((x,t_y),line,font=tf,fill="white",stroke_width=1,stroke_fill=(10,10,10,90))
-        t_y+=int(tf.size*1.22)
-    if slide.get("subtitle"):
-        subfont=fnt(30,True)
-        for line in wrap(d,slide["subtitle"],subfont,mw,2):
-            d.text((x,t_y+10),line,font=subfont,fill=accent,stroke_width=2,stroke_fill=(0,0,0,185))
-            t_y+=43
-    chosen={f["id"]:f for f in facts}
-    cards=[chosen[fid] for fid in slide.get("fact_ids",[]) if fid in chosen][:3]
-    # A restrained lower factual ribbon -- legible but not large fake technical blocks.
-    foot_top=H-(138 if cards else 70)
-    footer=Image.new("RGBA",(W,H),(0,0,0,0));fd=ImageDraw.Draw(footer)
-    fd.rectangle((0,foot_top,W,H),fill=(0,0,0,215))
-    fd.rectangle((0,foot_top,W,foot_top+8),fill=accent)
-    image=Image.alpha_composite(image,footer);d=ImageDraw.Draw(image)
-    if cards:
-        available=W-108
-        step=int(available/len(cards))
-        for i,f in enumerate(cards):
-            xx=50+i*step
-            label=str(f.get("label") or "")[:32]
-            value=str(f.get("value") or "")[:30]
-            d.text((xx,foot_top+24),label,font=fnt(20),fill="#d1d7de")
-            d.text((xx,foot_top+62),value,font=fnt(34,True),fill=accent)
-    d.text((50,H-36),"Товар: "+str(product["sku"]),font=fnt(18),fill="#becbd6")
-    d.text((1030,H-39),f"{num}/8",font=fnt(25,True),fill="white")
+        draw.text((xy[0],y),line,font=font,fill=color,stroke_width=2,stroke_fill=(0,0,0,225))
+        y+=int(size*line_height)
+    return y
+
+def _gradient(image,xleft=0,xright=1200,height=700,max_alpha=220):
+    layer=Image.new("RGBA",image.size,(0,0,0,0))
+    d=ImageDraw.Draw(layer)
+    for y in range(min(height,image.height)):
+        alpha=int(max_alpha*(1-y/height)**1.35)
+        d.line((xleft,y,xright,y),fill=(0,0,0,alpha),width=1)
+    return Image.alpha_composite(image,layer)
+
+def premium_composite(scene_bytes,slide,facts,product):
+    """Different typography compositions, preserving the exact product in the AI scene.
+    Source photo and the AI scene are separately archived for inexpensive copy-only revision.
+    No external I/O or image-model calls occur in this function.
+    """
+    W,H=1200,1500
+    if not 1<=int(slide["number"])<=8:raise RuntimeError("Invalid slide number")
+    num=int(slide["number"])
+    bg=Image.open(io.BytesIO(scene_bytes)).convert("RGB")
+    image=ImageOps.fit(bg,(W,H),method=Image.Resampling.LANCZOS,centering=(.50,.48)).convert("RGBA")
+    brand,accent,dark=brand_colors(product["product_name"])
+    verified={f["id"]:f for f in facts}
+    refs=[verified[fid] for fid in slide.get("fact_ids",[]) if fid in verified]
+    if num==1 and len(refs)<3:raise RuntimeError("Hero requires three or more independently verified specs")
+    image=_gradient(image,0,W,530 if num!=1 else 790,225 if num==1 else 185)
+    if num==1:
+        # Product occupies the central/right frame; hero receives 4–5 boxed real specifications.
+        left=Image.new("RGBA",(W,H),(0,0,0,0));ld=ImageDraw.Draw(left)
+        for x in range(610):
+            a=int(191*(1-x/610)**1.25)
+            ld.line((x,115,x,1340),fill=(0,0,0,a),width=1)
+        image=Image.alpha_composite(image,left)
+    d=ImageDraw.Draw(image)
+    d.rounded_rectangle((46,35,280,101),radius=15,fill=(8,10,14,233),outline=accent,width=3)
+    d.text((64,51),brand,fill=accent,font=fnt(34,True))
+    d.rounded_rectangle((902,38,1149,95),radius=14,fill=(7,9,13,216))
+    d.text((924,53),str(product["sku"])[:20],fill="white",font=fnt(24,True))
+    if num==1:
+        headline=re.sub(r"\s*\(\s*"+re.escape(str(product["sku"]))+r"\s*\)\s*$","",str(product["product_name"]),flags=re.I)
+        headline=headline.strip() or str(product["product_name"])
+        y=_draw_lines(d,headline.upper(),(48,143),550,start_size=54,max_lines=3)
+        d.rectangle((50,y+14,550,y+18),fill=accent)
+        d.text((50,y+31),"ГЛАВНЫЕ ХАРАКТЕРИСТИКИ",font=fnt(25,True),fill=accent)
+        # Compact verified feature cards: 2-line labeling, no false material/volume claims.
+        start=max(410,y+104)
+        row_h=150 if len(refs)<=4 else 139
+        if start+len(refs)*row_h>1355:raise RuntimeError("Hero text does not fit: review title and 5 specs")
+        for i,f in enumerate(refs[:5]):
+            label,value=safe_fact_caption(f)
+            top=start+i*row_h
+            d.rounded_rectangle((46,top,560,top+row_h-12),radius=18,
+                                fill=(7,10,15,224),outline=accent,width=2)
+            _draw_lines(d,value,(68,top+16),456,start_size=43,max_lines=1,color=accent)
+            _draw_lines(d,label,(68,top+76),456,start_size=22,max_lines=2,color="white")
+        footer=Image.new("RGBA",(W,H),(0,0,0,0));fd=ImageDraw.Draw(footer)
+        fd.rectangle((0,1401,W,H),fill=(0,0,0,215))
+        fd.rectangle((0,1401,W,1410),fill=accent)
+        image=Image.alpha_composite(image,footer);d=ImageDraw.Draw(image)
+        d.text((48,1431),"ТОЛЬКО ПОДТВЕРЖДЁННЫЕ ХАРАКТЕРИСТИКИ",font=fnt(22,True),fill="white")
+    else:
+        # Distinct headline layouts; model-generated photography is independent on every slide.
+        layouts={
+            2:(55,130,980,79),3:(53,135,740,71),4:(380,116,760,69),
+            5:(53,136,990,70),6:(370,115,770,66),7:(52,126,990,67),
+            8:(55,135,980,70)
+        }
+        x,y,mw,sz=layouts[num]
+        title=str(slide.get("title") or "").strip()
+        if not title or title.upper() in ("ОБЛОЖКА","ПРЕИМУЩЕСТВА","ХАРАКТЕРИСТИКИ"):
+            raise RuntimeError("Placeholder text in professional slide")
+        y=_draw_lines(d,title.upper(),(x,y),mw,start_size=sz,max_lines=3)
+        # No generated marketing subtitle can invent unverified capabilities.
+        if slide.get("subtitle"):
+            _draw_lines(d,slide["subtitle"],(x,y+23),mw,start_size=27,max_lines=2,color=accent)
+        # Optional small factual labels in a footer, not five nearly identical posters.
+        cards=refs[:2]
+        foot_top=1365 if cards else 1430
+        footer=Image.new("RGBA",(W,H),(0,0,0,0));fd=ImageDraw.Draw(footer)
+        fd.rectangle((0,foot_top,W,H),fill=(0,0,0,217))
+        fd.rectangle((0,foot_top,W,foot_top+7),fill=accent)
+        image=Image.alpha_composite(image,footer);d=ImageDraw.Draw(image)
+        if cards:
+            part=int(1080/len(cards))
+            for i,f in enumerate(cards):
+                label,value=safe_fact_caption(f)
+                xx=53+i*part
+                _draw_lines(d,label,(xx,foot_top+17),part-27,start_size=20,max_lines=1,color="white")
+                _draw_lines(d,value,(xx,foot_top+53),part-27,start_size=33,max_lines=1,color=accent)
+    d=ImageDraw.Draw(image)
+    d.text((1080,1448),f"{num}/8",font=fnt(24,True),fill="white")
     out=io.BytesIO();image.convert("RGB").save(out,format="PNG",optimize=True)
     return out.getvalue()
+
 def build(pilot):
     id=pilot["id"]
     if not still_active(id):return
