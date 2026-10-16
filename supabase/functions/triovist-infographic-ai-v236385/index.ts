@@ -195,7 +195,7 @@ Deno.serve(async(req:Request)=>{
     const {data:products,error:pe}=await db.rpc("triovist_infographic_group_skus_v236386",{p_groups:groups,p_manager:manager?email:null});
     if(pe)throw pe;
     if(!array(products).length)return send(req,400,{ok:false,error:"EMPTY_SELECTION"});
-    if(products.length>250)return send(req,400,{ok:false,error:"TOO_MANY_SKUS",message:"Максимум 250 SKU за запуск. Выберите меньше товарных групп."});
+    if(products.length>300)return send(req,400,{ok:false,error:"TOO_MANY_SKUS",message:"Максимум 300 SKU за запуск. Выберите меньше товарных групп."});
     const {data:batch,error:je}=await db.from("triovist_infographic_batches_v1").insert({
       owner_user_id:au.user.id,owner_email:email,groups,total_items:products.length,
       status:"queued"
