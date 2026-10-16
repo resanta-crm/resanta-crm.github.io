@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.385',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.386',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
@@ -120,7 +120,10 @@ async function refreshCurrent(){
    }else if(k==='competitors'){
      const mod=window.RESANTA_TRIOVIST_COMPETITORS_V236218;
      if(mod?.open)await mod.open(panel,ctx,true);
-   }else if(k==='infographics')await window.RESANTA_TRIOVIST_INFOGRAPHICS_V236385?.refresh?.();
+    }else if(k==='infographics'){
+     await window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386?.refresh?.();
+     await window.RESANTA_TRIOVIST_INFOGRAPHICS_V236385?.refresh?.();
+   }
    else if(k==='anp'||k==='si')await expense(k,document.querySelector(`[data-tr14-month="${k}"]`)?.value||month());
    else if(k==='budget')await budget(document.querySelector('[data-tr14-month="budget"]')?.value||month());
    else if(k==='price')await prices();
@@ -166,10 +169,23 @@ async function work(k,token){
  if(token!==navEpoch||active!==k)return;
  showDirectWork(k);hideOld();
 }
+async function loadInfographicBatch(){
+ const previous=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(previous?.open)return previous;
+ const found=document.querySelector('script[data-tr14-infographic-batches]');
+ if(!found){
+  const s=document.createElement('script');s.async=true;s.dataset.tr14InfographicBatches='1';
+  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.386';document.head.appendChild(s);
+ }
+ for(let i=0;i<50;i++){
+  const mod=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(mod?.open)return mod;
+  await new Promise(r=>setTimeout(r,100));
+ }
+ throw Error('Массовый раздел инфографики временно недоступен. Редактор отдельного товара сохранён.');
+}
 async function loadInfographics(){
  const existing=window.RESANTA_TRIOVIST_INFOGRAPHICS_V236385;if(existing?.open)return existing;
  const found=document.querySelector('script[data-tr14-infographics]');
- if(!found){const el=document.createElement('script');el.async=true;el.dataset.tr14Infographics='1';el.src='./assets/120-triovist-infographics-v236385.js?v=23.6.385';document.head.appendChild(el)}
+ if(!found){const el=document.createElement('script');el.async=true;el.dataset.tr14Infographics='1';el.src='./assets/120-triovist-infographics-v236385.js?v=23.6.386';document.head.appendChild(el)}
  for(let i=0;i<50;i++){
   const mod=window.RESANTA_TRIOVIST_INFOGRAPHICS_V236385;
   if(mod?.open)return mod;
@@ -194,6 +210,15 @@ async function activate(k,save=false){
    const mod=await loadInfographics();
    if(token!==navEpoch||active!==k)return;
    const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
+   if(token!==navEpoch||active!==k)return;
+   try{
+     const bulk=await loadInfographicBatch();
+     if(token===navEpoch&&active===k)await bulk.open(panel,ctx);
+   }catch(e){
+     console.warn('Triovist bulk infographic isolated load',e);
+     const note=document.createElement('div');note.className='tr14-warn';note.textContent=e.message||'Массовая генерация временно недоступна';
+     panel.prepend(note);
+   }
  }else if(k==='motivation'){
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','none','important');
    for(let i=0;i<30&&!window.RESANTA_SAFE_TRIOVIST_V236200&&token===navEpoch;i++)await new Promise(r=>setTimeout(r,50));
