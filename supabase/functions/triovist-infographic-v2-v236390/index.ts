@@ -52,6 +52,64 @@ const sourceFacts=(spec:any,live:any[])=>{
  return facts;
 };
 function parseJson(s:string){s=str(s,55000).replace(/^`{3}(?:json)?\s*/i,"").replace(/\s*`{3}$/i,"");try{return JSON.parse(s)}catch(_){const a=s.indexOf("{"),b=s.lastIndexOf("}");if(a>=0&&b>a)return JSON.parse(s.slice(a,b+1));throw Error("INVALID_AI_JSON")}}
+
+/** 2.1: category-specific, deterministic fact ranking. No paid image calls. */
+function heroFactRank(f:any,product:any):number{
+ const k=low(f.key),label=low(f.label).replace(/ё/g,"е");
+ const n=low(product.product_name);
+ const concrete=/бетономеш|бетоносмес/.test(n),washer=/мойк|давлени/.test(n);
+ const snow=/снегоуб/.test(n),pump=/насос/.test(n);
+ const saw=/бензопил|цепн.*пил/.test(n);
+ const patterns:RegExp[]=concrete?
+ [/объем барабан|объём барабан|drum_volume_l|drum_l/i,/готовой смеси|готов.*смес/i,/input_power_w|power_w|мощность/i,/crown_material|материал венца/i,/частота вращения|об\/мин/i,/напряжение/i,/диаметр отверстия/i]:
+ washer?[/давлени|бар\b/i,/производительность|л\/ч|л\/мин/i,/длина шланг/i,/мощность/i,/насадк|пеногенератор/i]:
+ snow?[/ширина захват|ширина обработ/i,/высота захват|высота обработ/i,/дальность выброса/i,/мощность/i,/тип запуск|стартер/i]:
+ pump?[/производительн|flow/i,/напор|head/i,/размер частиц|частиц/i,/мощность/i,/материал корпуса/i]:
+ saw?[/мощность|л\.с\./i,/длина шины/i,/объем двигателя/i,/шаг цепи/i,/смазка цепи/i]:
+ [/мощность/i,/производительн|расход/i,/объем|объём|емкост|ёмкост/i,/напряжени/i,/материал/i,/частот|скорость/i];
+ const text=k+" "+label;
+ let idx=patterns.findIndex(r=>r.test(text));
+ // IDs do not establish truth; matched original verified facts do.
+ if(idx<0)idx=90;
+ if(concrete&&/input_power_w/.test(k))idx=2;
+ if(concrete&&/power_w|мощност/.test(text)&&!/input_power_w/.test(k))idx=Math.max(2,idx);
+ return idx;
+}
+function dedupHero(facts:any[],product:any):any[]{
+ const seen=new Set<string>(),chosen:any[]=[];
+ const ordered=[...facts].sort((a,b)=>heroFactRank(a,product)-heroFactRank(b,product));
+ for(const f of ordered){
+  const n=low(f.label).replace(/ё/g,"е"),k=low(f.key);
+  // Never duplicate power as "power_w" and scraped "Мощность" for the same value.
+  const group=/(input_power_w|power_w|мощност)/.test(k+" "+n)?"power":
+    /готовой смеси/.test(n)?"ready_mix":
+    /объем барабан|объём барабан|drum_volume_l/.test(k+" "+n)?"drum":
+    /crown_material|материал венца/.test(k+" "+n)?"crown":
+    /напряжен|voltage/.test(k+" "+n)?"voltage":
+    /частота вращения|об\/мин/.test(n)?"rotation":
+    k==="live"?n:k;
+  if(seen.has(group))continue;
+  seen.add(group);chosen.push(f);
+  if(chosen.length===5)break;
+ }
+ return chosen;
+}
+function checkedCaption(t:any,max:number):string{
+ const x=str(t,max).replace(/[\r\n\t]+/g," ").replace(/\s{2,}/g," ").trim();
+ if(/[{}<>]|https?:|@[a-z0-9]/i.test(x))return "";
+ if(/самый|лучш|абсолютн|идеальн|гарантир|100\s*%|навсегда|бесконечн|любой толщин|без ограничени/i.test(x))return "";
+ return x.replace(/объем/gi,"объём").replace(/емкость/gi,"ёмкость");
+}
+function canonicalFactHeading(f:any):string{
+ const key=low(f.key),label=low(f.label).replace(/ё/g,"е"),v=checkedCaption(f.value,60);
+ if(!v)return "ХАРАКТЕРИСТИКИ";
+ if(/готовой смеси/.test(label))return v+" ГОТОВОЙ СМЕСИ";
+ if(/input_power_w|power_w/.test(key)||/мощность/.test(label))return "МОЩНОСТЬ "+v;
+ if(/crown_material|материал венца/.test(key))return "ВЕНЕЦ — "+v;
+ if(/частота вращения/.test(label))return "ВРАЩЕНИЕ — "+v;
+ if(/напряжение/.test(label))return "ПИТАНИЕ — "+v;
+ return checkedCaption(f.label,48)+" — "+v;
+}
 function validateStoryboard(raw:any,facts:any[],product:any){
  const ids=new Set(facts.map(f=>f.id));
  const check=(t:any,max:number,permitted:Set<string>)=>{
@@ -62,14 +120,21 @@ function validateStoryboard(raw:any,facts:any[],product:any){
    return v;
  };
  const used=new Set<string>();
+ const hero=dedupHero(facts,product);
  return templates.map((tmpl,i)=>{
   let proposal=arr(raw?.slides)[i]||{};
   let linked=[...new Set(arr(proposal.fact_ids).map(x=>str(x,12)).filter(x=>ids.has(x)))].slice(0,3);
   if(!linked.length&&facts.length){const f=facts.find(x=>!used.has(x.id))||facts[i%facts.length];linked=[f.id]}
   linked.forEach(x=>used.add(x));
   const linkedDigits=new Set<string>(linked.flatMap(fid=>{const f=facts.find(x=>x.id===fid);return String(f?.value||"").match(/\d+(?:[,.]\d+)?/g)||[]}).map(x=>x.replace(",",".")));
-  const head=check(proposal.title,70,linkedDigits)||tmpl.name;
-  const sub=check(proposal.subtitle,110,linkedDigits);
+  // Only deterministic copy is printed on PNGs; AI directs photography, not product claims.
+  const heroItem=hero[0]||facts[0];
+  if(i===0)linked=hero.map(f=>f.id);
+  const source=facts.find(f=>f.id===linked[0])||heroItem;
+  const head=i===0?checkedCaption(product.product_name,95):
+      source?canonicalFactHeading(source):"ХАРАКТЕРИСТИКИ";
+  const sub=i===0?"ГЛАВНЫЕ ХАРАКТЕРИСТИКИ":
+      source?checkedCaption(source.label,90):"";
   return {number:i+1,key:keys[i],title:head,subtitle:sub,fact_ids:linked,
     scene:tmpl.scene,placement:tmpl.position,
     composition_note:str(proposal.composition_note,240),
@@ -153,7 +218,7 @@ Deno.serve(async(req:Request)=>{
      const row=arr(specs)[0];
      const isFresh=row?.specs_fetched_at&&Date.now()-Date.parse(row.specs_fetched_at)<=10*86400000;
      const facts=sourceFacts(isFresh?row:null,arr(input.live_facts));
-     if(facts.length<2)throw Error("NOT_ENOUGH_VERIFIED_FACTS");
+     if(dedupHero(facts,{product_name:pilot.product_name}).length<3)throw Error("NOT_ENOUGH_VERIFIED_HERO_FACTS");
      const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
      const storyboard=await buildStoryboard(facts,product);
      const {error:ue}=await db.from("triovist_infographic_v2_pilots").update({facts,storyboard,source_image_url:str(input.photo_url,700),status:"processing",stage:"AI storyboard",updated_at:new Date().toISOString()}).eq("id",pilot.id).in("status",["queued","processing"]);
@@ -199,7 +264,7 @@ Deno.serve(async(req:Request)=>{
  if(action==="config")return make(req,200,{ok:true,version:"2.0-pilot",max_skus:1,slides:8,
   image_provider_ready:!!Deno.env.get("OPENAI_API_KEY"),
   text_provider_ready:!!(Deno.env.get("ANTHROPIC_API_KEY")||Deno.env.get("OPENAI_API_KEY")),
-  premium_model:model,bulk_release:false,requires_approval:true,can_start:leader});
+  premium_model:model,bulk_release:false,requires_approval:true,can_start:leader,editorial_version:"2.1",requires_visual_review:true});
  if(action==="list"){
   let q=db.from("triovist_infographic_v2_pilots").select("id,sku,product_name,group_name,owner_email,status,stage,completed_slides,total_slides,paid_images_started,created_at,updated_at,error_message")
    .order("created_at",{ascending:false}).limit(20);
@@ -264,6 +329,8 @@ Deno.serve(async(req:Request)=>{
   if(action==="approve"){
     if(!leader)return make(req,403,{ok:false,error:"LEADER_ONLY"});
     if(pilot.status!=="needs_review"||pilot.completed_slides!==8)return make(req,409,{ok:false,error:"NOT_READY"});
+    if(pilot.audit?.editorial_version!=="2.1"||!pilot.audit?.hero_verified||pilot.audit?.requires_visual_review!==true)
+      return make(req,409,{ok:false,error:"QA_V21_REQUIRED",message:"Этот комплект сделан до редакционной проверки 2.1. Не утверждайте старые изображения с ошибками; проверьте новую версию."});
     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({status:"approved",stage:"Образец утверждён",updated_at:new Date().toISOString()}).eq("id",id).eq("status","needs_review");if(e)throw e;
     return make(req,200,{ok:true,status:"approved",bulk_release:false});
   }
