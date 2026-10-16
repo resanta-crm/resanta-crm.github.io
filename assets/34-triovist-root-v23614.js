@@ -97,8 +97,8 @@ async function refreshCurrent(){
      if(typeof window.triovistStockReload==='function')await window.triovistStockReload(true);
      else if(typeof window.triovistReload==='function')await window.triovistReload();
      else throw Error('Функция обновления остатков Triovist ещё не готова');
-   }else if(k==='tasks')await window.triovistTasksReload?.(true);
-   else if(k==='motivation')await window.triovistMotivationReload?.(true);
+   }else if(k==='tasks')await window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651?.render?.(true);
+   else if(k==='motivation')await window.RESANTA_SAFE_TRIOVIST_V236200?.refresh?.();
    else if(k==='cards')await window.triovistContentReload?.(true);
    else if(k==='parser')await window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh?.();
    else if(k==='groups'){
@@ -121,7 +121,7 @@ async function applySalesImportRefresh(payload){
  if(stamp&&stamp===lastSalesStamp)return;
  if(stamp)lastSalesStamp=stamp;
  try{window.TRIOVIST_DATA_HUB_V227315?.invalidate('sales','stock','tasks')}catch(_){}
- if(page()?.classList.contains('active')){
+ if(page()?.classList.contains('active')&&(active==='home'||active==='sales')){
   try{await refreshCurrent()}catch(e){console.warn('Triovist realtime refresh',e)}
  }else pendingSalesRefresh=true;
 }
