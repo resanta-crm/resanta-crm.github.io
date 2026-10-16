@@ -123,6 +123,7 @@ async function refreshCurrent(){
     }else if(k==='infographics'){
      await window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386?.refresh?.();
      await window.RESANTA_TRIOVIST_INFOGRAPHICS_V236385?.refresh?.();
+     await window.RESANTA_TRIOVIST_PREMIUM_V236390?.refresh?.();
    }
    else if(k==='anp'||k==='si')await expense(k,document.querySelector(`[data-tr14-month="${k}"]`)?.value||month());
    else if(k==='budget')await budget(document.querySelector('[data-tr14-month="budget"]')?.value||month());
@@ -168,6 +169,17 @@ async function work(k,token){
  }
  if(token!==navEpoch||active!==k)return;
  showDirectWork(k);hideOld();
+}
+async function loadPremiumInfographics(){
+ const existing=window.RESANTA_TRIOVIST_PREMIUM_V236390;if(existing?.open)return existing;
+ const found=document.querySelector('script[data-tr14-premium-infographics]');
+ if(!found){const script=document.createElement('script');script.async=true;script.dataset.tr14PremiumInfographics='1';
+ script.src='./assets/122-triovist-premium-infographic-v236390.js?v=23.6.391';document.head.appendChild(script)}
+ for(let i=0;i<60;i++){
+   const obj=window.RESANTA_TRIOVIST_PREMIUM_V236390;if(obj?.open)return obj;
+   await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ throw Error('Премиальный модуль ещё загружается. Старый редактор не затронут.');
 }
 async function loadInfographicBatch(){
  const previous=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(previous?.open)return previous;
@@ -217,6 +229,14 @@ async function activate(k,save=false){
    }catch(e){
      console.warn('Triovist bulk infographic isolated load',e);
      const note=document.createElement('div');note.className='tr14-warn';note.textContent=e.message||'Массовая генерация временно недоступна';
+     panel.prepend(note);
+   }
+   if(token!==navEpoch||active!==k)return;
+   try{
+     const premium=await loadPremiumInfographics();
+     if(token===navEpoch&&active===k)await premium.open(panel,ctx);
+   }catch(e){console.warn('Premium infographic isolated load',e);
+     const note=document.createElement('div');note.className='tr14-warn';note.textContent='Инфографика 2.0 пока не загрузилась: '+(e.message||e);
      panel.prepend(note);
    }
  }else if(k==='motivation'){
