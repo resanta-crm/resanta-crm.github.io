@@ -87,9 +87,9 @@ function draw(){
  '<div class="tib386-muted">Выбери группы → «Запустить» → CRM сама получает фото точных товаров 21vek, проверяет характеристики, создаёт 7 PNG на SKU и готовит архив. Вкладку можно закрыть.</div></div>'+
  '<button data-tib-refresh>↻ Обновить задания</button></div>'+
  '<div class="tib386-controls"><input data-tib-filter placeholder="Бетономешалки, фекальные насосы, снегоуборщики..." value="'+esc(filter)+'" aria-label="Найти товарные группы">'+
- '<div class="tib386-counter"><b>'+n.count+' групп · '+n.sku+' SKU</b><div class="tib386-muted">Лимит 250 SKU за запуск</div></div></div>'+
+ '<div class="tib386-counter"><b>'+n.count+' групп · '+n.sku+' SKU</b><div class="tib386-muted">Лимит 300 SKU за запуск</div></div></div>'+
  '<div class="tib386-items" id="tib386-group-grid">'+cardsHtml()+'</div>'+
- '<div class="tib386-actions"><button class="blue" data-tib-start '+(working||n.count===0||n.count>10||n.sku>250?'disabled':'')+'>'+
+ '<div class="tib386-actions"><button class="blue" data-tib-start '+(working||n.count===0||n.count>10||n.sku>300?'disabled':'')+'>'+
  (working?'Создаю задание…':'🚀 Запустить '+n.sku+' SKU')+'</button>'+
  '<span class="tib386-muted">Фото только из карточки нужной модели; неизвестные факты не придумываются.</span></div>'+
  jobHtml()+
@@ -130,7 +130,7 @@ async function showJob(id){
 }
 async function start(){
  const x=calc();
- if(working||x.count===0||x.count>10||x.sku>250)throw Error('Выбери 1–10 групп общим объёмом не более 250 SKU');
+ if(working||x.count===0||x.count>10||x.sku>300)throw Error('Выбери 1–10 групп общим объёмом не более 300 SKU');
  working=true;banner='Сохраняю задание. Генерация продолжится в фоне.';bannerError=false;draw();
  try{
   const result=await invoke('batch-start',{groups:[...selected]});
