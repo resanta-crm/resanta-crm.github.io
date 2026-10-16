@@ -1,0 +1,45 @@
+name: Triovist - infographic batch worker
+
+on:
+  schedule:
+    - cron: '3,13,23,33,43,53 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/triovist_infographic_batch.py'
+      - '.github/workflows/triovist-infographic-batch.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: triovist-infographic-batch-worker
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate worker syntax without touching business data
+        run: python -m py_compile tools/triovist_infographic_batch.py
+  worker:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated rendering dependencies
+        run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
+      - name: Build requested infographic batches
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          BATCH_MAX_ITEMS: '24'
+          BATCH_MAX_SECONDS: '2880'
+        run: python tools/triovist_infographic_batch.py
