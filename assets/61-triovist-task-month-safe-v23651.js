@@ -42,17 +42,16 @@ function ensureRoot(){if(!canUse())return null;injectCss();const c=card();if(!c)
 async function loadExtras(key,m,mgr){
  if(extrasFlight&&extrasKey===key)return extrasFlight;
  extrasKey=key;
- extrasFlight=Promise.allSettled([
-   rpc('triovist_month_summary_v23647',{p_month:m+'-01',p_manager_email:mgr}),
-   rpc('triovist_motivation_get_policy',{})
- ]).then(extra=>{
+ extrasFlight=(async()=>{
+   let summary=null,policy=null;
+   try{summary=await rpc('triovist_month_summary_v23647',{p_month:m+'-01',p_manager_email:mgr})}catch(e){console.warn('Triovist task summary deferred',e)}
+   try{policy=await rpc('triovist_motivation_get_policy',{})}catch(e){console.warn('Triovist task policy deferred',e)}
    if(lastKey!==key||!lastPack)return;
-   if(extra[0].status==='fulfilled'&&extra[0].value)lastPack.summary=extra[0].value;
-   else if(extra[0].status==='rejected')console.warn('Triovist task summary deferred',extra[0].reason);
-   if(extra[1].status==='fulfilled'&&extra[1].value)lastPack.policy=extra[1].value;
-   else if(extra[1].status==='rejected')console.warn('Triovist task policy deferred',extra[1].reason);
+   if(summary)lastPack.summary=summary;
+   if(policy)lastPack.policy=policy;
    lastAt=Date.now();
- }).finally(()=>{extrasFlight=null;extrasKey=''});
+   if(isTaskTab())setTimeout(()=>render(false),0);
+ })().finally(()=>{extrasFlight=null;extrasKey=''});
  return extrasFlight;
 }
 async function loadPack(force=false){
