@@ -152,9 +152,14 @@ function sync(){const p=page();if(!p||!shell||!panel)return;const on=p.classList
 function error(e){panel.innerHTML=`<div class="tr14-warn"><b>Ошибка.</b><br>${esc(e?.message||e)}</div>`;panel.style.setProperty('display','block','important')}
 async function work(k,token){
  choose(k);panel.style.setProperty('display','none','important');page().style.setProperty('display','block','important');
+ document.getElementById('tr14-direct-error')?.remove();
  restoreDirectWork();showDirectWork(k);hideOld();
  [0,80,250,700].forEach(ms=>setTimeout(()=>{if(token===navEpoch&&active===k&&page()?.classList.contains('active')){page().style.setProperty('display','block','important');shell.style.setProperty('display','block','important');showDirectWork(k);hideOld();if(k==='parser')document.getElementById('tri21-control-v236107')?.scrollIntoView({block:'start',behavior:ms?'auto':'smooth'})}},ms));
- try{await prepareDirectWork(k)}catch(e){console.warn('Triovist direct section '+k,e)}
+ try{await prepareDirectWork(k)}catch(e){
+   console.warn('Triovist direct section '+k,e);
+   const x=document.createElement('div');x.id='tr14-direct-error';x.className='tr14-warn';x.innerHTML='<b>Раздел не загрузился.</b><br>'+esc(e?.message||e);
+   page()?.prepend(x);
+ }
  if(token!==navEpoch||active!==k)return;
  showDirectWork(k);hideOld();
 }
