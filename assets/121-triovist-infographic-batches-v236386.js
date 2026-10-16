@@ -8,7 +8,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const list=x=>Array.isArray(x)?x:[];
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
 const pretty=x=>x==='Бетоносмесители'?'Бетономешалки':x;
-const stateLabels={queued:'В очереди',processing:'В работе',completed:'Готово',completed_with_errors:'Готово с замечаниями',failed:'Ошибка'};
+const stateLabels={queued:'В очереди',processing:'В работе',completed:'Готово',completed_with_errors:'Готово с замечаниями',failed:'Ошибка',cancelled:'Остановлено'};
 let root=null,groups=[],selected=new Set(),jobs=[],current=null,filter='',readyFilter='',working=false,downloading=false,timer=null,banner='',bannerError=false;
 let previewOverlay=null,previewUrls=[],previewZipBlob=null,previewSku='',previewSequence=0;
 async function invoke(action,args={}){
@@ -105,7 +105,7 @@ function jobHtml(){
  '<div class="tib386-progress"><span style="width:'+Math.max(0,Math.min(pct,100))+'%"></span></div>'+
  '<div class="tib386-actions"><b>'+done+'/'+Number(j.total_items||0)+' SKU обработано</b>'+
  '<span class="tib386-muted">Готово: '+Number(j.completed_items||0)+' · Проверка: '+Number(j.failed_items||0)+'</span>'+
- '<button data-tib-status="'+esc(j.id)+'">↻ Проверить статус</button>'+
+ '<button data-tib-status="'+esc(j.id)+'">↻ Проверить статус</button>'+ (['queued','processing'].includes(j.status)?'<button data-tib-stop="'+esc(j.id)+'">⏹ Остановить</button>':'')+
  (['completed','completed_with_errors'].includes(j.status)?
  '<button class="blue" data-tib-download="'+esc(j.id)+'" '+(downloading?'disabled':'')+'>📦 Скачать все группы одним ZIP</button>':'')+'</div>'+
  (j.error_summary?'<div class="tib386-note err">'+esc(j.error_summary)+'</div>':'')+
@@ -113,22 +113,15 @@ function jobHtml(){
 }
 function draw(){
  if(!root?.isConnected)return;
- const n=calc();
- root.innerHTML='<div class="tib386-head"><div><h3>🏭 Массовая инфографика · автопилот</h3>'+
- '<div class="tib386-muted">Выбери группы → «Запустить» → CRM сама получает фото точных товаров 21vek, проверяет характеристики, создаёт 7 PNG на SKU и готовит архив. Вкладку можно закрыть.</div></div>'+
- '<button data-tib-refresh>↻ Обновить задания</button></div>'+
- '<div class="tib386-controls"><input data-tib-filter placeholder="Бетономешалки, фекальные насосы, снегоуборщики..." value="'+esc(filter)+'" aria-label="Найти товарные группы">'+
- '<div class="tib386-counter"><b>'+n.count+' групп · '+n.sku+' SKU</b><div class="tib386-muted">Лимит 300 SKU за запуск</div></div></div>'+
- '<div class="tib386-items" id="tib386-group-grid">'+cardsHtml()+'</div>'+
- '<div class="tib386-actions"><button class="blue" data-tib-start '+(working||n.count===0||n.count>10||n.sku>300?'disabled':'')+'>'+
- (working?'Создаю задание…':'🚀 Запустить '+n.sku+' SKU')+'</button>'+
- '<span class="tib386-muted">Фото только из карточки нужной модели; неизвестные факты не придумываются.</span></div>'+
+ root.innerHTML='<div class="tib386-head"><div><h3>📁 История предыдущей инфографики (V1)</h3>'+
+ '<p class="tib386-muted">Старый шаблонный генератор отключён для новых партий. Здесь сохранены уже созданные слайды, включая остановленное задание. Новую профессиональную генерацию запускай в разделе «Инфографика 2.0» выше.</p></div>'+
+ '<button data-tib-refresh>↻ Обновить историю</button></div>'+
  jobHtml()+readyHtml()+
- (jobs.length?'<div class="tib386-sep"></div><h4>Последние задания</h4><div class="tib386-jobs">'+jobs.slice(0,8).map(j=>
+ (jobs.length?'<div class="tib386-sep"></div><h4>Предыдущие задания</h4><div class="tib386-jobs">'+jobs.slice(0,8).map(j=>
  '<button data-tib-status="'+esc(j.id)+'" class="'+(current?.id===j.id?'picked':'')+'"><span>'+list(j.groups).map(pretty).slice(0,3).map(esc).join(' · ')+'</span>'+
  '<small>'+esc(stateLabels[(current?.id===j.id?current:j).status]||(current?.id===j.id?current:j).status)+' · '+Number((current?.id===j.id?current:j).completed_items||0)+'/'+Number(j.total_items||0)+'</small></button>').join('')+'</div>':'')+
  (banner?'<div class="tib386-note '+(bannerError?'err':'')+'">'+esc(banner)+'</div>':'')+
- '<p class="tib386-muted" style="margin-top:13px">Ниже сохранён ручной редактор отдельного SKU. Публикация на 21vek автоматически не выполняется.</p>';
+ '<p class="tib386-muted" style="margin-top:11px">Все старые товары и их ZIP остались на сервере. Остановка задания не удаляет готовые материалы.</p>';
 }
 function schedule(){
  clearTimeout(timer);timer=null;
@@ -145,9 +138,9 @@ function schedule(){
 }
 async function refresh(){
  const el=root;
- const [catalog,bs]=await Promise.all([invoke('batch-catalog'),invoke('batch-list')]);
+ const bs=await invoke('batch-list');
  if(el!==root||!el?.isConnected)return;
- groups=list(catalog.groups);jobs=list(bs.batches);
+ jobs=list(bs.batches);
  if(!current&&jobs.length)current=jobs[0];
  else if(current){const x=jobs.find(j=>j.id===current.id);if(x)current={...current,...x}}
  if(current?.id){
@@ -296,7 +289,8 @@ async function click(e){
    const x=b.dataset.tibGroup;if(selected.has(x))selected.delete(x);else selected.add(x);draw();return;
   }
   if(b.hasAttribute('data-tib-preview')){await previewSkuNow(b.dataset.tibPreview);return}
-  if(b.hasAttribute('data-tib-start')){await start();return}
+  if(b.hasAttribute('data-tib-stop')){if(window.confirm('Остановить старую партию и сохранить готовые SKU?')){await invoke('batch-stop',{batch_id:b.dataset.tibStop});await showJob(b.dataset.tibStop)}return}
+  if(b.hasAttribute('data-tib-start')){throw Error('Старый шаблонный генератор отключён. Используйте Инфографику 2.0.');}
   if(b.hasAttribute('data-tib-refresh')){await refresh();return}
   if(b.hasAttribute('data-tib-status')){await showJob(b.dataset.tibStatus);return}
   if(b.hasAttribute('data-tib-download')){await download(b.dataset.tibDownload);return}
