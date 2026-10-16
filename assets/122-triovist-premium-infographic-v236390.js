@@ -7,7 +7,7 @@ if(window.RESANTA_TRIOVIST_PREMIUM_V236390)return;
 const FN='triovist-infographic-v2-v236390';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const a=x=>Array.isArray(x)?x:[];
-const db=()=>{try{return typeof window.db!=='undefined'?window.db:typeof globalThis.db!=='undefined'?globalThis.db:eval('db')}catch(_){return window.db}};
+const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
 let root=null,config=null,pilots=[],active=null,slides=[],images=[],message='',busy=false,timer=null,preview=false,selectedSku='',loading=false;
 function styles(){
  if(document.getElementById('tiv2390-css'))return;
@@ -39,7 +39,7 @@ function styles(){
  document.head.appendChild(sheet);
 }
 async function req(action,args={}){
- const d=db();
+ const d=dbx();
  if(!d?.functions?.invoke)throw Error('Сначала дождитесь подключения CRM к базе');
  const {data,error}=await d.functions.invoke(FN,{body:{action,...args}});
  if(error){
