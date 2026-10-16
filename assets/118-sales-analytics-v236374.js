@@ -165,11 +165,14 @@ function yoyFresh(d){const f=d?.freshness||{};if(!f.last_success_at&&!f.report_d
 function renderYoySummary(){
   const body=document.getElementById('msy-body-v236374');if(!body)return;
   const d=yoy.summary;if(!d){body.innerHTML=yoyControls();return}
-  const rows=Array.isArray(d.managers)?d.managers:[];
+  const rows=Array.isArray(d.managers)?d.managers:[],gd=d.diagnostics||{};
+  const guCur=num(gd.fully_unassigned_current_revenue),guPrev=num(gd.fully_unassigned_previous_revenue),guDelta=guCur-guPrev;
+  const globalUnassigned=(guCur||guPrev)?'<tr style="background:#FFF7ED"><td><b style="color:#9A3412">Не распределено по менеджеру</b><div style="font-size:10px;color:#9A3412;margin-top:2px">нет надёжной привязки в 1С/CRM</div></td><td>'+money(guPrev)+'</td><td>'+money(guCur)+'</td><td class="msy-adj">'+signed(guDelta)+'</td><td class="msy-adj">'+(guPrev>0?pct((guDelta/guPrev)*100):'—')+'</td><td>—</td><td>—</td><td>—</td><td class="msy-adj">'+money(guCur)+'</td></tr>':'';
   body.innerHTML=yoyControls()+yoyFresh(d)+'<div style="font-size:12px;font-weight:700;margin:2px 0 9px">'+esc(periodText(d))+'</div>'
    +'<div class="msy-table-wrap"><table class="msy-table"><thead><tr><th>Менеджер</th><th>'+(d.previous_year||yoy.year-1)+'</th><th>'+(d.year||yoy.year)+'</th><th>Δ BYN</th><th>Δ %</th><th>АКБ</th><th>С движением</th><th>Без продаж</th><th>Не распределено</th></tr></thead><tbody>'
    +rows.map(r=>'<tr class="msy-row" onclick="msyManager374(\''+esc(String(r.manager_name)).replace(/'/g,'&#39;')+'\')"><td><b>'+esc(r.manager_name)+'</b><div style="font-size:10px;color:var(--sub);margin-top:2px">открыть всех клиентов →</div></td><td>'+money(r.previous_revenue)+'</td><td>'+money(r.current_revenue)+'</td><td class="'+(num(r.delta)>=0?'msy-pos':'msy-neg')+'">'+signed(r.delta)+'</td><td class="'+(num(r.delta)>=0?'msy-pos':'msy-neg')+'">'+pct(r.growth_pct)+'</td><td><b>'+num(r.clients_total)+'</b></td><td>'+num(r.clients_any)+'</td><td>'+num(r.no_sales_both)+'</td><td class="msy-adj">'+money(num(r.unallocated_current_revenue))+'</td></tr>').join('')
-   +'</tbody></table></div><div class="msy-note">АКБ — все действующие клиенты текущего закрепления. «Без продаж» — нет движения ни в выбранном периоде, ни в аналогичном периоде прошлого года. Итоги менеджера включают нераспределённые по ТТ продажи 1С.</div><div id="msy-detail-v236374"></div>';
+   +globalUnassigned
+   +'</tbody></table></div><div class="msy-note">АКБ — все действующие клиенты текущего закрепления. «Без продаж» — нет движения ни в выбранном периоде, ни в аналогичном периоде прошлого года. Итоги менеджера включают нераспределённые по ТТ продажи 1С; строки без надёжной привязки к менеджеру показываются отдельно, чтобы общий итог сходился с 1С.</div><div id="msy-detail-v236374"></div>';
   if(yoy.manager)renderYoyDetail();
 }
 function filteredClients(){
