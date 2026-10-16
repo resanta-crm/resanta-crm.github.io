@@ -1,0 +1,45 @@
+name: Triovist premium infographic V2 - single SKU pilot
+
+on:
+  schedule:
+    - cron: '7,27,47 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/triovist_infographic_v2_pilot.py'
+      - '.github/workflows/triovist-infographic-v2-pilot.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: triovist-infographic-v2-single-pilot
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify premium pilot worker syntax only
+        run: python -m py_compile tools/triovist_infographic_v2_pilot.py
+
+  worker:
+    needs: validate
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated image and parser dependencies
+        run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
+      - name: Render authorized single-SKU premium pilot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          V2_PILOT_SECONDS: '3060'
+        run: python tools/triovist_infographic_v2_pilot.py
