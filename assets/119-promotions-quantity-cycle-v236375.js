@@ -1,4 +1,4 @@
-/* RESANTA CRM v23.6.375 · PROMOTIONS QUANTITY LIFE-CYCLE
+/* RESANTA CRM v23.6.382 · PROMOTIONS QUANTITY LIFE-CYCLE
  * - quantity plan/fact for active and completed promotions;
  * - safe quantity-only backfill for already running promotions;
  * - portrait-tablet SKU quantity editor;
@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_PROMOTIONS_QUANTITY_CYCLE_V236375)return;
-const V='v23.6.375',TTL=30000,cache=new Map();
+const V='v23.6.382',TTL=30000,cache=new Map(),qtyFlights=new Map();let allFlight=null;const detailFlights=new Map();
 const safe=v=>String(v??'');
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -72,19 +72,27 @@ function css(){
 async function loadQty(id,force=false){
  id=safe(id);if(!id)return null;
  const c=cache.get(id);if(!force&&c&&Date.now()-c.at<TTL)return c.row;
+ if(qtyFlights.has(id))return qtyFlights.get(id);
  const d=dbc();if(!d)return null;
- const {data,error}=await d.rpc('crm_promotions_quantity_control_v236375',{p_promotion_id:id});
- if(error)throw error;
- const row=Array.isArray(data)?data[0]:null;cache.set(id,{at:Date.now(),row});return row;
+ const p=(async()=>{
+   const {data,error}=await d.rpc('crm_promotions_quantity_control_v236375',{p_promotion_id:id});
+   if(error)throw error;
+   const row=Array.isArray(data)?data[0]:null;cache.set(id,{at:Date.now(),row});return row;
+ })().finally(()=>qtyFlights.delete(id));
+ qtyFlights.set(id,p);return p;
 }
 async function loadAll(force=false){
  const k='*',c=cache.get(k);if(!force&&c&&Date.now()-c.at<TTL)return c.rows||[];
+ if(allFlight)return allFlight;
  const d=dbc();if(!d)return[];
- const {data,error}=await d.rpc('crm_promotions_quantity_control_v236375',{p_promotion_id:null});
- if(error)throw error;
- const rows=Array.isArray(data)?data:[];cache.set(k,{at:Date.now(),rows});
- rows.forEach(r=>cache.set(safe(r.promotion_id),{at:Date.now(),row:r}));
- return rows;
+ allFlight=(async()=>{
+   const {data,error}=await d.rpc('crm_promotions_quantity_control_v236375',{p_promotion_id:null});
+   if(error)throw error;
+   const rows=Array.isArray(data)?data:[];cache.set(k,{at:Date.now(),rows});
+   rows.forEach(r=>cache.set(safe(r.promotion_id),{at:Date.now(),row:r}));
+   return rows;
+ })().finally(()=>{allFlight=null});
+ return allFlight;
 }
 function invalidate(id){cache.delete('*');if(id)cache.delete(safe(id))}
 function qualityLabel(q){
@@ -97,12 +105,12 @@ function canQtyEdit(p){
 }
 function summaryHtml(q,p,detail=true){
  if(!q)return'';
- const hist=!!q.historical_mode,lab=qualityLabel(q),comp=q.completion_pct==null?'—':num(q.completion_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%';
- const target=q.target_qty_30==null?'—':qty(q.target_qty_30),targetComp=q.target_completion_pct==null?'—':num(q.target_completion_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%';
+ const hist=!!q.historical_mode,exact=!!q.quantity_exact,lab=qualityLabel(q),comp=q.completion_pct==null?'—':num(q.completion_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%';
+ const baseline=q.baseline_qty==null?null:num(q.baseline_qty),target=q.target_qty_30==null?'—':qty(q.target_qty_30),targetComp=q.target_completion_pct==null?'—':num(q.target_completion_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%';
  const missing=Math.max(0,num(q.item_count)-num(q.quantity_filled_count));
  const edit=canQtyEdit(p)?'<button type="button" class="btn-secondary" data-pqc375-edit="'+esc(q.promotion_id)+'">'+(missing?'Заполнить количество, шт.':'Количество, шт.')+'</button>':'';
  let h='<div class="pqc375-box" data-pqc375-box="'+esc(q.promotion_id)+'"><div class="pqc375-head"><div><b>📦 План / факт в штуках</b><small>'+esc(lab[0])+(hist?' · старые акции не пересчитываются задним числом по правилу +30%':' · подготовительная отгрузка после финального согласования входит в факт')+'</small></div>'+edit+'</div>';
- h+='<div class="pqc375-kpis"><div class="pqc375-kpi"><small>План количества</small><b>'+(q.quantity_complete?qty(q.planned_qty_total):'Не заполнено')+'</b></div><div class="pqc375-kpi"><small>Факт</small><b class="'+lab[1]+'">'+qty(q.fact_qty_total)+'</b></div><div class="pqc375-kpi"><small>Выполнение плана</small><b>'+comp+'</b></div><div class="pqc375-kpi"><small>Цель +30%</small><b>'+(hist?'Не применяется':target)+'</b><small>'+(hist?'исторический режим':('выполнение цели '+targetComp))+'</small></div></div>';
+ h+='<div class="pqc375-kpis"><div class="pqc375-kpi"><small>План количества</small><b>'+(q.quantity_complete?qty(q.planned_qty_total):'Не заполнено')+'</b></div><div class="pqc375-kpi"><small>'+(exact?'Факт':'Предварительный факт')+'</small><b class="'+lab[1]+'">'+qty(q.fact_qty_total)+'</b></div><div class="pqc375-kpi"><small>'+(exact?'Выполнение плана':'Предварительное выполнение')+'</small><b>'+comp+'</b></div><div class="pqc375-kpi"><small>Цель +30% к исторической базе</small><b>'+(hist?'Не применяется':target)+'</b><small>'+(hist?'исторический режим':((baseline!=null?'база '+qty(baseline)+' · ':'')+'выполнение цели '+targetComp))+'</small></div></div>';
  if(missing&&!hist)h+='<div class="pqc375-note pqc375-warn"><b>Нужно заполнить количество по '+missing+' SKU.</b> Для уже идущей акции это меняет только количество и не запускает согласование заново.</div>';
  if(!q.quantity_exact&&!hist)h+='<div class="pqc375-note pqc375-warn">Точный факт в штуках пока нельзя отделить от продаж до начала/согласования. CRM показывает календарный факт как ориентир. При закрытии ДФС подтвердит количество вручную, если точных снимков 1С недостаточно.</div>';
  if(hist)h+='<div class="pqc375-note">Акция создана до внедрения количественного контроля. История сохранена как есть: отсутствие плановых штук не считается ошибкой и цель +30% не применяется задним числом.</div>';
@@ -114,15 +122,23 @@ function summaryHtml(q,p,detail=true){
  return h+'</div>';
 }
 async function decorateDetail(id){
- const root=document.getElementById('promotion-detail-body');if(!root)return;
- root.querySelector('[data-pqc375-box]')?.remove();
- try{
-   const q=await loadQty(id),p=promo(id);if(!q)return;
-   const wrap=document.createElement('div');wrap.innerHTML=summaryHtml(q,p,true);const node=wrap.firstElementChild;
-   const ai=root.querySelector('.pai345-detail');if(ai)ai.insertAdjacentElement('afterend',node);else root.prepend(node);
-   stripFinance(root);
-   await decorateBudget(id);
- }catch(e){console.warn(V+' detail',e)}
+ id=safe(id);if(!id)return;
+ if(detailFlights.has(id))return detailFlights.get(id);
+ const p=(async()=>{
+   const root=document.getElementById('promotion-detail-body');if(!root)return;
+   [...root.querySelectorAll('[data-pqc375-box]')].forEach(n=>n.remove());
+   try{
+     const q=await loadQty(id),pr=promo(id);if(!q)return;
+     const current=safe(typeof promotionDetailId!=='undefined'?promotionDetailId:(window.promotionDetailId||''));
+     if(current&&current!==id)return;
+     [...root.querySelectorAll('[data-pqc375-box]')].forEach(n=>n.remove());
+     const wrap=document.createElement('div');wrap.innerHTML=summaryHtml(q,pr,true);const node=wrap.firstElementChild;if(!node)return;
+     const ai=root.querySelector('.pai345-detail');if(ai)ai.insertAdjacentElement('afterend',node);else root.prepend(node);
+     stripFinance(root);
+     await decorateBudget(id);
+   }catch(e){console.warn(V+' detail',e)}
+ })().finally(()=>detailFlights.delete(id));
+ detailFlights.set(id,p);return p;
 }
 function stripFinance(root=document){
  [...root.querySelectorAll('.promo-eff-chip-v236132,.promo-eff-note-v236132')].forEach(n=>{
@@ -240,7 +256,7 @@ function patchBudgetOptions(){
  return true;
 }
 function patchFunctions(){
- const od=window.openPromotionDetail;if(typeof od==='function'&&!od.__pqc375){const base=od,fn=function(id){const r=base.apply(this,arguments);setTimeout(()=>decorateDetail(id),100);setTimeout(()=>decorateDetail(id),350);return r};fn.__pqc375=true;fn.__base=base;window.openPromotionDetail=fn;try{openPromotionDetail=fn}catch(_){}}
+ const od=window.openPromotionDetail;if(typeof od==='function'&&!od.__pqc375){const base=od,fn=function(id){const r=base.apply(this,arguments);setTimeout(()=>decorateDetail(id),120);return r};fn.__pqc375=true;fn.__base=base;window.openPromotionDetail=fn;try{openPromotionDetail=fn}catch(_){}}
  const rp=window.renderPromotions;if(typeof rp==='function'&&!rp.__pqc375){const base=rp,fn=function(){const r=base.apply(this,arguments);setTimeout(decorateCards,80);setTimeout(()=>stripFinance(document),120);return r};fn.__pqc375=true;fn.__base=base;window.renderPromotions=fn;try{renderPromotions=fn}catch(_){}}
  const or=window.openPromotionResult;if(typeof or==='function'&&!or.__pqc375){const base=or,fn=function(id){const r=base.apply(this,arguments);setTimeout(()=>decorateResult(id),80);return r};fn.__pqc375=true;fn.__base=base;window.openPromotionResult=fn;try{openPromotionResult=fn}catch(_){}}
  const sr=window.savePromotionResult;if(typeof sr==='function'&&!sr.__pqc375){const base=sr,fn=async function(closeIt){const id=safe(document.getElementById('promotion-result-id')?.value);if(closeIt&&id){const ok=await guardClose(id);if(!ok)return}const r=await base.apply(this,arguments);invalidate(id);setTimeout(decorateCards,100);return r};fn.__pqc375=true;fn.__base=base;window.savePromotionResult=fn;try{savePromotionResult=fn}catch(_){}}
@@ -259,5 +275,5 @@ function install(){
  css();patchFunctions();stripFinance(document);if(active())setTimeout(decorateCards,80);
 }
 bind();install();[150,500,1200,2500].forEach(ms=>setTimeout(install,ms));
-window.RESANTA_PROMOTIONS_QUANTITY_CYCLE_V236375=Object.freeze({version:V,loadQty,loadAll,openQtyEditor,decorateDetail,portraitTablet:true,legalEntityBudget:true,historicalSafe:true,noPolling:true,noMutationObserver:true});
+window.RESANTA_PROMOTIONS_QUANTITY_CYCLE_V236375=Object.freeze({version:V,loadQty,loadAll,openQtyEditor,decorateDetail,portraitTablet:true,legalEntityBudget:true,historicalSafe:true,singleFlight:true,detailDedup:true,clearPreliminaryLabels:true,noPolling:true,noMutationObserver:true});
 })();
