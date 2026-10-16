@@ -37,7 +37,7 @@ MAX_ITEMS=max(1,min(50,int(os.getenv("BATCH_MAX_ITEMS","24"))))
 MAX_SECONDS=max(900,min(3300,int(os.getenv("BATCH_MAX_SECONDS","3000"))))
 PART_BYTES=43*1024*1024
 PHOTO_BYTES=12*1024*1024
-MEDIA_DOMAINS={"21vek.by","www.21vek.by"}
+MEDIA_DOMAINS={"21vek.by","www.21vek.by","cdn21vek.by"}
 START=time.monotonic()
 
 def log(*a):
@@ -94,7 +94,8 @@ def model_matches(crm_name,live_name):
 def is_21vek(url):
     try:
         p=urlparse(url)
-        return p.scheme=="https" and (p.hostname or "").lower().endswith(".21vek.by") or (p.scheme=="https" and p.hostname=="21vek.by")
+        host=(p.hostname or "").lower()
+        return p.scheme=="https" and (host in MEDIA_DOMAINS or host.endswith(".21vek.by"))
     except Exception:return False
 
 def candidate_urls(value):
@@ -102,10 +103,10 @@ def candidate_urls(value):
     def walk(v,depth=0):
         if depth>6:return
         if isinstance(v,dict):
-            for key in ("original","originalUrl","large","image","imageUrl","src","url","path","file","medium","preview","photo"):
+            for key in ("fullSize","original","originalUrl","large","image","imageUrl","src","url","path","file","medium","preview","miniature","photo"):
                 if key in v:walk(v[key],depth+1)
             for key,val in v.items():
-                if key not in {"original","originalUrl","large","image","imageUrl","src","url","path","file","medium","preview","photo"}:walk(val,depth+1)
+                if key not in {"fullSize","original","originalUrl","large","image","imageUrl","src","url","path","file","medium","preview","miniature","photo"}:walk(val,depth+1)
         elif isinstance(v,list):
             for item in v[:25]:walk(item,depth+1)
         elif isinstance(v,str):
