@@ -8,6 +8,7 @@
 if(window.RESANTA_PAYMENT_REGISTRY_V23623)return;
 const V='v23.6.376';
 const $=id=>document.getElementById(id);
+const safe=v=>String(v??'');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=v=>Number(v)||0;
 const money=(v,cur='BYN')=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+cur;
@@ -80,7 +81,7 @@ function renderShell(){
  <div class="pr-kpis">${kpi(expenseType?'Всего · '+(d.expense_label||expenseLabel(expenseType)):'Всего в реестре',money(d.total_amount),`${d.total_count||0} платежей`)}${kpi('Ждёт решения Паюшина',money(d.submitted_amount),`${d.submitted_count||0} платежей`,'pr-warn')}${kpi('К оплате Нестерову',money(d.approved_amount),`${d.approved_count||0} платежей${n(d.carryover_approved_count)?' · перенос: '+d.carryover_approved_count:''}`,'pr-blue')}${kpi('Оплачено',money(d.paid_amount),`${d.paid_count||0} платежей`,'pr-good')}</div>
  ${articleSummaryHtml(d)}${recipientsHtml(d)}
  ${ctx?.can_create?createForm():''}<div class="pr-tools"><div class="pr-tabs">${paymentTabs().map(([v,t])=>`<button class="pr-tab ${status===v?'active':''}" data-status="${v}">${t}</button>`).join('')}</div><input id="pr-search" placeholder="Поиск по назначению / поставщику / статье / участнику" value="${esc(search)}"><button class="pr-btn" id="pr-find">Найти</button></div><div id="pr-body"><div class="card">Загрузка списка…</div></div>`;
- $('pr-month').onchange=()=>{month=$('pr-month').value+'-01';open(true)};$('pr-expense-filter').onchange=()=>setExpenseType($('pr-expense-filter').value);$('pr-refresh').onclick=()=>open(true);$('pr-summary-toggle').onclick=()=>{showArticleSummary=!showArticleSummary;renderShell()};root.querySelectorAll('[data-expense]').forEach(b=>b.onclick=()=>setExpenseType(b.dataset.expense));$('pr-find').onclick=()=>{search=$('pr-search').value.trim();renderRows()};$('pr-search').onkeydown=e=>{if(e.key==='Enter')$('pr-find').click()};root.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{status=b.dataset.status;root.querySelectorAll('[data-status]').forEach(x=>x.classList.toggle('active',x.dataset.status===status));renderRows()});
+ $('pr-month').onchange=()=>{month=$('pr-month').value+'-01';open(true)};$('pr-expense-filter').onchange=()=>setExpenseType($('pr-expense-filter').value);$('pr-refresh').onclick=()=>open(true);if($('pr-summary-toggle'))$('pr-summary-toggle').onclick=()=>{showArticleSummary=!showArticleSummary;renderShell()};root.querySelectorAll('[data-expense]').forEach(b=>b.onclick=()=>setExpenseType(b.dataset.expense));$('pr-find').onclick=()=>{search=$('pr-search').value.trim();renderRows()};$('pr-search').onkeydown=e=>{if(e.key==='Enter')$('pr-find').click()};root.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{status=b.dataset.status;root.querySelectorAll('[data-status]').forEach(x=>x.classList.toggle('active',x.dataset.status===status));renderRows()});
  if(ctx?.can_create){$('pr-create-submit').onclick=createAndSubmit;$('pr-create-draft').onclick=()=>createPayment(false)}
  renderRows();
 }
