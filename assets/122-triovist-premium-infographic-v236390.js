@@ -73,7 +73,7 @@ function currentHtml(){
  (mimeRepair?'<button class="prime" data-v2-recover>↻ Продолжить после исправления PNG</button>':'')+
  (done?'<button class="prime" data-v2-download-all>↓ Скачать 8 PNG одним ZIP</button>':'')+
  (status==='needs_review'&&x.audit?.editorial_version==='2.1'&&!a(x.audit?.pending_recompose).length&&x.audit?.hero_verified&&x.audit?.scene_layers_preserved?'<button data-v2-approve>✓ Утвердить образец</button>':'')+'</div>'+
- '<p class="tiv2390-caption">'+h(x.stage||'')+'</p>'+
+ '<p class="tiv2390-caption">'+(status==='queued'?'Ожидает фонового запуска (примерно каждые 5 минут; GitHub может задерживать запуск). Обновляется автоматически — создавать тест повторно не нужно.':h(x.stage||''))+'</p>'+
  (status==='needs_review'&&x.audit?.editorial_version!=='2.1'?
    '<div class="tiv2390-warn">Этот комплект был создан старым движком 2.0. Сохраняем изображения и ZIP, но не утверждаем их по новому стандарту: в них нет гарантированной редакционной проверки и отдельных исходных сцен.</div>':'')+
  (a(x.audit?.pending_recompose).length?
@@ -242,5 +242,5 @@ async function open(parent){
  if(!root.dataset.bound){root.dataset.bound='1';root.addEventListener('click',clicked);root.addEventListener('input',entered)}
  message='';draw();try{await refresh()}catch(e){message=e.message;draw()}
 }
-window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:'23.6.395',open,refresh,isolated:true,requiresManualQA:true,maxPilotSku:1});
+window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:'23.6.397',open,refresh,isolated:true,requiresManualQA:true,maxPilotSku:1});
 })();
