@@ -1,11 +1,12 @@
-/* RESANTA CRM v23.6.370 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
+/* RESANTA CRM v23.6.377 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_COMPETITORS_V236218)return;
-const V='v23.6.370',TTL=30000;
+const V='v23.6.377',TTL=30000;
+if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
+if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
     scopeFlights=new Map(),scopeCache=new Map(),
     listingFlights=new Map(),listingCache=new Map(),
@@ -3106,7 +3107,9 @@ async function open(panel,ctx,force=false){
  try{
   // Only the 36 KB metadata cache is critical. Products, listing and history
   // are loaded after a category is selected.
-  const [dash,stateCounts]=await Promise.all([load(force),loadStateCounts(force)]);
+  const dash=await load(force);
+  let stateCounts=null;
+  try{stateCounts=await loadStateCounts(force)}catch(err){console.warn('Счётчик состояний конкурентов временно недоступен; основной анализ открыт',err)}
   mergeStateCounts(dash,stateCounts);
   render(panel,dash,emptyListing('',7));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
@@ -3114,6 +3117,6 @@ async function open(panel,ctx,force=false){
 window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{
  last=null;lastAt=0;scopeCache.clear();scopeFlights.clear();listingCache.clear();listingFlights.clear();
  historyCache.clear();historyFlights.clear();detailCache.clear();positionCache.clear();positionFlights.clear();positionHistoryCache.clear();stateCountsCache=null;stateCountsFlight=null;
- return Promise.all([load(true),loadStateCounts(true)]).then(([d,s])=>mergeStateCounts(d,s));
+ return load(true).then(async d=>{let s=null;try{s=await loadStateCounts(true)}catch(err){console.warn('Счётчик состояний конкурентов временно недоступен; основной анализ сохранён',err)}return mergeStateCounts(d,s)});
 },automaticMarket:true,lazyMarketByScope:true,positionHistory:true,liveCompetitorPositionWatch:true,livePositionDepth:120,livePositionTargetHours:3,manualScopeRefresh:true,competitorPriceHistory:true,competitorPriceFilters:[3,7,10,14,20,30],sprayerProfile:true,impactWrenchProfile:true,circularSawProfile:true,impactDrillProfile:true,cordlessScrewdriverProfile:true,paintSprayerProfile:true,jigsawProfile:true,rotaryHammerProfile:true,planerProfile:true,reciprocatingSawProfile:true,constructionVacuumProfile:true,constructionHeatGunProfile:true,miterSawProfile:true,benchGrinderProfile:true,angleGrinderProfile:true,circulationPumpProfile:true,drainagePumpProfile:true,fecalPumpProfile:true,surfacePumpProfile:true,boreholePumpProfile:true,preserveResultWithIncompleteFlag:true,ownListingHistory:true,fullMarketAccess:true,mainCompetitorModel:true,excel:true});
 })();
