@@ -9,7 +9,7 @@ const MANAGERS=[ALEKS,KRIS],LEADERS=['payushin_ar@resanta.ru','sidarovich_kn@res
 const EXCLUDED=new Set(['cancelled','not_relevant']);
 const FINAL=new Set(['verified','partial','not_achieved','cancelled','not_relevant']);
 const STATUS={pending_approval:'На согласовании',new:'Новая',accepted:'Принята',in_progress:'В работе',waiting_21vek:'Ожидает 21vek',awaiting_check:'Ожидает проверки',partial:'Частично выполнена',verified:'Выполнена и подтверждена',not_achieved:'Не выполнена',overdue:'Просрочена',cancelled:'Отменена / заменена',not_relevant:'Неактуальна'};
-let selected='',busy=false,lastKey='',lastAt=0,lastPack=null,packFlight=null,packFlightKey='',privateLogic=null,privateLogicOpen=false;
+let selected='',busy=false,lastKey='',lastAt=0,lastPack=null,packFlight=null,packFlightKey='',extrasFlight=null,extrasKey='',privateLogic=null,privateLogicOpen=false;
 const profile=()=>{try{return window.currentProfile||currentProfile}catch(_){return window.currentProfile}};
 const email=()=>String(profile()?.email||'').trim().toLowerCase();
 const isLeader=()=>String(profile()?.role||'').toLowerCase()==='boss'&&LEADERS.includes(email());
@@ -39,6 +39,22 @@ function injectCss(){if(document.getElementById('tri-month-safe51-css'))return;c
 `;document.head.appendChild(s)}
 function applyMode(){const c=card();if(!c)return;const past=getMonth()<curMonth();c.classList.add('tri-month-safe51');const head=c.querySelector(':scope > .tri-task-head'),note=c.querySelector(':scope > .tri-task-note'),banner=document.getElementById('tri-task-banner'),planGrid=document.getElementById('tri-task-manager-wrap')?.parentElement;[head,note,banner,planGrid].forEach(x=>{if(x)x.style.display=past?'none':''})}
 function ensureRoot(){if(!canUse())return null;injectCss();const c=card();if(!c)return null;applyMode();document.getElementById('tri-month-safe-v23650')?.remove();c.classList.remove('tri-month-safe50','tri-month-safe50-past');let r=document.getElementById('tri-month-safe-v23651');if(!r){r=document.createElement('div');r.id='tri-month-safe-v23651';c.prepend(r)}return r}
+async function loadExtras(key,m,mgr){
+ if(extrasFlight&&extrasKey===key)return extrasFlight;
+ extrasKey=key;
+ extrasFlight=Promise.allSettled([
+   rpc('triovist_month_summary_v23647',{p_month:m+'-01',p_manager_email:mgr}),
+   rpc('triovist_motivation_get_policy',{})
+ ]).then(extra=>{
+   if(lastKey!==key||!lastPack)return;
+   if(extra[0].status==='fulfilled'&&extra[0].value)lastPack.summary=extra[0].value;
+   else if(extra[0].status==='rejected')console.warn('Triovist task summary deferred',extra[0].reason);
+   if(extra[1].status==='fulfilled'&&extra[1].value)lastPack.policy=extra[1].value;
+   else if(extra[1].status==='rejected')console.warn('Triovist task policy deferred',extra[1].reason);
+   lastAt=Date.now();
+ }).finally(()=>{extrasFlight=null;extrasKey=''});
+ return extrasFlight;
+}
 async function loadPack(force=false){
  const m=getMonth(),mgr=isLeader()?null:email(),key=m+'|'+(mgr||'all');
  if(!force&&lastPack&&lastKey===key&&Date.now()-lastAt<60000)return lastPack;
@@ -46,16 +62,11 @@ async function loadPack(force=false){
  packFlightKey=key;
  packFlight=(async()=>{
    const dash=await rpc('triovist_tasks_get_dashboard_month_v23648',{p_manager_email:mgr,p_month:m+'-01'});
-   let summary={managers:[]},policy={};
-   const extra=await Promise.allSettled([
-     rpc('triovist_month_summary_v23647',{p_month:m+'-01',p_manager_email:mgr}),
-     rpc('triovist_motivation_get_policy',{})
-   ]);
-   if(extra[0].status==='fulfilled'&&extra[0].value)summary=extra[0].value;
-   else console.warn('Triovist task summary fallback',extra[0].reason);
-   if(extra[1].status==='fulfilled'&&extra[1].value)policy=extra[1].value;
-   else console.warn('Triovist task policy fallback',extra[1].reason);
-   lastKey=key;lastAt=Date.now();lastPack={dash:dash||{tasks:[]},summary,policy};return lastPack;
+   const previous=lastKey===key&&lastPack?lastPack:null;
+   lastKey=key;lastAt=Date.now();
+   lastPack={dash:dash||{tasks:[]},summary:previous?.summary||{managers:[]},policy:previous?.policy||{}};
+   loadExtras(key,m,mgr).catch(()=>{});
+   return lastPack;
  })().finally(()=>{packFlight=null;packFlightKey=''});
  return packFlight;
 }
@@ -135,5 +146,5 @@ const oldTaskRender=window.triovistTasksRender;if(typeof oldTaskRender==='functi
 const legacyTaskReload=window.triovistTasksReload;
 window.triovistTasksReload=async function(force=true){lastKey='';lastPack=null;if(isTaskTab())return await render(!!force);return true};
 window.triovistTasksEnsureLoaded=async function(){if(isTaskTab())return await render(false);return true};
-bind();if(isTaskTab())setTimeout(mount,0);window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651=Object.freeze({version:V,getMonth,setMonth,render,mount,refreshMonth,isolated:true,lazyByActiveTab:true,legacyHeavyReloadDisabled:true,singleFlight:true,summaryPolicyFallback:true,noHubWrap:true,noPolling:true,noObserver:true,mountPoint:'#tri-task-card'});
+bind();if(isTaskTab())setTimeout(mount,0);window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651=Object.freeze({version:V,getMonth,setMonth,render,mount,refreshMonth,isolated:true,lazyByActiveTab:true,legacyHeavyReloadDisabled:true,singleFlight:true,nonBlockingSummaryPolicy:true,summaryPolicyFallback:true,noHubWrap:true,noPolling:true,noObserver:true,mountPoint:'#tri-task-card'});
 })();
