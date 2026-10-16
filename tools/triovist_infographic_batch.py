@@ -118,6 +118,26 @@ def candidate_urls(value):
     walk(value)
     return out[:45]
 
+def public_live_facts(fd):
+    """Only general attributes of the exact current 21vek product, never variant models."""
+    facts=[];used=set()
+    for group in (fd.get("attributes") or [])[:8]:
+        for entry in (group.get("groupItems") or [])[:35]:
+            if not isinstance(entry,dict):continue
+            label=str(entry.get("label") or entry.get("name") or "").strip()
+            value=entry.get("value")
+            if not label or not isinstance(value,(str,int,float)) or isinstance(value,bool):continue
+            value=str(value).strip()
+            if not value or len(value)>75 or len(label)>65 or value.lower() in ("нет","не указано","неизвестно","-","—","n/a"):
+                continue
+            key=label.lower()
+            if key in used:continue
+            used.add(key)
+            facts.append({"id":"F"+str(len(facts)+1),"key":"live_"+str(len(facts)+1),
+                "label":label,"value":value,"source":"Публичные характеристики точной карточки 21vek"})
+            if len(facts)>=22:return facts
+    return facts
+
 def fetch_photo(item):
     source=str(item["product_url"])
     if not public_product_url(source):raise RuntimeError("Небезопасная или неканоническая ссылка 21vek")
@@ -128,6 +148,7 @@ def fetch_photo(item):
     name=str(fd.get("name") or "").strip()
     if not model_matches(item["product_name"],name):
         raise RuntimeError("Модель на 21vek отличается от выбранного SKU — фото заблокировано")
+    live_facts=public_live_facts(fd)
     gallery=fd.get("gallery") or []
     valid=[x for x in gallery if isinstance(x,dict) and str(x.get("type") or "image").lower()=="image"]
     urls=candidate_urls(valid)
@@ -157,13 +178,13 @@ def fetch_photo(item):
             if image.width/image.height>3 or image.height/image.width>3:
                 last_error="неподходящие пропорции фото";continue
             image.thumbnail((1200,1200),Image.Resampling.LANCZOS)
-            return image.convert("RGBA"),u,name
+            return image.convert("RGBA"),u,name,live_facts
         except (requests.RequestException,UnidentifiedImageError,OSError,ValueError,RuntimeError) as e:
             last_error=str(e)[:150]
     raise RuntimeError("Не удалось получить качественное фото нужной модели: "+last_error)
 
-def worker_plan(item_id):
-    resp=request("POST",EDGE,headers=headers(True),json={"action":"worker-plan","item_id":item_id},timeout=110)
+def worker_plan(item_id,live_facts):
+    resp=request("POST",EDGE,headers=headers(True),json={"action":"worker-plan","item_id":item_id,"live_facts":live_facts},timeout=110)
     if resp.status_code in (401,403):
         raise PermissionError("Ключ доступа к генератору не совпадает с серверным service-role")
     if resp.status_code!=200:
@@ -358,9 +379,9 @@ def process(batch):
             break
         try:
             patch_item(item,{"status":"processing","error_message":None})
-            photo,url,source_name=fetch_photo(item)
+            photo,url,source_name,live_facts=fetch_photo(item)
             # No photo -> no artificially completed infographic. Model must match.
-            plan=worker_plan(item["id"])
+            plan=worker_plan(item["id"],live_facts)
             pack,warnings=render_zip(item,plan,photo,url)
             if len(pack)>48*1024*1024:raise RuntimeError("Комплект SKU слишком велик для хранилища")
             storage_put(f"batches/{bid}/items/{safe_name(item['sku'])}.zip",pack)
