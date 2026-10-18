@@ -761,7 +761,7 @@ Deno.serve(async(req:Request)=>{
  const email=low(profile.email),leader=profile.role==="boss"&&leadership.has(email);
  const manager=profile.role==="manager"&&profile.access_scope==="triovist"&&managers.has(email);
  if(!leader&&!manager)return make(req,403,{ok:false,error:"FORBIDDEN"});
- if(action==="config")return make(req,200,{ok:true,version:"4.3-provider-fallback",max_skus:1,slides:8,
+ if(action==="config")return make(req,200,{ok:true,version:"4.4-rate-limit-queue",max_skus:1,slides:8,
   image_provider_ready:!!Deno.env.get("OPENAI_API_KEY"),
   text_provider_ready:!!(Deno.env.get("ANTHROPIC_API_KEY")||Deno.env.get("OPENAI_API_KEY")),
   premium_model:model,bulk_release:false,requires_approval:true,can_start:leader,editorial_version:"2.4",
@@ -960,5 +960,11 @@ Deno.serve(async(req:Request)=>{
   return make(req,200,{ok:true,pilot,slides});
  }
  return make(req,400,{ok:false,error:"UNKNOWN_ACTION"});
- }catch(e){console.error("TRIOVIST_V2",e instanceof Error?e.message:"UNKNOWN");return make(req,500,{ok:false,error:"PROCESSING_FAILED",message:e instanceof Error?str(e.message,220):"Ошибка"})}
+ }catch(e){
+  const msg=e instanceof Error?str(e.message,220):"Ошибка";
+  console.error("TRIOVIST_V2",msg);
+  if(/STRATEGY_PROVIDERS_UNAVAILABLE/i.test(msg)&&/429/.test(msg))
+    return make(req,429,{ok:false,error:"TEXT_AI_RATE_LIMIT",message:"Текстовый ИИ временно достиг лимита. Проект сохранён и будет автоматически повторён позже.",retry_after_seconds:300});
+  return make(req,500,{ok:false,error:"PROCESSING_FAILED",message:msg});
+ }
 });
