@@ -1,6 +1,6 @@
 {
-  "version": "23.6.376",
-  "released_at": "2026-10-16",
-  "purpose": "Payment registry: expense article filter, article totals, recipient breakdown and structured expense classification visible to Payushin and Sidorovich.",
-  "deploy_trigger": "2026-10-16T16:00:00+03:00"
+  "version": "23.6.402",
+  "released_at": "2026-10-18",
+  "purpose": "Hotfix: synchronize CRM module contracts after Triovist infographic v23.6.401; prevent loader conflict and blank sections.",
+  "deploy_trigger": "2026-10-18T17:35:00+03:00"
 }

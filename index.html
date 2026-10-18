@@ -18,16 +18,15 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-10-18-resanta-crm-v23.6.401-infographic-four-pass-visualqa';
+const APP_VERSION = '2026-10-18-resanta-crm-v23.6.402-loader-hotfix';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
     if (saved !== APP_VERSION) {
       localStorage.setItem('crm_app_version', APP_VERSION);
-      // Чистим кеш Service Worker / Cache API, если он есть.
-      if (window.caches && caches.keys) {
-        caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(()=>{});
-      }
+      // Не удаляем Cache API во время старта приложения: это может пересечься
+      // с загрузкой defer/lazy-модулей. Актуальность файлов обеспечивается
+      // версионными query-параметрами в src.
       // Текущий index.html уже новый. Раньше здесь делали второй location.reload(),
       // из-за чего каждый деплой заставлял CRM грузиться дважды и пользователь
       // видел длинный полноэкранный спиннер. Версии JS/CSS уже cache-busted в src.
@@ -52,7 +51,7 @@ const APP_VERSION = '2026-10-18-resanta-crm-v23.6.401-infographic-four-pass-visu
 <script defer src="./assets/05-performance-core.js?v=23.6.380"></script>
 <script defer src="./assets/06-root-fixes.js?v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
-<script defer src="./assets/66-performance-root-v23657.js?v=23.6.400"></script>
+<script defer src="./assets/66-performance-root-v23657.js?v=23.6.402"></script>
 <script defer src="./assets/75-service-manager-markdown-only-v23690.js?v=23.6.90"></script>
 <script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.131"></script>
 <script defer src="./assets/88-promotions-effectiveness-v236368.js?v=23.6.368"></script>
@@ -1707,6 +1706,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 
 
 
-<script defer src="./assets/100-safe-upgrades-loader-v236272.js?v=23.6.401"></script>
+<script defer src="./assets/100-safe-upgrades-loader-v236272.js?v=23.6.402"></script>
 </body>
 </html>
