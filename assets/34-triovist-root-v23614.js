@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.400',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
+const V='v23.6.401',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
@@ -171,17 +171,26 @@ async function work(k,token){
  showDirectWork(k);hideOld();
 }
 async function loadPremiumInfographics(){
- const expected='23.6.400',existing=window.RESANTA_TRIOVIST_PREMIUM_V236390;
- if(existing?.open&&String(existing.version||'')===expected)return existing;
- if(existing){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){window.RESANTA_TRIOVIST_PREMIUM_V236390=null}}
- const found=document.querySelector('script[data-tr14-premium-infographics]');if(found)found.remove();
- const script=document.createElement('script');script.async=true;script.dataset.tr14PremiumInfographics='1';
- script.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected;document.head.appendChild(script);
- for(let i=0;i<60;i++){
-   const obj=window.RESANTA_TRIOVIST_PREMIUM_V236390;if(obj?.open&&String(obj.version||'')===expected)return obj;
-   await new Promise(resolve=>setTimeout(resolve,100));
+ const expected='23.6.401';
+ const ready=()=>{const x=window.RESANTA_TRIOVIST_PREMIUM_V236390;return x?.open&&String(x.version||'')===expected?x:null};
+ if(ready())return ready();
+ if(window.RESANTA_TRIOVIST_PREMIUM_V236390){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){window.RESANTA_TRIOVIST_PREMIUM_V236390=null}}
+ for(let attempt=1;attempt<=2;attempt++){
+  document.querySelectorAll('script[data-tr14-premium-infographics]').forEach(x=>x.remove());
+  try{
+   await new Promise((resolve,reject)=>{
+    const s=document.createElement('script');s.async=true;s.dataset.tr14PremiumInfographics='1';
+    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+(attempt===2?'-retry2':'');
+    const timer=setTimeout(()=>reject(Error('Таймаут загрузки профессионального модуля')),15000);
+    s.onload=()=>{clearTimeout(timer);resolve(true)};
+    s.onerror=()=>{clearTimeout(timer);reject(Error('Файл профессионального модуля не загрузился'))};
+    document.head.appendChild(s);
+   });
+  }catch(e){if(attempt===2)throw e}
+  const mod=ready();if(mod)return mod;
+  if(window.RESANTA_TRIOVIST_PREMIUM_V236390){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){}}
  }
- throw Error('Профессиональный модуль инфографики ещё загружается. Другие разделы Triovist не затронуты.');
+ throw Error('Профессиональный модуль v23.6.401 не инициализировался после двух загрузок.');
 }
 async function loadInfographicBatch(){
  const previous=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(previous?.open)return previous;
@@ -220,26 +229,26 @@ async function activate(k,save=false){
    const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
  }else if(k==='infographics'){
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
-   panel.innerHTML='<div class="tr14-info">Загружаю студию инфографики…</div>';
+   panel.innerHTML='<div class="tr14-info">Загружаю профессиональную студию инфографики…</div>';
    const mod=await loadInfographics();
    if(token!==navEpoch||active!==k)return;
    const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
    if(token!==navEpoch||active!==k)return;
    try{
-     const bulk=await loadInfographicBatch();
-     if(token===navEpoch&&active===k)await bulk.open(panel,ctx);
-   }catch(e){
-     console.warn('Triovist bulk infographic isolated load',e);
-     const note=document.createElement('div');note.className='tr14-warn';note.textContent=e.message||'Массовая генерация временно недоступна';
+     const premium=await loadPremiumInfographics();
+     if(token===navEpoch&&active===k)await premium.open(panel,ctx);
+   }catch(e){console.warn('Professional infographic load',e);
+     const note=document.createElement('div');note.className='tr14-warn';note.textContent='Профессиональная инфографика v23.6.401 не загрузилась: '+(e.message||e);
      panel.prepend(note);
    }
    if(token!==navEpoch||active!==k)return;
    try{
-     const premium=await loadPremiumInfographics();
-     if(token===navEpoch&&active===k)await premium.open(panel,ctx);
-   }catch(e){console.warn('Premium infographic isolated load',e);
-     const note=document.createElement('div');note.className='tr14-warn';note.textContent='Инфографика 2.0 пока не загрузилась: '+(e.message||e);
-     panel.prepend(note);
+     const bulk=await loadInfographicBatch();
+     if(token===navEpoch&&active===k)await bulk.open(panel,ctx);
+   }catch(e){
+     console.warn('Triovist infographic history isolated load',e);
+     const note=document.createElement('div');note.className='tr14-warn';note.textContent=e.message||'История предыдущей инфографики временно недоступна';
+     panel.append(note);
    }
  }else if(k==='motivation'){
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','none','important');
