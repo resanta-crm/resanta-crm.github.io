@@ -56,13 +56,21 @@ jobs:
           ]
           prod={"product_name":"Бетономешалка Вихрь БМ-20АЧ (74/1/20)","sku":"74/1/20"}
           assert safe_fact_caption(facts[0])[0]=="Объём готовой смеси"
+          story=[]
           for n in range(1,9):
-              fids=[f["id"] for f in facts] if n==1 else [facts[(n-2)%len(facts)]["id"]]
-              slide={"number":n,"title":"МОЩНОСТЬ 900 ВТ","subtitle":"Потребляемая мощность","fact_ids":fids}
+              if n==1:
+                  fids=[f["id"] for f in facts]
+              else:
+                  fids=[facts[(n-2)%len(facts)]["id"],facts[(n-1)%len(facts)]["id"],facts[n%len(facts)]["id"]]
+              slide={"number":n,"title":f"ПРОВЕРЕННЫЙ ЭКРАН {n}","subtitle":"Подтверждённые характеристики","fact_ids":fids}
+              story.append(slide)
               blob=premium_composite(scene,slide,facts,prod)
               image=Image.open(io.BytesIO(blob))
               assert image.size==(1200,1500) and image.format=="PNG",n
               assert len(blob)>10000,n
+          saved=[{"scene_path":f"scene_{n}.jpg","final_path":f"slide_{n}.png"} for n in range(1,9)]
+          qr=automatic_quality_report(story,facts,saved,{"strict_facts":True,"strategy_pack":{"data_quality":{"score":95}}})
+          assert qr["score"]>=80 and qr["automatic_gate_passed"],qr
           try:
               premium_composite(scene,{"number":1,"fact_ids":["F1"],"title":"Обложка"},facts,prod)
               raise AssertionError("Unverified hero was not blocked")
