@@ -4,10 +4,10 @@
  */
 (function(){
 'use strict';
-const MOD_VERSION='23.6.400';
+const MOD_VERSION='23.6.401';
 if(window.RESANTA_TRIOVIST_PREMIUM_V236390?.version===MOD_VERSION)return;
 if(window.RESANTA_TRIOVIST_PREMIUM_V236390){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){window.RESANTA_TRIOVIST_PREMIUM_V236390=null}}
-const FN='triovist-infographic-v3-v236400';
+const FN='triovist-infographic-v3-v236401';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const a=x=>Array.isArray(x)?x:[];
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
@@ -63,7 +63,7 @@ async function req(action,args={}){
 function banner(){
  if(!config)return '<p>Проверяем ИИ-провайдеров и доступ…</p>';
  if(!config.text_provider_ready)return '<div class="tiv2390-warn">Нет текстового ИИ для анализа товара и трёх концепций. Анализ заблокирован.</div>';
- return '<div class="tiv2390-note"><b>Строго по фактам: ВКЛ 🔒</b> · Exact-SKU → рынок 21vek → 3 концепции → выбор директора. До выбора концепции платный Image API технически заблокирован.</div>'+
+ return '<div class="tiv2390-note"><b>Строго по фактам: ВКЛ 🔒</b> · 4 независимых ИИ-прохода: Аналитик → Стратег → Арт-директор → QA. После генерации каждый PNG отдельно сравнивается с исходным товаром.</div>'+
  (!config.image_provider_ready?'<div class="tiv2390-warn">Анализ и 3 концепции доступны, но графический провайдер сейчас не настроен. Генерация изображений останется заблокированной.</div>':'');
 }
 const pack=()=>active?.strategy_pack&&typeof active.strategy_pack==='object'?active.strategy_pack:{};
@@ -117,31 +117,49 @@ function conceptsHtml(){
   '</div>';
  }).join('')+'</div></div>';
 }
+function slideFactsEditor(sl){
+ const current=new Set(a(sl.fact_ids).map(String)),all=a(active?.facts);
+ const linked=all.filter(f=>current.has(String(f.id)));
+ const options=all.filter(f=>!current.has(String(f.id))).map(f=>'<option value="'+h(f.id)+'">'+h(f.label+': '+f.value)+'</option>').join('');
+ return '<div class="tiv2390-chips">'+linked.map(f=>'<span class="tiv2390-chip">'+h(f.label+': '+f.value)+' <button type="button" data-v4-remove-fact="'+h(sl.number)+'" data-fact="'+h(f.id)+'" title="Убрать факт">×</button></span>').join('')+'</div>'+
+ '<div class="tiv2390-actions"><select class="tiv2390-input" style="width:min(360px,100%)" data-v4-add-fact-select="'+h(sl.number)+'"><option value="">Добавить обязательную характеристику…</option>'+options+'</select>'+
+ '<button type="button" data-v4-add-fact="'+h(sl.number)+'">＋ Добавить</button></div>';
+}
 function slidesHtml(){
  const c=chosen();if(!c)return '<p>Сначала выбери концепцию.</p>';
- return '<div><p><b>'+h(c.name||'')+'</b> · 8 самостоятельных продающих экранов. На каждом — минимум 3 подтверждённых факта exact-SKU.</p>'+
- '<div class="tiv2390-plan">'+a(c.slides).map(sl=>{
-  const fs=linkedFacts(sl.fact_ids);
-  return '<div class="tiv2390-plan-card"><h4>'+Number(sl.number||0)+'. '+h(sl.title||'')+'</h4>'+
-   '<p>'+h(sl.subtitle||'')+'</p>'+chips(fs.map(f=>String(f.label||'')+': '+String(f.value||'')))+
-   '<p class="tiv2390-caption"><b>Визуальная постановка:</b> '+h(sl.composition_note||sl.scene||'')+'</p>'+
-   '<p class="tiv2390-caption"><b>Польза:</b> '+h(sl.takeaway||'')+'</p></div>';
+ return '<div><p><b>'+h(c.name||'')+'</b> · <b>Редактор ДО генерации.</b> Можно менять тексты, порядок экранов и подтверждённые факты. На каждом экране остаётся минимум 3 exact-SKU факта.</p>'+
+ '<div class="tiv2390-plan">'+a(c.slides).map((sl,idx)=>{
+  return '<div class="tiv2390-plan-card" data-v4-plan-card="'+h(sl.number)+'"><div class="tiv2390-header"><h4>'+Number(sl.number||0)+'. '+h(sl.title||'')+'</h4><div class="tiv2390-actions">'+
+   '<button type="button" data-v4-move="'+h(sl.number)+'" data-dir="-1" '+(idx===0?'disabled':'')+'>↑ Раньше</button>'+
+   '<button type="button" data-v4-move="'+h(sl.number)+'" data-dir="1" '+(idx===a(c.slides).length-1?'disabled':'')+'>↓ Позже</button></div></div>'+
+   '<label class="tiv2390-caption">Заголовок</label><input class="tiv2390-input" style="width:100%" maxlength="95" data-v4-plan-title="'+h(sl.number)+'" value="'+h(sl.title||'')+'">'+
+   '<label class="tiv2390-caption">Подзаголовок</label><input class="tiv2390-input" style="width:100%" maxlength="120" data-v4-plan-subtitle="'+h(sl.number)+'" value="'+h(sl.subtitle||'')+'">'+
+   '<label class="tiv2390-caption">Вывод / польза</label><input class="tiv2390-input" style="width:100%" maxlength="150" data-v4-plan-takeaway="'+h(sl.number)+'" value="'+h(sl.takeaway||'')+'">'+
+   slideFactsEditor(sl)+
+   '<p class="tiv2390-caption"><b>Визуальная постановка:</b> '+h(sl.composition_note||sl.scene||'')+'</p></div>';
  }).join('')+'</div>'+
+ '<div class="tiv2390-actions"><button class="prime" data-v4-save-plan>💾 Сохранить структуру и перепроверить QA</button><span class="tiv2390-caption">Сохранение не вызывает Image API.</span></div>'+
  '<label class="tiv2390-label">Комментарий директора к генерации</label>'+
  '<textarea class="tiv2390-notearea" data-v2-note maxlength="500" placeholder="Например: на первом экране обязательно крупно показать объём и материал венца">'+h(directorNote||active?.director_note||'')+'</textarea>'+
  '</div>';
 }
 function qaHtml(){
- const q=pack().data_quality||{},qr=active?.quality_report||{},after=Number(active?.completed_slides||0)===8;
+ const q=pack().data_quality||{},planQa=pack().planning_qa||{},qr=active?.quality_report||{},after=Number(active?.completed_slides||0)===8;
  if(!after)return '<div>'+
-  '<div class="'+(q.generation_allowed?'tiv2390-good':'tiv2390-bad')+'"><b>Предгенерационный контроль: '+(q.generation_allowed?'ПРОЙДЕН':'НЕ ПРОЙДЕН')+'</b> · '+(q.generation_allowed?'Можно запускать выбранную концепцию.':'Image API заблокирован до полноты подтверждённых данных.')+'</div>'+
-  '<p>Проверяем exact-SKU факты, свежесть характеристик, источник фото, рынок 21vek, восемь разных экранов и минимум 3 подтверждения на каждом.</p>'+
-  '<p><b>После генерации:</b> автоматический контроль фактов/структуры + обязательная визуальная проверка директора. Автопубликации нет.</p></div>';
+  '<div class="'+(q.generation_allowed&&planQa.approved?'tiv2390-good':'tiv2390-bad')+'"><b>Предгенерационный контроль: '+(q.generation_allowed&&planQa.approved?'ПРОЙДЕН':'НЕ ПРОЙДЕН')+'</b></div>'+
+  '<div class="tiv2390-kpis"><div class="tiv2390-kpi"><small>Данные</small><b>'+Number(q.score||0)+'/100</b></div><div class="tiv2390-kpi"><small>Независимый planning QA</small><b>'+Number(planQa.score||0)+'/100</b></div></div>'+
+  (a(planQa.problems).length?'<div class="tiv2390-warn">'+h(a(planQa.problems).join(' · '))+'</div>':'')+
+  '<p>ANALYST, STRATEGIST, ART DIRECTOR и QA CONTROLLER выполняются отдельными проходами. Image API заблокирован до их прохождения и выбора директора.</p></div>';
+ const visual=qr.visual_slides||{},keys=Object.keys(visual).sort((x,y)=>Number(x)-Number(y));
  return '<div>'+
-  '<div class="'+(Number(qr.score||0)>=80?'tiv2390-good':'tiv2390-bad')+'"><b>Автопроверка фактов и структуры: '+Number(qr.score||0)+'/100</b></div>'+
+  '<div class="'+(qr.automatic_gate_passed?'tiv2390-good':'tiv2390-bad')+'"><b>Итоговый QA: '+Number(qr.score||0)+'/100</b> · визуальный AI-QA '+(qr.visual_qa_all_passed?'8/8 ПРОЙДЕН':'ТРЕБУЕТ ИСПРАВЛЕНИЙ')+'</div>'+
   '<div class="tiv2390-kpis">'+Object.entries(qr.scores||{}).map(([k,v])=>'<div class="tiv2390-kpi"><small>'+h(String(k).replace(/_/g,' '))+'</small><b>'+Number(v||0)+'</b></div>').join('')+'</div>'+
   (a(qr.problems).length?'<div class="tiv2390-warn">'+h(a(qr.problems).join(' · '))+'</div>':'')+
-  '<p><b>Важно:</b> этот балл проверяет факты, доказательность, структуру и сохранность сцен. Соответствие внешнего вида реальному товару всё равно подтверждает директор перед утверждением.</p></div>';
+  (keys.length?'<div class="tiv2390-plan">'+keys.map(k=>{const r=visual[k]||{};return '<div class="tiv2390-plan-card"><h4>Слайд '+h(k)+' · '+Number(r.score||0)+'/100 '+(r.approved?'✅':'❌')+'</h4>'+
+    '<p>'+h(a(r.problems).join(' · ')||'Проблем не найдено')+'</p>'+
+    (!r.approved?'<p class="tiv2390-caption"><b>Что исправить:</b> '+h(a(r.required_changes).join(' · '))+'</p><button class="danger" data-v4-regenerate="'+h(k)+'">↻ Переделать только этот слайд</button>':'')+
+    '</div>'}).join('')+'</div>':'')+
+  '<p><b>После AI-QA финальное решение всё равно остаётся за директором.</b> Автопубликации нет.</p></div>';
 }
 function strategyBody(){
  if(!concepts().length)return '';
@@ -155,9 +173,9 @@ function currentHtml(){
  const x=active,ready=Number(x.completed_slides||0),status=x.status;
  const state={queued:'Анализ в очереди',processing:x.generation_approved?'Генерация':'Анализ',concept_review:'Концепции готовы',needs_review:'Готово к проверке',approved:'Утверждено',cancelled:'Остановлено',failed:'Ошибка'};
  const done=ready===8&&['needs_review','approved'].includes(status);
- const q=pack().data_quality||{},canGenerate=status==='concept_review'&&q.generation_allowed===true&&config?.image_provider_ready;
+ const q=pack().data_quality||{},canGenerate=status==='concept_review'&&q.generation_allowed===true&&pack().planning_qa?.approved===true&&config?.image_provider_ready;
  const mimeRepair=status==='failed'&&!x.recovery_approved&&Number(x.paid_images_started||0)===1&&/mime type image\/png is not supported/i.test(x.error_message||'');
- const legacyReview=status==='needs_review'&&!['2.2','2.3'].includes(String(x.audit?.editorial_version||''));
+ const legacyReview=status==='needs_review'&&!['2.2','2.3','2.4'].includes(String(x.audit?.editorial_version||''));
  return '<div style="border-top:1px solid #cbdcec;margin-top:12px;padding-top:12px">'+
  '<div class="tiv2390-header"><div><h4>SKU: '+h(x.sku)+'</h4><p>'+h(x.product_name)+'</p></div><span class="tiv2390-tag">'+h(state[status]||status)+'</span></div>'+
  (status==='concept_review'?strategyTabs()+strategyBody():'')+
@@ -170,11 +188,11 @@ function currentHtml(){
  (canGenerate?'<button class="prime" data-v2-generate>🚀 Создать 8 слайдов по выбранной концепции</button>':'')+
  (mimeRepair?'<button class="prime" data-v2-recover>↻ Продолжить после исправления PNG</button>':'')+
  (done?'<button class="prime" data-v2-download-all>↓ Скачать 8 PNG одним ZIP</button>':'')+
- (status==='needs_review'&&['2.2','2.3'].includes(String(x.audit?.editorial_version||''))&&x.audit?.all_slide_proofs_verified&&!a(x.audit?.pending_recompose).length&&x.audit?.hero_verified&&x.audit?.scene_layers_preserved&&(String(x.audit?.editorial_version||'')==='2.2'||x.quality_report?.automatic_gate_passed===true)?'<button data-v2-approve>✓ Утвердить образец</button>':'')+
+ (status==='needs_review'&&['2.2','2.3','2.4'].includes(String(x.audit?.editorial_version||''))&&x.audit?.all_slide_proofs_verified&&!a(x.audit?.pending_recompose).length&&x.audit?.hero_verified&&x.audit?.scene_layers_preserved&&x.quality_report?.automatic_gate_passed===true&&x.quality_report?.visual_qa_all_passed===true?'<button data-v2-approve>✓ Утвердить образец</button>':'')+
  '</div>'+
  '<p class="tiv2390-caption">'+h(status==='queued'&&!x.generation_approved?'Фоновый сервер собирает exact-SKU, фото, рынок и три концепции. Image API ещё не вызывается.':x.stage||'')+'</p>'+
  (status==='needs_review'&&concepts().length?strategyTabs()+strategyBody():'')+
- (legacyReview?'<div class="tiv2390-warn">Этот комплект создан до стандарта 8/8 proof-first. Архив сохраняется, но для нового утверждения требуется проверенный комплект 2.2/2.3.</div>':'')+
+ (legacyReview?'<div class="tiv2390-warn">Этот комплект создан до стандарта 4-pass + independent visual QA. Архив сохраняется, но для нового утверждения требуется версия 2.4.</div>':'')+
  (a(x.audit?.pending_recompose).length?'<div class="tiv2390-note">Текстовые исправления ожидают фоновой пересборки PNG без нового Image API запроса.</div>':'')+
  (mimeRepair?'<div class="tiv2390-warn">Исправлена настройка PNG. Восстановление потребует отдельного подтверждения дополнительного платного вызова.</div>':'')+
  (x.error_message&&!mimeRepair?'<div class="tiv2390-warn">'+h(x.error_message)+'</div>':'')+
@@ -183,15 +201,16 @@ function currentHtml(){
 }
 function previews(){
  if(!images.length)return '';
- const canEdit=['2.1','2.2','2.3'].includes(String(active?.audit?.editorial_version||''))&&active?.audit?.scene_layers_preserved&&
-       active?.status==='needs_review';
- const story=a(active?.storyboard);
- return '<h4>Предпросмотр готовых PNG</h4><p>Точные характеристики на обложке и независимые рекламные сцены. Для комплектов с сохранёнными сценами можно исправить подписи без нового платного запроса.</p>'+
+ const canEdit=['2.1','2.2','2.3','2.4'].includes(String(active?.audit?.editorial_version||''))&&active?.audit?.scene_layers_preserved&&active?.status==='needs_review';
+ const story=a(active?.storyboard),visual=active?.quality_report?.visual_slides||{};
+ return '<h4>Предпросмотр готовых PNG</h4><p>Каждый финальный PNG независимо сравнивается с исходным exact-SKU изображением.</p>'+
  '<div class="tiv2390-grid">'+images.map(im=>{
- const slide=story[im.slide_no-1]||{};
+ const slide=story[im.slide_no-1]||{},qa=visual[String(im.slide_no)]||visual[im.slide_no]||{};
  return '<div class="tiv2390-thumb">'+
  '<a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="'+h(im.url)+'" alt="Слайд '+im.slide_no+'"></a>'+
- '<b>Слайд '+im.slide_no+' из 8</b><a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer">Открыть полностью ↗</a>'+
+ '<b>Слайд '+im.slide_no+' из 8 · '+(qa.approved?'QA ✅':qa.score?'QA ❌ '+Number(qa.score||0)+'/100':'QA …')+'</b>'+
+ '<a href="'+h(im.url)+'" target="_blank" rel="noopener noreferrer">Открыть полностью ↗</a>'+
+ (!qa.approved&&qa.score?'<div class="tiv2390-warn">'+h(a(qa.problems).join(' · '))+'</div><button class="danger" data-v4-regenerate="'+im.slide_no+'">↻ Переделать только этот слайд</button>':'')+
  (canEdit&&im.slide_no>1?'<details style="margin-top:9px"><summary style="cursor:pointer;color:#145c96;font-size:12px">Редактировать подпись</summary>'+
  '<label class="tiv2390-caption">Заголовок</label>'+
  '<input class="tiv2390-input" maxlength="95" style="width:100%" data-v2-copy-title="'+im.slide_no+'" value="'+h(slide.title||'')+'">'+
@@ -205,13 +224,13 @@ function draw(){
  if(!root?.isConnected)return;
  const activeBusy=active&&['queued','processing','concept_review'].includes(active.status);
  root.innerHTML='<div class="tiv2390"><div class="tiv2390-header"><div><h3>✨ Триовист · Инфографика 21vek</h3>'+
- '<p>Exact-SKU → анализ рынка → 3 концепции → 8 сильных proof-first слайдов → QA.</p></div>'+
- '<span class="tiv2390-tag">3.0 · v23.6.400</span></div>'+banner()+
+ '<p>Exact-SKU → отдельный ANALYST → STRATEGIST → ART DIRECTOR → QA → 8 сильных слайдов → независимый визуальный QA.</p></div>'+
+ '<span class="tiv2390-tag">4.0 · v23.6.401</span></div>'+banner()+
  '<div class="tiv2390-actions"><input class="tiv2390-input" data-v2-sku value="'+h(selectedSku)+'" placeholder="Точный артикул, например 74/1/20" aria-label="Артикул для инфографики">'+
  '<button class="prime" data-v2-start '+(busy||!config?.text_provider_ready||!config?.can_start||activeBusy?'disabled':'')+'>🔎 Проанализировать товар и создать 3 концепции</button></div>'+
  '<p class="tiv2390-caption">Первый этап не вызывает Image API. Платные 8 изображений запускаются только отдельной кнопкой после выбора концепции.</p>'+
  currentHtml()+
- (pilots.length>1?'<h4>Предыдущие проекты</h4><div class="tiv2390-list">'+pilots.slice(0,8).map(p=>'<button data-v2-load="'+h(p.id)+'">'+h(p.sku)+' · '+h(p.status)+'</button>').join('')+'</div>':'')+
+ (pilots.length>1?'<h4>Предыдущие проекты</h4><div class="tiv2390-list">'+pilots.slice(0,12).map(p=>'<button data-v2-load="'+h(p.id)+'"><b>'+h(p.sku)+'</b> · V'+Number(p.strategy_pack?.project_version||1)+' · '+h(p.status)+'</button>').join('')+'</div>':'')+
  (message?'<div class="tiv2390-warn">'+h(message)+'</div>':'')+'</div>';
 }
 function schedule(){
@@ -302,7 +321,7 @@ async function cancel(){
  active.status=d.status;message='Пилот остановлен';await status();
 }
 async function saveCopy(n){
- if(!active||!['2.1','2.2','2.3'].includes(String(active.audit?.editorial_version||'')))throw Error('Редактор доступен только для комплектов с сохранёнными исходными сценами');
+ if(!active||!['2.1','2.2','2.3','2.4'].includes(String(active.audit?.editorial_version||'')))throw Error('Редактор доступен только для комплектов с сохранёнными исходными сценами');
  const title=root?.querySelector('[data-v2-copy-title="'+n+'"]')?.value||'';
  const subtitle=root?.querySelector('[data-v2-copy-subtitle="'+n+'"]')?.value||'';
  if(!title.trim())throw Error('Введи заголовок слайда');
@@ -312,6 +331,38 @@ async function saveCopy(n){
  message='Текст принят. Графический ИИ повторно НЕ вызывается. Ожидаем фоновую пересборку PNG.';
  await status();
  }finally{busy=false;draw()}
+}
+async function savePlan(){
+ if(!active||active.status!=='concept_review')throw Error('Редактор структуры доступен до запуска изображений');
+ const concept=chosen();if(!concept)throw Error('Выбери концепцию');
+ busy=true;message='Сохраняю структуру и запускаю независимый planning QA…';draw();
+ try{
+  const d=await req('save-plan',{pilot_id:active.id,concept_id:concept.id,slides:a(concept.slides)});
+  active.strategy_pack=d.strategy_pack;active.storyboard=d.storyboard;selectedConcept=concept.id;message=d.message||'Структура сохранена';view='qa';
+ }finally{busy=false;draw()}
+}
+function moveSlide(n,dir){
+ const c=chosen();if(!c)return;const list=a(c.slides),i=list.findIndex(x=>Number(x.number)===Number(n)),j=i+Number(dir);
+ if(i<0||j<0||j>=list.length)return;[list[i],list[j]]=[list[j],list[i]];list.forEach((x,k)=>x.number=k+1);draw();
+}
+function addFact(n){
+ const c=chosen();if(!c)return;const sl=a(c.slides).find(x=>Number(x.number)===Number(n));if(!sl)return;
+ const sel=root?.querySelector('[data-v4-add-fact-select="'+n+'"]'),id=sel?.value;if(!id)return;
+ const ids=[...new Set([...a(sl.fact_ids).map(String),String(id)])];if(ids.length>4)throw Error('На одном экране максимум 4 подтверждённых факта');
+ sl.fact_ids=ids;draw();
+}
+function removeFact(n,id){
+ const c=chosen();if(!c)return;const sl=a(c.slides).find(x=>Number(x.number)===Number(n));if(!sl)return;
+ const ids=a(sl.fact_ids).map(String).filter(x=>x!==String(id));if(ids.length<3)throw Error('На каждом экране должно остаться минимум 3 подтверждённых факта');
+ sl.fact_ids=ids;draw();
+}
+async function regenerateSlide(n){
+ if(!active||active.status!=='needs_review')throw Error('Точечная переделка доступна после готовности комплекта');
+ const qa=active.quality_report?.visual_slides?.[String(n)]||active.quality_report?.visual_slides?.[n]||{};
+ const why=a(qa.required_changes).join(' · ');
+ if(!window.confirm('Переделать только слайд '+n+'? Остальные 7 останутся без изменений. Это один дополнительный платный Image API запрос.'+(why?'\n\nПричина QA: '+why:'')))return;
+ busy=true;message='Ставлю слайд '+n+' на точечную переделку…';draw();
+ try{const d=await req('regenerate-slide',{pilot_id:active.id,slide_no:n,reason:why,confirm_extra_paid_image:true});message=d.message||'Слайд поставлен в очередь';await status();}finally{busy=false;draw()}
 }
 async function approve(){
  if(!active||!window.confirm('Подтверждаешь, что все 8 изображений визуально соответствуют реальной модели, характеристики верны, комплектация не придумана и качество устраивает?'))return;
@@ -345,6 +396,11 @@ async function clicked(event){
   if(button.hasAttribute('data-v2-cancel')){await cancel();return}
   if(button.hasAttribute('data-v2-recover')){await recover();return}
   if(button.hasAttribute('data-v2-approve')){await approve();return}
+  if(button.hasAttribute('data-v4-save-plan')){await savePlan();return}
+  if(button.hasAttribute('data-v4-move')){moveSlide(Number(button.dataset.v4Move),Number(button.dataset.dir));return}
+  if(button.hasAttribute('data-v4-add-fact')){addFact(Number(button.dataset.v4AddFact));return}
+  if(button.hasAttribute('data-v4-remove-fact')){removeFact(Number(button.dataset.v4RemoveFact),button.dataset.fact);return}
+  if(button.hasAttribute('data-v4-regenerate')){await regenerateSlide(Number(button.dataset.v4Regenerate));return}
   if(button.hasAttribute('data-v2-save-copy')){await saveCopy(Number(button.dataset.v2SaveCopy));return}
   if(button.hasAttribute('data-v2-download-all')){await downloadAll();return}
   if(button.hasAttribute('data-v2-load')){
@@ -354,7 +410,13 @@ async function clicked(event){
   }
  }catch(e){message=String(e.message||e);draw()}
 }
-function entered(event){if(event.target?.matches('[data-v2-sku]'))selectedSku=event.target.value;if(event.target?.matches('[data-v2-note]'))directorNote=event.target.value}
+function entered(event){
+ if(event.target?.matches('[data-v2-sku]'))selectedSku=event.target.value;
+ if(event.target?.matches('[data-v2-note]'))directorNote=event.target.value;
+ const concept=chosen();if(!concept)return;
+ const set=(attr,key)=>{if(!event.target?.hasAttribute(attr))return;const n=Number(event.target.getAttribute(attr));const sl=a(concept.slides).find(x=>Number(x.number)===n);if(sl)sl[key]=event.target.value};
+ set('data-v4-plan-title','title');set('data-v4-plan-subtitle','subtitle');set('data-v4-plan-takeaway','takeaway');
+}
 async function open(parent){
  if(!parent)return;
  styles();clearTimeout(timer);
@@ -363,5 +425,5 @@ async function open(parent){
  if(!root.dataset.bound){root.dataset.bound='1';root.addEventListener('click',clicked);root.addEventListener('input',entered)}
  message='';draw();try{await refresh()}catch(e){message=e.message;draw()}
 }
-window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:MOD_VERSION,open,refresh,isolated:true,requiresManualQA:true,strategyFirst:true,threeConcepts:true,strictFactsLocked:true,proofFirstEight:true,maxPilotSku:1});
+window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:MOD_VERSION,open,refresh,isolated:true,requiresManualQA:true,strategyFirst:true,fourPass:true,threeConcepts:true,strictFactsLocked:true,proofFirstEight:true,independentVisualQA:true,preGenerationEditor:true,revisionHistory:true,maxPilotSku:1});
 })();
