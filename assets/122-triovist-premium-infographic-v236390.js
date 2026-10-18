@@ -168,7 +168,7 @@ function currentHtml(){
  (canGenerate?'<button class="prime" data-v2-generate>🚀 Создать 8 слайдов по выбранной концепции</button>':'')+
  (mimeRepair?'<button class="prime" data-v2-recover>↻ Продолжить после исправления PNG</button>':'')+
  (done?'<button class="prime" data-v2-download-all>↓ Скачать 8 PNG одним ZIP</button>':'')+
- (status==='needs_review'&&['2.2','2.3'].includes(String(x.audit?.editorial_version||''))&&x.audit?.all_slide_proofs_verified&&!a(x.audit?.pending_recompose).length&&x.audit?.hero_verified&&x.audit?.scene_layers_preserved?'<button data-v2-approve>✓ Утвердить образец</button>':'')+
+ (status==='needs_review'&&['2.2','2.3'].includes(String(x.audit?.editorial_version||''))&&x.audit?.all_slide_proofs_verified&&!a(x.audit?.pending_recompose).length&&x.audit?.hero_verified&&x.audit?.scene_layers_preserved&&(String(x.audit?.editorial_version||'')==='2.2'||x.quality_report?.automatic_gate_passed===true)?'<button data-v2-approve>✓ Утвердить образец</button>':'')+
  '</div>'+
  '<p class="tiv2390-caption">'+h(status==='queued'&&!x.generation_approved?'Фоновый сервер собирает exact-SKU, фото, рынок и три концепции. Image API ещё не вызывается.':x.stage||'')+'</p>'+
  (status==='needs_review'&&concepts().length?strategyTabs()+strategyBody():'')+
