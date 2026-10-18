@@ -8,7 +8,7 @@
 const compat=Object.freeze({version:'v23.6.401',retired:true,delegatesTo:'v23.6.401'});
 window.RESANTA_TRIOVIST_SINGLE_V23612=window.RESANTA_TRIOVIST_SINGLE_V23612||compat;
 window.RESANTA_TRIOVIST_SINGLE_V23611=window.RESANTA_TRIOVIST_SINGLE_V23611||compat;
-const cv=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.400'}catch(_){return'23.6.400'}})().replace(/^v/,'');
+const cv=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.401'}catch(_){return'23.6.401'}})().replace(/^v/,'');
 function loadRefreshGuard(){
   if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_REFRESH_V236122||document.querySelector('script[data-trgd-refresh-v236122]'))return;
   const g=document.createElement('script');
