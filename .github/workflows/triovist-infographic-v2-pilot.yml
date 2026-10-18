@@ -1,8 +1,9 @@
 name: Triovist professional infographic V3 - strategy-first pilot
+# v23.6.403: normalized 5-minute cron; push with [wake-infographic-v3] wakes queued planning immediately.
 
 on:
   schedule:
-    - cron: '3-58/5 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
   pull_request:
     branches: [main]
