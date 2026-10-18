@@ -178,34 +178,58 @@ def premium_composite(scene_bytes,slide,facts,product):
         image=Image.alpha_composite(image,footer);d=ImageDraw.Draw(image)
         d.text((48,1431),"ТОЛЬКО ПОДТВЕРЖДЁННЫЕ ХАРАКТЕРИСТИКИ",font=fnt(22,True),fill="white")
     else:
-        # Distinct headline layouts; model-generated photography is independent on every slide.
-        layouts={
-            2:(55,130,980,79),3:(53,135,740,71),4:(380,116,760,69),
-            5:(53,136,990,70),6:(370,115,770,66),7:(52,126,990,67),
-            8:(55,135,980,70)
-        }
-        x,y,mw,sz=layouts[num]
+        # EIGHT commercially dense posters: same proof-quality as the approved hero.
+        # Every printed technical claim is one of the exact-SKU facts supplied by the API.
+        # Left/right layout varies with the distinct cinematic background requested upstream.
+        if not 3<=len(refs)<=4:
+            raise RuntimeError(f"Slide {num}: need 3-4 independently verified proof facts")
+        layout=slide.get("layout") or ("product-left" if num in (4,6,8) else "macro-right")
+        panel_on_right=layout=="product-left"
+        x0,x1=(630,1155) if panel_on_right else (43,568)
+        content_w=x1-x0-44
+        matte=Image.new("RGBA",(W,H),(0,0,0,0));md=ImageDraw.Draw(matte)
+        # Protected typography surface, without altering the source product photo.
+        for dx in range(x0,min(x1+30,W)):
+            edge_dist=(x1-dx) if not panel_on_right else (dx-x0)
+            alpha=max(0,int(177*min(1,edge_dist/105)))
+            md.line((dx,112,dx,1270),fill=(0,0,0,alpha),width=1)
+        image=Image.alpha_composite(image,matte);d=ImageDraw.Draw(image)
         title=str(slide.get("title") or "").strip()
         if not title or title.upper() in ("ОБЛОЖКА","ПРЕИМУЩЕСТВА","ХАРАКТЕРИСТИКИ"):
-            raise RuntimeError("Placeholder text in professional slide")
-        y=_draw_lines(d,title.upper(),(x,y),mw,start_size=sz,max_lines=3)
-        # No generated marketing subtitle can invent unverified capabilities.
-        if slide.get("subtitle"):
-            _draw_lines(d,slide["subtitle"],(x,y+23),mw,start_size=27,max_lines=2,color=accent)
-        # Optional small factual labels in a footer, not five nearly identical posters.
-        cards=refs[:2]
-        foot_top=1365 if cards else 1430
+            raise RuntimeError("Generic or missing professional slide title")
+        y=_draw_lines(d,title.upper(),(x0+18,135),content_w,start_size=51,max_lines=3)
+        if y>395:raise RuntimeError("Title exceeds safe composition zone")
+        d.rectangle((x0+18,y+18,x1-28,y+25),fill=accent)
+        sub=str(slide.get("subtitle") or "").strip()
+        if sub:
+            sub_y=_draw_lines(d,sub.upper(),(x0+18,y+47),content_w,start_size=24,max_lines=2,color=accent)
+            if sub_y>490:raise RuntimeError("Subtitle overlaps supporting facts")
+        # Four evidence cards with strong visual hierarchy, leading number,
+        # supporting label and a simple professional icon. Never draw imagined benefits.
+        count=len(refs)
+        top=504
+        row_h=172 if count==4 else 205
+        if top+count*row_h>1230:raise RuntimeError("Fact cards exceed verified typography region")
+        for n_fact,f in enumerate(refs):
+            label,value=safe_fact_caption(f)
+            y0=top+n_fact*row_h
+            y1=y0+row_h-13
+            d.rounded_rectangle((x0,y0,x1,y1),radius=18,fill=(8,11,16,237),outline=accent,width=2)
+            # Single spec = visual proof inside a multi-proof slide, never the whole slide.
+            circle_x=x0+36
+            d.ellipse((circle_x-16,y0+23,circle_x+30,y0+69),outline=accent,width=3,fill=(22,27,31,236))
+            d.text((circle_x-2,y0+31),str(n_fact+1),font=fnt(23,True),fill=accent)
+            t_x=x0+88
+            _draw_lines(d,value,(t_x,y0+16),x1-t_x-15,start_size=42,max_lines=2,color=accent)
+            _draw_lines(d,label,(t_x,y0+92),x1-t_x-15,start_size=22,max_lines=2,color="white")
         footer=Image.new("RGBA",(W,H),(0,0,0,0));fd=ImageDraw.Draw(footer)
-        fd.rectangle((0,foot_top,W,H),fill=(0,0,0,217))
-        fd.rectangle((0,foot_top,W,foot_top+7),fill=accent)
+        fd.rounded_rectangle((27,1306,W-27,1450),radius=20,fill=(6,9,13,237),outline=accent,width=3)
+        fd.rectangle((48,1324,58,1420),fill=accent)
         image=Image.alpha_composite(image,footer);d=ImageDraw.Draw(image)
-        if cards:
-            part=int(1080/len(cards))
-            for i,f in enumerate(cards):
-                label,value=safe_fact_caption(f)
-                xx=53+i*part
-                _draw_lines(d,label,(xx,foot_top+17),part-27,start_size=20,max_lines=1,color="white")
-                _draw_lines(d,value,(xx,foot_top+53),part-27,start_size=33,max_lines=1,color=accent)
+        takeaway=str(slide.get("takeaway") or "").strip()
+        if not takeaway:raise RuntimeError("Missing grounded takeaway")
+        _draw_lines(d,takeaway.upper(),(82,1345),1030,start_size=35,max_lines=2,color=accent)
+
     d=ImageDraw.Draw(image)
     d.text((1080,1448),f"{num}/8",font=fnt(24,True),fill="white")
     out=io.BytesIO();image.convert("RGB").save(out,format="PNG",optimize=True)
@@ -225,7 +249,17 @@ def build(pilot):
     story=plan["storyboard"];facts=plan["facts"];product=plan["product"]
     if len(story)!=8:raise RuntimeError("Storyboard is not eight scenes")
     preflight_png_storage()
-    log("V2 Pilot",id,"source",url,"verified facts",len(facts))
+    # Offline preflight ALL eight typography layouts before consuming the first paid Image API request.
+    # Guarantees every page contains 3-4 exact-SKU proof blocks and has no overflow.
+    dummy=io.BytesIO()
+    Image.new("RGB",(1024,1536),(17,24,31)).save(dummy,format="JPEG",quality=78)
+    for draft in story:
+        if draft.get("qa_version")!="2.2-proof-first":
+            raise RuntimeError("Editor requires V2.2 storyboard; no paid generation started")
+        if int(draft.get("number",0))>1 and len(draft.get("fact_ids") or [])<3:
+            raise RuntimeError("Slide missing supporting verified facts; no paid generation started")
+        premium_composite(dummy.getvalue(),draft,facts,product)
+    log("V2 Pilot",id,"source",url,"verified facts",len(facts),"proof-first preflight passed")
     for slide in story:
         if time.monotonic()-START>MAX_RUNTIME:break
         if not still_active(id):return
@@ -261,7 +295,10 @@ def build(pilot):
         update(pilot,{"status":"needs_review","completed_slides":8,
                       "stage":"8 слайдов готовы — обязательная визуальная проверка директора",
                 "audit":{"source_url":url,"provider":"OpenAI Image API","model":"gpt-image-2.5-sunburst",
-                         "editorial_version":"2.1","hero_verified":coverage>=3,
+                         "editorial_version":"2.2","creative_standard":"2.2-proof-first",
+                         "all_slide_proofs_verified":all(len(x.get("fact_ids") or [])>=3 for x in story),
+                         "visual_editorial_review_required":True,
+                         "hero_verified":coverage>=3,
                          "hero_fact_count":coverage,"scene_layers_preserved":scenes_saved,
                          "russian_text_from_verified_facts":True,"requires_visual_review":True,
                          "automatically_publishable":False,"manual_review_required":True,
