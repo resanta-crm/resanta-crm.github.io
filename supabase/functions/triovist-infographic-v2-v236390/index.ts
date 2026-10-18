@@ -415,7 +415,7 @@ Deno.serve(async(req:Request)=>{
     if(!leader)return make(req,403,{ok:false,error:"DIRECTOR_ONLY"});
     const audit=pilot.audit||{};
     if(pilot.status!=="needs_review"||pilot.completed_slides!==8||
-       audit.editorial_version!=="2.1"||!audit.scene_layers_preserved)
+       !["2.1","2.2"].includes(audit.editorial_version)||!audit.scene_layers_preserved)
       return make(req,409,{ok:false,error:"COPY_ONLY_UNAVAILABLE",
         message:"Для редактирования без оплаты нужны исходные сцены нового генератора 2.1. Старые PNG остаются без изменений."});
     const num=Number(input.slide_no);
@@ -453,10 +453,11 @@ Deno.serve(async(req:Request)=>{
   if(action==="approve"){
     if(!leader)return make(req,403,{ok:false,error:"LEADER_ONLY"});
     if(pilot.status!=="needs_review"||pilot.completed_slides!==8)return make(req,409,{ok:false,error:"NOT_READY"});
-    if(pilot.audit?.editorial_version!=="2.1"||!pilot.audit?.hero_verified||
+    if(pilot.audit?.editorial_version!=="2.2"||!pilot.audit?.all_slide_proofs_verified||
+       pilot.audit?.creative_standard!==creativeVersion||!pilot.audit?.hero_verified||
        !pilot.audit?.scene_layers_preserved||arr(pilot.audit?.pending_recompose).length||
        pilot.audit?.requires_visual_review!==true)
-      return make(req,409,{ok:false,error:"QA_V21_REQUIRED",message:"Этот комплект сделан до редакционной проверки 2.1. Не утверждайте старые изображения с ошибками; проверьте новую версию."});
+      return make(req,409,{ok:false,error:"QA_V22_REQUIRED",message:"Этот комплект сделан до стандарта 8/8 (2.2), или не прошёл проверку качества. Для утверждения нужен новый проверенный пилот."});
     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({status:"approved",stage:"Образец утверждён",updated_at:new Date().toISOString()}).eq("id",id).eq("status","needs_review");if(e)throw e;
     return make(req,200,{ok:true,status:"approved",bulk_release:false});
   }
