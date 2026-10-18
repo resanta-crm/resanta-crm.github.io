@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TRIOVIST v23.6.400: strategy-first premium 21vek infographic worker.
+"""TRIOVIST v23.6.401: strategy-first premium 21vek infographic worker.
 Keeps proof-first 2.2 all-eight slide rules.
 Phase 1: exact product/photo/facts -> three concepts, ZERO Image API calls.
 Phase 2 starts only after director concept approval -> at most eight reserved image calls.
@@ -19,7 +19,7 @@ from triovist_infographic_batch import (
     headers, request, log, storage_get
 )
 
-EDGE=SUPABASE_URL+"/functions/v1/triovist-infographic-v3-v236400"
+EDGE=SUPABASE_URL+"/functions/v1/triovist-infographic-v3-v236401"
 STEPS=8
 MAX_RUNTIME=int(os.environ.get("V2_PILOT_SECONDS","3150"))
 START=time.monotonic()
@@ -237,8 +237,8 @@ def premium_composite(scene_bytes,slide,facts,product):
     out=io.BytesIO();image.convert("RGB").save(out,format="PNG",optimize=True)
     return out.getvalue()
 
-def automatic_quality_report(story,facts,saved,pilot):
-    """Automatic factual/editorial QA only. Visual fidelity still requires director review."""
+def automatic_quality_report(story,facts,saved,pilot,visual=None):
+    """Factual/editorial QA plus independent AI visual QA from source-vs-final comparisons."""
     fact_ids={str(f.get("id")) for f in facts if f.get("id")}
     proof=[len({str(x) for x in (slide.get("fact_ids") or []) if str(x) in fact_ids}) for slide in story]
     titles=[str(x.get("title") or "").strip().casefold() for x in story if x.get("title")]
@@ -250,35 +250,44 @@ def automatic_quality_report(story,facts,saved,pilot):
     scene_score=100 if scenes_ok else 55
     data_score=int(((pilot.get("strategy_pack") or {}).get("data_quality") or {}).get("score") or 70)
     claim_score=100 if pilot.get("strict_facts") is True else 0
-    total=round(data_score*.25+structure_score*.25+diversity_score*.15+scene_score*.15+claim_score*.20)
+    visual=visual or {}
+    reports=[visual.get(str(n)) or visual.get(n) for n in range(1,9)]
+    visual_complete=all(isinstance(r,dict) for r in reports)
+    visual_all=visual_complete and all(r.get("approved") is True for r in reports)
+    visual_score=round(sum(int((r or {}).get("score") or 0) for r in reports)/8) if visual_complete else 0
+    total=round(data_score*.15+structure_score*.20+diversity_score*.10+scene_score*.10+claim_score*.15+visual_score*.30)
     problems=[]
     if any(n<3 for n in proof):problems.append("Не на каждом слайде есть минимум 3 подтверждённых факта")
     if not proof_first:problems.append("Не каждый слайд соответствует proof-first 2.2")
     if unique_titles<8:problems.append("Есть повторяющиеся смысловые заголовки")
     if not scenes_ok:problems.append("Не все чистые сцены и финальные PNG сохранены")
+    if not visual_complete:problems.append("Не завершён независимый визуальный AI-QA всех 8 слайдов")
+    if visual_complete and not visual_all:problems.append("Есть слайды, которые визуальный AI-QA требует переделать")
     return {
-        "score":total,
-        "minimum_score":80,
-        "automatic_gate_passed":total>=80 and not problems,
-        "scope":"facts_structure_editorial",
+        "score":total,"minimum_score":80,
+        "automatic_gate_passed":total>=80 and not problems and visual_all,
+        "visual_qa_all_passed":visual_all,
+        "visual_score":visual_score,
+        "visual_slides":visual,
+        "scope":"facts_structure_editorial_and_visual",
         "visual_review_required":True,
-        "scores":{
-            "data_quality":data_score,
-            "claim_accuracy":claim_score,
-            "proof_coverage":structure_score,
-            "slide_diversity":diversity_score,
-            "scene_preservation":scene_score
-        },
+        "scores":{"data_quality":data_score,"claim_accuracy":claim_score,"proof_coverage":structure_score,
+                  "slide_diversity":diversity_score,"scene_preservation":scene_score,"visual_ai":visual_score},
         "problems":problems,
-        "checks":[
-            "Только exact-SKU факты",
-            "Минимум 3 факта на каждом экране",
-            "8 самостоятельных proof-first экранов",
-            "Сохранены исходные сцены",
-            "Визуальная точность товара проверяется директором"
-        ],
-        "checked_at":now()
+        "checks":["Только exact-SKU факты","Минимум 3 факта на каждом экране","8 самостоятельных композиций",
+                  "Независимое сравнение исходного товара и каждого финального PNG","Ручное утверждение директора"]
     }
+
+def store_visual_qa(pilot,slide_no,report):
+    rows=db_get("triovist_infographic_v2_pilots",{"id":"eq."+pilot["id"],"select":"audit,status","limit":"1"})
+    if not rows or rows[0]["status"] not in ("queued","processing"):return
+    audit=rows[0].get("audit") or {}
+    visual=dict(audit.get("visual_qa") or {})
+    visual[str(slide_no)]=report
+    audit["visual_qa"]=visual
+    audit["visual_qa_updated_at"]=now()
+    db_update("triovist_infographic_v2_pilots",{"id":"eq."+pilot["id"],"status":"in.(queued,processing)"},
+              {"audit":audit,"updated_at":now()})
 
 def build(pilot):
     id=pilot["id"]
@@ -325,6 +334,10 @@ def build(pilot):
             db_update("triovist_infographic_v2_slides",{"pilot_id":"eq."+id,"slide_no":"eq."+str(nr)},
                       {"scene_path":scene_path,"updated_at":now()})
             final=premium_composite(raw,slide,facts,product)
+            visual=call("worker-visual-qa",{"pilot_id":id,"slide_no":nr,
+                         "source_image_base64":ref,
+                         "final_image_base64":base64.b64encode(final).decode("ascii")},timeout=210)
+            store_visual_qa(pilot,nr,visual.get("report") or {})
             path=f"premium-v2/{id}/slide_{nr:02}.png"
             storage_put(path,final,content_type="image/png")
             db_update("triovist_infographic_v2_slides",{"pilot_id":"eq."+id,"slide_no":"eq."+str(nr),"status":"eq.generating"},
@@ -340,12 +353,16 @@ def build(pilot):
         coverage=len({x for x in hero_refs if any(f["id"]==x for f in facts)})
         saved=slides(id)
         scenes_saved=all(row.get("scene_path") for row in saved)
-        quality=automatic_quality_report(story,facts,saved,pilot)
+        current_rows=db_get("triovist_infographic_v2_pilots",{"id":"eq."+id,"select":"audit,strategy_pack,strict_facts","limit":"1"})
+        current=current_rows[0] if current_rows else pilot
+        visual=(current.get("audit") or {}).get("visual_qa") or {}
+        merged={**pilot,**current}
+        quality=automatic_quality_report(story,facts,saved,merged,visual)
         update(pilot,{"status":"needs_review","completed_slides":8,
-                      "stage":"8 слайдов готовы — автопроверка + обязательная визуальная проверка директора",
+                      "stage":"8 слайдов готовы — независимый визуальный AI-QA + проверка директора",
                 "quality_report":quality,
                 "audit":{"source_url":url,"provider":"OpenAI Image API","model":"gpt-image-2.5-sunburst",
-                         "editorial_version":"2.3","creative_standard":"2.2-proof-first",
+                         "editorial_version":"2.4","creative_standard":"2.2-proof-first",
                          "all_slide_proofs_verified":all(len(x.get("fact_ids") or [])>=3 for x in story),
                          "visual_editorial_review_required":True,
                          "hero_verified":coverage>=3,
@@ -353,10 +370,10 @@ def build(pilot):
                          "russian_text_from_verified_facts":True,"requires_visual_review":True,
                          "automatically_publishable":False,"manual_review_required":True,
                          "automatic_quality_score":quality["score"],
-                         "automatic_gate_passed":quality["automatic_gate_passed"],
+                         "automatic_gate_passed":quality["automatic_gate_passed"],"visual_qa_all_passed":quality["visual_qa_all_passed"],
                          "pending_recompose":[],"generated_at":now()},
                 "finished_at":now(),"updated_at":now()})
-        log("V3 pilot needs review",id)
+        log("V4 pilot needs review",id)
 def recompose_text_only(pilot):
     """Re-render signed-off factual text from stored source scene. ZERO Image API requests."""
     if pilot.get("status")!="needs_review":return
