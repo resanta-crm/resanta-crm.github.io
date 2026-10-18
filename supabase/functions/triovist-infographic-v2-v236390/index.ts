@@ -262,7 +262,7 @@ function artPrompt(product:any,facts:any[],slide:any){
    space+" Poster must be an enriched independent commercial scene, not a simple product photo.";
  const detail=technical&&[3,5,6].includes(nSlide)?"Premium close-up of ONLY physically visible, source-confirmed technical exterior components, with real material detail, lighting and safe annotation space. NEVER synthesize unseen internal parts, exploded diagrams or transparent housings.":"";
  const selected=arr(slide.fact_ids).map(x=>facts.find(f=>f.id===x)).filter(Boolean);
- const n=low(product?.product_name),brand=n.includes("huter")?"Huter yellow/black":n.includes("вихр")?"Vikhr orange/black":n.includes("eurolux")?"Eurolux verified brand accents":"Resanta red/black";
+ const brand=n.includes("huter")?"Huter yellow/black":n.includes("вихр")?"Vikhr orange/black":n.includes("eurolux")?"Eurolux verified brand accents":"Resanta red/black";
  return [
   "High-end PHOTOREALISTIC commercial product scene for an e-commerce marketing poster, vertical 2:3 portrait, visually rich and cinematic, polished physical lighting and intentional negative space. Do not generate any NEW writings, NEW logos, artificial letters, numbers or icons in the scene: correct brand typography will be added separately. Any labels genuinely visible on the supplied exact product must remain unaltered.",
   "The UPLOADED IMAGE depicts the EXACT product SKU. Preserve its brand colors, silhouette, physical geometry, design, visible controls, labeling and proportions. Do not replace the product with a similar model; DO NOT invent handles, accessories, internal parts or product features.",
