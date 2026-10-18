@@ -611,8 +611,9 @@ Deno.serve(async(req:Request)=>{
     if(!["2.2","2.3"].includes(String(pilot.audit?.editorial_version||""))||!pilot.audit?.all_slide_proofs_verified||
        pilot.audit?.creative_standard!==creativeVersion||!pilot.audit?.hero_verified||
        !pilot.audit?.scene_layers_preserved||arr(pilot.audit?.pending_recompose).length||
-       pilot.audit?.requires_visual_review!==true)
-      return make(req,409,{ok:false,error:"QA_V23_REQUIRED",message:"Комплект должен пройти стандарт 8/8 proof-first и редакционную проверку 2.3. Без этого утверждение запрещено."});
+       pilot.audit?.requires_visual_review!==true||
+       (String(pilot.audit?.editorial_version||"")==="2.3"&&pilot.quality_report?.automatic_gate_passed!==true))
+      return make(req,409,{ok:false,error:"QA_V23_REQUIRED",message:"Комплект должен пройти стандарт 8/8 proof-first, автоматический QA ≥80 и визуальную проверку директора. Без этого утверждение запрещено."});
     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({status:"approved",stage:"Образец утверждён",updated_at:new Date().toISOString()}).eq("id",id).eq("status","needs_review");if(e)throw e;
     return make(req,200,{ok:true,status:"approved",bulk_release:false});
   }
