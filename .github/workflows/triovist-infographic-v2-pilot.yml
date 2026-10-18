@@ -1,13 +1,22 @@
-name: Triovist premium infographic V2 - single SKU pilot
+name: Triovist professional infographic V3 - strategy-first pilot
 
 on:
   schedule:
     - cron: '3-58/5 * * * *'
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/triovist_infographic_v2_pilot.py'
+      - 'supabase/functions/triovist-infographic-v3-v236399/index.ts'
+      - 'assets/122-triovist-premium-infographic-v236390.js'
+      - '.github/workflows/triovist-infographic-v2-pilot.yml'
   push:
     branches: [main]
     paths:
       - 'tools/triovist_infographic_v2_pilot.py'
+      - 'supabase/functions/triovist-infographic-v3-v236399/index.ts'
+      - 'assets/122-triovist-premium-infographic-v236390.js'
       - '.github/workflows/triovist-infographic-v2-pilot.yml'
 
 permissions:
@@ -26,7 +35,7 @@ jobs:
         run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
       - name: Verify premium pilot worker syntax
         run: python -m py_compile tools/triovist_infographic_v2_pilot.py
-      - name: V2.2 all-eight rich factual poster/offline typography QA — NO IMAGE API
+      - name: V3 strategy + V2.2 proof-first offline QA — NO IMAGE API
         env:
           SUPABASE_URL: https://example.supabase.co
           SUPABASE_KEY: offline-test-only
@@ -34,7 +43,7 @@ jobs:
           PYTHONPATH=tools python - <<'PY'
           import io, re
           from PIL import Image
-          from triovist_infographic_v2_pilot import premium_composite, safe_fact_caption
+          from triovist_infographic_v2_pilot import premium_composite, safe_fact_caption, automatic_quality_report
           data=io.BytesIO()
           Image.new("RGB",(1024,1536),(27,35,44)).save(data,"JPEG")
           scene=data.getvalue()
@@ -47,28 +56,34 @@ jobs:
           ]
           prod={"product_name":"Бетономешалка Вихрь БМ-20АЧ (74/1/20)","sku":"74/1/20"}
           assert safe_fact_caption(facts[0])[0]=="Объём готовой смеси"
+          story=[]
           for n in range(1,9):
               fids=[f["id"] for f in facts] if n==1 else [facts[(n+i)%len(facts)]["id"] for i in range(4)]
-              slide={"number":n,"title":"МОЩНОСТЬ 900 ВТ","subtitle":"Потребляемая мощность",
+              slide={"number":n,"title":f"ПРОВЕРЕННЫЙ ЭКРАН {n}","subtitle":"Потребляемая мощность",
                      "fact_ids":fids,"qa_version":"2.2-proof-first",
                      "layout":"product-left" if n in (4,6,8) else "macro-right",
                      "takeaway":"ПОДТВЕРЖДЁННЫЕ ХАРАКТЕРИСТИКИ МОДЕЛИ"}
+              story.append(slide)
               blob=premium_composite(scene,slide,facts,prod)
               image=Image.open(io.BytesIO(blob))
               assert image.size==(1200,1500) and image.format=="PNG",n
               assert len(blob)>10000,n
+          saved=[{"scene_path":f"scene_{n}.jpg","final_path":f"slide_{n}.png"} for n in range(1,9)]
+          qr=automatic_quality_report(story,facts,saved,{"strict_facts":True,"strategy_pack":{"data_quality":{"score":95}}})
+          assert qr["score"]>=80 and qr["automatic_gate_passed"],qr
+          assert qr["scores"]["claim_accuracy"]==100
           for n in (1,2,5,8):
               try:
                   premium_composite(scene,{"number":n,"fact_ids":["F1"],"title":"МОЩНОСТЬ 900 ВТ",
                                            "takeaway":"ХАРАКТЕРИСТИКИ","layout":"macro-right"},facts,prod)
                   raise AssertionError("Missing verified proof cards on slide %d"%n)
               except RuntimeError:pass
-          print("Offline 8 rich-proof posters, readable captions and negative guards PASS (0 paid provider requests)")
+          print("Offline V3 strategy gate + 8 rich-proof posters + automatic QA PASS (0 paid provider requests)")
           PY
 
   worker:
     needs: validate
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[wake-queued-v21]'))
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[wake-queued-v21]') || contains(github.event.head_commit.message, '[wake-infographic-v3]')))
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -78,7 +93,7 @@ jobs:
           python-version: '3.11'
       - name: Install isolated image and parser dependencies
         run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
-      - name: Render authorized single-SKU premium pilot
+      - name: Run strategy-first single-SKU worker
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
