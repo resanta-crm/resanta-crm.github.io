@@ -26,7 +26,7 @@ jobs:
         run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
       - name: Verify premium pilot worker syntax
         run: python -m py_compile tools/triovist_infographic_v2_pilot.py
-      - name: V2.1 offline eight-poster typography and fact smoke test — NO IMAGE API
+      - name: V2.2 all-eight rich factual poster/offline typography QA — NO IMAGE API
         env:
           SUPABASE_URL: https://example.supabase.co
           SUPABASE_KEY: offline-test-only
@@ -48,17 +48,22 @@ jobs:
           prod={"product_name":"Бетономешалка Вихрь БМ-20АЧ (74/1/20)","sku":"74/1/20"}
           assert safe_fact_caption(facts[0])[0]=="Объём готовой смеси"
           for n in range(1,9):
-              fids=[f["id"] for f in facts] if n==1 else [facts[(n-2)%len(facts)]["id"]]
-              slide={"number":n,"title":"МОЩНОСТЬ 900 ВТ","subtitle":"Потребляемая мощность","fact_ids":fids}
+              fids=[f["id"] for f in facts] if n==1 else [facts[(n+i)%len(facts)]["id"] for i in range(4)]
+              slide={"number":n,"title":"МОЩНОСТЬ 900 ВТ","subtitle":"Потребляемая мощность",
+                     "fact_ids":fids,"qa_version":"2.2-proof-first",
+                     "layout":"product-left" if n in (4,6,8) else "macro-right",
+                     "takeaway":"ПОДТВЕРЖДЁННЫЕ ХАРАКТЕРИСТИКИ МОДЕЛИ"}
               blob=premium_composite(scene,slide,facts,prod)
               image=Image.open(io.BytesIO(blob))
               assert image.size==(1200,1500) and image.format=="PNG",n
               assert len(blob)>10000,n
-          try:
-              premium_composite(scene,{"number":1,"fact_ids":["F1"],"title":"Обложка"},facts,prod)
-              raise AssertionError("Unverified hero was not blocked")
-          except RuntimeError:pass
-          print("Offline 8-slide poster and QA checks PASS (0 paid provider requests)")
+          for n in (1,2,5,8):
+              try:
+                  premium_composite(scene,{"number":n,"fact_ids":["F1"],"title":"МОЩНОСТЬ 900 ВТ",
+                                           "takeaway":"ХАРАКТЕРИСТИКИ","layout":"macro-right"},facts,prod)
+                  raise AssertionError("Missing verified proof cards on slide %d"%n)
+              except RuntimeError:pass
+          print("Offline 8 rich-proof posters, readable captions and negative guards PASS (0 paid provider requests)")
           PY
 
   worker:
