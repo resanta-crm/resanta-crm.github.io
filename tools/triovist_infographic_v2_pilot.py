@@ -309,7 +309,7 @@ def recompose_text_only(pilot):
     """Re-render signed-off factual text from stored source scene. ZERO Image API requests."""
     if pilot.get("status")!="needs_review":return
     audit=pilot.get("audit") or {}
-    if audit.get("editorial_version")!="2.1":return
+    if audit.get("editorial_version") not in ("2.1","2.2"):return
     pending=[x for x in audit.get("pending_recompose",[]) if isinstance(x,int) and 1<=x<=8]
     if not pending:return
     id=pilot["id"]
