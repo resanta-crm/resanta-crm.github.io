@@ -172,11 +172,70 @@ function posterTakeaway(product:any,facts:any[],n:number):string{
  }
  return caption?"ПОДРОБНЕЕ: "+caption.toLocaleUpperCase("ru"):"ОСОБЕННОСТИ ЭТОЙ МОДЕЛИ";
 }
-function verifiedCopy(raw:any,linked:any[],max:number,fallback:string):string{
+const groundingStop=new Set(["тип","общий","общая","общие","модель","товар","параметр","параметры","характеристика","характеристики","данные","готовый","готовая","работа","работы","для","при","или","без","это","этой","этого","этот","как","можно","перед","один","одна","одного","все","главные","ключевые"]);
+function normGround(s:any):string{
+ return low(String(s||"")).replace(/ё/g,"е").replace(/[,.;:()\[\]{}"«»]/g," ").replace(/\s+/g," ").trim();
+}
+function factTokens(f:any):string[]{
+ const raw=normGround(String(f?.label||"")+" "+String(f?.value||""));
+ const out=new Set<string>();
+ for(const t of raw.split(" ")){
+  if(!t||groundingStop.has(t))continue;
+  if(/^\d+(?:[.,]\d+)?$/.test(t)){out.add(t.replace(",","."));continue}
+  if(t.length>=5)out.add(t);
+ }
+ for(const n of (String(f?.value||"").match(/\d+(?:[.,]\d+)?/g)||[]))out.add(n.replace(",","."));
+ return [...out];
+}
+function referencedFactGroups(text:any,facts:any[]):Array<{token:string,ids:string[]}>{
+ const s=normGround(text),digits=new Set((String(text||"").match(/\d+(?:[.,]\d+)?/g)||[]).map(x=>x.replace(",",".")));
+ const words=new Set(s.split(" "));
+ const map=new Map<string,Set<string>>();
+ for(const f of facts){
+  for(const token of factTokens(f)){
+   const hit=/^\d/.test(token)?digits.has(token):words.has(token);
+   if(!hit)continue;
+   if(!map.has(token))map.set(token,new Set());
+   map.get(token)!.add(String(f.id));
+  }
+ }
+ return [...map.entries()].map(([token,ids])=>({token,ids:[...ids]}));
+}
+function missingGrounding(text:any,linked:any[],facts:any[]):Array<{token:string,ids:string[]}>{
+ const allowed=new Set(linked.map((f:any)=>String(f.id)));
+ return referencedFactGroups(text,facts).filter(g=>!g.ids.some(id=>allowed.has(id)));
+}
+function unsupportedInference(text:any,facts:any[]):boolean{
+ const s=normGround(text),all=normGround(facts.map(f=>String(f.label||"")+" "+String(f.value||"")).join(" "));
+ const risky=[
+  {re:/\bза\s+(?:один\s+)?цикл\b/,evidence:/\bцикл/},
+  {re:/\bза\s+час\b|\bв\s+час\b/,evidence:/\bчас/},
+  {re:/\bэконом\w*\b/,evidence:/\bэконом/},
+  {re:/\bбыстр\w*\b/,evidence:/\bбыстр/},
+  {re:/\bнадеж\w*\b|\bнадёж\w*\b/,evidence:/\bнадеж|\bнадёж/},
+  {re:/\bдолговеч\w*\b/,evidence:/\bдолговеч/},
+  {re:/\bресурс\w*\b/,evidence:/\bресурс/}
+ ];
+ return risky.some(x=>x.re.test(s)&&!x.evidence.test(all));
+}
+function verifiedCopy(raw:any,linked:any[],facts:any[],max:number,fallback:string):string{
  const x=checkedCaption(raw,max);if(!x)return fallback;
- const allowed=new Set(linked.flatMap((f:any)=>String(f.value||"").match(/\d+(?:[.,]\d+)?/g)||[]).map((v:string)=>v.replace(",",".")));
+ if(unsupportedInference(x,facts))return fallback;
+ if(missingGrounding(x,linked,facts).length)return fallback;
+ return x;
+}
+function groundedComposition(raw:any,linked:any[],facts:any[],fallback:string):string{
+ const x=checkedCaption(raw,320);
+ if(x&&!unsupportedInference(x,facts)&&!missingGrounding(x,linked,facts).length)return x;
+ const details=linked.slice(0,4).map((f:any)=>checkedCaption(f.label,55)+": "+checkedCaption(f.value,55)).join("; ");
+ return checkedCaption("Премиальная композиция с точным изображением SKU. Информационные элементы только по подтвержденным фактам: "+details+". Без неподтвержденных деталей, разрезов и аксессуаров.",320)||fallback;
+}
+function groundedConceptText(raw:any,facts:any[],max:number,fallback:string):string{
+ const x=checkedCaption(raw,max);if(!x)return fallback;
+ if(unsupportedInference(x,facts))return fallback;
+ const allNumbers=new Set(facts.flatMap((f:any)=>String(f.value||"").match(/\d+(?:[.,]\d+)?/g)||[]).map((v:string)=>v.replace(",",".")));
  const nums=x.match(/\d+(?:[.,]\d+)?/g)||[];
- if(nums.some(v=>!allowed.has(v.replace(",","."))))return fallback;
+ if(nums.some(v=>!allNumbers.has(v.replace(",","."))))return fallback;
  return x;
 }
 function validateStoryboard(raw:any,facts:any[],product:any){
@@ -198,12 +257,12 @@ function validateStoryboard(raw:any,facts:any[],product:any){
   previous=new Set(linked.map(f=>f.id));
   const first=linked[0];
   const fallbackTitle=num===1?checkedCaption(product.product_name,95):canonicalFactHeading(first);
-  const title=verifiedCopy(proposal.title,linked,95,fallbackTitle);
+  const title=verifiedCopy(proposal.title,linked,facts,95,fallbackTitle);
   if(!title||title.toLowerCase()==="обложка")throw Error("BAD_EDITORIAL_TITLE_"+num);
   const fallbackSub=num===1?"ГЛАВНЫЕ ХАРАКТЕРИСТИКИ":checkedCaption(first.label,80);
-  const subtitle=verifiedCopy(proposal.subtitle,linked,120,fallbackSub);
-  const takeaway=verifiedCopy(proposal.takeaway,linked,150,posterTakeaway(product,linked,num));
-  const artNote=checkedCaption(proposal.composition_note,320);
+  const subtitle=verifiedCopy(proposal.subtitle,linked,facts,120,fallbackSub);
+  const takeaway=verifiedCopy(proposal.takeaway,linked,facts,150,posterTakeaway(product,linked,num));
+  const artNote=groundedComposition(proposal.composition_note,linked,facts,tmpl.scene);
   return {
    number:num,key:keys[i],role:posterRoles[i].role,layout:posterRoles[i].layout,
    title,subtitle,takeaway,
@@ -354,17 +413,20 @@ async function strategistPass(facts:any[],product:any,market:any,analysis:any){
  const ids=["concept_a","concept_b","concept_c"];
  const concepts=ids.map((id,i)=>{
   const x=input.find((v:any)=>str(v?.id,30)===id)||input[i]||{};
+  const heroFacts=dedupHero(facts,product).slice(0,3);
+  const safeHero=heroFacts[0]?canonicalFactHeading(heroFacts[0]):checkedCaption(product.product_name,95);
+  const safeIdea="Концепция построена только на подтвержденных характеристиках exact-SKU: "+heroFacts.map((f:any)=>checkedCaption(f.label,55)+" — "+checkedCaption(f.value,55)).join("; ")+".";
   return {id,name:conceptName(x.name,i),recommended:false,score:Math.max(0,Math.min(100,Number(x.score)||[92,88,85][i])),
    strategy:["benefit_technical","construction","market_positioning"][i],
-   idea:checkedCaption(x.idea,220)||conceptName(x.name,i),
-   hero_message:checkedCaption(x.hero_message,110)||checkedCaption(product.product_name,95)};
+   idea:groundedConceptText(x.idea,facts,220,checkedCaption(safeIdea,220)),
+   hero_message:groundedConceptText(x.hero_message,facts,110,safeHero)};
  });
  let best=concepts.reduce((p,c)=>c.score>p.score?c:p,concepts[0]);
  const ai=input.find((x:any)=>x?.recommended===true);if(ai){const exact=concepts.find(x=>x.id===str(ai.id,30));if(exact&&exact.score>=best.score-5)best=exact}
  concepts.forEach(x=>x.recommended=x.id===best.id);
  return {recommended_strategy:{
    type:checkedCaption(r?.recommended_strategy?.type,60)||best.strategy,
-   main_message:checkedCaption(r?.recommended_strategy?.main_message,160)||best.hero_message,
+   main_message:groundedConceptText(r?.recommended_strategy?.main_message,facts,160,best.hero_message),
    reason:checkedCaption(r?.recommended_strategy?.reason,220)||"Выбрана концепция с наиболее сильным подтверждённым потенциалом."
   },concepts};
 }
@@ -375,7 +437,9 @@ async function artDirectorPass(facts:any[],product:any,market:any,analysis:any,s
   "Each screen needs one buyer benefit, 3-4 existing exact-SKU fact_ids, a distinct visual story, strong hierarchy, and 2-4 supporting visual/information elements.",
   "Use noticeably different compositions: hero, action, exterior macro, capacity/scale, materials, ergonomics, real use, verified kit-or-recap.",
   "Technical close-ups may show only source-confirmed visible exterior components; never invent cutaways or invisible internals.",
-  "Title/subtitle/takeaway may be persuasive but any number must exist in linked facts. No unsupported superlatives.",
+  "GROUNDING CONTRACT: every characteristic, numeric value, material, power source, drive type, operating principle, dimension or capability mentioned in title/subtitle/takeaway/composition_note MUST have its exact fact_id in that same slide. If it is not in fact_ids, do not mention it at all.",
+  "Never infer throughput, per-cycle output, durability, speed benefit, resource, savings or performance outcome unless that exact relationship exists in an exact-SKU fact. In particular, a volume fact does NOT mean 'per cycle'.",
+  "Title/subtitle/takeaway may be persuasive only within those linked facts. No unsupported superlatives.",
   "Return strict JSON: {concepts:[{id,slides:[{fact_ids,title,subtitle,takeaway,composition_note} x8]}]}",
   categoryBrief(product),
   repair?("QA REQUIRED CHANGES: "+JSON.stringify(repair)):"",
@@ -399,6 +463,11 @@ async function planningQaPass(facts:any[],product:any,analysis:any,strategy:any,
    if(n<3||n>4)structuralProblems.push("Слайд "+String(s?.number||"?")+": требуется 3–4 exact-SKU факта, сейчас "+n+".");
    if(!checkedCaption(s?.title,95))structuralProblems.push("Слайд "+String(s?.number||"?")+": нет конкретного заголовка.");
    if(!checkedCaption(s?.takeaway,150))structuralProblems.push("Слайд "+String(s?.number||"?")+": нет покупательского вывода.");
+   const linked=arr(s?.fact_ids).map((id:any)=>facts.find((f:any)=>String(f.id)===String(id))).filter(Boolean);
+   const combined=[s?.title,s?.subtitle,s?.takeaway,s?.composition_note].filter(Boolean).join(" ");
+   const missing=missingGrounding(combined,linked,facts);
+   if(missing.length)structuralProblems.push("Слайд "+String(s?.number||"?")+": текст ссылается на неподключенные факты ("+missing.map(x=>x.token).slice(0,6).join(", ")+").");
+   if(unsupportedInference(combined,facts))structuralProblems.push("Слайд "+String(s?.number||"?")+": обнаружено неподтвержденное смысловое усиление результата.");
  }
  if(structuralProblems.length){
    return {approved:false,score:0,problems:structuralProblems,required_changes:structuralProblems,independent:true,concept_id:str(concept?.id,30),structural_gate:false};
@@ -406,6 +475,7 @@ async function planningQaPass(facts:any[],product:any,analysis:any,strategy:any,
  const prompt=[
   "ROLE: QA CONTROLLER. You are independent from analyst, strategist and art director. Evaluate ONE concept of 8 slides, not the other alternative concepts.",
   "Reject only for real defects: unsupported claims, mismatch between linked facts and copy, weak buyer usefulness, sparse slide, repeated composition inside this same 8-slide concept, technical dishonesty, or later slides materially weaker than the cover.",
+  "Treat each slide.fact_ids as the ONLY factual evidence available to that slide. A fact present elsewhere in the SKU but absent from that slide.fact_ids is NOT allowed in that slide's title, subtitle, takeaway or composition note.",
   "Do NOT penalize a fact for appearing on more than one slide when its role/context differs. Do NOT compare repetition against the two alternative concepts.",
   "Every slide already passed a deterministic gate of exactly 3-4 exact-SKU proofs. Judge commercial strength and factual coherence.",
   "Return strict JSON only: {approved:boolean,score:0-100,problems:[string or {slide_no,problem}],required_changes:[string or {slide_no,change}]}.",
@@ -664,7 +734,7 @@ Deno.serve(async(req:Request)=>{
  const email=low(profile.email),leader=profile.role==="boss"&&leadership.has(email);
  const manager=profile.role==="manager"&&profile.access_scope==="triovist"&&managers.has(email);
  if(!leader&&!manager)return make(req,403,{ok:false,error:"FORBIDDEN"});
- if(action==="config")return make(req,200,{ok:true,version:"4.1-four-pass-concept-qa",max_skus:1,slides:8,
+ if(action==="config")return make(req,200,{ok:true,version:"4.2-grounded-proof-contract",max_skus:1,slides:8,
   image_provider_ready:!!Deno.env.get("OPENAI_API_KEY"),
   text_provider_ready:!!(Deno.env.get("ANTHROPIC_API_KEY")||Deno.env.get("OPENAI_API_KEY")),
   premium_model:model,bulk_release:false,requires_approval:true,can_start:leader,editorial_version:"2.4",
