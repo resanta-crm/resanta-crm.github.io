@@ -35,7 +35,7 @@ jobs:
         run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
       - name: Verify premium pilot worker syntax
         run: python -m py_compile tools/triovist_infographic_v2_pilot.py
-      - name: V3 strategy + V2.2 proof-first offline QA — NO IMAGE API
+      - name: V4 four-pass + proof-first + visual-QA gate offline test — NO IMAGE API
         env:
           SUPABASE_URL: https://example.supabase.co
           SUPABASE_KEY: offline-test-only
@@ -69,9 +69,13 @@ jobs:
               assert image.size==(1200,1500) and image.format=="PNG",n
               assert len(blob)>10000,n
           saved=[{"scene_path":f"scene_{n}.jpg","final_path":f"slide_{n}.png"} for n in range(1,9)]
-          qr=automatic_quality_report(story,facts,saved,{"strict_facts":True,"strategy_pack":{"data_quality":{"score":95}}})
-          assert qr["score"]>=80 and qr["automatic_gate_passed"],qr
-          assert qr["scores"]["claim_accuracy"]==100
+          base_pilot={"strict_facts":True,"strategy_pack":{"data_quality":{"score":95}}}
+          no_visual=automatic_quality_report(story,facts,saved,base_pilot)
+          assert not no_visual["automatic_gate_passed"] and not no_visual["visual_qa_all_passed"],no_visual
+          visual={str(n):{"approved":True,"score":92,"scores":{"product_fidelity":96,"claim_accuracy":100,"text_legibility":92,"visual_hierarchy":90,"commercial_strength":90,"consistency":94},"problems":[],"required_changes":[],"regenerate":False} for n in range(1,9)}
+          qr=automatic_quality_report(story,facts,saved,base_pilot,visual)
+          assert qr["score"]>=80 and qr["automatic_gate_passed"] and qr["visual_qa_all_passed"],qr
+          assert qr["scores"]["claim_accuracy"]==100 and qr["scores"]["visual_ai"]>=90
           for n in (1,2,5,8):
               try:
                   premium_composite(scene,{"number":n,"fact_ids":["F1"],"title":"МОЩНОСТЬ 900 ВТ",
