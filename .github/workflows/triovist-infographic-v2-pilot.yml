@@ -1,4 +1,4 @@
-name: Triovist premium infographic V2 - single SKU pilot
+name: Triovist professional infographic V3 - strategy-first pilot
 
 on:
   schedule:
@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - 'tools/triovist_infographic_v2_pilot.py'
+      - 'supabase/functions/triovist-infographic-v3-v236398/index.ts'
+      - 'assets/122-triovist-premium-infographic-v236390.js'
       - '.github/workflows/triovist-infographic-v2-pilot.yml'
 
 permissions:
@@ -26,7 +28,7 @@ jobs:
         run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
       - name: Verify premium pilot worker syntax
         run: python -m py_compile tools/triovist_infographic_v2_pilot.py
-      - name: V2.1 offline eight-poster typography and fact smoke test — NO IMAGE API
+      - name: V3 offline eight-poster typography, proof and QA smoke test — NO IMAGE API
         env:
           SUPABASE_URL: https://example.supabase.co
           SUPABASE_KEY: offline-test-only
@@ -34,7 +36,7 @@ jobs:
           PYTHONPATH=tools python - <<'PY'
           import io, re
           from PIL import Image
-          from triovist_infographic_v2_pilot import premium_composite, safe_fact_caption
+          from triovist_infographic_v2_pilot import premium_composite, safe_fact_caption, automatic_quality_report
           data=io.BytesIO()
           Image.new("RGB",(1024,1536),(27,35,44)).save(data,"JPEG")
           scene=data.getvalue()
@@ -58,12 +60,12 @@ jobs:
               premium_composite(scene,{"number":1,"fact_ids":["F1"],"title":"Обложка"},facts,prod)
               raise AssertionError("Unverified hero was not blocked")
           except RuntimeError:pass
-          print("Offline 8-slide poster and QA checks PASS (0 paid provider requests)")
+          print("Offline V3 8-slide poster, strict-proof and automatic QA checks PASS (0 paid provider requests)")
           PY
 
   worker:
     needs: validate
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[wake-queued-v21]'))
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[wake-queued-v21]') || contains(github.event.head_commit.message, '[wake-infographic-v3]')))
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -73,7 +75,7 @@ jobs:
           python-version: '3.11'
       - name: Install isolated image and parser dependencies
         run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
-      - name: Render authorized single-SKU premium pilot
+      - name: Run strategy-first single-SKU worker
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
