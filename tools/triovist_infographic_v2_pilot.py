@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TRIOVIST v23.6.401: strategy-first premium 21vek infographic worker.
+"""TRIOVIST v23.6.404: staged four-pass premium 21vek infographic worker.
 Keeps proof-first 2.2 all-eight slide rules.
 Phase 1: exact product/photo/facts -> three concepts, ZERO Image API calls.
 Phase 2 starts only after director concept approval -> at most eight reserved image calls.
@@ -295,15 +295,42 @@ def build(pilot):
     if pilot["status"]=="queued":
         update(pilot,{"status":"processing","stage":"Поиск оригинального фото","updated_at":now()})
     item={"product_url":pilot["product_url"],"product_name":pilot["product_name"],"sku":pilot["sku"]}
-    photo,url,name,live_facts=fetch_photo(item) # same exact-model validation as V1, read-only
+    photo,url,name,live_facts=fetch_photo(item) # exact-model validation, read-only
     if not still_active(id):return
     ref=image_to_reference(photo)
-    plan=call("worker-plan",{"pilot_id":id,"photo_url":url,"live_facts":live_facts},timeout=180)
-    if plan.get("requires_concept_review"):
-        log("V3 strategy ready",id,"- waiting for director concept approval; 0 Image API calls")
-        return
-    if not still_active(id):return
-    story=plan["storyboard"];facts=plan["facts"];product=plan["product"]
+
+    if pilot.get("generation_approved") is True and len(pilot.get("storyboard") or [])==8 and len(pilot.get("facts") or [])>=3:
+        story=pilot["storyboard"];facts=pilot["facts"]
+        product={"sku":pilot["sku"],"product_name":pilot["product_name"],"product_url":pilot.get("product_url")}
+    else:
+        update(pilot,{"stage":"ANALYST: проверка exact-SKU фактов и рынка","updated_at":now()})
+        call("worker-analyze",{"pilot_id":id,"photo_url":url,"live_facts":live_facts},timeout=145)
+        if not still_active(id):return
+
+        update(pilot,{"stage":"STRATEGIST: формирование 3 концепций","updated_at":now()})
+        call("worker-strategize",{"pilot_id":id},timeout=145)
+        if not still_active(id):return
+
+        update(pilot,{"stage":"ART DIRECTOR: проектирование 8 сильных экранов","updated_at":now()})
+        call("worker-art-direct",{"pilot_id":id},timeout=165)
+        if not still_active(id):return
+
+        update(pilot,{"stage":"QA CONTROLLER: независимая проверка структуры","updated_at":now()})
+        qa=call("worker-plan-qa",{"pilot_id":id},timeout=145)
+        if qa.get("requires_repair"):
+            changes=qa.get("required_changes") or []
+            log("V4 planning QA requested repair",id,changes[:4])
+            update(pilot,{"stage":"ART DIRECTOR: исправление замечаний QA","updated_at":now()})
+            call("worker-art-direct",{"pilot_id":id,"required_changes":changes},timeout=165)
+            if not still_active(id):return
+            update(pilot,{"stage":"QA CONTROLLER: повторная проверка структуры","updated_at":now()})
+            qa=call("worker-plan-qa",{"pilot_id":id},timeout=145)
+        if qa.get("requires_concept_review"):
+            log("V4 four-pass strategy ready",id,"- waiting for director concept approval; 0 Image API calls")
+            return
+        if qa.get("requires_repair"):
+            raise RuntimeError("Planning QA rejected the repaired storyboard; manual review required")
+        raise RuntimeError("Planning pipeline ended without concept review state")
     if len(story)!=8:raise RuntimeError("Storyboard is not eight scenes")
     preflight_png_storage()
     # Offline preflight ALL eight typography layouts before consuming the first paid Image API request.
@@ -415,12 +442,12 @@ def main():
             if (pilot.get("audit") or {}).get("pending_recompose"):
                 recompose_text_only(pilot)
                 return
-        log("V3 no paid-generation or text-only jobs")
+        log("V4 no paid-generation or text-only jobs")
         return
     pilot=pilots[0]
     try:build(pilot)
     except Exception as ex:
-        log("V3 failed",pilot["id"],str(ex)[:400])
+        log("V4 failed",pilot["id"],str(ex)[:400])
         update(pilot,{"status":"failed","stage":"Не прошёл контроль выполнения",
                       "error_message":str(ex)[:260],"finished_at":now(),"updated_at":now()})
         raise
