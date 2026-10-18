@@ -1,5 +1,5 @@
 name: Triovist professional infographic V3 - strategy-first pilot
-# v23.6.405: concept-scoped QA; push with [wake-infographic-v3] wakes queued planning immediately.
+# v23.6.406: grounded text-to-fact contract; push with [wake-infographic-v3] wakes queued planning immediately.
 
 on:
   schedule:
