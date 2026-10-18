@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: '3-58/5 * * * *'
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/triovist_infographic_v2_pilot.py'
+      - 'supabase/functions/triovist-infographic-v3-v236398/index.ts'
+      - 'assets/122-triovist-premium-infographic-v236390.js'
+      - '.github/workflows/triovist-infographic-v2-pilot.yml'
   push:
     branches: [main]
     paths:
