@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""TRIOVIST V2: guarded premium-image eight-slide SINGLE-SKU pilot worker.
-No legacy batch writes. Eight premium Image API calls maximum; each reserved atomically.
-Never marks the product publishable until a director reviews all eight images.
+"""TRIOVIST v23.6.399: strategy-first premium 21vek infographic worker.
+Keeps proof-first 2.2 all-eight slide rules.
+Phase 1: exact product/photo/facts -> three concepts, ZERO Image API calls.
+Phase 2 starts only after director concept approval -> at most eight reserved image calls.
+Never auto-publishes; director visual review remains mandatory.
 """
 from __future__ import annotations
 import base64
@@ -17,7 +19,7 @@ from triovist_infographic_batch import (
     headers, request, log, storage_get
 )
 
-EDGE=SUPABASE_URL+"/functions/v1/triovist-infographic-v2-v236390"
+EDGE=SUPABASE_URL+"/functions/v1/triovist-infographic-v3-v236399"
 STEPS=8
 MAX_RUNTIME=int(os.environ.get("V2_PILOT_SECONDS","3150"))
 START=time.monotonic()
@@ -235,6 +237,49 @@ def premium_composite(scene_bytes,slide,facts,product):
     out=io.BytesIO();image.convert("RGB").save(out,format="PNG",optimize=True)
     return out.getvalue()
 
+def automatic_quality_report(story,facts,saved,pilot):
+    """Automatic factual/editorial QA only. Visual fidelity still requires director review."""
+    fact_ids={str(f.get("id")) for f in facts if f.get("id")}
+    proof=[len({str(x) for x in (slide.get("fact_ids") or []) if str(x) in fact_ids}) for slide in story]
+    titles=[str(x.get("title") or "").strip().casefold() for x in story if x.get("title")]
+    unique_titles=len(set(titles))
+    scenes_ok=len(saved)==8 and all(row.get("scene_path") and row.get("final_path") for row in saved)
+    proof_first=all(str(x.get("qa_version") or "")=="2.2-proof-first" for x in story)
+    structure_score=100 if len(story)==8 and all(n>=3 for n in proof) and proof_first else 55
+    diversity_score=100 if unique_titles==8 else max(40,60+unique_titles*5)
+    scene_score=100 if scenes_ok else 55
+    data_score=int(((pilot.get("strategy_pack") or {}).get("data_quality") or {}).get("score") or 70)
+    claim_score=100 if pilot.get("strict_facts") is True else 0
+    total=round(data_score*.25+structure_score*.25+diversity_score*.15+scene_score*.15+claim_score*.20)
+    problems=[]
+    if any(n<3 for n in proof):problems.append("Не на каждом слайде есть минимум 3 подтверждённых факта")
+    if not proof_first:problems.append("Не каждый слайд соответствует proof-first 2.2")
+    if unique_titles<8:problems.append("Есть повторяющиеся смысловые заголовки")
+    if not scenes_ok:problems.append("Не все чистые сцены и финальные PNG сохранены")
+    return {
+        "score":total,
+        "minimum_score":80,
+        "automatic_gate_passed":total>=80 and not problems,
+        "scope":"facts_structure_editorial",
+        "visual_review_required":True,
+        "scores":{
+            "data_quality":data_score,
+            "claim_accuracy":claim_score,
+            "proof_coverage":structure_score,
+            "slide_diversity":diversity_score,
+            "scene_preservation":scene_score
+        },
+        "problems":problems,
+        "checks":[
+            "Только exact-SKU факты",
+            "Минимум 3 факта на каждом экране",
+            "8 самостоятельных proof-first экранов",
+            "Сохранены исходные сцены",
+            "Визуальная точность товара проверяется директором"
+        ],
+        "checked_at":now()
+    }
+
 def build(pilot):
     id=pilot["id"]
     if not still_active(id):return
@@ -244,7 +289,10 @@ def build(pilot):
     photo,url,name,live_facts=fetch_photo(item) # same exact-model validation as V1, read-only
     if not still_active(id):return
     ref=image_to_reference(photo)
-    plan=call("worker-plan",{"pilot_id":id,"photo_url":url,"live_facts":live_facts},timeout=130)
+    plan=call("worker-plan",{"pilot_id":id,"photo_url":url,"live_facts":live_facts},timeout=180)
+    if plan.get("requires_concept_review"):
+        log("V3 strategy ready",id,"- waiting for director concept approval; 0 Image API calls")
+        return
     if not still_active(id):return
     story=plan["storyboard"];facts=plan["facts"];product=plan["product"]
     if len(story)!=8:raise RuntimeError("Storyboard is not eight scenes")
@@ -259,14 +307,14 @@ def build(pilot):
         if int(draft.get("number",0))>1 and len(draft.get("fact_ids") or [])<3:
             raise RuntimeError("Slide missing supporting verified facts; no paid generation started")
         premium_composite(dummy.getvalue(),draft,facts,product)
-    log("V2 Pilot",id,"source",url,"verified facts",len(facts),"proof-first preflight passed")
+    log("V3 Pilot",id,"source",url,"verified facts",len(facts),"proof-first preflight passed")
     for slide in story:
         if time.monotonic()-START>MAX_RUNTIME:break
         if not still_active(id):return
         nr=int(slide["number"]);state=next((s for s in slides(id) if s["slide_no"]==nr),None)
         if state and state["status"]=="completed":continue
         if state and state["status"]!="queued":raise RuntimeError(f"Slide {nr}: interrupted; no blind paid retry")
-        log("V2 image",nr,"of",STEPS)
+        log("V3 image",nr,"of",STEPS)
         try:
             result=call("worker-image",{"pilot_id":id,"slide_no":nr,"photo_base64":ref},timeout=235)
             raw=base64.b64decode(result["image_base64"],validate=True)
@@ -292,24 +340,28 @@ def build(pilot):
         coverage=len({x for x in hero_refs if any(f["id"]==x for f in facts)})
         saved=slides(id)
         scenes_saved=all(row.get("scene_path") for row in saved)
+        quality=automatic_quality_report(story,facts,saved,pilot)
         update(pilot,{"status":"needs_review","completed_slides":8,
-                      "stage":"8 слайдов готовы — обязательная визуальная проверка директора",
+                      "stage":"8 слайдов готовы — автопроверка + обязательная визуальная проверка директора",
+                "quality_report":quality,
                 "audit":{"source_url":url,"provider":"OpenAI Image API","model":"gpt-image-2.5-sunburst",
-                         "editorial_version":"2.2","creative_standard":"2.2-proof-first",
+                         "editorial_version":"2.3","creative_standard":"2.2-proof-first",
                          "all_slide_proofs_verified":all(len(x.get("fact_ids") or [])>=3 for x in story),
                          "visual_editorial_review_required":True,
                          "hero_verified":coverage>=3,
                          "hero_fact_count":coverage,"scene_layers_preserved":scenes_saved,
                          "russian_text_from_verified_facts":True,"requires_visual_review":True,
                          "automatically_publishable":False,"manual_review_required":True,
+                         "automatic_quality_score":quality["score"],
+                         "automatic_gate_passed":quality["automatic_gate_passed"],
                          "pending_recompose":[],"generated_at":now()},
                 "finished_at":now(),"updated_at":now()})
-        log("V2 pilot needs review",id)
+        log("V3 pilot needs review",id)
 def recompose_text_only(pilot):
     """Re-render signed-off factual text from stored source scene. ZERO Image API requests."""
     if pilot.get("status")!="needs_review":return
     audit=pilot.get("audit") or {}
-    if audit.get("editorial_version") not in ("2.1","2.2"):return
+    if audit.get("editorial_version") not in ("2.1","2.2","2.3"):return
     pending=[x for x in audit.get("pending_recompose",[]) if isinstance(x,int) and 1<=x<=8]
     if not pending:return
     id=pilot["id"]
@@ -346,12 +398,12 @@ def main():
             if (pilot.get("audit") or {}).get("pending_recompose"):
                 recompose_text_only(pilot)
                 return
-        log("V2 no paid-generation or text-only jobs")
+        log("V3 no paid-generation or text-only jobs")
         return
     pilot=pilots[0]
     try:build(pilot)
     except Exception as ex:
-        log("V2 failed",pilot["id"],str(ex)[:400])
+        log("V3 failed",pilot["id"],str(ex)[:400])
         update(pilot,{"status":"failed","stage":"Не прошёл контроль выполнения",
                       "error_message":str(ex)[:260],"finished_at":now(),"updated_at":now()})
         raise
