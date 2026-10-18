@@ -483,10 +483,12 @@ Deno.serve(async(req:Request)=>{
    if(!uuid(input.pilot_id))return make(req,400,{ok:false,error:"BAD_PILOT_ID"});
    const {data:pilot}=await db.from("triovist_infographic_v2_pilots").select("*").eq("id",input.pilot_id).maybeSingle();
    if(!pilot||!["queued","processing"].includes(pilot.status))return make(req,409,{ok:false,error:"PILOT_NOT_ACTIVE"});
-   if(action==="worker-plan"){
+   if(action==="worker-analyze"){
      const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
-     if(pilot.generation_approved===true&&arr(pilot.storyboard).length===8&&arr(pilot.facts).length>=3)
-       return make(req,200,{ok:true,storyboard:pilot.storyboard,facts:pilot.facts,product,requires_concept_review:false,strategy_pack:pilot.strategy_pack||{}});
+     const existing=pilot.strategy_pack||{};
+     if(existing.analyst&&arr(pilot.facts).length>=3){
+       return make(req,200,{ok:true,product,facts:pilot.facts,strategy_pack:existing,stage:"analyst_ready"});
+     }
      const [{data:specs},{data:marketRows}]=await Promise.all([
       db.from("triovist_market_own_specs_current_v1").select("specs_normalized,specs_fetched_at").eq("sku",pilot.sku).order("specs_fetched_at",{ascending:false}).limit(1),
       db.from("triovist_market_analysis_current_v1").select("status,similarity_score,advantages,disadvantages,data_incomplete,computed_at").eq("our_sku",pilot.sku).order("similarity_score",{ascending:false}).limit(30)
@@ -497,17 +499,90 @@ Deno.serve(async(req:Request)=>{
      if(dedupHero(facts,{product_name:pilot.product_name}).length<3)throw Error("NOT_ENOUGH_VERIFIED_HERO_FACTS");
      const freshMarket=freshMarketRows(arr(marketRows));
      const quality=qualityOf(facts,row,arr(input.live_facts),freshMarket,str(input.photo_url,700));
-     const strategy=await buildStrategyPack(facts,product,arr(marketRows),quality,pilot.strategy_pack||{});
-     const recommended=arr(strategy.concepts).find((x:any)=>x.recommended)||arr(strategy.concepts)[0];
-     if(!recommended||arr(recommended.slides).length!==8)throw Error("STRATEGY_CONCEPT_INVALID");
-     const storyboard=recommended.slides;
-     const stage=quality.generation_allowed?"3 концепции готовы — выберите перед генерацией":"Анализ готов — генерация заблокирована до подтверждённых данных";
-     const {error:ue}=await db.from("triovist_infographic_v2_pilots").update({
-      facts,storyboard,strategy_pack:strategy,selected_concept:recommended.id,source_image_url:str(input.photo_url,700),
-      strict_facts:true,generation_approved:false,planning_version:"2.3-strategy",status:"concept_review",stage,updated_at:new Date().toISOString()
+     const market=marketSummary(freshMarket);
+     if(arr(marketRows).length&&!freshMarket.length)market.warnings=[...arr(market.warnings),"Сравнения парсера старше 72 часов не использованы в стратегии."];
+     const analysis=await analystPass(facts,product,market,quality);
+     const next={...existing,
+       schema_version:"triovist_infographic_strategy_v2",
+       generated_at:new Date().toISOString(),strict_facts:true,
+       passes:{analyst:"complete",strategist:"pending",art_director:"pending",qa_controller:"pending"},
+       data_quality:quality,
+       audience:{primary_buyer:analysis.primary_buyer,jobs_to_be_done:analysis.jobs_to_be_done},
+       analyst:analysis,market_analysis:market
+     };
+     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
+       facts,source_image_url:str(input.photo_url,700),strategy_pack:next,status:"processing",
+       stage:"STRATEGIST: формирование 3 концепций",updated_at:new Date().toISOString()
      }).eq("id",pilot.id).in("status",["queued","processing"]);
-     if(ue)throw ue;
-     return make(req,200,{ok:true,facts,storyboard,product,strategy_pack:strategy,requires_concept_review:true});
+     if(e)throw e;
+     return make(req,200,{ok:true,product,facts,strategy_pack:next,stage:"analyst_ready"});
+   }
+   if(action==="worker-strategize"){
+     const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
+     const pack=pilot.strategy_pack||{};
+     if(pack.recommended_strategy&&arr(pack.concepts).length===3){
+       return make(req,200,{ok:true,product,facts:pilot.facts,strategy_pack:pack,stage:"strategy_ready"});
+     }
+     if(!pack.analyst||!pack.market_analysis||arr(pilot.facts).length<3)throw Error("ANALYST_STAGE_REQUIRED");
+     const strategy=await strategistPass(arr(pilot.facts),product,pack.market_analysis,pack.analyst);
+     const next={...pack,
+       recommended_strategy:strategy.recommended_strategy,
+       concepts:strategy.concepts,
+       passes:{...(pack.passes||{}),analyst:"complete",strategist:"complete",art_director:"pending",qa_controller:"pending"}
+     };
+     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
+       strategy_pack:next,status:"processing",stage:"ART DIRECTOR: проектирование 8 экранов",updated_at:new Date().toISOString()
+     }).eq("id",pilot.id).eq("status","processing");
+     if(e)throw e;
+     return make(req,200,{ok:true,product,facts:pilot.facts,strategy_pack:next,stage:"strategy_ready"});
+   }
+   if(action==="worker-art-direct"){
+     const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
+     const pack=pilot.strategy_pack||{},repair=arr(input.required_changes);
+     const full=arr(pack.concepts).length===3&&arr(pack.concepts).every((x:any)=>arr(x.slides).length===8);
+     if(full&&!repair.length){
+       return make(req,200,{ok:true,product,facts:pilot.facts,strategy_pack:pack,stage:"art_ready"});
+     }
+     if(!pack.analyst||!pack.market_analysis||!pack.recommended_strategy||arr(pack.concepts).length!==3)throw Error("STRATEGIST_STAGE_REQUIRED");
+     const strategy={recommended_strategy:pack.recommended_strategy,concepts:pack.concepts};
+     const concepts=await artDirectorPass(arr(pilot.facts),product,pack.market_analysis,pack.analyst,strategy,repair.length?repair:null);
+     const next={...pack,concepts,
+       passes:{...(pack.passes||{}),analyst:"complete",strategist:"complete",art_director:"complete",qa_controller:"pending"}
+     };
+     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
+       strategy_pack:next,status:"processing",stage:"QA CONTROLLER: независимая проверка структуры",updated_at:new Date().toISOString()
+     }).eq("id",pilot.id).eq("status","processing");
+     if(e)throw e;
+     return make(req,200,{ok:true,product,facts:pilot.facts,strategy_pack:next,stage:"art_ready"});
+   }
+   if(action==="worker-plan-qa"){
+     const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
+     const pack=pilot.strategy_pack||{},concepts=arr(pack.concepts);
+     if(concepts.length!==3||!concepts.every((x:any)=>arr(x.slides).length===8))throw Error("ART_DIRECTOR_STAGE_REQUIRED");
+     const strategy={recommended_strategy:pack.recommended_strategy,concepts};
+     const qa=await planningQaPass(arr(pilot.facts),product,pack.analyst||{},strategy,concepts);
+     const next={...pack,planning_qa:qa,
+       passes:{...(pack.passes||{}),analyst:"complete",strategist:"complete",art_director:"complete",qa_controller:qa.approved?"complete":"rejected"},
+       quality_control:{minimum_score:80,factual_gate:true,visual_review_required:true,independent_visual_qa:true,auto_publish:false,
+        checks:["product_fidelity","claim_accuracy","text_legibility","slide_repetition","visual_hierarchy","commercial_strength","consistency"]}
+     };
+     if(!qa.approved){
+       const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
+         strategy_pack:next,status:"processing",stage:"QA отклонил структуру — точечная переработка ART DIRECTOR",updated_at:new Date().toISOString()
+       }).eq("id",pilot.id).eq("status","processing");
+       if(e)throw e;
+       return make(req,200,{ok:true,approved:false,requires_repair:true,required_changes:qa.required_changes||[],problems:qa.problems||[],strategy_pack:next});
+     }
+     const recommended=concepts.find((x:any)=>x.recommended)||concepts[0];
+     if(!recommended||arr(recommended.slides).length!==8)throw Error("STRATEGY_CONCEPT_INVALID");
+     const storyboard=recommended.slides,quality=next.data_quality||{};
+     const stage=quality.generation_allowed?"3 концепции готовы — выберите перед генерацией":"Анализ готов — генерация заблокирована до подтверждённых данных";
+     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
+       storyboard,strategy_pack:next,selected_concept:recommended.id,
+       strict_facts:true,generation_approved:false,planning_version:"2.4-four-pass",status:"concept_review",stage,updated_at:new Date().toISOString()
+     }).eq("id",pilot.id).eq("status","processing");
+     if(e)throw e;
+     return make(req,200,{ok:true,approved:true,requires_concept_review:true,facts:pilot.facts,storyboard,product,strategy_pack:next});
    }
    if(action==="worker-visual-qa"){
      if(pilot.status!=="processing")return make(req,409,{ok:false,error:"PILOT_NOT_PROCESSING"});
