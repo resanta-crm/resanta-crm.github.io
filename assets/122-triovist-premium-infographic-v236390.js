@@ -4,7 +4,9 @@
  */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_PREMIUM_V236390)return;
+const MOD_VERSION='23.6.400';
+if(window.RESANTA_TRIOVIST_PREMIUM_V236390?.version===MOD_VERSION)return;
+if(window.RESANTA_TRIOVIST_PREMIUM_V236390){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){window.RESANTA_TRIOVIST_PREMIUM_V236390=null}}
 const FN='triovist-infographic-v3-v236400';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const a=x=>Array.isArray(x)?x:[];
@@ -361,5 +363,5 @@ async function open(parent){
  if(!root.dataset.bound){root.dataset.bound='1';root.addEventListener('click',clicked);root.addEventListener('input',entered)}
  message='';draw();try{await refresh()}catch(e){message=e.message;draw()}
 }
-window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:'23.6.400',open,refresh,isolated:true,requiresManualQA:true,strategyFirst:true,threeConcepts:true,strictFactsLocked:true,proofFirstEight:true,maxPilotSku:1});
+window.RESANTA_TRIOVIST_PREMIUM_V236390=Object.freeze({version:MOD_VERSION,open,refresh,isolated:true,requiresManualQA:true,strategyFirst:true,threeConcepts:true,strictFactsLocked:true,proofFirstEight:true,maxPilotSku:1});
 })();
