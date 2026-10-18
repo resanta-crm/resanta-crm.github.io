@@ -149,7 +149,7 @@ function proofFacts(facts:any[],product:any,slideNo:number,proposed:any[]):any[]
   if(ai>=0&&bi<0)return -1;if(bi>=0&&ai<0)return 1;
   return heroFactRank(a,product)-heroFactRank(b,product);
  });
- if(slideNo===1)return hero;
+ if(slideNo===1)return hero.slice(0,4);
  // Rotate the supporting facts across 7 independent pages; prevent a "single spec" poster.
  const set:any[]=[];const seen=new Set<string>();
  const add=(f:any)=>{if(!f||seen.has(f.id))return;seen.add(f.id);set.push(f)};
@@ -229,10 +229,28 @@ function categoryBrief(product:any){
  if(/зернодроб/.test(s))return "Grain crusher: confirmed throughput, motor power, hopper capacity, cleaning, casing and intended grains only.";
  return "Select category-relevant features only from the supplied verified facts. Avoid unsupported accessories, modes or outcomes.";
 }
+function issueText(v:any):string{
+ if(v===null||v===undefined)return "";
+ if(typeof v==="string"||typeof v==="number"||typeof v==="boolean")return checkedCaption(v,240);
+ if(typeof v==="object"){
+  const core=v.message??v.problem??v.issue??v.required_change??v.change??v.recommendation??v.description??v.text??v.reason??"";
+  const prefix=[
+   v.concept_id?("концепция "+str(v.concept_id,30)):"",
+   v.slide_no?("слайд "+String(v.slide_no)):""
+  ].filter(Boolean).join(", ");
+  const body=checkedCaption(core,220);
+  if(body)return checkedCaption((prefix?prefix+": ":"")+body,240);
+  try{
+   const compact=Object.entries(v).filter(([k])=>!["score","approved"].includes(k)).slice(0,4).map(([k,val])=>k+": "+String(val)).join("; ");
+   return checkedCaption(compact,240);
+  }catch(_){return ""}
+ }
+ return checkedCaption(String(v),240);
+}
 function uniqueStrings(values:any[],limit=8):string[]{
  const out:string[]=[],seen=new Set<string>();
  for(const v of values){
-  const x=checkedCaption(v,170);if(!x)continue;
+  const x=issueText(v);if(!x||x==="[object Object]")continue;
   const k=low(x);if(seen.has(k))continue;seen.add(k);out.push(x);
   if(out.length>=limit)break;
  }
@@ -370,19 +388,35 @@ async function artDirectorPass(facts:any[],product:any,market:any,analysis:any,s
  });
  return concepts;
 }
-async function planningQaPass(facts:any[],product:any,analysis:any,strategy:any,concepts:any[]){
+async function planningQaPass(facts:any[],product:any,analysis:any,strategy:any,concept:any){
+ const slides=arr(concept?.slides);
+ const structuralProblems:string[]=[];
+ if(slides.length!==8)structuralProblems.push("Концепция должна содержать ровно 8 экранов.");
+ const titles=slides.map((s:any)=>low(s?.title)).filter(Boolean);
+ if(new Set(titles).size!==titles.length)structuralProblems.push("Есть повторяющиеся заголовки экранов.");
+ for(const s of slides){
+   const n=Number(s?.proof_count||arr(s?.fact_ids).length);
+   if(n<3||n>4)structuralProblems.push("Слайд "+String(s?.number||"?")+": требуется 3–4 exact-SKU факта, сейчас "+n+".");
+   if(!checkedCaption(s?.title,95))structuralProblems.push("Слайд "+String(s?.number||"?")+": нет конкретного заголовка.");
+   if(!checkedCaption(s?.takeaway,150))structuralProblems.push("Слайд "+String(s?.number||"?")+": нет покупательского вывода.");
+ }
+ if(structuralProblems.length){
+   return {approved:false,score:0,problems:structuralProblems,required_changes:structuralProblems,independent:true,concept_id:str(concept?.id,30),structural_gate:false};
+ }
  const prompt=[
-  "ROLE: QA CONTROLLER. You are independent from analyst, strategist and art director. Try to reject weak work.",
-  "Check facts, buyer usefulness, 8/8 commercial density, repetition, composition diversity, unsupported claims, technical honesty and whether later slides are weaker than the cover.",
-  "Every slide must have 3-4 exact-SKU proofs and must not be a sparse poster.",
-  "Return JSON only: {approved,score,problems,required_changes}. Approve only at score >=80.",
-  JSON.stringify({product,facts,analysis,strategy,concepts})
+  "ROLE: QA CONTROLLER. You are independent from analyst, strategist and art director. Evaluate ONE concept of 8 slides, not the other alternative concepts.",
+  "Reject only for real defects: unsupported claims, mismatch between linked facts and copy, weak buyer usefulness, sparse slide, repeated composition inside this same 8-slide concept, technical dishonesty, or later slides materially weaker than the cover.",
+  "Do NOT penalize a fact for appearing on more than one slide when its role/context differs. Do NOT compare repetition against the two alternative concepts.",
+  "Every slide already passed a deterministic gate of exactly 3-4 exact-SKU proofs. Judge commercial strength and factual coherence.",
+  "Return strict JSON only: {approved:boolean,score:0-100,problems:[string or {slide_no,problem}],required_changes:[string or {slide_no,change}]}.",
+  "Approve only at score >=80 and when no material problem remains.",
+  JSON.stringify({product,facts,analysis,strategy:{recommended_strategy:strategy?.recommended_strategy},concept})
  ].join("\n");
- const r=await callTextJson(prompt,5000);
+ const r=await callTextJson(prompt,4200);
  const score=Math.max(0,Math.min(100,Number(r?.score)||0));
  const problems=uniqueStrings(arr(r?.problems),12),required_changes=uniqueStrings(arr(r?.required_changes),12);
- const programOk=concepts.length===3&&concepts.every((c:any)=>arr(c.slides).length===8&&arr(c.slides).every((s:any)=>Number(s.proof_count)>=3));
- return {approved:r?.approved===true&&score>=80&&programOk&&problems.length===0,score,problems,required_changes,independent:true};
+ const approved=r?.approved===true&&score>=80&&problems.length===0;
+ return {approved,score,problems,required_changes,independent:true,concept_id:str(concept?.id,30),structural_gate:true};
 }
 async function buildStrategyPack(facts:any[],product:any,marketRows:any[],quality:any,seed:any={}){
  const fresh=freshMarketRows(marketRows),market=marketSummary(fresh);
@@ -559,30 +593,32 @@ Deno.serve(async(req:Request)=>{
      const product={sku:pilot.sku,product_name:pilot.product_name,product_url:pilot.product_url};
      const pack=pilot.strategy_pack||{},concepts=arr(pack.concepts);
      if(concepts.length!==3||!concepts.every((x:any)=>arr(x.slides).length===8))throw Error("ART_DIRECTOR_STAGE_REQUIRED");
+     const recommended=concepts.find((x:any)=>x.recommended)||concepts[0];
      const strategy={recommended_strategy:pack.recommended_strategy,concepts};
-     const qa=await planningQaPass(arr(pilot.facts),product,pack.analyst||{},strategy,concepts);
-     const next={...pack,planning_qa:qa,
+     const qa=await planningQaPass(arr(pilot.facts),product,pack.analyst||{},strategy,recommended);
+     const reports={...(pack.planning_qa_by_concept||{}),[recommended.id]:qa};
+     const next={...pack,planning_qa:qa,planning_qa_by_concept:reports,
        passes:{...(pack.passes||{}),analyst:"complete",strategist:"complete",art_director:"complete",qa_controller:qa.approved?"complete":"rejected"},
        quality_control:{minimum_score:80,factual_gate:true,visual_review_required:true,independent_visual_qa:true,auto_publish:false,
         checks:["product_fidelity","claim_accuracy","text_legibility","slide_repetition","visual_hierarchy","commercial_strength","consistency"]}
      };
-     if(!qa.approved){
+     if(!qa.approved&&input.final_attempt!==true){
        const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
-         strategy_pack:next,status:"processing",stage:"QA отклонил структуру — точечная переработка ART DIRECTOR",updated_at:new Date().toISOString()
+         strategy_pack:next,status:"processing",stage:"QA отклонил рекомендованную концепцию — ART DIRECTOR исправляет её",updated_at:new Date().toISOString()
        }).eq("id",pilot.id).eq("status","processing");
        if(e)throw e;
-       return make(req,200,{ok:true,approved:false,requires_repair:true,required_changes:qa.required_changes||[],problems:qa.problems||[],strategy_pack:next});
+       return make(req,200,{ok:true,approved:false,requires_repair:true,required_changes:qa.required_changes||qa.problems||[],problems:qa.problems||[],strategy_pack:next});
      }
-     const recommended=concepts.find((x:any)=>x.recommended)||concepts[0];
-     if(!recommended||arr(recommended.slides).length!==8)throw Error("STRATEGY_CONCEPT_INVALID");
      const storyboard=recommended.slides,quality=next.data_quality||{};
-     const stage=quality.generation_allowed?"3 концепции готовы — выберите перед генерацией":"Анализ готов — генерация заблокирована до подтверждённых данных";
+     const stage=qa.approved
+       ?(quality.generation_allowed?"3 концепции готовы — выберите перед генерацией":"Анализ готов — генерация заблокирована до подтверждённых данных")
+       :"3 концепции готовы — QA требует ручной правки рекомендованной концепции";
      const {error:e}=await db.from("triovist_infographic_v2_pilots").update({
        storyboard,strategy_pack:next,selected_concept:recommended.id,
        strict_facts:true,generation_approved:false,planning_version:"2.4-four-pass",status:"concept_review",stage,updated_at:new Date().toISOString()
      }).eq("id",pilot.id).eq("status","processing");
      if(e)throw e;
-     return make(req,200,{ok:true,approved:true,requires_concept_review:true,facts:pilot.facts,storyboard,product,strategy_pack:next});
+     return make(req,200,{ok:true,approved:qa.approved,requires_concept_review:true,manual_edit_required:!qa.approved,facts:pilot.facts,storyboard,product,strategy_pack:next});
    }
    if(action==="worker-visual-qa"){
      if(pilot.status!=="processing")return make(req,409,{ok:false,error:"PILOT_NOT_PROCESSING"});
@@ -628,7 +664,7 @@ Deno.serve(async(req:Request)=>{
  const email=low(profile.email),leader=profile.role==="boss"&&leadership.has(email);
  const manager=profile.role==="manager"&&profile.access_scope==="triovist"&&managers.has(email);
  if(!leader&&!manager)return make(req,403,{ok:false,error:"FORBIDDEN"});
- if(action==="config")return make(req,200,{ok:true,version:"4.0-four-pass-visual-qa",max_skus:1,slides:8,
+ if(action==="config")return make(req,200,{ok:true,version:"4.1-four-pass-concept-qa",max_skus:1,slides:8,
   image_provider_ready:!!Deno.env.get("OPENAI_API_KEY"),
   text_provider_ready:!!(Deno.env.get("ANTHROPIC_API_KEY")||Deno.env.get("OPENAI_API_KEY")),
   premium_model:model,bulk_release:false,requires_approval:true,can_start:leader,editorial_version:"2.4",
@@ -689,11 +725,12 @@ Deno.serve(async(req:Request)=>{
     const concept=arr(pack.concepts).find((x:any)=>str(x.id,30)===conceptId);if(!concept)return make(req,400,{ok:false,error:"BAD_CONCEPT"});
     const incoming=arr(input.slides);if(incoming.length!==8)return make(req,400,{ok:false,error:"EIGHT_SLIDES_REQUIRED"});
     const revised=validateStoryboard({slides:incoming},arr(pilot.facts),{sku:pilot.sku,product_name:pilot.product_name});
-    const qa=await planningQaPass(arr(pilot.facts),{sku:pilot.sku,product_name:pilot.product_name},pack.analyst||{}, {recommended_strategy:pack.recommended_strategy,concepts:pack.concepts}, [{...concept,slides:revised},...arr(pack.concepts).filter((x:any)=>x.id!==conceptId)]);
-    if(!qa.approved)return make(req,409,{ok:false,error:"PLAN_QA_REJECTED",message:(qa.problems||[]).join(" · "),qa});
+    const revisedConcept={...concept,slides:revised};
+    const qa=await planningQaPass(arr(pilot.facts),{sku:pilot.sku,product_name:pilot.product_name},pack.analyst||{}, {recommended_strategy:pack.recommended_strategy}, revisedConcept);
+    if(!qa.approved)return make(req,409,{ok:false,error:"PLAN_QA_REJECTED",message:(qa.problems||qa.required_changes||[]).join(" · "),qa});
     const history=[...arr(pack.revision_history),{at:new Date().toISOString(),by:email,type:"plan_edit",concept_id:conceptId}].slice(-40);
-    const concepts=arr(pack.concepts).map((x:any)=>x.id===conceptId?{...x,slides:revised}:x);
-    const next={...pack,concepts,planning_qa:qa,revision_history:history};
+    const concepts=arr(pack.concepts).map((x:any)=>x.id===conceptId?revisedConcept:x);
+    const next={...pack,concepts,planning_qa:qa,planning_qa_by_concept:{...(pack.planning_qa_by_concept||{}),[conceptId]:qa},revision_history:history};
     const {error:e}=await db.from("triovist_infographic_v2_pilots").update({strategy_pack:next,selected_concept:conceptId,storyboard:revised,updated_at:new Date().toISOString()}).eq("id",id).eq("status","concept_review");if(e)throw e;
     return make(req,200,{ok:true,strategy_pack:next,storyboard:revised,message:"Структура сохранена и повторно прошла независимый QA."});
   }
@@ -725,8 +762,16 @@ Deno.serve(async(req:Request)=>{
     const concept=arr(pack.concepts).find((x:any)=>str(x.id,30)===conceptId);
     if(!concept||arr(concept.slides).length!==8)return make(req,400,{ok:false,error:"BAD_CONCEPT"});
     const storyboard=concept.slides;
-    if(storyboard.some((x:any,i:number)=>x.number!==i+1||Number(x.proof_count||0)<3||x.qa_version!==creativeVersion))
-      return make(req,409,{ok:false,error:"CONCEPT_QA_REJECTED"});
+    if(storyboard.some((x:any,i:number)=>x.number!==i+1||Number(x.proof_count||0)<3||Number(x.proof_count||0)>4||x.qa_version!==creativeVersion))
+      return make(req,409,{ok:false,error:"CONCEPT_QA_REJECTED",message:"Структурный QA выбранной концепции не пройден."});
+    let selectedQa=pack.planning_qa_by_concept?.[conceptId];
+    if(!selectedQa?.approved){
+      selectedQa=await planningQaPass(arr(pilot.facts),{sku:pilot.sku,product_name:pilot.product_name},pack.analyst||{}, {recommended_strategy:pack.recommended_strategy}, concept);
+      if(!selectedQa.approved)return make(req,409,{ok:false,error:"SELECTED_CONCEPT_QA_REJECTED",message:"QA выбранной концепции: "+(selectedQa.problems||selectedQa.required_changes||[]).join(" · "),qa:selectedQa});
+      const nextPack={...pack,planning_qa:selectedQa,planning_qa_by_concept:{...(pack.planning_qa_by_concept||{}),[conceptId]:selectedQa}};
+      const {error:qae}=await db.from("triovist_infographic_v2_pilots").update({strategy_pack:nextPack,updated_at:new Date().toISOString()}).eq("id",id).eq("status","concept_review");
+      if(qae)throw qae;
+    }
     const note=checkedCaption(input.director_note,500);
     const {error:de}=await db.from("triovist_infographic_v2_slides").delete().eq("pilot_id",id);if(de)throw de;
     const {error:se}=await db.from("triovist_infographic_v2_slides").insert(storyboard.map((x:any)=>({

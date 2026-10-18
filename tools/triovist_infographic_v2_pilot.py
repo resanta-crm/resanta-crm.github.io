@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TRIOVIST v23.6.404: staged four-pass premium 21vek infographic worker.
+"""TRIOVIST v23.6.405: staged four-pass premium 21vek infographic worker.
 Keeps proof-first 2.2 all-eight slide rules.
 Phase 1: exact product/photo/facts -> three concepts, ZERO Image API calls.
 Phase 2 starts only after director concept approval -> at most eight reserved image calls.
@@ -324,12 +324,15 @@ def build(pilot):
             call("worker-art-direct",{"pilot_id":id,"required_changes":changes},timeout=165)
             if not still_active(id):return
             update(pilot,{"stage":"QA CONTROLLER: повторная проверка структуры","updated_at":now()})
-            qa=call("worker-plan-qa",{"pilot_id":id},timeout=145)
+            qa=call("worker-plan-qa",{"pilot_id":id,"final_attempt":True},timeout=145)
         if qa.get("requires_concept_review"):
-            log("V4 four-pass strategy ready",id,"- waiting for director concept approval; 0 Image API calls")
+            if qa.get("manual_edit_required"):
+                log("V4 concepts ready with QA notes for manual editor",id,"- 0 Image API calls")
+            else:
+                log("V4 four-pass strategy ready",id,"- waiting for director concept approval; 0 Image API calls")
             return
         if qa.get("requires_repair"):
-            raise RuntimeError("Planning QA rejected the repaired storyboard; manual review required")
+            raise RuntimeError("Planning QA repair loop did not reach manual editor")
         raise RuntimeError("Planning pipeline ended without concept review state")
     if len(story)!=8:raise RuntimeError("Storyboard is not eight scenes")
     preflight_png_storage()
@@ -340,8 +343,9 @@ def build(pilot):
     for draft in story:
         if draft.get("qa_version")!="2.2-proof-first":
             raise RuntimeError("Editor requires V2.2 storyboard; no paid generation started")
-        if int(draft.get("number",0))>1 and len(draft.get("fact_ids") or [])<3:
-            raise RuntimeError("Slide missing supporting verified facts; no paid generation started")
+        proof_count=len(draft.get("fact_ids") or [])
+        if proof_count<3 or proof_count>4:
+            raise RuntimeError("Slide must contain 3-4 supporting verified facts; no paid generation started")
         premium_composite(dummy.getvalue(),draft,facts,product)
     log("V3 Pilot",id,"source",url,"verified facts",len(facts),"proof-first preflight passed")
     for slide in story:
