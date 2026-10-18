@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TRIOVIST v23.6.405: staged four-pass premium 21vek infographic worker.
+"""TRIOVIST v23.6.408: staged four-pass premium 21vek infographic worker.
 Keeps proof-first 2.2 all-eight slide rules.
 Phase 1: exact product/photo/facts -> three concepts, ZERO Image API calls.
 Phase 2 starts only after director concept approval -> at most eight reserved image calls.
@@ -436,9 +436,41 @@ def recompose_text_only(pilot):
                       {"id":"eq."+id,"status":"eq.needs_review"},
                       {"audit":current,"stage":"Подписи пересобраны без новых платных изображений","updated_at":now()})
 
+def _provider_retry_due(pilot):
+    audit=pilot.get("audit") or {}
+    return int(audit.get("strategy_provider_retry_after_epoch") or 0)<=int(time.time())
+
+def _is_transient_text_provider_error(message):
+    s=str(message or "")
+    return ("TEXT_AI_RATE_LIMIT" in s or
+            ("STRATEGY_PROVIDERS_UNAVAILABLE" in s and "429" in s) or
+            ("STRATEGY_PROVIDER_HTTP_429" in s) or
+            ("Edge 429" in s))
+
+def _requeue_text_provider_limit(pilot,message):
+    rows=db_get("triovist_infographic_v2_pilots",{"id":"eq."+pilot["id"],"select":"audit,status,paid_images_started","limit":"1"})
+    current=rows[0] if rows else pilot
+    audit=current.get("audit") or {}
+    attempt=int(audit.get("strategy_provider_retry_count") or 0)+1
+    delay=min(1800, 120*(2**min(attempt-1,4)))
+    retry_epoch=int(time.time())+delay
+    audit={**audit,
+           "strategy_provider_retry_count":attempt,
+           "strategy_provider_retry_after_epoch":retry_epoch,
+           "strategy_provider_last_error":str(message)[:180],
+           "strategy_provider_last_retry_at":now()}
+    mins=max(1,(delay+59)//60)
+    db_update("triovist_infographic_v2_pilots",
+              {"id":"eq."+pilot["id"],"status":"in.(queued,processing)"},
+              {"status":"queued",
+               "stage":f"Лимит текстового ИИ — автоматический повтор примерно через {mins} мин",
+               "error_message":None,"finished_at":None,"audit":audit,"updated_at":now()})
+    log("V4 text provider rate limit; requeued",pilot["id"],"attempt",attempt,"delay",delay)
+
 def main():
-    pilots=db_get("triovist_infographic_v2_pilots",{
-     "status":"in.(queued,processing)","select":"*","order":"created_at.asc","limit":"1"})
+    candidates=db_get("triovist_infographic_v2_pilots",{
+     "status":"in.(queued,processing)","select":"*","order":"created_at.asc","limit":"12"})
+    pilots=[p for p in candidates if p.get("status")=="processing" or _provider_retry_due(p)]
     if not pilots:
         review=db_get("triovist_infographic_v2_pilots",{
             "status":"eq.needs_review","select":"*","order":"updated_at.desc","limit":"10"})
@@ -446,13 +478,20 @@ def main():
             if (pilot.get("audit") or {}).get("pending_recompose"):
                 recompose_text_only(pilot)
                 return
-        log("V4 no paid-generation or text-only jobs")
+        if candidates:
+            log("V4 queued jobs waiting for text-provider backoff")
+        else:
+            log("V4 no paid-generation or text-only jobs")
         return
     pilot=pilots[0]
     try:build(pilot)
     except Exception as ex:
-        log("V4 failed",pilot["id"],str(ex)[:400])
+        msg=str(ex)
+        if _is_transient_text_provider_error(msg) and int(pilot.get("paid_images_started") or 0)==0:
+            _requeue_text_provider_limit(pilot,msg)
+            return
+        log("V4 failed",pilot["id"],msg[:400])
         update(pilot,{"status":"failed","stage":"Не прошёл контроль выполнения",
-                      "error_message":str(ex)[:260],"finished_at":now(),"updated_at":now()})
+                      "error_message":msg[:260],"finished_at":now(),"updated_at":now()})
         raise
 if __name__=="__main__":main()
