@@ -3795,7 +3795,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if {"drum_capacity_l","crown_material","input_power_w"}.issubset(keys):
         return RULESET_VERSION+"-concretemixer2"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(keys):
-        return RULESET_VERSION+"-compressor1"
+        return RULESET_VERSION+"-compressor2"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
         return RULESET_VERSION+"-anglegrinder1"
     if "grinding_wheel_diameter_mm" in keys and "motor_type" in keys and "max_rpm" in keys and "input_power_w" in keys:
