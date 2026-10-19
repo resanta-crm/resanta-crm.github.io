@@ -18,7 +18,7 @@ const INVENTORY_APP_VERSION='2026-10-19-v23.6.378-exact-fact-correction';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?legacy-module=1&v=250&ts='+Date.now());
+        location.replace('/inventory.html?legacy-module=1&v=378&ts='+Date.now());
       }
     }
   }catch(_){}
