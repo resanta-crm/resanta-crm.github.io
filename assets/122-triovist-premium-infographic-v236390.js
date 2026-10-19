@@ -9,6 +9,7 @@ if(window.RESANTA_TRIOVIST_PREMIUM_V236390?.factoryVersion===FACTORY_VERSION)ret
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const a=x=>Array.isArray(x)?x:[];
 const dbx=()=>{try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}};
+const pretty=x=>x==='Бетоносмесители'?'Бетономешалки':x;
 const stateLabel={
  queued:'В очереди',researching:'Изучаю рынок',pilot_review:'Контрольные SKU готовы',
  processing:'Фабрика работает',completed:'Готово',completed_with_attention:'Готово · есть внимание',
@@ -93,7 +94,7 @@ function selectionHtml(){
 function batchListHtml(){
  if(!batches.length)return '';
  return '<div class="tif5-sep"></div><h4>Запуски фабрики</h4><div class="tif5-batches">'+batches.map(b=>{
-  const groups=a(b.groups).join(' · '),on=current?.id===b.id?'on':'';
+  const groups=a(b.groups).map(pretty).join(' · '),on=current?.id===b.id?'on':'';
   return '<button class="'+on+'" data-tif-batch="'+h(b.id)+'"><span><b>'+h(groups||'Без групп')+'</b><small class="tif5-muted">'+new Date(b.created_at).toLocaleString('ru-RU')+'</small></span><span>'+h(stateLabel[b.status]||b.status)+'</span></button>';
  }).join('')+'</div>';
 }
@@ -101,7 +102,7 @@ function pilotHtml(){
  if(!current||current.status!=='pilot_review')return '';
  const cards=a(current.selection_snapshot).filter(x=>!x.bulk_approved).map(sel=>{
   const item=items.find(x=>x.group_name===sel.group&&x.is_reference),ready=item?.status==='completed'&&Number(item.quality_score||0)>=Number(current.qa_threshold||90);
-  return '<div class="tif5-pilot"><h4>'+h(sel.group)+'</h4>'+
+  return '<div class="tif5-pilot"><h4>'+h(pretty(sel.group))+'</h4>'+
    '<div class="'+statusClass(item?.status||'queued')+'">'+(item?'<b>'+h(item.sku)+'</b> · '+h(stateLabel[item.status]||item.status)+(item.quality_score?' · QA '+Number(item.quality_score)+'/100':''):'Контрольный SKU готовится')+'</div>'+
    (item?'<div class="tif5-actions"><button data-tif-preview="'+h(item.sku)+'">👁 Посмотреть все слайды</button>'+
    '<button class="green" data-tif-approve="'+h(sel.group)+'" '+(!ready?'disabled':'')+'>✓ Утвердить стиль группы</button></div>':'')+
