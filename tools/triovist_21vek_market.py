@@ -3063,6 +3063,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     construction_heat_gun_mode={"airflow_lmin","heating_time_sec","input_power_w"}.issubset(rule_keys)
     concrete_mixer_mode={"drum_capacity_l","crown_material","input_power_w"}.issubset(rule_keys)
     grain_crusher_mode={"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(rule_keys)
+    washstand_mode={"washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(rule_keys)
     compressor_mode={"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
@@ -3951,6 +3952,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-concretemixer2"
     if {"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(keys):
         return RULESET_VERSION+"-graincrusher1"
+    if {"washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
+        return RULESET_VERSION+"-washstand1"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor2"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
