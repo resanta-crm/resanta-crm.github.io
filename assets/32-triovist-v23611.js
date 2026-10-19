@@ -30,7 +30,7 @@ if(window.RESANTA_TRIOVIST_ROOT_V23614?.version==='v23.6.401'){loadGroupFix();re
 const stale=document.querySelector('script[data-triovist-root-v23614]');
 if(stale){const age=Date.now()-Number(stale.dataset.triovistStartedAt||0);if(stale.dataset.triovistStartedAt&&age<5000){loadGroupFix();return;}stale.remove();}
 const s=document.createElement('script');
-s.src='./assets/34-triovist-root-v23614.js?v='+encodeURIComponent(cv);
+s.src='./assets/34-triovist-root-v23614.js?v='+encodeURIComponent(cv)+'&factory=5.0';
 s.async=false;
 s.dataset.triovistRootV23614='1';
 s.dataset.triovistStartedAt=String(Date.now());
