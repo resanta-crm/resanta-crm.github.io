@@ -1,91 +1,17 @@
-name: Triovist Infographic Factory V5
-# wake probe 2026-10-19T07:47Z
+name: Triovist Infographic Factory V5 - ARCHIVED
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'tools/triovist_infographic_factory_v5.py'
-      - 'supabase/functions/triovist-infographic-factory-v5/index.ts'
-      - 'supabase/migrations/20261019_triovist_infographic_factory_v5.sql'
-      - 'assets/122-triovist-premium-infographic-v236390.js'
-      - '.github/workflows/triovist-infographic-factory-v5.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'tools/triovist_infographic_factory_v5.py'
-      - 'supabase/functions/triovist-infographic-factory-v5/index.ts'
-      - 'supabase/migrations/20261019_triovist_infographic_factory_v5.sql'
-      - 'assets/122-triovist-premium-infographic-v236390.js'
-      - '.github/workflows/triovist-infographic-factory-v5.yml'
 
 permissions:
   contents: read
 
-concurrency:
-  group: triovist-infographic-factory-v5
-  cancel-in-progress: false
-
 jobs:
-  validate:
+  archive-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install isolated offline dependencies
-        run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
-      - name: Verify Factory V5 worker syntax
-        run: python -m py_compile tools/triovist_infographic_factory_v5.py
-      - name: Offline poster compositor smoke test — NO API calls
-        env:
-          SUPABASE_URL: https://example.supabase.co
-          SUPABASE_KEY: offline-only
+      - name: Factory archived
         run: |
-          PYTHONPATH=tools python - <<'PY'
-          import io
-          from PIL import Image
-          from triovist_infographic_factory_v5 import overlay_final, build_contact_sheet
-          scene=io.BytesIO();Image.new("RGB",(1024,1536),(28,34,43)).save(scene,"JPEG")
-          item={"sku":"74/1/20","product_name":"Бетономешалка Вихрь БМ-20АЧ","slide_count":7}
-          facts=[
-            {"id":"F1","label":"Объём готовой смеси","value":"140 л"},
-            {"id":"F2","label":"Потребляемая мощность","value":"900 Вт"},
-            {"id":"F3","label":"Материал венца","value":"чугун"},
-          ]
-          slide={"slide_no":1,"title":"140 л готовой смеси","subtitle":"Проверенные параметры exact-SKU",
-                 "fact_ids":["F1","F2","F3"],"layout_key":"hero_split"}
-          blob=overlay_final(scene.getvalue(),slide,facts,item)
-          im=Image.open(io.BytesIO(blob))
-          assert im.size==(1200,1500) and im.format=="PNG" and len(blob)>10000
-          sheet=build_contact_sheet([("21vek",Image.new("RGB",(500,500),"white"))])
-          assert len(sheet)>5000
-          print("Factory V5 offline compositor PASS")
-          PY
-
-  worker:
-    needs: validate
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[wake-infographic-factory-v5]'))
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        shard: [0,1,2,3]
-    runs-on: ubuntu-latest
-    timeout-minutes: 32
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install isolated worker dependencies
-        run: pip install 'requests>=2.31,<3' 'beautifulsoup4>=4.12,<5' 'Pillow>=10.2,<12'
-      - name: Run Factory V5 shard
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          FACTORY_SHARD: ${{ matrix.shard }}
-          FACTORY_ITEMS_PER_WORKER: '2'
-          FACTORY_WORKER_SECONDS: '1650'
-        run: python tools/triovist_infographic_factory_v5.py
+          echo "Triovist Infographic Factory V5 is archived."
+          echo "Scheduled and paid background generation are disabled."

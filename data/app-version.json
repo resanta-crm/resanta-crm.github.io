@@ -1,6 +1,6 @@
 {
-  "version": "23.7.1",
+  "version": "23.7.2",
   "released_at": "2026-10-19",
-  "purpose": "Triovist Infographic Factory 5.0 preview modal hotfix.",
-  "deploy_trigger": "2026-10-19T11:25:00+03:00"
+  "purpose": "Infographic project archived; read-only and visible only to Payushin. Paid generation disabled.",
+  "deploy_trigger": "2026-10-19T12:05:00+03:00"
 }
