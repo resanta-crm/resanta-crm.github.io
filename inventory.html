@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const INVENTORY_APP_VERSION='2026-10-07-v23.6.250-warehouse-3in1';
+const INVENTORY_APP_VERSION='2026-10-19-v23.6.378-exact-fact-correction';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -92,6 +92,7 @@ label{display:block;font-size:13px;color:#6B7280;font-weight:700;margin:9px 0 5p
           <div class="kpi"><b id="last-diff">0</b><span>Разница</span></div>
         </div>
         <div id="last-balance" class="status blue" style="margin-top:10px;margin-bottom:0">Сравнение появится после скана.</div>
+        <button id="correct-fact-btn" class="btn secondary" style="width:100%;margin-top:8px">✎ Исправить факт по этому SKU</button>
       </div>
       <div id="bind-box" class="bind hidden">
         <div class="status amber"><b>Штрихкод не найден.</b> Введите артикул товара — связь сохранится для следующих сканов. Если в снимке 1С было 0 или SKU отсутствовал, найденный товар будет записан как излишек / возможный пересорт.</div>
@@ -129,7 +130,7 @@ function tsdLabel(email){
  if(email==='sidarovich_kn@resanta.ru')return 'ТСД-2 · Кладовщик';
  return 'ТСД';
 }
-let session=null,active=null,access=null,lastUnknown='',flushing=false,refreshTimer=null,refreshFlight=null;
+let session=null,active=null,access=null,lastUnknown='',flushing=false,refreshTimer=null,refreshFlight=null,lastFactRow=null;
 let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
@@ -144,6 +145,7 @@ function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===activ
 function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
 function showLast(r){
  const system=Number(r?.system_qty_onhand||0),counted=Number(r?.counted_qty||0),diff=counted-system;
+ lastFactRow={sku:String(r?.sku||''),product:String(r?.product||''),fact:counted};
  text('last-sku',r?.sku||'');text('last-product',r?.product||'Товар без названия');
  text('last-system',system.toLocaleString('ru-RU',{maximumFractionDigits:2}));
  text('last-count',counted.toLocaleString('ru-RU',{maximumFractionDigits:2}));
@@ -290,6 +292,22 @@ function scheduleActiveRefresh(delay=700){
  },delay)
 }
 function focusCode(){setTimeout(()=>{const e=$('code');if(e&&!document.hidden)e.focus()},20)}
+async function correctFact(){
+ if(!active?.id||!lastFactRow?.sku)return status('Сначала отсканируйте или выберите товар.','amber');
+ const raw=prompt('Исправить общий факт по SKU '+lastFactRow.sku+'\nВведите правильное количество:',String(lastFactRow.fact??0));
+ if(raw===null)return;
+ const value=Number(String(raw).replace(',','.'));
+ if(!Number.isFinite(value)||value<0)return status('Введите корректное количество от 0 и выше.','red');
+ try{
+  status('Исправляю факт по '+lastFactRow.sku+'…','blue');
+  const r=await rpc('warehouse_inventory_set_fact_v1',{p_session_id:active.id,p_sku:lastFactRow.sku,p_fact_qty:value});
+  if(!r?.ok)throw new Error(r?.reason||'Не удалось исправить факт');
+  showLast(r);beep(true);
+  status('✓ Факт исправлен: '+r.sku+' · было '+Number(r.old_fact_qty||0)+' → стало '+Number(r.counted_qty||0)+'.','green');
+  await reloadActive(true);
+ }catch(e){beep(false);status('Ошибка исправления: '+(e?.message||e),'red')}
+ finally{focusCode()}
+}
 async function previewManualCode(code){
  code=String(code||'').trim();
  if(!active?.id||!code||/^\d{8,32}$/.test(code))return;
@@ -470,7 +488,7 @@ async function init(){
  document.addEventListener('touchstart',unlockAudio,{passive:true,once:false});
  $('code').addEventListener('focus',()=>scannerDiag('Поле готово. Нажмите курок сканера.'));
  $('code').addEventListener('click',armScannerWatchdog);
- $('undo-btn').onclick=undo;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
+ $('undo-btn').onclick=undo;$('correct-fact-btn').onclick=correctFact;$('refresh-btn').onclick=async()=>{await reloadActive();await flushQueue()};$('bind-btn').onclick=bindUnknown;
  window.addEventListener('online',()=>{net('Связь восстановлена. Синхронизирую…');flushQueue().finally(()=>setTimeout(()=>net(''),1500))});
  window.addEventListener('offline',()=>net('Нет интернета. Сканы будут сохраняться на ТСД.'));
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)focusCode()});
