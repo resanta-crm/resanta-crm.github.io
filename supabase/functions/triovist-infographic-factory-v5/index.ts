@@ -349,7 +349,7 @@ Deno.serve(async(req:Request)=>{
     let q=db.from("triovist_infographic_factory_batches_v5").select("*").order("created_at",{ascending:false}).limit(25);if(!leader)q=q.eq("owner_user_id",auth.user.id);
     const {data,error}=await q;if(error)throw error;return send(req,200,{ok:true,batches:data||[]});
   }
-  if(["status","stop","preview","download","approve-group"].includes(action)){
+  if(["status","stop","preview","preview-slides","download","approve-group"].includes(action)){
     const batchId=str(input.batch_id,60);if(!uuid(batchId))return send(req,400,{ok:false,error:"BATCH"});
     const {data:batch}=await db.from("triovist_infographic_factory_batches_v5").select("*").eq("id",batchId).maybeSingle();
     if(!batch)return send(req,404,{ok:false,error:"NOT_FOUND"});if(!leader&&batch.owner_user_id!==auth.user.id)return send(req,403,{ok:false,error:"ACCESS"});
@@ -378,6 +378,17 @@ Deno.serve(async(req:Request)=>{
      if(!item?.item_zip_path)return send(req,409,{ok:false,error:"NOT_READY"});
      const {data:signed,error}=await db.storage.from("triovist-infographic-factory-v5").createSignedUrl(item.item_zip_path,900);if(error)throw error;
      return send(req,200,{ok:true,url:signed.signedUrl,item});
+    }
+    if(action==="preview-slides"){
+     const sku=cleanText(input.sku,80);
+     const {data:item}=await db.from("triovist_infographic_factory_items_v5").select("id,sku,group_name,product_name,status,quality_score,slide_count").eq("batch_id",batchId).eq("sku",sku).maybeSingle();
+     if(!item)return send(req,404,{ok:false,error:"ITEM_NOT_FOUND"});
+     const {data:slides,error:se}=await db.from("triovist_infographic_factory_slides_v5")
+       .select("slide_no,title,subtitle,status,final_path,qa_score,qa_report").eq("item_id",item.id).order("slide_no");if(se)throw se;
+     const ready=arr(slides).filter((x:any)=>x.final_path);
+     if(!ready.length)return send(req,409,{ok:false,error:"NOT_READY"});
+     const {data:signed,error}=await db.storage.from("triovist-infographic-factory-v5").createSignedUrls(ready.map((x:any)=>x.final_path),900);if(error)throw error;
+     return send(req,200,{ok:true,item,slides:ready.map((x:any,i:number)=>({...x,url:arr(signed)[i]?.signedUrl||null})).filter((x:any)=>x.url)});
     }
     if(action==="download"){
      if(!["completed","completed_with_attention"].includes(batch.status))return send(req,409,{ok:false,error:"NOT_READY"});
