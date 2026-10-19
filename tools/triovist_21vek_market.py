@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.397.
+"""Triovist / 21vek automatic market analysis v23.6.398.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.26"
+PARSER_VERSION="market-auto-v6.27"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -47,7 +47,7 @@ VALIDATE_EXACT=str(os.environ.get("MARKET_VALIDATE_EXACT","")).strip().lower() i
 if VALIDATE_PROFILES and not VALIDATE_EXACT:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -541,6 +541,45 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
             }
             own[key].update(skus)
 
+    # Agricultural machines are split into four ranking scopes so 21vek
+    # positions remain meaningful and different power classes never share a market.
+    agri_rows=[]
+    for x in all_price:
+        sku=str(x.get("sku") or "").strip()
+        pn=norm(x.get("product"))
+        if sku.startswith("900/"):continue
+        valid_sku=sku.startswith("70/5/") or bool(re.fullmatch(r"901/\d+",sku))
+        valid_name=any(z in pn for z in ("сельскохозяйственная машина","культиватор","мотокультиватор","мотоблок"))
+        if valid_sku and valid_name:agri_rows.append(x)
+
+    agri_defs=[
+      ("Сельхозмашины · бензиновые культиваторы","культиватор бензиновый","gas_cultivator"),
+      ("Сельхозмашины · мотоблоки","мотоблок","motoblock"),
+      ("Сельхозмашины · электрические культиваторы","электрический культиватор","mains"),
+      ("Сельхозмашины · аккумуляторные культиваторы","аккумуляторный культиватор","battery"),
+    ]
+    for label,query,kind in agri_defs:
+        key=scope_key("agricultural_machine",query)
+        skus=set()
+        for x in agri_rows:
+            sku=str(x.get("sku") or "").strip();pn=norm(x.get("product"))
+            is_battery=("аккумулятор" in pn)
+            is_mains=("электрический культиватор" in pn or "электрокультив" in pn)
+            is_motoblock=("мотоблок" in pn or bool(re.search(r"(?:^|\s)(?:мб|mb)[-\s]?\d",pn,re.I)))
+            if kind=="battery":matched=is_battery
+            elif kind=="mains":matched=is_mains and not is_battery
+            elif kind=="motoblock":matched=is_motoblock and not is_battery and not is_mains
+            else:matched=not is_battery and not is_mains and not is_motoblock
+            if matched:skus.add(sku)
+        if skus:
+            groups[key]={
+              "scope_key":key,"source_category":"Садовая техника","source_subgroup":label,
+              "source_prefix":"70/5,901","search_query":query,"profile_key":"agricultural_machine","enabled":True,
+              "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
+              "updated_at":datetime.now(timezone.utc).isoformat(),
+            }
+            own[key].update(skus)
+
     for key,g in groups.items():
         g["own_sku_count"]=len(own[key])
 
@@ -553,7 +592,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
     for x in all_price:
         sku=str(x.get("sku") or "").strip()
         name=str(x.get("product") or "").strip()
-        if sku and name and sku_depth(sku)>=3:
+        if sku and name and (sku_depth(sku)>=3 or re.fullmatch(r"901/\d+",sku)):
             price_names[sku]=name
     return scopes,own,price_names
 
@@ -2444,6 +2483,143 @@ def vibratory_plate_power_conflict(raw: list[dict]) -> bool:
     return (hi-lo)/max(hi,1e-9)>0.12
 
 
+def agri_machine_type_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    if "мотоблок" in n or re.search(r"(?:^|\s)(?:мб|mb)[-\s]?\d",n,re.I):return "motoblock"
+    if "мотокультив" in n or "культиватор" in n or re.search(r"(?:^|\s)(?:мк|mk)[-\s]?\d",n,re.I):return "cultivator"
+    return ""
+
+
+def agri_power_source_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    if any(x in n for x in ("аккумуля","батаре","battery","li ion","li-ion")):return "battery"
+    if any(x in n for x in ("дизел","diesel")):return "diesel"
+    if any(x in n for x in ("бензин","gasoline","petrol")):return "gasoline"
+    # Do not confuse petrol machines with an electric starter with mains power.
+    if "электростартер" not in n and (
+        "электрический культиватор" in n or "электрокультив" in n
+        or any(x in n for x in ("сетев","питание от сети","220 в","230 в","mains"))
+    ):return "mains"
+    return ""
+
+
+def agri_bool(v: Any) -> bool|None:
+    if isinstance(v,bool):return v
+    return bool_value(v)
+
+
+def agri_dimension_cm(v: Any, require_unit: bool=False) -> float|None:
+    low=str(v or "").lower()
+    vals=[]
+    vals.extend(float(x.replace(",","."))/10 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I))
+    vals.extend(float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I))
+    vals.extend(float(x.replace(",","."))*100 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I))
+    vals.extend(float(x.replace(",","."))*2.54 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:дюйм(?:а|ов)?|inch(?:es)?|[\"″])",low,re.I))
+    if vals:return round(max(vals),3)
+    if require_unit:return None
+    ns=nums(v)
+    return round(max(ns),3) if ns else None
+
+
+def agri_gears_from_raw(raw: list[dict]) -> tuple[int|None,int|None]:
+    fwd=rev=None
+    for x in raw or []:
+        if not isinstance(x,dict):continue
+        ln=norm(x.get("label") or "")
+        txt=str(x.get("value") or "")
+        vn=norm(txt)
+        if "передач" not in ln and "передач" not in vn:continue
+        ns=[int(float(z.replace(",","."))) for z in re.findall(r"\d+(?:[.,]\d+)?",txt) if float(z.replace(",","."))<=20]
+        if ("вперед" in ln or "вперёд" in ln) and ns:fwd=ns[0]
+        if "назад" in ln and ns:rev=ns[0]
+        m=re.search(r"(\d+)\s*(?:вперед|вперёд|forward).*?(\d+)\s*(?:назад|reverse)",txt,re.I)
+        if m:fwd=int(m.group(1));rev=int(m.group(2))
+        m=re.search(r"(\d+)\s*[+/]\s*(\d+)",txt)
+        if m and fwd is None and rev is None:fwd=int(m.group(1));rev=int(m.group(2))
+    return fwd,rev
+
+
+def agri_enrich_specs(name: Any,raw: list[dict],specs: dict) -> dict:
+    out=dict(specs or {})
+    n=norm(name)
+    joined=" ".join(norm(str(x.get("label") or "")+" "+primitive_text(x.get("value"))) for x in (raw or []) if isinstance(x,dict))
+    ctx=(n+" "+joined).strip()
+
+    mt=agri_machine_type_family(out.get("agri_machine_type") or ctx)
+    if mt:out["agri_machine_type"]=mt
+
+    ps=agri_power_source_family(out.get("agri_power_source") or ctx)
+    if not ps:
+        # Product names in this category are petrol by default unless they are
+        # explicitly electric/battery/diesel. "с электростартером" remains petrol.
+        if any(x in n for x in ("мотоблок","мотокультив","сельскохозяйственная машина")):
+            ps="gasoline"
+    if ps:out["agri_power_source"]=ps
+
+    # PTO / ВОМ is a hard construction class.
+    pto=agri_bool(out.get("pto_present"))
+    if pto is None:
+        if re.search(r"(?:без\s+(?:вом|вала отбора мощности)|(?:вом|вал отбора мощности).{0,20}(?:нет|отсутств))",ctx,re.I):
+            pto=False
+        elif re.search(r"(?:с\s+(?:вом|валом отбора мощности)|(?:вом|вал отбора мощности).{0,20}(?:есть|да|предусмотр))",ctx,re.I):
+            pto=True
+        elif mt=="cultivator" and ps in ("mains","battery"):
+            pto=False
+        elif mt=="cultivator" and ("мотокультив" in n or ("культиватор" in n and "сельскохозяйственная машина" not in n)):
+            pto=False
+    if pto is not None:out["pto_present"]=pto
+
+    low=agri_bool(out.get("low_gear_present"))
+    if low is None:
+        if re.search(r"(?:без\s+понижен|понижен.{0,20}(?:нет|отсутств))",ctx,re.I):low=False
+        elif re.search(r"(?:пониженн(?:ая|ой)\s+(?:передач|скорост)|понижающ(?:ая|ий)\s+передач)",ctx,re.I):low=True
+    if low is not None:out["low_gear_present"]=low
+
+    fwd,rev=agri_gears_from_raw(raw)
+    if out.get("gears_forward") is None and fwd is not None:out["gears_forward"]=fwd
+    if out.get("gears_reverse") is None and rev is not None:out["gears_reverse"]=rev
+    return out
+
+
+def agri_required_missing(ours: dict,comp: dict) -> bool:
+    required=("agri_machine_type","agri_power_source","pto_present","motor_power_w","cultivation_width_cm")
+    if any(ours.get(k) is None or comp.get(k) is None for k in required):return True
+    source=agri_power_source_family(ours.get("agri_power_source") or comp.get("agri_power_source"))
+    if source in ("gasoline","diesel"):
+        return ours.get("gears_forward") is None or comp.get("gears_forward") is None
+    return False
+
+
+def agri_relative_similarity(a: float,b: float,full: float=0.10,close: float=0.20,partial: float=0.30) -> float:
+    d=abs(float(a)-float(b))/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def agri_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k in ("agri_machine_type","agri_power_source","pto_present","wheel_diameter_cm"):
+        return 50
+    if k in ("motor_power_w","cultivation_width_cm"):
+        av=float(a);bv=float(b)
+        if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.10:return 50
+        return directional(rule,av,bv)
+    if k in ("gears_forward","gears_reverse"):
+        av=float(a);bv=float(b)
+        if av==bv:return 50
+        return directional(rule,av,bv)
+    if k=="low_gear_present":
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 78 if av and not bv else 22
+    return directional(rule,a,b)
+
+
 def vibratory_plate_required_missing(ours: dict,comp: dict) -> bool:
     # Reverse is a construction class: without it direct/close analogue status
     # is not allowed. Water tank remains a weighted option, not a blocking field.
@@ -2702,6 +2878,22 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="washstand_body_material":
         v=washstand_body_material_family(text)
         return v[:120] if v else None
+    if key=="agri_machine_type":
+        v=agri_machine_type_family(text)
+        return v or None
+    if key=="agri_power_source":
+        v=agri_power_source_family(text)
+        return v or None
+    if key in ("pto_present","low_gear_present"):
+        return bool_value(text)
+    if key in ("gears_forward","gears_reverse"):
+        ns=[int(float(x.replace(",","."))) for x in re.findall(r"\d+(?:[.,]\d+)?",low) if float(x.replace(",","."))<=20]
+        return ns[0] if ns else None
+    if key=="cultivation_width_cm":
+        return agri_dimension_cm(text,False)
+    if key=="wheel_diameter_cm":
+        # Tire markings such as 4.00-10 are not an outer wheel diameter.
+        return agri_dimension_cm(text,True)
     if key=="water_tank_present":
         n=norm(text)
         if any(x in n for x in ("без бака","бак отсутств","резервуар отсутств","нет бака")):return False
@@ -3280,6 +3472,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     grain_crusher_mode={"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(rule_keys)
     washstand_mode={"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(rule_keys)
     vibratory_plate_mode={"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(rule_keys)
+    agri_mode={"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm"}.issubset(rule_keys)
     compressor_mode={"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_lmin","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
@@ -3357,6 +3550,34 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         if any(x in ln for x in ("функц","особенност","конструкц")):
             if any(x in vn for x in ("реверс","обратн ход")):return "reverse_present"
             if any(x in vn for x in ("бак для воды","водяной бак","система орошения")):return "water_tank_present"
+        return None
+
+
+    def agri_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not agri_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if any(x in ln for x in ("тип машины","тип техники","вид техники","тип устройства")):
+            return "agri_machine_type"
+        if ("тип" in ln and "двигател" in ln) or "источник питан" in ln or "тип питан" in ln:
+            return "agri_power_source"
+        if "вал отбора мощности" in ln or re.search(r"(^|\s)вом($|\s)",ln):
+            return "pto_present"
+        if "мощност" in ln and not any(x in ln for x in ("выходн","акуст")):
+            return "motor_power_w"
+        if "передач" in ln and ("вперед" in ln or "вперёд" in ln):
+            return "gears_forward"
+        if "передач" in ln and "назад" in ln:
+            return "gears_reverse"
+        if "ширин" in ln and any(x in ln for x in ("культив","обработ","захват","фрез")):
+            return "cultivation_width_cm"
+        if "понижен" in ln and any(x in ln for x in ("передач","скорост","ряд")):
+            return "low_gear_present"
+        if "диаметр" in ln and ("колес" in ln or "колёс" in ln):
+            return "wheel_diameter_cm"
+        if any(x in ln for x in ("особенност","функц","конструкц")):
+            if any(x in vn for x in ("вал отбора мощности","вом")):return "pto_present"
+            if "понижен" in vn:return "low_gear_present"
         return None
 
 
@@ -3727,7 +3948,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or vibratory_plate_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or vibratory_plate_fuzzy_key(label,value) or agri_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -4080,6 +4301,17 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     # are a different product class and must never win by price.
                     if washstand_class_from_name(name)!="full_set":
                         continue
+                if scope.get("profile_key")=="agricultural_machine":
+                    an=norm(name)
+                    machine=any(x in an for x in ("культиватор","мотокультиватор","мотоблок","сельскохозяйственная машина"))
+                    excluded=any(x in an for x in (
+                      "фреза для","фрезы для","плуг","грунтозацеп","сцепка","картофелекоп",
+                      "окучник","колесо для","колёса для","прицеп","навесное оборудование",
+                      "адаптер для","ремень для","двигатель для","редуктор для","насадка для",
+                      "запчаст","комплект навес"
+                    ))
+                    if not machine or excluded:
+                        continue
                 if scope.get("profile_key")=="vibratory_plate":
                     vn=norm(name)
                     plate_class=("виброплит" in vn)
@@ -4245,6 +4477,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-washstand3"
     if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(keys):
         return RULESET_VERSION+"-vibplate2"
+    if {"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm"}.issubset(keys):
+        return RULESET_VERSION+"-agri1"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor3"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
@@ -4297,6 +4531,10 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     })
     raw,specs=extract_specs(html,rules)
     card=parsed["card"];extra=parsed["extra"]
+    if {"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm"}.issubset(
+        {str(r.get("spec_key") or "") for r in rules}
+    ):
+        specs=agri_enrich_specs(card.get("product_name") or base.get("model") or base.get("product_name") or "",raw,specs)
     if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(
         {str(r.get("spec_key") or "") for r in rules}
     ):
@@ -5102,6 +5340,41 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         score*=0.60+0.40*coverage
         if form_mismatch:score=min(score,84.0)
         if grain_crusher_required_missing(ours,comp):score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+
+    if profile=="agricultural_machine":
+        mt_a=agri_machine_type_family(ours.get("agri_machine_type"));mt_b=agri_machine_type_family(comp.get("agri_machine_type"))
+        ps_a=agri_power_source_family(ours.get("agri_power_source"));ps_b=agri_power_source_family(comp.get("agri_power_source"))
+        pto_a=ours.get("pto_present");pto_b=comp.get("pto_present")
+        if mt_a and mt_b and mt_a!=mt_b:return 0.0
+        if ps_a and ps_b and ps_a!=ps_b:return 0.0
+        if pto_a is not None and pto_b is not None and bool(pto_a)!=bool(pto_b):return 0.0
+
+        weights={"motor_power_w":0.30,"gears_forward":0.10,"gears_reverse":0.10,"cultivation_width_cm":0.25,"low_gear_present":0.15,"wheel_diameter_cm":0.10}
+        total=used=0.0
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k in ("motor_power_w","cultivation_width_cm","wheel_diameter_cm"):
+                    z=agri_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k in ("gears_forward","gears_reverse"):
+                    d=abs(float(a)-float(b))
+                    z=1.0 if d==0 else (0.65 if d==1 else 0.0)
+                elif k=="low_gear_present":
+                    z=1.0 if bool(a)==bool(b) else 0.0
+                else:z=0.0
+            except Exception:z=0.0
+            total+=w*z;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        # Unknown construction class is only preliminary, never direct/close.
+        if not mt_a or not mt_b or not ps_a or not ps_b or pto_a is None or pto_b is None:
+            score=min(score,69.0)
+        if agri_required_missing(ours,comp):score=min(score,69.0)
         return round(max(0,min(100,score)),2)
 
 
@@ -6708,6 +6981,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=washstand_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="vibratory_plate":
             z=vibratory_plate_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="agricultural_machine":
+            z=agri_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="compressor":
             z=compressor_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]),ours,comp)
         elif profile=="snow_blower":
@@ -6794,6 +7069,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=washstand_directional(rule,a,b)
         elif profile=="vibratory_plate":
             z=vibratory_plate_directional(rule,a,b)
+        elif profile=="agricultural_machine":
+            z=agri_directional(rule,a,b)
         elif profile=="compressor":
             z=compressor_directional(rule,a,b,ours,comp)
         elif profile=="garden_shredder":
@@ -6902,6 +7179,8 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных по бетономешалке. Отсутствующую характеристику не считать проигрышем: сравнивать только подтвержденные объём барабана, материал венца и мощность."
     if profile=="grain_crusher" and status=="data_incomplete":
         return "Недостаточно подтверждено ядро сравнения зернодробилки: нужны мощность и производительность. Форма корпуса и ёмкость бункера учитываются с согласованными весами, когда 21vek их публикует; отсутствие этих полей не считается проигрышем."
+    if profile=="agricultural_machine" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения сельхозмашин. Тип машины, источник питания и ВОМ — обязательный класс; для бензиновых/дизельных также должна быть подтверждена передача вперёд. Электрические, аккумуляторные и бензиновые между собой не смешиваются."
     if profile=="vibratory_plate" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения виброплит. Для прямого/близкого аналога обязательны вес, мощность, глубина уплотнения и реверс. Бак для воды учитывается с весом 10%, а отсутствие значения не считается проигрышем."
     if profile=="washstand" and status=="data_incomplete":
@@ -6912,7 +7191,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
         return "Аналог рассчитан по неполным данным. Для подтверждения пробела обязательны производительность, максимальный напор и размер частиц; измельчитель сильно влияет на итог, когда он указан. Материал корпуса, подключение и тип воды уточняют сравнение."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -7036,7 +7315,10 @@ def main() -> None:
             # Recover our real 21vek cards missing from the old registry. This is a
             # targeted fallback for the agreed categories, not a broad market crawl.
             resolved_own_cards=0
-            if profile in ("snow_blower","borehole_pump","planer","fecal_pump"):
+            if profile in ("snow_blower","borehole_pump","planer","fecal_pump") or (
+                profile=="agricultural_machine"
+                and any(x in norm(scope.get("search_query")) for x in ("мотоблок","электрический","аккумуляторный"))
+            ):
                 for sku in sorted(scope_skus[skey]):
                     src=registry.get(sku) or {}
                     if src.get("product_url"):continue
@@ -7178,8 +7460,8 @@ def main() -> None:
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
             expected_own_count=len(scope_skus[skey])
             matrix_checked=expected_own_count>0 and len(usable_own)>=expected_own_count
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -7196,6 +7478,11 @@ def main() -> None:
                     )
                 if profile=="grain_crusher" and scored:
                     gap_confirmed=gap_confirmed and not grain_crusher_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="agricultural_machine" and scored:
+                    gap_confirmed=gap_confirmed and not agri_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -7301,6 +7588,8 @@ def main() -> None:
                     if profile=="grain_crusher" and grain_crusher_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="washstand" and washstand_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
+                    if profile=="agricultural_machine" and agri_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="vibratory_plate" and vibratory_plate_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
