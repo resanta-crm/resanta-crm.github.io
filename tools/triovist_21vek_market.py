@@ -7498,7 +7498,7 @@ def main() -> None:
             own_rows=[]
             for sku in sorted(scope_skus[skey]):
                 src=registry.get(sku) or {}
-                baseline=vibratory_plate_own_baseline(sku) if profile=="vibratory_plate" else {}
+                baseline=(vibratory_plate_own_baseline(sku) if profile=="vibratory_plate" else (agri_own_baseline(sku) if profile=="agricultural_machine" else {}))
                 # Verified own baseline may exist even when 21vek has no registry/card.
                 if not src and not baseline:
                     continue
@@ -7511,10 +7511,13 @@ def main() -> None:
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
                 if baseline and not row["product_url"]:
+                    base_source="official_huter" if profile=="vibratory_plate" else "official_resanta_huter"
+                    base_label="HUTER · подтверждённые характеристики" if profile=="vibratory_plate" else "РЕСАНТА/HUTER · подтверждённые характеристики"
+                    base_sig="official-huter-v1" if profile=="vibratory_plate" else "official-agri-v1"
                     row.update({
-                      "specs_raw":[{"key":"official_huter_baseline","label":"HUTER · подтверждённые характеристики","value":"official product documentation","source":"official_huter"}],
+                      "specs_raw":[{"key":"official_own_baseline","label":base_label,"value":"official product documentation","source":base_source}],
                       "specs_normalized":dict(baseline),
-                      "specs_signature":rules_signature_prefix(rules)+":official-huter-v1",
+                      "specs_signature":rules_signature_prefix(rules)+":"+base_sig,
                       "specs_fetched_at":observed
                     })
                 elif fresh_specs(old,row["product_url"],rules):
@@ -7546,6 +7549,16 @@ def main() -> None:
                     row["specs_normalized"]=agri_enrich_specs(
                       row.get("product_name") or sku,row.get("specs_raw") or [],row.get("specs_normalized") or {}
                     )
+                    if baseline:
+                        merged=dict(row.get("specs_normalized") or {})
+                        merged.update(baseline)
+                        row["specs_normalized"]=merged
+                        rr=list(row.get("specs_raw") or [])
+                        rr.append({"key":"official_own_baseline","label":"РЕСАНТА/HUTER · подтверждённые характеристики","value":"official product documentation","source":"official_resanta_huter"})
+                        row["specs_raw"]=rr
+                        row["specs_signature"]=rules_signature_prefix(rules)+":official-agri-v1"
+                        row["specs_fetched_at"]=observed
+                        row["error_text"]=None
                 if profile=="vibratory_plate" and baseline:
                     merged=dict(row.get("specs_normalized") or {})
                     merged.update(baseline)
