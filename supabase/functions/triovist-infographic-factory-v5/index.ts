@@ -370,8 +370,13 @@ Deno.serve(async(req:Request)=>{
      const add=arr(products).filter((x:any)=>!have.has(x.sku)).map((x:any)=>({batch_id:batchId,sku:x.sku,group_name:x.group_name,manager_email:low(x.manager_email),product_name:x.product_name,product_url:x.product_url,status:"queued",stage:"Ожидает массовой фабрики"}));
      if(add.length){const {error}=await db.from("triovist_infographic_factory_items_v5").insert(add);if(error)throw error}
      const {count}=await db.from("triovist_infographic_factory_items_v5").select("id",{head:true,count:"exact"}).eq("batch_id",batchId);
-     await db.from("triovist_infographic_factory_batches_v5").update({total_items:Number(count||0),mode:"bulk",status:"processing",stage:"Стиль группы утверждён — массовая фабрика продолжает работу",updated_at:now()}).eq("id",batchId);
-     return send(req,200,{ok:true,added:add.length});
+     const snapshot=arr(batch.selection_snapshot).map((x:any)=>x?.group===group?{...x,bulk_approved:true,reference_sku:ref.sku}:x);
+     const allApproved=snapshot.every((x:any)=>x?.bulk_approved===true);
+     await db.from("triovist_infographic_factory_batches_v5").update({
+       total_items:Number(count||0),selection_snapshot:snapshot,mode:allApproved?"bulk":batch.mode,
+       status:"processing",stage:"Стиль группы утверждён — массовая фабрика продолжает работу",updated_at:now()
+     }).eq("id",batchId);
+     return send(req,200,{ok:true,added:add.length,all_groups_approved:allApproved});
     }
     if(action==="preview"){
      const sku=cleanText(input.sku,80);const {data:item}=await db.from("triovist_infographic_factory_items_v5").select("*").eq("batch_id",batchId).eq("sku",sku).maybeSingle();
