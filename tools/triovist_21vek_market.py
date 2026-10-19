@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.392.
+"""Triovist / 21vek automatic market analysis v23.6.393.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.22"
+PARSER_VERSION="market-auto-v6.23"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2523,8 +2523,10 @@ def compressor_drive_family(v: Any) -> str:
 def compressor_lubrication_family(v: Any) -> str:
     n=norm(v)
     if not n:return ""
-    if any(x in n for x in ("безмаслян","безмасля","без масла","oil free","oil-free")):return "oilfree"
-    if any(x in n for x in ("маслян","масля","с маслом","oil lubric","oil")):return "oil"
+    # Normalized DB values are fed back through this helper during comparison.
+    # "oilfree" must be recognized before the generic substring "oil".
+    if n=="oilfree" or any(x in n for x in ("безмаслян","безмасля","без масла","oil free","oil-free")):return "oilfree"
+    if n=="oil" or any(x in n for x in ("маслян","масля","с маслом","oil lubric")):return "oil"
     return n[:120]
 
 
@@ -5004,6 +5006,9 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         if da and db and da!=db:return 0.0
         if la and lb and la!=lb:return 0.0
         if va and vb and va!=vb:return 0.0
+        ba=str(ours.get("compressor_flow_basis") or "")
+        bb=str(comp.get("compressor_flow_basis") or "")
+        if ba and bb and ba!=bb:return 0.0
         # No receiver = inflator/head/tankless machine, not a direct analogue.
         try:
             if float(ours.get("receiver_capacity_l") or 0)<=0 or float(comp.get("receiver_capacity_l") or 0)<=0:return 0.0
