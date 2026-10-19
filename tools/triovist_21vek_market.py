@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.402.
+"""Triovist / 21vek automatic market analysis v23.6.403.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.31"
+PARSER_VERSION="market-auto-v6.32"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2600,9 +2600,10 @@ def agri_required_missing(ours: dict,comp: dict) -> bool:
     if any(ours.get(k) is None or comp.get(k) is None for k in base):return True
     source=agri_power_source_family(ours.get("agri_power_source") or comp.get("agri_power_source"))
     # Battery product cards often expose voltage but no motor wattage. Never
-    # fabricate watts from volts; missing battery power stays optional/incomplete.
+    # fabricate watts from volts; when watts are absent the result stays
+    # preliminary/conditional rather than becoming a full analogue.
     if source=="battery":
-        return False
+        return ours.get("motor_power_w") is None or comp.get("motor_power_w") is None
     if ours.get("motor_power_w") is None or comp.get("motor_power_w") is None:return True
     if source in ("gasoline","diesel"):
         return ours.get("gears_forward") is None or comp.get("gears_forward") is None
