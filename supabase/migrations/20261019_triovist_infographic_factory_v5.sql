@@ -15,6 +15,8 @@ create table if not exists public.triovist_infographic_group_dna_v5 (
   approved_at timestamptz,
   reference_sku text,
   error_message text,
+  lock_token text,
+  locked_until timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -70,6 +72,8 @@ create table if not exists public.triovist_infographic_factory_items_v5 (
   quality_score integer,
   retry_count integer not null default 0,
   next_attempt_at timestamptz,
+  lock_token text,
+  locked_until timestamptz,
   error_message text,
   started_at timestamptz,
   finished_at timestamptz,
