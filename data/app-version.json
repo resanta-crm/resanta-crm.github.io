@@ -1,6 +1,6 @@
 {
-  "version": "23.6.402",
-  "released_at": "2026-10-18",
-  "purpose": "Hotfix: synchronize CRM module contracts after Triovist infographic v23.6.401; prevent loader conflict and blank sections.",
-  "deploy_trigger": "2026-10-18T17:35:00+03:00"
+  "version": "23.7.0",
+  "released_at": "2026-10-19",
+  "purpose": "Triovist Infographic Factory 5.0: isolated one-click group pipeline, Visual DNA, background QA and auto-regeneration.",
+  "deploy_trigger": "2026-10-19T09:30:00+03:00"
 }
