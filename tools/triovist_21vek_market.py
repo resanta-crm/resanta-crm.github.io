@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.402.
+"""Triovist / 21vek automatic market analysis v23.6.403.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.31"
+PARSER_VERSION="market-auto-v6.32"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2482,6 +2482,42 @@ def vibratory_plate_power_conflict(raw: list[dict]) -> bool:
     lo=min(vals);hi=max(vals)
     return (hi-lo)/max(hi,1e-9)>0.12
 
+
+# Verified own motoblock baseline from current official Resanta/Huter product documentation.
+# Used only for our exact SKUs; never applied to competitor cards.
+AGRI_OWN_BASELINE={
+    "70/5/34":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":8090.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":115.0,"low_gear_present":False},
+    "70/5/35":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":9561.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":140.0,"low_gear_present":False},
+    "70/5/36":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":11032.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":140.0,"low_gear_present":False},
+    "70/5/37":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5148.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/38":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5516.24,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/39":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5516.24,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/40":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/41":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/65":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5736.89,"gears_forward":3,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":True},
+    "70/5/175":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+}
+
+def agri_own_baseline(sku: Any) -> dict:
+    return dict(AGRI_OWN_BASELINE.get(str(sku or "").strip()) or {})
+
+def agri_model_signatures(v: Any) -> set[str]:
+    n=norm(v)
+    out=set()
+    for t in re.findall(r"(?:мб|mb|мк|mk)[-\s]?[0-9]+(?:[a-zа-я0-9]+|[-/][a-zа-я0-9]+)*",n,re.I):
+        x=t.lower().replace("мб","mb").replace("мк","mk")
+        x=x.translate(str.maketrans({"р":"p","б":"b","ф":"f","г":"g"}))
+        x=re.sub(r"[^a-z0-9]","",x)
+        if x: out.add(x)
+    return out
+
+def agri_brand_family(v: Any) -> str:
+    n=norm(v)
+    if "ресанта" in n or "resanta" in n:return "resanta"
+    if "huter" in n or "хутер" in n:return "huter"
+    if "вихр" in n or "vikhr" in n:return "vikhr"
+    if "eurolux" in n or "евролюкс" in n:return "eurolux"
+    return ""
 
 def agri_machine_type_family(v: Any) -> str:
     n=norm(v)
