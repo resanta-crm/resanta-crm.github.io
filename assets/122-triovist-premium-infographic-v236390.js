@@ -89,7 +89,7 @@ function selectionHtml(){
   '<p class="tif5-muted">21vek даёт точный товар, характеристики и конкурентный контекст. Wildberries и Ozon используются как визуальная школа категории. Чужие характеристики на наш SKU не переносятся.</p>'+
   (hasNewStyle()?'<div class="tif5-note"><b>Есть новые группы.</b> Фабрика сначала автоматически сделает по одному контрольному SKU. После твоего единственного утверждения стиля группы остальные товары будут обрабатываться фоном без участия.</div>':'')+
   (tooMany?'<div class="tif5-err">Выбрано больше 500 SKU. Убери одну или несколько групп.</div>':'')+
-  '<div class="tif5-actions"><button class="primary" data-tif-start '+(!count||tooMany||busy?'disabled':'')+'>🚀 Запустить фабрику · '+count+' SKU</button><span class="tif5-muted">После запуска CRM можно закрыть — работа продолжится на сервере.</span></div>';
+  '<div class="tif5-actions"><button class="primary" data-tif-start '+(!count||tooMany||busy?'disabled':'')+'>🚀 Запустить фабрику · '+count+' SKU</button><span class="tif5-muted">После запуска CRM можно закрыть — очередь просыпается автоматически и работа продолжается на сервере.</span></div>';
 }
 function batchListHtml(){
  if(!batches.length)return '';
@@ -99,8 +99,10 @@ function batchListHtml(){
  }).join('')+'</div>';
 }
 function pilotHtml(){
- if(!current||current.status!=='pilot_review')return '';
- const cards=a(current.selection_snapshot).filter(x=>!x.bulk_approved).map(sel=>{
+ if(!current)return '';
+ const pending=a(current.selection_snapshot).filter(x=>!x.bulk_approved);
+ if(!pending.length)return '';
+ const cards=pending.map(sel=>{
   const item=items.find(x=>x.group_name===sel.group&&x.is_reference),ready=item?.status==='completed'&&Number(item.quality_score||0)>=Number(current.qa_threshold||90);
   return '<div class="tif5-pilot"><h4>'+h(pretty(sel.group))+'</h4>'+
    '<div class="'+statusClass(item?.status||'queued')+'">'+(item?'<b>'+h(item.sku)+'</b> · '+h(stateLabel[item.status]||item.status)+(item.quality_score?' · QA '+Number(item.quality_score)+'/100':''):'Контрольный SKU готовится')+'</div>'+
