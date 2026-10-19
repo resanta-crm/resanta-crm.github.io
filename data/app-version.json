@@ -1,6 +1,6 @@
 {
-  "version": "23.7.0",
+  "version": "23.7.1",
   "released_at": "2026-10-19",
-  "purpose": "Triovist Infographic Factory 5.0: isolated one-click group pipeline, Visual DNA, background QA and auto-regeneration.",
-  "deploy_trigger": "2026-10-19T09:30:00+03:00"
+  "purpose": "Triovist Infographic Factory 5.0 preview modal hotfix.",
+  "deploy_trigger": "2026-10-19T11:25:00+03:00"
 }
