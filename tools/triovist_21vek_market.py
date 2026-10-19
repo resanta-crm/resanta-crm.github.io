@@ -3825,6 +3825,11 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     grain_class=("зернодроб" in gn or ("измельчител" in gn and any(x in gn for x in ("зерн","корм"))))
                     if not grain_class or any(x in gn for x in ("сито для","нож для","решетк","решётк","ремень для","запчаст","комплект для")):
                         continue
+                if scope.get("profile_key")=="washstand":
+                    wn=norm(name)
+                    washstand_class=("умываль" in wn)
+                    if not washstand_class or any(x in wn for x in ("бак для","кран для","мойка для","раковина для","запчаст","комплект для")):
+                        continue
                 if scope.get("profile_key")=="compressor":
                     cn=norm(name)
                     compressor_class=("компрессор" in cn)
@@ -4806,6 +4811,34 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         score*=0.60+0.40*coverage
         if form_mismatch:score=min(score,84.0)
         if grain_crusher_required_missing(ours,comp):score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+
+    if profile=="washstand":
+        weights={"washstand_body_material":0.25,"tank_capacity_l":0.35,"water_heating_present":0.40}
+        total=used=0.0
+        material_mismatch=False
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="washstand_body_material":
+                    aa=washstand_body_material_family(a);bb=washstand_body_material_family(b)
+                    z=1.0 if aa and bb and aa==bb else 0.60
+                    if aa and bb and aa!=bb:material_mismatch=True
+                elif k=="tank_capacity_l":
+                    z=washstand_relative_similarity(float(a),float(b))
+                elif k=="water_heating_present":
+                    z=1.0 if bool(a)==bool(b) else 0.25
+                else:z=0.0
+            except Exception:z=0.0
+            total+=w*z;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if material_mismatch:score=min(score,88.0)
+        if washstand_required_missing(ours,comp):score=min(score,69.0)
         return round(max(0,min(100,score)),2)
 
 
