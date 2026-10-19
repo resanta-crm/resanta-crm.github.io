@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.391.
+"""Triovist / 21vek automatic market analysis v23.6.392.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.21"
+PARSER_VERSION="market-auto-v6.22"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2512,9 +2512,49 @@ def compressor_engine_family(v: Any) -> str:
     return n[:120]
 
 
+def compressor_drive_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    if any(x in n for x in ("коаксиал","прямой","прямой привод","direct","coaxial")):return "direct"
+    if any(x in n for x in ("ременн","ременной","belt")):return "belt"
+    return n[:120]
+
+
+def compressor_lubrication_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    if any(x in n for x in ("безмаслян","безмасля","без масла","oil free","oil-free")):return "oilfree"
+    if any(x in n for x in ("маслян","масля","с маслом","oil lubric","oil")):return "oil"
+    return n[:120]
+
+
+def compressor_voltage_class(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    vals=nums(v)
+    if any(370<=float(x)<=430 for x in vals):return "400v"
+    if any(210<=float(x)<=250 for x in vals):return "230v"
+    if any(100<=float(x)<=140 for x in vals):return "120v"
+    if "аккумулятор" in n or "акб" in n or "battery" in n:return "battery"
+    return n[:120]
+
+
+def compressor_flow_basis_pair(ours: dict,comp: dict) -> tuple[float,float,str]|None:
+    a=ours.get("flow_rate_lmin");b=comp.get("flow_rate_lmin")
+    ba=str(ours.get("compressor_flow_basis") or "")
+    bb=str(comp.get("compressor_flow_basis") or "")
+    if a is None or b is None or not ba or not bb or ba!=bb:return None
+    return float(a),float(b),ba
+
+
 def compressor_required_missing(ours: dict,comp: dict) -> bool:
-    required=("compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar")
-    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+    required=("compressor_type","receiver_capacity_l","compressor_engine_type","pressure_bar")
+    if any(ours.get(k) is None or comp.get(k) is None for k in required):return True
+    # Tankless inflators/heads are not direct analogues of our receiver compressors.
+    try:
+        if float(ours.get("receiver_capacity_l") or 0)<=0 or float(comp.get("receiver_capacity_l") or 0)<=0:return True
+    except Exception:return True
+    return compressor_flow_basis_pair(ours,comp) is None
 
 
 def compressor_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
@@ -2533,7 +2573,7 @@ def compressor_pressure_similarity(a: float,b: float) -> float:
     return 0.0
 
 
-def compressor_directional(rule: dict,a: Any,b: Any) -> float|None:
+def compressor_directional(rule: dict,a: Any,b: Any,ours: dict|None=None,comp: dict|None=None) -> float|None:
     if a is None or b is None:return None
     k=rule.get("spec_key")
     if k=="compressor_type":
@@ -2542,12 +2582,23 @@ def compressor_directional(rule: dict,a: Any,b: Any) -> float|None:
     if k=="compressor_engine_type":
         aa=compressor_engine_family(a);bb=compressor_engine_family(b)
         return 50 if aa and bb and aa==bb else 50
+    if k=="compressor_drive_type":
+        aa=compressor_drive_family(a);bb=compressor_drive_family(b)
+        return 50 if aa and bb and aa==bb else None
+    if k=="compressor_lubrication":
+        aa=compressor_lubrication_family(a);bb=compressor_lubrication_family(b)
+        return 50 if aa and bb and aa==bb else None
+    if k=="compressor_voltage_v":
+        aa=compressor_voltage_class(a);bb=compressor_voltage_class(b)
+        return 50 if aa and bb and aa==bb else None
     if k=="receiver_capacity_l":
         av=float(a);bv=float(b)
         if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.20:return 50
         return directional(rule,av,bv)
     if k=="flow_rate_lmin":
-        av=float(a);bv=float(b)
+        pair=compressor_flow_basis_pair(ours or {},comp or {})
+        if pair is None:return None
+        av,bv,_basis=pair
         if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.10:return 50
         return directional(rule,av,bv)
     if k=="pressure_bar":
@@ -2596,6 +2647,15 @@ def normalize_value(key: str, text: str) -> Any:
         return v[:120] if v else None
     if key=="compressor_type":
         v=compressor_type_family(text)
+        return v[:120] if v else None
+    if key=="compressor_drive_type":
+        v=compressor_drive_family(text)
+        return v[:120] if v else None
+    if key=="compressor_lubrication":
+        v=compressor_lubrication_family(text)
+        return v[:120] if v else None
+    if key=="compressor_voltage_v":
+        v=compressor_voltage_class(text)
         return v[:120] if v else None
     if key=="compressor_engine_type":
         v=compressor_engine_family(text)
@@ -2944,7 +3004,7 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мл|ml)\s*/\s*(?:мин|min)",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))*0.00006,4)
         return round(ns[0],4) if ns else None
-    if key=="flow_rate_lmin":
+    if key in ("flow_rate_lmin","flow_rate_input_lmin","flow_rate_output_lmin"):
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:ч|h|hour)",low,re.I)
         if m:return round(float(m.group(1).replace(",","."))*1000/60,3)
         m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м3|м³|m3|m³)\s*/\s*(?:мин|min)",low,re.I)
@@ -3115,7 +3175,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     concrete_mixer_mode={"drum_capacity_l","crown_material","input_power_w"}.issubset(rule_keys)
     grain_crusher_mode={"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(rule_keys)
     washstand_mode={"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(rule_keys)
-    compressor_mode={"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(rule_keys)
+    compressor_mode={"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_lmin","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
     angle_grinder_mode={"power_source","motor_type","battery_capacity_ah","input_power_w","soft_start_present","speed_adjustment_present","grinder_disc_diameter_mm"}.issubset(rule_keys)
@@ -3181,15 +3241,21 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             return "compressor_type"
         if any(x in ln for x in ("ресивер","ресивер")) and any(x in ln for x in ("объем","обьем","ёмкост","емкост","вместим")):
             return "receiver_capacity_l"
-        if ("двигател" in ln and any(x in ln for x in ("тип","вид","привод"))) or (
+        if ("двигател" in ln and any(x in ln for x in ("тип","вид"))) or (
             "тип двигателя" in ln or "двигатель"==ln
         ):
             return "compressor_engine_type"
         if ("тип питан" in ln or "источник питан" in ln) and any(x in vn for x in ("сеть","сетев","электр","бензин","дизел","gasoline","diesel")):
             return "compressor_engine_type"
+        if "привод" in ln and "двигател" not in ln:
+            return "compressor_drive_type"
+        if "смаз" in ln or "масл" in ln and any(x in ln for x in ("тип","систем","налич")):
+            return "compressor_lubrication"
         if "напряжен" in ln and re.search(r"\b(?:110|127|220|230|240|380|400)\s*(?:в|v)\b",vn):
-            return "compressor_engine_type"
+            return "compressor_voltage_v"
         if any(x in ln for x in ("производительн","подач","расход воздух","воздушн поток")) and "мощност" not in ln:
+            if "выход" in ln:return "flow_rate_output_lmin"
+            if "вход" in ln:return "flow_rate_input_lmin"
             return "flow_rate_lmin"
         if "давлен" in ln and any(x in ln for x in ("макс","рабоч","номин")):
             return "pressure_bar"
@@ -3888,9 +3954,19 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     if washstand_class_from_name(name)!="full_set":
                         continue
                 if scope.get("profile_key")=="compressor":
-                    cn=norm(name)
+                    cn=norm(name);cu=url_key(url)
                     compressor_class=("компрессор" in cn)
-                    if not compressor_class or any(x in cn for x in ("масло компресс","шланг","фильтр для","ремень для","головка для","запчаст","пистолет","набор для")):
+                    excluded=(
+                        "inflators/" in cu
+                        or any(x in cn for x in (
+                          "автомобильн","без акб","без аккумулятор","аккумуляторн компрессор",
+                          "голова компрессор","компрессорная голова","головка компрессор",
+                          "блок компрессор","компрессорный блок","насос компрессорн",
+                          "масло компресс","шланг","фильтр для","ремень для","головка для",
+                          "запчаст","пистолет","набор для"
+                        ))
+                    )
+                    if not compressor_class or excluded:
                         continue
                 if scope.get("profile_key")=="circulation_pump":
                     cn=norm(name)
@@ -4031,8 +4107,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-graincrusher1"
     if {"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
         return RULESET_VERSION+"-washstand3"
-    if {"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(keys):
-        return RULESET_VERSION+"-compressor2"
+    if {"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(keys):
+        return RULESET_VERSION+"-compressor3"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
         return RULESET_VERSION+"-anglegrinder1"
     if "grinding_wheel_diameter_mm" in keys and "motor_type" in keys and "max_rpm" in keys and "input_power_w" in keys:
@@ -4083,6 +4159,15 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     })
     raw,specs=extract_specs(html,rules)
     card=parsed["card"];extra=parsed["extra"]
+    if any(r.get("spec_key")=="flow_rate_input_lmin" for r in rules):
+        if specs.get("flow_rate_input_lmin") is not None:
+            specs["flow_rate_lmin"]=specs["flow_rate_input_lmin"]
+            specs["compressor_flow_basis"]="input"
+        elif specs.get("flow_rate_output_lmin") is not None:
+            specs["flow_rate_lmin"]=specs["flow_rate_output_lmin"]
+            specs["compressor_flow_basis"]="output"
+        elif specs.get("flow_rate_lmin") is not None:
+            specs["compressor_flow_basis"]="generic"
     if any(r.get("spec_key")=="washstand_class" for r in rules):
         specs["washstand_class"]=washstand_class_from_name(
           card.get("product_name") or base.get("model") or base.get("product_name") or "",
@@ -4911,27 +4996,48 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
     if profile=="compressor":
         ta=compressor_type_family(ours.get("compressor_type"));tb=compressor_type_family(comp.get("compressor_type"))
         ea=compressor_engine_family(ours.get("compressor_engine_type"));eb=compressor_engine_family(comp.get("compressor_engine_type"))
+        da=compressor_drive_family(ours.get("compressor_drive_type"));db=compressor_drive_family(comp.get("compressor_drive_type"))
+        la=compressor_lubrication_family(ours.get("compressor_lubrication"));lb=compressor_lubrication_family(comp.get("compressor_lubrication"))
+        va=compressor_voltage_class(ours.get("compressor_voltage_v"));vb=compressor_voltage_class(comp.get("compressor_voltage_v"))
         if ta and tb and ta!=tb:return 0.0
         if ea and eb and ea!=eb:return 0.0
-        weights={"compressor_type":0.25,"receiver_capacity_l":0.25,"compressor_engine_type":0.15,"flow_rate_lmin":0.25,"pressure_bar":0.10}
+        if da and db and da!=db:return 0.0
+        if la and lb and la!=lb:return 0.0
+        if va and vb and va!=vb:return 0.0
+        # No receiver = inflator/head/tankless machine, not a direct analogue.
+        try:
+            if float(ours.get("receiver_capacity_l") or 0)<=0 or float(comp.get("receiver_capacity_l") or 0)<=0:return 0.0
+        except Exception:return 0.0
+        weights={"compressor_type":0.20,"receiver_capacity_l":0.20,"compressor_engine_type":0.10,"flow_rate_lmin":0.25,"pressure_bar":0.10,"compressor_drive_type":0.05,"compressor_lubrication":0.05,"compressor_voltage_v":0.05}
         total=used=0.0
         for k,w in weights.items():
             a=ours.get(k);b=comp.get(k)
-            if a is None or b is None:continue
+            if k=="flow_rate_lmin":
+                pair=compressor_flow_basis_pair(ours,comp)
+                if pair is None:continue
+                a,b,_basis=pair
+            elif a is None or b is None:
+                continue
             try:
                 if k=="compressor_type":
-                    s=1.0 if compressor_type_family(a)==compressor_type_family(b) else 0.0
+                    z=1.0 if compressor_type_family(a)==compressor_type_family(b) else 0.0
                 elif k=="compressor_engine_type":
-                    s=1.0 if compressor_engine_family(a)==compressor_engine_family(b) else 0.0
+                    z=1.0 if compressor_engine_family(a)==compressor_engine_family(b) else 0.0
+                elif k=="compressor_drive_type":
+                    z=1.0 if compressor_drive_family(a)==compressor_drive_family(b) else 0.0
+                elif k=="compressor_lubrication":
+                    z=1.0 if compressor_lubrication_family(a)==compressor_lubrication_family(b) else 0.0
+                elif k=="compressor_voltage_v":
+                    z=1.0 if compressor_voltage_class(a)==compressor_voltage_class(b) else 0.0
                 elif k=="receiver_capacity_l":
-                    s=compressor_relative_similarity(float(a),float(b),0.20,0.35,0.50)
+                    z=compressor_relative_similarity(float(a),float(b),0.20,0.35,0.50)
                 elif k=="flow_rate_lmin":
-                    s=compressor_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                    z=compressor_relative_similarity(float(a),float(b),0.10,0.20,0.30)
                 elif k=="pressure_bar":
-                    s=compressor_pressure_similarity(float(a),float(b))
-                else:s=0.0
-            except Exception:s=0.0
-            total+=w*s;used+=w
+                    z=compressor_pressure_similarity(float(a),float(b))
+                else:z=0.0
+            except Exception:z=0.0
+            total+=w*z;used+=w
         if used<=0:return 0.0
         score=total/used*100
         coverage=min(1.0,used/max(sum(weights.values()),1e-9))
@@ -6409,7 +6515,7 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
         elif profile=="washstand":
             z=washstand_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="compressor":
-            z=compressor_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+            z=compressor_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]),ours,comp)
         elif profile=="snow_blower":
             z=snow_blower_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="garden_shredder":
@@ -6493,7 +6599,7 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
         elif profile=="washstand":
             z=washstand_directional(rule,a,b)
         elif profile=="compressor":
-            z=compressor_directional(rule,a,b)
+            z=compressor_directional(rule,a,b,ours,comp)
         elif profile=="garden_shredder":
             z=garden_shredder_directional(rule,a,b)
         elif profile=="battery_pruner":
