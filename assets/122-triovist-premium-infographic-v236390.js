@@ -76,6 +76,7 @@ function currentCounts(){
  return {done,attention,error,remaking,active,total:items.length};
 }
 function selectionHtml(){
+ if(config?.archived)return '<div class="tif5-sep"></div><div class="tif5-warn"><b>Проект закрыт.</b> Новые запуски и платная генерация отключены. Здесь сохранён только архив уже созданных результатов для Паюшина.</div>';
  const count=pickedCount(),tooMany=count>500;
  const visible=groups.filter(g=>!filter||String(g.name).toLowerCase().includes(filter.toLowerCase()));
  return '<div class="tif5-sep"></div>'+
@@ -135,7 +136,7 @@ function currentHtml(){
 function draw(){
  if(!root)return;
  root.innerHTML='<div class="tif5-head"><div><h3>🎨 Triovist · Фабрика инфографики</h3><div class="tif5-muted">Группы → 21vek + WB + Ozon → Visual DNA → 5–9 сильных слайдов → независимый QA → автопеределка → готовый ZIP.</div></div><span class="tif5-tag">5.0 · background factory</span></div>'+
- '<div class="tif5-note"><b>Главное правило:</b> каждый слайд — как сильная обложка. Никаких «одна характеристика + товар + пустой фон». Временные ошибки ИИ обрабатываются автоматически и не останавливают остальные SKU.</div>'+
+ (config?.archived?'<div class="tif5-note"><b>Архив проекта.</b> Платная генерация остановлена. Новые задания создать нельзя; сохранённые слайды доступны только для просмотра.</div>':'<div class="tif5-note"><b>Главное правило:</b> каждый слайд — как сильная обложка. Никаких «одна характеристика + товар + пустой фон». Временные ошибки ИИ обрабатываются автоматически и не останавливают остальные SKU.</div>')+
  (message?'<div class="'+(isError?'tif5-err':'tif5-good')+'">'+h(message)+'</div>':'')+
  selectionHtml()+currentHtml()+batchListHtml();
 }
