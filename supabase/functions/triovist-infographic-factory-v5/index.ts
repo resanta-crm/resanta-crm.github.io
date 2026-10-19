@@ -8,6 +8,8 @@ import {createClient} from "npm:@supabase/supabase-js@2.57.4";
 const ORIGINS=new Set(["https://resanta-crm.by","https://www.resanta-crm.by"]);
 const LEADERS=new Set(["payushin_ar@resanta.ru","sidarovich_kn@resanta.ru"]);
 const MANAGERS=new Set(["aleksandrenko_av@resanta.ru","krishtal_na@resanta.ru"]);
+const INFOGRAPHIC_OWNER="payushin_ar@resanta.ru";
+const ARCHIVED=true;
 const BRAND_NAMES=/\b(?:resanta|ресанта|huter|хутер|вихрь|vikhr|eurolux|евролюкс)\b/i;
 const IMAGE_MODEL="gpt-image-2.5-sunburst";
 const TEXT_MODEL="gpt-5.6";
@@ -283,6 +285,7 @@ Deno.serve(async(req:Request)=>{
  try{
   if(worker){
    if(jwt!==service)return send(req,403,{ok:false,error:"WORKER_FORBIDDEN"});
+   if(ARCHIVED)return send(req,423,{ok:false,error:"PROJECT_ARCHIVED",message:"Проект инфографики закрыт. Платная генерация отключена."});
    if(action==="worker-group-dna"){
     const group=cleanText(input.group_name,150),sheet=str(input.contact_sheet_base64,15000000);
     if(!group||sheet.length<8000)return send(req,400,{ok:false,error:"GROUP_DNA_INPUT"});
@@ -395,16 +398,18 @@ Deno.serve(async(req:Request)=>{
   const {data:auth}=await db.auth.getUser(jwt);if(!auth?.user?.id)return send(req,401,{ok:false,error:"AUTH_INVALID"});
   const {data:profile}=await db.from("users").select("email,role,access_scope").eq("id",auth.user.id).maybeSingle();
   if(!profile)return send(req,403,{ok:false,error:"NO_PROFILE"});
-  const email=low(profile.email),leader=profile.role==="boss"&&LEADERS.has(email),manager=profile.role==="manager"&&profile.access_scope==="triovist"&&MANAGERS.has(email);
-  if(!leader&&!manager)return send(req,403,{ok:false,error:"FORBIDDEN"});
+  const email=low(profile.email);
+  if(email!==INFOGRAPHIC_OWNER)return send(req,403,{ok:false,error:"FORBIDDEN"});
+  const leader=true,manager=false;
 
-  if(action==="config")return send(req,200,{ok:true,version:"5.0",max_skus:500,qa_threshold:90,min_slides:5,max_slides:9,
-    image_provider_ready:!!Deno.env.get("OPENAI_API_KEY"),background:true,marketplaces:["21vek","wb","ozon"],leader});
+  if(action==="config")return send(req,200,{ok:true,version:"5.0",archived:ARCHIVED,read_only:true,max_skus:0,qa_threshold:90,min_slides:5,max_slides:9,
+    image_provider_ready:false,background:false,marketplaces:["21vek","wb","ozon"],leader});
   if(action==="catalog"){
     const {data,error}=await db.rpc("triovist_infographic_factory_catalog_v5",{p_manager:manager?email:null});if(error)throw error;
     return send(req,200,{ok:true,groups:data||[]});
   }
   if(action==="start"){
+    if(ARCHIVED)return send(req,423,{ok:false,error:"PROJECT_ARCHIVED",message:"Проект инфографики закрыт. Новые запуски отключены."});
     if(!leader)return send(req,403,{ok:false,error:"LEADER_ONLY"});
     const groups=[...new Set(arr(input.groups).map(x=>cleanText(x,150)).filter(Boolean))];
     if(!groups.length||groups.length>30)return send(req,400,{ok:false,error:"GROUPS"});
@@ -456,6 +461,7 @@ Deno.serve(async(req:Request)=>{
      return send(req,200,{ok:true});
     }
     if(action==="approve-group"){
+     if(ARCHIVED)return send(req,423,{ok:false,error:"PROJECT_ARCHIVED",message:"Проект закрыт. Массовый запуск отключён."});
      if(!leader)return send(req,403,{ok:false,error:"LEADER_ONLY"});
      const group=cleanText(input.group_name,150);if(!batch.groups.includes(group))return send(req,400,{ok:false,error:"GROUP"});
      const {data:ref}=await db.from("triovist_infographic_factory_items_v5").select("*").eq("batch_id",batchId).eq("group_name",group).eq("is_reference",true).eq("status","completed").maybeSingle();
