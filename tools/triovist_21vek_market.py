@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.401.
+"""Triovist / 21vek automatic market analysis v23.6.402.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.30"
+PARSER_VERSION="market-auto-v6.31"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2538,8 +2538,16 @@ def agri_gears_from_raw(raw: list[dict]) -> tuple[int|None,int|None]:
         if "назад" in ln and ns:rev=ns[0]
         m=re.search(r"(\d+)\s*(?:вперед|вперёд|forward).*?(\d+)\s*(?:назад|reverse)",txt,re.I)
         if m:fwd=int(m.group(1));rev=int(m.group(2))
+        m=re.search(r"(\d+)\s*(?:назад|reverse).*?(\d+)\s*(?:вперед|вперёд|forward)",txt,re.I)
+        if m:rev=int(m.group(1));fwd=int(m.group(2))
         m=re.search(r"(\d+)\s*[+/]\s*(\d+)",txt)
         if m and fwd is None and rev is None:fwd=int(m.group(1));rev=int(m.group(2))
+        if fwd is None:
+            m=re.search(r"(\d+)\s*(?:вперед|вперёд|forward)",txt,re.I)
+            if m:fwd=int(m.group(1))
+        if rev is None:
+            m=re.search(r"(\d+)\s*(?:назад|reverse)",txt,re.I)
+            if m:rev=int(m.group(1))
     return fwd,rev
 
 
@@ -3583,7 +3591,9 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         # 21vek uses several generic transmission labels ("коробка передач",
         # "скорости" etc.). Capture them all; agri_gears_from_raw only emits
         # forward/reverse counts when the value itself proves the split.
-        if "передач" in ln or "скорост" in ln:
+        if "передач" in ln or (
+            "скорост" in ln and not any(x in ln for x in ("вращ","двигател","фрез","оборот","вала"))
+        ):
             return "transmission_gears"
         if "ширин" in ln and any(x in ln for x in ("культив","обработ","захват","фрез")):
             return "cultivation_width_cm"
@@ -7286,6 +7296,10 @@ def main() -> None:
                 if old and not need_card:
                     p["specs_raw"]=old.get("specs_raw") or []
                     p["specs_normalized"]=old.get("specs_normalized") or {}
+                    if profile=="agricultural_machine":
+                        p["specs_normalized"]=agri_enrich_specs(
+                          p.get("model") or "",p["specs_raw"],p["specs_normalized"]
+                        )
                     p["specs_signature"]=old.get("specs_signature")
                     p["specs_fetched_at"]=old.get("specs_fetched_at")
                     if not p.get("brand"):p["brand"]=old.get("brand") or ""
@@ -7453,6 +7467,10 @@ def main() -> None:
                         else:
                             row.update({"specs_raw":[],"specs_normalized":{}})
                         row["error_text"]=str(exc)[:1200];errors+=1
+                if profile=="agricultural_machine":
+                    row["specs_normalized"]=agri_enrich_specs(
+                      row.get("product_name") or sku,row.get("specs_raw") or [],row.get("specs_normalized") or {}
+                    )
                 if profile=="vibratory_plate" and baseline:
                     merged=dict(row.get("specs_normalized") or {})
                     merged.update(baseline)
