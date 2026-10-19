@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.399.
+"""Triovist / 21vek automatic market analysis v23.6.400.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.28"
+PARSER_VERSION="market-auto-v6.29"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2486,6 +2486,7 @@ def vibratory_plate_power_conflict(raw: list[dict]) -> bool:
 def agri_machine_type_family(v: Any) -> str:
     n=norm(v)
     if not n:return ""
+    if n in ("motoblock","cultivator"):return n
     if "мотоблок" in n or re.search(r"(?:^|\s)(?:мб|mb)[-\s]?\d",n,re.I):return "motoblock"
     if "мотокультив" in n or "культиватор" in n or re.search(r"(?:^|\s)(?:мк|mk)[-\s]?\d",n,re.I):return "cultivator"
     return ""
@@ -2494,12 +2495,13 @@ def agri_machine_type_family(v: Any) -> str:
 def agri_power_source_family(v: Any) -> str:
     n=norm(v)
     if not n:return ""
+    if n in ("battery","diesel","gasoline","mains"):return n
     if any(x in n for x in ("аккумуля","батаре","battery","li ion","li-ion")):return "battery"
     if any(x in n for x in ("дизел","diesel")):return "diesel"
     if any(x in n for x in ("бензин","gasoline","petrol")):return "gasoline"
     # Do not confuse petrol machines with an electric starter with mains power.
     if "электростартер" not in n and (
-        "электрический культиватор" in n or "электрокультив" in n
+        "электрическ" in n or "электрокультив" in n
         or any(x in n for x in ("сетев","питание от сети","220 в","230 в","mains"))
     ):return "mains"
     return ""
@@ -2530,7 +2532,7 @@ def agri_gears_from_raw(raw: list[dict]) -> tuple[int|None,int|None]:
         ln=norm(x.get("label") or "")
         txt=str(x.get("value") or "")
         vn=norm(txt)
-        if "передач" not in ln and "передач" not in vn:continue
+        if not any(z in ln or z in vn for z in ("передач","скорост")):continue
         ns=[int(float(z.replace(",","."))) for z in re.findall(r"\d+(?:[.,]\d+)?",txt) if float(z.replace(",","."))<=20]
         if ("вперед" in ln or "вперёд" in ln) and ns:fwd=ns[0]
         if "назад" in ln and ns:rev=ns[0]
@@ -2547,10 +2549,12 @@ def agri_enrich_specs(name: Any,raw: list[dict],specs: dict) -> dict:
     joined=" ".join(norm(str(x.get("label") or "")+" "+primitive_text(x.get("value"))) for x in (raw or []) if isinstance(x,dict))
     ctx=(n+" "+joined).strip()
 
-    mt=agri_machine_type_family(out.get("agri_machine_type") or ctx)
+    # Product title is the safest class source. It prevents a battery cultivator
+    # whose motor row says merely "electric" from being recast as mains.
+    mt=agri_machine_type_family(n) or agri_machine_type_family(out.get("agri_machine_type") or ctx)
     if mt:out["agri_machine_type"]=mt
 
-    ps=agri_power_source_family(out.get("agri_power_source") or ctx)
+    ps=agri_power_source_family(n) or agri_power_source_family(out.get("agri_power_source") or ctx)
     if not ps:
         # Product names in this category are petrol by default unless they are
         # explicitly electric/battery/diesel. "с электростартером" remains petrol.
@@ -2584,9 +2588,14 @@ def agri_enrich_specs(name: Any,raw: list[dict],specs: dict) -> dict:
 
 
 def agri_required_missing(ours: dict,comp: dict) -> bool:
-    required=("agri_machine_type","agri_power_source","pto_present","motor_power_w","cultivation_width_cm")
-    if any(ours.get(k) is None or comp.get(k) is None for k in required):return True
+    base=("agri_machine_type","agri_power_source","pto_present","cultivation_width_cm")
+    if any(ours.get(k) is None or comp.get(k) is None for k in base):return True
     source=agri_power_source_family(ours.get("agri_power_source") or comp.get("agri_power_source"))
+    # Battery product cards often expose voltage but no motor wattage. Never
+    # fabricate watts from volts; missing battery power stays optional/incomplete.
+    if source=="battery":
+        return False
+    if ours.get("motor_power_w") is None or comp.get("motor_power_w") is None:return True
     if source in ("gasoline","diesel"):
         return ours.get("gears_forward") is None or comp.get("gears_forward") is None
     return False
@@ -2889,6 +2898,8 @@ def normalize_value(key: str, text: str) -> Any:
     if key in ("gears_forward","gears_reverse"):
         ns=[int(float(x.replace(",","."))) for x in re.findall(r"\d+(?:[.,]\d+)?",low) if float(x.replace(",","."))<=20]
         return ns[0] if ns else None
+    if key=="transmission_gears":
+        return str(text or "")[:160] or None
     if key=="cultivation_width_cm":
         return agri_dimension_cm(text,False)
     if key=="wheel_diameter_cm":
@@ -3565,10 +3576,12 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             return "pto_present"
         if "мощност" in ln and not any(x in ln for x in ("выходн","акуст")):
             return "motor_power_w"
-        if "передач" in ln and ("вперед" in ln or "вперёд" in ln):
+        if ("передач" in ln or "скорост" in ln) and ("вперед" in ln or "вперёд" in ln):
             return "gears_forward"
-        if "передач" in ln and "назад" in ln:
+        if ("передач" in ln or "скорост" in ln) and "назад" in ln:
             return "gears_reverse"
+        if any(x in ln for x in ("количество передач","число передач","количество скоростей","число скоростей")):
+            return "transmission_gears"
         if "ширин" in ln and any(x in ln for x in ("культив","обработ","захват","фрез")):
             return "cultivation_width_cm"
         if "понижен" in ln and any(x in ln for x in ("передач","скорост","ряд")):
@@ -4488,8 +4501,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-washstand3"
     if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(keys):
         return RULESET_VERSION+"-vibplate2"
-    if {"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm"}.issubset(keys):
-        return RULESET_VERSION+"-agri1"
+    if {"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm","transmission_gears"}.issubset(keys):
+        return RULESET_VERSION+"-agri2"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor3"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
