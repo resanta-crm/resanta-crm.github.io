@@ -6340,6 +6340,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=concrete_mixer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="grain_crusher":
             z=grain_crusher_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="washstand":
+            z=washstand_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="compressor":
             z=compressor_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="snow_blower":
@@ -6422,6 +6424,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=concrete_mixer_directional(rule,a,b)
         elif profile=="grain_crusher":
             z=grain_crusher_directional(rule,a,b)
+        elif profile=="washstand":
+            z=washstand_directional(rule,a,b)
         elif profile=="compressor":
             z=compressor_directional(rule,a,b)
         elif profile=="garden_shredder":
@@ -6530,13 +6534,15 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных по бетономешалке. Отсутствующую характеристику не считать проигрышем: сравнивать только подтвержденные объём барабана, материал венца и мощность."
     if profile=="grain_crusher" and status=="data_incomplete":
         return "Недостаточно подтверждено ядро сравнения зернодробилки: нужны мощность и производительность. Форма корпуса и ёмкость бункера учитываются с согласованными весами, когда 21vek их публикует; отсутствие этих полей не считается проигрышем."
+    if profile=="washstand" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных по умывальнику. Не считать отсутствующее поле нулём или проигрышем: нужны материал корпуса, ёмкость бака и наличие подогрева."
     if profile=="compressor" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных по компрессору. Не считать отсутствующую характеристику нулём или проигрышем: для точного аналога нужны тип компрессора, объём ресивера, тип двигателя, производительность и максимальное давление."
     if profile=="circulation_pump" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
         return "Аналог рассчитан по неполным данным. Для подтверждения пробела обязательны производительность, максимальный напор и размер частиц; измельчитель сильно влияет на итог, когда он указан. Материал корпуса, подключение и тип воды уточняют сравнение."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -6779,8 +6785,8 @@ def main() -> None:
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
             expected_own_count=len(scope_skus[skey])
             matrix_checked=expected_own_count>0 and len(usable_own)>=expected_own_count
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
@@ -6797,6 +6803,11 @@ def main() -> None:
                     )
                 if profile=="grain_crusher" and scored:
                     gap_confirmed=gap_confirmed and not grain_crusher_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
+                if profile=="washstand" and scored:
+                    gap_confirmed=gap_confirmed and not washstand_required_missing(
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
@@ -6890,6 +6901,8 @@ def main() -> None:
                     if profile=="concrete_mixer" and concrete_mixer_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="grain_crusher" and grain_crusher_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
+                    if profile=="washstand" and washstand_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="compressor" and compressor_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
