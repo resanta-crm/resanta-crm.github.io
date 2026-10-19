@@ -375,10 +375,11 @@ def process_item(item):
     if time.monotonic()-START>WORKER_SECONDS-120:return
     iid=item["id"];log("Factory item",item["sku"],item["group_name"])
     try:
-        release_item(item,{"status":"planning","stage":"Проверяю exact-SKU фото и факты","error_message":None})
-        # Reclaim local lease immediately after status change.
-        token=str(uuid.uuid4());db_patch("triovist_infographic_factory_items_v5",{"id":"eq."+iid},
-            {"lock_token":token,"locked_until":(now_dt()+timedelta(minutes=LEASE_MINUTES)).isoformat(),"updated_at":now()})
+        # Keep the claim lease while changing business status; never expose an unlocked paid-work item.
+        db_patch("triovist_infographic_factory_items_v5",{"id":"eq."+iid},
+                 {"status":"planning","stage":"Проверяю exact-SKU фото и факты","error_message":None,"updated_at":now()})
+        db_patch("triovist_infographic_factory_batches_v5",{"id":"eq."+item["batch_id"],"status":"in.(queued,researching,processing)"},
+                 {"status":"processing","stage":"Фабрика работает в фоне","started_at":now(),"updated_at":now()})
         photo,photo_url,_,live_facts=fetch_photo({"product_url":item["product_url"],"product_name":item["product_name"],"sku":item["sku"]})
         dna=ensure_group_dna(item,photo)
         ref_bytes=ref_jpeg(photo);ref64=base64.b64encode(ref_bytes).decode()
@@ -485,8 +486,12 @@ def finalize_batch(batch):
     })
     if counts["active"]:return
     # If any selected group still needs the one-time style approval, pause after reference SKU(s).
-    dna=db_get("triovist_infographic_group_dna_v5",{"group_name":f"in.({','.join(batch['groups'])})","select":"group_name,approved_for_bulk","limit":"50"})
-    unapproved=[x["group_name"] for x in dna if not x.get("approved_for_bulk")]
+    # Group names may contain commas, therefore never use a PostgREST in.(...) string here.
+    all_dna=db_get("triovist_infographic_group_dna_v5",{"select":"group_name,approved_for_bulk","limit":"500"})
+    selected=set(batch.get("groups") or [])
+    dna=[x for x in all_dna if x.get("group_name") in selected]
+    approved={x["group_name"]:bool(x.get("approved_for_bulk")) for x in dna}
+    unapproved=[g for g in selected if not approved.get(g,False)]
     if unapproved:
         refs=[x for x in items if x.get("group_name") in unapproved]
         if refs and all(x["status"] in ("completed","attention","error") for x in refs):
