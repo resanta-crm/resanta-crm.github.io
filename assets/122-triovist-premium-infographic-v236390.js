@@ -105,7 +105,7 @@ function pilotHtml(){
  const cards=pending.map(sel=>{
   const item=items.find(x=>x.group_name===sel.group&&x.is_reference),ready=item?.status==='completed'&&Number(item.quality_score||0)>=Number(current.qa_threshold||90);
   return '<div class="tif5-pilot"><h4>'+h(pretty(sel.group))+'</h4>'+
-   '<div class="'+statusClass(item?.status||'queued')+'">'+(item?'<b>'+h(item.sku)+'</b> · '+h(stateLabel[item.status]||item.status)+(item.quality_score?' · QA '+Number(item.quality_score)+'/100':''):'Контрольный SKU готовится')+'</div>'+
+   '<div class="'+statusClass(item?.status||'queued')+'">'+(item?'<b>'+h(item.sku)+'</b> · '+h(item.stage||stateLabel[item.status]||item.status)+(item.quality_score?' · QA '+Number(item.quality_score)+'/100':''):'Контрольный SKU готовится')+'</div>'+
    (item?'<div class="tif5-actions"><button data-tif-preview="'+h(item.sku)+'">👁 Посмотреть все слайды</button>'+
    '<button class="green" data-tif-approve="'+h(sel.group)+'" '+(!ready?'disabled':'')+'>✓ Утвердить стиль группы</button></div>':'')+
    '<p class="tif5-muted">'+(ready?'После утверждения фабрика сама добавит остальные SKU этой группы в очередь.':'Утверждение доступно только когда все слайды контрольного SKU прошли QA ≥ '+Number(current.qa_threshold||90)+'.')+'</p></div>';
@@ -117,7 +117,7 @@ function readyHtml(){
  const q=readyFilter.toLowerCase(),ready=items.filter(x=>['completed','attention','error'].includes(x.status)&&(!q||(x.sku+' '+x.product_name+' '+x.group_name).toLowerCase().includes(q))).slice(0,80);
  if(!ready.length)return '';
  return '<h4>Готовые и требующие внимания SKU</h4><input class="tif5-input" style="max-width:480px" data-tif-ready-filter placeholder="Найти артикул…" value="'+h(readyFilter)+'">'+
- '<div class="tif5-ready">'+ready.map(x=>'<div class="tif5-ready-card"><b>'+h(x.sku)+' · '+h(stateLabel[x.status]||x.status)+'</b><small>'+h(x.group_name)+' · '+h(x.product_name)+(x.quality_score?' · QA '+Number(x.quality_score)+'/100':'')+'</small>'+
+ '<div class="tif5-ready">'+ready.map(x=>'<div class="tif5-ready-card"><b>'+h(x.sku)+' · '+h(x.stage||stateLabel[x.status]||x.status)+'</b><small>'+h(x.group_name)+' · '+h(x.product_name)+(x.quality_score?' · QA '+Number(x.quality_score)+'/100':'')+'</small>'+
  (x.status!=='error'?'<button data-tif-preview="'+h(x.sku)+'">👁 Слайды</button>':'')+'</div>').join('')+'</div>';
 }
 function currentHtml(){
