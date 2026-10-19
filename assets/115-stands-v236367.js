@@ -1,10 +1,10 @@
-/* RESANTA CRM v23.6.367 · STANDS / OS / TRADE EQUIPMENT + ROUTE-BOUND VISION TASKS
+/* RESANTA CRM v23.6.394 · STANDS / OS / TRADE EQUIPMENT + ROUTE-BOUND VISION TASKS
  * Isolated lazy module. No polling. No client-side purchase_history scans.
  */
 (function(){
 'use strict';
 if(window.RESANTA_STANDS_V236367)return;
-const V='v23.6.379';
+const V='v23.6.394';
 const safe=v=>String(v??'');
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
@@ -566,7 +566,7 @@ function renderCatalogBox(){
   '<div class="st350-cat-head"><div><b>Номенклатура на стенде · наш прайс</b><div class="st346-meta">Группа → подгруппа → конкретный SKU. Продажи менеджер не вводит.</div></div><span class="st350-cat-count" id="st350-count">Выбрано '+state.catalogSelected.size+' SKU</span></div>'+
   (legacy.length?'<div class="st346-alert warn" style="margin-top:8px"><b>Старый ручной список:</b> '+legacy.length+' записей не являются SKU нашего прайса и автоматически не переносятся. Выберите реальные товары ниже.<br><span class="st346-meta">'+legacy.slice(0,8).map(x=>esc(x.sku)).join(' · ')+(legacy.length>8?' …':'')+'</span></div>':'')+
   '<div class="st350-toggles"><label><input type="checkbox" id="st350-brand-only" '+(state.catalog.brandOnly?'checked':'')+'> Только бренд стенда'+(brand?' · '+esc(brand):'')+'</label><label><input type="checkbox" id="st350-mo2-only" '+(state.catalog.mo2Only?'checked':'')+'> Только актуальный МО2</label></div>'+
-  '<div class="st350-filters"><select id="st350-group">'+catalogGroupOptions()+'</select><select id="st350-subgroup">'+catalogSubgroupOptions()+'</select><input id="st350-search" value="'+esc(state.catalog.query||'')+'" placeholder="Поиск по SKU или названию"></div>'+
+  '<div class="st350-filters"><select id="st350-group">'+catalogGroupOptions()+'</select><select id="st350-subgroup">'+catalogSubgroupOptions()+'</select><input id="st350-search" value="'+esc(state.catalog.query||'')+'" placeholder="Поиск по всему прайсу: SKU или название"></div>'+
   '<div class="st350-toolbar"><button type="button" class="btn-secondary" data-st350-select-visible>Выбрать показанные</button><span class="st346-meta">Чтобы увидеть товары другого бренда или позиции без текущей цены МО2 — снимите соответствующий фильтр.</span></div>'+
   '<div id="st350-selected" class="st350-selected"></div><div id="st350-rows" style="margin-top:8px"></div>'+
  '</div>';
@@ -601,8 +601,13 @@ async function loadCatalogRows(){
  const cat=state.catalog;if(!cat)return;
  cat.loading=true;renderCatalogRows();
  try{
+   const q=safe(cat.query||'').trim();
+   const globalSearch=q!=='';
    const d=await rpc('crm_stands_catalog_v236350',{
-     p_placement_id:cat.placementId,p_category:cat.group||null,p_subgroup:cat.subgroup||null,p_search:cat.query||null,
+     p_placement_id:cat.placementId,
+     p_category:globalSearch?null:(cat.group||null),
+     p_subgroup:globalSearch?null:(cat.subgroup||null),
+     p_search:q||null,
      p_brand_only:cat.brandOnly,p_mo2_only:cat.mo2Only,p_limit:300
    });
    cat.rows=arr(d?.rows);
