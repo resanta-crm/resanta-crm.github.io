@@ -180,7 +180,7 @@ async function loadPremiumInfographics(){
   try{
    await new Promise((resolve,reject)=>{
     const s=document.createElement('script');s.async=true;s.dataset.tr14PremiumInfographics='1';
-    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+'&factory=5.0'+(attempt===2?'-retry2':'');
+    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+'&factory=5.0.1'+(attempt===2?'-retry2':'');
     const timer=setTimeout(()=>reject(Error('Таймаут загрузки профессионального модуля')),15000);
     s.onload=()=>{clearTimeout(timer);resolve(true)};
     s.onerror=()=>{clearTimeout(timer);reject(Error('Файл профессионального модуля не загрузился'))};
