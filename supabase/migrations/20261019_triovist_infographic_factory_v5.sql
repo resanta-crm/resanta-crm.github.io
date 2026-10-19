@@ -29,6 +29,8 @@ create table if not exists public.triovist_infographic_factory_batches_v5 (
   min_slides integer not null default 5 check (min_slides between 4 and 9),
   max_slides integer not null default 9 check (max_slides between 5 and 10),
   max_regenerations integer not null default 2 check (max_regenerations between 0 and 4),
+  requested_total_items integer not null default 0 check (requested_total_items between 0 and 500),
+  selection_snapshot jsonb not null default '[]'::jsonb,
   total_items integer not null default 0 check (total_items between 0 and 500),
   completed_items integer not null default 0,
   attention_items integer not null default 0,
