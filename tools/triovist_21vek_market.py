@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.388.
+"""Triovist / 21vek automatic market analysis v23.6.389.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.18"
+PARSER_VERSION="market-auto-v6.19"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -47,7 +47,7 @@ VALIDATE_EXACT=str(os.environ.get("MARKET_VALIDATE_EXACT","")).strip().lower() i
 if VALIDATE_PROFILES and not VALIDATE_EXACT:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -224,6 +224,7 @@ def profile_for(label: str) -> str:
     if "углошлиф" in n or ("болгар" in n and "машин" in n) or re.search(r"\bа?ушм\b",n): return "angle_grinder"
     if "бетономеш" in n or "бетоносмес" in n: return "concrete_mixer"
     if "зернодроб" in n or ("измельч" in n and "зерн" in n): return "grain_crusher"
+    if "умываль" in n: return "washstand"
     if "компрессор" in n: return "compressor"
     if ("фекаль" in n or "фекал" in n) and "насос" in n: return "fecal_pump"
     if "канализац" in n and any(x in n for x in ("станц","установ")): return "sewage_station"
@@ -270,6 +271,7 @@ def query_for(label: str, profile: str) -> str:
       "angle_grinder":"угловая шлифовальная машина",
       "concrete_mixer":"бетономешалка",
       "grain_crusher":"зернодробилка",
+      "washstand":"умывальник дачный",
       "compressor":"компрессор",
       "circulation_pump":"циркуляционный насос",
       "drainage_pump":"дренажный насос",
@@ -353,6 +355,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
       ("Углошлифовальные машины","angle_grinder","углошлиф"),
       ("Бетономешалки","concrete_mixer","бетономеш"),
       ("Зернодробилки","grain_crusher","зернодроб"),
+      ("Умывальники","washstand","умываль"),
       ("Компрессоры","compressor","компрессор"),
       ("Циркуляционные насосы","circulation_pump","циркуляц"),
       ("Дренажные насосы","drainage_pump","дренаж"),
@@ -372,7 +375,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -434,6 +437,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
                          and "зернодроб" in pn
                          and not sku.startswith("900/")
                          and not any(x in pn for x in ("сито для","нож для","решетк","решётк","ремень для","двигатель для","запчаст","комплект для")))
+            elif profile=="washstand":
+                matched=(sku.startswith("74/4/")
+                         and "умываль" in pn
+                         and not sku.startswith("900/")
+                         and not any(x in pn for x in ("бак для","тэн для","тен для","кран для","мойка для","раковина для","запчаст","комплект для")))
             elif profile=="compressor":
                 matched=((sku.startswith("74/3/") or sku.startswith("74/7/"))
                          and "компрессор" in pn
@@ -518,7 +526,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Оборудование" if profile in ("concrete_mixer","grain_crusher","compressor") else ("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"))),"source_subgroup":label,
+              "scope_key":key,"source_category":("Оборудование" if profile in ("concrete_mixer","grain_crusher","washstand","compressor") else ("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"))),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
