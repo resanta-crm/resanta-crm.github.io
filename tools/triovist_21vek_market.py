@@ -2625,6 +2625,32 @@ def agri_enrich_specs(name: Any,raw: list[dict],specs: dict) -> dict:
         elif re.search(r"(?:пониженн(?:ая|ой)\s+(?:передач|скорост)|понижающ(?:ая|ий)\s+передач)",ctx,re.I):low=True
     if low is not None:out["low_gear_present"]=low
 
+    # Sanity-check wheel diameter. 21vek sometimes publishes wrong units:
+    # 450/254 "cm" are clearly mm, while values like 12 "cm" can represent
+    # a 12-inch rim only when the tire marking in the title proves it.
+    if out.get("wheel_diameter_cm") is not None:
+        try:
+            w=float(out.get("wheel_diameter_cm"))
+            if 100 < w <= 1000:
+                w=w/10.0
+            elif w < 15:
+                m=re.search(r"\b\d+(?:[.,]\d+)?\s*(?:x|х|×|-)\s*\d+(?:[.,]\d+)?(?:\s*[-xх×]\s*\d+(?:[.,]\d+)?)?\b",n,re.I)
+                if m:
+                    nums_t=[float(z.replace(",",".")) for z in re.findall(r"\d+(?:[.,]\d+)?",m.group(0))]
+                    rim=nums_t[-1] if nums_t else None
+                    if rim is not None and abs(rim-w)<=0.6:
+                        w=rim*2.54
+                    else:
+                        w=float("nan")
+                else:
+                    w=float("nan")
+            if math.isfinite(w) and 15<=w<=100:
+                out["wheel_diameter_cm"]=round(w,2)
+            else:
+                out.pop("wheel_diameter_cm",None)
+        except Exception:
+            out.pop("wheel_diameter_cm",None)
+
     fwd,rev=agri_gears_from_raw(raw)
     if out.get("gears_forward") is None and fwd is not None:out["gears_forward"]=fwd
     if out.get("gears_reverse") is None and rev is not None:out["gears_reverse"]=rev
