@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.396.
+"""Triovist / 21vek automatic market analysis v23.6.397.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.25"
+PARSER_VERSION="market-auto-v6.26"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -7099,15 +7099,16 @@ def main() -> None:
             own_existing=load_existing_own(skey)
             own_rows=[]
             for sku in sorted(scope_skus[skey]):
-                src=registry.get(sku)
+                src=registry.get(sku) or {}
                 baseline=vibratory_plate_own_baseline(sku) if profile=="vibratory_plate" else {}
-                if not src:
+                # Verified own baseline may exist even when 21vek has no registry/card.
+                if not src and not baseline:
                     continue
                 if not src.get("product_url") and not baseline:
                     continue
                 old=own_existing.get(sku)
                 row={
-                  "sku":sku,"scope_key":skey,"product_name":src.get("product_name") or sku,
+                  "sku":sku,"scope_key":skey,"product_name":src.get("product_name") or price_names.get(sku) or sku,
                   "product_url":src.get("product_url"),"current_price":valid_price(src.get("price")),
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
