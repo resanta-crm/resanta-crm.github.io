@@ -172,7 +172,7 @@ async function work(k,token){
 }
 async function loadPremiumInfographics(){
  const expected='23.6.401';
- const ready=()=>{const x=window.RESANTA_TRIOVIST_PREMIUM_V236390;return x?.open&&String(x.version||'')===expected?x:null};
+ const ready=()=>{const x=window.RESANTA_TRIOVIST_PREMIUM_V236390;return x?.open&&String(x.version||'')===expected&&String(x.factoryVersion||'')==='5.0'?x:null};
  if(ready())return ready();
  if(window.RESANTA_TRIOVIST_PREMIUM_V236390){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){window.RESANTA_TRIOVIST_PREMIUM_V236390=null}}
  for(let attempt=1;attempt<=2;attempt++){
