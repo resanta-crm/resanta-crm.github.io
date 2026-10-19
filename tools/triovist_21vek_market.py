@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.389.
+"""Triovist / 21vek automatic market analysis v23.6.390.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.19"
+PARSER_VERSION="market-auto-v6.20"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2379,8 +2379,23 @@ def grain_crusher_directional(rule: dict,a: Any,b: Any) -> float|None:
     return directional(rule,a,b)
 
 
+def washstand_body_material_part(v: Any) -> str:
+    raw=str(v or "").strip()
+    if not raw:return ""
+    parts=[x.strip() for x in re.split(r"[,;]",raw) if x.strip()]
+    useful=[]
+    for part in parts:
+        pn=norm(part)
+        # 21vek can combine body and sink material in one "Материал" row.
+        # Never use the sink/ basin segment as the body material.
+        if re.search(r"\(\s*(?:мойк|раковин)",part,re.I) or any(x in pn for x in ("мойка","раковина")):
+            continue
+        useful.append(part)
+    return ", ".join(useful) if useful else raw
+
+
 def washstand_body_material_family(v: Any) -> str:
-    n=norm(v)
+    n=norm(washstand_body_material_part(v))
     if not n:return ""
     has_stainless=any(x in n for x in ("нержав","stainless","inox"))
     n2=re.sub(r"нержав\w*\s+сталь|stainless\s+steel|inox"," ",n)
@@ -3109,9 +3124,11 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         if not washstand_mode:return None
         ln=norm(label);vn=norm(primitive_text(value))
         if not ln:return None
-        if "материал" in ln and "корпус" in ln:
+        if ("материал" in ln and "корпус" in ln) or ln=="материал":
             return "washstand_body_material"
         if any(x in ln for x in ("емкост","ёмкост","объем","обьем","вместим")) and any(x in ln for x in ("бак","резервуар","для вод")):
+            return "tank_capacity_l"
+        if ln in ("объем","обьем","объём"):
             return "tank_capacity_l"
         if any(x in ln for x in ("подогрев","нагрев вод","водонагрев","нагревател")):
             return "water_heating_present"
@@ -3973,7 +3990,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if {"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(keys):
         return RULESET_VERSION+"-graincrusher1"
     if {"washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
-        return RULESET_VERSION+"-washstand1"
+        return RULESET_VERSION+"-washstand2"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor2"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
