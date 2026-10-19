@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.393.
+"""Triovist / 21vek automatic market analysis v23.6.395.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.23"
+PARSER_VERSION="market-auto-v6.24"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -47,7 +47,7 @@ VALIDATE_EXACT=str(os.environ.get("MARKET_VALIDATE_EXACT","")).strip().lower() i
 if VALIDATE_PROFILES and not VALIDATE_EXACT:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -225,6 +225,7 @@ def profile_for(label: str) -> str:
     if "бетономеш" in n or "бетоносмес" in n: return "concrete_mixer"
     if "зернодроб" in n or ("измельч" in n and "зерн" in n): return "grain_crusher"
     if "умываль" in n: return "washstand"
+    if "виброплит" in n: return "vibratory_plate"
     if "компрессор" in n: return "compressor"
     if ("фекаль" in n or "фекал" in n) and "насос" in n: return "fecal_pump"
     if "канализац" in n and any(x in n for x in ("станц","установ")): return "sewage_station"
@@ -272,6 +273,7 @@ def query_for(label: str, profile: str) -> str:
       "concrete_mixer":"бетономешалка",
       "grain_crusher":"зернодробилка",
       "washstand":"умывальник дачный",
+      "vibratory_plate":"виброплита",
       "compressor":"компрессор",
       "circulation_pump":"циркуляционный насос",
       "drainage_pump":"дренажный насос",
@@ -356,6 +358,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
       ("Бетономешалки","concrete_mixer","бетономеш"),
       ("Зернодробилки","grain_crusher","зернодроб"),
       ("Умывальники","washstand","умываль"),
+      ("Виброплиты","vibratory_plate","виброплит"),
       ("Компрессоры","compressor","компрессор"),
       ("Циркуляционные насосы","circulation_pump","циркуляц"),
       ("Дренажные насосы","drainage_pump","дренаж"),
@@ -375,7 +378,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
             if sku_depth(sku)<3:continue
@@ -442,6 +445,11 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
                          and "умываль" in pn
                          and not sku.startswith("900/")
                          and not any(x in pn for x in ("бак для","тэн для","тен для","кран для","мойка для","раковина для","запчаст","комплект для")))
+            elif profile=="vibratory_plate":
+                matched=(sku.startswith("74/6/")
+                         and "виброплит" in pn
+                         and not sku.startswith("900/")
+                         and not any(x in pn for x in ("коврик","мат для","резинов","колеса для","колёса для","ремень для","двигатель для","запчаст","комплект для")))
             elif profile=="compressor":
                 matched=((sku.startswith("74/3/") or sku.startswith("74/7/"))
                          and "компрессор" in pn
@@ -2402,6 +2410,49 @@ def washstand_class_from_name(v: Any, sku: Any="") -> str:
     return "unknown"
 
 
+def vibratory_plate_required_missing(ours: dict,comp: dict) -> bool:
+    required=("weight_kg","motor_power_w","compaction_depth_cm")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def vibratory_plate_relative_similarity(a: float,b: float,full: float,close: float,partial: float) -> float:
+    d=abs(float(a)-float(b))/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.85
+    if d<=partial:return 0.65
+    return 0.0
+
+
+def vibratory_plate_depth_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b));rel=d/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=2.0 or rel<=0.10:return 1.0
+    if d<=4.0 or rel<=0.20:return 0.85
+    if d<=6.0 or rel<=0.30:return 0.65
+    return 0.0
+
+
+def vibratory_plate_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="weight_kg":
+        # Weight defines the machine class; heavier is not automatically better.
+        return 50
+    if k=="motor_power_w":
+        av=float(a);bv=float(b)
+        if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.10:return 50
+        return directional(rule,av,bv)
+    if k=="compaction_depth_cm":
+        av=float(a);bv=float(b)
+        d=abs(av-bv);rel=d/max(abs(av),abs(bv),1e-9)
+        if d<=2.0 or rel<=0.10:return 50
+        return directional(rule,av,bv)
+    if k in ("water_tank_present","reverse_present"):
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 78 if av and not bv else 22
+    return directional(rule,a,b)
+
+
 def washstand_body_material_part(v: Any) -> str:
     raw=str(v or "").strip()
     if not raw:return ""
@@ -2615,6 +2666,21 @@ def normalize_value(key: str, text: str) -> Any:
     if key=="washstand_body_material":
         v=washstand_body_material_family(text)
         return v[:120] if v else None
+    if key=="water_tank_present":
+        n=norm(text)
+        if any(x in n for x in ("без бака","бак отсутств","резервуар отсутств","нет бака")):return False
+        b=bool_value(text)
+        if b is not None:return b
+        if any(x in n for x in ("бак для воды","водяной бак","резервуар для воды","система орошения","орошение")):return True
+        return None
+    if key=="compaction_depth_cm":
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))/10,2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:см|cm)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",",".")),2)
+        m=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:м|m)\b",low,re.I)
+        if m:return round(float(m.group(1).replace(",","."))*100,2)
+        return round(max(ns),2) if ns else None
     if key=="water_heating_present":
         n=norm(text)
         if any(x in n for x in ("без подогрев","без нагрев","подогрев отсутств","нагрев отсутств","не подогрев")):return False
@@ -3177,6 +3243,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     concrete_mixer_mode={"drum_capacity_l","crown_material","input_power_w"}.issubset(rule_keys)
     grain_crusher_mode={"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(rule_keys)
     washstand_mode={"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(rule_keys)
+    vibratory_plate_mode={"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(rule_keys)
     compressor_mode={"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_lmin","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
@@ -3232,6 +3299,28 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             return "water_heating_present"
         if any(x in ln for x in ("функц","особенност","комплект")) and any(x in vn for x in ("подогрев","нагрев вод","водонагрев")):
             return "water_heating_present"
+        return None
+
+
+    def vibratory_plate_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not vibratory_plate_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if ln in ("вес","масса") or ("вес" in ln and "упаков" not in ln) or ("масса" in ln and "упаков" not in ln):
+            return "weight_kg"
+        if "мощност" in ln and not any(x in ln for x in ("вибрац","акуст","выходн")):
+            return "motor_power_w"
+        if ("глубин" in ln and any(x in ln for x in ("уплот","трамб","уплотнен","уплотнён"))) or "глубина уплотнения" in ln:
+            return "compaction_depth_cm"
+        if ("бак" in ln or "резервуар" in ln) and "вод" in ln:
+            return "water_tank_present"
+        if any(x in ln for x in ("орошен","смачиван")):
+            return "water_tank_present"
+        if "реверс" in ln or "обратн ход" in ln:
+            return "reverse_present"
+        if any(x in ln for x in ("функц","особенност","конструкц")):
+            if any(x in vn for x in ("реверс","обратн ход")):return "reverse_present"
+            if any(x in vn for x in ("бак для воды","водяной бак","система орошения")):return "water_tank_present"
         return None
 
 
@@ -3602,7 +3691,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or vibratory_plate_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
@@ -3955,6 +4044,15 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     # are a different product class and must never win by price.
                     if washstand_class_from_name(name)!="full_set":
                         continue
+                if scope.get("profile_key")=="vibratory_plate":
+                    vn=norm(name)
+                    plate_class=("виброплит" in vn)
+                    excluded=any(x in vn for x in (
+                      "коврик","мат для","резинов","колеса для","колёса для",
+                      "ремень для","двигатель для","запчаст","комплект для"
+                    ))
+                    if not plate_class or excluded:
+                        continue
                 if scope.get("profile_key")=="compressor":
                     cn=norm(name);cu=url_key(url)
                     compressor_class=("компрессор" in cn)
@@ -4109,6 +4207,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-graincrusher1"
     if {"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
         return RULESET_VERSION+"-washstand3"
+    if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(keys):
+        return RULESET_VERSION+"-vibplate1"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor3"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
@@ -4960,6 +5060,35 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         score*=0.60+0.40*coverage
         if form_mismatch:score=min(score,84.0)
         if grain_crusher_required_missing(ours,comp):score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
+
+
+    if profile=="vibratory_plate":
+        weights={"weight_kg":0.25,"water_tank_present":0.10,"motor_power_w":0.20,"compaction_depth_cm":0.25,"reverse_present":0.20}
+        total=used=0.0
+        reverse_mismatch=False
+        for k,w in weights.items():
+            a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="weight_kg":
+                    z=vibratory_plate_relative_similarity(float(a),float(b),0.15,0.25,0.40)
+                elif k=="motor_power_w":
+                    z=vibratory_plate_relative_similarity(float(a),float(b),0.10,0.20,0.30)
+                elif k=="compaction_depth_cm":
+                    z=vibratory_plate_depth_similarity(float(a),float(b))
+                elif k in ("water_tank_present","reverse_present"):
+                    z=1.0 if bool(a)==bool(b) else 0.0
+                    if k=="reverse_present" and bool(a)!=bool(b):reverse_mismatch=True
+                else:z=0.0
+            except Exception:z=0.0
+            total+=w*z;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(sum(weights.values()),1e-9))
+        score*=0.60+0.40*coverage
+        if reverse_mismatch:score=min(score,54.0)
+        if vibratory_plate_required_missing(ours,comp):score=min(score,69.0)
         return round(max(0,min(100,score)),2)
 
 
@@ -6519,6 +6648,8 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
             z=grain_crusher_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="washstand":
             z=washstand_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
+        elif profile=="vibratory_plate":
+            z=vibratory_plate_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="compressor":
             z=compressor_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]),ours,comp)
         elif profile=="snow_blower":
@@ -6603,6 +6734,8 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
             z=grain_crusher_directional(rule,a,b)
         elif profile=="washstand":
             z=washstand_directional(rule,a,b)
+        elif profile=="vibratory_plate":
+            z=vibratory_plate_directional(rule,a,b)
         elif profile=="compressor":
             z=compressor_directional(rule,a,b,ours,comp)
         elif profile=="garden_shredder":
@@ -6711,6 +6844,8 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных по бетономешалке. Отсутствующую характеристику не считать проигрышем: сравнивать только подтвержденные объём барабана, материал венца и мощность."
     if profile=="grain_crusher" and status=="data_incomplete":
         return "Недостаточно подтверждено ядро сравнения зернодробилки: нужны мощность и производительность. Форма корпуса и ёмкость бункера учитываются с согласованными весами, когда 21vek их публикует; отсутствие этих полей не считается проигрышем."
+    if profile=="vibratory_plate" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения виброплит. Не считать конкурента прямым аналогом, пока не подтверждены вес, мощность двигателя и глубина уплотнения; бак для воды и реверс учитываются, когда 21vek их публикует."
     if profile=="washstand" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных по умывальнику. Не считать отсутствующее поле нулём или проигрышем: нужны материал корпуса, ёмкость бака и наличие подогрева."
     if profile=="compressor" and status=="data_incomplete":
@@ -6983,6 +7118,11 @@ def main() -> None:
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
+                if profile=="vibratory_plate" and scored:
+                    gap_confirmed=gap_confirmed and not vibratory_plate_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {}
+                    )
                 if profile=="washstand" and scored:
                     gap_confirmed=gap_confirmed and not washstand_required_missing(
                       scored[0][1].get("specs_normalized") or {},
@@ -7080,6 +7220,8 @@ def main() -> None:
                     if profile=="grain_crusher" and grain_crusher_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="washstand" and washstand_required_missing(ours["specs_normalized"],comp_specs):
+                        data_incomplete=True
+                    if profile=="vibratory_plate" and vibratory_plate_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
                     if profile=="compressor" and compressor_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
