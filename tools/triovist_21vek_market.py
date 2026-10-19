@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.400.
+"""Triovist / 21vek automatic market analysis v23.6.401.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.29"
+PARSER_VERSION="market-auto-v6.30"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -3580,7 +3580,10 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             return "gears_forward"
         if ("передач" in ln or "скорост" in ln) and "назад" in ln:
             return "gears_reverse"
-        if any(x in ln for x in ("количество передач","число передач","количество скоростей","число скоростей")):
+        # 21vek uses several generic transmission labels ("коробка передач",
+        # "скорости" etc.). Capture them all; agri_gears_from_raw only emits
+        # forward/reverse counts when the value itself proves the split.
+        if "передач" in ln or "скорост" in ln:
             return "transmission_gears"
         if "ширин" in ln and any(x in ln for x in ("культив","обработ","захват","фрез")):
             return "cultivation_width_cm"
@@ -4502,7 +4505,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(keys):
         return RULESET_VERSION+"-vibplate2"
     if {"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm","transmission_gears"}.issubset(keys):
-        return RULESET_VERSION+"-agri2"
+        return RULESET_VERSION+"-agri3"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor3"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
