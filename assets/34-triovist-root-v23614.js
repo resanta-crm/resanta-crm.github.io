@@ -172,7 +172,7 @@ async function work(k,token){
 }
 async function loadPremiumInfographics(){
  const expected='23.6.401';
- const ready=()=>{const x=window.RESANTA_TRIOVIST_PREMIUM_V236390;return x?.open&&String(x.version||'')===expected?x:null};
+ const ready=()=>{const x=window.RESANTA_TRIOVIST_PREMIUM_V236390;return x?.open&&String(x.version||'')===expected&&String(x.factoryVersion||'')==='5.0'?x:null};
  if(ready())return ready();
  if(window.RESANTA_TRIOVIST_PREMIUM_V236390){try{delete window.RESANTA_TRIOVIST_PREMIUM_V236390}catch(_){window.RESANTA_TRIOVIST_PREMIUM_V236390=null}}
  for(let attempt=1;attempt<=2;attempt++){
@@ -180,7 +180,7 @@ async function loadPremiumInfographics(){
   try{
    await new Promise((resolve,reject)=>{
     const s=document.createElement('script');s.async=true;s.dataset.tr14PremiumInfographics='1';
-    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+(attempt===2?'-retry2':'');
+    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+'&factory=5.0'+(attempt===2?'-retry2':'');
     const timer=setTimeout(()=>reject(Error('Таймаут загрузки профессионального модуля')),15000);
     s.onload=()=>{clearTimeout(timer);resolve(true)};
     s.onerror=()=>{clearTimeout(timer);reject(Error('Файл профессионального модуля не загрузился'))};
@@ -197,7 +197,7 @@ async function loadInfographicBatch(){
  const found=document.querySelector('script[data-tr14-infographic-batches]');
  if(!found){
   const s=document.createElement('script');s.async=true;s.dataset.tr14InfographicBatches='1';
-  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.391';document.head.appendChild(s);
+  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.391&factory=5.0';document.head.appendChild(s);
  }
  for(let i=0;i<50;i++){
   const mod=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(mod?.open)return mod;
@@ -228,27 +228,18 @@ async function activate(k,save=false){
    if(!mod?.open)throw Error('Модуль «Конкуренты 21vek» ещё не загрузился. Повторите через несколько секунд.');
    const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
  }else if(k==='infographics'){
+   // Factory 5 is the only visible infographic workspace. Legacy V1/V4 data remain archived in DB/storage,
+   // but their UI/workers are not loaded here. This keeps the heavy module isolated from every other CRM route.
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
-   panel.innerHTML='<div class="tr14-info">Загружаю профессиональную студию инфографики…</div>';
-   const mod=await loadInfographics();
-   if(token!==navEpoch||active!==k)return;
-   const mount=document.createElement('div');panel.replaceChildren(mount);await mod.open(mount,ctx);
-   if(token!==navEpoch||active!==k)return;
+   panel.innerHTML='<div class="tr14-info">Загружаю Фабрику инфографики 5.0…</div>';
    try{
-     const premium=await loadPremiumInfographics();
-     if(token===navEpoch&&active===k)await premium.open(panel,ctx);
-   }catch(e){console.warn('Professional infographic load',e);
-     const note=document.createElement('div');note.className='tr14-warn';note.textContent='Профессиональная инфографика v23.6.401 не загрузилась: '+(e.message||e);
-     panel.prepend(note);
-   }
-   if(token!==navEpoch||active!==k)return;
-   try{
-     const bulk=await loadInfographicBatch();
-     if(token===navEpoch&&active===k)await bulk.open(panel,ctx);
+     const factory=await loadPremiumInfographics();
+     if(token!==navEpoch||active!==k)return;
+     await factory.open(panel,ctx);
    }catch(e){
-     console.warn('Triovist infographic history isolated load',e);
-     const note=document.createElement('div');note.className='tr14-warn';note.textContent=e.message||'История предыдущей инфографики временно недоступна';
-     panel.append(note);
+     console.warn('Infographic Factory 5 isolated load',e);
+     if(token!==navEpoch||active!==k)return;
+     panel.innerHTML='<div class="tr14-warn">Фабрика инфографики временно не загрузилась. Остальные разделы CRM не затронуты.</div>';
    }
  }else if(k==='motivation'){
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','none','important');
