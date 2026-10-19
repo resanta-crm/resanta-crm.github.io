@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.403.
+"""Triovist / 21vek automatic market analysis v23.6.404.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.32"
+PARSER_VERSION="market-auto-v6.33"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2499,16 +2499,25 @@ AGRI_OWN_BASELINE={
 }
 
 def agri_own_baseline(sku: Any) -> dict:
-    return dict(AGRI_OWN_BASELINE.get(str(sku or "").strip()) or {})
+    out=dict(AGRI_OWN_BASELINE.get(str(sku or "").strip()) or {})
+    if out.get("gears_forward") is not None:
+        out["transmission_gears"]=f'{int(out["gears_forward"])} вперед / {int(out.get("gears_reverse") or 0)} назад'
+    return out
 
 def agri_model_signatures(v: Any) -> set[str]:
-    n=norm(v)
+    # Work from the original title, not norm(): norm() intentionally erases
+    # separators, but suffixes such as P/BF/GR/10/12 are model identity here.
+    raw=str(v or "").lower()
+    raw=raw.replace("мб","mb").replace("мк","mk")
+    raw=raw.translate(str.maketrans({
+      "р":"p","п":"p","б":"b","ф":"f","г":"g",
+      "–":"-","—":"-","−":"-","_":"-"
+    }))
     out=set()
-    for t in re.findall(r"(?:мб|mb|мк|mk)[-\s]?[0-9]+(?:[a-zа-я0-9]+|[-/][a-zа-я0-9]+)*",n,re.I):
-        x=t.lower().replace("мб","mb").replace("мк","mk")
-        x=x.translate(str.maketrans({"р":"p","б":"b","ф":"f","г":"g"}))
-        x=re.sub(r"[^a-z0-9]","",x)
-        if x: out.add(x)
+    pattern=r"\b(?:mb|mk)\s*-?\s*\d+[a-z]*(?:\s*[-/]\s*[a-z0-9]+){0,3}(?:\s+(?:bf|gr))?"
+    for m in re.finditer(pattern,raw,re.I):
+        x=re.sub(r"[^a-z0-9]","",m.group(0))
+        if x:out.add(x)
     return out
 
 def agri_brand_family(v: Any) -> str:
