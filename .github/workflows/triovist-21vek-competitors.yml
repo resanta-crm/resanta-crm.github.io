@@ -54,13 +54,13 @@ jobs:
           node --check assets/106-triovist-competitors-v236218.js
 
       - name: Установить зависимости
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]') || contains(github.event.head_commit.message, '[market-target-analog-fix]') || contains(github.event.head_commit.message, '[market-target-concrete-mixer]') || contains(github.event.head_commit.message, '[market-target-compressor]') || contains(github.event.head_commit.message, '[market-target-grain-crusher]')))
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]') || contains(github.event.head_commit.message, '[market-target-analog-fix]') || contains(github.event.head_commit.message, '[market-target-concrete-mixer]') || contains(github.event.head_commit.message, '[market-target-compressor]') || contains(github.event.head_commit.message, '[market-target-grain-crusher]') || contains(github.event.head_commit.message, '[market-target-washstand]')))
         run: pip install requests beautifulsoup4
 
       - name: Проверка рынка 21vek
         # Обычный push проверяет только синтаксис. Полный рынок идёт ночью.
         # Маркеры позволяют безопасно прогнать только нужные новые профили.
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]') || contains(github.event.head_commit.message, '[market-target-analog-fix]') || contains(github.event.head_commit.message, '[market-target-concrete-mixer]') || contains(github.event.head_commit.message, '[market-target-compressor]') || contains(github.event.head_commit.message, '[market-target-grain-crusher]')))
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[market-target-pumps]') || contains(github.event.head_commit.message, '[market-target-circulation]') || contains(github.event.head_commit.message, '[market-target-analog-fix]') || contains(github.event.head_commit.message, '[market-target-concrete-mixer]') || contains(github.event.head_commit.message, '[market-target-compressor]') || contains(github.event.head_commit.message, '[market-target-grain-crusher]') || contains(github.event.head_commit.message, '[market-target-washstand]')))
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -71,11 +71,15 @@ jobs:
           TARGET_CONCRETE_MIXER: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-concrete-mixer]') }}
           TARGET_COMPRESSOR: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-compressor]') }}
           TARGET_GRAIN_CRUSHER: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-grain-crusher]') }}
+          TARGET_WASHSTAND: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[market-target-washstand]') }}
           MARKET_DELAY_SECONDS: '0.22'
           MARKET_HTTP_TIMEOUT: '30'
           MARKET_SPEC_TTL_DAYS: '30'
         run: |
-          if [ "$TARGET_GRAIN_CRUSHER" = "true" ]; then
+          if [ "$TARGET_WASHSTAND" = "true" ]; then
+            export MARKET_VALIDATE_PROFILES='washstand'
+            export MARKET_VALIDATE_EXACT='1'
+          elif [ "$TARGET_GRAIN_CRUSHER" = "true" ]; then
             export MARKET_VALIDATE_PROFILES='grain_crusher'
             export MARKET_VALIDATE_EXACT='1'
           elif [ "$TARGET_COMPRESSOR" = "true" ]; then
