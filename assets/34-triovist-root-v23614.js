@@ -180,7 +180,7 @@ async function loadPremiumInfographics(){
   try{
    await new Promise((resolve,reject)=>{
     const s=document.createElement('script');s.async=true;s.dataset.tr14PremiumInfographics='1';
-    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+(attempt===2?'-retry2':'');
+    s.src='./assets/122-triovist-premium-infographic-v236390.js?v='+expected+'&factory=5.0'+(attempt===2?'-retry2':'');
     const timer=setTimeout(()=>reject(Error('Таймаут загрузки профессионального модуля')),15000);
     s.onload=()=>{clearTimeout(timer);resolve(true)};
     s.onerror=()=>{clearTimeout(timer);reject(Error('Файл профессионального модуля не загрузился'))};
@@ -197,7 +197,7 @@ async function loadInfographicBatch(){
  const found=document.querySelector('script[data-tr14-infographic-batches]');
  if(!found){
   const s=document.createElement('script');s.async=true;s.dataset.tr14InfographicBatches='1';
-  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.391';document.head.appendChild(s);
+  s.src='./assets/121-triovist-infographic-batches-v236386.js?v=23.6.391&factory=5.0';document.head.appendChild(s);
  }
  for(let i=0;i<50;i++){
   const mod=window.RESANTA_TRIOVIST_INFOGRAPHIC_BATCH_V236386;if(mod?.open)return mod;
