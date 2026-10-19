@@ -18,6 +18,7 @@ import re
 import time
 import uuid
 import zipfile
+import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -55,6 +56,10 @@ def now_dt():return datetime.now(timezone.utc)
 def safe_name(v):
     x=re.sub(r'[<>:"/\\|?*\x00-\x1f]+','_',str(v or '')).strip(" ._")
     return x[:110] or "Unknown"
+def storage_key(v):
+    raw=str(v or '').encode('utf-8')
+    stem=re.sub(r'[^a-z0-9]+','-',str(v or '').lower()).strip('-')[:32] or 'group'
+    return stem+'-'+hashlib.sha1(raw).hexdigest()[:12]
 def api_headers(json_request=False):
     h={"apikey":KEY,"Authorization":"Bearer "+KEY}
     if json_request:h["Content-Type"]="application/json"
@@ -380,7 +385,7 @@ def ensure_group_dna(item,fallback_photo):
     if len(samples)<4:
         samples.append(("exact-sku",fallback_photo.convert("RGB")));summary["fallback_exact_sku"]+=1
     sheet=build_contact_sheet(samples)
-    path=f"dna/{safe_name(group)}/{int(time.time())}.jpg";storage_put(path,sheet,"image/jpeg")
+    path=f"dna/{storage_key(group)}/{int(time.time())}.jpg";storage_put(path,sheet,"image/jpeg")
     try:
         result=edge("worker-group-dna",{"group_name":group,"contact_sheet_base64":base64.b64encode(sheet).decode(),"source_summary":summary},timeout=190)
         db_patch("triovist_infographic_group_dna_v5",{"group_name":"eq."+group},
@@ -555,7 +560,10 @@ def finalize_batch(batch):
     if unapproved:
         refs=[x for x in items if x.get("group_name") in unapproved]
         if refs and all(x["status"] in ("completed","attention","error") for x in refs):
-            db_patch("triovist_infographic_factory_batches_v5",{"id":"eq."+bid},{"status":"pilot_review","stage":"Контрольные SKU готовы — один раз утвердите стиль группы, затем фабрика запустит остальные SKU","updated_at":now()})
+            if any(x["status"]=="completed" for x in refs):
+                db_patch("triovist_infographic_factory_batches_v5",{"id":"eq."+bid},{"status":"pilot_review","stage":"Контрольные SKU готовы — один раз утвердите стиль группы, затем фабрика запустит остальные SKU","updated_at":now()})
+            else:
+                db_patch("triovist_infographic_factory_batches_v5",{"id":"eq."+bid},{"status":"completed_with_attention","stage":"Контрольные SKU требуют внимания — массовый запуск не начат","updated_at":now()})
         return
     # Final batch archives from per-SKU ZIPs.
     good=[x for x in items if x.get("item_zip_path")]
