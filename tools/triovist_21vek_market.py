@@ -2346,7 +2346,13 @@ def compressor_engine_family(v: Any) -> str:
     if not n:return ""
     if any(x in n for x in ("бензин","gasoline","petrol")):return "gasoline"
     if any(x in n for x in ("дизел","diesel")):return "diesel"
-    if any(x in n for x in ("электр","асинхрон","индукцион","коллектор","electric","induction","asynchronous")):return "electric"
+    if any(x in n for x in ("электр","асинхрон","индукцион","коллектор","electric","induction","asynchronous","сеть","сетев")):
+        return "electric"
+    # 21vek compressor cards often expose the engine source as power voltage
+    # instead of a literal "Тип двигателя". Explicit mains voltage is enough
+    # evidence to classify the drive as electric, without inventing details.
+    if re.search(r"\b(?:110|127|220|230|240|380|400)\s*(?:в|v)\b",n):
+        return "electric"
     return n[:120]
 
 
@@ -2959,6 +2965,10 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         if ("двигател" in ln and any(x in ln for x in ("тип","вид","привод"))) or (
             "тип двигателя" in ln or "двигатель"==ln
         ):
+            return "compressor_engine_type"
+        if ("тип питан" in ln or "источник питан" in ln) and any(x in vn for x in ("сеть","сетев","электр","бензин","дизел","gasoline","diesel")):
+            return "compressor_engine_type"
+        if "напряжен" in ln and re.search(r"\b(?:110|127|220|230|240|380|400)\s*(?:в|v)\b",vn):
             return "compressor_engine_type"
         if any(x in ln for x in ("производительн","подач","расход воздух","воздушн поток")) and "мощност" not in ln:
             return "flow_rate_lmin"
