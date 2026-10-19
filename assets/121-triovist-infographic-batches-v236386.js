@@ -311,6 +311,7 @@ function input(e){
  if(next){next.focus();try{next.setSelectionRange(caret,caret)}catch(_){}}
 }
 async function open(parent){
+ if(window.RESANTA_TRIOVIST_FACTORY_V5_ACTIVE)return;
  if(!parent)return;
  closePreview();
  css();clearTimeout(timer);
