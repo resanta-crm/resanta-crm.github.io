@@ -2379,6 +2379,54 @@ def grain_crusher_directional(rule: dict,a: Any,b: Any) -> float|None:
     return directional(rule,a,b)
 
 
+def washstand_body_material_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    has_stainless=any(x in n for x in ("нержав","stainless","inox"))
+    n2=re.sub(r"нержав\w*\s+сталь|stainless\s+steel|inox"," ",n)
+    has_steel=bool(re.search(r"(^|\s)сталь(?:\s|$)",n2)) or bool(re.search(r"(^|\s)steel(?:\s|$)",n2))
+    has_metal=any(x in n2 for x in ("металл","metal"))
+    has_plastic=any(x in n for x in ("пластик","пластмасс","полимер","plastic","polymer"))
+    fam=[]
+    if has_stainless:fam.append("stainless")
+    if has_steel:fam.append("steel")
+    elif has_metal:fam.append("metal")
+    if has_plastic:fam.append("plastic")
+    fam=list(dict.fromkeys(fam))
+    if len(fam)>1:return "combined"
+    return fam[0] if fam else n[:120]
+
+
+def washstand_required_missing(ours: dict,comp: dict) -> bool:
+    required=("washstand_body_material","tank_capacity_l","water_heating_present")
+    return any(ours.get(k) is None or comp.get(k) is None for k in required)
+
+
+def washstand_relative_similarity(a: float,b: float) -> float:
+    d=abs(float(a)-float(b))/max(abs(float(a)),abs(float(b)),1e-9)
+    if d<=0.10:return 1.0
+    if d<=0.20:return 0.85
+    if d<=0.30:return 0.65
+    return 0.0
+
+
+def washstand_directional(rule: dict,a: Any,b: Any) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="washstand_body_material":
+        aa=washstand_body_material_family(a);bb=washstand_body_material_family(b)
+        return 50 if aa and bb else None
+    if k=="tank_capacity_l":
+        av=float(a);bv=float(b)
+        if abs(av-bv)/max(abs(av),abs(bv),1e-9)<=0.10:return 50
+        return directional(rule,av,bv)
+    if k=="water_heating_present":
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 78 if av else 22
+    return directional(rule,a,b)
+
+
 def compressor_type_family(v: Any) -> str:
     n=norm(v)
     if not n:return ""
@@ -2460,6 +2508,16 @@ def compressor_directional(rule: dict,a: Any,b: Any) -> float|None:
 
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
+    if key=="washstand_body_material":
+        v=washstand_body_material_family(text)
+        return v[:120] if v else None
+    if key=="water_heating_present":
+        n=norm(text)
+        if any(x in n for x in ("без подогрев","без нагрев","подогрев отсутств","нагрев отсутств","не подогрев")):return False
+        b=bool_value(text)
+        if b is not None:return b
+        if any(x in n for x in ("с подогрев","подогрев","нагрев вод","водонагрев","тэн","тен")):return True
+        return None
     if key=="throughput_kgh":
         vals=[]
         vals.extend(float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:кг\s*/\s*ч|кг/ч|kg\s*/\s*h|kg/h)",low,re.I))
