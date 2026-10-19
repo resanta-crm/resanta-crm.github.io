@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.402.
+"""Triovist / 21vek automatic market analysis v23.6.403.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.31"
+PARSER_VERSION="market-auto-v6.32"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2483,6 +2483,42 @@ def vibratory_plate_power_conflict(raw: list[dict]) -> bool:
     return (hi-lo)/max(hi,1e-9)>0.12
 
 
+# Verified own motoblock baseline from current official Resanta/Huter product documentation.
+# Used only for our exact SKUs; never applied to competitor cards.
+AGRI_OWN_BASELINE={
+    "70/5/34":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":8090.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":115.0,"low_gear_present":False},
+    "70/5/35":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":9561.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":140.0,"low_gear_present":False},
+    "70/5/36":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":11032.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":140.0,"low_gear_present":False},
+    "70/5/37":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5148.49,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/38":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5516.24,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/39":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5516.24,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/40":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/41":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+    "70/5/65":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":False,"motor_power_w":5736.89,"gears_forward":3,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":True},
+    "70/5/175":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
+}
+
+def agri_own_baseline(sku: Any) -> dict:
+    return dict(AGRI_OWN_BASELINE.get(str(sku or "").strip()) or {})
+
+def agri_model_signatures(v: Any) -> set[str]:
+    n=norm(v)
+    out=set()
+    for t in re.findall(r"(?:мб|mb|мк|mk)[-\s]?[0-9]+(?:[a-zа-я0-9]+|[-/][a-zа-я0-9]+)*",n,re.I):
+        x=t.lower().replace("мб","mb").replace("мк","mk")
+        x=x.translate(str.maketrans({"р":"p","б":"b","ф":"f","г":"g"}))
+        x=re.sub(r"[^a-z0-9]","",x)
+        if x: out.add(x)
+    return out
+
+def agri_brand_family(v: Any) -> str:
+    n=norm(v)
+    if "ресанта" in n or "resanta" in n:return "resanta"
+    if "huter" in n or "хутер" in n:return "huter"
+    if "вихр" in n or "vikhr" in n:return "vikhr"
+    if "eurolux" in n or "евролюкс" in n:return "eurolux"
+    return ""
+
 def agri_machine_type_family(v: Any) -> str:
     n=norm(v)
     if not n:return ""
@@ -2588,6 +2624,32 @@ def agri_enrich_specs(name: Any,raw: list[dict],specs: dict) -> dict:
         if re.search(r"(?:без\s+понижен|понижен.{0,20}(?:нет|отсутств))",ctx,re.I):low=False
         elif re.search(r"(?:пониженн(?:ая|ой)\s+(?:передач|скорост)|понижающ(?:ая|ий)\s+передач)",ctx,re.I):low=True
     if low is not None:out["low_gear_present"]=low
+
+    # Sanity-check wheel diameter. 21vek sometimes publishes wrong units:
+    # 450/254 "cm" are clearly mm, while values like 12 "cm" can represent
+    # a 12-inch rim only when the tire marking in the title proves it.
+    if out.get("wheel_diameter_cm") is not None:
+        try:
+            w=float(out.get("wheel_diameter_cm"))
+            if 100 < w <= 1000:
+                w=w/10.0
+            elif w < 15:
+                m=re.search(r"\b\d+(?:[.,]\d+)?\s*(?:x|х|×|-)\s*\d+(?:[.,]\d+)?(?:\s*[-xх×]\s*\d+(?:[.,]\d+)?)?\b",n,re.I)
+                if m:
+                    nums_t=[float(z.replace(",",".")) for z in re.findall(r"\d+(?:[.,]\d+)?",m.group(0))]
+                    rim=nums_t[-1] if nums_t else None
+                    if rim is not None and abs(rim-w)<=0.6:
+                        w=rim*2.54
+                    else:
+                        w=float("nan")
+                else:
+                    w=float("nan")
+            if math.isfinite(w) and 15<=w<=100:
+                out["wheel_diameter_cm"]=round(w,2)
+            else:
+                out.pop("wheel_diameter_cm",None)
+        except Exception:
+            out.pop("wheel_diameter_cm",None)
 
     fwd,rev=agri_gears_from_raw(raw)
     if out.get("gears_forward") is None and fwd is not None:out["gears_forward"]=fwd
@@ -4150,7 +4212,7 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
     raise last or RuntimeError("21vek search failed")
 
 
-def resolve_own_card(session: requests.Session,product_name: str) -> dict|None:
+def resolve_own_card(session: requests.Session,product_name: str,strict_model: bool=False) -> dict|None:
     """Resolve a missing own 21vek card using its price-list name.
 
     Only page 1 is queried and a model token must match. A recovered card does
@@ -4169,14 +4231,27 @@ def resolve_own_card(session: requests.Session,product_name: str) -> dict|None:
       t for t in re.findall(r"[0-9a-zа-я]+(?:[/.-][0-9a-zа-я]+)*",src,re.I)
       if any(ch.isdigit() for ch in t) and len(t)>=2
     ]
+    strict_sigs=agri_model_signatures(product_name) if strict_model else set()
+    strict_brand=agri_brand_family(product_name) if strict_model else ""
+    if strict_model and not strict_sigs:
+        return None
     best=None;best_score=-1
     for item in data.get("products") or []:
         name=item_name(item);url=item_url(item)
         if not url or not is_our_brand(item,name):continue
         nn=norm(name)
-        hits=sum(1 for t in model_tokens if t in nn)
-        if model_tokens and hits<=0:continue
         meta=search_meta(item)
+        if strict_model:
+            candidate_sigs=agri_model_signatures(name)
+            if not candidate_sigs or strict_sigs.isdisjoint(candidate_sigs):
+                continue
+            candidate_brand=agri_brand_family((meta.get("brand") or "")+" "+name)
+            if strict_brand and candidate_brand!=strict_brand:
+                continue
+            hits=len(strict_sigs.intersection(candidate_sigs))
+        else:
+            hits=sum(1 for t in model_tokens if t in nn)
+            if model_tokens and hits<=0:continue
         score=hits*10
         if norm(meta.get("brand")) and norm(meta.get("brand")) in src:score+=3
         if score>best_score:
@@ -7365,7 +7440,7 @@ def main() -> None:
                     if src.get("product_url"):continue
                     pname=price_names.get(sku) or src.get("product_name")
                     if not pname:continue
-                    resolved=resolve_own_card(session,pname)
+                    resolved=resolve_own_card(session,pname,strict_model=(profile=="agricultural_machine"))
                     if not resolved:continue
                     registry[sku]={
                       **src,
@@ -7423,7 +7498,7 @@ def main() -> None:
             own_rows=[]
             for sku in sorted(scope_skus[skey]):
                 src=registry.get(sku) or {}
-                baseline=vibratory_plate_own_baseline(sku) if profile=="vibratory_plate" else {}
+                baseline=(vibratory_plate_own_baseline(sku) if profile=="vibratory_plate" else (agri_own_baseline(sku) if profile=="agricultural_machine" else {}))
                 # Verified own baseline may exist even when 21vek has no registry/card.
                 if not src and not baseline:
                     continue
@@ -7436,10 +7511,13 @@ def main() -> None:
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
                 if baseline and not row["product_url"]:
+                    base_source="official_huter" if profile=="vibratory_plate" else "official_resanta_huter"
+                    base_label="HUTER · подтверждённые характеристики" if profile=="vibratory_plate" else "РЕСАНТА/HUTER · подтверждённые характеристики"
+                    base_sig="official-huter-v1" if profile=="vibratory_plate" else "official-agri-v1"
                     row.update({
-                      "specs_raw":[{"key":"official_huter_baseline","label":"HUTER · подтверждённые характеристики","value":"official product documentation","source":"official_huter"}],
+                      "specs_raw":[{"key":"official_own_baseline","label":base_label,"value":"official product documentation","source":base_source}],
                       "specs_normalized":dict(baseline),
-                      "specs_signature":rules_signature_prefix(rules)+":official-huter-v1",
+                      "specs_signature":rules_signature_prefix(rules)+":"+base_sig,
                       "specs_fetched_at":observed
                     })
                 elif fresh_specs(old,row["product_url"],rules):
@@ -7471,6 +7549,16 @@ def main() -> None:
                     row["specs_normalized"]=agri_enrich_specs(
                       row.get("product_name") or sku,row.get("specs_raw") or [],row.get("specs_normalized") or {}
                     )
+                    if baseline:
+                        merged=dict(row.get("specs_normalized") or {})
+                        merged.update(baseline)
+                        row["specs_normalized"]=merged
+                        rr=list(row.get("specs_raw") or [])
+                        rr.append({"key":"official_own_baseline","label":"РЕСАНТА/HUTER · подтверждённые характеристики","value":"official product documentation","source":"official_resanta_huter"})
+                        row["specs_raw"]=rr
+                        row["specs_signature"]=rules_signature_prefix(rules)+":official-agri-v1"
+                        row["specs_fetched_at"]=observed
+                        row["error_text"]=None
                 if profile=="vibratory_plate" and baseline:
                     merged=dict(row.get("specs_normalized") or {})
                     merged.update(baseline)
