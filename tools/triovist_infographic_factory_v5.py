@@ -78,6 +78,9 @@ def db_insert(table,rows,representation=False):
     h=api_headers(True);h["Prefer"]="return=representation" if representation else "return=minimal"
     r=req("POST",f"{SUPABASE_URL}/rest/v1/{table}",headers=h,json=rows,timeout=50)
     r.raise_for_status();return r.json() if representation and r.text else []
+def db_rpc(name,payload):
+    r=req("POST",f"{SUPABASE_URL}/rest/v1/rpc/{name}",headers=api_headers(True),json=payload,timeout=45)
+    r.raise_for_status();return r.json() if r.text else []
 def storage_put(path,data,content_type):
     encoded="/".join(quote(x,safe="") for x in path.split("/"))
     h=api_headers();h.update({"Content-Type":content_type,"x-upsert":"true"})
@@ -399,27 +402,8 @@ def ensure_group_dna(item,fallback_photo):
         raise
 
 def claim_item():
-    batches=db_get("triovist_infographic_factory_batches_v5",{
-        "status":"in.(queued,researching,processing)","select":"id,status,created_at","order":"created_at.asc","limit":"12"})
-    token=str(uuid.uuid4());until=(now_dt()+timedelta(minutes=LEASE_MINUTES)).isoformat()
-    for batch in batches:
-        candidates=db_get("triovist_infographic_factory_items_v5",{
-            "batch_id":"eq."+batch["id"],
-            "status":"in.(queued,planning,generating,qa,remaking)",
-            "select":"*","order":"is_reference.desc,updated_at.asc","limit":"16"})
-        for item in candidates:
-            if item.get("next_attempt_at"):
-                try:
-                    if datetime.fromisoformat(item["next_attempt_at"].replace("Z","+00:00"))>now_dt():continue
-                except ValueError:pass
-            if item.get("locked_until"):
-                try:
-                    if datetime.fromisoformat(item["locked_until"].replace("Z","+00:00"))>now_dt():continue
-                except ValueError:pass
-            out=db_patch("triovist_infographic_factory_items_v5",{"id":"eq."+item["id"],"status":"eq."+item["status"]},
-                         {"lock_token":token,"locked_until":until,"started_at":item.get("started_at") or now(),"updated_at":now()},True)
-            if out:return out[0]
-    return None
+    rows=db_rpc("triovist_infographic_factory_claim_v5",{"p_lease_minutes":LEASE_MINUTES})
+    return rows[0] if rows else None
 
 def release_item(item,changes=None):
     payload={"lock_token":None,"locked_until":None,"updated_at":now()}

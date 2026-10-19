@@ -151,18 +151,69 @@ async function visionJSON(prompt:string,images:{mime:string,b64:string}[],maxTok
    }
   }
  }
- try{
-  const fallbackPrompt=[
-   "VISION PROVIDERS TEMPORARILY UNAVAILABLE. Build a conservative PROVISIONAL category Visual DNA from the textual brief below.",
-   "Do not claim that you saw the images. Do not invent competitor-specific observations. Keep it premium but category-aware.",
-   "Return the same JSON schema requested by the brief, plus provisional:true and provisional_reason:'vision_provider_unavailable'.",
-   prompt
-  ].join("\n");
-  const out=await textAI(fallbackPrompt,Math.min(maxTokens,5000));
-  return {...out,provisional:true,provisional_reason:"vision_provider_unavailable",provider_failures:fail};
- }catch(_){
-  throw Error("VISION_PROVIDERS_UNAVAILABLE:"+fail.join(","));
+ const m=prompt.match(/category:\s*([^\.\n]+)/i),category=cleanText(m?.[1]||"товарная категория",120);
+ const concrete=/бетон|смесител/i.test(category),water=/водонагрев|бойлер/i.test(category);
+ return {
+  category,
+  creative_principle: concrete
+    ?"Премиальная индустриальная подача: точный товар крупно, ощущение прочной техники, глубина строительной среды и технические акценты только по подтвержденным фактам."
+    : water
+      ?"Премиальная чистая интерьерная подача: точный товар крупно, аккуратная архитектурная среда, ощущение инженерной точности и понятные технические акценты только по подтвержденным фактам."
+      :"Премиальная коммерческая подача exact-SKU: крупный товар, реалистичная среда, глубина и технические акценты только по подтвержденным данным.",
+  palette_guidance: concrete?"графит, сталь, тёплые индустриальные акценты":"чистые нейтральные тона, холодные технические акценты, высокий контраст",
+  lighting:"контролируемый коммерческий свет, объём по материалам, реалистичные блики, без плоской заливки",
+  product_scale:"товар занимает 55–75% кадра и остаётся главным визуальным объектом",
+  background_language: concrete?"слоистая индустриальная/строительная среда без выдуманных деталей товара":"слоистая интерьерная или студийно-техническая среда без выдуманных деталей товара",
+  information_density:"средне-высокая: визуальная история + 2–4 проверенных факта, без пустых вторичных экранов",
+  technical_visual_language:"макро-акценты на реально видимых деталях, схемные линии и подсветки без выдуманных разрезов",
+  slide_archetypes:[
+   {role:"hero",visual_story:"сильная обложка",composition:"крупный exact-SKU + глубина + место под факты"},
+   {role:"capability",visual_story:"ключевая характеристика в контексте",composition:"товар + среда + 2–4 факт-карты"},
+   {role:"construction",visual_story:"конструкция и материалы",composition:"крупный товар + допустимые макро-акценты"},
+   {role:"details",visual_story:"выбор по параметрам",composition:"техническая сетка вокруг exact-SKU"},
+   {role:"recap",visual_story:"финальное подтверждение выбора",composition:"цельный премиальный экран без повторения обложки"}
+  ],
+  must_have_elements:["точный SKU","визуальная глубина","разные композиции","2–4 подтвержденных факта"],
+  avoid:["одна характеристика + товар + пустой фон","выдуманные аксессуары","неподтвержденные преимущества","копирование карточек конкурентов"],
+  quality_bar:"каждый экран должен выглядеть как самостоятельная сильная обложка",
+  source_observations:[],
+  provisional:true,
+  provisional_reason:"vision_provider_unavailable",
+  provider_failures:fail
+ };
+}
+function fallbackStoryboard(facts:any[],item:any,minSlides:number,maxSlides:number,dna:any){
+ const count=Math.max(minSlides,Math.min(maxSlides,Math.min(7,Math.max(minSlides,facts.length>=10?7:facts.length>=7?6:5))));
+ const layouts=["hero_split","editorial_left","macro_detail","technical_grid","editorial_right","lifestyle","recap"];
+ const roles=["hero","capability","construction","details","choice","use","recap"];
+ const slides:any[]=[];
+ for(let i=0;i<count;i++){
+  const ids:string[]=[];
+  for(let k=0;k<Math.min(4,Math.max(3,facts.length));k++){
+   const f=facts[(i+k)%facts.length]; if(f&&!ids.includes(f.id))ids.push(f.id);
+  }
+  const linked=ids.map(id=>facts.find((f:any)=>f.id===id)).filter(Boolean);
+  const primary=linked[0],secondary=linked[1];
+  let title=primary?primary.label+" — "+primary.value:"Главное о товаре";
+  if(i===0) title=cleanText(item.product_name,78)||title;
+  else if(i===count-1) title="Ключевые параметры "+(cleanText(item.product_name,42)||"товара");
+  const subtitle=secondary?secondary.label+" — "+secondary.value:"";
+  const role=roles[i%roles.length],layout=layouts[i%layouts.length];
+  const scene=i===0
+    ?"Премиальная hero-сцена: exact-SKU крупно, выразительный свет, глубина и несколько визуальных слоёв."
+    : role==="construction"
+      ?"Технически богатая композиция: exact-SKU крупно, допустимые макро-акценты только на реально видимых деталях, глубина и графические направляющие."
+      : role==="details"
+        ?"Премиальная техническая сетка вокруг exact-SKU, разные уровни глубины и визуальные акценты на подтверждённых параметрах."
+        :"Самостоятельная премиальная коммерческая сцена уровня обложки, отличающаяся от предыдущего экрана по композиции и ритму.";
+  slides.push({
+   role,title,subtitle,
+   buyer_value:"Покупатель быстро понимает подтверждённые параметры exact-SKU без неподтверждённых обещаний.",
+   fact_ids:ids,layout_key:layout,
+   art_brief:scene+" Visual DNA: "+cleanText(dna?.creative_principle||"",240)
+  });
  }
+ return {recommended_slide_count:count,story_strategy:"deterministic_exact_sku_fallback",slides,provisional:true};
 }
 function storyboardValidate(raw:any,facts:any[],minSlides:number,maxSlides:number){
  const allowed=new Set(facts.map(f=>String(f.id))),input=arr(raw?.slides);
@@ -281,7 +332,10 @@ Deno.serve(async(req:Request)=>{
      "21vek competitor context: "+JSON.stringify(market),
      "Visual DNA: "+JSON.stringify(dna.visual_dna)
     ].join("\n");
-    const raw=await textAI(prompt,10000),slides=storyboardValidate(raw,facts,batch.min_slides,batch.max_slides);
+    let raw:any;
+    try{raw=await textAI(prompt,10000)}
+    catch(_){raw=fallbackStoryboard(facts,item,batch.min_slides,batch.max_slides,dna.visual_dna||{})}
+    const slides=storyboardValidate(raw,facts,batch.min_slides,batch.max_slides);
     const {error:ue}=await db.from("triovist_infographic_factory_items_v5").update({
      status:"generating",stage:"Storyboard готов — генерация слайдов",facts,storyboard:slides,slide_count:slides.length,
      source_photo_url:str(input.photo_url,1000),error_message:null,started_at:item.started_at||now(),updated_at:now()
