@@ -183,9 +183,10 @@ async function previewSku(sku){
  }catch(e){message=String(e.message||e);isError=true}
  finally{busy=false;draw();schedule()}
 }
-function closePreview(){document.querySelector('.tif5-overlay')?.remove();preview=null}
+function removePreviewModal(){document.querySelector('.tif5-overlay')?.remove()}
+function closePreview(){removePreviewModal();preview=null}
 function drawPreview(){
- closePreview();if(!preview)return;
+ removePreviewModal();if(!preview)return;
  const shade=document.createElement('div');shade.className='tif5-overlay';
  shade.innerHTML='<div class="tif5-modal"><div class="tif5-modal-head"><div><h3 style="margin:0">'+h(preview.item?.sku)+' · '+h(preview.item?.product_name)+'</h3><div class="tif5-muted">QA комплекта: '+Number(preview.item?.quality_score||0)+'/100 · '+h(preview.item?.group_name)+'</div></div><button data-tif-close>✕ Закрыть</button></div>'+
  '<div class="tif5-slidegrid">'+a(preview.slides).map(s=>'<div class="tif5-slide"><img loading="lazy" src="'+h(s.url)+'"><b>'+Number(s.slide_no)+'. '+h(s.title)+'</b><small>QA '+Number(s.qa_score||0)+'/100 · '+h(stateLabel[s.status]||s.status)+'</small></div>').join('')+'</div></div>';
