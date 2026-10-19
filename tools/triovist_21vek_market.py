@@ -4212,7 +4212,7 @@ def search_page(session: requests.Session, query: str,page: int,search_id: str="
     raise last or RuntimeError("21vek search failed")
 
 
-def resolve_own_card(session: requests.Session,product_name: str) -> dict|None:
+def resolve_own_card(session: requests.Session,product_name: str,strict_model: bool=False) -> dict|None:
     """Resolve a missing own 21vek card using its price-list name.
 
     Only page 1 is queried and a model token must match. A recovered card does
@@ -4231,14 +4231,27 @@ def resolve_own_card(session: requests.Session,product_name: str) -> dict|None:
       t for t in re.findall(r"[0-9a-zа-я]+(?:[/.-][0-9a-zа-я]+)*",src,re.I)
       if any(ch.isdigit() for ch in t) and len(t)>=2
     ]
+    strict_sigs=agri_model_signatures(product_name) if strict_model else set()
+    strict_brand=agri_brand_family(product_name) if strict_model else ""
+    if strict_model and not strict_sigs:
+        return None
     best=None;best_score=-1
     for item in data.get("products") or []:
         name=item_name(item);url=item_url(item)
         if not url or not is_our_brand(item,name):continue
         nn=norm(name)
-        hits=sum(1 for t in model_tokens if t in nn)
-        if model_tokens and hits<=0:continue
         meta=search_meta(item)
+        if strict_model:
+            candidate_sigs=agri_model_signatures(name)
+            if not candidate_sigs or strict_sigs.isdisjoint(candidate_sigs):
+                continue
+            candidate_brand=agri_brand_family((meta.get("brand") or "")+" "+name)
+            if strict_brand and candidate_brand!=strict_brand:
+                continue
+            hits=len(strict_sigs.intersection(candidate_sigs))
+        else:
+            hits=sum(1 for t in model_tokens if t in nn)
+            if model_tokens and hits<=0:continue
         score=hits*10
         if norm(meta.get("brand")) and norm(meta.get("brand")) in src:score+=3
         if score>best_score:
@@ -7427,7 +7440,7 @@ def main() -> None:
                     if src.get("product_url"):continue
                     pname=price_names.get(sku) or src.get("product_name")
                     if not pname:continue
-                    resolved=resolve_own_card(session,pname)
+                    resolved=resolve_own_card(session,pname,strict_model=(profile=="agricultural_machine"))
                     if not resolved:continue
                     registry[sku]={
                       **src,
