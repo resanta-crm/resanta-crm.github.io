@@ -2944,6 +2944,29 @@ function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
  return '<div class="tm224-sku-group '+(isGap?'gap':isIncomplete?'incomplete':'')+'"><div class="tm224-sku-head"><div><b>'+E(title)+'</b><span>'+E(subtitle)+'</span>'+listing+'</div><div><b>'+E(rows.length)+'</b><span>конкурентов</span></div></div><div class="tm224-sku-list">'+items+'</div></div>';
 }
 
+function scopeSearchNorm(v){return String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^0-9a-zа-я]+/g,' ').trim()}
+function scopeSearchAliases(q){
+ const n=scopeSearchNorm(q),out=[n];
+ if(/бетон(?:омеш|осмес)?/.test(n))out.push('бетономеш','бетоносмес');
+ if(/компресс/.test(n))out.push('компресс');
+ if(/болгар|ушм/.test(n))out.push('углошлиф');
+ if(/шуруп/.test(n))out.push('шуруповерт');
+ if(/скваж/.test(n))out.push('скважин');
+ return [...new Set(out.filter(Boolean))];
+}
+function scopeMatchesSearch(s,q){
+ const terms=scopeSearchAliases(q);if(!terms.length)return true;
+ const hay=scopeSearchNorm([s?.subgroup,s?.search_query,s?.profile_key].filter(Boolean).join(' '));
+ return terms.some(t=>hay.includes(t));
+}
+function filterScopeSelect(panel,scopes,q){
+ const sel=panel.querySelector('[data-f-scope]');if(!sel)return[];
+ const prev=sel.value||'',filtered=(scopes||[]).filter(s=>scopeMatchesSearch(s,q));
+ sel.innerHTML='<option value="">Выберите подгруппу</option>'+filtered.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('');
+ if(filtered.some(x=>String(x.scope_key)===prev))sel.value=prev;
+ return filtered;
+}
+
 function scopeHtml(s,summaryMap){
  const configured=N(s.main_competitors)!=null&&N(s.competitors)!=null&&N(s.main_competitors)<N(s.competitors);
  const brands=(s.brands||[]).map(b=>'<span class="tm224-brand"><b>'+E(b.brand)+'</b>'+(configured&&b.is_main_competitor?' ⭐':'')+' · '+E(b.models)+' мод. · лучшая #'+E(b.best_position??'—')+' · средняя '+E(b.avg_position??'—')+' · '+E(b.share_pct??0)+'%</span>').join('');
@@ -3062,12 +3085,23 @@ function render(panel,d,listing){
  const pd=N(listing?.period_days)||7;
  panel.innerHTML='<div class="tm224-head"><div><h3 style="margin:0">⚔️ Конкуренты 21vek · рынок TOP-2</h3><div class="tm224-note">Позиции конкурентов и наших товаров снимаются из одного и того же листинга 21vek по популярности. <b>Паюшин, Сидорович, Александренко и Кришталь видят одинаковый полный рынок без ограничения по зонам менеджеров.</b> Для бензопил основной конкурентный вывод строится только по отмеченным прямым конкурентам; остальные бренды остаются видимыми как ориентир рынка.</div></div><div class="tm224-actions"><button class="tr14-refresh" data-tm224-export>📥 Выгрузить конкурентный анализ Excel</button><button class="tr14-refresh" data-tm224-refresh>↻ Обновить</button></div></div>'
   +'<div class="tm224-kpi"><div><span>Категорий</span><b>'+E(s.scopes??0)+'</b></div><div><span>Товаров конкурентов</span><b>'+E(s.products??0)+'</b></div><div><span>Брендов</span><b>'+E(s.brands??0)+'</b></div><div><span>Аналог найден</span><b class="good">'+E(s.analog_found??0)+'</b></div><div><span>Недостаточно данных</span><b class="warn">'+E(s.insufficient_data??0)+'</b></div><div><span>Подтв. пробел</span><b class="bad">'+E(s.confirmed_gaps??s.gaps??0)+'</b></div><div><span>Мы сильнее</span><b class="good">'+E(s.ours_stronger??0)+'</b></div><div><span>Конкурент сильнее</span><b class="bad">'+E(s.competitor_stronger??0)+'</b></div><div><span>Ниже МРЦ</span><b class="'+((s.below_mrc||0)>0?'bad':'good')+'">'+E(s.below_mrc??0)+'</b></div></div>'
-  +'<div class="tm224-filters"><select data-f-scope><option value="">Выберите подгруппу</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-view><option value="market">По позициям 21vek</option><option value="ours">По нашим SKU</option></select><select data-f-sku><option value="">Все наши SKU</option><option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option></select><select data-f-analysis-state><option value="">Все статусы данных</option><option value="analog_found">Аналог найден</option><option value="insufficient_data">Недостаточно данных</option><option value="confirmed_gap">Подтверждённый пробел</option></select><select data-f-brand><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><b data-tm224-count></b></div></div>'
+  +'<div class="tm224-filters"><input type="search" data-f-scope-search placeholder="🔎 Найти подгруппу…"><select data-f-scope><option value="">Выберите подгруппу</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-view><option value="market">По позициям 21vek</option><option value="ours">По нашим SKU</option></select><select data-f-sku><option value="">Все наши SKU</option><option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option></select><select data-f-analysis-state><option value="">Все статусы данных</option><option value="analog_found">Аналог найден</option><option value="insufficient_data">Недостаточно данных</option><option value="confirmed_gap">Подтверждённый пробел</option></select><select data-f-brand><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><b data-tm224-count></b></div></div>'
   +scopes.map(x=>scopeHtml(x,summaryMap)).join('')+'<div data-tm224-rows></div>'
   +'<div class="tm224-meta">Последний полный анализ: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · конкурентных товаров '+E(run.competitor_count??0)+' · сравнений '+E(run.comparison_count??0)+' · подтверждённых пробелов '+E(run.gap_count??0)+' · ошибок '+E(run.error_count??0)+'. <b>Позиции конкурентов обновляются отдельным лёгким монитором каждые 3 часа реальным запросом к 21vek.</b> 🟢 до 4 ч · 🟡 4–8 ч · 🔴 старше 8 ч. Глубина — первые 120 позиций.</div>';
  const daySel=panel.querySelector('[data-f-days]');if(daySel)daySel.value=String(pd);
  refreshBrandOptions(panel,{...d,rows});refreshSkuOptions(panel,{...d,rows},listing);
  applyFilters(panel,{...d,rows},listing);
+ const scopeSearch=panel.querySelector('[data-f-scope-search]');
+ if(scopeSearch){
+   scopeSearch.addEventListener('input',e=>{filterScopeSelect(panel,scopes,e.currentTarget.value||'')});
+   scopeSearch.addEventListener('keydown',e=>{
+     if(e.key!=='Enter')return;
+     e.preventDefault();
+     const matched=filterScopeSelect(panel,scopes,e.currentTarget.value||'');
+     const sel=panel.querySelector('[data-f-scope]');
+     if(matched.length&&sel){sel.value=String(matched[0].scope_key||'');sel.dispatchEvent(new Event('change',{bubbles:true}))}
+   });
+ }
  panel.querySelector('[data-f-scope]')?.addEventListener('change',async e=>{
    const scope=String(e.currentTarget.value||'').trim();
    panel.dataset.tm224Limit='120';d.rows=[];listing=emptyListing(scope,7);d.__scopeLoading=scope||null;
