@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.387.
+"""Triovist / 21vek automatic market analysis v23.6.388.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.17"
+PARSER_VERSION="market-auto-v6.18"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2342,7 +2342,11 @@ def grain_crusher_body_form_family(v: Any) -> str:
 
 
 def grain_crusher_required_missing(ours: dict,comp: dict) -> bool:
-    required=("input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l")
+    # 21vek reliably exposes power + throughput for this category, while body
+    # form is absent from the public spec set and hopper volume is only partial.
+    # Optional fields still contribute their approved weights when present, but
+    # their absence must never be treated as zero, a loss, or block the verdict.
+    required=("input_power_w","throughput_kgh")
     return any(ours.get(k) is None or comp.get(k) is None for k in required)
 
 
@@ -6408,7 +6412,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
     if profile=="concrete_mixer" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных по бетономешалке. Отсутствующую характеристику не считать проигрышем: сравнивать только подтвержденные объём барабана, материал венца и мощность."
     if profile=="grain_crusher" and status=="data_incomplete":
-        return "Недостаточно подтвержденных данных по зернодробилке. Для точного аналога нужны мощность, производительность, форма корпуса и ёмкость бункера; массу бункера в кг не переводить в литры без подтверждённой плотности."
+        return "Недостаточно подтверждено ядро сравнения зернодробилки: нужны мощность и производительность. Форма корпуса и ёмкость бункера учитываются с согласованными весами, когда 21vek их публикует; отсутствие этих полей не считается проигрышем."
     if profile=="compressor" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных по компрессору. Не считать отсутствующую характеристику нулём или проигрышем: для точного аналога нужны тип компрессора, объём ресивера, тип двигателя, производительность и максимальное давление."
     if profile=="circulation_pump" and status=="data_incomplete":
