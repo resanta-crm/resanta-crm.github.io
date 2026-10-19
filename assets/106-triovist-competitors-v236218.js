@@ -1,10 +1,10 @@
-/* RESANTA CRM v23.6.384 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
+/* RESANTA CRM v23.6.396 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
-const V='v23.6.384',TTL=30000;
+const V='v23.6.396',TTL=30000;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
@@ -201,6 +201,7 @@ function analysisState(r){
 function analysisStateLabel(r){
  const s=analysisState(r);
  if(s==='confirmed_gap')return['🔴 Подтверждённый пробел','bad'];
+ if(s==='insufficient_data'&&r?.profile_key==='vibratory_plate'&&!r?.our_sku)return['🟡 Тех. аналог не найден','warn'];
  if(s==='insufficient_data')return['🟡 Недостаточно данных','warn'];
  return['🟢 Аналог найден','good'];
 }
@@ -256,7 +257,7 @@ function specLine(k,v){
   application_area:'Область применения',carry_type:'Вид переноски',flow_rate_lmin:'Производительность',
   max_head_m:'Максимальный напор',max_suction_depth_m:'Глубина откачки',max_pumping_depth_m:'Глубина откачки',max_immersion_depth_m:'Глубина погружения',well_diameter_mm:'Диаметр скважины',operating_principle:'Принцип действия',water_type:'Тип воды',pump_body_material:'Материал корпуса',filter_particle_mm:'Размер фильтрующих частиц',max_water_temp_c:'Максимальная температура воды',
   tank_capacity_l:'Объем емкости',fuel_engine_type:'Тип бензинового двигателя',spray_radius_m:'Радиус опрыскивания',
-  wrench_type:'Тип гайковерта',motor_type:'Тип электродвигателя',reverse_present:'Реверс',operating_modes:'Режимы',
+  wrench_type:'Тип гайковерта',motor_type:'Тип электродвигателя',reverse_present:'Реверс',water_tank_present:'Бак для воды',compaction_depth_cm:'Глубина уплотнения',operating_modes:'Режимы',
   chuck_type:'Тип патрона',drive_size_in:'Посадочный квадрат/шестигранник',rotation_adjustment:'Регулировка вращения',
   max_rpm:'Макс. скорость вращения',max_torque_nm:'Макс. крутящий момент',charging_time_min:'Время зарядки',
   cut_speed_adjustment:'Регулировка скорости распила',cut_depth_90_mm:'Глубина реза 90°',cut_depth_45_mm:'Глубина реза 45°',
@@ -2896,15 +2897,16 @@ function competitorPriceTrend(r,days){
  return{kind:'up',className:'good',delta,pct:p,past,text:'↑ поднял на '+money(Math.abs(delta))+' ('+pct(p)+') за '+d+'д · было '+money(past)};
 }
 function rowHtml(r,ownMap,days,priceDays){
- const state=analysisState(r),gap=state==='confirmed_gap',incomplete=state==='insufficient_data',[sl,sc]=rowStatus(r),pos=livePosition(r),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays),fresh=freshnessInfo(r),w=r.__positionWatch;
- const lp=gap?null:ownMap.get(listingKey(r.scope_key,r.our_sku));
+ const state=analysisState(r),gap=state==='confirmed_gap',incomplete=state==='insufficient_data',noOwn=!r?.our_sku,[sl,sc]=rowStatus(r),pos=livePosition(r),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays),fresh=freshnessInfo(r),w=r.__positionWatch;
+ const lp=(gap||noOwn)?null:ownMap.get(listingKey(r.scope_key,r.our_sku));
  return '<div class="tm224-row '+(gap?'gap':incomplete?'incomplete':'')+'"><div class="tm224-main">'
   +'<div><small>Позиция 21vek</small><b class="'+(pos!=null&&pos<=10?'bad':'')+'">'+E(positionLabel(r))+'</b><span>'+(w?.listing_state==='outside_top120'?'вне первых 120':'страница '+E(w?.page_no??r.page_no??'—'))+'</span><span class="'+E(w?.movement==='up'||w?.movement==='entered'?'good':w?.movement==='down'||w?.movement==='exited'?'bad':'')+'">'+E(positionHistoryText(r))+'</span><span class="tm224-fresh '+E(fresh.cls)+'">'+E(fresh.text)+'</span></div>'
   +'<div><small>Конкурент</small><b>'+E(r.brand||'—')+'</b>'+competitorBadge(r)+'<span>'+E(r.model||'')+'</span>'+(r.product_url?'<a target="_blank" rel="noopener" href="'+E(r.product_url)+'">21vek ↗</a>':'')+'</div>'
   +'<div><small>Цена конкурента</small><b>'+money(r.competitor_price)+'</b><span class="'+E(pt.className)+'">'+E(pt.text)+'</span></div>'
   +(gap?'<div class="tm224-gapbox"><small>Наша матрица</small><b>⚠ Подтверждённый пробел ассортимента</b><span>лучшее совпадение '+pct(r.best_similarity).replace('+','')+'</span></div>'
+    :noOwn?'<div class="tm224-gapbox"><small>Наша матрица</small><b>Технический аналог по подтверждённым данным не найден</b><span>Это не означает, что наш листинг 21vek отсутствует: просто ни один наш SKU не прошёл текущий порог сопоставимости.</span></div>'
     :'<div><small>Наш SKU</small><b>'+E(r.our_sku||'—')+'</b><span>'+E(r.our_product_name||'')+'</span>'+listingInline(lp,days)+(r.our_product_url?'<a target="_blank" rel="noopener" href="'+E(r.our_product_url)+'">наша карточка ↗</a>':'')+'</div>')
-  +(gap?'':('<div><small>Наша цена / МРЦ</small><b>'+money(r.our_price)+' / '+money(r.mrc_byn)+'</b><span class="'+(N(r.mrc_delta_pct)<0?'bad':'good')+'">от МРЦ '+pct(r.mrc_delta_pct)+'</span></div>'
+  +((gap||noOwn)?'':('<div><small>Наша цена / МРЦ</small><b>'+money(r.our_price)+' / '+money(r.mrc_byn)+'</b><span class="'+(N(r.mrc_delta_pct)<0?'bad':'good')+'">от МРЦ '+pct(r.mrc_delta_pct)+'</span></div>'
    +'<div><small>Сопоставимость</small><b>'+pct(r.similarity_score).replace('+','')+'</b><span>'+E(r.data_incomplete?'по доступным данным':gradeLabel(r.analog_grade))+'</span>'+(r.data_incomplete?'<span class="warn">⚠️ Расчёт по неполным данным</span>':'')+'</div>'
    +'<div><small>Итог</small><b class="'+sc+'">'+sl+'</b><span>'+(priceMissing?'сравнение цены невозможно':'цена к конкуренту '+pct(r.price_delta_pct))+'</span>'+(r.data_incomplete?'<span class="warn">предварительно · часть характеристик не подтверждена</span>':'')+'</div>'))
   +'</div>'+(r.__detailLoaded?details(r,lp):lazyDetails(r))+'</div>';

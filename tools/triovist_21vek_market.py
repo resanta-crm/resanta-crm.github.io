@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.395.
+"""Triovist / 21vek automatic market analysis v23.6.396.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.24"
+PARSER_VERSION="market-auto-v6.25"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2410,8 +2410,44 @@ def washstand_class_from_name(v: Any, sku: Any="") -> str:
     return "unknown"
 
 
+# Verified HUTER own-matrix baseline. Primary source: HUTER VP-series
+# technical passport (Rev.5); SKU-specific current product pages are used where
+# they provide a newer explicit value. This baseline only affects our SKUs, never
+# competitor cards. It also lets no-card own SKUs participate in matrix coverage.
+VIBRATORY_PLATE_OWN_BASELINE={
+    "74/6/1":{"weight_kg":89.0,"motor_power_w":4780.74,"compaction_depth_cm":35.0,"water_tank_present":False,"reverse_present":False},
+    "74/6/2":{"weight_kg":90.0,"motor_power_w":4780.74,"compaction_depth_cm":35.0,"water_tank_present":True,"reverse_present":False},
+    "74/6/4":{"weight_kg":90.0,"motor_power_w":4780.0,"compaction_depth_cm":35.0,"water_tank_present":True,"reverse_present":False},
+    "74/6/5":{"weight_kg":60.0,"motor_power_w":4780.0,"compaction_depth_cm":30.0,"water_tank_present":False,"reverse_present":False},
+    "74/6/10":{"weight_kg":108.0,"motor_power_w":4780.74,"compaction_depth_cm":35.0,"water_tank_present":True,"reverse_present":False},
+    # Current SKU-specific HUTER page explicitly states reverse + water tank.
+    "74/6/20":{"weight_kg":65.43,"motor_power_w":4780.74,"compaction_depth_cm":30.0,"water_tank_present":True,"reverse_present":True},
+    "74/6/21":{"weight_kg":154.57,"motor_power_w":4780.74,"compaction_depth_cm":50.0,"water_tank_present":False,"reverse_present":True},
+}
+
+
+def vibratory_plate_own_baseline(sku: Any) -> dict:
+    return dict(VIBRATORY_PLATE_OWN_BASELINE.get(str(sku or "").strip()) or {})
+
+
+def vibratory_plate_power_conflict(raw: list[dict]) -> bool:
+    vals=[]
+    for x in raw or []:
+        if not isinstance(x,dict) or x.get("key")!="motor_power_w":continue
+        try:
+            v=normalize_value("motor_power_w",primitive_text(x.get("value")))
+            if v is not None and float(v)>0:vals.append(float(v))
+        except Exception:
+            pass
+    if len(vals)<2:return False
+    lo=min(vals);hi=max(vals)
+    return (hi-lo)/max(hi,1e-9)>0.12
+
+
 def vibratory_plate_required_missing(ours: dict,comp: dict) -> bool:
-    required=("weight_kg","motor_power_w","compaction_depth_cm")
+    # Reverse is a construction class: without it direct/close analogue status
+    # is not allowed. Water tank remains a weighted option, not a blocking field.
+    required=("weight_kg","motor_power_w","compaction_depth_cm","reverse_present")
     return any(ours.get(k) is None or comp.get(k) is None for k in required)
 
 
@@ -4208,7 +4244,7 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     if {"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
         return RULESET_VERSION+"-washstand3"
     if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(keys):
-        return RULESET_VERSION+"-vibplate1"
+        return RULESET_VERSION+"-vibplate2"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","compressor_drive_type","compressor_lubrication","compressor_voltage_v","flow_rate_input_lmin","flow_rate_output_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor3"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
@@ -4261,6 +4297,12 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     })
     raw,specs=extract_specs(html,rules)
     card=parsed["card"];extra=parsed["extra"]
+    if {"weight_kg","water_tank_present","motor_power_w","compaction_depth_cm","reverse_present"}.issubset(
+        {str(r.get("spec_key") or "") for r in rules}
+    ):
+        if vibratory_plate_power_conflict(raw):
+            specs["motor_power_w"]=None
+            specs["motor_power_conflict"]=True
     if any(r.get("spec_key")=="flow_rate_input_lmin" for r in rules):
         if specs.get("flow_rate_input_lmin") is not None:
             specs["flow_rate_lmin"]=specs["flow_rate_input_lmin"]
@@ -5087,7 +5129,23 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
         score=total/used*100
         coverage=min(1.0,used/max(sum(weights.values()),1e-9))
         score*=0.60+0.40*coverage
-        if reverse_mismatch:score=min(score,54.0)
+
+        # Weight defines the machine class. <=15% may be direct; 15–25% can
+        # only be close; >25% only conditional; >40% is not a direct analogue.
+        ow=ours.get("weight_kg");cw=comp.get("weight_kg")
+        if ow is not None and cw is not None:
+            wr=abs(float(ow)-float(cw))/max(abs(float(ow)),abs(float(cw)),1e-9)
+            if wr>0.40:score=min(score,54.0)
+            elif wr>0.25:score=min(score,69.0)
+            elif wr>0.15:score=min(score,84.0)
+
+        orv=ours.get("reverse_present");crv=comp.get("reverse_present")
+        if orv is None or crv is None:
+            # Unknown reverse => preliminary / conditional at best.
+            score=min(score,69.0)
+        elif bool(orv)!=bool(crv):
+            # Reversible and forward-only plates are different classes.
+            score=min(score,54.0)
         if vibratory_plate_required_missing(ours,comp):score=min(score,69.0)
         return round(max(0,min(100,score)),2)
 
@@ -6845,7 +6903,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
     if profile=="grain_crusher" and status=="data_incomplete":
         return "Недостаточно подтверждено ядро сравнения зернодробилки: нужны мощность и производительность. Форма корпуса и ёмкость бункера учитываются с согласованными весами, когда 21vek их публикует; отсутствие этих полей не считается проигрышем."
     if profile=="vibratory_plate" and status=="data_incomplete":
-        return "Недостаточно подтвержденных данных для точного сравнения виброплит. Не считать конкурента прямым аналогом, пока не подтверждены вес, мощность двигателя и глубина уплотнения; бак для воды и реверс учитываются, когда 21vek их публикует."
+        return "Недостаточно подтвержденных данных для точного сравнения виброплит. Для прямого/близкого аналога обязательны вес, мощность, глубина уплотнения и реверс. Бак для воды учитывается с весом 10%, а отсутствие значения не считается проигрышем."
     if profile=="washstand" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных по умывальнику. Не считать отсутствующее поле нулём или проигрышем: нужны материал корпуса, ёмкость бака и наличие подогрева."
     if profile=="compressor" and status=="data_incomplete":
@@ -6854,7 +6912,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
         return "Аналог рассчитан по неполным данным. Для подтверждения пробела обязательны производительность, максимальный напор и размер частиц; измельчитель сильно влияет на итог, когда он указан. Материал корпуса, подключение и тип воды уточняют сравнение."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -7042,7 +7100,10 @@ def main() -> None:
             own_rows=[]
             for sku in sorted(scope_skus[skey]):
                 src=registry.get(sku)
-                if not src or not src.get("product_url"):
+                baseline=vibratory_plate_own_baseline(sku) if profile=="vibratory_plate" else {}
+                if not src:
+                    continue
+                if not src.get("product_url") and not baseline:
                     continue
                 old=own_existing.get(sku)
                 row={
@@ -7050,7 +7111,14 @@ def main() -> None:
                   "product_url":src.get("product_url"),"current_price":valid_price(src.get("price")),
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
-                if fresh_specs(old,row["product_url"],rules):
+                if baseline and not row["product_url"]:
+                    row.update({
+                      "specs_raw":[{"key":"official_huter_baseline","label":"HUTER · подтверждённые характеристики","value":"official product documentation","source":"official_huter"}],
+                      "specs_normalized":dict(baseline),
+                      "specs_signature":rules_signature_prefix(rules)+":official-huter-v1",
+                      "specs_fetched_at":observed
+                    })
+                elif fresh_specs(old,row["product_url"],rules):
                     row.update({
                       "specs_raw":old.get("specs_raw") or [],"specs_normalized":old.get("specs_normalized") or {},
                       "specs_signature":old.get("specs_signature"),"specs_fetched_at":old.get("specs_fetched_at")
@@ -7075,6 +7143,18 @@ def main() -> None:
                         else:
                             row.update({"specs_raw":[],"specs_normalized":{}})
                         row["error_text"]=str(exc)[:1200];errors+=1
+                if profile=="vibratory_plate" and baseline:
+                    merged=dict(row.get("specs_normalized") or {})
+                    merged.update(baseline)
+                    # Official own baseline wins over marketplace card typos.
+                    merged.pop("motor_power_conflict",None)
+                    row["specs_normalized"]=merged
+                    rr=list(row.get("specs_raw") or [])
+                    rr.append({"key":"official_huter_baseline","label":"HUTER · подтверждённые характеристики","value":"official product documentation","source":"official_huter"})
+                    row["specs_raw"]=rr
+                    row["specs_signature"]=rules_signature_prefix(rules)+":official-huter-v1"
+                    row["specs_fetched_at"]=observed
+                    row["error_text"]=None
                 own_rows.append(row)
             # Publish fresh own specs first. The old delete-first sequence could leave
             # a category empty when Supabase was busy between DELETE and UPSERT.
@@ -7097,8 +7177,8 @@ def main() -> None:
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
             expected_own_count=len(scope_skus[skey])
             matrix_checked=expected_own_count>0 and len(usable_own)>=expected_own_count
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
