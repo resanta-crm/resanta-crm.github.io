@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <script>
 (function(){
-  const V='250';
+  const V='378';
   try{
     const u=new URL(location.href);
     if(u.searchParams.get('v')!==V && !sessionStorage.getItem('tsd_hub_force_'+V)){
@@ -18,7 +18,7 @@
 })();
 </script>
 <title>Resanta Склад · ТСД</title>
-<link rel="manifest" href="/tsd-manifest.webmanifest?v=250">
+<link rel="manifest" href="/tsd-manifest.webmanifest?v=378">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827}
@@ -44,9 +44,9 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
  <div class="card">
   <b style="font-size:18px">Что будем делать?</b>
   <div class="actions">
-   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=250"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
-   <a class="action" href="/inventory.html?legacy-module=1&v=250"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></a>
-   <a class="action" href="/picking.html?standalone=1&v=250"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></a>
+   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=378"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
+   <a class="action" href="/inventory.html?legacy-module=1&v=378"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></a>
+   <a class="action" href="/picking.html?standalone=1&v=378"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></a>
   </div>
   <button id="install" class="install hidden">⬇ Установить «Resanta Склад»</button>
   <div class="note">Один ярлык на терминале. Приёмка, инвентаризация и заказы остаются отдельными защищёнными модулями внутри него.</div>
@@ -58,15 +58,15 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-07-v23.6.250-warehouse-3in1';
+const HUB_VERSION='2026-10-19-v23.6.378-warehouse';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
-const PICKING_FAST_URL='/picking.html?standalone=1&v=250';
+const PICKING_FAST_URL='/picking.html?standalone=1&v=378';
 function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKING_FAST_URL:url}
 let moduleAttempt=0,moduleWatchdog=null,moduleReady=false;
 function freshUrl(target,attempt=1){
  const u=new URL(target,location.origin);
- u.searchParams.set('hub','250');
+ u.searchParams.set('hub','378');
  u.searchParams.set('attempt',String(attempt));
  u.searchParams.set('open',String(Date.now()));
  return u.pathname+u.search
