@@ -15,7 +15,7 @@ const RECEIVING_APP_VERSION='2026-10-19-v23.6.378-exact-fact-correction';
    localStorage.setItem(k,RECEIVING_APP_VERSION);
    if(old!==null&&!sessionStorage.getItem('receiving_reload_'+RECEIVING_APP_VERSION)){
     sessionStorage.setItem('receiving_reload_'+RECEIVING_APP_VERSION,'1');
-    location.replace('/receiving.html?legacy-module=1&v=247&ts='+Date.now());
+    location.replace('/receiving.html?legacy-module=1&v=378&ts='+Date.now());
    }
   }
  }catch(_){}
