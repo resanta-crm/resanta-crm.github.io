@@ -3105,6 +3105,21 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         return None
 
 
+    def washstand_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not washstand_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if "материал" in ln and "корпус" in ln:
+            return "washstand_body_material"
+        if any(x in ln for x in ("емкост","ёмкост","объем","обьем","вместим")) and any(x in ln for x in ("бак","резервуар","для вод")):
+            return "tank_capacity_l"
+        if any(x in ln for x in ("подогрев","нагрев вод","водонагрев","нагревател")):
+            return "water_heating_present"
+        if any(x in ln for x in ("функц","особенност","комплект")) and any(x in vn for x in ("подогрев","нагрев вод","водонагрев")):
+            return "water_heating_present"
+        return None
+
+
     def compressor_fuzzy_key(label: Any,value: Any) -> str|None:
         if not compressor_mode:return None
         ln=norm(label);vn=norm(primitive_text(value))
@@ -3466,7 +3481,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
 
