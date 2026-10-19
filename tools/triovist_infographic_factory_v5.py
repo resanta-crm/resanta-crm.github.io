@@ -45,6 +45,7 @@ START=time.monotonic()
 PART_BYTES=45*1024*1024
 PHOTO_LIMIT=14*1024*1024
 OWN_BRANDS={"resanta","ресанта","huter","хутер","вихрь","vikhr","eurolux","евролюкс"}
+WB_HOST_CACHE={}
 
 class TemporaryLimit(RuntimeError):pass
 class WaitForDNA(RuntimeError):pass
@@ -249,6 +250,55 @@ def ddg_result_urls(query,domain,limit=6):
         return out
     except Exception:return []
 
+def wb_search_products(query,limit=5):
+    """Best-effort public WB discovery. Any anti-bot/rate-limit failure falls back to web discovery."""
+    try:
+        r=req("GET","https://search.wb.ru/exactmatch/ru/common/v4/search",
+              params={"query":query,"resultset":"catalog","dest":"-1257786","curr":"rub","spp":"30","appType":"1","lang":"ru","page":"1"},
+              headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150 Safari/537.36","Accept":"application/json,text/plain,*/*"},
+              timeout=18)
+        if r.status_code!=200 or "json" not in (r.headers.get("content-type") or "").lower():return []
+        j=r.json()
+        products=j.get("products") or (j.get("data") or {}).get("products") or []
+        out=[]
+        for p in products:
+            try:nm=int(p.get("id"))
+            except Exception:continue
+            brand=normalize_group(p.get("brand"))
+            if brand in OWN_BRANDS:continue
+            out.append({"id":nm,"pics":int(p.get("pics") or 3)})
+            if len(out)>=limit:break
+        return out
+    except Exception:return []
+
+def wb_basket_host(nm):
+    vol=nm//100000
+    if vol in WB_HOST_CACHE:return WB_HOST_CACHE[vol]
+    path=f"/vol{vol}/part{nm//1000}/{nm}/info/ru/card.json"
+    # Recent hosts first, then exhaustive bounded probe. Cached per volume.
+    order=list(range(35,61))+list(range(1,35))
+    for n in order:
+        host=f"{n:02d}"
+        try:
+            r=req("GET",f"https://basket-{host}.wbbasket.ru{path}",headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"},timeout=3)
+            if r.status_code==200:
+                WB_HOST_CACHE[vol]=host;return host
+        except Exception:pass
+    return None
+
+def wb_visual_samples(query,max_images=6):
+    out=[]
+    for p in wb_search_products(query,4):
+        host=wb_basket_host(p["id"])
+        if not host:continue
+        nm=p["id"];vol=nm//100000;part=nm//1000
+        for i in range(1,min(3,p.get("pics",3))+1):
+            u=f"https://basket-{host}.wbbasket.ru/vol{vol}/part{part}/{nm}/images/big/{i}.webp"
+            im=download_image(u)
+            if im is not None:out.append(im)
+            if len(out)>=max_images:return out
+    return out
+
 def normalize_group(s):
     return re.sub(r"[^a-zа-я0-9]+"," ",str(s or "").lower().replace("ё","е")).strip()
 
@@ -309,14 +359,24 @@ def ensure_group_dna(item,fallback_photo):
             samples.append(("21vek",im));summary["21vek"]+=1
             if summary["21vek"]>=6:break
         if summary["21vek"]>=6:break
-    # WB + Ozon public web research. Fail-soft: source may block automated access.
-    for source,domain in (("wb","wildberries.ru"),("ozon","ozon.ru")):
-        for u in ddg_result_urls(group,domain,5):
-            ims=marketplace_page_images(u,2);summary["urls"][source].append(u)
+    # Wildberries: first use its public JSON/CDN discovery; if throttled or fingerprint-blocked, fall back to public web results.
+    wbims=wb_visual_samples(group,6)
+    for im in wbims:
+        samples.append(("wb",im));summary["wb"]+=1
+    if summary["wb"]<3:
+        for u in ddg_result_urls(group,"wildberries.ru",5):
+            ims=marketplace_page_images(u,2);summary["urls"]["wb"].append(u)
             for im in ims:
-                samples.append((source,im));summary[source]+=1
-                if summary[source]>=5:break
-            if summary[source]>=5:break
+                samples.append(("wb",im));summary["wb"]+=1
+                if summary["wb"]>=5:break
+            if summary["wb"]>=5:break
+    # Ozon is intentionally fail-soft: public pages/search may be anti-bot protected. The factory never stops if this source is unavailable.
+    for u in ddg_result_urls(group,"ozon.ru",6):
+        ims=marketplace_page_images(u,2);summary["urls"]["ozon"].append(u)
+        for im in ims:
+            samples.append(("ozon",im));summary["ozon"]+=1
+            if summary["ozon"]>=5:break
+        if summary["ozon"]>=5:break
     if len(samples)<4:
         samples.append(("exact-sku",fallback_photo.convert("RGB")));summary["fallback_exact_sku"]+=1
     sheet=build_contact_sheet(samples)
