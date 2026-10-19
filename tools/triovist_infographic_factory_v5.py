@@ -507,7 +507,23 @@ def process_item(item):
     except WaitForDNA:
         requeue(item,"Visual DNA is being researched",2)
     except TemporaryLimit as e:
-        log("Factory temporary limit",item["sku"],str(e)[:160]);requeue(item,str(e),5)
+        msg=str(e)
+        log("Factory temporary limit",item["sku"],msg[:220])
+        if "no credits remaining" in msg.lower() or "billing" in msg.lower():
+            release_item(item,{
+                "status":"queued",
+                "stage":"Image API: нет кредитов — пополните API-баланс; фабрика продолжит автоматически",
+                "retry_count":int(item.get("retry_count") or 0)+1,
+                "next_attempt_at":(now_dt()+timedelta(minutes=60)).isoformat(),
+                "error_message":None
+            })
+            db_patch("triovist_infographic_factory_batches_v5",{"id":"eq."+item["batch_id"]},{
+                "status":"processing",
+                "stage":"Ожидание пополнения OpenAI API-баланса",
+                "updated_at":now()
+            })
+            return
+        requeue(item,msg,5)
     except Exception as e:
         msg=str(e)[:260];log("Factory item failed",item["sku"],msg)
         current=db_get("triovist_infographic_factory_items_v5",{"id":"eq."+iid,"select":"retry_count","limit":"1"})
