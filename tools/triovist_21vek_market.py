@@ -510,7 +510,7 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
             if matched:skus.add(sku)
         if skus:
             groups[key]={
-              "scope_key":key,"source_category":("Оборудование" if profile=="concrete_mixer" else ("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"))),"source_subgroup":label,
+              "scope_key":key,"source_category":("Оборудование" if profile in ("concrete_mixer","compressor") else ("Насосы" if profile in ("circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else ("Инструмент" if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder") else "Садовая техника"))),"source_subgroup":label,
               "source_prefix":None,"search_query":query,"profile_key":profile,"enabled":True,
               "own_sku_count":len(skus),"derived_from_price_at":datetime.now(timezone.utc).isoformat(),
               "updated_at":datetime.now(timezone.utc).isoformat(),
@@ -3644,6 +3644,11 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     mixer_class=("бетономеш" in mn or "бетоносмес" in mn)
                     if not mixer_class or any(x in mn for x in ("венец для","двигатель для","лопасть для","ремень для","запчаст","шестерн для","насадка миксер","дрель миксер")):
                         continue
+                if scope.get("profile_key")=="compressor":
+                    cn=norm(name)
+                    compressor_class=("компрессор" in cn)
+                    if not compressor_class or any(x in cn for x in ("масло компресс","шланг","фильтр для","ремень для","головка для","запчаст","пистолет","набор для")):
+                        continue
                 if scope.get("profile_key")=="circulation_pump":
                     cn=norm(name)
                     circulation_class=("циркуляц" in cn and "насос" in cn)
@@ -6525,8 +6530,8 @@ def main() -> None:
             usable_own=[x for x in own_rows if x.get("specs_normalized")]
             expected_own_count=len(scope_skus[skey])
             matrix_checked=expected_own_count>0 and len(usable_own)>=expected_own_count
-            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
-            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
+            gap_threshold=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+            candidate_threshold=50 if profile in ("earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","compressor","drainage_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 55)
             for p in current_rows:
                 if p.get("error_text") and not p.get("specs_normalized"): continue
                 scored=[]
