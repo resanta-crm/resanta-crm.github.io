@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.390.
+"""Triovist / 21vek automatic market analysis v23.6.391.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.20"
+PARSER_VERSION="market-auto-v6.21"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2379,19 +2379,55 @@ def grain_crusher_directional(rule: dict,a: Any,b: Any) -> float|None:
     return directional(rule,a,b)
 
 
+def washstand_class_from_name(v: Any, sku: Any="") -> str:
+    n=norm(v);sku=str(sku or "").strip()
+    if sku.startswith("74/4/") and not sku.startswith("900/"):
+        return "full_set"
+    if any(x in n for x in ("тэн для","тен для","нагревательный элемент","кран для","мойка для","раковина для","бак для","запчаст")):
+        return "accessory"
+    if "с душем" in n or "душевой" in n:
+        return "shower_set"
+    full_markers=(
+        "с тумб","тумба","тандем","чистюля","с раковин","с мойк",
+        "мойка нержав","мойка пластик","комфорт","люкс"
+    )
+    if any(x in n for x in full_markers):
+        return "full_set"
+    # Standalone heated tanks / hand-wash tanks are sold in the same 21vek
+    # category but are not substitutes for our cabinet + sink sets.
+    if ("эвбо" in n or re.search(r"\bум[-\s]?\d",n)
+        or "без эвн" in n or re.search(r"\b(?:5|9|10|12|15|17|20|22)\s*л\b",n)):
+        return "tank_only"
+    # Unknown construction is deliberately not accepted as a direct analogue.
+    return "unknown"
+
+
 def washstand_body_material_part(v: Any) -> str:
     raw=str(v or "").strip()
     if not raw:return ""
     parts=[x.strip() for x in re.split(r"[,;]",raw) if x.strip()]
-    useful=[]
+    sink_marked=any(
+        re.search(r"\(\s*(?:мойк|раковин)",part,re.I) or any(x in norm(part) for x in ("мойка","раковина"))
+        for part in parts
+    )
+    explicit_body=[]
+    unlabeled=[]
     for part in parts:
         pn=norm(part)
-        # 21vek can combine body and sink material in one "Материал" row.
-        # Never use the sink/ basin segment as the body material.
         if re.search(r"\(\s*(?:мойк|раковин)",part,re.I) or any(x in pn for x in ("мойка","раковина")):
             continue
-        useful.append(part)
-    return ", ".join(useful) if useful else raw
+        if any(x in pn for x in ("тумб","корпус","каркас")):
+            explicit_body.append(part)
+        else:
+            unlabeled.append(part)
+    if explicit_body:
+        return ", ".join(explicit_body)
+    # If the source explicitly labels another segment as the sink, the remaining
+    # unlabeled material belongs to the body/cabinet. Otherwise a generic
+    # "Материал: пластик/нержавейка" is ambiguous and must not be invented as body.
+    if sink_marked and unlabeled:
+        return ", ".join(unlabeled)
+    return ""
 
 
 def washstand_body_material_family(v: Any) -> str:
@@ -2413,7 +2449,7 @@ def washstand_body_material_family(v: Any) -> str:
 
 
 def washstand_required_missing(ours: dict,comp: dict) -> bool:
-    required=("washstand_body_material","tank_capacity_l","water_heating_present")
+    required=("washstand_class","tank_capacity_l","water_heating_present")
     return any(ours.get(k) is None or comp.get(k) is None for k in required)
 
 
@@ -3078,7 +3114,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     construction_heat_gun_mode={"airflow_lmin","heating_time_sec","input_power_w"}.issubset(rule_keys)
     concrete_mixer_mode={"drum_capacity_l","crown_material","input_power_w"}.issubset(rule_keys)
     grain_crusher_mode={"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(rule_keys)
-    washstand_mode={"washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(rule_keys)
+    washstand_mode={"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(rule_keys)
     compressor_mode={"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(rule_keys)
     miter_saw_mode={"input_power_w","blade_diameter_mm","sliding_present","cut_depth_90_mm","cut_depth_45_mm","max_rpm"}.issubset(rule_keys)
     bench_grinder_mode={"motor_type","input_power_w","max_rpm","grinding_wheel_diameter_mm"}.issubset(rule_keys)
@@ -3844,8 +3880,12 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                         continue
                 if scope.get("profile_key")=="washstand":
                     wn=norm(name)
-                    washstand_class=("умываль" in wn)
-                    if not washstand_class or any(x in wn for x in ("бак для","кран для","мойка для","раковина для","запчаст","комплект для")):
+                    if "умываль" not in wn:
+                        continue
+                    # Only confirmed full washstand sets enter the analogue pool.
+                    # Tanks/hand-wash basins, heaters, spare parts and shower sets
+                    # are a different product class and must never win by price.
+                    if washstand_class_from_name(name)!="full_set":
                         continue
                 if scope.get("profile_key")=="compressor":
                     cn=norm(name)
@@ -3989,8 +4029,8 @@ def rules_signature_prefix(rules: list[dict]|None=None) -> str:
         return RULESET_VERSION+"-concretemixer2"
     if {"input_power_w","throughput_kgh","grain_crusher_body_form","hopper_capacity_l"}.issubset(keys):
         return RULESET_VERSION+"-graincrusher1"
-    if {"washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
-        return RULESET_VERSION+"-washstand2"
+    if {"washstand_class","washstand_body_material","tank_capacity_l","water_heating_present"}.issubset(keys):
+        return RULESET_VERSION+"-washstand3"
     if {"compressor_type","receiver_capacity_l","compressor_engine_type","flow_rate_lmin","pressure_bar"}.issubset(keys):
         return RULESET_VERSION+"-compressor2"
     if "grinder_disc_diameter_mm" in keys and "power_source" in keys and "soft_start_present" in keys and "speed_adjustment_present" in keys:
@@ -4043,6 +4083,11 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     })
     raw,specs=extract_specs(html,rules)
     card=parsed["card"];extra=parsed["extra"]
+    if any(r.get("spec_key")=="washstand_class" for r in rules):
+        specs["washstand_class"]=washstand_class_from_name(
+          card.get("product_name") or base.get("model") or base.get("product_name") or "",
+          base.get("sku") or ""
+        )
     if any(r.get("spec_key")=="energy_type" for r in rules):
         specs["energy_type"]=infrared_energy_type(
           card.get("product_name") or base.get("model") or base.get("product_name") or "",
@@ -4832,6 +4877,10 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
     if profile=="washstand":
+        ca=str(ours.get("washstand_class") or "")
+        cb=str(comp.get("washstand_class") or "")
+        if ca!="full_set" or cb!="full_set":
+            return 0.0
         weights={"washstand_body_material":0.25,"tank_capacity_l":0.35,"water_heating_present":0.40}
         total=used=0.0
         material_mismatch=False
