@@ -1,10 +1,10 @@
-/* RESANTA CRM v23.6.396 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
+/* RESANTA CRM v23.6.399 · TRIOVIST / 21VEK ANALOG STATES + OWN SKU VIEW
  * Automatic market map from the first two 21vek ranking pages.
  * Separate read-only analytical contour; production own-card parser is untouched.
  */
 (function(){
 'use strict';
-const V='v23.6.396',TTL=30000;
+const V='v23.6.399',TTL=30000;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
@@ -257,7 +257,9 @@ function specLine(k,v){
   application_area:'Область применения',carry_type:'Вид переноски',flow_rate_lmin:'Производительность',
   max_head_m:'Максимальный напор',max_suction_depth_m:'Глубина откачки',max_pumping_depth_m:'Глубина откачки',max_immersion_depth_m:'Глубина погружения',well_diameter_mm:'Диаметр скважины',operating_principle:'Принцип действия',water_type:'Тип воды',pump_body_material:'Материал корпуса',filter_particle_mm:'Размер фильтрующих частиц',max_water_temp_c:'Максимальная температура воды',
   tank_capacity_l:'Объем емкости',fuel_engine_type:'Тип бензинового двигателя',spray_radius_m:'Радиус опрыскивания',
-  wrench_type:'Тип гайковерта',motor_type:'Тип электродвигателя',reverse_present:'Реверс',water_tank_present:'Бак для воды',compaction_depth_cm:'Глубина уплотнения',operating_modes:'Режимы',
+  wrench_type:'Тип гайковерта',motor_type:'Тип электродвигателя',reverse_present:'Реверс',water_tank_present:'Бак для воды',compaction_depth_cm:'Глубина уплотнения',
+  agri_machine_type:'Тип машины',agri_power_source:'Источник питания',pto_present:'ВОМ',gears_forward:'Передачи вперёд',gears_reverse:'Передачи назад',cultivation_width_cm:'Ширина культивации',low_gear_present:'Пониженная передача',wheel_diameter_cm:'Диаметр колёс',
+  operating_modes:'Режимы',
   chuck_type:'Тип патрона',drive_size_in:'Посадочный квадрат/шестигранник',rotation_adjustment:'Регулировка вращения',
   max_rpm:'Макс. скорость вращения',max_torque_nm:'Макс. крутящий момент',charging_time_min:'Время зарядки',
   cut_speed_adjustment:'Регулировка скорости распила',cut_depth_90_mm:'Глубина реза 90°',cut_depth_45_mm:'Глубина реза 45°',

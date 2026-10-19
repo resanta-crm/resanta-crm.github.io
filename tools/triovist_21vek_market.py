@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.398.
+"""Triovist / 21vek automatic market analysis v23.6.399.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.27"
+PARSER_VERSION="market-auto-v6.28"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -4302,15 +4302,26 @@ def discover_scope(session: requests.Session,scope: dict) -> tuple[list[dict],li
                     if washstand_class_from_name(name)!="full_set":
                         continue
                 if scope.get("profile_key")=="agricultural_machine":
-                    an=norm(name)
+                    an=norm(name);aq=norm(scope.get("search_query") or "")
                     machine=any(x in an for x in ("культиватор","мотокультиватор","мотоблок","сельскохозяйственная машина"))
                     excluded=any(x in an for x in (
+                      "культиватор ручной","ручной культиватор",
                       "фреза для","фрезы для","плуг","грунтозацеп","сцепка","картофелекоп",
                       "окучник","колесо для","колёса для","прицеп","навесное оборудование",
                       "адаптер для","ремень для","двигатель для","редуктор для","насадка для",
                       "запчаст","комплект навес"
                     ))
                     if not machine or excluded:
+                        continue
+                    # 21vek broadens search results after the most relevant items.
+                    # Keep each ranking contour pure before opening product cards.
+                    if "аккумулятор" in aq and "аккумулятор" not in an:
+                        continue
+                    if "электрический" in aq and ("электрическ" not in an or "аккумулятор" in an):
+                        continue
+                    if "мотоблок" in aq and "мотоблок" not in an:
+                        continue
+                    if "бензинов" in aq and any(x in an for x in ("аккумулятор","электрическ","мотоблок","ручной")):
                         continue
                 if scope.get("profile_key")=="vibratory_plate":
                     vn=norm(name)
