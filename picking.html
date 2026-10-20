@@ -32,6 +32,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.k{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px}.k .v{font-weight:900;font-size:20px}.k .l{font-size:11px;color:#64748b}
 .item{padding:11px 0;border-bottom:1px solid #e5e7eb}.item:last-child{border-bottom:0}.item .name{font-weight:700}.item .meta{font-size:13px;color:#64748b;margin-top:3px}.item.removed{opacity:.7;background:#fff7ed;padding:10px;border-radius:10px}.item-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.mini{border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:7px 9px;font-weight:800;font-size:12px}.mini.short{border-color:#f59e0b;background:#fffbeb;color:#92400e}.mini.return{border-color:#ef4444;background:#fff1f2;color:#9f1239}.badge{display:inline-block;border-radius:99px;padding:2px 7px;font-size:11px;font-weight:800;margin-left:5px}.badge.red{background:#fee2e2;color:#991b1b}.badge.amber{background:#fef3c7;color:#92400e}.progress{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:6px}.progress>i{display:block;height:100%;background:#185FA5}
 .scanbox{position:sticky;bottom:10px;z-index:3;box-shadow:0 8px 30px rgba(15,23,42,.18)}.ready{border:2px solid #22c55e}.mut{font-size:12px;color:#64748b}
+.netbar{width:100%;border:1px solid #bbf7d0;border-radius:10px;padding:8px 11px;margin:0 0 10px;background:#f0fdf4;color:#166534;text-align:left;font-weight:800;font-size:12px;line-height:1.35}.netbar.offline{background:#fff1f2;border-color:#fecdd3;color:#9f1239}.netbar.pending{background:#fffbeb;border-color:#fde68a;color:#92400e}
 @media(max-width:560px){.wrap{padding:10px 8px 84px}.card{padding:11px;border-radius:12px}.top{gap:8px}.logo{width:42px;height:42px;font-size:22px;flex:0 0 42px}.grow,.top>div:last-child{min-width:0}.title{font-size:18px;line-height:1.2}.sub{font-size:12px}.kpi{grid-template-columns:1fr 1fr}.row>*{flex-basis:100%}.row .auto{flex-basis:auto}.inp{font-size:16px}.btn{min-height:46px}}
 </style>
 </head>
@@ -60,6 +61,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
   <button id="refresh-btn" class="btn auto">↻</button>
  </div>
  <div id="session-warning" class="status amber hidden"></div>
+ <button id="net-state" type="button" class="netbar online" title="Нажмите для проверки связи">🟢 Онлайн</button>
  <div class="card">
   <b>Мои заказы</b>
   <div class="mut">Здесь нет цен, НДС, УНП и исходных Excel-файлов.</div>
@@ -83,7 +85,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-19-v23.6.378-central-barcode';
+const PICKING_APP_VERSION='2026-10-20-v23.6.440-offline-safe';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const TSD_GATEWAYS=[
  'https://baqchjtvtmcfzwjjluhs.functions.supabase.co/warehouse-tsd-gateway-v1',
@@ -95,11 +97,13 @@ const WAREHOUSE_CHAT_URL=SUPABASE_URL+'/functions/v1/crm-warehouse-chat-v2';
 try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'resanta-picking-ready',version:PICKING_APP_VERSION},location.origin)}catch(_){}
 let session=null,orders=[],selected=null,pendingScan=null,pollTimer=null,busy=false,audioCtx=null,syncTimer=null,scanQueue=[],scanWorker=false,scanRetryTimer=null;
 let scannerInput={timer:null,start:0,last:0,lastLen:0,count:0,rapid:false};
+let netReachable=navigator.onLine!==false,netReason='',netProbe=null,lastProbeAt=0,diagFlushBusy=false;
+const PICK_DB='resanta_pick_local_v236440',PICK_STORE='scan_queue',PICK_FALLBACK='resanta_pick_queue_fallback_v236440',DIAG_KEY='resanta_pick_diag_v236440';
 const $=id=>document.getElementById(id);
 const STANDALONE=new URLSearchParams(location.search).has('standalone');
 setTimeout(()=>{
  const b=$('standalone-menu-btn');
- if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=250&from=picking')}
+ if(b&&STANDALONE){b.classList.remove('hidden');b.onclick=()=>location.replace('/tsd.html?v=379&from=picking')}
 },0);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v||0);
@@ -110,6 +114,114 @@ function moduleVisible(){try{return !window.frameElement||!window.frameElement.c
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function loadSession(){try{const x=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');return x?.token&&x?.device_key?x:null}catch(_){return null}}
 function saveSession(x){if(!x)clearFastCache();session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
+
+function openPickDb(){
+ return new Promise((resolve,reject)=>{
+  try{
+   const req=indexedDB.open(PICK_DB,1);
+   req.onupgradeneeded=()=>{const d=req.result;if(!d.objectStoreNames.contains(PICK_STORE))d.createObjectStore(PICK_STORE,{keyPath:'id'})};
+   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('IndexedDB unavailable'))
+  }catch(e){reject(e)}
+ })
+}
+function fallbackQueueLoad(){try{const x=JSON.parse(localStorage.getItem(PICK_FALLBACK)||'[]');return Array.isArray(x)?x:[]}catch(_){return[]}}
+function fallbackQueueSave(rows){try{localStorage.setItem(PICK_FALLBACK,JSON.stringify(rows));return true}catch(_){return false}}
+async function durableQueuePut(job){
+ try{
+  const d=await openPickDb();
+  await new Promise((resolve,reject)=>{const tx=d.transaction(PICK_STORE,'readwrite');tx.objectStore(PICK_STORE).put(job);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
+  d.close();return true
+ }catch(_){
+  const rows=fallbackQueueLoad().filter(x=>x.id!==job.id);rows.push(job);return fallbackQueueSave(rows)
+ }
+}
+async function durableQueueDelete(id){
+ try{
+  const d=await openPickDb();
+  await new Promise((resolve,reject)=>{const tx=d.transaction(PICK_STORE,'readwrite');tx.objectStore(PICK_STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
+  d.close()
+ }catch(_){}
+ fallbackQueueSave(fallbackQueueLoad().filter(x=>x.id!==id))
+}
+async function durableQueueAll(){
+ let rows=[];
+ try{
+  const d=await openPickDb();
+  rows=await new Promise((resolve,reject)=>{const tx=d.transaction(PICK_STORE,'readonly'),req=tx.objectStore(PICK_STORE).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error)});
+  d.close()
+ }catch(_){rows=fallbackQueueLoad()}
+ const by=new Map();
+ [...rows,...fallbackQueueLoad()].forEach(x=>{if(x?.id)by.set(x.id,x)});
+ return [...by.values()]
+}
+async function restoreScanQueue(){
+ if(!session?.device_key)return;
+ const rows=await durableQueueAll(),by=new Map(scanQueue.map(x=>[x.id,x]));
+ rows.filter(x=>x?.device_key===session.device_key).forEach(x=>by.set(x.id,x));
+ scanQueue=[...by.values()].sort((a,b)=>Number(a.queued_at||0)-Number(b.queued_at||0));
+ pendingScan=scanQueue[0]||null;renderNetState();
+ if(scanQueue.length)rememberDiag('queue_restored',{count:scanQueue.length})
+}
+function diagLoad(){try{const x=JSON.parse(localStorage.getItem(DIAG_KEY)||'[]');return Array.isArray(x)?x:[]}catch(_){return[]}}
+function diagSave(rows){try{localStorage.setItem(DIAG_KEY,JSON.stringify(rows.slice(-120)));return true}catch(_){return false}}
+function rememberDiag(type,details={}){
+ if(!session?.device_key)return;
+ const rows=diagLoad();
+ rows.push({id:uuid(),type:String(type||'event').slice(0,80),at:new Date().toISOString(),online:navigator.onLine!==false,queue:scanQueue.length,page:location.pathname,details});
+ diagSave(rows);
+ if(netReachable)setTimeout(flushDiag,50)
+}
+async function sendDiagRecord(r){
+ if(!session?.token)return false;
+ const args={p_device_token:session.token,p_event_type:r.type,p_client_at:r.at,p_online_hint:r.online,p_queue_len:r.queue,p_page:r.page,p_details:r.details||{}};
+ try{const out=await fetchRpc('warehouse_pick_device_diag_v1',args,2200);return !!out?.ok}catch(_){}
+ try{const out=await gatewayRpc('warehouse_pick_device_diag_v1',args,3000);return !!out?.ok}catch(_){}
+ return false
+}
+async function flushDiag(){
+ if(diagFlushBusy||!session?.token||!netReachable)return;
+ diagFlushBusy=true;
+ try{
+  const rows=diagLoad();let sent=0;
+  for(const r of rows){if(!(await sendDiagRecord(r)))break;sent++}
+  if(sent)diagSave(rows.slice(sent))
+ }catch(_){}
+ finally{diagFlushBusy=false}
+}
+function renderNetState(){
+ const e=$('net-state');if(!e)return;
+ const q=scanQueue.length;
+ if(!netReachable){
+  const p=netProbe?(' · сайт '+(netProbe.site?'✓':'×')+' · API '+(netProbe.api?'✓':'×')+' · резерв '+(netProbe.gateway?'✓':'×')):'';
+  e.className='netbar offline';e.textContent='🔴 Нет связи с сервером · сохранено локально '+q+' скан(ов)'+p;return
+ }
+ if(q){e.className='netbar pending';e.textContent='🟡 Онлайн · '+q+' скан(ов) ждут подтверждения сервера';return}
+ e.className='netbar online';e.textContent='🟢 Онлайн · очередь синхронизирована'
+}
+function setNet(ok,reason=''){
+ const changed=netReachable!==!!ok;netReachable=!!ok;netReason=String(reason||'');renderNetState();
+ if(changed&&session?.device_key)rememberDiag(ok?'network_restored':'network_lost',{reason:netReason})
+}
+async function probeOne(url,opts={}){
+ const ctrl=typeof AbortController!=='undefined'?new AbortController():null,t=ctrl?setTimeout(()=>ctrl.abort(),2500):null;
+ try{await fetch(url,{cache:'no-store',credentials:'omit',...opts,...(ctrl?{signal:ctrl.signal}:{})});return true}catch(_){return false}finally{if(t)clearTimeout(t)}
+}
+async function runConnectivityChecks(force=false){
+ if(!force&&Date.now()-lastProbeAt<12000)return netProbe;
+ lastProbeAt=Date.now();const stamp=Date.now();
+ const [site,api,gateway]=await Promise.all([
+  probeOne('/tsd.html?__probe=1&t='+stamp),
+  probeOne(SUPABASE_URL+'/rest/v1/?__probe='+stamp,{headers:{apikey:APIKEY}}),
+  probeOne(TSD_GATEWAYS[0],{method:'OPTIONS',headers:{apikey:APIKEY}})
+ ]);
+ netProbe={site,api,gateway,at:new Date().toISOString()};setNet(api||gateway,'probe');rememberDiag('connectivity_probe',netProbe);return netProbe
+}
+function archiveRejected(job,reason){
+ try{
+  const key='resanta_pick_rejected_v236440',rows=JSON.parse(localStorage.getItem(key)||'[]'),arr=Array.isArray(rows)?rows:[];
+  arr.push({...job,rejected_at:new Date().toISOString(),reason:String(reason||'unknown')});localStorage.setItem(key,JSON.stringify(arr.slice(-100)))
+ }catch(_){}
+}
 function scanStatus(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
 function fastCacheKey(){return 'resanta_pick_fast_cache_v236239_'+String(session?.device_key||'device')}
 function saveFastCache(){
@@ -225,7 +337,7 @@ async function rpc(name,args={},opts={}){
  const retries=Math.max(0,Number(opts.retry||0)),timeout=Math.max(1800,Number(opts.timeout||4500));
  let last=null;
  for(let i=0;i<=retries;i++){
-  try{return await fetchRpc(name,args,timeout)}
+  try{const out=await fetchRpc(name,args,timeout);setNet(true,'rpc');return out}
   catch(e){
    last=e;
    const transient=!e?.httpStatus||e.httpStatus===429||e.httpStatus>=500;
@@ -235,14 +347,15 @@ async function rpc(name,args={},opts={}){
  }
  const transient=!last?.httpStatus||last.httpStatus===429||last.httpStatus>=500;
  if(opts.xhrFallback&&transient){
-  try{return await xhrRpc(name,args,timeout+1200)}catch(e){last=e}
+  try{const out=await xhrRpc(name,args,timeout+1200);setNet(true,'xhr');return out}catch(e){last=e}
  }
  if(transient){
-  try{return await gatewayRpc(name,args,timeout+1800)}catch(e){last=e}
+  try{const out=await gatewayRpc(name,args,timeout+1800);setNet(true,'gateway');return out}catch(e){last=e}
  }
  const msg=String(last?.message||last||'Ошибка сети');
- if(/failed to fetch|networkerror|load failed|нет связи|abort|timed out|вовремя/i.test(msg)){
-  throw new Error('Нет связи ТСД с сервером. Wi‑Fi может быть подключён, но сервер недоступен. CRM повторит запрос автоматически.');
+ if(/failed to fetch|networkerror|load failed|нет связи|abort|timed out|вовремя|network/i.test(msg)){
+  setNet(false,msg);rememberDiag('rpc_network_error',{rpc:name,message:msg});runConnectivityChecks(false).catch(()=>{});
+  throw new Error('Нет связи ТСД с сервером. Сканы сохраняются на терминале и будут отправлены автоматически после восстановления связи.');
  }
  throw last||new Error('Ошибка запроса');
 }
@@ -341,12 +454,12 @@ async function scan(){
  const code=String($('scan-code').value||'').trim(),q=Number($('scan-qty').value||1);
  if(!code){$('scan-code').focus();return}
  if(!Number.isFinite(q)||q<=0){scanStatus('Количество должно быть больше 0.','red');beep(false);return}
- const job={id:uuid(),order:selected.id,code,qty:q,queued_at:Date.now()};
- scanQueue.push(job);pendingScan=job;
- resetScannerInput();$('scan-code').value='';$('scan-qty').value='1';
- scanStatus('Скан принят · очередь '+scanQueue.length,'blue');
- $('scan-code').focus();
- processScanQueue()
+ const job={id:uuid(),order:selected.id,code,qty:q,queued_at:Date.now(),device_key:session?.device_key||''};
+ const saved=await durableQueuePut(job);
+ if(!saved){scanStatus('Не удалось сохранить скан в память ТСД. Повторите сканирование.','red');beep(false);return}
+ scanQueue.push(job);pendingScan=job;resetScannerInput();$('scan-code').value='';$('scan-qty').value='1';renderNetState();
+ scanStatus((netReachable?'Скан принят':'Скан сохранён локально')+' · очередь '+scanQueue.length,netReachable?'blue':'amber');
+ $('scan-code').focus();processScanQueue()
 }
 async function processScanQueue(){
  if(scanWorker||busy||!session?.token||!scanQueue.length)return;
@@ -360,7 +473,6 @@ async function processScanQueue(){
       p_device_token:session.token,p_order_id:job.order,p_code:job.code,p_qty:job.qty,p_client_event_id:job.id
     },{retry:1,xhrFallback:true,timeout:3200});
     if(!r?.ok){
-     scanQueue.shift();pendingScan=scanQueue[0]||null;
      const msg={
        not_in_order:'Этого артикула/штрихкода нет в заказе.',
        not_in_device_part:'Эта позиция назначена другому ТСД.',
@@ -370,13 +482,14 @@ async function processScanQueue(){
        device_session_invalid:'Сессия ТСД истекла. Переподключите терминал.',
        return_required_first:'Сначала верните лишнее по корректировке.'
      }[r?.reason]||('Ошибка: '+String(r?.reason||'unknown'));
-     if(r?.reason==='device_session_invalid'){scanQueue=[];pendingScan=null;saveSession(null)}
-     scanStatus(msg,'red');beep(false);
-     if(!session?.token)break;
-     continue
+     if(r?.reason==='device_session_invalid'){
+      rememberDiag('device_session_invalid',{order:job.order,queued:scanQueue.length});saveSession(null);scanStatus(msg,'red');beep(false);break
+     }
+     archiveRejected(job,r?.reason);await durableQueueDelete(job.id);scanQueue.shift();pendingScan=scanQueue[0]||null;renderNetState();
+     rememberDiag('scan_rejected',{reason:r?.reason,order:job.order,code:job.code});scanStatus(msg,'red');beep(false);continue
     }
 
-    scanQueue.shift();pendingScan=scanQueue[0]||null;
+    await durableQueueDelete(job.id);scanQueue.shift();pendingScan=scanQueue[0]||null;renderNetState();
     if(selected?.id===job.order){
      const item=(selected.items||[]).find(x=>String(x.sku||'')===String(r.sku||'')&&num(x.picked_qty)<=num(r.picked_qty));
      if(item)item.picked_qty=num(r.picked_qty);
@@ -388,9 +501,9 @@ async function processScanQueue(){
     }
     beep(true);dispatchWarehouseChat();scheduleSync(r.order_status==='ready'?250:700)
    }catch(e){
-    retryLater=true;
-    scanStatus('Связь прервалась. '+scanQueue.length+' скан(ов) сохранены в очереди ТСД и будут отправлены автоматически с теми же ID операций. '+String(e?.message||e),'amber');
-    beep(false);break
+    retryLater=true;setNet(false,String(e?.message||e));
+    scanStatus('Связь прервалась. '+scanQueue.length+' скан(ов) сохранены в памяти ТСД и будут отправлены автоматически с теми же ID операций.','amber');
+    rememberDiag('scan_send_deferred',{order:job.order,queue:scanQueue.length,message:String(e?.message||e)});beep(false);break
    }
   }
  }finally{
@@ -435,7 +548,13 @@ async function confirmReturn(itemId){
 }
 async function undo(){
  if(busy||!selected)return;
- if(!confirm('Отменить ПОСЛЕДНИЙ скан этого заказа?'))return;
+ const local=[...scanQueue].reverse().find(x=>x.order===selected.id);
+ if(local){
+  if(!confirm('Отменить последний ещё не отправленный скан этого заказа?'))return;
+  await durableQueueDelete(local.id);scanQueue=scanQueue.filter(x=>x.id!==local.id);pendingScan=scanQueue[0]||null;renderNetState();
+  scanStatus('Локальный скан отменён. В очереди: '+scanQueue.length,'amber');beep(true);return
+ }
+ if(!confirm('Отменить ПОСЛЕДНИЙ подтверждённый сервером скан этого заказа?'))return;
  busy=true;render();scanStatus('Отменяю последний скан…','blue');
  try{
   const r=await rpc('warehouse_pick_device_undo_v1',{p_device_token:session.token,p_order_id:selected.id});
@@ -458,13 +577,15 @@ async function boot(){
  session=loadSession();
  if(!session){clearInterval(pollTimer);pollTimer=null;show('app-view',false);show('pair-view',true);return}
  show('pair-view',false);show('app-view',true);$('device-line').textContent=session.label||session.device_key;
+ await restoreScanQueue();
  const cached=loadFastCache();
  if(cached){render();$('device-line').textContent=(session.label||session.device_key)+' · сохранённый список';}
  else $('orders-list').innerHTML='<div class="status blue">Заказы готовы к загрузке.</div>';
- // В скрытом pre-load iframe сеть не трогаем: раньше именно здесь TSD-1 ловил
- // Failed to fetch и потом показывал старую ошибку уже после открытия раздела.
+ renderNetState();rememberDiag('boot',{cached:!!cached,queue:scanQueue.length,version:PICKING_APP_VERSION});
  if(moduleVisible())await refreshVisible();
- clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&!scanWorker&&moduleVisible())refreshVisible()},8000);
+ if(scanQueue.length&&session?.token)processScanQueue();
+ setTimeout(flushDiag,600);
+ clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&!scanWorker&&moduleVisible()&&netReachable)refreshVisible()},8000);
 }
 document.querySelectorAll('[data-pair-device]').forEach(b=>b.addEventListener('click',()=>{
  $('pair-device').value=b.dataset.pairDevice||'';
@@ -483,25 +604,27 @@ window.addEventListener('message',e=>{
  if(e.origin!==location.origin||e.data?.type!=='resanta-tsd-module-open')return;
  if(session&&!busy&&!scanWorker)refreshVisible();
 });
-window.addEventListener('online',()=>{if(session&&scanQueue.length)processScanQueue();else if(session&&!busy&&!scanWorker&&moduleVisible())refreshVisible()});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy&&!scanWorker)refreshVisible()});
+window.addEventListener('online',()=>{setNet(true,'browser-online');rememberDiag('browser_online',{});runConnectivityChecks(true).then(()=>{if(session&&scanQueue.length)processScanQueue();else if(session&&!busy&&!scanWorker&&moduleVisible())refreshVisible();flushDiag()}).catch(()=>{})});
+window.addEventListener('offline',()=>{setNet(false,'browser-offline');rememberDiag('browser_offline',{})});
+document.addEventListener('visibilitychange',()=>{
+ rememberDiag('visibility',{state:document.visibilityState});
+ if(document.visibilityState==='visible'&&moduleVisible()&&session&&!busy&&!scanWorker){
+  if(scanQueue.length)processScanQueue();else refreshVisible()
+ }
+});
+window.addEventListener('pagehide',()=>rememberDiag('pagehide',{queue:scanQueue.length}));
+window.addEventListener('error',e=>rememberDiag('js_error',{message:String(e?.message||''),source:String(e?.filename||''),line:Number(e?.lineno||0)}));
+window.addEventListener('unhandledrejection',e=>rememberDiag('promise_rejection',{message:String(e?.reason?.message||e?.reason||'')}));
+$('net-state')?.addEventListener('click',()=>runConnectivityChecks(true).catch(()=>{}));
 
 if('serviceWorker'in navigator){
- navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
-  rs.filter(r=>String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'').includes('/picking-sw.js'))
-    .map(r=>r.unregister().catch(()=>false))
- )).catch(()=>{});
+ navigator.serviceWorker.register('/tsd-sw.js?v=379',{scope:'/',updateViaCache:'none'})
+  .then(r=>r.update().catch(()=>{}))
+  .catch(e=>rememberDiag('service_worker_error',{message:String(e?.message||e)}));
 }
-if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(
- keys.filter(k=>k.startsWith('resanta-picking-')).map(k=>caches.delete(k))
-)).catch(()=>{});
 
 boot();
 
-if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
- rs.filter(r=>String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'').includes('/picking-sw.js')).map(r=>r.unregister().catch(()=>false))
-)).catch(()=>{});
-if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('resanta-picking-')).map(k=>caches.delete(k)))).catch(()=>{});
 </script>
 </body>
 </html>
