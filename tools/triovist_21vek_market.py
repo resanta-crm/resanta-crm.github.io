@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.404.
+"""Triovist / 21vek automatic market analysis v23.6.405.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.33"
+PARSER_VERSION="market-auto-v6.34"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2498,8 +2498,21 @@ AGRI_OWN_BASELINE={
     "70/5/175":{"agri_machine_type":"motoblock","agri_power_source":"gasoline","pto_present":True,"motor_power_w":5883.99,"gears_forward":2,"gears_reverse":1,"cultivation_width_cm":100.0,"low_gear_present":False},
 }
 
+AGRI_OWN_SKU_ALIASES={
+    "901/986":"70/5/37",  # МБ-7000-10
+    "901/987":"70/5/38",  # МБ-7500-10
+    "901/988":"70/5/39",  # МБ-7500-БФ
+    "901/989":"70/5/41",  # МБ-8000-10
+    "901/990":"70/5/40",  # МБ-8000-БФ
+    "901/991":"70/5/34",  # МБ-11000-12
+    "901/992":"70/5/35",  # МБ-13000-12
+    "901/993":"70/5/36",  # МБ-15000-12
+}
+
 def agri_own_baseline(sku: Any) -> dict:
-    out=dict(AGRI_OWN_BASELINE.get(str(sku or "").strip()) or {})
+    key=str(sku or "").strip()
+    base_key=AGRI_OWN_SKU_ALIASES.get(key,key)
+    out=dict(AGRI_OWN_BASELINE.get(base_key) or {})
     if out.get("gears_forward") is not None:
         out["transmission_gears"]=f'{int(out["gears_forward"])} вперед / {int(out.get("gears_reverse") or 0)} назад'
     return out
@@ -7515,7 +7528,8 @@ def main() -> None:
                     continue
                 old=own_existing.get(sku)
                 row={
-                  "sku":sku,"scope_key":skey,"product_name":src.get("product_name") or price_names.get(sku) or sku,
+                  "sku":sku,"scope_key":skey,
+                  "product_name":(price_names.get(sku) if profile=="agricultural_machine" else None) or src.get("product_name") or price_names.get(sku) or sku,
                   "product_url":src.get("product_url"),"current_price":valid_price(src.get("price")),
                   "mrc_byn":mrc.get(sku),"observed_at":observed,"error_text":None
                 }
