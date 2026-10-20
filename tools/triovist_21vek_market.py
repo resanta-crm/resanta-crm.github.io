@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.412.
+"""Triovist / 21vek automatic market analysis v23.6.413.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.41"
+PARSER_VERSION="market-auto-v6.42"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -4998,6 +4998,14 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         if specs.get("min_welding_current_a") is None:
             cm=re.search(r"(?:минимальн\w*|мин\.?)\s+(?:сварочн\w*\s+)?ток[^0-9]{0,20}(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
             if cm:specs["min_welding_current_a"]=float(cm.group(1).replace(",","."))
+
+        if welding_profile=="welding_semi_auto" and specs.get("max_spool_weight_kg") is None:
+            sm=re.search(r"(?:катушк\w*|бобин\w*)[^\n.;]{0,60}?(?:до|max(?:имальн\w*)?)?\s*(\d+(?:[.,]\d+)?)\s*(?:кг|kg)\b",local_blob,re.I)
+            if not sm:
+                sm=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:кг|kg)\b[^\n.;]{0,40}?(?:катушк\w*|бобин\w*)",local_blob,re.I)
+            if sm:
+                sw=float(sm.group(1).replace(",","."))
+                if 0.1<=sw<=30:specs["max_spool_weight_kg"]=sw
 
         # Duty current is accepted only when the SAME local phrase proves both current and duty %.
         if specs.get("duty_cycle_current_a") is None:
