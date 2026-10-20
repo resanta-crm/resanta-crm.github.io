@@ -637,3 +637,27 @@ select cron.schedule(
   '0 17 * * *',
   $$select public.crm_run_gps_workday_reminder_v236417('20:00');$$
 );
+
+
+-- v23.6.420: reminder idempotency is per Minsk calendar date.
+alter table public.gps_workday_reminder_log_v236417
+  add column if not exists reminder_date date;
+update public.gps_workday_reminder_log_v236417
+set reminder_date=coalesce(reminder_date,(created_at at time zone 'Europe/Minsk')::date);
+alter table public.gps_workday_reminder_log_v236417
+  alter column reminder_date set default ((now() at time zone 'Europe/Minsk')::date),
+  alter column reminder_date set not null;
+do $$
+begin
+  if exists(
+    select 1 from pg_constraint
+    where conrelid='public.gps_workday_reminder_log_v236417'::regclass
+      and conname='gps_workday_reminder_log_v236417_pkey'
+  ) then
+    alter table public.gps_workday_reminder_log_v236417
+      drop constraint gps_workday_reminder_log_v236417_pkey;
+  end if;
+end $$;
+alter table public.gps_workday_reminder_log_v236417
+  add constraint gps_workday_reminder_log_v236417_pkey
+  primary key(workday_id,reminder_kind,reminder_date);
