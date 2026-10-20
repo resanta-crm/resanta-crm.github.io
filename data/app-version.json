@@ -1,6 +1,6 @@
 {
-  "version": "23.7.6",
+  "version": "23.7.7",
   "released_at": "2026-10-20",
-  "purpose": "GPS: trusted TT matching, true geofence visit time, technical-stop map markers, director facts tab and Excel export.",
+  "purpose": "GPS director package verified: trusted TT mapping, technical stop map, period facts and Excel export.",
   "deploy_trigger": "2026-10-20"
 }
