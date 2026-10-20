@@ -146,14 +146,14 @@ async function saveMapKey(){
 async function ensureAuth(){const {data,error}=await db.auth.getSession();if(error)throw error;if(!data?.session)throw new Error('Нет активной сессии CRM. Вернитесь в CRM, войдите и откройте маршрут снова.');}
 async function getAggregate(rebuild=false){
   if(!workday)throw new Error('Не указан рабочий день.');
-  const fn=rebuild?'gps_rebuild_workday_aggregate_v2362':'gps_get_workday_aggregate_director_v2362';
+  const fn=rebuild?'gps_rebuild_workday_aggregate_v236417':'gps_get_workday_aggregate_director_v236417';
   const {data,error}=await db.rpc(fn,{p_workday_id:workday});
   if(error)throw error;
   return data||{};
 }
 function stale(a){
   if(!a||!Object.keys(a).length)return true;
-  if(a.director_version!=='v23.6.2')return true;
+  if(a.director_version!=='v23.6.417')return true;
   if(a.aggregation_status!=='ready')return true;
   const src=new Date(a.source_last_point_at||0).getTime(),gen=new Date(a.generated_at||0).getTime();
   return !!(src&&(!gen||src>gen));
@@ -203,16 +203,21 @@ function renderDiagnostics(a){
   const stops=Array.isArray(a.physical_stops)?a.physical_stops:[];
   $('diagSummary').textContent='GPS-точек: '+(a.valid_points||0)+' валидных / '+(a.raw_points||0)+' сырых · физических остановок ≥5 минут: '+stops.length+'. Эти цифры диагностические и не являются количеством клиентов.';
   if(!stops.length){$('stopList').innerHTML='<div class="muted">Физических остановок ≥5 минут пока не найдено.</div>';return;}
-  const plans=Array.isArray(a.planned_points)?a.planned_points:[];
   $('stopList').innerHTML=stops.map(s=>{
-    const p=plans.find(x=>Number(x.stop_seq)===Number(s.seq));
-    return `<div class="stop"><b>Остановка ${s.seq}</b> · ${tm(s.start_at)}—${tm(s.end_at)} · <b>${Number(s.minutes||0).toFixed(0)} мин</b>${p?` · <span class="st-ok">${esc(p.client_name)}</span>`:' · <span class="muted">не сопоставлена с плановой ТТ</span>'}<div class="muted">точек: ${s.samples||0} · средняя точность ±${Number(s.avg_accuracy||0).toFixed(0)} м</div></div>`;
+    const cls=String(s.classification||'technical');
+    const css=cls==='planned_tt'?'st-ok':cls==='home'?'st-ok':cls==='offplan'?'st-warn':cls==='start_zone'?'st-warn':'muted';
+    const label=s.classification_label||'🔧 Техническая остановка';
+    const detail=s.classification_detail||'';
+    return `<div class="stop"><b>Остановка ${s.seq}</b> · ${tm(s.start_at)}—${tm(s.end_at)} · <b>${Number(s.minutes||0).toFixed(0)} мин</b> · <span class="${css}">${esc(label)}</span><div class="muted">точек: ${s.samples||0} · средняя точность ±${Number(s.avg_accuracy||0).toFixed(0)} м${detail?' · '+esc(detail):''}</div></div>`;
   }).join('');
 }
 function render(a){
   aggregate=a;$('content').classList.remove('hide');$('status').classList.add('hide');
   $('title').textContent=(a.manager_name||'Менеджер')+' · '+(a.work_date||'');
-  $('meta').textContent='Последняя GPS '+dt(a.source_last_point_at)+' · данные обновлены '+dt(a.generated_at);
+  const depart=a.actual_departure_at?tm(a.actual_departure_at):'—';
+  const enabled=a.gps_enabled_at?tm(a.gps_enabled_at):'—';
+  const departNote=a.departure_basis==='confirmed_home_zone'?' · 🏠 Дом подтверждён':a.departure_basis==='suggested_start_zone'?' · 📍 стартовая зона ожидает подтверждения':'';
+  $('meta').textContent='GPS включён: '+enabled+' · фактический выезд: '+depart+departNote+' · последняя GPS '+dt(a.source_last_point_at)+' · данные обновлены '+dt(a.generated_at);
   $('head').textContent=(a.manager_name||'GPS')+' · '+(a.work_date||'');
   $('km').textContent=km(a.distance_m);
   $('visTotal').textContent=String(a.visit_total||0)+(Number(a.offplan_count)>0?' (+'+a.offplan_count+' вне плана)':'');
