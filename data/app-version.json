@@ -1,6 +1,6 @@
 {
-  "version": "23.7.4",
+  "version": "23.7.5",
   "released_at": "2026-10-20",
-  "purpose": "21vek own parser: safe staged promotion, fresh MRC control, honest unapplied-data status.",
+  "purpose": "GPS: repeated start-zone/home classification, September-October audit, after-hours Telegram reminders.",
   "deploy_trigger": "2026-10-20"
 }
