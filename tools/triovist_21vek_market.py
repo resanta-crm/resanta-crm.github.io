@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.408.
+"""Triovist / 21vek automatic market analysis v23.6.409.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.37"
+PARSER_VERSION="market-auto-v6.38"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -3009,6 +3009,11 @@ def welding_voltage_tokens(v: Any) -> set[str]:
     vals=[float(x.replace(",",".")) for x in re.findall(r"\d+(?:[.,]\d+)?",str(v or ""))]
     if any(200<=x<=250 for x in vals) or any(x in n for x in ("однофаз","1 фаз","1ф")):out.add("220")
     if any(350<=x<=430 for x in vals) or any(x in n for x in ("трехфаз","трёхфаз","3 фаз","3ф")):out.add("380")
+    # Input-voltage ranges such as 140–260 V or 320–440 V identify the network class.
+    if len(vals)>=2:
+        lo=min(vals);hi=max(vals)
+        if lo<=230<=hi:out.add("220")
+        if lo<=400<=hi:out.add("380")
     return out
 
 
@@ -4289,7 +4294,12 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         if not text:return
         ln=norm(label);vn=norm(text)
         if "свароч" in ln and "ток" in ln and any(x in ln for x in ("диапазон","регулиров","предел")):
-            vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",text,re.I)]
+            vals=[]
+            rm=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)?\s*(?:-|–|—|…|\.\.|до)\s*(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",text,re.I)
+            if rm:
+                vals=[float(rm.group(1).replace(",",".")),float(rm.group(2).replace(",","."))]
+            else:
+                vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",text,re.I)]
             if len(vals)>=2:
                 push("min_welding_current_a",label,f"{min(vals)} A",source,path)
                 push("max_welding_current_a",label,f"{max(vals)} A",source,path)
@@ -4939,17 +4949,21 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         else ("welding_semi_auto" if "max_spool_weight_kg" in welding_rule_keys else "")
     )
     if welding_profile:
-        wname=str(card.get("product_name") or base.get("model") or base.get("product_name") or "")
+        wname=str(card.get("product_name") or "")
+        wbase=str(base.get("product_name") or base.get("model") or "")
         wdesc=str(extra.get("description_text") or "")
-        wn=norm(wname)
-        local_blob=wname+"\n"+wdesc
+        title_blob=(wname+"\n"+wbase).strip()
+        wn=norm(title_blob)
+        local_blob=title_blob+"\n"+wdesc
 
-        # Machine class comes only from this product title, never from related products.
+        # Machine class comes only from this product's own titles, never from related products.
         if welding_profile=="welding_inverter":
-            if "полуавтомат" in wn or re.search(r"\b(?:mig|mag)\b",wname,re.I):
+            if "полуавтомат" in wn or re.search(r"\b(?:mig|mag)\b",title_blob,re.I):
                 specs["welding_machine_type"]="semi_auto"
-            elif "инвертор" in wn or ("свароч" in wn and "аппарат" in wn):
+            elif "инвертор" in wn or "inverter" in wn:
                 specs["welding_machine_type"]="inverter"
+            else:
+                specs.pop("welding_machine_type",None)
 
         # Merge processes found in structured attributes with this product's own title/description.
         pt=set()
@@ -4959,8 +4973,10 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
 
         # Safe local fallbacks for network voltage / current range.
         if specs.get("mains_voltage_v") is None:
-            vm=re.search(r"(?:напряжени[ея](?:\s+сети|\s+питания)?|питающее\s+напряжение)[^0-9]{0,24}(220|230|380|400)\s*(?:в|v)\b",wdesc,re.I)
-            if vm:specs["mains_voltage_v"]=welding_voltage_class(vm.group(1)+" В")
+            vm=re.search(r"(?:напряжени[ея](?:\s+сети|\s+питания)?|питающее\s+напряжение)[^\n.;]{0,60}",wdesc,re.I)
+            if vm:
+                vc=welding_voltage_class(vm.group(0))
+                if welding_voltage_tokens(vc):specs["mains_voltage_v"]=vc
         if specs.get("max_welding_current_a") is None:
             cm=re.search(r"(?:диапазон|регулировк[аи]?|пределы?)?\s*(?:сварочного\s+)?тока[^0-9]{0,24}(\d+(?:[.,]\d+)?)\s*[-–—…]+\s*(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
             if cm:
@@ -5803,7 +5819,8 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
                     s=welding_relative_similarity(float(a),float(b),0.10,0.25,0.40)
                 elif k=="duty_cycle_pct":
                     ai=welding_duty_index(ours);bi=welding_duty_index(comp)
-                    s=welding_relative_similarity(ai,bi,0.10,0.20,0.30) if ai is not None and bi is not None else 0.0
+                    if ai is None or bi is None:continue
+                    s=welding_relative_similarity(ai,bi,0.10,0.20,0.30)
                 elif k in ("hot_start_present","anti_stick_present","arc_force_present","vrd_present","display_present",
                            "gasless_present","polarity_change_present","synergy_present","mode_2t4t_present",
                            "inductance_adjustment_present"):
