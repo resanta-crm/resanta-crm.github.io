@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.405.
+"""Triovist / 21vek automatic market analysis v23.6.406.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.34"
+PARSER_VERSION="market-auto-v6.35"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -47,7 +47,7 @@ VALIDATE_EXACT=str(os.environ.get("MARKET_VALIDATE_EXACT","")).strip().lower() i
 if VALIDATE_PROFILES and not VALIDATE_EXACT:
     VALIDATE_PROFILES.update({
         "earth_auger","garden_shredder","battery_pruner","sprayer",
-        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
+        "impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","welding_inverter","welding_semi_auto","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump"
     })
 OUR_BRANDS={"resanta","ресанта","huter","вихрь","vikhr","eurolux"}
 
@@ -227,6 +227,8 @@ def profile_for(label: str) -> str:
     if "умываль" in n: return "washstand"
     if "виброплит" in n: return "vibratory_plate"
     if "компрессор" in n: return "compressor"
+    if "полуавтомат" in n and "свароч" in n: return "welding_semi_auto"
+    if "свароч" in n and "инвертор" in n: return "welding_inverter"
     if ("фекаль" in n or "фекал" in n) and "насос" in n: return "fecal_pump"
     if "канализац" in n and any(x in n for x in ("станц","установ")): return "sewage_station"
     if "поверхност" in n and "насос" in n: return "surface_pump"
@@ -275,6 +277,8 @@ def query_for(label: str, profile: str) -> str:
       "washstand":"умывальник дачный",
       "vibratory_plate":"виброплита",
       "compressor":"компрессор",
+      "welding_inverter":"сварочный инвертор",
+      "welding_semi_auto":"сварочный полуавтомат",
       "circulation_pump":"циркуляционный насос",
       "drainage_pump":"дренажный насос",
       "fecal_pump":"фекальный насос",
@@ -360,6 +364,8 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
       ("Умывальники","washstand","умываль"),
       ("Виброплиты","vibratory_plate","виброплит"),
       ("Компрессоры","compressor","компрессор"),
+      ("Сварочные инверторы","welding_inverter","свароч"),
+      ("Сварочные полуавтоматы","welding_semi_auto","полуавтомат"),
       ("Циркуляционные насосы","circulation_pump","циркуляц"),
       ("Дренажные насосы","drainage_pump","дренаж"),
       ("Фекальные насосы","fecal_pump","фекал"),
@@ -378,10 +384,10 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
     ]:
         query=query_for(label,profile);key=scope_key(profile,query)
         skus=set()
-        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
+        source_rows=all_price if profile in ("impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","compressor","welding_inverter","welding_semi_auto","circulation_pump","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else garden
         for x in source_rows:
             sku=str(x.get("sku") or "").strip()
-            if sku_depth(sku)<3:continue
+            if sku_depth(sku)<3 and profile not in ("welding_inverter","welding_semi_auto"):continue
             pn=norm(x.get("product"))
             matched=needle in pn
             if profile=="chainsaw_electric":
@@ -454,6 +460,17 @@ def load_price_scope() -> tuple[list[dict],dict[str,set[str]],dict[str,str]]:
                 matched=((sku.startswith("74/3/") or sku.startswith("74/7/"))
                          and "компрессор" in pn
                          and not any(x in pn for x in ("масло компресс","шланг","фильтр для","ремень для","головка для","запчаст","набор для","пистолет")))
+            elif profile=="welding_inverter":
+                matched=(sku.startswith("65/")
+                         and not sku.startswith("900/")
+                         and "свароч" in pn and "инвертор" in pn
+                         and "полуавтомат" not in pn
+                         and not any(x in pn for x in ("маска","пластиковых труб","пвх труб","горелка","электрод","проволок","держател","кабель","запчаст","комплект для")))
+            elif profile=="welding_semi_auto":
+                matched=(sku.startswith("65/")
+                         and not sku.startswith("900/")
+                         and "свароч" in pn and "полуавтомат" in pn
+                         and not any(x in pn for x in ("маска","пластиковых труб","пвх труб","горелка","электрод","проволок","держател","кабель","запчаст","комплект для")))
             elif profile=="circulation_pump":
                 matched=("циркуляц" in pn and "насос" in pn
                          and "шланг" not in pn and "муфт" not in pn and "патруб" not in pn
@@ -2974,6 +2991,143 @@ def compressor_directional(rule: dict,a: Any,b: Any,ours: dict|None=None,comp: d
     return directional(rule,a,b)
 
 
+
+def welding_machine_family(v: Any) -> str:
+    n=norm(v)
+    if not n:return ""
+    if "полуавтомат" in n or "mig" in n or "mag" in n:return "semi_auto"
+    if "инвертор" in n or "inverter" in n:return "inverter"
+    if "трансформ" in n:return "transformer"
+    if "выпрямител" in n:return "rectifier"
+    if "плазм" in n:return "plasma"
+    return n[:80]
+
+
+def welding_voltage_tokens(v: Any) -> set[str]:
+    n=norm(v);out=set()
+    vals=[float(x.replace(",",".")) for x in re.findall(r"\d+(?:[.,]\d+)?",str(v or ""))]
+    if any(200<=x<=250 for x in vals) or any(x in n for x in ("однофаз","1 фаз","1ф")):out.add("220")
+    if any(350<=x<=430 for x in vals) or any(x in n for x in ("трехфаз","трёхфаз","3 фаз","3ф")):out.add("380")
+    return out
+
+
+def welding_voltage_class(v: Any) -> str:
+    t=welding_voltage_tokens(v)
+    if t=={"220","380"}:return "220+380"
+    if "380" in t:return "380"
+    if "220" in t:return "220"
+    return norm(v)[:80] or ""
+
+
+def welding_process_tokens(v: Any) -> set[str]:
+    raw=str(v or "").lower().replace("ё","е")
+    n=norm(v);out=set()
+    if re.search(r"(^|[^a-z])mma([^a-z]|$)",raw,re.I) or "ручн дугов" in n:out.add("mma")
+    if re.search(r"(^|[^a-z])mig([^a-z]|$)",raw,re.I) or re.search(r"(^|[^a-z])mag([^a-z]|$)",raw,re.I) or "полуавтомат" in n:out.add("mig_mag")
+    if re.search(r"(^|[^a-z])tig([^a-z]|$)",raw,re.I) or "аргонодугов" in n:
+        out.add("tig_lift" if "lift" in raw or "лифт" in n else "tig")
+    if re.search(r"(^|[^a-z])fcaw([^a-z]|$)",raw,re.I) or "flux" in raw or "порошков" in n:out.add("flux")
+    return out
+
+
+def welding_process_similarity(a: Any,b: Any) -> float:
+    aa=welding_process_tokens(a);bb=welding_process_tokens(b)
+    if not aa or not bb:return 0.0
+    inter=len(aa&bb);union=len(aa|bb)
+    if not inter:return 0.0
+    # Extra supported modes are an advantage, not a reason to stop treating
+    # otherwise comparable welders as analogues.
+    return min(1.0,0.80+0.20*(inter/max(1,union)))
+
+
+def welding_spool_class(v: Any) -> str:
+    try:x=float(v)
+    except Exception:return ""
+    if x<=1.5:return "compact"
+    if x<=6.0:return "standard"
+    return "professional"
+
+
+def welding_relative_similarity(a: float,b: float,full: float=0.10,close: float=0.20,far: float=0.30) -> float:
+    d=abs(a-b)/max(abs(a),abs(b),1e-9)
+    if d<=full:return 1.0
+    if d<=close:return 0.82
+    if d<=far:return 0.58
+    return 0.0
+
+
+def welding_current_similarity(a: float,b: float) -> float:
+    d=abs(a-b);rel=d/max(abs(a),abs(b),1e-9)
+    if d<=20 or rel<=0.10:return 1.0
+    if rel<=0.20:return 0.82
+    if rel<=0.30:return 0.58
+    return 0.0
+
+
+def welding_diameter_similarity(a: float,b: float,full: float=0.5,close: float=1.0) -> float:
+    d=abs(a-b)
+    if d<=full:return 1.0
+    if d<=close:return 0.72
+    return 0.0
+
+
+def welding_duty_index(specs: dict) -> float|None:
+    pct=specs.get("duty_cycle_pct");cur=specs.get("duty_cycle_current_a")
+    if pct is None or cur is None:return None
+    try:
+        p=max(0.0,min(100.0,float(pct)));i=float(cur)
+        if i<=0:return None
+        # Equivalent continuous-current indicator. It prevents comparing
+        # e.g. 70% @ 140A as automatically stronger than 60% @ 190A.
+        return i*math.sqrt(p/100.0)
+    except Exception:return None
+
+
+def welding_required_missing(ours: dict,comp: dict,profile: str) -> bool:
+    if profile=="welding_inverter":
+        req=("welding_machine_type","mains_voltage_v","input_power_w",
+             "max_welding_current_a","max_electrode_diameter_mm",
+             "duty_cycle_pct","duty_cycle_current_a")
+    else:
+        req=("welding_processes","mains_voltage_v","input_power_w",
+             "max_welding_current_a","wire_diameter_mm","max_spool_weight_kg",
+             "duty_cycle_pct","duty_cycle_current_a")
+    return any(ours.get(k) is None or comp.get(k) is None for k in req)
+
+
+def welding_directional(rule: dict,a: Any,b: Any,ours: dict,comp: dict,profile: str) -> float|None:
+    if a is None or b is None:return None
+    k=rule.get("spec_key")
+    if k=="mains_voltage_v":
+        aa=welding_voltage_tokens(a);bb=welding_voltage_tokens(b)
+        return 50 if aa and bb and aa==bb else (50 if aa and bb and aa&bb else None)
+    if k=="welding_machine_type":
+        return 50 if welding_machine_family(a)==welding_machine_family(b) else 35
+    if k=="welding_processes":
+        aa=welding_process_tokens(a);bb=welding_process_tokens(b)
+        if not aa or not bb:return None
+        if aa==bb:return 50
+        if aa>bb:return 72
+        if bb>aa:return 28
+        return 50
+    if k=="input_power_w":
+        return 50
+    if k=="duty_cycle_pct":
+        ai=welding_duty_index(ours);bi=welding_duty_index(comp)
+        if ai is None or bi is None:return None
+        if abs(ai-bi)/max(ai,bi,1e-9)<=0.05:return 50
+        return min(92,55+abs(ai-bi)/max(bi,1e-9)*70) if ai>bi else max(8,45-abs(ai-bi)/max(bi,1e-9)*70)
+    if k=="duty_cycle_current_a":
+        return None
+    if k in ("hot_start_present","anti_stick_present","arc_force_present","vrd_present","display_present",
+             "gasless_present","polarity_change_present","synergy_present","mode_2t4t_present",
+             "inductance_adjustment_present"):
+        av=bool(a);bv=bool(b)
+        if av==bv:return 50
+        return 72 if av and not bv else 28
+    return directional(rule,a,b)
+
+
 def normalize_value(key: str, text: str) -> Any:
     low=str(text or "").lower();ns=nums(text)
     if key=="washstand_body_material":
@@ -3207,6 +3361,43 @@ def normalize_value(key: str, text: str) -> Any:
         m=re.search(r"^(\d+)\s*\+\s*(\d+)$",n)
         if m:return m.group(1)+"+"+m.group(2)
         return n[:80] or None
+    if key=="welding_machine_type":
+        return welding_machine_family(text) or None
+    if key=="mains_voltage_v":
+        return welding_voltage_class(text) or None
+    if key=="welding_processes":
+        t=welding_process_tokens(text)
+        return "+".join(sorted(t)) if t else (norm(text)[:160] or None)
+    if key in ("hot_start_present","anti_stick_present","arc_force_present","vrd_present",
+               "gasless_present","polarity_change_present","synergy_present","mode_2t4t_present",
+               "inductance_adjustment_present"):
+        n=norm(text)
+        b=bool_value(text)
+        if b is not None:return b
+        negatives=("нет","без ","отсутств","не поддерж")
+        if any(x in n for x in negatives):return False
+        return True if n else None
+    if key in ("min_welding_current_a","max_welding_current_a","duty_cycle_current_a"):
+        vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",low,re.I)]
+        if not vals:vals=ns
+        if not vals:return None
+        if key=="min_welding_current_a":return round(min(vals),2)
+        if key=="max_welding_current_a":return round(max(vals),2)
+        # For combined duty-cycle values prefer the current immediately attached to A.
+        return round(max(vals),2)
+    if key in ("max_electrode_diameter_mm","wire_diameter_mm"):
+        vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)]
+        if not vals:vals=ns
+        return round(max(vals),3) if vals else None
+    if key=="max_spool_weight_kg":
+        vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:кг|kg)\b",low,re.I)]
+        if vals:return round(max(vals),3)
+        grams=[float(x.replace(",","."))/1000 for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:г|g)\b",low,re.I)]
+        return round(max(grams),3) if grams else (round(max(ns),3) if ns else None)
+    if key=="duty_cycle_pct":
+        vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*%",low,re.I)]
+        return round(max(vals),2) if vals else (round(max(ns),2) if ns else None)
+
     if key in ("device_type","purpose","heater_type","thermostat_type","control_type","ip_rating","installation_type","fuel_type","heating_mode","motor_position","bulb_shape","equipment","snow_blower_type","drive_type","clutch_type","construction","engine_type","battery_type","tool_type","knife_type","blade_type","application_area","carry_type","fuel_engine_type"):
         return norm(text)[:240] or None
     if key=="base_type":
@@ -3585,6 +3776,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
     sewage_station_mode={"flow_rate_lmin","input_power_w","max_head_m","filter_particle_mm","max_water_temp_c"}.issubset(rule_keys)
     surface_pump_mode={"flow_rate_lmin","input_power_w","max_head_m","max_suction_depth_m","water_type"}.issubset(rule_keys)
     borehole_pump_mode={"water_type","operating_principle","max_head_m","max_pumping_depth_m","max_immersion_depth_m","well_diameter_mm","flow_rate_lmin"}.issubset(rule_keys)
+    welding_mode={"mains_voltage_v","input_power_w","max_welding_current_a","duty_cycle_pct"}.issubset(rule_keys)
 
     def concrete_mixer_fuzzy_key(label: Any,value: Any) -> str|None:
         if not concrete_mixer_mode:return None
@@ -4056,11 +4248,77 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         elif any(x in vn for x in ("без кейса","без чемодан","без футляр")):
             push("case_present",label,"без кейса",source,path)
 
+    def welding_fuzzy_key(label: Any,value: Any) -> str|None:
+        if not welding_mode:return None
+        ln=norm(label);vn=norm(primitive_text(value))
+        if not ln:return None
+        if ("тип" in ln or "вид" in ln) and "свароч" in ln and "процесс" not in ln:
+            if any(x in vn for x in ("инвертор","трансформ","полуавтомат","mig","mag")):
+                return "welding_machine_type"
+        if "напряжен" in ln and any(x in ln for x in ("сет","питан","вход")):
+            return "mains_voltage_v"
+        if "мощност" in ln and any(x in ln for x in ("потреб","номин","вход","макс")):
+            return "input_power_w"
+        if "свароч" in ln and "ток" in ln:
+            if any(x in ln for x in ("макс","максим")):return "max_welding_current_a"
+            if any(x in ln for x in ("мин","миним")):return "min_welding_current_a"
+        if "диаметр" in ln and "электрод" in ln:return "max_electrode_diameter_mm"
+        if "диаметр" in ln and "провол" in ln:return "wire_diameter_mm"
+        if ("катуш" in ln and any(x in ln for x in ("вес","масса","макс"))) or "вес катушки" in ln:
+            return "max_spool_weight_kg"
+        if any(x in ln for x in ("продолжительность нагрузки","продолжительность включения","рабочий цикл","duty cycle")) or ln in ("пн","пв"):
+            return "duty_cycle_pct"
+        if any(x in ln for x in ("тип сварки","виды сварки","способы сварки","режимы сварки","методы сварки","сварочные процессы")):
+            return "welding_processes"
+        if "hot start" in ln or "горяч" in ln and "старт" in ln:return "hot_start_present"
+        if "anti" in ln and "stick" in ln or "антизалип" in ln or "антиприлип" in ln:return "anti_stick_present"
+        if "arc force" in ln or "форсаж" in ln and "дуг" in ln:return "arc_force_present"
+        if ln=="vrd" or "снижен" in ln and "холост" in ln:return "vrd_present"
+        if "синерг" in ln or ln=="syn":return "synergy_present"
+        if "полярност" in ln:return "polarity_change_present"
+        if "индуктивност" in ln:return "inductance_adjustment_present"
+        if "2t" in ln and "4t" in ln:return "mode_2t4t_present"
+        if "без газа" in ln or "порошков" in ln or "flux" in ln:return "gasless_present"
+        return None
+
+    def welding_extras(label: Any,value: Any,source: str,path: str=""):
+        if not welding_mode:return
+        text=primitive_text(value)
+        if not text:return
+        ln=norm(label);vn=norm(text)
+        if "свароч" in ln and "ток" in ln and any(x in ln for x in ("диапазон","регулиров","предел")):
+            vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",text,re.I)]
+            if len(vals)>=2:
+                push("min_welding_current_a",label,f"{min(vals)} A",source,path)
+                push("max_welding_current_a",label,f"{max(vals)} A",source,path)
+        duty=any(x in ln for x in ("продолжительность нагрузки","продолжительность включения","рабочий цикл","duty cycle")) or ln in ("пн","пв")
+        if duty:
+            if "%" in text:push("duty_cycle_pct",label,text,source,path)
+            if re.search(r"\d+(?:[.,]\d+)?\s*(?:а|a)\b",text,re.I):
+                push("duty_cycle_current_a",label,text,source,path)
+        if any(x in ln for x in ("тип сварки","виды сварки","способы сварки","режимы сварки","методы сварки","сварочные процессы")):
+            if welding_process_tokens(text):push("welding_processes",label,text,source,path)
+        feature_blob=ln+" "+vn
+        checks=(
+          ("hot_start_present",("hot start","горячий старт")),
+          ("anti_stick_present",("anti stick","antistick","антизалип","антиприлип")),
+          ("arc_force_present",("arc force","форсаж дуги")),
+          ("vrd_present",("vrd","снижение напряжения холостого")),
+          ("synergy_present",("синерг","synergy","synergic")),
+          ("polarity_change_present",("смена полярности","изменение полярности","переключение полярности")),
+          ("mode_2t4t_present",("2t/4t","2t 4t")),
+          ("inductance_adjustment_present",("регулировка индуктивности","настройка индуктивности")),
+          ("gasless_present",("без газа","порошков","flux","fcaw"))
+        )
+        for key,words in checks:
+            if any(w in feature_blob for w in words):push(key,label,"да",source,path)
+
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
-        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or vibratory_plate_fuzzy_key(label,value) or agri_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value)
+        k=aliases.get(norm(label)) or concrete_mixer_fuzzy_key(label,value) or grain_crusher_fuzzy_key(label,value) or washstand_fuzzy_key(label,value) or vibratory_plate_fuzzy_key(label,value) or agri_fuzzy_key(label,value) or compressor_fuzzy_key(label,value) or borehole_pump_fuzzy_key(label,value) or surface_pump_fuzzy_key(label,value) or sewage_station_fuzzy_key(label,value) or circulation_pump_fuzzy_key(label,value) or drainage_pump_fuzzy_key(label,value) or angle_grinder_fuzzy_key(label,value) or bench_grinder_fuzzy_key(label,value) or miter_saw_fuzzy_key(label,value) or construction_heat_gun_fuzzy_key(label,value) or construction_vacuum_fuzzy_key(label,value) or reciprocating_saw_fuzzy_key(label,value) or planer_fuzzy_key(label,value) or rotary_hammer_fuzzy_key(label,value) or impact_drill_fuzzy_key(label,value) or jigsaw_fuzzy_key(label,value) or welding_fuzzy_key(label,value)
         if k and text:push(k,label,text,source,path)
         cordless_extras(label,value,source,path)
+        welding_extras(label,value,source,path)
 
     def walk(node: Any,path="fd"):
         if isinstance(node,dict):
@@ -4105,6 +4363,28 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             raw_nums=nums(x.get("value"))
             if raw_nums and max(raw_nums)>=500:
                 anomalies.append("Диаметр скважины в источнике выглядит аномально: "+str(x.get("value") or ""))
+    if welding_mode:
+        blob=json.dumps(root,ensure_ascii=False)
+        if "welding_machine_type" in rule_keys and values.get("welding_machine_type") is None:
+            fam=welding_machine_family(blob)
+            if fam in ("inverter","semi_auto","transformer","rectifier","plasma"):values["welding_machine_type"]=fam
+        if values.get("welding_processes") is None:
+            pt=welding_process_tokens(blob)
+            if pt:values["welding_processes"]="+".join(sorted(pt))
+        nblob=norm(blob)
+        for key,words in (
+          ("hot_start_present",("hot start","горячий старт")),
+          ("anti_stick_present",("anti stick","antistick","антизалип","антиприлип")),
+          ("arc_force_present",("arc force","форсаж дуги")),
+          ("vrd_present",("vrd","снижение напряжения холостого")),
+          ("synergy_present",("синерг","synergy","synergic")),
+          ("polarity_change_present",("смена полярности","изменение полярности","переключение полярности")),
+          ("mode_2t4t_present",("2t/4t","2t 4t")),
+          ("inductance_adjustment_present",("регулировка индуктивности","настройка индуктивности")),
+          ("gasless_present",("без газа","порошков","flux","fcaw"))
+        ):
+            if key in rule_keys and values.get(key) is None and any(w in nblob for w in words):
+                values[key]=True
     if anomalies:
         values["_data_anomalies"]=list(dict.fromkeys(anomalies))[:5]
     return raw,values
@@ -5423,6 +5703,69 @@ def similarity(ours: dict,comp: dict,rules: list[dict],profile: str="generic") -
 
 
 
+
+
+    if profile in ("welding_inverter","welding_semi_auto"):
+        va=welding_voltage_tokens(ours.get("mains_voltage_v"));vb=welding_voltage_tokens(comp.get("mains_voltage_v"))
+        if va and vb and not (va&vb):return 0.0
+
+        if profile=="welding_inverter":
+            ta=welding_machine_family(ours.get("welding_machine_type"));tb=welding_machine_family(comp.get("welding_machine_type"))
+            if ta and tb and ta!=tb:return 0.0
+            pa=welding_process_tokens(ours.get("welding_processes"));pb=welding_process_tokens(comp.get("welding_processes"))
+            if pa and pb and (("mma" in pa) != ("mma" in pb)):return 0.0
+        else:
+            pa=welding_process_tokens(ours.get("welding_processes"));pb=welding_process_tokens(comp.get("welding_processes"))
+            if pa and pb:
+                semi_a=bool(pa&{"mig_mag","flux"});semi_b=bool(pb&{"mig_mag","flux"})
+                if semi_a!=semi_b:return 0.0
+            sa=ours.get("max_spool_weight_kg");sb=comp.get("max_spool_weight_kg")
+            if sa is not None and sb is not None:
+                ca=welding_spool_class(sa);cb=welding_spool_class(sb)
+                if ca and cb and ca!=cb:return 0.0
+
+        total=used=allw=0.0
+        for rule in rules:
+            w=float(rule.get("weight") or 0)
+            if w<=0:continue
+            allw+=w
+            k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
+            if a is None or b is None:continue
+            try:
+                if k=="welding_machine_type":
+                    s=1.0 if welding_machine_family(a)==welding_machine_family(b) else 0.0
+                elif k=="mains_voltage_v":
+                    aa=welding_voltage_tokens(a);bb=welding_voltage_tokens(b)
+                    s=1.0 if aa and bb and aa&bb else 0.0
+                elif k=="welding_processes":
+                    s=welding_process_similarity(a,b)
+                elif k=="input_power_w":
+                    s=welding_relative_similarity(float(a),float(b),0.15,0.30,0.45)
+                elif k in ("min_welding_current_a","max_welding_current_a"):
+                    s=welding_current_similarity(float(a),float(b))
+                elif k=="max_electrode_diameter_mm":
+                    s=welding_diameter_similarity(float(a),float(b),0.5,1.0)
+                elif k=="wire_diameter_mm":
+                    s=welding_diameter_similarity(float(a),float(b),0.2,0.4)
+                elif k=="max_spool_weight_kg":
+                    s=welding_relative_similarity(float(a),float(b),0.10,0.25,0.40)
+                elif k=="duty_cycle_pct":
+                    ai=welding_duty_index(ours);bi=welding_duty_index(comp)
+                    s=welding_relative_similarity(ai,bi,0.10,0.20,0.30) if ai is not None and bi is not None else 0.0
+                elif k in ("hot_start_present","anti_stick_present","arc_force_present","vrd_present","display_present",
+                           "gasless_present","polarity_change_present","synergy_present","mode_2t4t_present",
+                           "inductance_adjustment_present"):
+                    s=1.0 if bool(a)==bool(b) else 0.65
+                else:
+                    s=categorical_similarity(a,b)
+            except Exception:s=0.0
+            total+=w*s;used+=w
+        if used<=0:return 0.0
+        score=total/used*100
+        coverage=min(1.0,used/max(allw,1e-9))
+        score*=0.60+0.40*coverage
+        if welding_required_missing(ours,comp,profile):score=min(score,69.0)
+        return round(max(0,min(100,score)),2)
 
 
     if profile=="concrete_mixer":
@@ -7107,7 +7450,9 @@ def competitiveness(ours: dict,comp: dict,rules: list[dict],our_price: float|Non
     else: price_score=50
     s=w=0.0
     for rule in rules:
-        if profile=="concrete_mixer":
+        if profile in ("welding_inverter","welding_semi_auto"):
+            z=welding_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]),ours,comp,profile)
+        elif profile=="concrete_mixer":
             z=concrete_mixer_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
         elif profile=="grain_crusher":
             z=grain_crusher_directional(rule,ours.get(rule["spec_key"]),comp.get(rule["spec_key"]))
@@ -7195,7 +7540,9 @@ def compare_texts(ours: dict,comp: dict,rules: list[dict],our_price: float|None,
         if float(rule.get("weight") or 0)<=0: continue
         k=rule["spec_key"];a=ours.get(k);b=comp.get(k)
         if a is None or b is None: continue
-        if profile=="concrete_mixer":
+        if profile in ("welding_inverter","welding_semi_auto"):
+            z=welding_directional(rule,a,b,ours,comp,profile)
+        elif profile=="concrete_mixer":
             z=concrete_mixer_directional(rule,a,b)
         elif profile=="grain_crusher":
             z=grain_crusher_directional(rule,a,b)
@@ -7273,6 +7620,10 @@ def mrc_state(price: float|None,mrc: float|None) -> tuple[float|None,float|None]
 def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str,our_price: float|None,comp_price: float|None,profile: str="generic") -> str:
     if mrc_delta_pct is not None and mrc_delta_pct<0:
         return "Сначала восстановить МРЦ. Ниже МРЦ цену не снижать; конкурировать характеристиками, карточкой и комплектацией."
+    if profile=="welding_inverter" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения сварочных инверторов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип аппарата, напряжение сети, потребляемая мощность, максимальный ток, диаметр электрода и ПН вместе с током, при котором она заявлена."
+    if profile=="welding_semi_auto" and status=="data_incomplete":
+        return "Недостаточно подтвержденных данных для точного сравнения сварочных полуавтоматов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип сварки, напряжение сети, мощность, максимальный ток, диаметр проволоки, класс катушки и ПН вместе с током. Компактные, 5-кг и 15-кг классы не смешиваются."
     if profile=="earth_auger" and status=="data_incomplete":
         return "Недостаточно подтвержденных данных для точного сравнения мотобуров. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены тип двигателя, мощность, максимальный диаметр бура и посадочный диаметр."
     if profile=="garden_shredder" and status=="data_incomplete":
@@ -7325,7 +7676,7 @@ def recommendation(mrc_delta_pct: float|None,similarity_score: float,status: str
         return "Недостаточно подтвержденных данных для точного сравнения циркуляционных насосов. Не считать конкурента сильнее или прямым аналогом, пока не подтверждены максимальный напор, пропускная способность, мощность и максимальное давление. Размер фильтруемых частиц — дополнительный параметр и не обязателен для вывода."
     if profile=="fecal_pump" and status=="data_incomplete":
         return "Аналог рассчитан по неполным данным. Для подтверждения пробела обязательны производительность, максимальный напор и размер частиц; измельчитель сильно влияет на итог, когда он указан. Материал корпуса, подключение и тип воды уточняют сравнение."
-    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
+    min_match=55 if profile in ("oil_radiator","fan_heater","heat_gun","humidifier","chainsaw_electric","snow_blower","leaf_blower","earth_auger","garden_shredder","battery_pruner","sprayer","impact_wrench","circular_saw","impact_drill","cordless_screwdriver","paint_sprayer","jigsaw","rotary_hammer","planer","reciprocating_saw","construction_vacuum","construction_heat_gun","miter_saw","bench_grinder","angle_grinder","concrete_mixer","grain_crusher","washstand","vibratory_plate","agricultural_machine","compressor","welding_inverter","welding_semi_auto","drainage_pump","fecal_pump","sewage_station","surface_pump","borehole_pump") else (60 if profile in ("convector","chainsaw_gas","infrared_heater") else 70)
     if similarity_score<min_match:
         return "Технического аналога нет: проверить пробел ассортимента. Не использовать эту пару для ценовой войны."
     if profile=="convector" and comp_price is None:
@@ -7657,6 +8008,12 @@ def main() -> None:
                       scored[0][1].get("specs_normalized") or {},
                       p.get("specs_normalized") or {}
                     )
+                if profile in ("welding_inverter","welding_semi_auto") and scored:
+                    gap_confirmed=gap_confirmed and not welding_required_missing(
+                      scored[0][1].get("specs_normalized") or {},
+                      p.get("specs_normalized") or {},
+                      profile
+                    )
                 if profile=="reciprocating_saw" and scored:
                     gap_confirmed=gap_confirmed and not reciprocating_saw_required_missing(
                       scored[0][1].get("specs_normalized") or {},
@@ -7751,6 +8108,8 @@ def main() -> None:
                         data_incomplete=True
                     if profile=="compressor" and compressor_required_missing(ours["specs_normalized"],comp_specs):
                         data_incomplete=True
+                    if profile in ("welding_inverter","welding_semi_auto") and welding_required_missing(ours["specs_normalized"],comp_specs,profile):
+                        data_incomplete=True
                     if profile=="snow_blower":
                         our_start=snow_blower_start_family(ours["specs_normalized"].get("engine_start_type"))
                         comp_start=comp_specs.get("engine_start_type")
@@ -7817,6 +8176,8 @@ def main() -> None:
                         bad.append("Недостаточно данных по объёму барабана, материалу венца или мощности бетономешалки — отсутствующие данные не считаются проигрышем, итог предварительный")
                     if profile=="compressor" and compressor_required_missing(ours["specs_normalized"],comp_specs):
                         bad.append("Недостаточно данных по типу компрессора, объёму ресивера, типу двигателя, производительности или максимальному давлению — отсутствующие данные не считаются проигрышем, итог предварительный")
+                    if profile in ("welding_inverter","welding_semi_auto") and welding_required_missing(ours["specs_normalized"],comp_specs,profile):
+                        bad.append("Недостаточно данных по критическим характеристикам сварочного аппарата — ПН сравнивается только вместе с током, отсутствующие поля не считаются проигрышем, итог предварительный")
                     if profile=="snow_blower" and "electric" in snow_blower_start_family(ours["specs_normalized"].get("engine_start_type")) and comp_specs.get("engine_start_type") is None:
                         bad.append("У конкурента нет данных по типу запуска: нельзя считать электростартер равным отсутствующим данным")
                     if profile=="earth_auger":
