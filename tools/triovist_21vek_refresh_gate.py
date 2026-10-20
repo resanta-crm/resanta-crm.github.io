@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Gate for queued manual 21vek refresh requests.
+"""Gate for queued manual 21vek refresh requests and pointer-promotion recovery.
 
 Uses only stdlib so the workflow can decide whether an expensive parser run is
-needed before installing dependencies. Manual CRM requests are claimed through
-service-role-only RPC and finalized after the workflow completes.
+needed before installing dependencies. v23.6.404 adds a parser-free recovery
+path: if complete shadow + TOP + manager staging already exist, the 10-minute
+check runs only promotion/post-processing instead of collecting 1724 cards again.
 """
 from __future__ import annotations
 
@@ -48,44 +49,90 @@ def write_output(**values):
             f.write(f"{k}={str(v).lower() if isinstance(v,bool) else v}\n")
 
 
+def apply_recovery(result: dict, mode: str) -> bool:
+    recovery=rpc("triovist_21vek_recovery_gate_v236404",{})
+    if not recovery.get("recovery_needed"):
+        return False
+
+    result.update(
+        run=True,
+        mode=mode,
+        do_parse=False,
+        do_top=False,
+        do_promote=True,
+        limit="2500",
+        top_limit="500",
+        skip_recent="0",
+    )
+    return True
+
+
 def claim():
     event=(os.environ.get("EVENT_NAME") or "").strip()
     schedule=(os.environ.get("EVENT_SCHEDULE") or "").strip()
 
     result={
-        "run":False,"mode":"noop","request_id":"","do_top":False,
-        "do_promote":False,"limit":"2500","top_limit":"500","skip_recent":"0"
+        "run":False,
+        "mode":"noop",
+        "request_id":"",
+        "do_parse":False,
+        "do_top":False,
+        "do_promote":False,
+        "limit":"2500",
+        "top_limit":"500",
+        "skip_recent":"0",
     }
 
     if event=="push":
-        # If a boss already requested a real refresh from CRM, do not make it wait
-        # for GitHub cron after deploying parser fixes: claim it immediately and
-        # run the same full safe pipeline. Without a pending request, keep the
-        # lightweight push validation.
         claimed=rpc("triovist_21vek_claim_refresh_v236107",{})
         if claimed.get("claimed"):
             result.update(
                 run=True,mode="crm_manual_after_push",
                 request_id=str(claimed.get("request_id") or ""),
-                do_top=True,do_promote=True,limit="2500",top_limit="500",skip_recent="0"
+                do_parse=True,do_top=True,do_promote=True,
+                limit="2500",top_limit="500",skip_recent="0"
             )
-        else:
-            result.update(run=True,mode="push_test",do_top=True,limit="300",top_limit="500")
+        elif not apply_recovery(result,"promotion_recovery_after_push"):
+            result.update(
+                run=True,mode="push_test",
+                do_parse=True,do_top=True,do_promote=False,
+                limit="300",top_limit="500",skip_recent="0"
+            )
+
     elif event=="workflow_dispatch":
         limit=(os.environ.get("DISPATCH_LIMIT") or "2500").strip() or "2500"
         top=(os.environ.get("DISPATCH_TOP_LIMIT") or "500").strip() or "500"
-        result.update(run=True,mode="dispatch_test",do_top=True,limit=limit,top_limit=top)
+        result.update(
+            run=True,mode="dispatch_test",
+            do_parse=True,do_top=True,do_promote=False,
+            limit=limit,top_limit=top,skip_recent="0"
+        )
+
     elif event=="schedule" and schedule=="17 3 * * *":
-        result.update(run=True,mode="daily_main",do_top=True,do_promote=True,limit="2500",top_limit="500")
+        result.update(
+            run=True,mode="daily_main",
+            do_parse=True,do_top=True,do_promote=True,
+            limit="2500",top_limit="500",skip_recent="0"
+        )
+
     elif event=="schedule" and schedule=="17 5 * * *":
-        result.update(run=True,mode="daily_backup",do_top=False,do_promote=False,limit="2500",skip_recent="4")
+        result.update(
+            run=True,mode="daily_backup",
+            do_parse=True,do_top=False,do_promote=False,
+            limit="2500",top_limit="500",skip_recent="4"
+        )
+
     elif event=="schedule" and schedule=="*/10 * * * *":
         claimed=rpc("triovist_21vek_claim_refresh_v236107",{})
         if claimed.get("claimed"):
             result.update(
-                run=True,mode="crm_manual",request_id=str(claimed.get("request_id") or ""),
-                do_top=True,do_promote=True,limit="2500",top_limit="500",skip_recent="0"
+                run=True,mode="crm_manual",
+                request_id=str(claimed.get("request_id") or ""),
+                do_parse=True,do_top=True,do_promote=True,
+                limit="2500",top_limit="500",skip_recent="0"
             )
+        else:
+            apply_recovery(result,"promotion_recovery")
 
     write_output(**result)
     print(json.dumps(result,ensure_ascii=False),flush=True)
