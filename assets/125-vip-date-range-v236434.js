@@ -6,7 +6,7 @@
 'use strict';
 if(window.RESANTA_VIP_DATE_RANGE_V236434)return;
 
-const V='v23.6.434';
+const V='v23.6.437';
 const baseSummary=window.getVipClientSummary||globalThis.getVipClientSummary;
 const basePeriod=window.vipComparisonPeriod||globalThis.vipComparisonPeriod;
 const baseRender=window.renderVip||globalThis.renderVip;
@@ -197,10 +197,29 @@ document.addEventListener('change',e=>{
   if(e.target.closest?.('#vip-period-controls-v236198 select[onchange*="vipMonth198"]')&&S.active)reset(false);
   if(e.target.closest?.('#vip-period-controls-v236198 select[onchange*="vipMode198"]')&&S.active){setTimeout(apply,0)}
 },true);
+function vipPageActive(){
+  try{
+    return document.getElementById('app')?.dataset?.activePage==='vip'
+      || !!document.getElementById('vip-period-info');
+  }catch(_){return false}
+}
+function keepControlsAlive(){
+  if(!vipPageActive())return;
+  const host=document.getElementById('vip-period-controls-v236198')||document.getElementById('vip-period-controls-v236200');
+  if(host&&!document.getElementById('vip-date-range-v236434'))ensureControls();
+}
+function installObserver(){
+  const info=document.getElementById('vip-period-info');
+  if(!info||info.__vipDateObserver236434)return;
+  const mo=new MutationObserver(()=>setTimeout(keepControlsAlive,0));
+  mo.observe(info,{childList:true,subtree:true});
+  info.__vipDateObserver236434=mo;
+}
 document.addEventListener('click',e=>{
-  if(e.target.closest?.('#nav-vip,#bn-vip,[onclick*="goPage(\'vip\'"]'))setTimeout(()=>{ensureControls();afterRender()},220);
+  if(e.target.closest?.('#nav-vip,#bn-vip'))setTimeout(()=>{keepControlsAlive();installObserver();afterRender()},220);
 },true);
-setTimeout(()=>{if(document.getElementById('page-vip')?.classList.contains('active')){ensureControls();afterRender()}},800);
+setInterval(()=>{keepControlsAlive();installObserver()},700);
+setTimeout(()=>{keepControlsAlive();installObserver();afterRender()},250);
 
-window.RESANTA_VIP_DATE_RANGE_V236434=Object.freeze({version:V,exactSnapshots:true,noExtrapolation:true});
+window.RESANTA_VIP_DATE_RANGE_V236434=Object.freeze({version:'v23.6.437',exactSnapshots:true,noExtrapolation:true});
 })();
