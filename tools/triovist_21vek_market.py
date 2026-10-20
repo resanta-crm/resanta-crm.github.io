@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.409.
+"""Triovist / 21vek automatic market analysis v23.6.410.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.38"
+PARSER_VERSION="market-auto-v6.39"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -7805,7 +7805,8 @@ def main() -> None:
                 old=existing.get(p["product_key"])
                 p["run_id"]=run_id;p["observed_at"]=observed;p["error_text"]=None
                 p["current_price"]=valid_price(p.get("current_price"))
-                need_specs=not fresh_specs(old,p.get("product_url") or "",rules)
+                force_target_specs=VALIDATE_EXACT and profile in ("welding_inverter","welding_semi_auto")
+                need_specs=force_target_specs or not fresh_specs(old,p.get("product_url") or "",rules)
                 need_card=need_specs or (profile in ("convector","infrared_heater") and p["current_price"] is None)
                 # Keep cached technical specs unless TTL/url/model requires refresh.
                 # For convectors, a missing/zero search price forces a card lookup;
