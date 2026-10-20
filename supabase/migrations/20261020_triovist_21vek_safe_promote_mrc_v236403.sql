@@ -1,5 +1,5 @@
--- RESANTA CRM v23.6.403
--- 21vek own parser: safe staged promotion + fresh MRC source + honest promotion status.
+-- RESANTA CRM v23.6.404
+-- 21vek own parser: safe staged promotion + fresh FULL-run MRC source + honest promotion status.
 -- Applied to Supabase on 2026-10-20.
 
 CREATE OR REPLACE FUNCTION public.triovist_21vek_promotion_plan_v236403()
@@ -619,14 +619,19 @@ begin
     raise exception 'Нет доступа к контролю МРЦ 21vek' using errcode='42501';
   end if;
 
-  with latest_run as (
-    select id,finished_at,started_at
-    from public.triovist_21vek_shadow_runs
-    where status='complete'
-      and coalesce(error_count,0)=0
-      and coalesce(success_count,0)=coalesce(total_targets,0)
-      and coalesce(total_targets,0)>0
-    order by finished_at desc nulls last
+  with registry_meta as (
+    select count(*)::int targets
+    from public.triovist_21vek_registry_v236214
+  ), latest_run as (
+    select r.id,r.finished_at,r.started_at
+    from public.triovist_21vek_shadow_runs r
+    cross join registry_meta g
+    where r.status='complete'
+      and coalesce(r.error_count,0)=0
+      and coalesce(r.success_count,0)=coalesce(r.total_targets,0)
+      and r.total_targets=g.targets
+      and g.targets>0
+    order by r.finished_at desc nulls last
     limit 1
   ), shadow_cards as (
     select distinct on (trim(s.sku))
@@ -678,7 +683,7 @@ begin
     limit 80
   )
   select jsonb_build_object(
-    'version','v23.6.403',
+    'version','v23.6.404',
     'source_file','РБ МРЦ 06.10.2026.xlsx',
     'effective_date',(select max(effective_date) from public.triovist_mrc_current where source_file='РБ МРЦ 06.10.2026.xlsx'),
     'price_source',case when exists(select 1 from latest_run) then 'latest_complete_own_parser' else 'working_snapshot_fallback' end,
