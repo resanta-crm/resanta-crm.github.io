@@ -1136,19 +1136,20 @@ def save_vip_yoy_snapshot(snapshot_date, month, rows, *, source_message_at=None)
 
 
 def backfill_previous_year_snapshot(mail, current_end):
-    """Пытается автоматически найти в почте отчёт ровно на ту же дату год назад.
+    """Сохраняет точный накопительный ВИП-срез на ту же календарную дату год назад.
 
-    Это разовая страховка для уже прошедшего 2025 года. Если такой ежедневной
-    рассылки тогда не было, импорт продаж всё равно остаётся успешным, а CRM
-    просто не показывает ложный процент до ручной загрузки исторического среза.
+    В текущей рассылке 1С шапка отчёта может содержать полный диапазон месяца
+    (например 01–31.10), хотя письмо от 20.10 содержит фактический накопительный
+    срез именно на 20.10. Поэтому исторический срез определяем по ДАТЕ ПИСЬМА,
+    а не по формальному end_date в шапке.
     """
     target_end = _previous_year_same_date(current_end)
     if vip_snapshot_exists(target_end):
         log(f"  Исторический ВИП-снимок {target_end:%d.%m.%Y} уже есть.")
         return True
 
-    since = (target_end - timedelta(days=2)).strftime("%d-%b-%Y")
-    before = (target_end + timedelta(days=4)).strftime("%d-%b-%Y")
+    since = (target_end - timedelta(days=1)).strftime("%d-%b-%Y")
+    before = (target_end + timedelta(days=2)).strftime("%d-%b-%Y")
     try:
         status, data = mail.search(None, f'(SINCE {since} BEFORE {before})')
         if status != "OK":
@@ -1156,9 +1157,19 @@ def backfill_previous_year_snapshot(mail, current_end):
         candidates = []
         for msg_id in data[0].split():
             st, msg_data = mail.fetch(msg_id, "(RFC822)")
-            if st != "OK":
+            if st != "OK" or not msg_data:
                 continue
-            msg = email.message_from_bytes(msg_data[0][1])
+            raw = next((item[1] for item in msg_data if isinstance(item, tuple) and len(item)>1 and isinstance(item[1], (bytes, bytearray))), None)
+            if not raw:
+                continue
+            msg = email.message_from_bytes(raw)
+            sent = normalize_message_date(msg.get("Date"))
+            try:
+                local_sent = sent.astimezone(ZoneInfo("Europe/Minsk"))
+            except Exception:
+                local_sent = sent
+            if local_sent.date() != target_end:
+                continue
             raw_subject = msg.get("Subject", "")
             subject = "".join(
                 part.decode(enc or "utf-8", errors="replace") if isinstance(part, bytes) else part
@@ -1170,26 +1181,24 @@ def backfill_previous_year_snapshot(mail, current_end):
             if not content:
                 continue
             try:
-                start, end = parse_report_bounds(content)
+                month, hist_rows = parse_sales(content)
             except Exception:
                 continue
-            if end != target_end or start != date(target_end.year, target_end.month, 1):
+            if month[:7] != target_end.strftime("%Y-%m"):
                 continue
-            sent = normalize_message_date(msg.get("Date"))
-            candidates.append((sent, filename, content))
+            candidates.append((sent, filename, month, hist_rows))
         if not candidates:
-            log(f"  ⚠️ В почте не найден отчёт 1С за 01–{target_end:%d.%m.%Y}. Точный YoY пока будет без процента.")
+            log(f"  ⚠️ В почте не найден точный ВИП-срез на {target_end:%d.%m.%Y}. Сравнение по выбранной дате пока будет без YoY.")
             return False
         candidates.sort(key=lambda x: x[0])
-        sent, filename, content = candidates[-1]
-        month, hist_rows = parse_sales(content)
+        sent, filename, month, hist_rows = candidates[-1]
         try:
             attach_client_ids(hist_rows)
         except Exception as exc:
             log(f"  ⚠️ Исторический client_id: {exc}")
         ok = save_vip_yoy_snapshot(target_end, month, hist_rows, source_message_at=sent.isoformat())
         if ok:
-            log(f"  Историческая база взята из письма «{filename}» от {sent:%d.%m.%Y %H:%M}.")
+            log(f"  Историческая база на {target_end:%d.%m.%Y} взята из «{filename}» от {sent:%d.%m.%Y %H:%M}.")
         return ok
     except Exception as exc:
         log(f"  ⚠️ Автопоиск исторического ВИП-среза пропущен: {exc}")
