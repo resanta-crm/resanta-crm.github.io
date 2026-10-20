@@ -1,12 +1,12 @@
-/* RESANTA CRM v23.6.115 · TRIOVIST OWN 21VEK CONTROL CENTER
+/* RESANTA CRM v23.6.403 · TRIOVIST OWN 21VEK CONTROL CENTER
  * Lightweight status/control UI for the production own 21vek parser.
  * Managers get a prominent warning if data is stale, incomplete or the parser fails.
  * One cached status RPC; no card scans in browser; no MutationObserver.
  */
 (function(){
 'use strict';
-if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107)return;
-const VERSION='v23.6.379',TTL=15000;
+if(window.RESANTA_TRIOVIST_21VEK_CONTROL_V236403)return;
+const VERSION='v23.6.403',TTL=15000;
 let cache=null,cacheAt=0,flight=null,mrcCache=null,mrcCacheAt=0,mrcFlight=null;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -21,6 +21,8 @@ function ageText(v){
   return Math.floor(h/24)+' дн назад';
 }
 function parserError(d){
+  const promotion=d?.promotion||{};
+  if(promotion.pending)return String(promotion.error_explain||'Сбор 21vek завершён полностью, но свежий снимок не применён в рабочие данные CRM.');
   const p=d?.parser||{};
   if(String(p.status||'')!=='failed'&&Number(p.errors||0)<=0)return'';
   return String(p.error_explain||p.error_text||'Сбор завершился не полностью. Рабочий снимок не заменён; используются последние проверенные данные.');
@@ -77,10 +79,11 @@ function mrcBadge(row){
   if(s==='warning')return'<span class="tri21mrc-badge warn">🟠 ниже МРЦ</span>';
   if(s==='slight')return'<span class="tri21mrc-badge warn">🟡 ниже МРЦ</span>';
   if(s==='above')return'<span class="tri21mrc-badge good">выше МРЦ</span>';
+  if(s==='missing_mrc')return'<span class="tri21mrc-badge">⚪ нет МРЦ в файле</span>';
   return'<span class="tri21mrc-badge">МРЦ</span>';
 }
 function mrcHtml(m){
-  const s=m?.summary||{},rows=Array.isArray(m?.rows)?m.rows:[];
+  const s=m?.summary||{},rows=Array.isArray(m?.rows)?m.rows:[],missing=Array.isArray(m?.missing_mrc_rows)?m.missing_mrc_rows:[];
   const line=rows.length?rows.map(x=>`<tr>
     <td><b>${esc(x.sku||'—')}</b><br><span>${esc(x.product_name||'')}</span></td>
     <td>${money(x.mrc_byn)}</td>
@@ -89,9 +92,19 @@ function mrcHtml(m){
     <td>${mrcBadge(x)}</td>
     <td>${esc(x.manager_name||'—')}</td>
     <td>${x.product_url?'<a target="_blank" rel="noopener" href="'+esc(x.product_url)+'">21vek ↗</a>':'—'}</td>
-  </tr>`).join(''):'<tr><td colspan="7">Отклонений от МРЦ в текущем рабочем снимке нет.</td></tr>';
+  </tr>`).join(''):'<tr><td colspan="7">Отклонений от МРЦ в последнем полном успешном сборе нет.</td></tr>';
+  const missingLine=missing.length?missing.map(x=>`<tr>
+    <td><b>${esc(x.sku||'—')}</b><br><span>${esc(x.product_name||'')}</span></td>
+    <td>${money(x.price)}</td>
+    <td>${x.in_stock===true?'да':x.in_stock===false?'нет':'—'}</td>
+    <td>${esc(x.manager_name||'—')}</td>
+    <td>${x.product_url?'<a target="_blank" rel="noopener" href="'+esc(x.product_url)+'">21vek ↗</a>':'—'}</td>
+  </tr>`).join(''):'';
+  const priceSource=m?.price_source==='latest_complete_own_parser'
+    ?'цена и наличие — из последнего полного успешного собственного парсера '+dt(m?.price_observed_at)
+    :'цена и наличие — из текущего рабочего снимка';
   return `<div class="tri21mrc">
-    <div class="tri21mrc-head"><div><b>💰 МРЦ РБ / отклонения цены на 21vek</b><div>Источник: ${esc(m?.source_file||'РБ МРЦ')}, действует с ${esc(m?.effective_date||'—')}. Сравнение идёт строго по нашему артикулу.</div></div></div>
+    <div class="tri21mrc-head"><div><b>💰 МРЦ РБ / отклонения цены на 21vek</b><div>МРЦ: ${esc(m?.source_file||'РБ МРЦ')}, действует с ${esc(m?.effective_date||'—')}; ${esc(priceSource)}. Сравнение строго по нашему артикулу.</div></div></div>
     <div class="tri21mrc-kpi">
       <div><span>МРЦ в файле</span><b>${n(s.mrc_rows)}</b></div>
       <div><span>Карточек с МРЦ</span><b>${n(s.with_mrc)}</b></div>
@@ -99,9 +112,13 @@ function mrcHtml(m){
       <div><span>Ниже МРЦ >5% · в наличии</span><b class="${Number(s.critical_below_mrc)>0?'bad':'good'}">${n(s.critical_below_mrc)}</b></div>
       <div><span>Без МРЦ</span><b>${n(s.missing_mrc)}</b></div>
     </div>
-    <details class="tri21mrc-details" ${Number(s.below_mrc_in_stock)>0?'open':''}><summary>Показать отклонения от МРЦ · до 120 позиций · ниже МРЦ без наличия отмечены отдельно</summary>
+    <details class="tri21mrc-details" ${Number(s.below_mrc_in_stock)>0?'open':''}><summary>Показать отклонения от МРЦ · до 120 позиций · цены из свежего полного сбора</summary>
       <div class="tri21mrc-table"><table><thead><tr><th>SKU / товар</th><th>МРЦ</th><th>Цена 21vek</th><th>Отклонение</th><th>Статус</th><th>Менеджер</th><th>Карточка</th></tr></thead><tbody>${line}</tbody></table></div>
     </details>
+    ${Number(s.missing_mrc)>0?`<details class="tri21mrc-details"><summary>⚪ Без МРЦ в действующем файле: ${n(s.missing_mrc)} · показать первые ${n(missing.length)}</summary>
+      <div class="tri21ctl-note" style="margin:7px 0">Эти позиции не считаются нарушением автоматически: сначала нужно подтвердить МРЦ в утверждённом файле.</div>
+      <div class="tri21mrc-table"><table><thead><tr><th>SKU / товар</th><th>Цена 21vek</th><th>В наличии</th><th>Менеджер</th><th>Карточка</th></tr></thead><tbody>${missingLine}</tbody></table></div>
+    </details>`:''}
   </div>`;
 }
 function healthMeta(h){
@@ -119,7 +136,8 @@ function dangerState(d){
   return'green';
 }
 function warningHtml(d){
-  const st=dangerState(d);
+  const st=dangerState(d),promotion=d?.promotion||{};
+  if(promotion.pending)return '<div class="tri21ctl-alert red">🚨 <strong>Сбор 21vek выполнен, но данные не применены.</strong> '+esc(promotion.error_explain||'Свежий полный снимок не переключён в рабочие данные CRM.')+' МРЦ при этом считается по последнему полному успешному сбору, чтобы нарушение цены не скрывалось.</div>';
   if(st==='red')return '<div class="tri21ctl-alert red">🚨 <strong>21vek сейчас не обновляется корректно.</strong> Не принимайте решение по остаткам, наличию и TOP на основании этого блока до восстановления. Используйте последний хороший снимок и сразу сообщите руководителю, приложив скрин этого статуса.</div>';
   if(st==='amber')return '<div class="tri21ctl-alert amber">⚠️ <strong>Данные 21vek требуют проверки.</strong> Можно видеть последний хороший снимок, но новые решения по остаткам и TOP лучше не принимать до зелёного статуса. Сообщите руководителю и приложите скрин.</div>';
   return'';
@@ -127,7 +145,8 @@ function warningHtml(d){
 function render(d,mrc){
   const root=ensurePanel();if(!root)return;
   const w=d?.working||{},p=d?.parser||{},g=d?.last_good||{},t=d?.top||{},rq=d?.refresh_request||null,rg=d?.registry||{};
-  const [label,cls]=healthMeta(d?.health);
+  const [baseLabel,cls]=healthMeta(d?.health);
+  const label=d?.promotion?.pending?'🔴 Сбор выполнен · данные не применены':baseLabel;
   const state=dangerState(d);
   root.classList.remove('state-green','state-amber','state-red');root.classList.add('state-'+state);
   const errors=Number(p?.errors||0);
@@ -136,7 +155,7 @@ function render(d,mrc){
   const reqActive=rq&&['queued','claimed'].includes(String(rq.status));
   const can=!!d?.can_refresh;
   const btnText=rq?.status==='claimed'?'⏳ Сбор выполняется':rq?.status==='queued'?'⏱ В очереди':'↻ Запустить обновление 21vek';
-  const workingAt=w.completed_at||t.finished_at||g.finished_at||null;
+  const workingAt=w.completed_at||null;
   const ageH=workingAt?Math.max(0,(Date.now()-new Date(workingAt).getTime())/3600000):999;
   const freshClass=ageH<=24?'ok':'warn';
   const freshIcon=ageH<=24?'✅':'⚠️';
@@ -188,6 +207,8 @@ window.renderTriovist=function(){const out=baseRender?.apply(this,arguments);ens
 const baseReload=window.triovistReload;
 if(typeof baseReload==='function')window.triovistReload=async function(){const out=await baseReload.apply(this,arguments);cache=null;cacheAt=0;mrcCache=null;mrcCacheAt=0;if(activeParser())await load(true);return out;};
 
-window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),mrc:()=>mrcStatus(false),lazyByActiveTab:true,registrySeparated:true,mrcControl:true});
+const API=Object.freeze({version:VERSION,refresh:()=>load(true),status:()=>status(false),mrc:()=>mrcStatus(false),lazyByActiveTab:true,registrySeparated:true,mrcControl:true,freshMrcFromCompleteRun:true,safePromotionStatus:true});
+window.RESANTA_TRIOVIST_21VEK_CONTROL_V236403=API;
+window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107=API;
 setTimeout(()=>{if(activeParser()){ensurePanel();load(false);}},0);
 })();
