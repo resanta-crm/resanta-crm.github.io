@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <script>
 (function(){
-  const V='378';
+  const V='379';
   try{
     const u=new URL(location.href);
     if(u.searchParams.get('v')!==V && !sessionStorage.getItem('tsd_hub_force_'+V)){
@@ -18,7 +18,7 @@
 })();
 </script>
 <title>Resanta Склад · ТСД</title>
-<link rel="manifest" href="/tsd-manifest.webmanifest?v=378">
+<link rel="manifest" href="/tsd-manifest.webmanifest?v=379">
 <link rel="icon" href="/inventory-icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f4f6f8;color:#111827}
@@ -44,9 +44,9 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
  <div class="card">
   <b style="font-size:18px">Что будем делать?</b>
   <div class="actions">
-   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=378"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
-   <a class="action" href="/inventory.html?legacy-module=1&v=378"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></a>
-   <a class="action" href="/picking.html?standalone=1&v=378"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></a>
+   <a class="action receiving-direct" href="/receiving.html?legacy-module=1&v=379"><span class="ico">📥</span><span><b>Приёмка товара</b>Принимать машину по УПД и сканировать товар.</span></a>
+   <a class="action" href="/inventory.html?legacy-module=1&v=379"><span class="ico">📋</span><span><b>Инвентаризация</b>Пересчёт склада через ТСД.</span></a>
+   <a class="action" href="/picking.html?standalone=1&v=379"><span class="ico">📦</span><span><b>Заказы</b>Собирать назначенные ОМ счета и подтверждать готовность.</span></a>
   </div>
   <button id="install" class="install hidden">⬇ Установить «Resanta Склад»</button>
   <div class="note">Один ярлык на терминале. Приёмка, инвентаризация и заказы остаются отдельными защищёнными модулями внутри него.</div>
@@ -58,30 +58,25 @@ iframe{border:0;width:100%;height:calc(100vh - 54px);height:calc(100dvh - 54px);
 </section>
 <script>
 'use strict';
-const HUB_VERSION='2026-10-19-v23.6.378-warehouse';
+const HUB_VERSION='2026-10-19-v23.6.379-warehouse';
 let installPrompt=null;
 const $=id=>document.getElementById(id);
-const PICKING_FAST_URL='/picking.html?standalone=1&v=378';
+const PICKING_FAST_URL='/picking.html?standalone=1&v=379';
 function moduleUrl(url){return String(url||'').startsWith('/picking.html')?PICKING_FAST_URL:url}
 let moduleAttempt=0,moduleWatchdog=null,moduleReady=false;
 function freshUrl(target,attempt=1){
  const u=new URL(target,location.origin);
- u.searchParams.set('hub','378');
+ u.searchParams.set('hub','379');
  u.searchParams.set('attempt',String(attempt));
  u.searchParams.set('open',String(Date.now()));
  return u.pathname+u.search
 }
 async function purgePickingRuntime(){
  try{
-  if(window.caches&&caches.keys){
-   const keys=await caches.keys();
-   await Promise.all(keys.filter(k=>k.startsWith('resanta-picking-')).map(k=>caches.delete(k)))
-  }
- }catch(_){}
- try{
   if('serviceWorker'in navigator){
-   const regs=await navigator.serviceWorker.getRegistrations();
-   await Promise.all(regs.filter(r=>String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'').includes('/picking-sw.js')).map(r=>r.unregister().catch(()=>false)))
+   const reg=await navigator.serviceWorker.register('/tsd-sw.js?v=379',{scope:'/',updateViaCache:'none'});
+   await reg.update().catch(()=>{});
+   reg.active?.postMessage({type:'RESANTA_TSD_WARM'})
   }
  }catch(_){}
 }
@@ -142,19 +137,13 @@ $('reload').onclick=()=>{
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});
 $('install').onclick=async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')};
 window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').classList.add('hidden')});
-// Online warehouse shell: do not let a stale hub service worker hold a TSD
-// on the Android/PWA splash screen. Modules manage their own runtime.
+// Unified offline shell for Orders: keeps the TSD hub and picking screen available
+// even when warehouse Wi-Fi loses internet. It does not intercept normal CRM/API traffic.
 if('serviceWorker'in navigator){
- navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(
-  rs.filter(r=>{
-   const u=String(r.active?.scriptURL||r.waiting?.scriptURL||r.installing?.scriptURL||'');
-   return u.includes('/tsd/sw.js')||u.includes('/tsd-sw.js')||u.includes('/inventory-sw.js')||u.includes('/picking-sw.js')
-  }).map(r=>r.unregister().catch(()=>false))
- )).catch(()=>{});
+ navigator.serviceWorker.register('/tsd-sw.js?v=379',{scope:'/',updateViaCache:'none'})
+  .then(reg=>{reg.update().catch(()=>{});reg.active?.postMessage({type:'RESANTA_TSD_WARM'})})
+  .catch(()=>{});
 }
-if(window.caches&&caches.keys)caches.keys().then(keys=>Promise.all(
- keys.filter(k=>k.startsWith('resanta-tsd-hub-')||k.startsWith('resanta-inventory-')||k.startsWith('resanta-picking-')).map(k=>caches.delete(k))
-)).catch(()=>{});
 </script>
 </body>
 </html>
