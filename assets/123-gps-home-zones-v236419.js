@@ -11,8 +11,10 @@ const ALLOWED=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 let busy=false;
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const email=()=>String(window.currentProfile?.email||window.currentUser?.email||'').trim().toLowerCase();
-const allowed=()=>window.currentProfile?.role==='boss'&&ALLOWED.has(email());
+const profile=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}};
+const user=()=>{try{return typeof currentUser!=='undefined'?currentUser:null}catch(_){return null}};
+const email=()=>String(profile()?.email||user()?.email||'').trim().toLowerCase();
+const allowed=()=>profile()?.role==='boss'&&ALLOWED.has(email());
 const n=v=>Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
 
 function root(){
