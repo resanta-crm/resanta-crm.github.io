@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.410.
+"""Triovist / 21vek automatic market analysis v23.6.411.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.39"
+PARSER_VERSION="market-auto-v6.40"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -3033,6 +3033,7 @@ def welding_process_tokens(v: Any) -> set[str]:
     if re.search(r"(^|[^a-z])tig([^a-z]|$)",raw,re.I) or "аргонодугов" in n:
         out.add("tig_lift" if "lift" in raw or "лифт" in n else "tig")
     if re.search(r"(^|[^a-z])fcaw([^a-z]|$)",raw,re.I) or "flux" in raw or "порошков" in n:out.add("flux")
+    if "tig_lift" in out:out.discard("tig")
     return out
 
 
@@ -4985,6 +4986,12 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
             else:
                 cm=re.search(r"(?:максимальн\w*|макс\.?)\s+(?:сварочн\w*\s+)?ток[^0-9]{0,20}(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
                 if cm:specs["max_welding_current_a"]=float(cm.group(1).replace(",","."))
+        # An explicit ampere value in the product title (e.g. "24В/200А")
+        # is technical evidence; bare model numbers such as SAI-200 are NOT inferred.
+        if specs.get("max_welding_current_a") is None:
+            title_amps=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",title_blob,re.I)]
+            title_amps=[x for x in title_amps if 30<=x<=1000]
+            if title_amps:specs["max_welding_current_a"]=max(title_amps)
         if specs.get("min_welding_current_a") is None:
             cm=re.search(r"(?:минимальн\w*|мин\.?)\s+(?:сварочн\w*\s+)?ток[^0-9]{0,20}(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
             if cm:specs["min_welding_current_a"]=float(cm.group(1).replace(",","."))
