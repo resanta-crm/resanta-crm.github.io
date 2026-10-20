@@ -1,7 +1,7 @@
 -- RESANTA CRM v23.6.428
--- GPS trusted TT matching, true geofence time, technical stops and director report.
--- Approved 2026-10-20.
--- Raw GPS points, route plans, visits and mileage are not modified.
+-- GPS trusted TT matching, geofence arrival/departure, technical-stop classification,
+-- director period report and client-anchor protection.
+-- Approved 2026-10-20. Raw GPS points, route plans, visits and mileage are not modified.
 
 CREATE OR REPLACE FUNCTION public.gps_classify_workday_stops_v236417(p_workday_id uuid)
  RETURNS jsonb
