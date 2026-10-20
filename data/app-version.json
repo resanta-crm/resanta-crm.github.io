@@ -1,6 +1,6 @@
 {
-  "version": "23.7.10",
+  "version": "23.7.11",
   "released_at": "2026-10-20",
-  "purpose": "VIP clients: exact date controls persist inside VIP period bar; 48 Sep-Oct exact snapshots restored.",
+  "purpose": "VIP clients: long exact date ranges up to 24 months with fast full-month YoY comparison.",
   "deploy_trigger": "2026-10-20"
 }
