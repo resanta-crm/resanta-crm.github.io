@@ -1,6 +1,6 @@
 {
-  "version": "23.7.11",
+  "version": "23.7.12",
   "released_at": "2026-10-20",
-  "purpose": "VIP clients: long exact date ranges up to 24 months with fast full-month YoY comparison.",
+  "purpose": "TSD Orders resilience: offline shell, durable local scan queue, automatic resend with idempotent event IDs, connectivity status and client diagnostics.",
   "deploy_trigger": "2026-10-20"
 }
