@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.407.
+"""Triovist / 21vek automatic market analysis v23.6.408.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.36"
+PARSER_VERSION="market-auto-v6.37"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -4834,6 +4834,10 @@ def load_existing_own(scope: str) -> dict[str,dict]:
 
 def rules_signature_prefix(rules: list[dict]|None=None) -> str:
     keys={str(x.get("spec_key") or "") for x in (rules or [])}
+    if "welding_machine_type" in keys and "duty_cycle_pct" in keys:
+        return RULESET_VERSION+"-weldinv2"
+    if "max_spool_weight_kg" in keys and "wire_diameter_mm" in keys and "duty_cycle_pct" in keys:
+        return RULESET_VERSION+"-weldsemi2"
     if "heating_mode" in keys and "fuel_consumption_kgh" in keys and "airflow_m3h" in keys:
         return RULESET_VERSION+"-gun3"
     if "technologies" in keys and "output_mlh" in keys and "power_supply" in keys:
