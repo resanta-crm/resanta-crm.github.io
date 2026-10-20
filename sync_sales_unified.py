@@ -27,7 +27,7 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.432"
+VERSION = "v23.6.435"
 MINSK = ZoneInfo("Europe/Minsk")
 TARGET_HOURS = set(range(9, 19))
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
@@ -400,6 +400,18 @@ def main() -> None:
         if selected is None:
             latest=(headers[0].get("sent") if headers else None)
             latest_txt=normalize_dt(latest).astimezone(MINSK).strftime("%d.%m.%Y %H:%M") if latest else "нет подходящих писем"
+
+            # v23.6.435: даже если нового среза нет, один раз достраиваем точную
+            # историческую базу VIP на ту же дату прошлого года. Это не меняет
+            # purchase_history и не трогает продажи — только служебный VIP snapshot.
+            sales_stamp=status_stamp((statuses or {}).get("sales"))
+            if sales_stamp is not None:
+                try:
+                    cut_date=sales_stamp.astimezone(MINSK).date()
+                    field.backfill_previous_year_snapshot(mail, cut_date)
+                except Exception as exc:
+                    log(f"⚠️ VIP historical same-date backfill skipped: {exc}")
+
             record_hourly_check(f"no_new_slice: latest matching email {latest_txt}")
             log(f"✅ Нового почасового среза 09:00–18:00 нет — без изменений. Последнее подходящее письмо: {latest_txt}.")
             return
