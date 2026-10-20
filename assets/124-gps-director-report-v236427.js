@@ -220,6 +220,12 @@ function install(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 setTimeout(install,500);setTimeout(install,1200);
+document.addEventListener('click',e=>{
+  if(e.target.closest?.('#bn-gps-control,[onclick*="gps-control"]'))setTimeout(install,220);
+},true);
+setInterval(()=>{
+  if(document.getElementById('page-gps-control')?.classList.contains('active')&&allowed()&&!document.getElementById('gps-director-view-v236427'))install();
+},2000);
 
 window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:VERSION,access:['payushin','sidarovich'],factsOnly:true});
 })();
