@@ -9,7 +9,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_GPS_AGGREGATED_ROOT_V2360)return;
-const VERSION='v23.6.104';
+const VERSION='v23.6.419';
 const GPS_SERVICE_STALE_SEC=300;
 let flight=null,reqSeq=0,lastRows=[];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -32,7 +32,7 @@ function km(v){const n=Number(v)||0;return(n/1000).toLocaleString('ru-RU',{minim
 function clock(v){if(!v)return'—';try{return new Date(v).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}catch(_){return'—';}}
 function duration(a,b){const x=new Date(a).getTime(),y=b?new Date(b).getTime():Date.now();if(!Number.isFinite(x)||!Number.isFinite(y))return'';const m=Math.max(0,Math.round((y-x)/60000));return Math.floor(m/60)+' ч '+(m%60)+' мин';}
 function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000?Math.round(n)+' м':(n/1000).toLocaleString('ru-RU',{maximumFractionDigits:1})+' км';}
-function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.104&workday='+encodeURIComponent(String(id||''));}
+function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.419&workday='+encodeURIComponent(String(id||''));}
 function openViewer(id){if(!id)return;window.open(viewerUrl(id),'_blank','noopener');}
 window.crmOpenGpsViewerV2360=openViewer;
 
@@ -147,7 +147,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 setTimeout(install,250);setTimeout(install,900);
 setInterval(()=>{if(active())load(true);},30000);
 window.RESANTA_GPS_CONTROL_PERFORMANCE_V2357=Object.freeze({version:VERSION,directorView:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
-window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPointsInMainCrm:false,mapInMainCrm:false,directorRpc:'gps_get_control_workdays_director_v2362',separateViewer:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
+window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPointsInMainCrm:false,mapInMainCrm:false,directorRpc:'gps_get_control_workdays_director_v2365',separateViewer:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
 })();
 
 // v23.6.36 · lazy GPS fuel report loader
