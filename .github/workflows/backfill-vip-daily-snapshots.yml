@@ -1,0 +1,35 @@
+name: VIP — backfill exact daily snapshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backfill_vip_daily_snapshots.py'
+      - '.github/workflows/backfill-vip-daily-snapshots.yml'
+
+concurrency:
+  group: vip-daily-snapshot-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install --disable-pip-version-check openpyxl requests
+      - name: Backfill VIP snapshots from archived 1C emails
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_PORT: '993'
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          VIP_BACKFILL_FROM: '2026-09-01'
+          VIP_BACKFILL_TO: '2026-10-20'
+        run: python backfill_vip_daily_snapshots.py
