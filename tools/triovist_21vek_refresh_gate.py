@@ -93,10 +93,12 @@ def claim():
                 limit="2500",top_limit="500",skip_recent="0"
             )
         elif not apply_recovery(result,"promotion_recovery_after_push"):
+            # A code push must never create a partial "complete" parser run.
+            # If there is nothing to recover, keep this workflow cheap/no-op.
             result.update(
-                run=True,mode="push_test",
-                do_parse=True,do_top=True,do_promote=False,
-                limit="300",top_limit="500",skip_recent="0"
+                run=False,mode="push_noop",
+                do_parse=False,do_top=False,do_promote=False,
+                limit="2500",top_limit="500",skip_recent="0"
             )
 
     elif event=="workflow_dispatch":
