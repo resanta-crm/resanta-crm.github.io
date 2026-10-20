@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.411.
+"""Triovist / 21vek automatic market analysis v23.6.412.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.40"
+PARSER_VERSION="market-auto-v6.41"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -4970,7 +4970,10 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
         pt=set()
         if specs.get("welding_processes"):pt|=welding_process_tokens(specs.get("welding_processes"))
         pt|=welding_process_tokens(local_blob)
-        if pt:specs["welding_processes"]="+".join(sorted(pt))
+        if pt:
+            specs["welding_processes"]="+".join(sorted(pt))
+            if welding_profile=="welding_inverter" and ("mig_mag" in pt or "flux" in pt):
+                specs["welding_machine_type"]="semi_auto"
 
         # Safe local fallbacks for network voltage / current range.
         if specs.get("mains_voltage_v") is None:
