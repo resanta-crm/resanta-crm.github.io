@@ -26,7 +26,8 @@ const PICK_ALLOWED=new Set([
  'warehouse_pick_device_scan_v1',
  'warehouse_pick_device_shortage_v2',
  'warehouse_pick_device_confirm_return_v2',
- 'warehouse_pick_device_undo_v1'
+ 'warehouse_pick_device_undo_v1',
+ 'warehouse_pick_device_diag_v1'
 ]);
 const USER_PREFIXES=['warehouse_inventory_','warehouse_receiving_'];
 
