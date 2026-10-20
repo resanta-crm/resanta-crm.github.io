@@ -38,7 +38,11 @@ def main():
         for i in range(0,len(ids),batch_size):
             for m in field.fetch_message_headers_batch(mail,ids[i:i+batch_size]):
                 if field.SUBJECT_MARKER.lower() in str(m.get("subject") or "").lower():
-                    sent=field.normalize_message_date(m.get("sent") or m.get("date"))
+                    sent=m.get("sent") or m.get("date")
+                    if not isinstance(sent,datetime):
+                        sent=field.normalize_message_date(sent)
+                    elif sent.tzinfo is None:
+                        sent=sent.replace(tzinfo=MINSK)
                     local=sent.astimezone(MINSK)
                     if FROM<=local.date()<=TO:
                         metas.append({"id":m["id"],"sent":sent,"date":local.date(),"subject":m["subject"]})
