@@ -1,6 +1,6 @@
 {
-  "version": "23.7.8",
+  "version": "23.7.9",
   "released_at": "2026-10-20",
-  "purpose": "VIP clients: exact date filter, approved VIP membership reassignment, safe historical same-date snapshots.",
+  "purpose": "VIP clients: exact date filter with safe no-fake-YoY behavior and approved 39-client membership.",
   "deploy_trigger": "2026-10-20"
 }
