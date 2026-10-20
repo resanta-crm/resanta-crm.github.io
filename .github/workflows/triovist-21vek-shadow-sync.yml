@@ -1,5 +1,5 @@
 name: Триовист — 21vek · собственный ежедневный сбор
-# v0.8: bounded parallel card/TOP collection with adaptive 429 cooldown.
+# v0.9: pointer-based production promotion with parser-free recovery.
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
     - cron: '17 3 * * *'
     # Резерв карточек: 08:17 по Минску. TOP и production-promote здесь не повторяем.
     - cron: '17 5 * * *'
-    # Лёгкая проверка ручной очереди из CRM. Без запроса дорогой парсер не запускается.
+    # Каждые 10 минут: ручная очередь + лёгкое восстановление готовой публикации.
     - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
@@ -64,7 +64,7 @@ jobs:
         run: pip install requests beautifulsoup4
 
       - name: Собрать публичные карточки 21vek в безопасный staging
-        if: steps.gate.outputs.run == 'true'
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.do_parse == 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
