@@ -146,14 +146,14 @@ async function saveMapKey(){
 async function ensureAuth(){const {data,error}=await db.auth.getSession();if(error)throw error;if(!data?.session)throw new Error('Нет активной сессии CRM. Вернитесь в CRM, войдите и откройте маршрут снова.');}
 async function getAggregate(rebuild=false){
   if(!workday)throw new Error('Не указан рабочий день.');
-  const fn=rebuild?'gps_rebuild_workday_aggregate_v236417':'gps_get_workday_aggregate_director_v236417';
+  const fn=rebuild?'gps_rebuild_workday_aggregate_v236421':'gps_get_workday_aggregate_director_v236421';
   const {data,error}=await db.rpc(fn,{p_workday_id:workday});
   if(error)throw error;
   return data||{};
 }
 function stale(a){
   if(!a||!Object.keys(a).length)return true;
-  if(a.director_version!=='v23.6.417')return true;
+  if(!['v23.6.421','v23.6.425'].includes(String(a.director_version||'')))return true;
   if(a.aggregation_status!=='ready')return true;
   const src=new Date(a.source_last_point_at||0).getTime(),gen=new Date(a.generated_at||0).getTime();
   return !!(src&&(!gen||src>gen));
@@ -235,13 +235,13 @@ function focusRoute(){if(!safeBounds(mapRouteCoords))focusNow();}
 function focusPlan(){const x=[...mapPlanCoords];if(mapRouteCoords.length)x.push(mapRouteCoords[mapRouteCoords.length-1]);if(!safeBounds(x))focusNow();}
 function toggleStops(){
   if(!map||!stopCollection)return;
-  if(stopsVisible){try{map.geoObjects.remove(stopCollection);}catch(_){}stopsVisible=false;$('toggleStops').textContent='🔧 Диагностика GPS';}
-  else{try{map.geoObjects.add(stopCollection);}catch(_){}stopsVisible=true;$('toggleStops').textContent='Скрыть GPS-остановки';}
+  if(stopsVisible){try{map.geoObjects.remove(stopCollection);}catch(_){}stopsVisible=false;$('toggleStops').textContent='Показать остановки';}
+  else{try{map.geoObjects.add(stopCollection);}catch(_){}stopsVisible=true;$('toggleStops').textContent='Скрыть остановки';}
 }
 async function drawMap(a){
   const y=await loadYandex(),rows=Array.isArray(a.route_points)?a.route_points:[],stops=Array.isArray(a.physical_stops)?a.physical_stops:[],plans=Array.isArray(a.planned_points)?a.planned_points:[],off=Array.isArray(a.offplan_visits)?a.offplan_visits:[];
-  mapRouteCoords=rows.map(p=>coord(p.lat,p.lng)).filter(Boolean);mapPlanCoords=plans.map(p=>coord(p.lat,p.lng)).filter(Boolean);stopsVisible=false;
-  $('toggleStops').textContent='🔧 Диагностика GPS';
+  mapRouteCoords=rows.map(p=>coord(p.lat,p.lng)).filter(Boolean);mapPlanCoords=plans.map(p=>coord(p.lat,p.lng)).filter(Boolean);stopsVisible=true;
+  $('toggleStops').textContent='Скрыть остановки';
   $('mapStatus').className='msg info';
   $('mapStatus').textContent=`Посещено клиентов: ${a.visit_total||0} · по плану ${a.visited_count||0}/${a.planned_count||0}${Number(a.offplan_count)>0?' · вне плана '+a.offplan_count:''}.`;
   if(map){try{map.destroy()}catch(_){}map=null;}
@@ -271,10 +271,22 @@ async function drawMap(a){
 
   stopCollection=new y.GeoObjectCollection();
   for(const s of stops){
-    const c=coord(s.lat,s.lng);if(!c)continue;
-    const p=plans.find(x=>Number(x.stop_seq)===Number(s.seq));
-    stopCollection.add(new y.Placemark(c,{iconContent:String(s.seq),hintContent:`GPS-остановка ${s.seq} · ${Number(s.minutes||0).toFixed(0)} мин`,balloonContent:`<b>Техническая GPS-остановка ${s.seq}</b><br>${tm(s.start_at)}—${tm(s.end_at)} · ${Number(s.minutes||0).toFixed(0)} мин${p?`<br>${esc(p.client_name)}`:''}`},{preset:'islands#orangeCircleIcon'}));
+    const cc=coord(s.lat,s.lng);if(!cc)continue;
+    const cls=String(s.classification||'technical');
+    if(cls==='planned_tt')continue;
+    const m=Number(s.minutes||0).toFixed(0);
+    let icon='Ост. '+s.seq+' · '+m+' мин',preset='islands#orangeStretchyIcon',title=s.classification_label||'Остановка '+s.seq;
+    if(cls==='technical'){icon='Тех. '+s.seq+' · '+m+' мин';preset='islands#grayStretchyIcon';title='🔧 Техническая остановка '+s.seq;}
+    else if(cls==='home'){icon='🏠 Дом · '+m+' мин';preset='islands#brownStretchyIcon';title='🏠 Дом';}
+    else if(cls==='start_zone'){icon='Старт · '+m+' мин';preset='islands#yellowStretchyIcon';title='📍 Стартовая стоянка';}
+    else if(cls==='offplan'){icon='Вне плана · '+m+' мин';preset='islands#orangeStretchyIcon';title=s.classification_label||'⚠️ Внеплановая остановка';}
+    stopCollection.add(new y.Placemark(cc,{
+      iconContent:icon,
+      hintContent:title,
+      balloonContent:`<b>${esc(title)}</b><br>Остановка ${esc(s.seq)} · ${tm(s.start_at)}—${tm(s.end_at)} · <b>${m} мин</b><br>Средняя точность ±${Number(s.avg_accuracy||0).toFixed(0)} м`
+    },{preset}));
   }
+  try{if(stopCollection.getLength()>0)map.geoObjects.add(stopCollection);}catch(_){}
 
   focusNow();
 }
