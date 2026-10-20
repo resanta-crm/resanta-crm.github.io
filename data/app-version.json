@@ -1,6 +1,6 @@
 {
-  "version": "23.7.3",
-  "released_at": "2026-10-19",
-  "purpose": "Triovist competitors: subgroup search and compressor comparison profile.",
-  "deploy_trigger": "2026-10-19T13:45:00+03:00"
+  "version": "23.7.4",
+  "released_at": "2026-10-20",
+  "purpose": "21vek own parser: safe staged promotion, fresh MRC control, honest unapplied-data status.",
+  "deploy_trigger": "2026-10-20"
 }
