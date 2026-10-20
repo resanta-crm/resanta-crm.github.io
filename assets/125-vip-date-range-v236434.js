@@ -63,10 +63,11 @@ function rangeSummary(){
     };
     addRows(g,pr,true);addRows(g,cr,false);
     g.sku_prev=g._prevSku.size;g.sku_cur=g._curSku.size;delete g._prevSku;delete g._curSku;
-    g.growth_pct=growth(g.revenue_prev,g.revenue_cur);
+    const compareOk=!!S.data?.exact_previous;
+    g.growth_pct=compareOk?growth(g.revenue_prev,g.revenue_cur):null;
     Object.values(g.categories).forEach(gc=>{
-      gc.growth_pct=growth(gc.revenue_prev,gc.revenue_cur);
-      Object.values(gc.subgroups).forEach(gs=>{gs.items=Object.values(gs.items);gs.growth_pct=growth(gs.revenue_prev,gs.revenue_cur)});
+      gc.growth_pct=compareOk?growth(gc.revenue_prev,gc.revenue_cur):null;
+      Object.values(gc.subgroups).forEach(gs=>{gs.items=Object.values(gs.items);gs.growth_pct=compareOk?growth(gs.revenue_prev,gs.revenue_cur):null});
     });
     S.summary.set(k,g);return g;
   });
@@ -146,10 +147,6 @@ async function apply(){
       const miss=(data?.current?.missing_snapshots||[]).map(day).join(', ');
       status('Нет точного среза 1С на '+(miss||'выбранную дату')+'. Месячные данные не подменяю.','bad');return;
     }
-    if(!data?.exact_previous){
-      const miss=(data?.previous?.missing_snapshots||[]).map(day).join(', ');
-      status('Для сравнения нет точного исторического среза '+(miss||'за сопоставимый период')+'. Он будет подхвачен после исторического среза 1С; пока месячные цифры оставлены без изменений.','bad');return;
-    }
     S.active=true;S.data=data;S.from=from;S.to=to;S.mode=mode;
     try{localStorage.setItem('resanta_vip_date_range_v236434',JSON.stringify({from,to,mode}))}catch(_){}
     window.renderVip?.();
@@ -166,16 +163,23 @@ function afterRender(){
   if(!S.active||!S.data)return;
   const cur=S.data.current,prev=S.data.previous;
   const info=$('vip-period-info');
+  const compareOk=!!S.data.exact_previous;
   if(info)info.innerHTML='<div class="card-title">Как считается ВИП</div>'+
-    '<div style="font-size:13px;line-height:1.65"><b>Точный период:</b> '+E(day(prev.from))+'—'+E(day(prev.to))+' → <b>'+E(day(cur.from))+'—'+E(day(cur.to))+'</b></div>'+
-    '<div style="font-size:12px;color:var(--sub);margin-top:4px">Источник: точные накопительные срезы продаж 1С. Никакой экстраполяции по дням.</div>';
+    '<div style="font-size:13px;line-height:1.65"><b>Точный период:</b> '+E(day(cur.from))+'—'+E(day(cur.to))+
+    (compareOk?' · сравнение: '+E(day(prev.from))+'—'+E(day(prev.to)):'')+'</div>'+
+    '<div style="font-size:12px;color:var(--sub);margin-top:4px">Источник: точные накопительные срезы продаж 1С. Никакой экстраполяции по дням.</div>'+
+    (!compareOk?'<div style="font-size:12px;color:var(--am);margin-top:5px">За сопоставимый период прошлого года точного дневного среза 1С нет — текущий период показан точно, процент сравнения не рассчитывается.</div>':'');
   const dtitle=document.querySelector('#vip-decliners-block .card-title');
   if(dtitle)dtitle.textContent='⚠️ Сильнее всего просели за выбранный период (топ-5)';
   document.querySelectorAll('#vip-list [id^="vipdept_"] > .card').forEach(card=>{
     const head=card.firstElementChild,right=head?.lastElementChild;
     if(!right)return;
     const ch=[...right.children];
-    if(ch[0])ch[0].textContent=day(prev.from)+'—'+day(prev.to)+' → '+day(cur.from)+'—'+day(cur.to);
+    const left=head?.firstElementChild;
+    const name=left?.firstElementChild?.textContent||'';
+    const sum=S.summary.get(K(name));
+    if(ch[0])ch[0].textContent=compareOk?(day(prev.from)+'—'+day(prev.to)+' → '+day(cur.from)+'—'+day(cur.to)):('Точный период '+day(cur.from)+'—'+day(cur.to));
+    if(!compareOk&&ch[1]&&sum)ch[1].textContent='— → '+N(sum.revenue_cur).toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN';
     const last=ch[ch.length-1];
     if(last&&/кв\.|квартал/i.test(last.textContent||''))last.style.display='none';
     const body=card.querySelector('[id^="vipcard_"]');
@@ -183,7 +187,7 @@ function afterRender(){
       [...body.children].forEach(x=>{if(/📊 Продажи ·/i.test(x.textContent||''))x.style.display='none'});
     }
   });
-  status('Точный период активен: '+day(S.from)+' — '+day(S.to),'ok');
+  status('Точный период активен: '+day(S.from)+' — '+day(S.to)+(compareOk?'':' · без точного YoY'),'ok');
 }
 if(typeof baseRender==='function'){
   const wrapped=function(){const out=baseRender.apply(this,arguments);setTimeout(afterRender,0);return out};
