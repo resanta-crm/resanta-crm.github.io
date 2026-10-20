@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.415.
+"""Triovist / 21vek automatic market analysis v23.6.416.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.44"
+PARSER_VERSION="market-auto-v6.45"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -3394,10 +3394,10 @@ def normalize_value(key: str, text: str) -> Any:
         return round(max(vals),2)
     if key in ("max_electrode_diameter_mm","wire_diameter_mm"):
         vals=[float(x.replace(",",".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:мм|mm)\b",low,re.I)]
-        nums=ns or vals
+        diameter_nums=ns or vals
         if key=="wire_diameter_mm":
-            if not nums:return None
-            mx=max(nums);mn=min(nums)
+            if not diameter_nums:return None
+            mx=max(diameter_nums);mn=min(diameter_nums)
             # 21vek occasionally drops decimal separators in MIG wire ranges:
             # "0.8–1.0 mm" arrives as "8–10 mm". Repair only that obvious pattern.
             if mx>3:
