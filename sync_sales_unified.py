@@ -27,7 +27,7 @@ import requests
 import import_sales as field
 from triovist_import_core import check_current_or_previous, parse_current_report
 
-VERSION = "v23.6.321"
+VERSION = "v23.6.432"
 MINSK = ZoneInfo("Europe/Minsk")
 TARGET_HOURS = set(range(9, 19))
 LOOKBACK_DAYS = max(2, int(os.environ.get("UNIFIED_SALES_LOOKBACK_DAYS", "4")))
@@ -348,8 +348,15 @@ def reconcile_triovist_tasks_after_commit(month: str) -> None:
             log(f"⚠️ Автопроверка ИИ-задач {manager_email} отложена: {exc}")
 
 
-def refresh_secondary_data(report_end: date, month: str, sent: datetime, rows: list[dict]) -> None:
-    field.save_vip_yoy_snapshot(report_end, month, rows, source_message_at=sent.isoformat())
+def refresh_secondary_data(mail, report_end: date, month: str, sent: datetime, rows: list[dict]) -> None:
+    local_sent=sent.astimezone(MINSK)
+    month_start=date.fromisoformat(month)
+    slice_date=local_sent.date() if local_sent.strftime("%Y-%m")==month_start.strftime("%Y-%m") else report_end
+    field.save_vip_yoy_snapshot(slice_date, month, rows, source_message_at=sent.isoformat())
+    try:
+        field.backfill_previous_year_snapshot(mail, slice_date)
+    except Exception as exc:
+        log(f"⚠️ Исторический VIP-срез на ту же дату не найден/не сохранён: {exc}")
     try:
         response = requests.post(
             f"{field.SUPABASE_URL}/rest/v1/rpc/refresh_client_revenue_totals",
@@ -439,7 +446,7 @@ def main() -> None:
         log(f"✅ Единая транзакция подтверждена: {result}")
 
         reconcile_triovist_tasks_after_commit(month)
-        refresh_secondary_data(report_end, month, sent, field_rows)
+        refresh_secondary_data(mail, report_end, month, sent, field_rows)
         record_hourly_check(f"imported: {local:%d.%m.%Y %H:%M}")
         log(f"ГОТОВО: один срез {local:%d.%m.%Y %H:%M} применён к полевым и Triovist.")
     except Exception as exc:
