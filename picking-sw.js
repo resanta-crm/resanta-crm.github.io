@@ -1,15 +1,3 @@
-const LEGACY_PREFIX='resanta-picking-';
-self.addEventListener('install',e=>{e.waitUntil(self.skipWaiting())});
-self.addEventListener('activate',e=>{
- e.waitUntil((async()=>{
-  try{
-   const keys=await caches.keys();
-   await Promise.all(keys.filter(k=>k.startsWith(LEGACY_PREFIX)).map(k=>caches.delete(k)));
-  }catch(_){}
-  try{await self.registration.unregister()}catch(_){}
-  try{
-   const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-   for(const c of clients)try{c.navigate(c.url)}catch(_){}
-  }catch(_){}
- })())
-});
+// Compatibility worker: old TSD pages may still register /picking-sw.js.
+// Delegate to the unified v23.6.440 offline shell instead of unregistering itself.
+importScripts('/tsd-sw.js?v=379');
