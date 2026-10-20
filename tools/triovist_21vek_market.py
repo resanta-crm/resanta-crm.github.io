@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Triovist / 21vek automatic market analysis v23.6.406.
+"""Triovist / 21vek automatic market analysis v23.6.407.
 
 Separate contour from the production own-card parser.
 - scope comes from the current Resanta price matrix, not from a manual competitor list;
@@ -30,7 +30,7 @@ from triovist_21vek_parser import next_state, parse_product, public_product_url
 
 SUPABASE_URL=os.environ["SUPABASE_URL"].strip().rstrip("/")
 SUPABASE_KEY=os.environ["SUPABASE_KEY"].strip()
-PARSER_VERSION="market-auto-v6.35"
+PARSER_VERSION="market-auto-v6.36"
 RULESET_VERSION="rules-v5"
 SEARCH_ENDPOINT="https://gate.21vek.by/search-composer/api/v3/products"
 UA="ResantaCRM-21vekMarket/1.0 (+https://resanta-crm.by)"
@@ -2995,8 +2995,9 @@ def compressor_directional(rule: dict,a: Any,b: Any,ours: dict|None=None,comp: d
 def welding_machine_family(v: Any) -> str:
     n=norm(v)
     if not n:return ""
-    if "полуавтомат" in n or "mig" in n or "mag" in n:return "semi_auto"
+    if "полуавтомат" in n:return "semi_auto"
     if "инвертор" in n or "inverter" in n:return "inverter"
+    if re.search(r"(^|\s)(?:mig|mag)(\s|$)",n):return "semi_auto"
     if "трансформ" in n:return "transformer"
     if "выпрямител" in n:return "rectifier"
     if "плазм" in n:return "plasma"
@@ -4262,6 +4263,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
         if "свароч" in ln and "ток" in ln:
             if any(x in ln for x in ("макс","максим")):return "max_welding_current_a"
             if any(x in ln for x in ("мин","миним")):return "min_welding_current_a"
+            if any(x in ln for x in ("диапазон","регулиров","предел","ток сварки")):return "max_welding_current_a"
         if "диаметр" in ln and "электрод" in ln:return "max_electrode_diameter_mm"
         if "диаметр" in ln and "провол" in ln:return "wire_diameter_mm"
         if ("катуш" in ln and any(x in ln for x in ("вес","масса","макс"))) or "вес катушки" in ln:
@@ -4311,7 +4313,7 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
           ("gasless_present",("без газа","порошков","flux","fcaw"))
         )
         for key,words in checks:
-            if any(w in feature_blob for w in words):push(key,label,"да",source,path)
+            if key in rule_keys and any(w in feature_blob for w in words):push(key,label,"да",source,path)
 
     def add(label: Any,value: Any,source: str,path: str=""):
         text=primitive_text(value)
@@ -4363,28 +4365,9 @@ def extract_specs(html: str, rules: list[dict]) -> tuple[list[dict],dict]:
             raw_nums=nums(x.get("value"))
             if raw_nums and max(raw_nums)>=500:
                 anomalies.append("Диаметр скважины в источнике выглядит аномально: "+str(x.get("value") or ""))
-    if welding_mode:
-        blob=json.dumps(root,ensure_ascii=False)
-        if "welding_machine_type" in rule_keys and values.get("welding_machine_type") is None:
-            fam=welding_machine_family(blob)
-            if fam in ("inverter","semi_auto","transformer","rectifier","plasma"):values["welding_machine_type"]=fam
-        if values.get("welding_processes") is None:
-            pt=welding_process_tokens(blob)
-            if pt:values["welding_processes"]="+".join(sorted(pt))
-        nblob=norm(blob)
-        for key,words in (
-          ("hot_start_present",("hot start","горячий старт")),
-          ("anti_stick_present",("anti stick","antistick","антизалип","антиприлип")),
-          ("arc_force_present",("arc force","форсаж дуги")),
-          ("vrd_present",("vrd","снижение напряжения холостого")),
-          ("synergy_present",("синерг","synergy","synergic")),
-          ("polarity_change_present",("смена полярности","изменение полярности","переключение полярности")),
-          ("mode_2t4t_present",("2t/4t","2t 4t")),
-          ("inductance_adjustment_present",("регулировка индуктивности","настройка индуктивности")),
-          ("gasless_present",("без газа","порошков","flux","fcaw"))
-        ):
-            if key in rule_keys and values.get(key) is None and any(w in nblob for w in words):
-                values[key]=True
+    # Do not infer welding type/features from the whole Next.js state:
+    # that tree can contain recommendations/related products from other welding classes.
+    # Product-name/description enrichment is applied later in card_data().
     if anomalies:
         values["_data_anomalies"]=list(dict.fromkeys(anomalies))[:5]
     return raw,values
@@ -4945,6 +4928,71 @@ def card_data(session: requests.Session,url: str,base: dict,rules: list[dict]) -
     })
     raw,specs=extract_specs(html,rules)
     card=parsed["card"];extra=parsed["extra"]
+
+    welding_rule_keys={str(r.get("spec_key") or "") for r in rules}
+    welding_profile=(
+        "welding_inverter" if "welding_machine_type" in welding_rule_keys
+        else ("welding_semi_auto" if "max_spool_weight_kg" in welding_rule_keys else "")
+    )
+    if welding_profile:
+        wname=str(card.get("product_name") or base.get("model") or base.get("product_name") or "")
+        wdesc=str(extra.get("description_text") or "")
+        wn=norm(wname)
+        local_blob=wname+"\n"+wdesc
+
+        # Machine class comes only from this product title, never from related products.
+        if welding_profile=="welding_inverter":
+            if "полуавтомат" in wn or re.search(r"\b(?:mig|mag)\b",wname,re.I):
+                specs["welding_machine_type"]="semi_auto"
+            elif "инвертор" in wn or ("свароч" in wn and "аппарат" in wn):
+                specs["welding_machine_type"]="inverter"
+
+        # Merge processes found in structured attributes with this product's own title/description.
+        pt=set()
+        if specs.get("welding_processes"):pt|=welding_process_tokens(specs.get("welding_processes"))
+        pt|=welding_process_tokens(local_blob)
+        if pt:specs["welding_processes"]="+".join(sorted(pt))
+
+        # Safe local fallbacks for network voltage / current range.
+        if specs.get("mains_voltage_v") is None:
+            vm=re.search(r"(?:напряжени[ея](?:\s+сети|\s+питания)?|питающее\s+напряжение)[^0-9]{0,24}(220|230|380|400)\s*(?:в|v)\b",wdesc,re.I)
+            if vm:specs["mains_voltage_v"]=welding_voltage_class(vm.group(1)+" В")
+        if specs.get("max_welding_current_a") is None:
+            cm=re.search(r"(?:диапазон|регулировк[аи]?|пределы?)?\s*(?:сварочного\s+)?тока[^0-9]{0,24}(\d+(?:[.,]\d+)?)\s*[-–—…]+\s*(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
+            if cm:
+                vals=[float(cm.group(1).replace(",",".")),float(cm.group(2).replace(",","."))]
+                specs["min_welding_current_a"]=min(vals);specs["max_welding_current_a"]=max(vals)
+            else:
+                cm=re.search(r"(?:максимальн\w*|макс\.?)\s+(?:сварочн\w*\s+)?ток[^0-9]{0,20}(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
+                if cm:specs["max_welding_current_a"]=float(cm.group(1).replace(",","."))
+        if specs.get("min_welding_current_a") is None:
+            cm=re.search(r"(?:минимальн\w*|мин\.?)\s+(?:сварочн\w*\s+)?ток[^0-9]{0,20}(\d+(?:[.,]\d+)?)\s*(?:а|a)\b",wdesc,re.I)
+            if cm:specs["min_welding_current_a"]=float(cm.group(1).replace(",","."))
+
+        # Duty current is accepted only when the SAME local phrase proves both current and duty %.
+        if specs.get("duty_cycle_current_a") is None:
+            dm=re.search(r"(?:пн|пв|продолжительност\w*\s+(?:нагрузк\w*|включени\w*)|duty\s*cycle)[^\n.;]{0,100}?(\d+(?:[.,]\d+)?)\s*(?:а|a)[^\n.;]{0,60}?(\d+(?:[.,]\d+)?)\s*%",wdesc,re.I)
+            if not dm:
+                dm=re.search(r"(\d+(?:[.,]\d+)?)\s*(?:а|a)[^\n.;]{0,60}?(?:пн|пв|duty\s*cycle)[^\n.;]{0,60}?(\d+(?:[.,]\d+)?)\s*%",wdesc,re.I)
+            if dm:
+                specs["duty_cycle_current_a"]=float(dm.group(1).replace(",","."))
+                if specs.get("duty_cycle_pct") is None:specs["duty_cycle_pct"]=float(dm.group(2).replace(",","."))
+
+        # Boolean advantages are inferred only from this card's title/description.
+        local_n=norm(local_blob)
+        for key,words in (
+          ("hot_start_present",("hot start","горячий старт")),
+          ("anti_stick_present",("anti stick","antistick","антизалип","антиприлип")),
+          ("arc_force_present",("arc force","форсаж дуги")),
+          ("vrd_present",("vrd","снижение напряжения холостого")),
+          ("synergy_present",("синерг","synergy","synergic")),
+          ("polarity_change_present",("смена полярности","изменение полярности","переключение полярности")),
+          ("mode_2t4t_present",("2t/4t","2t 4t")),
+          ("inductance_adjustment_present",("регулировка индуктивности","настройка индуктивности")),
+          ("gasless_present",("без газа","порошков","flux","fcaw"))
+        ):
+            if key in welding_rule_keys and specs.get(key) is None and any(w in local_n for w in words):
+                specs[key]=True
     if {"agri_machine_type","agri_power_source","pto_present","motor_power_w","gears_forward","gears_reverse","cultivation_width_cm","low_gear_present","wheel_diameter_cm"}.issubset(
         {str(r.get("spec_key") or "") for r in rules}
     ):
