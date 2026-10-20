@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-10-19-resanta-crm-v23.7.3-competitor-compressor-search';
+const APP_VERSION = '2026-10-20-resanta-crm-v23.7.5-gps-home-zones-reminders';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -43,6 +43,7 @@ const APP_VERSION = '2026-10-19-resanta-crm-v23.7.3-competitor-compressor-search
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="./assets/01-crm-core.js?v=23.6.339"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
+<script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
 <script defer src="./assets/03-triovist-routes.js?v=23.6.380"></script>
 <script defer src="./assets/111-triovist-db-queue-v236251.js?v=23.6.257"></script>
 <script defer src="./assets/79-falling-task-period-v236106.js?v=23.6.106"></script>
