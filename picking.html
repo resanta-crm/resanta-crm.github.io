@@ -113,7 +113,7 @@ function show(id,on=true){$(id)?.classList.toggle('hidden',!on)}
 function moduleVisible(){try{return !window.frameElement||!window.frameElement.closest('#work')?.classList.contains('hidden')}catch(_){return document.visibilityState==='visible'}}
 function uuid(){return crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(16).slice(2)}
 function loadSession(){try{const x=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');return x?.token&&x?.device_key?x:null}catch(_){return null}}
-function saveSession(x){if(!x)clearFastCache();session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
+function saveSession(x){if(!x&&!scanQueue.length)clearFastCache();session=x||null;if(x)localStorage.setItem(SESSION_KEY,JSON.stringify(x));else localStorage.removeItem(SESSION_KEY)}
 
 function openPickDb(){
  return new Promise((resolve,reject)=>{
@@ -509,7 +509,7 @@ async function processScanQueue(){
  }finally{
   scanWorker=false;
   if(retryLater&&session?.token&&scanQueue.length){
-   scanRetryTimer=setTimeout(()=>processScanQueue(),900)
+   scanRetryTimer=setTimeout(()=>processScanQueue(),netReachable?900:8000)
   }else if(scanQueue.length&&!busy){
    setTimeout(()=>processScanQueue(),0)
   }
