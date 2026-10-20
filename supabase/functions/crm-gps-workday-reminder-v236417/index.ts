@@ -29,6 +29,9 @@ function minskTime(v:unknown){
   try{return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',hour:'2-digit',minute:'2-digit'}).format(new Date(String(v)));}
   catch(_){return String(v)}
 }
+function minskDate(){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+}
 
 Deno.serve(async(req)=>{
   try{
@@ -56,27 +59,28 @@ Deno.serve(async(req)=>{
 
     let sent=0,skipped=0,noBinding=0,failed=0;
     const errors:any[]=[];
+    const reminderDate=minskDate();
 
     for(const w of (days||[]) as any[]){
       const workdayId=String(w.id),uid=String(w.user_id),manager=String(w.manager_name||'Менеджер');
       const binding:any=bindMap.get(uid);
       const {data:existing,error:ee}=await db.from('gps_workday_reminder_log_v236417')
-        .select('status').eq('workday_id',workdayId).eq('reminder_kind',phase).maybeSingle();
+        .select('status').eq('workday_id',workdayId).eq('reminder_kind',phase).eq('reminder_date',reminderDate).maybeSingle();
       if(ee)throw ee;
       if(existing?.status==='sent'||existing?.status==='pending'){skipped++;continue;}
 
       if(!binding?.chat_id){
         await db.from('gps_workday_reminder_log_v236417').upsert({
           workday_id:workdayId,reminder_kind:phase,user_id:uid,manager_name:manager,
-          work_date:w.work_date,status:'no_binding',error_text:'NO_ACTIVE_TELEGRAM_BINDING'
-        },{onConflict:'workday_id,reminder_kind'});
+          work_date:w.work_date,reminder_date:reminderDate,status:'no_binding',error_text:'NO_ACTIVE_TELEGRAM_BINDING'
+        },{onConflict:'workday_id,reminder_kind,reminder_date'});
         noBinding++;continue;
       }
 
       await db.from('gps_workday_reminder_log_v236417').upsert({
         workday_id:workdayId,reminder_kind:phase,user_id:uid,manager_name:manager,
-        work_date:w.work_date,status:'pending',telegram_chat_id:binding.chat_id,error_text:null
-      },{onConflict:'workday_id,reminder_kind'});
+        work_date:w.work_date,reminder_date:reminderDate,status:'pending',telegram_chat_id:binding.chat_id,error_text:null
+      },{onConflict:'workday_id,reminder_kind,reminder_date'});
 
       const started=minskTime(w.started_at);
       const text=phase==='18:10'
@@ -87,14 +91,14 @@ Deno.serve(async(req)=>{
         await tg(text,binding.chat_id);
         const {error:ue}=await db.from('gps_workday_reminder_log_v236417').update({
           status:'sent',sent_at:new Date().toISOString(),error_text:null
-        }).eq('workday_id',workdayId).eq('reminder_kind',phase);
+        }).eq('workday_id',workdayId).eq('reminder_kind',phase).eq('reminder_date',reminderDate);
         if(ue)throw ue;
         sent++;
       }catch(e){
         const msg=e instanceof Error?e.message:String(e);
         await db.from('gps_workday_reminder_log_v236417').update({
           status:'failed',error_text:msg
-        }).eq('workday_id',workdayId).eq('reminder_kind',phase);
+        }).eq('workday_id',workdayId).eq('reminder_kind',phase).eq('reminder_date',reminderDate);
         failed++;errors.push({manager,error:msg});
       }
     }
