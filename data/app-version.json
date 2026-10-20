@@ -1,6 +1,6 @@
 {
-  "version": "23.7.9",
+  "version": "23.7.10",
   "released_at": "2026-10-20",
-  "purpose": "VIP clients: exact date filter with safe no-fake-YoY behavior and approved 39-client membership.",
+  "purpose": "VIP clients: exact date controls persist inside VIP period bar; 48 Sep-Oct exact snapshots restored.",
   "deploy_trigger": "2026-10-20"
 }
