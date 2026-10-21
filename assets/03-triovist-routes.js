@@ -2542,6 +2542,15 @@ install();
   };}
   async function updateRows(ids,patch){for(let i=0;i<ids.length;i+=100){const {error}=await db.from('route_plans').update(patch).in('id',ids.slice(i,i+100));if(error)throw error;}}
   async function reloadRoutes(){allRoutePlans=await loadAllRows('route_plans');clearIndexes();}
+  // Read the authoritative day before saving or after an interrupted save.
+  // Never delete visits or other days; replace only this day in the in-memory cache.
+  async function syncRouteDaySafe(manager,date){
+    const {data,error}=await db.from('route_plans').select('*').eq('manager_name',manager).eq('visit_date',date);
+    if(error)throw error;
+    allRoutePlans=(allRoutePlans||[]).filter(r=>r.manager_name!==manager||r.visit_date!==date).concat(data||[]);
+    clearIndexes();
+    return (data||[]).filter(activeRow);
+  }
   async function approveWorkflow(manager,ym){
     const {data:old,error:e0}=await db.from('route_month_workflow').select('*').eq('manager_name',manager).eq('route_month',ym).maybeSingle();if(e0)throw e0;
     const now=new Date().toISOString(),row={...(old||{}),manager_name:manager,route_month:ym,status:'approved',office_weekday:Number(old?.office_weekday||1),max_points_day:15,updated_at:now,approved_by:currentProfile?.name||null,approved_at:now,boss_comment:'Маршрут составляет и изменяет руководитель вручную.'};
@@ -2561,6 +2570,9 @@ install();
     if(!confirm((office?'Сохранить офисный день':'Сохранить '+totalSelected+' ТТ, включая сетевых '+selectedNetworks.length)+' для '+state.manager+' на '+state.date+' и сразу отправить менеджеру?'))return;
     const btn=document.getElementById('mrl-save');btn.disabled=true;btn.textContent='Сохраняю…';
     try{
+      // Mandatory preflight: an earlier request could have been committed even
+      // when Android/desktop received Failed to fetch. Prevent duplicate inserts.
+      await syncRouteDaySafe(state.manager,state.date);
       const old=(allRoutePlans||[]).filter(r=>r.manager_name===state.manager&&r.visit_date===state.date&&activeRow(r)),visited=old.filter(isVisited),replaceable=old.filter(r=>!isVisited(r)),keepIds=new Set();
       const visitedClientIds=new Set();visited.forEach(r=>rowClientIds(r,state.manager).forEach(id=>visitedClientIds.add(id)));
       const visitedNetworkIds=new Set(visited.filter(r=>r.is_network_point&&r.network_point_id).map(r=>String(r.network_point_id)));
@@ -2603,7 +2615,30 @@ install();
       }
       renderCurrentDay();resetEditor();
       alert('Готово. День сразу утверждён и отправлен менеджеру.\n\n'+state.manager+' · '+state.date+'\n'+(office?'Офисный день 09:00–18:00':'Всего ТТ: '+totalSelected+' · клиентских: '+selected.length+' · сетевых: '+selectedNetworks.length));
-    }catch(e){alert('Не удалось сохранить маршрут. Посещённые данные не удалялись.\n\n'+(e.message||e));}
+    }catch(e){
+      console.warn('Manual route save interrupted; verifying actual server state',e);
+      try{
+        const actual=await syncRouteDaySafe(state.manager,state.date);
+        renderCurrentDay();
+        const clients=new Set(actual.filter(r=>!r.is_network_point&&!r.is_office_day)
+          .flatMap(r=>rowClientIds(r,state.manager)));
+        const networks=new Set(actual.filter(r=>r.is_network_point).map(r=>String(r.network_point_id||'')));
+        const matched=selected.filter(p=>clients.has(pointId(p))).length+
+          selectedNetworks.filter(n=>networks.has(networkId(n))).length;
+        const fullyRecorded=office
+          ? actual.length===1&&actual[0].is_office_day&&approvedRow(actual[0])
+          : actual.length===totalSelected&&matched===totalSelected&&actual.every(approvedRow);
+        if(fullyRecorded){
+          resetEditor();
+          alert('Соединение прервалось при завершении сохранения, но повторная проверка подтвердила все точки в базе.\n\n'+state.manager+' · '+state.date+' · '+actual.length+' точек согласованы.\n\nПовторно создавать маршрут НЕ нужно.');
+        }else{
+          alert('Сохранение прервалось, состояние сверено с сервером.\n\n'+state.manager+' · '+state.date+'\nВ базе активных строк: '+actual.length+'. Из выбранных точек обнаружено: '+matched+' из '+totalSelected+'.\n\nЧасть изменений могла сохраниться. Ничего не удаляйте. Перед повторной попыткой нажмите «Показать клиентов» и проверьте список.');
+        }
+      }catch(checkError){
+        console.warn('Manual route verification temporarily unavailable',checkError);
+        alert('Связь с сервером потеряна. Пока НЕВОЗМОЖНО проверить результат сохранения.\n\nДанные посещений не удалялись. Не создавайте маршрут повторно вслепую: после восстановления связи откройте этот день и проверьте сохранённые точки.\n\n'+(e.message||e));
+      }
+    }
     finally{btn.disabled=false;btn.textContent='Сохранить и сразу отправить менеджеру';}
   }
 
@@ -5142,7 +5177,7 @@ async function geocodeOne(n){
 
 window.v2271GeocodeNetworkPoints=async function(manager){
   if(geoBusy||currentProfile?.role!=='boss')return;
-  let rows=[];try{rows=(await loadAllRows('route_network_points')||[]).filter(n=>n.active!==false&&norm(n.manager_name)===norm(manager)&&!(Number.isFinite(Number(n.lat))&&Number.isFinite(Number(n.lng))));}catch(e){alert('Сначала установите SQL v22.7.1.');return;}
+  let rows=[];try{rows=(await loadAllRows('route_network_points')||[]).filter(n=>n.active!==false&&norm(n.manager_name)===norm(manager)&&!(Number.isFinite(Number(n.lat))&&Number.isFinite(Number(n.lng))));}catch(e){alert('Не удалось загрузить сетевые точки с сервера. Возможно, временный сбой связи. Координаты не менялись.\n\n'+(e.message||e));return;}
   if(!rows.length){alert('У '+manager+' все сетевые точки уже имеют координаты.');return;}
   if(!confirm('Геокодировать сетевые точки '+manager+' без координат: '+rows.length+'?\n\nСохранённые координаты не изменяются.'))return;
   geoBusy=true;const btn=document.getElementById('mrl-network-geocode');let ok=0,miss=0;
@@ -5210,7 +5245,7 @@ function ensureNetworksUi(){
 
 async function loadNetworks(force=false){
   if(networkLoaded&&!force)return networkRows;if(networkLoading&&!force)return networkLoading;
-  networkLoading=(async()=>{const st=document.getElementById('net-status');if(st)st.textContent='Загружаю сетевые точки…';try{networkRows=(await loadAllRows('route_network_points')||[]).filter(x=>x.active!==false);networkLoaded=true;if(st)st.textContent='Загружено сетевых точек: '+networkRows.length+'.';return networkRows;}catch(e){networkRows=[];networkLoaded=false;if(st)st.innerHTML='<span style="color:var(--r)">Сети не загрузились: '+escN(e.message||e)+'. Проверьте установку SQL v22.7.1.</span>';throw e;}finally{networkLoading=null;}})();return networkLoading;
+  networkLoading=(async()=>{const st=document.getElementById('net-status');if(st)st.textContent='Загружаю сетевые точки…';try{networkRows=(await loadAllRows('route_network_points')||[]).filter(x=>x.active!==false);networkLoaded=true;if(st)st.textContent='Загружено сетевых точек: '+networkRows.length+'.';return networkRows;}catch(e){networkRows=[];networkLoaded=false;if(st)st.innerHTML='<span style="color:var(--r)">Сети временно не загрузились: '+escN(e.message||e)+'. Проверьте доступность сервера и повторите обновление.</span>';throw e;}finally{networkLoading=null;}})();return networkLoading;
 }
 function fillFilters(rows){
   const mgr=document.getElementById('net-manager'),net=document.getElementById('net-network');if(!mgr||!net)return;
