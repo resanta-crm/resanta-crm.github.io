@@ -884,10 +884,14 @@ function v236435AssignServerStop(stop,visits,plans){
   if(cls!=='planned_tt'&&cls!=='offplan')return {...stop,kind:'technical'};
 
   const name=stop.serverMatchedClientName||stop.serverLabel.replace(/^.*?·\s*/,'')||'Торговая точка';
+  const networkByName=(plans||[]).some(r=>r.is_network_point&&canonicalSalesClientName(r.client_name||'')===canonicalSalesClientName(name));
+  const isNetwork=/^\s*🏬/.test(name)||networkByName;
   let client=null;
-  try{client=matchClientByName(name);}catch(_){}
-  if(!client){
-    client=(allClients||[]).find(x=>canonicalSalesClientName(x.name||'')===canonicalSalesClientName(name))||null;
+  if(!isNetwork){
+    try{client=matchClientByName(name);}catch(_){}
+    if(!client){
+      client=(allClients||[]).find(x=>canonicalSalesClientName(x.name||'')===canonicalSalesClientName(name))||null;
+    }
   }
   const matchedPlans=(plans||[]).filter(r=>
     canonicalSalesClientName(r.client_name||'')===canonicalSalesClientName(name)
@@ -1166,7 +1170,7 @@ async function v19OpenGpsWorkday(id,silent){
     // Planned but not physically assigned points stay small and secondary.
     const assignedClientIds=new Set(business.filter(x=>x.client?.id).map(x=>String(x.client.id)));
     plans.forEach(r=>{
-      const c=r.client_id?(allClients||[]).find(x=>String(x.id)===String(r.client_id)):matchClientByName(r.client_name||'');
+      const c=r.is_network_point?null:(r.client_id?(allClients||[]).find(x=>String(x.id)===String(r.client_id)):matchClientByName(r.client_name||''));
       if(c&&assignedClientIds.has(String(c.id)))return;
       const gf=c?clientGeofence(c):(
         r.is_network_point&&Number.isFinite(Number(r.route_lat))&&Number.isFinite(Number(r.route_lng))
