@@ -116,6 +116,17 @@ function ensureUi(){
     <div class="gps-brief-grid" id="gps-dir-kpi-v236427" style="margin-bottom:12px"></div>
     <div class="gps-brief-card"><div class="gps-brief-title" style="font-size:15px">Что требует внимания</div>
       <div id="gps-brief-actions-v236438" class="gps-brief-actions"></div></div>
+    <div class="gps-brief-card" id="gps-meeting-ai-v236441" style="border-color:#c5d9ef">
+      <div class="gps-brief-top">
+        <div><div class="gps-brief-title" style="font-size:15px">✦ ИИ-повестка маршрутного совещания</div>
+          <div class="gps-brief-muted">Вопросы руководителю, проверяемые факты, рекомендуемые решения. Только GPS и визиты ТТ.</div>
+        </div>
+        <button id="gps-meeting-ai-run-v236441" type="button" class="btn-primary">Подготовить совещание</button>
+      </div>
+      <div id="gps-meeting-ai-result-v236441" style="margin-top:10px">
+        <div class="gps-brief-muted">ИИ не запускается автоматически и не влияет на скорость открытия CRM. Подготовка по нажатию.</div>
+      </div>
+    </div>
     <div class="gps-brief-card">
       <div class="gps-brief-top"><div class="gps-brief-title" style="font-size:15px">Посещения торговых точек</div>
         <div class="gps-brief-toolbar"><button class="btn-secondary" id="gps-brief-issues-v236438">Только спорные</button><button class="btn-secondary" id="gps-brief-all-v236438">Все ТТ</button></div></div>
