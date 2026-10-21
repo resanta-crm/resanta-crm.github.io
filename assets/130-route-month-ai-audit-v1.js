@@ -294,14 +294,14 @@ async function decide(f,decision,action){
  try{
   const user=(()=>{try{return String(currentProfile?.email||currentProfile?.name||currentUser?.email||'ДФ')}catch(_){return'ДФ'}})();
   const data={
-   audit_month:state.month,manager_name:f.manager,item_key:f.itemKey,kind:f.kind,
+   audit_month:action?.audit_month||state.month,manager_name:f.manager,item_key:f.itemKey,kind:f.kind,
    client_id:f.clientId,client_name:f.clientName||null,reason:f.reason,basis:action?{...f.details,route_ai_action:action}:f.details,
    decision,director_note:note||null,updated_by:user,updated_at:new Date().toISOString()
   };
   const {data:saved,error}=await db.from('route_month_ai_reviews').upsert(data,{onConflict:'audit_month,manager_name,item_key,kind'}).select().single();
   if(error)throw error;
-  state.reviews.set(reviewKey(f),saved);render();
- }catch(e){console.error(VERSION+' decision',e);alert('Не удалось сохранить решение ДФ: '+(e.message||e))}
+  state.reviews.set(reviewKey(f),saved);if(state.month===saved.audit_month)render();return saved;
+ }catch(e){console.error(VERSION+' decision',e);alert('Не удалось сохранить решение ДФ: '+(e.message||e));return null}
 }
 window.resantaRouteAiStoreActionV1=(f,action)=>decide(f,'approve',action);
 window.RESANTA_ROUTE_MONTH_AI_AUDIT_V1=Object.freeze({version:VERSION,manualOnly:true,originalRoutesUnchanged:true,bossOnly:true,run:audit});
