@@ -2591,6 +2591,16 @@ install();
       await approveWorkflow(state.manager,state.date.slice(0,7));await reloadRoutes();
       try{await window.syncRouteCoverageCallsV23675?.(state.date.slice(0,7));}catch(e){console.warn('v23.6.75 coverage sync',e);}
       try{window.renderRouteCoverageV23675?.();window.renderRouteCoverageV23674?.();}catch(_){}
+      // Explicit handoff from director's route AI. Confirm action only after normal manual save.
+      const aiAction=state.aiFocus;
+      state.aiFocus=null;
+      if(aiAction&&aiAction.manager===state.manager&&aiAction.date===state.date&&!office
+          &&state.selected.has(String(aiAction.clientId))
+          &&(allRoutePlans||[]).some(r=>r.manager_name===state.manager&&r.visit_date===state.date&&!r.removed&&!r.is_office_day&&!r.is_network_point&&
+             (String(r.client_id||'')===String(aiAction.clientId)||(Array.isArray(r.linked_client_ids)&&r.linked_client_ids.map(String).includes(String(aiAction.clientId)))))){
+        try{window.dispatchEvent(new CustomEvent('resanta-route-ai-saved',{detail:{manager:state.manager,date:state.date,clientId:aiAction.clientId,review:aiAction.review}}));}
+        catch(e){console.warn('route AI save followup',e)}
+      }
       renderCurrentDay();resetEditor();
       alert('Готово. День сразу утверждён и отправлен менеджеру.\n\n'+state.manager+' · '+state.date+'\n'+(office?'Офисный день 09:00–18:00':'Всего ТТ: '+totalSelected+' · клиентских: '+selected.length+' · сетевых: '+selectedNetworks.length));
     }catch(e){alert('Не удалось сохранить маршрут. Посещённые данные не удалялись.\n\n'+(e.message||e));}
@@ -2616,6 +2626,45 @@ install();
   window.approveAllRoutes=function(){alert('Каждый сохранённый руководителем день утверждается сразу.');};
   window.openNewBossRouteDayEditor=function(){installBossUi();document.getElementById('mrl-load')?.click();};
   window.openBossRouteDayEditor=function(date,manager){installBossUi();if(MANAGERS.includes(manager))document.getElementById('mrl-manager').value=manager;if(date)document.getElementById('mrl-date').value=date;document.getElementById('mrl-load')?.click();};
+  // Read-only AI suggestion -> director manual editing. No writes until the director presses Save.
+  window.resantaRouteAiPrepareV1=async function(request){
+    if(currentProfile?.role!=='boss')throw new Error('Только для ДФ');
+    const manager=String(request?.manager||''),date=String(request?.date||''),clientId=String(request?.clientId||'');
+    if(!MANAGERS.includes(manager)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||date<=todayM()||!clientId)
+      throw new Error('Нужны менеджер, будущая дата и клиент');
+    installBossUi();
+    const c=(allClients||[]).find(c=>String(c.id)===clientId&&activeClientM(c)&&normM(c.manager_name)===normM(manager));
+    if(!c)throw new Error('Клиент больше не закреплён за выбранным менеджером');
+    const city=String(c.city||c.region||'').trim();
+    if(!city)throw new Error('У клиента не указан город');
+    const {data:day,error}=await db.from('route_plans').select('id,city,is_office_day,is_network_point,removed,client_id,linked_client_ids,physical_point_id,physical_point_key').eq('manager_name',manager).eq('visit_date',date).limit(100);
+    if(error)throw error;
+    const active=(day||[]).filter(r=>!r.removed);
+    if(!active.some(r=>!r.is_office_day&&normM(r.city)===normM(city)))
+      throw new Error('На эту дату нет запланированной поездки в '+city);
+    if(active.some(r=>r.is_office_day))throw new Error('Указан офисный день');
+    const mgr=document.getElementById('mrl-manager'),dt=document.getElementById('mrl-date'),type=document.getElementById('mrl-type');
+    if(!mgr||!dt||!type)throw new Error('Ручной редактор ещё не готов');
+    mgr.value=manager;dt.value=date;type.value='field';
+    state.aiFocus=null;
+    await loadEditor();
+    if(state.loading||document.getElementById('mrl-editor')?.style.display==='none')throw new Error('Редактор не открылся. Повторите');
+    const plan=getPlans(manager).find(p=>pointId(p)===clientId);
+    if(!plan)throw new Error('Клиент не найден в актуальном перечне маршрута');
+    const old=state.selected.has(clientId);
+    if(!old&&state.selected.size+state.networkSelected.size>=MAX_POINTS)
+      throw new Error('В выбранном дне уже 15 точек. Пересмотрите маршрут вручную');
+    state.selected.add(clientId);
+    state.city=pointCity(plan);
+    state.query='';
+    state.aiFocus={manager,date,clientId,review:request.review};
+    renderCities();renderPoints();renderSummary();
+    const status=document.getElementById('mrl-status');
+    if(status)status.textContent='🤖 Предложение ИИ: '+c.name+' — '+city+' · '+date+'. Проверьте состав дня и нажмите «Сохранить и сразу отправить менеджеру». Пока маршрут не изменён.';
+    document.getElementById('manual-route-lite')?.scrollIntoView({behavior:'smooth',block:'start'});
+    return{manager,date,clientId,alreadySelected:old};
+  };
+
 
   const previousBossRender=window.renderRoutesBoss;
   window.renderRoutesBoss=function(){return lightweightBossRender();};
