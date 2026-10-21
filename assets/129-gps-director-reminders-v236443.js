@@ -18,7 +18,7 @@ const severity={
  no_deadline:{name:'Без срока',color:'#475569',background:'#f8fafc'},
  upcoming:{name:'Ближайшие 7 дней',color:'#185fa5',background:'#eff6ff'}
 };
-let busy=false,lastAt=0;
+let busy=false,lastAt=0,expanded=false,cachedData=null;
 function panel(){return document.getElementById('gps-director-reminders-v236443')}
 function active(){
  const box=panel();
@@ -26,6 +26,7 @@ function active(){
 }
 const shortDate=v=>{const m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?m[3]+'.'+m[2]+'.'+m[1]:'Срок не указан'};
 function render(data){
+ cachedData=data;
  const target=document.getElementById('gps-reminders-content-v236443');if(!target)return;
  const items=Array.isArray(data?.items)?data.items:[],counts=data?.counts||{};
  const statuses=[
@@ -40,7 +41,9 @@ function render(data){
   target.innerHTML=overview+'<div style="color:var(--sub);font-size:12px;line-height:1.6">Пока нет открытых поручений с решением директора. Когда на разборе ТТ нажмёшь «Сохранить решение», оно появится здесь — со сроком или пометкой «Без срока».</div>';
   return;
  }
- const visible=items.map((x)=>{
+ const ordered=items;
+ const showAll=expanded;
+ const visible=ordered.slice(0,showAll?ordered.length:1).map((x)=>{
    const color=severity[x.urgency]||severity.no_deadline;
    const title=actionTitle[x.action]||'Решение руководителя';
    return '<div style="border:1px solid var(--border);border-left:3px solid '+color.color+';border-radius:9px;padding:11px;margin-top:7px">'+
@@ -56,7 +59,9 @@ function render(data){
  (future?' · На более поздние даты: '+future:'')+
  (items.length<total-future?' · Показаны первые '+items.length:'')+
  '. Выполненные и закрытые вопросы не отображаются.</div>';
- target.innerHTML=overview+visible+count;
+ const toggle=ordered.length>1?'<button id="gps-reminders-expand-v236445" type="button" class="btn-secondary" style="margin-top:9px">'+
+    (expanded?'Свернуть список':'Показать все решения · '+ordered.length)+'</button>':'';
+ target.innerHTML=overview+visible+toggle+count;
 }
 async function load(force=false){
  if(!active()||busy||(!force&&Date.now()-lastAt<60000))return;
@@ -76,10 +81,12 @@ async function load(force=false){
 document.addEventListener('click',e=>{
  const tab=e.target.closest?.('#gps-tab-director-v236427');
  if(tab)setTimeout(()=>load(false),160);
+ const expand=e.target.closest?.('#gps-reminders-expand-v236445');
+ if(expand){expanded=!expanded;render(cachedData||{items:[],counts:{}});}
  const btn=e.target.closest?.('#gps-reminders-refresh-v236443');
  if(btn){lastAt=0;load(true);}
 },true);
 document.addEventListener('resanta-gps-decision-updated',()=>{lastAt=0;load(true)});
 setTimeout(()=>{if(active())load(false)},900);
-window.RESANTA_GPS_REMINDERS_V236443=Object.freeze({version:'v23.6.443',onlyApprovedDecisions:true,onTabOpen:true,initialDelayMs:900,rawGpsReads:false});
+window.RESANTA_GPS_REMINDERS_V236443=Object.freeze({version:'v23.6.445',onlyApprovedDecisions:true,onTabOpen:true,initialDelayMs:900,rawGpsReads:false});
 })();
