@@ -211,6 +211,7 @@ async function audit(){
      {date,points:ordered.length,straight_current_km:Math.round(actual),straight_alternative_km:Math.round(efficient)}));
    }
   }
+  if(month()!==ym){message('Месяц маршрута изменился во время расчёта. Нажмите «ИИ-анализ маршрута» повторно.');return;}
   state.items=findings.sort((a,b)=>b.weight-a.weight||a.manager.localeCompare(b.manager,'ru'));
   state.month=ym;state.shown=8;state.filters={kind:'priority',manager:'all',status:'pending',query:''};
   state.period=(salesResp.data||[])[0]||null;
