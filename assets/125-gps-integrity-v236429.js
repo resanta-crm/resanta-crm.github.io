@@ -5,9 +5,9 @@
 (function(){
 'use strict';
 if(window.RESANTA_GPS_INTEGRITY_V236429)return;
-const VERSION='v23.6.429';
+const VERSION='v23.6.445';
 const ALLOWED=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
-let busy=false,lastRouteKey='',lastRouteData=null;
+let busy=false,lastRouteKey='',lastRouteData=null,integrityRows=[],trustFilter='all',lastDirectorParams='';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const profile=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}};
@@ -58,11 +58,28 @@ function ensureDirectorCard(){
   const kpi=document.getElementById('gps-dir-kpi-v236427');
   if(kpi?.parentNode===panel)kpi.insertAdjacentElement('afterend',card);
   else panel.insertBefore(card,panel.children[1]||null);
+  card.querySelector('#gps-integrity-kpi-v236429')?.addEventListener('click',event=>{
+    const trigger=event.target.closest('[data-integrity-level]');if(!trigger)return;
+    const selected=trigger.getAttribute('data-integrity-level');
+    const panel=card.querySelector('#gps-integrity-list-v236429');
+    if(!panel)return;
+    trustFilter=selected;
+    panel.style.display='block';
+    renderIntegrityRows(integrityRows);
+    updateTrustButtons();
+    card.querySelector('#gps-integrity-toggle-v236438').textContent='Скрыть подробную диагностику ▴';
+  });
+  card.addEventListener('click',event=>{
+    const trigger=event.target.closest('[data-integrity-workday]');
+    const id=trigger?.getAttribute('data-integrity-workday');
+    if(id&&typeof window.crmOpenGpsViewerV2360==='function')window.crmOpenGpsViewerV2360(id);
+  });
   card.querySelector('#gps-integrity-toggle-v236438')?.addEventListener('click',()=>{
     const list=card.querySelector('#gps-integrity-list-v236429');
     if(!list)return;
     const visible=list.style.display==='block';
     list.style.display=visible?'none':'block';
+    if(!visible){trustFilter='all';renderIntegrityRows(integrityRows);updateTrustButtons();}
     card.querySelector('#gps-integrity-toggle-v236438').textContent=visible?'Подробная диагностика GPS ▾':'Скрыть подробную диагностику ▴';
   });
   return card;
@@ -77,26 +94,53 @@ function reasons(r){
   if(Number(r.poor_accuracy_points)>0)a.push('слабая точность: '+Number(r.poor_accuracy_points));
   return a.join(' · ')||'явных аномалий нет';
 }
+function updateTrustButtons(){
+ const card=document.getElementById('gps-integrity-v236429');
+ if(!card)return;
+ card.querySelectorAll('[data-integrity-level]').forEach(btn=>{
+  const active=btn.getAttribute('data-integrity-level')===trustFilter;
+  btn.style.borderColor=active?'#185fa5':'var(--border)';
+  btn.style.background=active?'#eff6ff':'#fff';
+  btn.setAttribute('aria-pressed',active?'true':'false');
+ });
+}
+function renderIntegrityRows(rows){
+ const root=document.getElementById('gps-integrity-list-v236429');if(!root)return;
+ const shown=(rows||[]).filter(r=>trustFilter==='all'||r.trust_level===trustFilter);
+ const names={high:'высокое доверие',medium:'проверить',low:'системный mock'};
+ const heading='<div style="font-size:12px;color:var(--sub);padding:6px 0 12px">'+
+   (trustFilter==='all'?'Все уровни':'Выбран уровень: '+esc(names[trustFilter]||trustFilter))+
+   ' · рабочих дней '+shown.length+' / '+(rows||[]).length+
+   ' · высокий уровень не означает идеальную точность каждой точки</div>';
+ if(!shown.length){
+  root.innerHTML=heading+'<div style="padding:14px;color:var(--sub)">В выбранном уровне за этот период рабочих дней нет.</div>';return;
+ }
+ root.innerHTML=heading+'<table class="gps-route-table"><thead><tr>'+
+ '<th>Дата</th><th>Менеджер</th><th>Доверие</th><th>Системный mock</th><th>Точки</th><th>Что проверить</th><th>Маршрут</th>'+
+ '</tr></thead><tbody>'+shown.map(r=>'<tr>'+
+ '<td><b>'+esc(day(r.date))+'</b></td>'+
+ '<td><b>'+esc(r.manager_name||'—')+'</b></td>'+
+ '<td>'+badge(r.trust_level)+'</td>'+
+ '<td>'+(Number(r.mock_points)>0?'<b class="bad">⚠ '+Number(r.mock_points)+' точек</b>':'—')+'</td>'+
+ '<td>'+Number(r.valid_points||0)+' / '+Number(r.raw_points||0)+' доверенных</td>'+
+ '<td style="font-size:11px">'+esc(reasons(r))+'</td>'+
+ '<td>'+(r.workday_id?'<button type="button" class="btn-secondary" data-integrity-workday="'+esc(r.workday_id)+'">Открыть карту</button>':'—')+'</td>'+
+ '</tr>').join('')+'</tbody></table>';
+}
 function renderDirector(data){
-  ensureDirectorCard();
-  const s=data?.summary||{},rows=Array.isArray(data?.rows)?data.rows:[];
-  const k=document.getElementById('gps-integrity-kpi-v236429');
-  if(k)k.innerHTML=
-    '<div class="kpi"><div class="kpi-label">Высокое доверие</div><div class="kpi-value ok">'+Number(s.high||0)+'</div></div>'+
-    '<div class="kpi"><div class="kpi-label">Проверить</div><div class="kpi-value '+(Number(s.medium||0)?'warn':'')+'">'+Number(s.medium||0)+'</div></div>'+
-    '<div class="kpi"><div class="kpi-label">Системный mock</div><div class="kpi-value '+(Number(s.low||0)?'bad':'')+'">'+Number(s.low||0)+'</div><div class="kpi-sub">'+Number(s.mock_points||0)+' точек</div></div>';
-  const root=document.getElementById('gps-integrity-list-v236429');if(!root)return;
-  if(!rows.length){root.innerHTML='<div style="padding:14px;color:var(--sub)">За выбранный период GPS-рабочих дней нет.</div>';return;}
-  root.innerHTML='<table class="gps-route-table"><thead><tr>'+
-    '<th>Дата</th><th>Менеджер</th><th>Доверие</th><th>Системный mock</th><th>Точки</th><th>Что проверить</th>'+
-    '</tr></thead><tbody>'+rows.map(r=>'<tr>'+
-      '<td><b>'+esc(day(r.date))+'</b></td>'+
-      '<td><b>'+esc(r.manager_name||'—')+'</b></td>'+
-      '<td>'+badge(r.trust_level)+'</td>'+
-      '<td>'+(Number(r.mock_points)>0?'<b class="bad">⚠ '+Number(r.mock_points)+' точек</b>':'—')+'</td>'+
-      '<td>'+Number(r.valid_points||0)+' / '+Number(r.raw_points||0)+' доверенных</td>'+
-      '<td style="font-size:11px">'+esc(reasons(r))+'</td>'+
-    '</tr>').join('')+'</tbody></table>';
+ ensureDirectorCard();
+ const s=data?.summary||{},rows=Array.isArray(data?.rows)?data.rows:[];
+ integrityRows=rows;
+ const k=document.getElementById('gps-integrity-kpi-v236429');
+ const kpi=(key,label,count,cls,extra='')=>'<button type="button" class="kpi" data-integrity-level="'+key+'" style="cursor:pointer;text-align:left;font:inherit;border:1px solid var(--border);background:#fff;border-radius:12px" title="Показать рабочие дни этого уровня">'+
+ '<div class="kpi-label">'+label+' ↗</div><div class="kpi-value '+cls+'">'+Number(count||0)+'</div>'+
+ (extra?'<div class="kpi-sub">'+esc(extra)+'</div>':'')+'</button>';
+ if(k)k.innerHTML=
+   kpi('high','Высокое доверие',s.high,'ok')+
+   kpi('medium','Проверить',s.medium,Number(s.medium||0)?'warn':'')+
+   kpi('low','Системный mock',s.low,Number(s.low||0)?'bad':'',Number(s.mock_points||0)+' точек');
+ renderIntegrityRows(rows);
+ updateTrustButtons();
 }
 async function loadDirector(){
   if(!allowed()||!directorActive()||busy)return;
@@ -104,6 +148,8 @@ async function loadDirector(){
   const to=document.getElementById('gps-dir-to-v236427')?.value;
   const manager=document.getElementById('gps-dir-manager-v236427')?.value||'all';
   if(!from||!to)return;
+  const key=[from,to,manager].join('|');
+  if(key!==lastDirectorParams){trustFilter='all';lastDirectorParams=key;}
   busy=true;ensureDirectorCard();
   try{renderDirector(await fetchIntegrity(from,to,manager));}
   catch(e){
@@ -177,6 +223,8 @@ window.RESANTA_GPS_INTEGRITY_V236429=Object.freeze({
   directorOnly:true,
   managerUi:false,
   scoringServerSide:true,
-  directMockSignal:true
+  directMockSignal:true,
+  clickableTrustBreakdown:true,
+  reuseFetchedRows:true
 });
 })();
