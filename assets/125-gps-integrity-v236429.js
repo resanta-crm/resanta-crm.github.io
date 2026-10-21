@@ -53,10 +53,18 @@ function ensureDirectorCard(){
       'Жёлтый означает технические аномалии и требует просмотра маршрута — это не доказательство подмены.'+
     '</div>'+
     '<div class="kpi-row" id="gps-integrity-kpi-v236429"></div>'+
+    '<button id="gps-integrity-toggle-v236438" type="button" class="btn-secondary" style="margin:8px 0 10px;font-size:11px">Подробная диагностика GPS ▾</button>'+
     '<div id="gps-integrity-list-v236429"><div style="padding:14px;color:var(--sub)">Загрузка…</div></div>';
   const kpi=document.getElementById('gps-dir-kpi-v236427');
   if(kpi?.parentNode===panel)kpi.insertAdjacentElement('afterend',card);
   else panel.insertBefore(card,panel.children[1]||null);
+  card.querySelector('#gps-integrity-toggle-v236438')?.addEventListener('click',()=>{
+    const list=card.querySelector('#gps-integrity-list-v236429');
+    if(!list)return;
+    const visible=list.style.display==='block';
+    list.style.display=visible?'none':'block';
+    card.querySelector('#gps-integrity-toggle-v236438').textContent=visible?'Подробная диагностика GPS ▾':'Скрыть подробную диагностику ▴';
+  });
   return card;
 }
 function reasons(r){
