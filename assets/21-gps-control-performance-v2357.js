@@ -3,13 +3,13 @@
  * - total client visits;
  * - plan fact separated from off-plan visits;
  * - GPS warnings are visible but do not erase a recorded/linked visit;
- * - background GPS service is treated as alive only while background points are fresh;
+ * - server GPS freshness is never presented as proof that Android service died;
  * - no raw GPS points and no maps in the main CRM.
  */
 (function(){
 'use strict';
 if(window.RESANTA_GPS_AGGREGATED_ROOT_V2360)return;
-const VERSION='v23.6.427';
+const VERSION='v23.6.436';
 const GPS_SERVICE_STALE_SEC=300;
 let flight=null,reqSeq=0,lastRows=[];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -21,12 +21,16 @@ function ageSec(v){const t=v?new Date(v).getTime():NaN;return Number.isFinite(t)
 function ageText(v){const s=ageSec(v);if(!Number.isFinite(s))return'нет GPS';if(s<60)return s+' сек назад';if(s<3600)return Math.round(s/60)+' мин назад';return Math.round(s/3600)+' ч назад';}
 function serviceAgeSec(w){return ageSec(w?.last_point_at||w?.started_at);}
 function gpsTruth(w){
-  if(w?.status!=='active')return{cls:'ok',text:'● рабочий день завершён',serviceBroken:false,age:serviceAgeSec(w)};
+  if(w?.status!=='active')return{cls:'ok',text:'● рабочий день завершён',serviceBroken:false,needsCheck:false,age:serviceAgeSec(w)};
   const s=serviceAgeSec(w);
-  if(w.native_tracking!==true)return{cls:'bad',text:'● фоновая служба не запущена',serviceBroken:true,age:s};
-  if(!Number.isFinite(s)||s>GPS_SERVICE_STALE_SEC)return{cls:'bad',text:'● фоновая служба не работает',serviceBroken:true,age:s};
-  if(s<=120)return{cls:'ok',text:'● GPS онлайн',serviceBroken:false,age:s};
-  return{cls:'warn',text:'● GPS задержка',serviceBroken:false,age:s};
+  // The backend has only timestamps of received GPS points, not a remote
+  // heartbeat from the Android process. A stale point can mean offline queue,
+  // expired session, disabled location or a stopped service; do not invent
+  // a confirmed Android service failure.
+  if(w.native_tracking!==true)return{cls:'bad',text:'● запись Android не подтверждена',serviceBroken:true,needsCheck:true,age:s};
+  if(!Number.isFinite(s)||s>GPS_SERVICE_STALE_SEC)return{cls:'warn',text:'● нет новых GPS-данных',serviceBroken:false,needsCheck:true,age:s};
+  if(s<=120)return{cls:'ok',text:'● координаты поступают',serviceBroken:false,needsCheck:false,age:s};
+  return{cls:'warn',text:'● задержка передачи GPS',serviceBroken:false,needsCheck:false,age:s};
 }
 function km(v){const n=Number(v)||0;return(n/1000).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})+' км';}
 function clock(v){if(!v)return'—';try{return new Date(v).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}catch(_){return'—';}}
@@ -62,14 +66,15 @@ function renderKpi(rows){
   const totalVisits=rows.reduce((s,x)=>s+(Number(x.visit_total)||0),0);
   const planVisited=rows.reduce((s,x)=>s+(Number(x.plan_visited_count)||0),0);
   const planTotal=rows.reduce((s,x)=>s+(Number(x.planned_count)||0),0);
-  const serviceBroken=activeRows.filter(x=>gpsTruth(x).serviceBroken).length;
+  const needsCheck=activeRows.filter(x=>gpsTruth(x).needsCheck).length;
   root.innerHTML=
     '<div class="kpi"><div class="kpi-label">Сейчас в пути</div><div class="kpi-value '+(activeRows.length?'ok':'')+'">'+activeRows.length+'</div></div>'+
     '<div class="kpi"><div class="kpi-label">Клиентов посещено</div><div class="kpi-value">'+totalVisits+'</div></div>'+
     '<div class="kpi"><div class="kpi-label">План выполнен</div><div class="kpi-value">'+planVisited+' / '+planTotal+'</div></div>'+
-    '<div class="kpi"><div class="kpi-label">Фоновая служба не работает</div><div class="kpi-value '+(serviceBroken?'bad':'ok')+'">'+serviceBroken+'</div></div>';
+    '<div class="kpi"><div class="kpi-label">Нет GPS более 5 мин</div><div class="kpi-value '+(needsCheck?'bad':'ok')+'">'+needsCheck+'</div></div>';
 }
 function currentPlace(w){
+  if(w.status==='active'&&gpsTruth(w).age>GPS_SERVICE_STALE_SEC)return '<b>Местоположение неизвестно</b><div style="font-size:10px;color:var(--sub);margin-top:3px">последняя GPS · '+esc(ageText(w.last_point_at))+'</div>';
   const name=String(w.near_client_name||'').trim(),d=Number(w.near_client_distance_m);
   if(name)return '<b>'+esc(name)+'</b><div style="font-size:10px;color:var(--sub);margin-top:3px">рядом · '+esc(dist(d))+'</div>';
   return '<b>'+esc(ageText(w.last_point_at))+'</b><div style="font-size:10px;color:var(--sub);margin-top:3px">последняя GPS</div>';
@@ -81,14 +86,14 @@ function renderRows(rows){
     rows.map(w=>{
       const live=w.status==='active',t=gpsTruth(w),planned=Number(w.planned_count)||0,planVisited=Number(w.plan_visited_count)||0;
       const total=Number(w.visit_total)||0,off=Number(w.offplan_count)||0,warn=Number(w.gps_warning_count)||0,pending=Math.max(0,planned-planVisited);
-      let control=t.serviceBroken?'<div class="bad" style="font-size:11px;font-weight:800">⛔ Фоновая служба не работает</div>':'<span class="ok" style="font-size:11px;font-weight:700">Без отклонений</span>';
+      let control=t.needsCheck?'<div class="'+(t.serviceBroken?'bad':'warn')+'" style="font-size:11px;font-weight:800">'+(t.serviceBroken?'⚠ Запись Android не подтверждена':'⚠ Проверить передачу GPS')+'</div>':t.cls==='warn'?'<span class="warn" style="font-size:11px;font-weight:700">GPS с задержкой</span>':'<span class="ok" style="font-size:11px;font-weight:700">Без отклонений</span>';
       if(warn||off){
         control+=(warn?'<div class="warn" style="font-size:11px;font-weight:700;margin-top:3px">⚠ GPS визитов к проверке: '+warn+'</div>':'')+
                 (off?'<div style="font-size:11px;color:#1D4ED8;font-weight:700;margin-top:3px">↗ Вне плана: '+off+'</div>':'');
       }
-      const statusBadge=live?(t.serviceBroken?'<span class="tag tag-r">GPS не работает</span>':'<span class="gps-live-pill">в пути · GPS работает</span>'):'<span class="tag tag-m">завершён</span>';
-      const serviceDetail=t.serviceBroken
-        ?'<div class="bad" style="font-size:10px;margin-top:4px;font-weight:800">'+esc(t.text.replace(/^●\s*/,''))+' · фоновая точка '+esc(ageText(w.last_point_at||w.started_at))+'</div>'
+      const statusBadge=live?(t.needsCheck?'<span class="tag tag-r">'+(t.serviceBroken?'Запись не подтверждена':'Нет свежих GPS-данных')+'</span>':t.cls==='warn'?'<span class="tag tag-m">в пути · задержка GPS</span>':'<span class="gps-live-pill">в пути · GPS поступает</span>'):'<span class="tag tag-m">завершён</span>';
+      const serviceDetail=t.needsCheck
+        ?'<div class="'+(t.serviceBroken?'bad':'warn')+'" style="font-size:10px;margin-top:4px;font-weight:800">'+esc(t.text.replace(/^●\s*/,''))+' · последняя GPS '+esc(ageText(w.last_point_at||w.started_at))+'</div>'
         :'<div class="'+t.cls+'" style="font-size:10px;margin-top:4px;font-weight:700">'+esc(t.text)+'</div>';
       return '<tr>'+
         '<td><b>'+esc(w.manager_name)+'</b></td>'+
@@ -146,7 +151,7 @@ function install(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 setTimeout(install,250);setTimeout(install,900);
 setInterval(()=>{if(active())load(true);},30000);
-window.RESANTA_GPS_CONTROL_PERFORMANCE_V2357=Object.freeze({version:VERSION,directorView:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
+window.RESANTA_GPS_CONTROL_PERFORMANCE_V2357=Object.freeze({version:VERSION,directorView:true,gpsDataStaleSeconds:GPS_SERVICE_STALE_SEC});
 window.RESANTA_GPS_AGGREGATED_ROOT_V2360=Object.freeze({version:VERSION,rawPointsInMainCrm:false,mapInMainCrm:false,directorRpc:'gps_get_control_workdays_director_v2365',separateViewer:true,gpsServiceStaleSeconds:GPS_SERVICE_STALE_SEC});
 })();
 
