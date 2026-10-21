@@ -48,7 +48,7 @@ function waitGuard(guard,ms=1400){
 function inject(path,marker,guard){
   return new Promise(resolve=>{
     const s=document.createElement('script');
-    s.src='./'+path+'?v='+V;
+    s.src='./'+path+'?v='+(path==='assets/21-gps-control-performance-v2357.js'?'23.6.436':V);
     s.async=false;
     s.setAttribute(attrName(marker),'1');
     s.onload=async()=>resolve(await waitGuard(guard,1400));
