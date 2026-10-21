@@ -2630,7 +2630,7 @@ install();
   window.resantaRouteAiPrepareV1=async function(request){
     if(currentProfile?.role!=='boss')throw new Error('Только для ДФ');
     const manager=String(request?.manager||''),date=String(request?.date||''),clientId=String(request?.clientId||'');
-    if(!MANAGERS.includes(manager)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||date<=todayM()||!clientId)
+    if(!MANAGERS.includes(manager)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<=todayM()||!clientId)
       throw new Error('Нужны менеджер, будущая дата и клиент');
     installBossUi();
     const c=(allClients||[]).find(c=>String(c.id)===clientId&&activeClientM(c)&&normM(c.manager_name)===normM(manager));
