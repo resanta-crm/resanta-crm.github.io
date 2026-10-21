@@ -7,9 +7,9 @@
 'use strict';
 if(window.RESANTA_GPS_DIRECTOR_REPORT_V236427)return;
 
-const VERSION='v23.6.438';
+const VERSION='v23.6.445';
 const ALLOWED=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
-let mode='route',busy=false,lastData={visits:[],summary:{}},pageOffset=0,onlyIssues=true,technicalLoadedKey='',activeFindingFilter='all';
+let mode='route',busy=false,lastData={visits:[],summary:{}},pageOffset=0,onlyIssues=true,technicalLoadedKey='',activeFindingFilter='all',caseScope='new';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const profile=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}};
@@ -96,6 +96,10 @@ function ensureUi(){
       #gps-director-view-v236427 #gps-integrity-list-v236429{display:none}
       #gps-director-view-v236427 .gps-brief-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
       #gps-director-view-v236427 .gps-brief-stamp{font-size:10px;color:var(--sub);margin-top:8px}
+      #gps-director-view-v236427 .gps-brief-scopes{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+      #gps-director-view-v236427 .gps-brief-scopes button{padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:#fff;cursor:pointer;font:inherit;font-size:12px}
+      #gps-director-view-v236427 .gps-brief-scopes button.active{background:#e6f1fb;border-color:#185fa5;color:#0c447c;font-weight:700}
+      #gps-director-view-v236427 .gps-brief-scopes button:focus-visible{outline:2px solid #185fa5}
       @media(max-width:640px){#gps-director-view-v236427 .gps-brief-filters>div{flex:1;min-width:120px}#gps-director-view-v236427 .gps-brief-filters input,#gps-director-view-v236427 .gps-brief-filters select{max-width:100%;width:100%!important}}
     </style>
     <div class="gps-brief-card">
@@ -113,9 +117,6 @@ function ensureUi(){
       </div>
       <div id="gps-brief-sync-v236438" class="gps-brief-stamp">Для скорости выводятся сохранённые расчёты, исходные точки GPS не пересчитываются.</div>
     </div>
-    <div class="gps-brief-grid" id="gps-dir-kpi-v236427" style="margin-bottom:12px"></div>
-    <div class="gps-brief-card"><div class="gps-brief-title" style="font-size:15px">Что требует внимания</div>
-      <div id="gps-brief-actions-v236438" class="gps-brief-actions"></div></div>
     <div class="gps-brief-card" id="gps-director-reminders-v236443">
       <div class="gps-brief-top">
         <div><div class="gps-brief-title" style="font-size:15px">🔔 Контроль решений и напоминания</div>
@@ -124,6 +125,14 @@ function ensureUi(){
       </div>
       <div id="gps-reminders-content-v236443" style="margin-top:10px"><div class="gps-brief-muted">Напоминания появятся после сохранения решения директора по торговой точке.</div></div>
     </div>
+    <div class="gps-brief-grid" id="gps-dir-kpi-v236427" style="margin-bottom:12px"></div>
+    <div class="gps-brief-scopes" id="gps-brief-case-scopes-v236445" aria-label="Состояние спорных посещений">
+      <button type="button" class="active" data-gps-case-scope="new">Новые · —</button>
+      <button type="button" data-gps-case-scope="in_progress">На контроле · —</button>
+      <button type="button" data-gps-case-scope="closed">Закрытые · —</button>
+    </div>
+    <div class="gps-brief-card"><div class="gps-brief-title" style="font-size:15px">Что требует внимания</div>
+      <div id="gps-brief-actions-v236438" class="gps-brief-actions"></div></div>
     <div class="gps-brief-card" id="gps-meeting-ai-v236441" style="border-color:#c5d9ef">
       <div class="gps-brief-top">
         <div><div class="gps-brief-title" style="font-size:15px">✦ ИИ-повестка маршрутного совещания</div>
@@ -155,17 +164,27 @@ function ensureUi(){
   tabs.querySelector('#gps-tab-director-v236427').addEventListener('click',()=>setMode('director'));
   panel.querySelector('#gps-dir-load-v236427').addEventListener('click',()=>load(true));
   panel.querySelector('#gps-dir-xlsx-v236427').addEventListener('click',exportExcel);
-  panel.querySelector('#gps-brief-issues-v236438').addEventListener('click',()=>{onlyIssues=true;activeFindingFilter='all';pageOffset=0;load(true);});
-  panel.querySelector('#gps-brief-all-v236438').addEventListener('click',()=>{onlyIssues=false;activeFindingFilter='all';pageOffset=0;load(true);});
+  panel.querySelector('#gps-brief-issues-v236438').addEventListener('click',()=>{onlyIssues=true;activeFindingFilter='all';caseScope='new';pageOffset=0;load(true);});
+  panel.querySelector('#gps-brief-all-v236438').addEventListener('click',()=>{onlyIssues=false;activeFindingFilter='all';caseScope='all';pageOffset=0;load(true);});
   panel.querySelector('#gps-brief-tech-load-v236438').addEventListener('click',()=>loadTechnical());
   panel.addEventListener('click',event=>{
     if(!allowed()||mode!=='director')return;
+    const scope=event.target.closest('[data-gps-case-scope]');
+    if(scope){
+      caseScope=scope.getAttribute('data-gps-case-scope')||'new';
+      activeFindingFilter='review';onlyIssues=true;pageOffset=0;load(true);
+      document.getElementById('gps-dir-visits-v236427')?.scrollIntoView({behavior:'smooth',block:'start'});
+      return;
+    }
     const btn=event.target.closest('[data-gps-brief-filter]');
     if(btn){event.preventDefault();const value=btn.getAttribute('data-gps-brief-filter')||'all';
       if(value==='technical'){loadTechnical();document.getElementById('gps-dir-tech-v236427')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
-      activeFindingFilter=value;onlyIssues=value==='review';pageOffset=0;load(true);
+      activeFindingFilter=value;onlyIssues=value==='review';caseScope='all';pageOffset=0;load(true);
       document.getElementById('gps-dir-visits-v236427')?.scrollIntoView({behavior:'smooth',block:'start'});
     }
+  });
+  document.addEventListener('resanta-gps-decision-updated',()=>{
+    if(mode==='director'&&allowed()){pageOffset=0;load(true);}
   });
   for(const id of ['gps-dir-from-v236427','gps-dir-to-v236427','gps-dir-manager-v236427']){
     panel.querySelector('#'+id)?.addEventListener('change',()=>{pageOffset=0;technicalLoadedKey='';if(mode==='director')load(true);});
@@ -208,6 +227,16 @@ function renderKpi(data){
     metric('День продолжается',s.pending,'факт ещё может появиться','','pending')+
     metric('Технические остановки',s.technical_stops,'из сохранённой классификации','','technical');
 }
+function renderCaseScopes(summary){
+  const counts={new:Number(summary?.review_new||0),in_progress:Number(summary?.review_in_progress||0),closed:Number(summary?.review_closed||0)};
+  document.querySelectorAll('#gps-brief-case-scopes-v236445 [data-gps-case-scope]').forEach(el=>{
+    const state=el.getAttribute('data-gps-case-scope');
+    const label=state==='new'?'Новые':state==='in_progress'?'На контроле':'Закрытые';
+    el.textContent=label+' · '+shownNumber(counts[state]);
+    el.classList.toggle('active',caseScope===state);
+    el.setAttribute('aria-pressed',caseScope===state?'true':'false');
+  });
+}
 function renderActions(data){
   const s=data?.summary||{},root=document.getElementById('gps-brief-actions-v236438');
   if(!root)return;
@@ -241,9 +270,13 @@ function renderVisits(rows){
      const snapshot=r.snapshot_status==='stale'?' · снимок предварительный':'';
      const gpsStatus=r.gps_verified?'GPS выверен':'GPS не выверен';
      const info=[r.coordinate_source||'—',gpsStatus].filter(Boolean).join(' · ');
+     const stateLabel=r.decision!=='review'?'':r.case_state==='in_progress'?'На контроле'+(r.director_due_date?' до '+day(r.director_due_date):''):
+       r.case_state==='closed'?'Закрыто директором':'Новое для разбора';
+     const stateColor=r.case_state==='in_progress'?'#185fa5':r.case_state==='closed'?'#166534':'#6b7280';
      return '<tr><td><b>'+esc(day(r.date))+'</b><div style="font-size:11px">'+esc(r.manager_name)+'</div></td>'+
      '<td><b>'+esc(r.client_name||'—')+'</b><div style="color:var(--sub);font-size:10px">'+esc([r.city,r.address].filter(Boolean).join(', '))+'</div></td>'+
-     '<td><b style="color:'+tone+'">'+esc(r.reason)+'</b><div style="font-size:10px;color:var(--sub)">'+esc(snapshot)+'</div></td>'+
+     '<td><b style="color:'+tone+'">'+esc(r.reason)+'</b><div style="font-size:10px;color:var(--sub)">'+esc(snapshot)+'</div>'+
+        (stateLabel?'<div style="font-size:11px;font-weight:700;color:'+stateColor+';margin-top:4px">'+esc(stateLabel)+'</div>':'')+'</td>'+
      '<td>'+esc(hhmm(r.planned_start))+'–'+esc(hhmm(r.planned_end))+'</td>'+
      '<td>'+esc(showTime(r.actual_arrival_at))+'–'+esc(showTime(r.actual_departure_at))+
         (r.actual_minutes!=null?'<div style="font-size:10px">'+esc(mins(r.actual_minutes))+'</div>':'')+'</td>'+
@@ -295,12 +328,12 @@ async function load(force=false){
   const area=document.getElementById('gps-dir-visits-v236427');
   if(area)area.innerHTML='<div style="padding:14px;color:var(--sub)">Загрузка быстрого GPS-брифинга…</div>';
   try{
-    const {data,error}=await db.rpc('gps_director_briefing_filtered_v236440',
-       {...a,p_limit:80,p_offset:pageOffset,p_only_issues:onlyIssues,p_filter:activeFindingFilter});
+    const {data,error}=await db.rpc('gps_director_briefing_case_state_v236445',
+       {...a,p_limit:80,p_offset:pageOffset,p_only_issues:onlyIssues,p_filter:activeFindingFilter,p_case_scope:caseScope});
     if(error)throw error;
     lastData=data||{visits:[],summary:{}};
     fillManagers(lastData.visits||[]);
-    renderKpi(lastData);renderActions(lastData);renderVisits(lastData.visits||[]);renderPage(lastData);
+    renderKpi(lastData);renderCaseScopes(lastData.summary);renderActions(lastData);renderVisits(lastData.visits||[]);renderPage(lastData);
     const stamp=document.getElementById('gps-brief-sync-v236438');
     if(stamp)stamp.textContent='Данные: готовые GPS-снимки и планы · обработка без повторного чтения GPS-трека · период '+day(a.p_from)+' — '+day(a.p_to);
     if(technicalLoadedKey!==[a.p_from,a.p_to,a.p_manager].join('|')){
@@ -364,5 +397,5 @@ setInterval(()=>{
   if(document.getElementById('page-gps-control')?.classList.contains('active')&&allowed()&&!document.getElementById('gps-director-view-v236427'))install();
 },2000);
 
-window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.440',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false});
+window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.445',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false});
 })();
