@@ -124,13 +124,15 @@ function groups(){
  for(const d of (data?.days||[])){
   const period=groupKey(d),k=String(d.manager||'—')+'|'+period;
   if(!m.has(k))m.set(k,{key:period,manager:String(d.manager||'—'),total:0,good:0,poor:0,checkMin:0,checkStops:0,knownTt:0,unknown:0});
-  const g=m.get(k);g.total++;if(d.quality==='ready'){g.good++;g.checkMin+=Number(d.review_minutes||0);g.checkStops+=Number(d.review_stops||0);g.knownTt+=Number(d.planned_tt_minutes||0)+Number(d.offplan_tt_minutes||0);g.unknown+=Number(d.unrecognized_stop_minutes||0)}else g.poor++;
+  const g=m.get(k);g.total++;if(d.quality==='ready'){g.good++;const unhandled=(data.stops||[]).filter(x=>x.workday_id===d.workday_id&&!['explained','technical'].includes(x.review_status||''));g.checkMin+=unhandled.reduce((n,x)=>n+Number(x.minutes||0),0);g.checkStops+=unhandled.length;g.knownTt+=Number(d.planned_tt_minutes||0)+Number(d.offplan_tt_minutes||0);g.unknown+=Number(d.unrecognized_stop_minutes||0)}else g.poor++;
  }
  return [...m.values()].sort((a,b)=>b.key.localeCompare(a.key)||a.manager.localeCompare(b.manager,'ru'));
 }
 function render(){
  if(!data)return;
  const s=data.summary||{},list=data.stops||[],summary=groups();
+ const open=list.filter(x=>!['explained','technical'].includes(x.review_status||''));
+ const openMinutes=open.reduce((n,x)=>n+Number(x.minutes||0),0);
  const visible=list.filter(x=>{
   const closed=['explained','technical'].includes(x.review_status||'');
   return (showClosed||!closed)&&(!onlyRepeats||Number(x.repeat_days)>=2)
@@ -141,8 +143,8 @@ function render(){
    +metric('GPS-дней',s.all_days||0,'Выбранный период','days')
    +metric('Дней с данными',s.quality_days||0,'Пригодны для анализа','ready')
    +metric('Недостаточно данных',s.unreliable_days||0,'Нужна проверка GPS','poor')
-   +metric('Остановок к проверке',s.candidate_stops||0,'От '+data.min_minutes+' минут','stops')
-   +metric('Время к проверке',fmt(s.review_minutes)+' мин','Не доказанная потеря','minutes')
+   +metric('Остановок к разбору',open.length,'Всего найдено '+(s.candidate_stops||0),'stops')
+   +metric('Время к разбору',fmt(openMinutes)+' мин','Возможные остановки, не потеря','minutes')
    +metric('Повторных остановок',s.repeat_stops||0,'Сопоставлено в радиусе 200 м','repeat')
    +'</div>'
    +'<div style="color:#475569;font-size:11px;margin:8px 0 12px">В оценку попадают только завершённые дни с готовыми агрегатами и достаточным качеством GPS. Учитываются лишь внутренние остановки вне распознанных ТТ, домашней/стартовой зоны, с точностью GPS до 100 м. Обед, заправка, ожидание клиента и проблемы связи не являются нарушением. GPS-разрывы и точная длительность езды не приравниваются к простою.</div>'
@@ -246,15 +248,19 @@ async function delegateStop(i){
  const basis='GPS_TIME_V2:'+item.workday_id+':'+item.seq+':'+item.start_at;
  const ai=aiByStop.get(item.workday_id+':'+item.seq);
  // Internal GPS diagnostics and AI reasoning are deliberately not copied to a manager-facing task.
- if(!window.confirm('Поручить '+item.manager+' уточнить обстоятельства остановки '+dayFmt(item.date)+' ('+fmt(item.minutes)+' мин) до '+deadline+'? Это запрос объяснения, не обвинение.'))return;
+ const requested=window.prompt('Кому поручить? Выберите: Руднев, Ачинович или Шкуран.',item.manager);
+ if(requested===null)return;
+ const assignee=requested.trim();
+ if(!['Руднев','Ачинович','Шкуран'].includes(assignee)){alert('Выберите одного из действующих менеджеров.');return}
+ if(!window.confirm('Поручить '+assignee+' уточнить результаты поездки '+dayFmt(item.date)+' до '+deadline+'? Это обычная задача, не обвинение.'))return;
  busy=true;
  try{
-  const {data:prev,error:readErr}=await db.from('tasks').select('id,due_date').eq('manager_name',item.manager).eq('basis',basis).eq('done',false).limit(1);
+  const {data:prev,error:readErr}=await db.from('tasks').select('id,due_date').eq('manager_name',assignee).eq('basis',basis).eq('done',false).limit(1);
   if(readErr)throw readErr;
   let saved=prev?.[0];
   if(!saved){
    const {data:newTask,error:writeErr}=await db.from('tasks').insert({
-    manager_name:item.manager,source:'gps_time_followup_v2',basis,done:false,
+    manager_name:assignee,source:'gps_time_followup_v2',basis,done:false,
     auto_generated:false,review_status:'approved',priority:'средний',
     title:'Уточнить результаты поездки '+dayFmt(item.date),
     text:'Уточнить результаты работы во время поездки '+dayFmt(item.date)+'. Указать фактически проведённые встречи и при необходимости предложить корректировку будущего маршрута. Это обычный рабочий запрос, не дисциплинарное обвинение.',
@@ -263,7 +269,7 @@ async function delegateStop(i){
    }).select('id,due_date').single();
    if(writeErr)throw writeErr;saved=newTask;
   }
-  alert('Поручение '+item.manager+' зарегистрировано до '+saved.due_date+'. Повторная открытая задача не создаётся.');
+  alert('Поручение '+assignee+' зарегистрировано до '+saved.due_date+'. Повторная открытая задача не создаётся.');
  }catch(e){console.error(VERSION,e);alert('Не удалось создать поручение: '+(e.message||e))}
  finally{busy=false}
 }
