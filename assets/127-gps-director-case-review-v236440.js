@@ -82,7 +82,7 @@ async function save(){
  try{const {error}=await db.rpc('gps_director_case_decide_v236440',{
   p_route_plan_id:selected,p_action:action,p_comment:comment,
   p_next_step:el.querySelector('#gp-case-next').value||'',p_due_date:el.querySelector('#gp-case-due').value||null
- });if(error)throw error;s.textContent='Решение сохранено в журнале. Данные GPS не изменены.';b.textContent='Сохранено ✓';}
+ });if(error)throw error;s.textContent='Решение сохранено в журнале. Данные GPS не изменены.';b.textContent='Сохранено ✓';document.dispatchEvent(new CustomEvent('resanta-gps-decision-updated'));}
  catch(e){s.textContent='Ошибка сохранения: '+(e?.message||e);}
  finally{busy=false;b.disabled=false;}
 }
