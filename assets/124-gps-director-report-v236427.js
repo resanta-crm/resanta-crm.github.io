@@ -116,6 +116,14 @@ function ensureUi(){
     <div class="gps-brief-grid" id="gps-dir-kpi-v236427" style="margin-bottom:12px"></div>
     <div class="gps-brief-card"><div class="gps-brief-title" style="font-size:15px">Что требует внимания</div>
       <div id="gps-brief-actions-v236438" class="gps-brief-actions"></div></div>
+    <div class="gps-brief-card" id="gps-director-reminders-v236443">
+      <div class="gps-brief-top">
+        <div><div class="gps-brief-title" style="font-size:15px">🔔 Контроль решений и напоминания</div>
+        <div class="gps-brief-muted">Принятые директором решения: просрочено, на сегодня, без срока и в ближайшие 7 дней. Не зависит от выбранного периода GPS.</div></div>
+        <button type="button" class="btn-secondary" id="gps-reminders-refresh-v236443">Обновить</button>
+      </div>
+      <div id="gps-reminders-content-v236443" style="margin-top:10px"><div class="gps-brief-muted">Напоминания появятся после сохранения решения директора по торговой точке.</div></div>
+    </div>
     <div class="gps-brief-card" id="gps-meeting-ai-v236441" style="border-color:#c5d9ef">
       <div class="gps-brief-top">
         <div><div class="gps-brief-title" style="font-size:15px">✦ ИИ-повестка маршрутного совещания</div>
