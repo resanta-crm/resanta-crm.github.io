@@ -327,7 +327,7 @@ async function v19StartNativeFor(workday){
   const result=await tracker.start({
     workdayId:String(workday.id),userId:String(currentUser.id),managerName:currentProfile?.name||currentUser.email,
     supabaseUrl:SUPABASE_URL,anonKey:SUPABASE_KEY,accessToken:session.access_token,refreshToken:'',
-    intervalMs:30000,minDistanceM:50
+    intervalMs:15000,minDistanceM:10
   });
   await db.rpc('gps_set_my_native_state',{p_workday_id:workday.id,p_active:true,p_error:null});
   if(result&&result.notificationPermissionGranted===false){
@@ -429,12 +429,27 @@ function v207GpsRouteDistance(segments){
   return (segments||[]).reduce((total,seg)=>total+(seg||[]).reduce((sum,p,i)=>i?sum+gpsDistance(seg[i-1].lat,seg[i-1].lng,p.lat,p.lng):sum,0),0);
 }
 function v206GpsSegments(points){
-  const stats={raw:(points||[]).length,usable:0,onMap:0,removedAccuracy:0,removedSpike:0,removedMotion:0,breaks:0};
+  const stats={raw:(points||[]).length,usable:0,onMap:0,removedAccuracy:0,removedProvider:0,removedSpike:0,removedMotion:0,breaks:0};
   let rows=(points||[]).map(p=>{
     const lat=Number(p.lat),lng=Number(p.lng),time=new Date(p.recorded_at).getTime(),accuracy=v207GpsAccuracy(p);
     return {...p,lat,lng,time,accuracy};
   }).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Number.isFinite(p.time)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180)
     .sort((a,b)=>a.time-b.time);
+
+  // GPS_PROVIDER is the route source of truth. NETWORK_PROVIDER is only a
+  // fallback when satellite GPS disappeared for at least two minutes.
+  // This also cleans historical days recorded by older APKs that mixed both
+  // providers into one polyline.
+  const gpsTimes=rows.filter(p=>String(p.provider||'').toLowerCase()==='gps').map(p=>p.time);
+  let gpsIdx=0;
+  rows=rows.filter(p=>{
+    if(String(p.provider||'').toLowerCase()!=='network'||!gpsTimes.length)return true;
+    while(gpsIdx<gpsTimes.length&&gpsTimes[gpsIdx]<p.time-120000)gpsIdx++;
+    const nearNext=gpsIdx<gpsTimes.length&&Math.abs(gpsTimes[gpsIdx]-p.time)<=120000;
+    const nearPrev=gpsIdx>0&&Math.abs(gpsTimes[gpsIdx-1]-p.time)<=120000;
+    if(nearNext||nearPrev){stats.removedProvider++;return false;}
+    return true;
+  });
 
   // Для линии берём только координаты с нормальной точностью. Точки с погрешностью
   // более 100 м полезны как «последний сигнал», но рисовать по ним путь нельзя:
@@ -475,7 +490,12 @@ function v206GpsSegments(points){
       const prev=current[current.length-1],seconds=Math.max(1,(row.time-prev.time)/1000),meters=gpsDistance(prev.lat,prev.lng,row.lat,row.lng),speedKmh=meters/seconds*3.6;
       // Не принимаем физически невозможный скачок как движение машины.
       if((seconds<=300&&speedKmh>160)||(seconds<=120&&meters>3500)){
-        stats.removedMotion++;continue;
+        // Never stitch across a rejected jump. The old "continue" skipped the
+        // bad point but then connected the previous good point to a later one,
+        // creating long false diagonals across rivers/blocks.
+        if(current.length)segments.push(current);
+        current=[];stats.removedMotion++;stats.breaks++;
+        continue;
       }
       // При длительном отсутствии достоверных координат не соединяем точки
       // прямой через весь город: на карте будет честный разрыв, а не выдуманный путь.
@@ -836,6 +856,55 @@ function v2273214AssignStop(stop,pool,visits,plans){
     visit:a.clientVisits[0]||null,plans:a.clientPlans
   };
 }
+function v236435ServerPhysicalStops(raw){
+  return (Array.isArray(raw)?raw:[]).map((s,i)=>{
+    const start=s.start_at||s.start||null,end=s.end_at||s.end||null;
+    const startMs=start?new Date(start).getTime():NaN,endMs=end?new Date(end).getTime():NaN;
+    return {
+      id:'server-stop-'+String(s.seq??i+1),
+      serverSeq:Number(s.seq??i+1),
+      serverClassification:String(s.classification||'technical'),
+      serverLabel:String(s.classification_label||''),
+      serverDetail:String(s.classification_detail||''),
+      serverMatchedClientName:String(s.matched_client_name||''),
+      start,end,startMs,endMs,
+      mins:Number(s.minutes||0),
+      lat:Number(s.lat),lng:Number(s.lng),
+      pointCount:Number(s.samples||0),
+      spread80:0,
+      medianAccuracy:Number(s.avg_accuracy||0),
+      points:[]
+    };
+  }).filter(s=>Number.isFinite(s.lat)&&Number.isFinite(s.lng)&&Number.isFinite(s.startMs)&&Number.isFinite(s.endMs));
+}
+function v236435AssignServerStop(stop,visits,plans){
+  const cls=stop.serverClassification;
+  if(cls==='home'||cls==='start_zone')return {...stop,kind:'ignored'};
+  if(cls==='technical')return {...stop,kind:'technical'};
+  if(cls!=='planned_tt'&&cls!=='offplan')return {...stop,kind:'technical'};
+
+  const name=stop.serverMatchedClientName||stop.serverLabel.replace(/^.*?·\s*/,'')||'Торговая точка';
+  let client=null;
+  try{client=matchClientByName(name);}catch(_){}
+  if(!client){
+    client=(allClients||[]).find(x=>canonicalSalesClientName(x.name||'')===canonicalSalesClientName(name))||null;
+  }
+  const matchedPlans=(plans||[]).filter(r=>
+    canonicalSalesClientName(r.client_name||'')===canonicalSalesClientName(name)
+    || (client?.id&&String(r.client_id||'')===String(client.id))
+  );
+  const matchedVisits=client?v2273214VisitMatchesClient(client,visits):[];
+  const routeDone=matchedPlans.some(r=>r.visited===true||r.network_transfer_status==='completed'||!!r.linked_visit_id);
+  return {
+    ...stop,kind:'client',client:client||{id:null,name},
+    clientName:name,confidence:'high',
+    visitSaved:matchedVisits.length>0||routeDone,
+    visit:matchedVisits[0]||null,plans:matchedPlans,
+    candidates:[],assigned:null,geofence:client?clientGeofence(client):null,
+    minDistance:null
+  };
+}
+
 function v2273214TaskSummary(clientId,tasks,workDate){
   if(!clientId)return {open:0,done:0,dueOpen:0};
   const rows=(tasks||[]).filter(t=>String(t.client_id||'')===String(clientId));
@@ -846,6 +915,7 @@ function v2273214TaskSummary(clientId,tasks,workDate){
   };
 }
 function v2273214Status(x){
+  if(x.serverDetail)return x.serverDetail;
   if(x.kind==='ambiguous')return '⚠️ Остановка одна, но рядом несколько ТТ — CRM не дублирует её и требует уточнения.';
   if(x.kind!=='client')return 'Прочая физическая остановка.';
   if(x.confidence==='medium'){
@@ -873,7 +943,7 @@ function v2273214SelectedHtml(x){
     +v2273214StopTimeLabel(x)
     +' · GPS точек: '+x.pointCount
     +' · разброс 80%: '+x.spread80+' м';
-  if(x.kind==='client')detail+=' · минимум до ТТ: <b>'+x.minDistance+' м</b>';
+  if(x.kind==='client'&&Number.isFinite(Number(x.minDistance)))detail+=' · минимум до ТТ: <b>'+x.minDistance+' м</b>';
   detail+='<br>'+esc(v2273214Status(x));
   if(x.kind==='client'&&x.confidence==='medium')detail+='<br>Координата: '+esc(x.geofence?.source||'геокодер/мало замеров')+'. Это предположение, а не обвинительный факт.';
   if(x.kind==='ambiguous')detail+='<br>CRM намеренно НЕ засчитывает эту же остановку нескольким клиентам.';
@@ -962,20 +1032,24 @@ async function v19OpenGpsWorkday(id,silent){
   try{
     const workDate=String(w.work_date||'').slice(0,10);
     const manager=String(w.manager_name||'');
-    const [gpsRes,plansRes,visitsRes]=await Promise.all([
+    const [gpsRes,plansRes,visitsRes,truthRes]=await Promise.all([
       db.from('gps_track_points').select('*').eq('workday_id',id).order('recorded_at',{ascending:true}),
       db.from('route_plans').select('*').eq('visit_date',workDate).eq('manager_name',manager),
-      db.from('visits').select('*').eq('date',workDate).eq('manager_name',manager)
+      db.from('visits').select('*').eq('date',workDate).eq('manager_name',manager),
+      db.rpc('gps_map_truth_v236435',{p_workday_id:id})
     ]);
     if(gpsRes.error)throw gpsRes.error;
     if(plansRes.error)console.warn('GPS route plans',plansRes.error);
     if(visitsRes.error)console.warn('GPS visits',visitsRes.error);
+    if(truthRes.error)console.warn('GPS server truth',truthRes.error);
+    const serverTruth=truthRes.error?null:(truthRes.data||null);
 
     const points=gpsRes.data||[];
     const valid=points.filter(p=>v206GpsBool(p.is_valid));
     const segments=v206GpsSegments(valid);           // only for the drawn route
     const routeRows=segments.flat();
-    const physical=v2273214PhysicalStops(points);    // independent physical-stop truth
+    const serverPhysical=v236435ServerPhysicalStops(serverTruth?.classified_stops);
+    const physical=serverPhysical.length?serverPhysical:v2273214PhysicalStops(points);
     const cleanDistance=v207GpsRouteDistance(segments);
     const displayDistance=routeRows.length>1?cleanDistance:(Number(w.total_distance_m)||0);
 
@@ -994,7 +1068,9 @@ async function v19OpenGpsWorkday(id,silent){
     ps.missed=plans.filter(r=>!ps.visited.includes(r));
 
     const pool=v2273214ClientPool(manager,plans,visits);
-    const assigned=physical.map(st=>v2273214AssignStop(st,pool,visits,plans));
+    const assigned=serverPhysical.length
+      ?physical.map(st=>v236435AssignServerStop(st,visits,plans))
+      :physical.map(st=>v2273214AssignStop(st,pool,visits,plans));
     const business=assigned.filter(x=>x.kind==='client'||x.kind==='ambiguous')
       .sort((a,b)=>a.startMs-b.startMs);
     business.forEach((x,i)=>x.actualNo=i+1);
@@ -1022,7 +1098,9 @@ async function v19OpenGpsWorkday(id,silent){
     }
 
     const stopInput=v2273214StopInput(points);
-    const lastRow=stopInput.length?stopInput[stopInput.length-1]:(routeRows.length?routeRows[routeRows.length-1]:null);
+    const live=serverTruth?.current_position;
+    const liveOk=live&&Number.isFinite(Number(live.lat))&&Number.isFinite(Number(live.lng));
+    const lastRow=liveOk?live:(stopInput.length?stopInput[stopInput.length-1]:(routeRows.length?routeRows[routeRows.length-1]:null));
     const lastLat=lastRow?Number(lastRow.lat):Number(w.last_lat);
     const lastLng=lastRow?Number(lastRow.lng):Number(w.last_lng);
     const lastAt=lastRow?.recorded_at||w.last_point_at;
@@ -1054,12 +1132,15 @@ async function v19OpenGpsWorkday(id,silent){
     });
 
     if(routeCoords.length){
-      const first=routeRows[0],last=routeRows[routeRows.length-1];
+      const first=routeRows[0];
       L.circleMarker([Number(first.lat),Number(first.lng)],{radius:7,color:'#ffffff',weight:3,fillColor:'#16a34a',fillOpacity:1})
         .addTo(layer).bindPopup('<b>Начало рабочего дня</b><br>'+v19Time(first.recorded_at||w.started_at),{autoPan:false});
-      const lm=L.circleMarker([Number(last.lat),Number(last.lng)],{radius:9,color:'#ffffff',weight:3,fillColor:w.status==='active'?(stale?'#dc2626':'#ef4444'):'#111827',fillOpacity:1})
-        .addTo(layer).bindPopup('<b>'+(w.status==='active'?'МПП сейчас':'Завершение маршрута')+'</b><br>'+v19Age(last.recorded_at),{autoPan:false});
-      lm.bindTooltip(w.status==='active'?(stale?'Последняя точка · GPS не обновлялся':'МПП сейчас'):'Конец маршрута',{permanent:true,direction:'top',offset:[0,-9],className:'v206-now-label'});
+      if(Number.isFinite(lastLat)&&Number.isFinite(lastLng)){
+        const lm=L.circleMarker([lastLat,lastLng],{radius:9,color:'#ffffff',weight:3,fillColor:w.status==='active'?(stale?'#dc2626':'#ef4444'):'#111827',fillOpacity:1})
+          .addTo(layer).bindPopup('<b>'+(w.status==='active'?'МПП сейчас':'Завершение маршрута')+'</b><br>'+v19Age(lastAt),{autoPan:false});
+        lm.bindTooltip(w.status==='active'?(stale?'Последняя точка · GPS не обновлялся':'МПП сейчас'):'Конец маршрута',{permanent:true,direction:'top',offset:[0,-9],className:'v206-now-label'});
+        routeBounds.push([lastLat,lastLng]);
+      }
     }else if(Number.isFinite(lastLat)&&Number.isFinite(lastLng)){
       L.circleMarker([lastLat,lastLng],{radius:9,color:'#ffffff',weight:3,fillColor:'#ef4444',fillOpacity:1})
         .addTo(layer).bindTooltip('Последняя известная точка',{permanent:true,direction:'top',className:'v206-now-label'});
@@ -1897,7 +1978,7 @@ window.RESANTA_FALLING_MANAGER_FIX=Object.freeze({version:'20.4.0',autoRefresh:t
     });
   }catch(_){ }
 
-  window.RESANTA_WORKDAY_GPS=Object.freeze({version:'19.2.1-auth-owner-webview',intervalSeconds:20,minDistanceMeters:10,heartbeatSeconds:30,durableQueue:true,watchdog:true,refreshOwner:'webview'});
+  window.RESANTA_WORKDAY_GPS=Object.freeze({version:'23.6.435-map-truth',intervalSeconds:15,minDistanceMeters:10,heartbeatSeconds:30,durableQueue:true,watchdog:true,refreshOwner:'webview',gpsProviderPrimary:true,networkProviderFallbackSeconds:120,serverStopTruth:true});
 })();
 
 /* ===== ORIGINAL INLINE SCRIPT 8 ===== */
