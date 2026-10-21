@@ -76,7 +76,7 @@ async function run(btn){
     throw new Error(msg);
   }
   if(viewKey===thisKey)render(result.result||{},result,root);
- }catch(e){if(viewKey===thisKey)root.innerHTML='<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:12px;font-size:12px">'+esc(e?.message||e)+
+ }catch(e){if(viewKey===thisKey)root.innerHTML='<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:9px;padding:12px;font-size:12px">'+esc((e?.name==='AbortError'||/abort/i.test(String(e?.message||'')))?'ИИ-сервис не успел ответить. Повторите позже: результаты GPS и решения директора сохранены.':(e?.message||e))+
  '<div style="margin-top:4px">GPS-брифинг и сохранённые данные работают независимо от ИИ.</div></div>';}
  finally{busy=false;btn.disabled=false;btn.textContent='Подготовить совещание';}
 }
