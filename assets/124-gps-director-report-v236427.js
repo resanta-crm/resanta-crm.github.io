@@ -7,9 +7,9 @@
 'use strict';
 if(window.RESANTA_GPS_DIRECTOR_REPORT_V236427)return;
 
-const VERSION='v23.6.445';
+const VERSION='v23.6.446';
 const ALLOWED=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
-let mode='route',busy=false,lastData={visits:[],summary:{}},pageOffset=0,onlyIssues=true,technicalLoadedKey='',activeFindingFilter='all',caseScope='new';
+let mode='route',busy=false,lastData={visits:[],summary:{}},pageOffset=0,onlyIssues=true,technicalLoadedKey='',activeFindingFilter='all',caseScope='new',groupMode='auto';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const profile=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}};
@@ -100,6 +100,14 @@ function ensureUi(){
       #gps-director-view-v236427 .gps-brief-scopes button{padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:#fff;cursor:pointer;font:inherit;font-size:12px}
       #gps-director-view-v236427 .gps-brief-scopes button.active{background:#e6f1fb;border-color:#185fa5;color:#0c447c;font-weight:700}
       #gps-director-view-v236427 .gps-brief-scopes button:focus-visible{outline:2px solid #185fa5}
+      #gps-director-view-v236427 .gps-brief-group{border:1px solid var(--border);border-radius:11px;padding:12px;margin:10px 0;background:#fff}
+      #gps-director-view-v236427 .gps-brief-group>summary{cursor:pointer;list-style:none;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+      #gps-director-view-v236427 .gps-brief-group>summary::-webkit-details-marker{display:none}
+      #gps-director-view-v236427 .gps-brief-group>summary:focus-visible{outline:2px solid #185fa5;border-radius:8px}
+      #gps-director-view-v236427 .gps-brief-group[open]>summary{padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:8px}
+      #gps-director-view-v236427 .gps-brief-group .gps-route-table{min-width:820px}
+      #gps-director-view-v236427 .gps-brief-group .gps-brief-micro{font-size:11px;color:var(--sub)}
+      #gps-director-view-v236427 .gps-group-list{overflow-x:auto}
       @media(max-width:640px){#gps-director-view-v236427 .gps-brief-filters>div{flex:1;min-width:120px}#gps-director-view-v236427 .gps-brief-filters input,#gps-director-view-v236427 .gps-brief-filters select{max-width:100%;width:100%!important}}
     </style>
     <div class="gps-brief-card">
@@ -146,8 +154,13 @@ function ensureUi(){
     </div>
     <div class="gps-brief-card">
       <div class="gps-brief-top"><div class="gps-brief-title" style="font-size:15px">Посещения торговых точек</div>
-        <div class="gps-brief-toolbar"><button class="btn-secondary" id="gps-brief-issues-v236438">Только спорные</button><button class="btn-secondary" id="gps-brief-all-v236438">Все ТТ</button></div></div>
-      <div class="gps-brief-muted" style="margin:8px 0">Отметка о визите и достоверный GPS — разные подтверждения. Нет данных ≠ менеджер не был.</div>
+        <div class="gps-brief-toolbar">
+          <button class="btn-secondary" id="gps-brief-issues-v236438">Только спорные</button>
+          <button class="btn-secondary" id="gps-brief-all-v236438">Все ТТ</button>
+          <button class="btn-secondary" id="gps-brief-group-on-v236446">По торговым точкам</button>
+          <button class="btn-secondary" id="gps-brief-group-off-v236446">По датам визитов</button>
+        </div></div>
+      <div class="gps-brief-muted" style="margin:8px 0">За несколько дней повторные посещения одной физической ТТ объединяются. Подробная история доступна внутри карточки. Разные физические магазины не объединяем по названию. Нет данных GPS ≠ менеджер не был.</div>
       <div id="gps-dir-visits-v236427"><div style="padding:12px;color:var(--sub)">Загрузка…</div></div>
       <div id="gps-brief-page-v236438" class="gps-brief-toolbar" style="justify-content:space-between;margin-top:12px"></div>
     </div>
@@ -167,6 +180,8 @@ function ensureUi(){
   panel.querySelector('#gps-brief-issues-v236438').addEventListener('click',()=>{onlyIssues=true;activeFindingFilter='all';caseScope='new';pageOffset=0;load(true);});
   panel.querySelector('#gps-brief-all-v236438').addEventListener('click',()=>{onlyIssues=false;activeFindingFilter='all';caseScope='all';pageOffset=0;load(true);});
   panel.querySelector('#gps-brief-tech-load-v236438').addEventListener('click',()=>loadTechnical());
+  panel.querySelector('#gps-brief-group-on-v236446').addEventListener('click',()=>{groupMode='grouped';pageOffset=0;load(true);});
+  panel.querySelector('#gps-brief-group-off-v236446').addEventListener('click',()=>{groupMode='visits';pageOffset=0;load(true);});
   panel.addEventListener('click',event=>{
     if(!allowed()||mode!=='director')return;
     const scope=event.target.closest('[data-gps-case-scope]');
@@ -187,7 +202,7 @@ function ensureUi(){
     if(mode==='director'&&allowed()){pageOffset=0;load(true);}
   });
   for(const id of ['gps-dir-from-v236427','gps-dir-to-v236427','gps-dir-manager-v236427']){
-    panel.querySelector('#'+id)?.addEventListener('change',()=>{pageOffset=0;technicalLoadedKey='';if(mode==='director')load(true);});
+    panel.querySelector('#'+id)?.addEventListener('change',()=>{pageOffset=0;groupMode='auto';technicalLoadedKey='';if(mode==='director')load(true);});
   }
 
   const obs=new MutationObserver(()=>{
@@ -284,6 +299,67 @@ function renderVisits(rows){
      '<td><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn-primary" data-gps-brief-case="'+esc(r.route_plan_id)+'">Разобрать</button><button type="button" class="btn-secondary" onclick="crmOpenGpsViewerV2360(\''+esc(r.workday_id)+'\')">Карта</button></div></td></tr>';
     }).join('')+'</tbody></table>';
 }
+
+function showGroupedMode(active){
+  document.getElementById('gps-brief-group-on-v236446')?.classList.toggle('btn-primary',active);
+  document.getElementById('gps-brief-group-off-v236446')?.classList.toggle('btn-primary',!active);
+  document.getElementById('gps-brief-group-on-v236446')?.setAttribute('aria-pressed',active?'true':'false');
+  document.getElementById('gps-brief-group-off-v236446')?.setAttribute('aria-pressed',active?'false':'true');
+}
+function renderGroupedVisits(data){
+  const root=document.getElementById('gps-dir-visits-v236427');
+  if(!root)return;
+  const groups=Array.isArray(data?.groups)?data.groups:[];
+  const total=Number(data?.total_groups)||0,visits=Number(data?.total_visits)||0;
+  const header='<div style="font-size:12px;color:var(--sub);padding:8px 0 5px">Физических ТТ в выборке: <b>'+shownNumber(total)+
+   '</b> · записей посещений: <b>'+shownNumber(visits)+'</b>. Нажмите на ТТ, чтобы увидеть все даты и отдельные решения.</div>';
+  if(!groups.length){root.innerHTML=header+'<div style="padding:14px;color:var(--sub)">По этому фильтру записей нет.</div>';return;}
+  const stateName={new:'Новое',in_progress:'На контроле',closed:'Закрыто'};
+  const countText=(g)=>[
+    g.confirmed?'GPS подтверждено: '+shownNumber(g.confirmed):'',
+    g.review_new?'Новых: '+shownNumber(g.review_new):'',
+    g.review_in_progress?'На контроле: '+shownNumber(g.review_in_progress):'',
+    g.review_closed?'Закрыто: '+shownNumber(g.review_closed):''
+  ].filter(Boolean).join(' · ')||'Нет спорных посещений';
+  root.innerHTML=header+groups.map((g,ix)=>{
+    const history=Array.isArray(g.history)?g.history:[];
+    const address=[g.city,g.address].filter(Boolean).join(', ');
+    const historyRows=history.map(r=>{
+      const gps=r.actual_arrival_at?showTime(r.actual_arrival_at)+'–'+showTime(r.actual_departure_at):'—';
+      const state=r.decision==='review'?(stateName[r.case_state]||'Не рассмотрено'):'';
+      const due=r.director_due_date?' · до '+day(r.director_due_date):'';
+      const marker=(state?'<div style="font-size:10px;color:var(--sub)">'+esc(state+due)+'</div>':'');
+      const visitTitle=(r.client_name&&r.client_name!==g.client_name)?'<div class="gps-brief-micro">'+esc(r.client_name)+'</div>':'';
+      const decisionButton=r.decision==='review'?
+        '<button type="button" class="btn-primary" data-gps-brief-case="'+esc(r.route_plan_id)+'">Разобрать</button>':'';
+      const mapButton=r.workday_id?'<button type="button" class="btn-secondary" onclick="crmOpenGpsViewerV2360(\''+esc(r.workday_id)+'\')">Карта</button>':'';
+      return '<tr><td><b>'+esc(day(r.date))+'</b>'+visitTitle+'</td>'+
+        '<td>'+esc(r.reason||'—')+marker+'</td>'+
+        '<td>'+esc(hhmm(r.planned_start))+'–'+esc(hhmm(r.planned_end))+'</td>'+
+        '<td>'+esc(gps)+'</td>'+
+        '<td><div style="display:flex;gap:5px;flex-wrap:wrap">'+decisionButton+mapButton+'</div></td></tr>';
+    }).join('');
+    return '<details class="gps-brief-group" '+(ix===0&&history.length>1?'':'')+'>'+
+      '<summary><span style="flex:1;min-width:185px"><b>'+esc(g.client_name||'Торговая точка')+'</b>'+
+      '<span class="gps-brief-micro" style="display:block">'+esc(g.manager_name||'—')+' · '+esc(address||'Адрес не указан')+'</span></span>'+
+      '<span style="text-align:right;font-size:12px"><b>'+shownNumber(g.visits)+'</b> посещений · <b>'+shownNumber(g.days)+'</b> дат'+
+      '<span class="gps-brief-micro" style="display:block">'+esc(countText(g))+' · Раскрыть ▾</span></span></summary>'+
+      '<div class="gps-group-list"><table class="gps-route-table"><thead><tr><th>Дата</th><th>GPS-статус</th><th>План</th><th>GPS-факт</th><th>Действие</th></tr></thead><tbody>'+
+      historyRows+'</tbody></table></div></details>';
+  }).join('');
+}
+function renderGroupedPage(data){
+  const box=document.getElementById('gps-brief-page-v236438');if(!box)return;
+  const total=Number(data?.total_groups)||0;
+  const shown=Array.isArray(data?.groups)?data.groups.length:0;
+  const from=shown?pageOffset+1:0,to=Math.min(total,pageOffset+shown);
+  box.innerHTML='<span class="gps-brief-muted">ТТ '+shownNumber(from)+'–'+shownNumber(to)+' из '+shownNumber(total)+
+    ' · '+shownNumber(data?.total_visits)+' посещений за выбранный период</span>'+
+    '<span class="gps-brief-toolbar"><button type="button" class="btn-secondary" id="gps-brief-prev-v236438" '+(pageOffset===0?'disabled':'')+'>Назад</button>'+
+    '<button type="button" class="btn-secondary" id="gps-brief-next-v236438" '+(to>=total?'disabled':'')+'>Далее</button></span>';
+  document.getElementById('gps-brief-prev-v236438')?.addEventListener('click',()=>{pageOffset=Math.max(0,pageOffset-40);load(true);});
+  document.getElementById('gps-brief-next-v236438')?.addEventListener('click',()=>{pageOffset+=40;load(true);});
+}
 function renderPage(data){
   const box=document.getElementById('gps-brief-page-v236438');if(!box)return;
   const total=Number(data?.total_matching)||0,from=total?Number(data?.offset||0)+1:0,to=Math.min(total,Number(data?.offset||0)+(data?.visits?.length||0));
@@ -323,19 +399,35 @@ async function load(force=false){
   const a=args();
   if(!a.p_from||!a.p_to)return;
   if(a.p_from>a.p_to){alert('Начало периода позже окончания');return;}
+  const grouped=groupMode==='grouped'||(groupMode==='auto'&&a.p_from!==a.p_to);
+  showGroupedMode(grouped);
   busy=true;
   const btn=document.getElementById('gps-dir-load-v236427');if(btn)btn.disabled=true;
   const area=document.getElementById('gps-dir-visits-v236427');
-  if(area)area.innerHTML='<div style="padding:14px;color:var(--sub)">Загрузка быстрого GPS-брифинга…</div>';
+  if(area)area.innerHTML='<div style="padding:14px;color:var(--sub)">Загрузка GPS-брифинга…</div>';
   try{
-    const {data,error}=await db.rpc('gps_director_briefing_case_state_v236445',
-       {...a,p_limit:80,p_offset:pageOffset,p_only_issues:onlyIssues,p_filter:activeFindingFilter,p_case_scope:caseScope});
-    if(error)throw error;
-    lastData=data||{visits:[],summary:{}};
+    const summaryRpc=db.rpc('gps_director_briefing_case_state_v236445',
+      {...a,p_limit:80,p_offset:grouped?0:pageOffset,p_only_issues:onlyIssues,p_filter:activeFindingFilter,p_case_scope:caseScope});
+    const groupedRpc=grouped?db.rpc('gps_director_visit_groups_v236446',{
+      p_from:a.p_from,p_to:a.p_to,p_manager:a.p_manager,
+      p_filter:activeFindingFilter,p_case_scope:caseScope,p_limit:40,p_offset:pageOffset
+    }):null;
+    const [basic,groups]=await Promise.all([summaryRpc,groupedRpc]);
+    if(basic?.error)throw basic.error;
+    lastData=basic?.data||{visits:[],summary:{}};
     fillManagers(lastData.visits||[]);
-    renderKpi(lastData);renderCaseScopes(lastData.summary);renderActions(lastData);renderVisits(lastData.visits||[]);renderPage(lastData);
+    renderKpi(lastData);renderCaseScopes(lastData.summary);renderActions(lastData);
+    if(grouped&&groups&&!groups.error){
+      renderGroupedVisits(groups.data);renderGroupedPage(groups.data);
+    }else{
+      renderVisits(lastData.visits||[]);renderPage(lastData);
+      if(grouped&&groups?.error&&area){
+        area.insertAdjacentHTML('afterbegin','<div style="font-size:12px;padding:9px;background:#fff7ed;border:1px solid #fbbf24;border-radius:8px">Группировка ТТ временно недоступна. Показан обычный список визитов (первая страница).</div>');
+      }
+    }
     const stamp=document.getElementById('gps-brief-sync-v236438');
-    if(stamp)stamp.textContent='Данные: готовые GPS-снимки и планы · обработка без повторного чтения GPS-трека · период '+day(a.p_from)+' — '+day(a.p_to);
+    if(stamp)stamp.textContent='Данные: готовые GPS-снимки и планы · период '+day(a.p_from)+' — '+day(a.p_to)+
+      (grouped?' · ТТ сгруппированы по идентификаторам физических точек':' · показаны визиты по датам');
     if(technicalLoadedKey!==[a.p_from,a.p_to,a.p_manager].join('|')){
       const tech=document.getElementById('gps-dir-tech-v236427');if(tech)tech.textContent='Нажмите «Показать детали».';
     }
@@ -344,7 +436,6 @@ async function load(force=false){
     if(area)area.innerHTML='<div style="padding:14px;border:1px solid #fecaca;border-radius:10px;color:#991b1b"><b>Брифинг временно недоступен.</b><div style="font-size:11px;margin-top:4px">'+esc(e?.message||e)+'</div><div style="font-size:11px;margin-top:5px">Исходные GPS-данные не изменены; можно открыть маршруты на соседней вкладке.</div></div>';
   }finally{busy=false;if(btn)btn.disabled=false;}
 }
-
 
 async function exportCsvBackup(){
  const a=args(),rows=[],step=250;
@@ -397,5 +488,5 @@ setInterval(()=>{
   if(document.getElementById('page-gps-control')?.classList.contains('active')&&allowed()&&!document.getElementById('gps-director-view-v236427'))install();
 },2000);
 
-window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.445',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false});
+window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.446',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false});
 })();
