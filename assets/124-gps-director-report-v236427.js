@@ -78,13 +78,15 @@ function ensureUi(){
   panel.innerHTML=`
     <style id="gps-briefing-styles-v236438">
       #gps-director-view-v236427 .gps-director-jump{position:sticky;top:56px;z-index:44;border:1px solid #cbd9ea;background:rgba(250,252,255,.97);backdrop-filter:blur(8px);border-radius:11px;padding:9px 11px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 9px rgba(15,23,42,.06)}
-      #gps-director-view-v236427 .gps-director-jump button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 12px;font-weight:650;cursor:pointer;color:#185fa5;font-size:12px;min-height:36px}
+      #gps-director-view-v236427 .gps-director-jump button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 12px;font-weight:650;cursor:pointer;color:#185fa5;font-size:13px;min-height:36px}
       #gps-director-view-v236427 .gps-director-jump button:hover{background:#eff6ff;border-color:#60a5fa}
       #gps-director-view-v236427 [id^="gps-"]{scroll-margin-top:125px}
       @media(max-width:720px){#gps-director-view-v236427 .gps-director-jump{top:54px;gap:5px;padding:6px}#gps-director-view-v236427 .gps-director-jump button{flex:1;font-size:11px}}
       #gps-director-view-v236427 .gps-brief-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
       #gps-director-view-v236427 .gps-brief-title{font-size:19px;font-weight:750;line-height:1.3}
-      #gps-director-view-v236427 .gps-brief-muted{font-size:12px;color:var(--sub);line-height:1.45}
+      #gps-director-view-v236427 .gps-brief-muted{font-size:13px;color:var(--sub);line-height:1.5}
+      #gps-director-view-v236427 .gps-brief-stamp{font-size:12px;color:var(--sub);margin-top:8px}
+      #gps-director-view-v236427 .gps-route-table{font-size:13px;line-height:1.45}
       #gps-director-view-v236427 .gps-brief-filters{display:flex;gap:9px;align-items:end;flex-wrap:wrap;margin-top:16px}
       #gps-director-view-v236427 .gps-brief-card{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:15px;margin-bottom:12px;overflow-x:auto}
       #gps-director-view-v236427 .gps-brief-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}
