@@ -5,8 +5,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_ROUTE_MONTH_AI_AUDIT_V1)return;
-const VERSION='route-ai-1.0.0',PAGE='page-routes-boss',ROOT_ID='route-month-ai-audit-v1';
-const state={busy:false,month:'',items:[],reviews:new Map(),shown:50,warnings:[],period:null};
+const VERSION='route-ai-1.1.0',PAGE='page-routes-boss',ROOT_ID='route-month-ai-audit-v1';
+const state={busy:false,month:'',items:[],reviews:new Map(),shown:8,warnings:[],period:null,filters:{kind:'priority',manager:'all',status:'pending',query:''}};
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const n=v=>Number.isFinite(Number(v))?Number(v):0;
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -16,13 +16,13 @@ const boss=()=>{try{return currentProfile?.role==='boss'}catch(_){return false}}
 const managerFilter=()=>{try{return typeof rbMgrFilter!=='undefined'?rbMgrFilter:'all'}catch(_){return'all'}};
 const ymToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit'}).format(new Date());
 const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const asOf=ym=>ym<ymToday()?ym+'-01':today();
+const asOf=ym=>{if(ym>=ymToday())return today();const [y,m]=ym.split('-').map(Number);return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10)};
 const days=(a,b)=>Math.max(0,Math.round((Date.parse(a+'T12:00:00Z')-Date.parse(b+'T12:00:00Z'))/86400000));
 const reviewKey=f=>[f.manager,f.kind,f.itemKey].join('\u001f');
-const statusName={approve:'Согласовано ДФ',reject:'Отклонено ДФ',discuss:'На обсуждении'};
+const statusName={approve:'Принято ДФ',reject:'Отклонено ДФ',discuss:'К обсуждению'};
 const kindName={sales_drop:'Падение продаж',stale_visit:'Давно не посещался',potential_near:'Потенциальный рядом',repeat_visit:'Повторное посещение',route_detour:'Лишние переезды'};
 function root(){return document.getElementById(ROOT_ID)}
-function month(){const x=document.getElementById('rb-coverage-month')?.value||'';return /^\d{4}-(0[1-9]|1[0-2])$/.test(x)?x:ymToday()}
+function month(){let x='';try{x=localStorage.getItem('crm_route_month_boss')||''}catch(_){}if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(x))x=document.getElementById('rb-coverage-month')?.value||'';return /^\d{4}-(0[1-9]|1[0-2])$/.test(x)?x:ymToday()}
 function visible(){return boss()&&!!document.getElementById(PAGE)?.classList.contains('active')}
 function install(){
  const page=document.getElementById(PAGE),anchor=document.getElementById('rb-coverage-card');
@@ -34,16 +34,23 @@ function install(){
   +'<div><div class="card-title" style="margin:0">🤖 ИИ-аудит месячного маршрута</div>'
   +'<div style="font-size:12px;color:var(--sub);margin-top:5px">Помощник ДФ: анализ рисков по клиентам и логистике, без изменения маршрута</div></div>'
   +'<button id="route-ai-run-v1" class="btn-primary" type="button">🔎 ИИ-анализ маршрута</button></div>'
-  +'<div id="route-ai-audit-result-v1" style="margin-top:11px;font-size:12px;color:var(--sub)">Месяц берётся из поля «Покрытие клиентской базы» выше. Анализ запускается только вручную.</div>';
+  +'<div id="route-ai-audit-result-v1" style="margin-top:11px;font-size:12px;color:var(--sub)">Анализируется месяц, выбранный во вкладках маршрута вверху. Нажмите кнопку после составления проекта.</div>';
  anchor.insertAdjacentElement('afterend',panel);
  panel.addEventListener('click',async e=>{
   const run=e.target.closest('#route-ai-run-v1');
   if(run){await audit();return}
   const more=e.target.closest('[data-route-ai-more]');
-  if(more){state.shown+=50;render();return}
+  if(more){state.shown+=8;render();return}
+  const kind=e.target.closest('[data-route-ai-kind]');
+  if(kind){state.filters.kind=kind.dataset.routeAiKind;state.shown=8;render();return}
+  const edit=e.target.closest('[data-route-ai-edit]');
+  if(edit){document.getElementById('manual-route-lite')?.scrollIntoView({behavior:'smooth',block:'start'});return}
   const action=e.target.closest('[data-route-ai-decision]');
   if(action){const idx=Number(action.dataset.aiIndex);if(Number.isInteger(idx)&&state.items[idx])await decide(state.items[idx],action.dataset.routeAiDecision)}
  });
+ panel.addEventListener('change',e=>{const field=e.target.closest('[data-route-ai-filter]');if(!field)return;const name=field.dataset.routeAiFilter;if(!Object.prototype.hasOwnProperty.call(state.filters,name))return;state.filters[name]=field.value;state.shown=8;render()});
+ panel.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-route-ai-filter="query"]')){e.preventDefault();state.filters.query=e.target.value;state.shown=8;render()}});
+ document.addEventListener('click',e=>{if(e.target.closest?.('#route-month-tabs-boss button'))window.setTimeout(()=>{if(state.month&&state.month!==month()){state.month='';state.items=[];message('Вы изменили месяц маршрута. Нажмите «ИИ-анализ маршрута», чтобы получить рекомендации за '+month()+'.')}},0)},true);
  return true;
 }
 function message(t,error=false){const out=document.getElementById('route-ai-audit-result-v1');if(out)out.innerHTML='<div style="padding:11px;background:'+(error?'#fef2f2':'#eff6ff')+';border-radius:8px;color:'+(error?'#991b1b':'#1e40af')+'">'+esc(t)+'</div>'}
@@ -205,7 +212,7 @@ async function audit(){
    }
   }
   state.items=findings.sort((a,b)=>b.weight-a.weight||a.manager.localeCompare(b.manager,'ru'));
-  state.month=ym;state.shown=50;
+  state.month=ym;state.shown=8;state.filters={kind:'priority',manager:'all',status:'pending',query:''};
   state.period=(salesResp.data||[])[0]||null;
   if(!sales.size)state.warnings.push('Не получены привязанные к клиентам продажи: финансовые выводы ограничены.');
   if(visits.length===0)state.warnings.push('Нет подтверждённых визитов в доступных данных: сигналы по давности визита недоступны.');
@@ -215,31 +222,59 @@ async function audit(){
 }
 function render(){
  const out=document.getElementById('route-ai-audit-result-v1');if(!out||!boss())return;
- const all=state.items,reviewed=all.filter(x=>state.reviews.has(reviewKey(x))).length;
- const drops=all.filter(x=>x.kind==='sales_drop');
+ const all=state.items,drops=all.filter(x=>x.kind==='sales_drop');
+ const reviewed=all.filter(x=>state.reviews.has(reviewKey(x))).length;
  const gap=drops.reduce((a,x)=>a+n(x.details.sales_gap),0);
- const rows=all.slice(0,state.shown).map((f,i)=>{
-  const rev=state.reviews.get(reviewKey(f)),decision=rev?.decision||'';
-  const actions=['approve','reject','discuss'].map(d=>'<button type="button" data-ai-index="'+i+'" data-route-ai-decision="'+d+'" class="chip" style="font-size:12px;'+(decision===d?'background:#dbeafe;border-color:#60a5fa;':'')+'">'+({approve:'✓ Согласовать',reject:'✕ Отклонить',discuss:'💬 Обсудить'}[d])+'</button>').join('');
-  return '<div style="border:1px solid #e2e8f0;padding:11px;border-radius:9px;margin-top:9px;background:#fff">'
-   +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>'+esc(f.clientName||'Маршрут '+f.details.date)+'</b>'
+ const kinds=['sales_drop','stale_visit','potential_near','repeat_visit','route_detour'];
+ const counts=Object.fromEntries(kinds.map(k=>[k,all.filter(f=>f.kind===k).length]));
+ const uniqueClients=new Set(all.filter(f=>f.clientId).map(f=>f.clientId)).size;
+ const filt=state.filters;
+ const matches=(f)=>{
+  const decision=state.reviews.get(reviewKey(f))?.decision||'pending';
+  if(filt.manager!=='all'&&f.manager!==filt.manager)return false;
+  if(filt.status!=='all'&&decision!==filt.status)return false;
+  if(filt.kind==='priority'){
+   if(!(f.kind==='sales_drop'||f.kind==='route_detour'||(f.kind==='stale_visit'&&n(f.details.days_since_visit)>=90)))return false;
+  }else if(filt.kind!=='all'&&f.kind!==filt.kind)return false;
+  if(filt.query&&!key(f.clientName+' '+f.manager+' '+f.reason).includes(key(filt.query)))return false;
+  return true;
+ };
+ const matching=all.filter(matches);
+ const sel=(name,opts)=>'<select data-route-ai-filter="'+name+'" class="form-input" style="padding:7px 9px;min-width:130px;max-width:100%;font-size:12px">'+
+  opts.map(([value,label])=>'<option value="'+esc(value)+'"'+(filt[name]===value?' selected':'')+'>'+esc(label)+'</option>').join('')+'</select>';
+ const managerOptions=[['all','Все менеджеры'],...[...new Set(all.map(f=>f.manager).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru')).map(x=>[x,x])];
+ const kindOptions=[['priority','В первую очередь'],['all','Все рекомендации'],...kinds.map(k=>[k,kindName[k]+' ('+counts[k]+')'])];
+ const statusOptions=[['pending','Не рассмотрено'],['discuss','На обсуждении'],['approve','Принято ДФ'],['reject','Отклонено'],['all','Все решения']];
+ const chips=kinds.map(k=>'<button type="button" data-route-ai-kind="'+k+'" class="chip" style="font-size:11px;min-height:32px;padding:5px 9px;'+(filt.kind===k?'background:#dbeafe;border-color:#60a5fa;':'')+'">'+esc(kindName[k])+': <b>'+counts[k]+'</b></button>').join('');
+ const cards=matching.slice(0,state.shown).map(f=>{
+  const idx=all.indexOf(f),rev=state.reviews.get(reviewKey(f)),decision=rev?.decision||'';
+  const actions=['approve','reject','discuss'].map(d=>'<button type="button" data-ai-index="'+idx+'" data-route-ai-decision="'+d+'" class="chip" style="font-size:12px;'+(decision===d?'background:#dbeafe;border-color:#60a5fa;':'')+'">'+({approve:'✓ Принять',reject:'✕ Отклонить',discuss:'💬 Обсудить'}[d])+'</button>').join('');
+  return '<article style="border:1px solid #e2e8f0;padding:11px 13px;border-radius:9px;margin-top:9px;background:#fff">'
+   +'<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><b>'+esc(f.clientName||'Маршрут '+(f.details.date||''))+'</b>'
    +'<span class="tag tag-gray">'+esc(kindName[f.kind])+'</span><span style="color:#64748b">'+esc(f.manager)+'</span></div>'
-   +'<div style="margin-top:6px"><b>Причина:</b> '+esc(f.reason)+'</div>'
-   +'<div style="margin-top:5px;color:#475569"><b>Данные:</b> '+esc(f.proof)+'</div>'
-   +'<div style="margin-top:5px"><b>Рекомендация:</b> '+esc(f.advice)+'</div>'
-   +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px">'+actions
-   +(decision?'<small>Решение: <b>'+esc(statusName[decision]||decision)+'</b>'+(rev.director_note?' · '+esc(rev.director_note):'')+'</small>':'')+'</div></div>';
+   +'<div style="margin-top:6px"><b>Почему:</b> '+esc(f.reason)+'</div>'
+   +'<div style="margin-top:5px;color:#475569"><b>Основание:</b> '+esc(f.proof)+'</div>'
+   +'<div style="margin-top:5px"><b>Что предлагается:</b> '+esc(f.advice)+'</div>'
+   +'<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px">'+actions
+   +(decision?'<small>Решение: <b>'+esc(statusName[decision]||decision)+'</b>'+(rev.director_note?' · '+esc(rev.director_note):'')+'</small>':'')+'</div></article>';
  }).join('');
- let html='<div style="display:flex;gap:7px;flex-wrap:wrap">'
-  +'<span class="tag tag-gray">Месяц: '+esc(state.month)+'</span>'
-  +'<span class="tag tag-gray">Рекомендаций: <b>'+all.length+'</b></span>'
-  +'<span class="tag tag-gray">Решений ДФ: <b>'+reviewed+'</b></span>'
-  +'<span class="tag tag-gray">Падение продаж вне маршрута: <b>'+drops.length+'</b></span></div>'
-  +'<div style="margin-top:9px;font-size:13px"><b>Историческая разница в продажах по клиентам с падением:</b> '+fmt(gap)+' BYN. Это не прогноз и не гарантированная выручка.</div>'
-  +'<div style="color:#64748b;font-size:11px;margin-top:5px">Сравниваются 3 полных месяца и тот же период прошлого года. Маршрут, задачи и GPS автоматически не меняются.</div>';
- if(state.warnings.length)html+='<div style="margin-top:8px;color:#9a3412;font-size:11px">Ограничения: '+esc(state.warnings.join(' · '))+'</div>';
- html+=rows||'<div style="padding:15px 0;color:#64748b">По доступным данным сигналов с заданными порогами нет. Это не заменяет совещание и проверку качества данных.</div>';
- if(all.length>state.shown)html+='<button type="button" data-route-ai-more="1" class="chip" style="margin-top:12px">Показать ещё ('+(all.length-state.shown)+')</button>';
+ let html='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
+  +'<span class="tag tag-gray">Месяц маршрута: <b>'+esc(state.month)+'</b></span>'
+  +'<span class="tag tag-gray">Всего сигналов: <b>'+all.length+'</b></span>'
+  +'<span class="tag tag-gray">Клиентов: <b>'+uniqueClients+'</b></span>'
+  +'<span class="tag tag-gray">Рассмотрено: <b>'+reviewed+'</b></span></div>'
+  +'<div style="font-size:12px;margin:9px 0;padding:11px;border:1px solid #dbeafe;background:#f5faff;border-radius:9px;line-height:1.6">'
+  +'<b>Как использовать на совещании:</b> выберите менеджера и срочные вопросы → обсудите клиента → зафиксируйте решение → при необходимости вручную поправьте маршрут.'
+  +'<div style="margin-top:5px"><b>Историческое снижение продаж:</b> '+fmt(gap)+' BYN у '+drops.length+' клиентов вне физического маршрута. Это не гарантированный возврат денег.</div>'
+  +'<div style="margin-top:7px"><button type="button" class="btn-secondary" data-route-ai-edit="1" style="font-size:12px;padding:7px 10px">🗓 К ручному редактору маршрута</button>'
+  +'<span style="margin-left:8px;color:#475569">«Принять» сохраняет решение ДФ, но не добавляет клиента в маршрут автоматически.</span></div></div>'
+  +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px">'+chips+'</div>'
+  +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+sel('kind',kindOptions)+sel('manager',managerOptions)+sel('status',statusOptions)
+  +'<input type="search" class="form-input" data-route-ai-filter="query" value="'+esc(filt.query)+'" placeholder="Клиент или причина, Enter" style="min-width:170px;flex:1;max-width:310px;padding:7px 9px;font-size:12px"></div>'
+  +'<div style="font-size:12px;color:#64748b;margin-bottom:8px">Под фильтрами: <b>'+matching.length+'</b> · показано '+Math.min(matching.length,state.shown)+'. Для полного перечня выберите «Все рекомендации».</div>';
+ if(state.warnings.length)html+='<details style="padding:7px 0;color:#9a3412;font-size:11px"><summary style="cursor:pointer">Ограничения достоверности данных ('+state.warnings.length+')</summary><div style="margin-top:6px">'+esc(state.warnings.join(' · '))+'</div></details>';
+ html+=cards||'<div style="padding:15px;color:#64748b;background:#f8fafc;border-radius:8px">По выбранным фильтрам рекомендаций нет. Измените тип или статус.</div>';
+ if(matching.length>state.shown)html+='<button type="button" data-route-ai-more="1" class="chip" style="margin-top:12px">Показать ещё 8 · осталось '+(matching.length-state.shown)+'</button>';
  out.innerHTML=html;
 }
 async function decide(f,decision){
