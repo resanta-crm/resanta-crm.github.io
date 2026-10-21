@@ -5,8 +5,8 @@
 (function(){
 'use strict';
 if(window.RESANTA_ROUTE_MONTH_AI_AUDIT_V1)return;
-const VERSION='route-ai-1.1.0',PAGE='page-routes-boss',ROOT_ID='route-month-ai-audit-v1';
-const state={busy:false,month:'',items:[],reviews:new Map(),shown:8,warnings:[],period:null,filters:{kind:'priority',manager:'all',status:'pending',query:''}};
+const VERSION='route-ai-1.2.0',PAGE='page-routes-boss',ROOT_ID='route-month-ai-audit-v1';
+const state={busy:false,month:'',items:[],reviews:new Map(),shown:8,warnings:[],period:null,filters:{kind:'priority',manager:'all',status:'all',query:''}};
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const n=v=>Number.isFinite(Number(v))?Number(v):0;
 const key=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
@@ -46,7 +46,11 @@ function install(){
   const edit=e.target.closest('[data-route-ai-edit]');
   if(edit){document.getElementById('manual-route-lite')?.scrollIntoView({behavior:'smooth',block:'start'});return}
   const action=e.target.closest('[data-route-ai-decision]');
-  if(action){const idx=Number(action.dataset.aiIndex);if(Number.isInteger(idx)&&state.items[idx])await decide(state.items[idx],action.dataset.routeAiDecision)}
+  if(action){const idx=Number(action.dataset.aiIndex),f=state.items[idx];if(!Number.isInteger(idx)||!f)return;
+    const choice=action.dataset.routeAiDecision;
+    if(choice==='approve'&&f.clientId){if(typeof window.resantaRouteAiActionV1==='function')await window.resantaRouteAiActionV1(f,state.month);else alert('Модуль действий ещё загружается. Повторите через секунду.');}
+    else await decide(f,choice);
+  }
  });
  panel.addEventListener('change',e=>{const field=e.target.closest('[data-route-ai-filter]');if(!field)return;const name=field.dataset.routeAiFilter;if(!Object.prototype.hasOwnProperty.call(state.filters,name))return;state.filters[name]=field.value;state.shown=8;render()});
  panel.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-route-ai-filter="query"]')){e.preventDefault();state.filters.query=e.target.value;state.shown=8;render()}});
@@ -112,7 +116,7 @@ async function audit(){
    rows('visits','id,client_id,date',q=>q.lte('date',cutoff)),
    rows('tasks','id,client_id,source,title,done,review_status,manager_name,due_date',q=>q.gte('due_date',ym+'-01').lt('due_date',next+'-01')),
    db.rpc('crm_route_audit_sales_v1',{p_month:ym+'-01'}),
-   rows('route_month_ai_reviews','id,audit_month,manager_name,item_key,kind,decision,director_note',q=>q.eq('audit_month',ym))
+   rows('route_month_ai_reviews','id,audit_month,manager_name,item_key,kind,decision,director_note,basis',q=>q.eq('audit_month',ym))
   ]);
   if(salesResp.error)throw new Error('Расчёт выручки: '+salesResp.error.message);
   const sales=new Map((salesResp.data||[]).map(s=>[String(s.client_id),s]));
@@ -213,7 +217,7 @@ async function audit(){
   }
   if(month()!==ym){message('Месяц маршрута изменился во время расчёта. Нажмите «ИИ-анализ маршрута» повторно.');return;}
   state.items=findings.sort((a,b)=>b.weight-a.weight||a.manager.localeCompare(b.manager,'ru'));
-  state.month=ym;state.shown=8;state.filters={kind:'priority',manager:'all',status:'pending',query:''};
+  state.month=ym;state.shown=8;state.filters={kind:'priority',manager:'all',status:'all',query:''};
   state.period=(salesResp.data||[])[0]||null;
   if(!sales.size)state.warnings.push('Не получены привязанные к клиентам продажи: финансовые выводы ограничены.');
   if(visits.length===0)state.warnings.push('Нет подтверждённых визитов в доступных данных: сигналы по давности визита недоступны.');
@@ -233,7 +237,9 @@ function render(){
  const matches=(f)=>{
   const decision=state.reviews.get(reviewKey(f))?.decision||'pending';
   if(filt.manager!=='all'&&f.manager!==filt.manager)return false;
-  if(filt.status!=='all'&&decision!==filt.status)return false;
+  if(filt.status==='in_progress'&&!(decision==='approve'&&state.reviews.get(reviewKey(f))?.basis?.route_ai_action))return false;
+  if(filt.status==='needs_action'&&!(decision==='approve'&&!state.reviews.get(reviewKey(f))?.basis?.route_ai_action))return false;
+  if(!['all','in_progress','needs_action'].includes(filt.status)&&decision!==filt.status)return false;
   if(filt.kind==='priority'){
    if(!(f.kind==='sales_drop'||f.kind==='route_detour'||(f.kind==='stale_visit'&&n(f.details.days_since_visit)>=90)))return false;
   }else if(filt.kind!=='all'&&f.kind!==filt.kind)return false;
@@ -245,11 +251,13 @@ function render(){
   opts.map(([value,label])=>'<option value="'+esc(value)+'"'+(filt[name]===value?' selected':'')+'>'+esc(label)+'</option>').join('')+'</select>';
  const managerOptions=[['all','Все менеджеры'],...[...new Set(all.map(f=>f.manager).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru')).map(x=>[x,x])];
  const kindOptions=[['priority','В первую очередь'],['all','Все рекомендации'],...kinds.map(k=>[k,kindName[k]+' ('+counts[k]+')'])];
- const statusOptions=[['pending','Не рассмотрено'],['discuss','На обсуждении'],['approve','Принято ДФ'],['reject','Отклонено'],['all','Все решения']];
+ const statusOptions=[['all','Все решения'],['pending','Не рассмотрено'],['needs_action','Принято, без действия'],['in_progress','К исполнению'],['discuss','На обсуждении'],['approve','Принято ДФ'],['reject','Отклонено']];
  const chips=kinds.map(k=>'<button type="button" data-route-ai-kind="'+k+'" class="chip" style="font-size:11px;min-height:32px;padding:5px 9px;'+(filt.kind===k?'background:#dbeafe;border-color:#60a5fa;':'')+'">'+esc(kindName[k])+': <b>'+counts[k]+'</b></button>').join('');
  const cards=matching.slice(0,state.shown).map(f=>{
   const idx=all.indexOf(f),rev=state.reviews.get(reviewKey(f)),decision=rev?.decision||'';
-  const actions=['approve','reject','discuss'].map(d=>'<button type="button" data-ai-index="'+idx+'" data-route-ai-decision="'+d+'" class="chip" style="font-size:12px;'+(decision===d?'background:#dbeafe;border-color:#60a5fa;':'')+'">'+({approve:'✓ Принять',reject:'✕ Отклонить',discuss:'💬 Обсудить'}[d])+'</button>').join('');
+  const actions=['approve','reject','discuss'].map(d=>'<button type="button" data-ai-index="'+idx+'" data-route-ai-decision="'+d+'" class="chip" style="font-size:12px;'+(decision===d?'background:#dbeafe;border-color:#60a5fa;':'')+'">'+({approve:(f.clientId?'✓ Выбрать действие':'✓ Принять'),reject:'✕ Отклонить',discuss:'💬 Обсудить'}[d])+'</button>').join('');
+  const work=rev?.basis?.route_ai_action;
+  const followup=work?' <span style="color:#166534"> · К исполнению: '+esc(work.kind==='visit'?'визит '+work.date:'прозвон '+work.due_date)+'</span>':decision==='approve'?' <span style="color:#9a3412"> · Действие не назначено</span>':'';
   return '<article style="border:1px solid #e2e8f0;padding:11px 13px;border-radius:9px;margin-top:9px;background:#fff">'
    +'<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><b>'+esc(f.clientName||'Маршрут '+(f.details.date||''))+'</b>'
    +'<span class="tag tag-gray">'+esc(kindName[f.kind])+'</span><span style="color:#64748b">'+esc(f.manager)+'</span></div>'
@@ -257,18 +265,19 @@ function render(){
    +'<div style="margin-top:5px;color:#475569"><b>Основание:</b> '+esc(f.proof)+'</div>'
    +'<div style="margin-top:5px"><b>Что предлагается:</b> '+esc(f.advice)+'</div>'
    +'<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px">'+actions
-   +(decision?'<small>Решение: <b>'+esc(statusName[decision]||decision)+'</b>'+(rev.director_note?' · '+esc(rev.director_note):'')+'</small>':'')+'</div></article>';
+   +(decision?'<small>Решение: <b>'+esc(statusName[decision]||decision)+'</b>'+(rev.director_note?' · '+esc(rev.director_note):'')+followup+'</small>':'')+'</div></article>';
  }).join('');
  let html='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
   +'<span class="tag tag-gray">Месяц маршрута: <b>'+esc(state.month)+'</b></span>'
   +'<span class="tag tag-gray">Всего сигналов: <b>'+all.length+'</b></span>'
   +'<span class="tag tag-gray">Клиентов: <b>'+uniqueClients+'</b></span>'
-  +'<span class="tag tag-gray">Рассмотрено: <b>'+reviewed+'</b></span></div>'
+  +'<span class="tag tag-gray">Рассмотрено: <b>'+reviewed+'</b></span>' +
+  '<span class="tag tag-gray">К исполнению: <b>'+all.filter(x=>state.reviews.get(reviewKey(x))?.basis?.route_ai_action).length+'</b></span></div>'
   +'<div style="font-size:12px;margin:9px 0;padding:11px;border:1px solid #dbeafe;background:#f5faff;border-radius:9px;line-height:1.6">'
   +'<b>Как использовать на совещании:</b> выберите менеджера и срочные вопросы → обсудите клиента → зафиксируйте решение → при необходимости вручную поправьте маршрут.'
   +'<div style="margin-top:5px"><b>Историческое снижение продаж:</b> '+fmt(gap)+' BYN у '+drops.length+' клиентов вне физического маршрута. Это не гарантированный возврат денег.</div>'
   +'<div style="margin-top:7px"><button type="button" class="btn-secondary" data-route-ai-edit="1" style="font-size:12px;padding:7px 10px">🗓 К ручному редактору маршрута</button>'
-  +'<span style="margin-left:8px;color:#475569">«Принять» сохраняет решение ДФ, но не добавляет клиента в маршрут автоматически.</span></div></div>'
+  +'<span style="margin-left:8px;color:#475569">Для клиента «Выбрать действие» предложит будущую поездку в тот же город или прозвон. Визит попадёт в маршрут только после сохранения ДФ.</span></div></div>'
   +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px">'+chips+'</div>'
   +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+sel('kind',kindOptions)+sel('manager',managerOptions)+sel('status',statusOptions)
   +'<input type="search" class="form-input" data-route-ai-filter="query" value="'+esc(filt.query)+'" placeholder="Клиент или причина, Enter" style="min-width:170px;flex:1;max-width:310px;padding:7px 9px;font-size:12px"></div>'
@@ -278,22 +287,23 @@ function render(){
  if(matching.length>state.shown)html+='<button type="button" data-route-ai-more="1" class="chip" style="margin-top:12px">Показать ещё 8 · осталось '+(matching.length-state.shown)+'</button>';
  out.innerHTML=html;
 }
-async function decide(f,decision){
+async function decide(f,decision,action){
  if(!boss()||state.busy||!['approve','reject','discuss'].includes(decision))return;
  let note='';
  if(decision==='discuss'){const s=prompt('Что обсудить на совещании? Комментарий ДФ (можно оставить пустым):','');if(s===null)return;note=s.trim().slice(0,900);}
  try{
   const user=(()=>{try{return String(currentProfile?.email||currentProfile?.name||currentUser?.email||'ДФ')}catch(_){return'ДФ'}})();
   const data={
-   audit_month:state.month,manager_name:f.manager,item_key:f.itemKey,kind:f.kind,
-   client_id:f.clientId,client_name:f.clientName||null,reason:f.reason,basis:f.details,
+   audit_month:action?.audit_month||state.month,manager_name:f.manager,item_key:f.itemKey,kind:f.kind,
+   client_id:f.clientId,client_name:f.clientName||null,reason:f.reason,basis:action?{...f.details,route_ai_action:action}:f.details,
    decision,director_note:note||null,updated_by:user,updated_at:new Date().toISOString()
   };
   const {data:saved,error}=await db.from('route_month_ai_reviews').upsert(data,{onConflict:'audit_month,manager_name,item_key,kind'}).select().single();
   if(error)throw error;
-  state.reviews.set(reviewKey(f),saved);render();
- }catch(e){console.error(VERSION+' decision',e);alert('Не удалось сохранить решение ДФ: '+(e.message||e))}
+  state.reviews.set(reviewKey(f),saved);if(state.month===saved.audit_month)render();return saved;
+ }catch(e){console.error(VERSION+' decision',e);alert('Не удалось сохранить решение ДФ: '+(e.message||e));return null}
 }
+window.resantaRouteAiStoreActionV1=(f,action)=>decide(f,'approve',action);
 window.RESANTA_ROUTE_MONTH_AI_AUDIT_V1=Object.freeze({version:VERSION,manualOnly:true,originalRoutesUnchanged:true,bossOnly:true,run:audit});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();

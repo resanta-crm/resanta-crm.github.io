@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_SAFE_UPGRADES_LOADER_V236200)return;
-const V='23.7.5',flights=new Map();
+const V='23.7.6',flights=new Map();
 function active(id){const name=String(id||'').replace(/^page-/,'');return !!document.getElementById(id)?.classList.contains('active')||String(document.getElementById('app')?.dataset?.activePage||'')===name}
 function load(path,guard){
  if(window[guard])return Promise.resolve(true);
@@ -23,7 +23,7 @@ function route(){
    if(active('page-promotions'))load('assets/83-promotions-mo2-selector-v236123.js','RESANTA_PROMOTIONS_MO2_SELECTOR_V236123').then(()=>load('assets/114-promotions-ai-precheck-v236373.js','RESANTA_PROMOTIONS_AI_PRECHECK_V236373')).then(()=>load('assets/117-promotions-approval-sync-v236373.js','RESANTA_PROMOTIONS_APPROVAL_SYNC_V236373')).then(()=>load('assets/119-promotions-quantity-cycle-v236375.js','RESANTA_PROMOTIONS_QUANTITY_CYCLE_V236375'));
    if(active('page-stands'))load('assets/115-stands-v236367.js?v=23.6.394','RESANTA_STANDS_V236367');
    if(active('page-triovist')){load('assets/80-triovist-21vek-control-v236107.js','RESANTA_TRIOVIST_21VEK_CONTROL_V236403');load('assets/104-safe-triovist-v236200.js','RESANTA_SAFE_TRIOVIST_V236200');load('assets/106-triovist-competitors-v236218.js?v=23.6.399','RESANTA_TRIOVIST_COMPETITORS_V236218');load('assets/107-triovist-auth-export-v236221.js','RESANTA_TRIOVIST_AUTH_EXPORT_V236221');load('assets/108-triovist-plan-server-v236231.js','RESANTA_TRIOVIST_PLAN_SERVER_V236231');load('assets/109-triovist-task-target-v236232.js','RESANTA_TRIOVIST_TASK_TARGET_EDITOR_V236232');load('assets/111-triovist-db-queue-v236251.js','RESANTA_TRIOVIST_DB_QUEUE_V236251');load('assets/116-triovist-own-positions-v236351.js','RESANTA_TRIOVIST_OWN_POSITIONS_V236351');}
-   if(active('page-routes-boss')){load('assets/131-route-boss-toolbar-v1.js','RESANTA_ROUTE_BOSS_TOOLBAR_V1');load('assets/130-route-month-ai-audit-v1.js','RESANTA_ROUTE_MONTH_AI_AUDIT_V1');}
+   if(active('page-routes-boss')){load('assets/131-route-boss-toolbar-v1.js','RESANTA_ROUTE_BOSS_TOOLBAR_V1');load('assets/130-route-month-ai-audit-v1.js','RESANTA_ROUTE_MONTH_AI_AUDIT_V1').then(()=>load('assets/132-route-ai-action-v1.js','RESANTA_ROUTE_AI_ACTION_V1'));}
    if(active('page-markdown'))load('assets/110-markdown-service-sales-v236233.js','RESANTA_MARKDOWN_SERVICE_SALES_V236233');
  }catch(e){console.warn('SAFE '+V+' route',e)}
 }
