@@ -44,7 +44,7 @@ const APP_VERSION = '2026-10-20-resanta-crm-v23.7.10-vip-date-controls';
 <script defer src="./assets/01-crm-core.js?v=23.6.339"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
-<script defer src="./assets/124-gps-director-report-v236427.js?v=23.6.445"></script>
+<script defer src="./assets/124-gps-director-report-v236427.js?v=23.6.446"></script>
 <script defer src="./assets/125-gps-integrity-v236429.js?v=23.6.445"></script>
 <script defer src="./assets/127-gps-director-case-review-v236440.js?v=23.6.444"></script>
 <script defer src="./assets/129-gps-director-reminders-v236443.js?v=23.6.445"></script>
@@ -424,6 +424,11 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 .abc-mini-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 @media(max-width:900px){.abc-filter-grid{grid-template-columns:repeat(2,minmax(150px,1fr))}.abc-rec-grid{grid-template-columns:1fr}.abc-mini-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.abc-filter-grid{grid-template-columns:1fr}.abc-mini-grid{grid-template-columns:1fr}.abc-table{min-width:760px}}
+</style>
+<style id="gps-hide-unused-legacy-route-panel-v236446">
+/* GPS map is provided by the separate viewer. Keep legacy DOM nodes for compatibility,
+   hide only their unused 480px placeholders in the main CRM screen. */
+#page-gps-control .gps-control-grid {display:none !important}
 </style>
 <style id="v19-gps-styles">
 .gps-workday-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border-radius:12px;border:1px solid var(--border);background:#fff}
