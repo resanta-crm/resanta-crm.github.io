@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_GPS_UNUSED_TIME_V1)return;
-const VERSION='23.7.7',ID='gps-unused-time-v1';
+const VERSION='23.7.8',ID='gps-unused-time-v1';
 const ALLOWED=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const prof=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}};
@@ -16,7 +16,8 @@ const minus=(date,n)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTC
 const dayFmt=iso=>{const x=String(iso||'');return /^\d{4}-\d{2}-\d{2}$/.test(x)?x.slice(8,10)+'.'+x.slice(5,7)+'.'+x.slice(0,4):x};
 const hm=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})};
 const fmt=v=>Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
-let busy=false,data=null,pageSize=12,view='day',status='pending',onlyRepeats=false;
+let busy=false,data=null,pageSize=12,view='day',status='pending',onlyRepeats=false,focus='all',selectedPeriod='',showClosed=false,aiBusy=false;
+const aiByStop=new Map();
 function panel(){return document.getElementById(ID)}
 function managerOptions(){
   return ['all','Ачинович','Руднев','Шкуран']
@@ -53,6 +54,15 @@ function install(){
     const to=today();root.querySelector('#gps-time-from-v1').value=minus(to,days);root.querySelector('#gps-time-to-v1').value=to;
     document.getElementById('gps-time-results-v1').textContent='Период выбран. Нажмите «Проверить время», чтобы обновить расчёт.';return;
   }
+  const metric=e.target.closest('[data-time-metric]');if(metric){
+    focus=metric.dataset.timeMetric||'all';selectedPeriod='';onlyRepeats=focus==='repeat';pageSize=12;render();
+    document.getElementById('gps-time-details-v2')?.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  const day=e.target.closest('[data-time-period]');if(day){
+    selectedPeriod=day.dataset.timePeriod===selectedPeriod?'':day.dataset.timePeriod;pageSize=12;render();
+    document.getElementById('gps-time-details-v2')?.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  const show=e.target.closest('[data-time-show-closed]');if(show){showClosed=!showClosed;pageSize=12;render();return}
   const more=e.target.closest('[data-time-more]');if(more){pageSize+=12;render();return}
   const toggle=e.target.closest('[data-time-repeat]');if(toggle){onlyRepeats=!onlyRepeats;pageSize=12;render();return}
   const map=e.target.closest('[data-time-map]');if(map){
@@ -60,6 +70,14 @@ function install(){
    if(/^[a-f0-9-]{36}$/i.test(id)&&typeof window.crmOpenGpsViewerV2360==='function')window.crmOpenGpsViewerV2360(id);
    return;
   }
+  const ai=e.target.closest('[data-time-ai]');if(ai){await analyzeStop(Number(ai.dataset.timeAi));return}
+  const route=e.target.closest('[data-time-route]');if(route){
+    if(!window.confirm('Открыть планирование маршрутов? Директор сможет пересмотреть будущие выезды. Уже подтверждённые GPS-визиты автоматически не меняются.'))return;
+    const link=document.getElementById('nav-routes-boss')||document.getElementById('bn-routes-boss');
+    if(link)link.click();else if(typeof window.goPage==='function')window.goPage('routes-boss','Маршруты · Согласование');
+    return;
+  }
+  const delegate=e.target.closest('[data-time-delegate]');if(delegate){await delegateStop(Number(delegate.dataset.timeDelegate));return}
   const decision=e.target.closest('[data-time-decision]');if(decision){await decide(Number(decision.dataset.timeIndex),decision.dataset.timeDecision)}
  });
  root.addEventListener('change',e=>{
@@ -89,7 +107,7 @@ async function load(){
   });
   if(error)throw error;
   if(!result||!Array.isArray(result.days)||!Array.isArray(result.stops))throw new Error('Некорректный ответ аналитики');
-  data=result;status='pending';onlyRepeats=false;pageSize=12;render();
+  data=result;status='pending';focus='all';selectedPeriod='';showClosed=false;onlyRepeats=false;pageSize=12;render();
  }catch(e){console.error(VERSION,e);output('<div style="padding:11px;color:#991b1b">Не удалось выполнить анализ: '+esc(e.message||e)+'</div>')}
  finally{busy=false;btn.disabled=false;btn.textContent='Проверить время'}
 }
@@ -112,39 +130,60 @@ function render(){
  if(!data)return;
  const s=data.summary||{},list=data.stops||[],summary=groups();
  const visible=list.filter(x=>{
-  const v=x.review_status||'pending';
-  return (status==='all'||v===status)&&(!onlyRepeats||Number(x.repeat_days)>=2);
+  const closed=['explained','technical'].includes(x.review_status||'');
+  return (showClosed||!closed)&&(!onlyRepeats||Number(x.repeat_days)>=2)
+    &&(!selectedPeriod|| (view==='month'?x.date.slice(0,7):view==='week'?weekStart(x.date):x.date)===selectedPeriod);
  });
- const metric=(name,value,sub)=>'<div style="border:1px solid #e2e8f0;border-radius:9px;padding:10px 12px;background:#f8fafc"><div style="color:#64748b;font-size:11px">'+esc(name)+'</div><strong style="display:block;font-size:22px;margin:3px 0">'+esc(String(value))+'</strong><span style="color:#64748b;font-size:11px">'+esc(sub)+'</span></div>';
+ const metric=(name,value,sub,code)=>'<button type="button" data-time-metric="'+code+'" style="border:1px solid '+(focus===code?'#2563eb':'#e2e8f0')+';border-radius:9px;padding:10px 12px;background:'+(focus===code?'#eff6ff':'#f8fafc')+';text-align:left;cursor:pointer;color:inherit"><span style="display:block;color:#64748b;font-size:11px">'+esc(name)+'</span><strong style="display:block;font-size:22px;margin:3px 0">'+esc(String(value))+'</strong><span style="color:#64748b;font-size:11px">'+esc(sub)+' · открыть ↗</span></button>';
  let html='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin:12px 0">'
-   +metric('GPS-дней',s.all_days||0,'Выбранный период')
-   +metric('Дней с данными',s.quality_days||0,'Пригодны для анализа')
-   +metric('Недостаточно данных',s.unreliable_days||0,'Не оцениваем время')
-   +metric('Остановок к проверке',s.candidate_stops||0,'От '+data.min_minutes+' минут')
-   +metric('Время к проверке',fmt(s.review_minutes)+' мин','Не доказанная потеря')
-   +metric('Повторных мест',s.repeat_zones||0,'Разные GPS-дни')
+   +metric('GPS-дней',s.all_days||0,'Выбранный период','days')
+   +metric('Дней с данными',s.quality_days||0,'Пригодны для анализа','ready')
+   +metric('Недостаточно данных',s.unreliable_days||0,'Нужна проверка GPS','poor')
+   +metric('Остановок к проверке',s.candidate_stops||0,'От '+data.min_minutes+' минут','stops')
+   +metric('Время к проверке',fmt(s.review_minutes)+' мин','Не доказанная потеря','minutes')
+   +metric('Повторных остановок',s.repeat_stops||0,'Сопоставлено в радиусе 200 м','repeat')
    +'</div>'
    +'<div style="color:#475569;font-size:11px;margin:8px 0 12px">В оценку попадают только завершённые дни с готовыми агрегатами и достаточным качеством GPS. Учитываются лишь внутренние остановки вне распознанных ТТ, домашней/стартовой зоны, с точностью GPS до 100 м. Обед, заправка, ожидание клиента и проблемы связи не являются нарушением. GPS-разрывы и точная длительность езды не приравниваются к простою.</div>'
    +'<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px"><b>Сводка времени по менеджерам и датам</b>'
    +'<select id="gps-time-view-v1" class="form-input" style="width:auto"><option value="day"'+(view==='day'?' selected':'')+'>По дням</option><option value="week"'+(view==='week'?' selected':'')+'>По неделям</option><option value="month"'+(view==='month'?' selected':'')+'>По месяцам</option></select></div>'
    +'<div style="overflow-x:auto"><table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:7px">Период</th><th>Менеджер</th><th>GPS-дней</th><th>Надёжных</th><th>У ТТ, мин</th><th>Нераспознанные остановки, мин</th><th>К проверке, мин</th></tr></thead><tbody>'
-   +summary.map(g=>'<tr style="border-top:1px solid #e2e8f0"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
+   +summary.map(g=>'<tr data-time-period="'+esc(g.key)+'" tabindex="0" title="Открыть дни и остановки за период" style="border-top:1px solid #e2e8f0;cursor:pointer;'+(selectedPeriod===g.key?'background:#eff6ff;':'')+'"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
    +'</tbody></table></div>';
  if(!summary.length)html+='<div style="padding:10px;color:var(--sub)">За выбранный период нет сохранённых GPS-агрегатов.</div>';
+
+ // One click KPI -> a concrete, short list of days with explicit GPS-quality causes.
+ const reason={ongoing:'День не завершён',stale:'Агрегат GPS устарел или не пересчитан',
+ mock_location_review:'Обнаружен признак подмены GPS: техническая проверка',
+ insufficient_points:'Мало точек GPS',low_valid_share:'Низкая доля достоверных GPS-точек',
+ no_stops:'Нет распознанных остановок',ready:'Данные пригодны для разбора'};
+ const targeted=(data.days||[]).filter(d=>
+  (focus==='poor'?d.quality!=='ready':focus==='ready'?d.quality==='ready':focus==='days'));
+ html+='<div id="gps-time-details-v2" style="margin-top:14px;border-top:1px solid #e2e8f0;padding-top:11px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>'+(focus==='poor'?'Почему не хватает GPS-данных':focus==='ready'?'Надёжные GPS-дни':focus==='days'?'Все дни по выбранному периоду':'Подробные остановки и решения ДФ')+'</b>'
+    +'<button type="button" class="chip" data-time-metric="all">Сбросить выбор</button></div>';
+ if(['poor','ready','days'].includes(focus)){
+  html+='<div style="font-size:11px;color:#64748b;margin:6px 0">День с неполными данными не означает, что менеджер не был на ТТ. Карта доступна для проверки исходных GPS-событий.</div>'
+   +targeted.slice(0,60).map(d=>'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin:7px 0;display:flex;justify-content:space-between;gap:9px;align-items:center;flex-wrap:wrap">'
+    +'<div><b>'+esc(d.manager)+' · '+dayFmt(d.date)+'</b><div style="font-size:11px;color:#64748b">'+esc(reason[d.quality]||'Нужна проверка качества GPS')+' · валидных точек '+fmt(d.valid_points)+' / '+fmt(d.raw_points)+'</div></div>'
+    +'<div><button class="btn-secondary" data-time-map="'+esc(d.workday_id)+'" type="button">Открыть карту</button>'
+    +'<button type="button" class="chip" data-time-period="'+esc(view==='month'?d.date.slice(0,7):view==='week'?weekStart(d.date):d.date)+'">К остановкам</button></div></div>').join('');
+ }
+ html+='</div>';
+
  html+='<div style="display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:16px 0 8px"><b>Нераспознанные остановки, требующие проверки</b>'
    +'<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">'
    +'<button type="button" class="chip" data-time-repeat="1" style="'+(onlyRepeats?'background:#dbeafe;border-color:#60a5fa;':'')+'">↻ '+(onlyRepeats?'Все остановки':'Только повторные')+'</button>'
-   +'<select id="gps-time-status-v1" class="form-input" style="width:auto">'
-   +[['pending','Не рассмотрены'],['review','На проверке'],['explained','Объяснённые'],['technical','Проблемы GPS'],['all','Все']].map(([v,label])=>'<option value="'+v+'"'+(status===v?' selected':'')+'>'+label+'</option>').join('')
-   +'</select></div></div>';
+   +'<button type="button" class="chip" data-time-show-closed="1">'+(showClosed?'Скрыть разобранные':'Показать разобранные')+'</button></div></div>';
  html+='<div style="font-size:11px;color:#64748b">Найдено по фильтру: '+visible.length+'. Снимки точек на карте открываются отдельно, без показа координат в этом отчёте.</div>';
  const rows=visible.slice(0,pageSize);
  html+=rows.map(item=>{
   const i=list.indexOf(item),code=item.review_status||'pending';
   const repeat=Number(item.repeat_days||0);
   const label=code==='review'?'На проверке':code==='explained'?'Объяснено':code==='technical'?'Техническая причина':'Не рассмотрено';
-  const controls=[['review','К проверке'],['explained','Объяснено'],['technical','Проблема GPS']].map(([value,title])=>
-    '<button type="button" class="btn-secondary" data-time-index="'+i+'" data-time-decision="'+value+'" style="padding:6px 9px;font-size:11px;'+(code===value?'border-color:#2563eb;background:#eff6ff;':'')+'">'+title+'</button>').join('');
+  const controls='<button type="button" class="btn-secondary" data-time-ai="'+i+'" style="padding:7px 11px;font-size:12px">✦ ИИ-разбор</button>'
+    +'<button type="button" class="btn-secondary" data-time-route="'+i+'" style="padding:7px 11px;font-size:12px">Изменить будущий маршрут</button>'
+    +'<button type="button" class="btn-secondary" data-time-delegate="'+i+'" style="padding:7px 11px;font-size:12px">Поручить менеджеру</button>'
+    +'<button type="button" class="chip" data-time-index="'+i+'" data-time-decision="explained" style="font-size:11px">Не требует действий</button>';
   return '<div style="border:1px solid #e2e8f0;border-radius:9px;padding:11px;margin-top:9px;background:#fff">'
    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>'+esc(item.manager)+' · '+dayFmt(item.date)+'</b><span style="color:#64748b">'+esc(hm(item.start_at))+'–'+esc(hm(item.end_at).slice(-5))+'</span>'
    +'<span class="tag tag-gray">'+fmt(item.minutes)+' мин</span>'
@@ -152,12 +191,81 @@ function render(){
    +'<div style="margin-top:5px;color:#64748b">Остановка №'+esc(item.seq)+' · GPS-точность ~'+fmt(item.accuracy_m)+' м · замеров '+fmt(item.samples)+' · статус: '+esc(label)+'</div>'
    +(item.review_note?'<div style="margin-top:5px"><b>Комментарий ДФ:</b> '+esc(item.review_note)+'</div>':'')
    +'<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px">'
-   +'<button type="button" class="btn-secondary" data-time-map="'+esc(item.workday_id)+'" style="padding:6px 9px;font-size:11px">🗺 GPS-карта дня</button>'+controls+'</div></div>';
+   +'<button type="button" class="btn-secondary" data-time-map="'+esc(item.workday_id)+'" style="padding:6px 9px;font-size:11px">🗺 GPS-карта дня</button>'+controls+'</div>'
+   +(aiByStop.has(item.workday_id+':'+item.seq)?formatAi(aiByStop.get(item.workday_id+':'+item.seq)):'')+'</div>';
  }).join('');
  if(!rows.length)html+='<div style="padding:12px;background:#f8fafc;border-radius:9px;margin-top:9px">Под выбранными условиями остановок нет. Это не подтверждение, что времени не терялось: проверьте качество GPS-дней выше.</div>';
  if(visible.length>pageSize)html+='<button type="button" class="chip" data-time-more="1" style="margin-top:10px">Показать ещё 12 · осталось '+(visible.length-pageSize)+'</button>';
  output(html);
 }
+
+function formatAi(a){
+ if(a?.error)return '<div style="background:#fff7ed;border:1px solid #fed7aa;padding:11px;border-radius:9px;margin-top:9px">'+esc(a.error)+'</div>';
+ if(!a)return'';
+ const actions={check_gps:'Проверить GPS и координаты',review_route:'Пересмотреть будущий маршрут',ask_manager:'Поручить менеджеру уточнить обстоятельства',no_change:'Пока не менять маршрут'};
+ return '<div style="padding:12px;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;margin-top:9px;line-height:1.6">'
+ +'<b>✦ ИИ-разбор конкретной остановки</b>'
+ +'<div><b>Что известно:</b> '+esc(a.confirmed)+'</div>'
+ +'<div><b>Что неизвестно:</b> '+esc(a.unknown)+'</div>'
+ +'<div><b>Вывод:</b> '+esc(a.summary)+'</div>'
+ +'<div><b>Предложение:</b> '+esc(actions[a.next_action]||'Проверить')+'. '+esc(a.recommendation)+'</div>'
+ +'<div style="font-size:11px;color:#475569">Уверенность: '+esc(a.confidence)+'. Вывод предварительный, ИИ не меняет визиты и маршруты.</div></div>';
+}
+async function analyzeStop(i){
+ const item=data?.stops?.[i];if(!item||!allowed()||aiBusy)return;
+ const k=item.workday_id+':'+item.seq;
+ if(aiByStop.has(k)&&!aiByStop.get(k).error){render();return}
+ aiBusy=true;aiByStop.set(k,{error:'ИИ проверяет факты, обычно до 30 секунд…'});render();
+ try{
+  const {data:auth,error:authErr}=await db.auth.getSession();
+  if(authErr||!auth?.session?.access_token)throw new Error('Сессия CRM завершилась. Войдите снова.');
+  const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),46000);
+  let res;try{
+   res=await fetch('https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-gps-stop-ai-v1',{
+    method:'POST',signal:abort.signal,
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+auth.session.access_token},
+    body:JSON.stringify({workday_id:item.workday_id,seq:item.seq,date:item.date,manager:item.manager})
+   });
+  }finally{clearTimeout(timeout)}
+  const json=await res.json().catch(()=>({}));
+  if(!res.ok||!json.ok){
+   if(json.error==='AI_DAILY_LIMIT')throw new Error('На сегодня лимит ИИ-разборов исчерпан, GPS-карты и данные доступны.');
+   throw new Error('ИИ пока недоступен ('+(json.error||res.status)+'). Проверьте остановку на карте.');
+  }
+  aiByStop.set(k,json.analysis);
+ }catch(e){aiByStop.set(k,{error:e.message||String(e)})}
+ finally{aiBusy=false;render()}
+}
+async function delegateStop(i){
+ const item=data?.stops?.[i];if(!item||!allowed()||busy)return;
+ const deadline=window.prompt('До какой даты поручить менеджеру уточнить причину остановки? Формат ГГГГ-ММ-ДД',today());
+ if(deadline===null)return;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(deadline)||deadline<today()){alert('Укажите сегодняшнюю или будущую дату: ГГГГ-ММ-ДД.');return}
+ const basis='GPS_TIME_V2:'+item.workday_id+':'+item.seq+':'+item.start_at;
+ const ai=aiByStop.get(item.workday_id+':'+item.seq);
+ const note=ai?.recommendation?'\nИИ предлагает: '+ai.recommendation:'';
+ if(!window.confirm('Поручить '+item.manager+' уточнить обстоятельства остановки '+dayFmt(item.date)+' ('+fmt(item.minutes)+' мин) до '+deadline+'? Это запрос объяснения, не обвинение.'))return;
+ busy=true;
+ try{
+  const {data:prev,error:readErr}=await db.from('tasks').select('id,due_date').eq('manager_name',item.manager).eq('basis',basis).eq('done',false).limit(1);
+  if(readErr)throw readErr;
+  let saved=prev?.[0];
+  if(!saved){
+   const {data:newTask,error:writeErr}=await db.from('tasks').insert({
+    manager_name:item.manager,source:'gps_time_followup_v2',basis,done:false,
+    auto_generated:false,review_status:'approved',priority:'средний',
+    title:'Уточнить обстоятельства GPS-остановки '+dayFmt(item.date),
+    text:'Уточнить обстоятельства остановки '+dayFmt(item.date)+' '+hm(item.start_at)+'–'+hm(item.end_at)+' ('+fmt(item.minutes)+' мин). Подтвердить, связана ли остановка с клиентом, логистикой, обедом, заправкой или технической причиной. Не является обвинением.'+note,
+    expected_result:'Проверяемое объяснение и при необходимости предложение по маршруту',
+    due_date:deadline
+   }).select('id,due_date').single();
+   if(writeErr)throw writeErr;saved=newTask;
+  }
+  alert('Поручение '+item.manager+' зарегистрировано до '+saved.due_date+'. Повторная открытая задача не создаётся.');
+ }catch(e){console.error(VERSION,e);alert('Не удалось создать поручение: '+(e.message||e))}
+ finally{busy=false}
+}
+
 async function decide(i,decision){
  if(!data||busy||!allowed()||!['review','explained','technical'].includes(decision))return;
  const item=data.stops[i];if(!item)return;
