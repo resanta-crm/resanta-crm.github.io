@@ -942,7 +942,7 @@ function v2273214SelectedHtml(x){
     +'Прибыл: <b>'+v19Time(x.start)+'</b> · уехал: <b>'+v19Time(x.end)+'</b><br>'
     +v2273214StopTimeLabel(x)
     +' · GPS точек: '+x.pointCount
-    +' · разброс 80%: '+x.spread80+' м';
+    +(Number.isFinite(Number(x.spread80))&&Number(x.spread80)>0?' · разброс 80%: '+x.spread80+' м':'');
   if(x.kind==='client'&&Number.isFinite(Number(x.minDistance)))detail+=' · минимум до ТТ: <b>'+x.minDistance+' м</b>';
   detail+='<br>'+esc(v2273214Status(x));
   if(x.kind==='client'&&x.confidence==='medium')detail+='<br>Координата: '+esc(x.geofence?.source||'геокодер/мало замеров')+'. Это предположение, а не обвинительный факт.';
@@ -983,7 +983,7 @@ function v2273214DetailHtml(business,technical,ps,w,displayDistance,points,valid
         +'<div class="v2273213-stop-head"><span class="v2273213-stop-num '+cls+'">'+x.actualNo+'</span>'
         +'<div style="min-width:0;flex:1"><div class="v2273213-stop-title">'+esc(v2273214StopHeading(x))+'</div>'
         +'<div class="v2273213-stop-meta">'+v19Time(x.start)+'–'+v19Time(x.end)+' · <b>'+v2273214StopTimeLabel(x)+'</b>'
-        +(x.kind==='client'?' · минимум '+x.minDistance+' м':'')
+        +(x.kind==='client'&&Number.isFinite(Number(x.minDistance))?' · минимум '+x.minDistance+' м':'')
         +'<br>'+esc(v2273214Status(x))+'</div></div></div></div>';
     }).join('')+'</div>'
     :'<div style="font-size:12px;color:var(--sub);margin-top:6px">Клиентских физических остановок пока не найдено.</div>';
@@ -1060,6 +1060,7 @@ async function v19OpenGpsWorkday(id,silent){
       plans,
       visited:plans.filter(r=>{
         try{
+          if(r.visited===true||r.network_transfer_status==='completed')return true;
           if(r.linked_visit_id&&visits.some(v=>String(v.id)===String(r.linked_visit_id)))return true;
           return visits.some(v=>routeClientMatchesVisit(r,v));
         }catch(_){return !!r.visited;}
@@ -1166,11 +1167,16 @@ async function v19OpenGpsWorkday(id,silent){
     const assignedClientIds=new Set(business.filter(x=>x.client?.id).map(x=>String(x.client.id)));
     plans.forEach(r=>{
       const c=r.client_id?(allClients||[]).find(x=>String(x.id)===String(r.client_id)):matchClientByName(r.client_name||'');
-      if(!c||assignedClientIds.has(String(c.id)))return;
-      const gf=clientGeofence(c);if(!gf)return;
-      const icon=L.divIcon({className:'',html:'<div class="v2273214-plan-marker">П</div>',iconSize:[22,22],iconAnchor:[11,11]});
+      if(c&&assignedClientIds.has(String(c.id)))return;
+      const gf=c?clientGeofence(c):(
+        r.is_network_point&&Number.isFinite(Number(r.route_lat))&&Number.isFinite(Number(r.route_lng))
+          ?{lat:Number(r.route_lat),lng:Number(r.route_lng)}
+          :null
+      );
+      if(!gf)return;
+      const icon=L.divIcon({className:'',html:'<div class="v2273214-plan-marker">'+(r.is_network_point?'С':'П')+'</div>',iconSize:[22,22],iconAnchor:[11,11]});
       L.marker([Number(gf.lat),Number(gf.lng)],{icon,zIndexOffset:150}).addTo(layer)
-        .bindTooltip('План: '+c.name,{direction:'top',sticky:true});
+        .bindTooltip('План: '+(c?.name||r.network_name||r.client_name||'ТТ'),{direction:'top',sticky:true});
     });
 
     // Technical physical stops are secondary and never numbered.
