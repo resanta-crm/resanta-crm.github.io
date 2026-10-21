@@ -32,6 +32,11 @@ function updateSelected(){
   b.classList.toggle('active',chosen);
   if(chosen)b.setAttribute('aria-current','date');else b.removeAttribute('aria-current');
  });
+ const coverage=document.getElementById('rb-coverage-month');
+ if(coverage&&/^\d{4}-(0[1-9]|1[0-2])$/.test(selected)&&coverage.value!==selected){
+  coverage.value=selected;
+  try{window.renderRouteCoverageV23675?.()}catch(e){console.warn('Route coverage sync:',e)}
+ }
 }
 function geometry(){
  const page=document.getElementById(PAGE),bar=document.getElementById(ID);
