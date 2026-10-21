@@ -102,11 +102,11 @@ function groupKey(d){
 function groups(){
  const m=new Map();
  for(const d of (data?.days||[])){
-  const k=groupKey(d);
-  if(!m.has(k))m.set(k,{key:k,total:0,good:0,poor:0,checkMin:0,checkStops:0,knownTt:0,unknown:0});
+  const period=groupKey(d),k=String(d.manager||'—')+'|'+period;
+  if(!m.has(k))m.set(k,{key:period,manager:String(d.manager||'—'),total:0,good:0,poor:0,checkMin:0,checkStops:0,knownTt:0,unknown:0});
   const g=m.get(k);g.total++;if(d.quality==='ready'){g.good++;g.checkMin+=Number(d.review_minutes||0);g.checkStops+=Number(d.review_stops||0);g.knownTt+=Number(d.planned_tt_minutes||0)+Number(d.offplan_tt_minutes||0);g.unknown+=Number(d.unrecognized_stop_minutes||0)}else g.poor++;
  }
- return [...m.values()].sort((a,b)=>b.key.localeCompare(a.key));
+ return [...m.values()].sort((a,b)=>b.key.localeCompare(a.key)||a.manager.localeCompare(b.manager,'ru'));
 }
 function render(){
  if(!data)return;
@@ -127,8 +127,8 @@ function render(){
    +'<div style="color:#475569;font-size:11px;margin:8px 0 12px">В оценку попадают только завершённые дни с готовыми агрегатами и достаточным качеством GPS. Учитываются лишь внутренние остановки вне распознанных ТТ, домашней/стартовой зоны, с точностью GPS до 100 м. Обед, заправка, ожидание клиента и проблемы связи не являются нарушением. GPS-разрывы и точная длительность езды не приравниваются к простою.</div>'
    +'<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px"><b>Сводка времени по менеджерам и датам</b>'
    +'<select id="gps-time-view-v1" class="form-input" style="width:auto"><option value="day"'+(view==='day'?' selected':'')+'>По дням</option><option value="week"'+(view==='week'?' selected':'')+'>По неделям</option><option value="month"'+(view==='month'?' selected':'')+'>По месяцам</option></select></div>'
-   +'<div style="overflow-x:auto"><table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:7px">Период</th><th>GPS-дней</th><th>Надёжных</th><th>У ТТ, мин</th><th>Нераспознанные остановки, мин</th><th>К проверке, мин</th></tr></thead><tbody>'
-   +summary.map(g=>'<tr style="border-top:1px solid #e2e8f0"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
+   +'<div style="overflow-x:auto"><table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:7px">Период</th><th>Менеджер</th><th>GPS-дней</th><th>Надёжных</th><th>У ТТ, мин</th><th>Нераспознанные остановки, мин</th><th>К проверке, мин</th></tr></thead><tbody>'
+   +summary.map(g=>'<tr style="border-top:1px solid #e2e8f0"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
    +'</tbody></table></div>';
  if(!summary.length)html+='<div style="padding:10px;color:var(--sub)">За выбранный период нет сохранённых GPS-агрегатов.</div>';
  html+='<div style="display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:16px 0 8px"><b>Нераспознанные остановки, требующие проверки</b>'
