@@ -17,6 +17,8 @@ function style(){
  '#page-routes-boss #route-month-tabs-boss .chip{display:inline-flex!important;flex:0 0 auto!important;white-space:nowrap!important;min-height:38px;align-items:center;justify-content:center;border-radius:9px}',
  '#page-routes-boss #route-month-tabs-boss .chip.active{background:#dbeafe!important;color:#174a85!important;border:1px solid #4387c6!important;font-weight:700}',
  '#page-routes-boss #crm-route-topbar-v1 #manager-absence-btn{display:inline-flex!important;flex:0 0 auto!important;align-items:center;justify-content:center;white-space:nowrap;min-height:38px;padding:8px 12px!important;border-radius:9px!important}',
+ // Obsolete v22.4 route controls are disconnected from the current manual director planner.
+ '#page-routes-boss #rb-search-top-v2351,#page-routes-boss #route-v224-filters,#page-routes-boss>.search-wrap,#page-routes-boss #rb-mgr-chips{display:none!important}',
  '#page-routes-boss #rb-search-top-v2351{top:calc(56px + var(--crm-route-toolbar-height,56px))!important;z-index:41!important}',
  '@media(max-width:730px){#page-routes-boss #crm-route-topbar-v1{gap:5px;flex-wrap:wrap;padding:6px;top:54px}#page-routes-boss #route-month-tabs-boss{flex:1 1 100%;width:100%}#page-routes-boss #crm-route-topbar-v1 #manager-absence-btn{width:100%;flex:1 1 auto!important;font-size:12px!important}#page-routes-boss #rb-search-top-v2351{top:calc(54px + var(--crm-route-toolbar-height,90px))!important}}'
  ].join('\n');
@@ -69,5 +71,5 @@ document.addEventListener('click',e=>{
 window.addEventListener('hashchange',()=>window.setTimeout(start,100));
 window.addEventListener('resize',()=>{if(active())geometry()},{passive:true});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
-window.RESANTA_ROUTE_BOSS_TOOLBAR_V1=Object.freeze({version:'route-toolbar-1.0.0',layoutOnly:true,install});
+window.RESANTA_ROUTE_BOSS_TOOLBAR_V1=Object.freeze({version:'route-toolbar-1.0.1',layoutOnly:true,install});
 })();
