@@ -16,7 +16,7 @@ const minus=(date,n)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTC
 const dayFmt=iso=>{const x=String(iso||'');return /^\d{4}-\d{2}-\d{2}$/.test(x)?x.slice(8,10)+'.'+x.slice(5,7)+'.'+x.slice(0,4):x};
 const hm=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})};
 const fmt=v=>Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
-let busy=false,data=null,pageSize=12,view='day',status='pending',onlyRepeats=false,focus='all',selectedPeriod='',showClosed=false,aiBusy=false;
+let busy=false,data=null,pageSize=12,view='day',status='pending',onlyRepeats=false,focus='all',selectedPeriod='',selectedManager='',showClosed=false,aiBusy=false;
 const aiByStop=new Map();
 function panel(){return document.getElementById(ID)}
 function managerOptions(){
@@ -55,11 +55,13 @@ function install(){
     document.getElementById('gps-time-results-v1').textContent='Период выбран. Нажмите «Проверить время», чтобы обновить расчёт.';return;
   }
   const metric=e.target.closest('[data-time-metric]');if(metric){
-    focus=metric.dataset.timeMetric||'all';selectedPeriod='';onlyRepeats=focus==='repeat';pageSize=12;render();
+    focus=metric.dataset.timeMetric||'all';selectedPeriod='';selectedManager='';onlyRepeats=focus==='repeat';pageSize=12;render();
     document.getElementById('gps-time-details-v2')?.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   const day=e.target.closest('[data-time-period]');if(day){
-    selectedPeriod=day.dataset.timePeriod===selectedPeriod?'':day.dataset.timePeriod;pageSize=12;render();
+    const period=day.dataset.timePeriod,manager=day.dataset.timeManager||'';
+    if(selectedPeriod===period&&selectedManager===manager){selectedPeriod='';selectedManager=''}else{selectedPeriod=period;selectedManager=manager}
+    focus='stops';pageSize=12;render();
     document.getElementById('gps-time-details-v2')?.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   const show=e.target.closest('[data-time-show-closed]');if(show){showClosed=!showClosed;pageSize=12;render();return}
@@ -107,7 +109,7 @@ async function load(){
   });
   if(error)throw error;
   if(!result||!Array.isArray(result.days)||!Array.isArray(result.stops))throw new Error('Некорректный ответ аналитики');
-  data=result;status='pending';focus='all';selectedPeriod='';showClosed=false;onlyRepeats=false;pageSize=12;render();
+  data=result;status='pending';focus='all';selectedPeriod='';selectedManager='';showClosed=false;onlyRepeats=false;pageSize=12;render();
  }catch(e){console.error(VERSION,e);output('<div style="padding:11px;color:#991b1b">Не удалось выполнить анализ: '+esc(e.message||e)+'</div>')}
  finally{busy=false;btn.disabled=false;btn.textContent='Проверить время'}
 }
@@ -132,7 +134,7 @@ function render(){
  const visible=list.filter(x=>{
   const closed=['explained','technical'].includes(x.review_status||'');
   return (showClosed||!closed)&&(!onlyRepeats||Number(x.repeat_days)>=2)
-    &&(!selectedPeriod|| (view==='month'?x.date.slice(0,7):view==='week'?weekStart(x.date):x.date)===selectedPeriod);
+    &&(!selectedPeriod|| ((view==='month'?x.date.slice(0,7):view==='week'?weekStart(x.date):x.date)===selectedPeriod && (!selectedManager||x.manager===selectedManager)));
  });
  const metric=(name,value,sub,code)=>'<button type="button" data-time-metric="'+code+'" style="border:1px solid '+(focus===code?'#2563eb':'#e2e8f0')+';border-radius:9px;padding:10px 12px;background:'+(focus===code?'#eff6ff':'#f8fafc')+';text-align:left;cursor:pointer;color:inherit"><span style="display:block;color:#64748b;font-size:11px">'+esc(name)+'</span><strong style="display:block;font-size:22px;margin:3px 0">'+esc(String(value))+'</strong><span style="color:#64748b;font-size:11px">'+esc(sub)+' · открыть ↗</span></button>';
  let html='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin:12px 0">'
@@ -147,7 +149,7 @@ function render(){
    +'<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px"><b>Сводка времени по менеджерам и датам</b>'
    +'<select id="gps-time-view-v1" class="form-input" style="width:auto"><option value="day"'+(view==='day'?' selected':'')+'>По дням</option><option value="week"'+(view==='week'?' selected':'')+'>По неделям</option><option value="month"'+(view==='month'?' selected':'')+'>По месяцам</option></select></div>'
    +'<div style="overflow-x:auto"><table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:7px">Период</th><th>Менеджер</th><th>GPS-дней</th><th>Надёжных</th><th>У ТТ, мин</th><th>Нераспознанные остановки, мин</th><th>К проверке, мин</th></tr></thead><tbody>'
-   +summary.map(g=>'<tr data-time-period="'+esc(g.key)+'" tabindex="0" title="Открыть дни и остановки за период" style="border-top:1px solid #e2e8f0;cursor:pointer;'+(selectedPeriod===g.key?'background:#eff6ff;':'')+'"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
+   +summary.map(g=>'<tr data-time-period="'+esc(g.key)+'" data-time-manager="'+esc(g.manager)+'" tabindex="0" title="Открыть дни и остановки за период" style="border-top:1px solid #e2e8f0;cursor:pointer;'+(selectedPeriod===g.key&&selectedManager===g.manager?'background:#eff6ff;':'')+'"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
    +'</tbody></table></div>';
  if(!summary.length)html+='<div style="padding:10px;color:var(--sub)">За выбранный период нет сохранённых GPS-агрегатов.</div>';
 
@@ -243,7 +245,7 @@ async function delegateStop(i){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(deadline)||deadline<today()){alert('Укажите сегодняшнюю или будущую дату: ГГГГ-ММ-ДД.');return}
  const basis='GPS_TIME_V2:'+item.workday_id+':'+item.seq+':'+item.start_at;
  const ai=aiByStop.get(item.workday_id+':'+item.seq);
- const note=ai?.recommendation?'\nИИ предлагает: '+ai.recommendation:'';
+ // Internal GPS diagnostics and AI reasoning are deliberately not copied to a manager-facing task.
  if(!window.confirm('Поручить '+item.manager+' уточнить обстоятельства остановки '+dayFmt(item.date)+' ('+fmt(item.minutes)+' мин) до '+deadline+'? Это запрос объяснения, не обвинение.'))return;
  busy=true;
  try{
@@ -254,8 +256,8 @@ async function delegateStop(i){
    const {data:newTask,error:writeErr}=await db.from('tasks').insert({
     manager_name:item.manager,source:'gps_time_followup_v2',basis,done:false,
     auto_generated:false,review_status:'approved',priority:'средний',
-    title:'Уточнить обстоятельства GPS-остановки '+dayFmt(item.date),
-    text:'Уточнить обстоятельства остановки '+dayFmt(item.date)+' '+hm(item.start_at)+'–'+hm(item.end_at)+' ('+fmt(item.minutes)+' мин). Подтвердить, связана ли остановка с клиентом, логистикой, обедом, заправкой или технической причиной. Не является обвинением.'+note,
+    title:'Уточнить результаты поездки '+dayFmt(item.date),
+    text:'Уточнить результаты работы во время поездки '+dayFmt(item.date)+'. Указать фактически проведённые встречи и при необходимости предложить корректировку будущего маршрута. Это обычный рабочий запрос, не дисциплинарное обвинение.',
     expected_result:'Проверяемое объяснение и при необходимости предложение по маршруту',
     due_date:deadline
    }).select('id,due_date').single();
