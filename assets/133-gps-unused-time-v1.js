@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_GPS_UNUSED_TIME_V1)return;
-const VERSION='23.7.8',ID='gps-unused-time-v1';
+const VERSION='23.7.9',ID='gps-unused-time-v1';
 const ALLOWED=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const prof=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}};
@@ -16,7 +16,7 @@ const minus=(date,n)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTC
 const dayFmt=iso=>{const x=String(iso||'');return /^\d{4}-\d{2}-\d{2}$/.test(x)?x.slice(8,10)+'.'+x.slice(5,7)+'.'+x.slice(0,4):x};
 const hm=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})};
 const fmt=v=>Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
-let busy=false,data=null,pageSize=12,view='day',status='pending',onlyRepeats=false,focus='all',selectedPeriod='',selectedManager='',showClosed=false,aiBusy=false;
+let busy=false,data=null,pageSize=6,view='day',status='pending',onlyRepeats=false,focus='all',selectedPeriod='',selectedManager='',showClosed=false,aiBusy=false,expandDays=false;
 const aiByStop=new Map();
 function panel(){return document.getElementById(ID)}
 function managerOptions(){
@@ -65,7 +65,8 @@ function install(){
     document.getElementById('gps-time-details-v2')?.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   const show=e.target.closest('[data-time-show-closed]');if(show){showClosed=!showClosed;pageSize=12;render();return}
-  const more=e.target.closest('[data-time-more]');if(more){pageSize+=12;render();return}
+  const expand=e.target.closest('[data-time-expand-days]');if(expand){expandDays=!expandDays;render();return}
+  const more=e.target.closest('[data-time-more]');if(more){pageSize+=6;render();return}
   const toggle=e.target.closest('[data-time-repeat]');if(toggle){onlyRepeats=!onlyRepeats;pageSize=12;render();return}
   const map=e.target.closest('[data-time-map]');if(map){
    const id=map.dataset.timeMap;
@@ -109,7 +110,7 @@ async function load(){
   });
   if(error)throw error;
   if(!result||!Array.isArray(result.days)||!Array.isArray(result.stops))throw new Error('Некорректный ответ аналитики');
-  data=result;status='pending';focus='all';selectedPeriod='';selectedManager='';showClosed=false;onlyRepeats=false;pageSize=12;render();
+  data=result;status='pending';focus='all';selectedPeriod='';selectedManager='';showClosed=false;onlyRepeats=false;pageSize=6;expandDays=false;render();
  }catch(e){console.error(VERSION,e);output('<div style="padding:11px;color:#991b1b">Не удалось выполнить анализ: '+esc(e.message||e)+'</div>')}
  finally{busy=false;btn.disabled=false;btn.textContent='Проверить время'}
 }
@@ -151,8 +152,9 @@ function render(){
    +'<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px"><b>Сводка времени по менеджерам и датам</b>'
    +'<select id="gps-time-view-v1" class="form-input" style="width:auto"><option value="day"'+(view==='day'?' selected':'')+'>По дням</option><option value="week"'+(view==='week'?' selected':'')+'>По неделям</option><option value="month"'+(view==='month'?' selected':'')+'>По месяцам</option></select></div>'
    +'<div style="overflow-x:auto"><table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:7px">Период</th><th>Менеджер</th><th>GPS-дней</th><th>Надёжных</th><th>У ТТ, мин</th><th>Нераспознанные остановки, мин</th><th>К проверке, мин</th></tr></thead><tbody>'
-   +summary.map(g=>'<tr data-time-period="'+esc(g.key)+'" data-time-manager="'+esc(g.manager)+'" tabindex="0" title="Открыть дни и остановки за период" style="border-top:1px solid #e2e8f0;cursor:pointer;'+(selectedPeriod===g.key&&selectedManager===g.manager?'background:#eff6ff;':'')+'"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
+   +summary.slice(0,expandDays?summary.length:6).map(g=>'<tr data-time-period="'+esc(g.key)+'" data-time-manager="'+esc(g.manager)+'" tabindex="0" title="Открыть дни и остановки за период" style="border-top:1px solid #e2e8f0;cursor:pointer;'+(selectedPeriod===g.key&&selectedManager===g.manager?'background:#eff6ff;':'')+'"><td style="padding:7px">'+esc(view==='month'?g.key:view==='week'?'Неделя с '+dayFmt(g.key):dayFmt(g.key))+'</td><td style="text-align:center">'+esc(g.manager)+'</td><td style="text-align:center">'+g.total+'</td><td style="text-align:center">'+g.good+'</td><td style="text-align:center">'+fmt(g.knownTt)+'</td><td style="text-align:center">'+fmt(g.unknown)+'</td><td style="text-align:center"><b>'+fmt(g.checkMin)+'</b></td></tr>').join('')
    +'</tbody></table></div>';
+ if(summary.length>6)html+='<button type="button" data-time-expand-days="1" class="chip" style="margin:8px 0">'+(expandDays?'Свернуть таблицу':'Показать все дни ('+summary.length+')')+'</button>';
  if(!summary.length)html+='<div style="padding:10px;color:var(--sub)">За выбранный период нет сохранённых GPS-агрегатов.</div>';
 
  // One click KPI -> a concrete, short list of days with explicit GPS-quality causes.
@@ -199,7 +201,7 @@ function render(){
    +(aiByStop.has(item.workday_id+':'+item.seq)?formatAi(aiByStop.get(item.workday_id+':'+item.seq)):'')+'</div>';
  }).join('');
  if(!rows.length)html+='<div style="padding:12px;background:#f8fafc;border-radius:9px;margin-top:9px">Под выбранными условиями остановок нет. Это не подтверждение, что времени не терялось: проверьте качество GPS-дней выше.</div>';
- if(visible.length>pageSize)html+='<button type="button" class="chip" data-time-more="1" style="margin-top:10px">Показать ещё 12 · осталось '+(visible.length-pageSize)+'</button>';
+ if(visible.length>pageSize)html+='<button type="button" class="chip" data-time-more="1" style="margin-top:10px">Показать ещё · осталось '+(visible.length-pageSize)+'</button>';
  output(html);
 }
 
@@ -208,7 +210,7 @@ function formatAi(a){
  if(!a)return'';
  const actions={check_gps:'Проверить GPS и координаты',review_route:'Пересмотреть будущий маршрут',ask_manager:'Поручить менеджеру уточнить обстоятельства',no_change:'Пока не менять маршрут'};
  return '<div style="padding:12px;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;margin-top:9px;line-height:1.6">'
- +'<b>✦ ИИ-разбор конкретной остановки</b>'
+ +'<b>'+(a.fallback?'◈ Предварительная оценка по правилам CRM (модель недоступна)':'✦ ИИ-разбор конкретной остановки')+'</b>'
  +'<div><b>Что известно:</b> '+esc(a.confirmed)+'</div>'
  +'<div><b>Что неизвестно:</b> '+esc(a.unknown)+'</div>'
  +'<div><b>Вывод:</b> '+esc(a.summary)+'</div>'
@@ -236,7 +238,7 @@ async function analyzeStop(i){
    if(json.error==='AI_DAILY_LIMIT')throw new Error('На сегодня лимит ИИ-разборов исчерпан, GPS-карты и данные доступны.');
    throw new Error('ИИ пока недоступен ('+(json.error||res.status)+'). Проверьте остановку на карте.');
   }
-  aiByStop.set(k,json.analysis);
+  aiByStop.set(k,{...json.analysis,fallback:!!json.fallback});
  }catch(e){aiByStop.set(k,{error:e.message||String(e)})}
  finally{aiBusy=false;render()}
 }

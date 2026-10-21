@@ -93,20 +93,34 @@ Deno.serve(async(req:Request)=>{
   const since=new Date(Date.now()-24*3600*1000).toISOString();
   const {count}=await admin.from("gps_time_ai_cache_v1").select("user_id",{head:true,count:"exact"}).eq("user_id",user.id).gte("created_at",since);
   if((count||0)>=DAILY_LIMIT)return answer(req,429,{ok:false,error:"AI_DAILY_LIMIT",limit:DAILY_LIMIT});
-  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),35000);
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),25000);
   let ai:any;
   try{
    const response=await fetch("https://api.openai.com/v1/responses",{
     method:"POST",signal:ctl.signal,
     headers:{"Content-Type":"application/json",Authorization:"Bearer "+apiKey},
-    body:JSON.stringify({model:MODEL,store:false,max_output_tokens:900,
+    body:JSON.stringify({model:MODEL,store:false,reasoning:{effort:"low"},max_output_tokens:2400,
       instructions,text:{format:{type:"json_schema",name:"gps_stop_explanation",strict:true,schema}},
       input:[{role:"user",content:[{type:"input_text",text:JSON.stringify(context)}]}]})
    });
    const obj=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error("AI_PROVIDER_"+response.status);
+   if(obj.status==="incomplete")throw new Error("AI_INCOMPLETE_"+String(obj.incomplete_details?.reason||"unknown"));
    ai={analysis:parseResponse(obj),usage:obj.usage||{}};
+  }catch(e){
+   console.warn(name,"provider_fallback",String(e).slice(0,140));
+   const repeated=Number(stop.repeat_days||0)>=2,uncertain=Number(stop.accuracy_m||100)>=60;
+   ai={fallback:true,usage:{},analysis:{
+     summary:"На "+date+" зафиксирована нераспознанная остановка "+Number(stop.minutes||0).toFixed(1)+" мин. Автоматический ИИ-разбор временно недоступен; показаны только правила CRM.",
+     confirmed:"Длительность "+Number(stop.minutes||0).toFixed(1)+" мин, точность GPS около "+Number(stop.accuracy_m||0)+" м; похожие дни: "+Number(stop.repeat_days||1)+".",
+     unknown:"Неизвестно, была ли встреча с клиентом, ожидание, обед, заправка или ошибка GPS.",
+     next_action:uncertain?"check_gps":repeated?"review_route":"ask_manager",
+     recommendation:uncertain?"Сначала проверить GPS-качество и карту дня.":repeated?"Сверить повторные места с плановыми ТТ и будущим маршрутом.":"Сопоставить карту дня с посещениями ТТ, затем при необходимости уточнить результаты поездки.",
+     reason:"Причина остановки данными CRM не подтверждена.",
+     confidence:"низкая"
+   }};
   }finally{clearTimeout(timer)}
+  if(ai.fallback)return answer(req,200,{ok:true,cached:false,fallback:true,model:"rules_only",analysis:ai.analysis,generated_at:new Date().toISOString()});
   const {error:saveErr}=await admin.from("gps_time_ai_cache_v1").upsert({...cacheKey,
       result:ai.analysis,model:MODEL,input_tokens:ai.usage.input_tokens||0,output_tokens:ai.usage.output_tokens||0,
       created_at:new Date().toISOString()},{onConflict:"user_id,workday_id,stop_seq,evidence_hash"});
