@@ -137,6 +137,8 @@ async function audit(){
    if(!cityPlan.has(k))cityPlan.set(k,[]);
    cityPlan.get(k).push(r);
   }
+  const linked=active.filter(c=>sales.has(String(c.id))).length;
+  if(active.length&&linked<active.length)state.warnings.push('Выручка за сравниваемые периоды привязана к '+linked+' из '+active.length+' активных клиентов. Остальным нельзя достоверно посчитать падение продаж.');
   const findings=[];
   for(const c of active){
    const id=String(c.id),scheduled=planned.get(id)||[],s=sales.get(id),prev=n(s?.sales_last_year),curr=n(s?.sales_recent),gap=Math.max(0,prev-curr);
@@ -184,10 +186,10 @@ async function audit(){
    groups.get(k).push(r);
   }
   for(const [group,rs] of groups){
-   const hasOrdering=rs.filter(r=>Number.isFinite(Number(r.sort_order))&&r.sort_order!==null).length>=3;
-   const hasTimes=rs.filter(r=>!!r.planned_start).length>=3;
-   if(!hasOrdering&&!hasTimes)continue;
    const points=rs.map(r=>({...r,_coord:coord(r)})).filter(r=>r._coord);
+   const hasOrdering=points.length>=4&&points.every(r=>r.sort_order!==null&&r.sort_order!==undefined&&Number.isFinite(Number(r.sort_order)))&&new Set(points.map(r=>Number(r.sort_order))).size>=4;
+   const hasTimes=points.length>=4&&points.every(r=>!!r.planned_start)&&new Set(points.map(r=>String(r.planned_start))).size>=4;
+   if(!hasOrdering&&!hasTimes)continue;
    const unique=new Map();
    for(const p of points){const k=p._coord.lat.toFixed(5)+'|'+p._coord.lng.toFixed(5);if(!unique.has(k))unique.set(k,p);}
    const ordered=[...unique.values()].sort((a,b)=>hasOrdering?(n(a.sort_order)-n(b.sort_order)):String(a.planned_start).localeCompare(String(b.planned_start)));
