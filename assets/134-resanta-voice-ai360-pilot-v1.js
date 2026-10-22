@@ -178,8 +178,8 @@
           stopRecognition();
           if (rest) { handleCommand(rest); }
           else { state.awaiting=true; textStatus('Фраза распознана. Слушаю вопрос…');
-            // No synthesized greeting here: it would mask the first words of the next question.
-            startListening('question'); }
+            // The previous recognizer releases the mic asynchronously: avoid a start/abort race.
+            setTimeout(()=>{if(state.wake && state.awaiting && visible()) startListening('question');},450); }
           return;
         }
         stopRecognition(); state.awaiting=false;
@@ -211,7 +211,8 @@
     if (muteBtn) muteBtn.textContent=state.silent?'🔇 Озвучка выключена':'🔊 Озвучка включена';
   }
   function setWake(on) {
-    state.wake=!!on; state.awaiting=false; stopRecognition(); updateButtons();
+    state.wake=!!on; state.awaiting=false; stopRecognition();
+    window.speechSynthesis?.cancel();state.speaking=false;updateButtons();
     if (state.wake) startListening('wake');
     else textStatus('Фоновая голосовая активация выключена');
   }
