@@ -11,7 +11,7 @@
  let panel,mic,wake,status,field,send,meter;
  let mode='',stream=null,context=null,analyser=null,src=null,clock=0,segment=0,starting=false,busy=false;
  let wakeHeard=false,wakeStart=0,clipCount=0,activeRecorder=null,userOptIn=false,listenEpoch=0;
- const WAIT_RE=/\bпривет[\s,!.?—-]+(?:ресанта|резанта|рясанта)\b/i;
+ const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта)(?=$|[^а-яё])/i;
  const isOwner=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
  function info(t){if(status)status.textContent=t;}
  function controls(){
@@ -95,7 +95,7 @@
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
        if(rms>.0035){loud=true;lastLoud=Date.now();}
-       if(mode==='manual' && loud && Date.now()-start>1550 && Date.now()-lastLoud>1200)end();
+       if(loud && Date.now()-start>1250 && Date.now()-lastLoud>(mode==='wake'?950:1200))end();
        if(epoch!==listenEpoch || !mode)end();
      },110);
      timer=window.setTimeout(end,sec*1000);
@@ -150,8 +150,8 @@
      while(mode==='wake' && epoch===listenEpoch && isOwner() && panel && !panel.hidden && !document.hidden){
        if(Date.now()-wakeStart > 5*60*1000){await stopAll('Для экономии отключил микрофон через 5 минут. Включи фразу снова, когда нужно.');break;}
        if(clipCount>=50){await stopAll('Завершил сеанс для ограничения расходов на распознавание.');break;}
-       if(window.speechSynthesis?.speaking){await new Promise(r=>setTimeout(r,350));continue;}
-       const clip=await capture(4,epoch);
+       if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy){await new Promise(r=>setTimeout(r,350));continue;}
+       const clip=await capture(5,epoch);
        if(epoch!==listenEpoch||mode!=='wake')break;
        if(!clip?.loud){info(wakeHeard?'Жду вопрос после приветствия…':'Микрофон включён: ожидаю «Привет, Ресанта»');continue;}
        clipCount++;
