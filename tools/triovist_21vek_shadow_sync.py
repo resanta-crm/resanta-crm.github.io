@@ -35,7 +35,7 @@ TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
 SNAPSHOT_BATCH_SIZE=max(10,int(os.environ.get("SHADOW_SNAPSHOT_BATCH_SIZE","75")))
 RAW_BATCH_SIZE=max(5,int(os.environ.get("SHADOW_RAW_BATCH_SIZE","15")))
-PARSER_VERSION="shadow-v1.0"
+PARSER_VERSION="shadow-v1.1"
 UA="ResantaCRM-21vekShadow/1.0 (+https://resanta-crm.by)"
 
 BASELINE_FIELDS=[
@@ -423,18 +423,82 @@ def apply_rate_limit_cooldown(response: requests.Response) -> None:
         _next_request_at=max(_next_request_at,_blocked_until)
 
 
+class PublicProductUnavailable(RuntimeError):
+    """The public 21vek product URL is confirmed gone (two successive 404/410)."""
+
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+        super().__init__(f"HTTP {status_code} (confirmed twice)")
+
+
+def unavailable_product(target: dict, status_code: int) -> dict:
+    """A terminal URL observation, NOT a live price or proof of warehouse stock.
+
+    Keep the registry card and historical descriptive attributes; stop treating
+    a removed public listing as currently buyable. Never put a synthetic
+    response into the fresh raw-current product payload cache.
+    """
+    return {
+        "card": {
+            "card_key": target.get("card_key"),
+            "sku": target.get("sku"),
+            "donor_article": target.get("donor_article"),
+            "product_name": target.get("product_name"),
+            "category": target.get("category"),
+            "subgroup": target.get("subgroup"),
+            "price": None,
+            "in_stock": False,
+            "description_present": target.get("description_present"),
+            "warranty_present": target.get("warranty_present"),
+            "product_rating": target.get("product_rating"),
+            "review_count": target.get("review_count"),
+            "photo_count": target.get("photo_count"),
+            "video_count": target.get("video_count"),
+            "delivery_minsk_days": target.get("delivery_minsk_days"),
+        },
+        "extra": {
+            "brand": None,
+            "base_price": None,
+            "warranty": {},
+            "status_raw": "public_listing_unavailable",
+            "parser_sources": {
+                "collection_status": f"unavailable_http_{status_code}",
+                "http_status": status_code,
+                "price_is_live": False,
+                "availability_is_live": False,
+                "stock_status": "not_verified; product_url_removed",
+                "historical_values": "registry baseline; not current observations",
+            },
+        },
+    }
+
+
+def is_unavailable(parsed: dict|None) -> bool:
+    if not isinstance(parsed, dict):
+        return False
+    sources = (parsed.get("extra") or {}).get("parser_sources") or {}
+    return str(sources.get("collection_status") or "").startswith("unavailable_http_")
+
+
 def fetch_product(session: requests.Session, url: str) -> requests.Response:
     last_error: Exception|None=None
+    not_found_streak=0
     for attempt in range(5):
         wait_rate_slot()
         try:
             response=session.get(url,timeout=TIMEOUT,allow_redirects=True)
             if response.status_code==200:
                 return response
+            if response.status_code in (404,410):
+                not_found_streak+=1
+                if not_found_streak>=2:
+                    raise PublicProductUnavailable(response.status_code)
+            else:
+                not_found_streak=0
             error=RuntimeError(f"HTTP {response.status_code}")
             if response.status_code==429:
                 apply_rate_limit_cooldown(response)
-            if response.status_code<500 and response.status_code not in (408,425,429):
+            if response.status_code<500 and response.status_code not in (404,410,408,425,429):
                 raise error
             last_error=error
         except (requests.Timeout,requests.ConnectionError) as exc:
@@ -459,6 +523,9 @@ def process_target(index: int, target: dict) -> tuple[int,dict,dict|None,str|Non
             "category":target.get("category"),
             "subgroup":target.get("subgroup")
         })
+    except PublicProductUnavailable as exc:
+        parsed=unavailable_product(target,exc.status_code)
+        print(f"21vek URL removed: SKU={target.get('sku')} HTTP={exc.status_code}; live price/stock withheld",flush=True)
     except Exception as exc:
         err=str(exc)
     return index,target,parsed,err
@@ -493,6 +560,7 @@ def main() -> None:
     success=0
     errors=0
     completed=0
+    unavailable_skus=[]
     batch=[]
     raw_batch=[]
 
@@ -508,7 +576,9 @@ def main() -> None:
                     errors+=1
 
                 batch.append(snapshot_row(run_id,target,parsed,err))
-                if parsed is not None:
+                if is_unavailable(parsed):
+                    unavailable_skus.append(str(target.get("sku") or target.get("card_key") or ""))
+                elif parsed is not None:
                     raw_batch.append(raw_current_row(run_id,target,parsed))
 
                 print(
@@ -526,7 +596,10 @@ def main() -> None:
         flush_snapshot_batch(batch)
         flush_raw_batch(raw_batch)
 
-        status="complete" if errors==0 else ("partial" if success else "failed")
+        # Several retired product pages are normal; a mass wave of 404s is not.
+        # Fail closed on catalog-wide failures rather than publishing fictional data.
+        unavailable_limit=max(1,min(5,int(len(targets)*0.005)))
+        status="complete" if errors==0 and len(unavailable_skus)<=unavailable_limit else ("partial" if success else "failed")
         rest_patch("triovist_21vek_shadow_runs",{"id":f"eq.{run_id}"},{
           "status":status,
           "success_count":success,
@@ -540,12 +613,18 @@ def main() -> None:
             "request_start_interval_seconds":DELAY,
             "workers":WORKERS,
             "approved_scope_version":"2026-09-09-v1",
+            "unavailable_url_count":len(unavailable_skus),
+            "unavailable_url_skus":unavailable_skus[:25],
+            "unavailable_url_limit":unavailable_limit,
             "result":"No working CRM tables were modified."
           }
         })
-        print(f"Shadow {status}: success={success} errors={errors}",flush=True)
+        print(f"Shadow {status}: success={success} errors={errors} unavailable_urls={len(unavailable_skus)}",flush=True)
         if status!="complete":
-            raise RuntimeError(f"Shadow completeness check failed: success={success} errors={errors}")
+            raise RuntimeError(
+                f"Shadow completeness check failed: success={success} errors={errors} "
+                f"unavailable_urls={len(unavailable_skus)} limit={unavailable_limit}"
+            )
 
     except Exception as exc:
         try:

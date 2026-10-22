@@ -63,6 +63,10 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: pip install requests beautifulsoup4
 
+      - name: Проверить безопасную обработку удалённых карточек 21vek
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.do_parse == 'true'
+        run: python -m unittest discover -s tools -p 'test_triovist_21vek_unavailable.py' -v
+
       - name: Собрать публичные карточки 21vek в безопасный staging
         if: steps.gate.outputs.run == 'true' && steps.gate.outputs.do_parse == 'true'
         env:
