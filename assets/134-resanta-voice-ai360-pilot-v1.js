@@ -32,7 +32,13 @@
     const wrap = document.createElement('div');
     wrap.className = 'rva-line';
     const head = document.createElement('strong'); head.textContent = who;
-    const txt = document.createElement('div'); txt.textContent = String(message || '');
+    const txt = document.createElement('div'); const raw = String(message || '');
+    txt.style.whiteSpace='pre-line';
+    for(const part of raw.split(/(\*\*[^*]+\*\*)/g)){
+      if(/^\*\*[^*]+\*\*$/.test(part)){
+        const strong=document.createElement('b');strong.textContent=part.slice(2,-2);txt.appendChild(strong);
+      }else txt.appendChild(document.createTextNode(part));
+    }
     wrap.append(head, txt); historyEl.appendChild(wrap);
     while (historyEl.children.length > 12) historyEl.removeChild(historyEl.firstChild);
     historyEl.scrollTop = historyEl.scrollHeight;
@@ -41,7 +47,7 @@
     if (typeof window.crmResantaVoiceSpeakV3 === 'function' && visible()) {
       if (state.silent) { state.speaking=false; resumeWake(); return; }
       state.speaking=true;
-      Promise.resolve().then(()=>window.crmResantaVoiceSpeakV3(String(message).slice(0,450)))
+      Promise.resolve().then(()=>window.crmResantaVoiceSpeakV3(String(message)))
         .catch(e=>console.warn('Resanta voice synthesis',e))
         .finally(()=>{state.speaking=false;resumeWake();});
       return;
@@ -51,7 +57,7 @@
     }
     try {
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(String(message).slice(0, 450));
+      const utter = new SpeechSynthesisUtterance(String(message));
       utter.lang = 'ru-RU'; utter.rate = 1; utter.volume = 0.85;
       const voices = window.speechSynthesis.getVoices?.() || [];
       const voice = voices.find(v => /^ru(?:-|_)/i.test(v.lang || ''));
