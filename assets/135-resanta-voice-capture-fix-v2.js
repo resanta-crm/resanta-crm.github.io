@@ -137,6 +137,21 @@
    const text=String(command||'').trim();if(!text)return;
    field.value=text;send.click();
  }
+ function greetingOnly(text){
+   const match=WAIT_RE.exec(String(text||'').trim());
+   if(!match)return false;
+   return !String(text).slice(match.index+match[0].length).replace(/[\s,.!?]+/g,'');
+ }
+ async function waitForAssistant(epoch,expectedMode){
+   // UI dispatch queues the neural voice on the next microtask.
+   await new Promise(r=>setTimeout(r,260));
+   const until=Date.now()+32000;
+   while(epoch===listenEpoch && mode===expectedMode && isOwner() && panel && !panel.hidden && !document.hidden &&
+         Date.now()<until && (window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1 ||
+                              window.speechSynthesis?.speaking)){
+     await new Promise(r=>setTimeout(r,230));
+   }
+ }
  async function manualLoop(epoch){
    try{
      const clip=await capture(10,epoch);
@@ -144,7 +159,21 @@
      if(clip && !clip.loud)info('Уровень микрофона низкий. Всё равно пробую распознать записанную фразу…');
      const phrase=await transcribe(clip,epoch);
      if(epoch!==listenEpoch||mode!=='manual')return;
-     if(phrase){await stopAll();submit(phrase);}
+     if(phrase && greetingOnly(phrase)){
+       // Manual mode: after 'Привет, Ресанта' reply, listen for exactly ONE follow-up
+       // without converting an explicit manual session into persistent hot-mic mode.
+       submit('Привет, Ресанта');
+       await waitForAssistant(epoch,'manual');
+       if(epoch!==listenEpoch||mode!=='manual')return;
+       info('Слушаю вопрос после приветствия…');
+       const second=await capture(10,epoch);
+       if(epoch!==listenEpoch||mode!=='manual')return;
+       const question=await transcribe(second,epoch);
+       if(epoch!==listenEpoch||mode!=='manual')return;
+       await stopAll();
+       if(question)submit(question);
+       else info('Вопрос не расслышала. Нажми микрофон ещё раз.');
+     }else if(phrase){await stopAll();submit(phrase);}
      else {await stopAll();info('Речь не распознана. Попробуй говорить ближе к микрофону.');}
    }catch(e){await stopAll(reason(e));}
  }
@@ -153,7 +182,7 @@
      while(mode==='wake' && epoch===listenEpoch && isOwner() && panel && !panel.hidden && !document.hidden){
        if(Date.now()-wakeStart > 5*60*1000){await stopAll('Для экономии отключил микрофон через 5 минут. Включи фразу снова, когда нужно.');break;}
        if(clipCount>=50){await stopAll('Завершил сеанс для ограничения расходов на распознавание.');break;}
-       if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy){await new Promise(r=>setTimeout(r,350));continue;}
+       if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1){await new Promise(r=>setTimeout(r,350));continue;}
        const clip=await capture(5,epoch);
        if(epoch!==listenEpoch||mode!=='wake')break;
        if(!clip?.loud){info(wakeHeard?'Жду вопрос после приветствия…':'Микрофон включён: ожидаю «Привет, Ресанта»');continue;}
@@ -162,13 +191,24 @@
        if(epoch!==listenEpoch||mode!=='wake')break;
        if(phrase===null){await stopAll('Сервер распознавания недоступен. Проверь подключение и попробуй ещё раз.');break;}
        if(!phrase){info('Фраза не распознана. Повтори ближе к микрофону.');continue;}
-       if(wakeHeard){wakeHeard=false;submit(phrase);info('Команда распознана: '+phrase.slice(0,80));}
-       else{
+       if(wakeHeard){
+         submit(phrase);
+         await waitForAssistant(epoch,'wake');
+         if(epoch===listenEpoch&&mode==='wake')info('Слушаю следующий вопрос…');
+       }else{
          const match=WAIT_RE.exec(phrase);
          if(!match){info('Слышу речь, но жду «Привет, Ресанта». Распознано: '+phrase.slice(0,65));continue;}
          const rest=phrase.slice(match.index+match[0].length).trim().replace(/^[\s,.!?]+/,'');
-         if(rest){submit(rest);info('Команда распознана: '+rest.slice(0,80));}
-         else{wakeHeard=true;info('Привет! Слушаю твой вопрос…');}
+         wakeHeard=true; // Activation lasts at most five minutes in explicitly enabled wake mode.
+         if(rest){
+           submit(rest);
+           await waitForAssistant(epoch,'wake');
+           if(epoch===listenEpoch&&mode==='wake')info('Слушаю следующий вопрос…');
+         }else{
+           submit('Привет, Ресанта'); // local greeting, not a paid LLM request
+           await waitForAssistant(epoch,'wake');
+           if(epoch===listenEpoch&&mode==='wake')info('Слушаю твой вопрос…');
+         }
        }
      }
    }catch(e){if(epoch===listenEpoch)await stopAll(reason(e));}
@@ -203,7 +243,7 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Новый режим: после твоего разрешения короткие фразы распознаются через сервер CRM и OpenAI. Записи не сохраняются в CRM. Лимит 60 фраз в день, ожидание «Привет, Ресанта» автоматически отключается через 5 минут. При закрытии окна микрофон выключается.';
+   if(note)note.textContent='Скажи «Привет, Ресанта» — помощник ответит и выслушает вопрос. В ручном режиме один вопрос записывается после приветствия, в режиме активации можно продолжить разговор до 5 минут. Распознавание — через сервер CRM после разрешения, максимум 60 фраз в сутки. При закрытии окна микрофон выключается.';
    mic.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('manual');},true);
    wake.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('wake');},true);
    panel.querySelector('.rva-close')?.addEventListener('click',()=>{void stopAll();},true);
