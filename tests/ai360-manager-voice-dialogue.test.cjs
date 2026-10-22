@@ -89,7 +89,7 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  assert(edge.includes("verify")||edge.includes("svc.auth.getUser("));
  assert(!edge.includes("svc.from('tasks').update"),'AI must never silently modify tasks');
  const migration=fs.readFileSync('supabase/migrations/20261022_ai360_phase3_operations_snapshot_v1.sql','utf8');
- assert(migration.includes('security invoker')||migration.includes('LANGUAGE sql STABLE'),'phase 3 must run as invoker');
+ assert(/language sql/i.test(migration)&&!/security definer/i.test(migration),'phase 3 must use SQL invoker (default) and never SECURITY DEFINER');
  assert(migration.includes('revoke all on function public.crm_ai360_operations_snapshot_v1'));
  assert(migration.includes('grant execute on function public.crm_ai360_operations_snapshot_v1(text,date) to service_role'));
  const p=fs.readFileSync('assets/135-resanta-voice-capture-fix-v2.js','utf8');
