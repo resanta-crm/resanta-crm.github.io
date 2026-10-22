@@ -33,8 +33,8 @@ function resolve(question, directory){
  });
  if(exact.length===1)return {kind:'exact',manager:exact[0].name};
  if(exact.length>1)return {kind:'ambiguous'};
- const mentionsManager=/\bменеджер[а-я]*\b/.test(input);
- const mentionMatch=input.match(/\bменеджер[а-я]*\s+(?:по\s+)?([а-я-]{4,})/);
+ const mentionsManager=/(?:^|\s)менеджер[а-я]*(?=\s|$)/.test(input);
+ const mentionMatch=input.match(/(?:^|\s)менеджер[а-я]*\s+(?:по\s+)?([а-я-]{4,})/);
  const candidate=mentionMatch?.[1]||null;
  if(!candidate)return {kind:'none'};
  const choices=persons.map(p=>({person:p,distance:lev(candidate,surname(p.name))}))
