@@ -423,7 +423,11 @@ async function warmDashboard(){
   // SINGLE RENDER CORE: persisted snapshot first, then one fresh batch.
   await hydrateCore();
   if(activePage()==='dashboard')try{window.crmSingleRenderRequestV227327?.('dashboard',{reason:'core-cache',delay:20});}catch(_){}
-  await Promise.allSettled(['tasks','visits','routes','absences'].map(n=>fetchFresh(n)));
+  // Reduce simultaneous dashboard RPC pressure on PostgREST after login.
+  for(const name of ['tasks','visits','routes','absences']){
+    await fetchFresh(name);
+    await waitTurn(120);
+  }
   if(activePage()==='dashboard')try{window.crmSingleRenderRequestV227327?.('dashboard',{reason:'core-fresh-batch',delay:40});}catch(_){}
 
   // Small version watcher starts independently. It never loads heavy data by itself.
