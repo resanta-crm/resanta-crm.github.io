@@ -9,7 +9,7 @@
 
 if(window.__resantaVoiceQualityV3)return;
 window.__resantaVoiceQualityV3=true;
-let panel,select,testBtn,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
+let panel,select,testBtn,budgetLabel,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
 let current='yandex:lera',epoch=0,prevVisible=true;
 const VOICE_KEY='resanta-ai360-yandex-voice-v4';
 const CONSENT_KEY='resanta-ai360-yandex-consent-monthly-v5';
@@ -63,6 +63,19 @@ function speechChunks(t,max=205){
  return result;
 }
 window.crmAI360SpeechChunksV4=speechChunks;
+async function refreshMonthlyBudget(){
+ if(!allowed()||!budgetLabel)return;
+ try{
+  const auth=await window.crmEnsureFreshSessionV236166?.(false);
+  if(!auth?.access_token)return;
+  const r=await db.functions.invoke('crm-voice-yandex-tts-v1',{body:{kind:'status'}});
+  const b=r.data?.budget;
+  if(r.error||!b||typeof b.reserved_rub!=='number'&&typeof b.reserved_rub!=='string')return;
+  const total=Number(b.reserved_rub);
+  const max=Number(b.limit_rub)||5000;
+  budgetLabel.textContent='Озвучка Яндекс за '+String(b.month||'этот месяц')+': ~'+total.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽ из '+max.toLocaleString('ru-RU')+' ₽ (расчётный расход, не счёт Яндекса).';
+ }catch(e){console.warn('AI360 monthly voice budget status unavailable',String(e?.message||'error').slice(0,80));}
+}
 const setStatus=(txt)=>{const el=panel?.querySelector('.rva-status');if(el)el.textContent=txt;};
 function stopSpeech(){
  epoch++;
@@ -169,6 +182,7 @@ window.crmResantaVoiceSpeakV3=async function(message){
      }
    }
    if(run===epoch && completed===chunks.length)setStatus('✅ '+(current.endsWith('dasha')?'Даша':'Лера')+' озвучила ответ полностью ('+completed+' '+(completed===1?'фраза':'фраз')+').');
+   if(run===epoch)void refreshMonthlyBudget();
  }finally{
    if(run===epoch){
      if(output){try{output.pause();}catch(_){}output=null;}
@@ -212,6 +226,12 @@ function mount(){
  caption.textContent='Только Лера и Даша · Яндекс SpeechKit v3. Длинный ответ произносится по частям. Месячный расчётный бюджет Яндекс-озвучки — 5 000 ₽ (РФ, с НДС). Распознавание и интеллект OpenAI отдельно. При ошибке полный ответ остаётся на экране.';
  caption.style.cssText='color:#b6c7db;font-size:10px;line-height:1.45';
  wrap.after(caption);
+ budgetLabel=document.createElement('div');
+ budgetLabel.setAttribute('aria-live','polite');
+ budgetLabel.style.cssText='color:#e0eaff;font-size:11px;line-height:1.4;margin-top:1px';
+ budgetLabel.textContent='Расход Яндекс-озвучки: проверяю месячный бюджет…';
+ caption.after(budgetLabel);
+ void refreshMonthlyBudget();
  fillVoices();
  if(!approvedYandex)setStatus('Основной голос — Лера. Нажми «▶ Проверить» и разреши Яндекс SpeechKit один раз.');
  select.addEventListener('change',()=>{
