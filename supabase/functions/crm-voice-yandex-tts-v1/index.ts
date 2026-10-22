@@ -58,21 +58,24 @@ Deno.serve(async(req:Request)=>{
  try{payload=await req.json();}catch{return json({error:'invalid_json'},400,origin);}
  const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
  const folderId=Deno.env.get('YANDEX_CLOUD_FOLDER_ID')||'';
- if(payload?.kind==='status')return json({configured:!!apiKey,voices:['lera','dasha'],engine:'Yandex SpeechKit v3 general'},200,origin);
+ if(payload?.kind==='status'){
+  const status=await supabase.rpc('crm_ai360_yandex_monthly_status_v1',{p_user_id:user.id});
+  if(status.error)return json({error:'tts_monthly_budget_unavailable'},503,origin);
+  return json({configured:!!apiKey,voices:['lera','dasha'],engine:'Yandex SpeechKit v3 general',budget:status.data},200,origin);
+ }
  if(!apiKey)return json({error:'yandex_credentials_required'},503,origin);
  const voice=String(payload?.voice||'');
  const text=String(payload?.text||'').trim();
  if(!VOICES.has(voice))return json({error:'invalid_voice'},400,origin);
  if(text.length<1||text.length>240)return json({error:'text_length_240'},400,origin);
- const claim=await supabase.rpc('crm_voice_yandex_tts_claim_v2',{p_user_id:user.id,p_characters:text.length});
+ // Atomic monthly RUB reservation. Each request here is <=240 chars and
+ // one billable unit of the 'general' model, currently 0.1626 RUB incl. VAT.
+ const claim=await supabase.rpc('crm_ai360_yandex_monthly_claim_v1',{p_user_id:user.id,p_characters:text.length});
  if(claim.error){
-  // PG check-constraint mismatch used to appear as opaque quota_unavailable.
-  // Never print request contents or personal data into the Edge logs.
-  const code=String(claim.error.code||'');
-  console.warn('SpeechKit quota RPC error code',code||'unknown');
-  return json({error:code==='23514'?'tts_quota_config_mismatch':'tts_quota_check_unavailable'},503,origin);
+  console.warn('SpeechKit monthly budget RPC error code',String(claim.error.code||'unknown'));
+  return json({error:'tts_monthly_budget_unavailable'},503,origin);
  }
- if(!claim.data)return json({error:'tts_daily_limit'},429,origin);
+ if(!claim.data?.allowed)return json({error:'tts_monthly_budget_exhausted',budget:claim.data||null},429,origin);
  const headers:Record<string,string>={'Authorization':'Api-Key '+apiKey,'Content-Type':'application/json'};
  if(folderId)headers['x-folder-id']=folderId;
  let upstream:Response;
