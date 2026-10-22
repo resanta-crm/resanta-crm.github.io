@@ -96,6 +96,11 @@
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
     if (!query) { answer('Привет! Слушаю тебя. Спроси о задачах, клиентах, визитах или попроси открыть раздел CRM.'); return; }
 
+    // Optional sales/KPI dialogue. No background requests; director action only.
+    if (typeof window.crmAI360SalesHandleV1 === 'function') {
+      try { if (window.crmAI360SalesHandleV1(query, {answer, textStatus})) return; }
+      catch (e) { console.warn('AI360 sales dialogue unavailable',e); }
+    }
     const stats = snapshot();
     // Commercial questions must take precedence over generic "today / what's important" patterns.
     if (/(продаж|оборота?|отгруз|выручк|реализаци)/.test(query)) {
