@@ -1,0 +1,40 @@
+name: Validate 21vek parser health
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/80-triovist-21vek-control-v236107.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
+      - 'supabase/migrations/20261022_triovist_21vek_status_tombstone_health_v236448.sql'
+      - 'tools/triovist_21vek_shadow_sync.py'
+      - 'tools/test_triovist_21vek_unavailable.py'
+      - '.github/workflows/validate-21vek-parser-health.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Safe parser health regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check 21vek control and safe loader syntax
+        run: |
+          node --check assets/80-triovist-21vek-control-v236107.js
+          node --check assets/100-safe-upgrades-loader-v236272.js
+      - name: Check removed product HTTP handling
+        run: python -m unittest discover -s tools -p 'test_triovist_21vek_unavailable.py' -v
+      - name: Verify fail-closed status migration contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          sql=Path("supabase/migrations/20261022_triovist_21vek_status_tombstone_health_v236448.sql").read_text()
+          ui=Path("assets/80-triovist-21vek-control-v236107.js").read_text()
+          for clause in ('v_live_price_issues','v_verified_removed_urls','unavailable_http_404','unavailable_http_410','s.error_text is null','k_health','pg_get_functiondef'):
+              assert clause in sql, clause
+          for clause in ('verified_removed_urls','blocking_price_issues','Удалённые страницы товаров'):
+              assert clause in ui, clause
+          assert "'23.6.448'" in Path("assets/100-safe-upgrades-loader-v236272.js").read_text()
+          print("Parser health preserves failures and explains verified unavailable cards")
+          PY
