@@ -29,7 +29,7 @@
      SecurityError:'Браузер заблокировал микрофон: проверь настройки безопасности.',
      AbortError:'Подключение микрофона прервалось.',
    };
-   return reason ? (msg[code]||('Не удалось включить микрофон: '+code+'. '+String(e?.message||'').slice(0,100))) : 'Ошибка микрофона';
+   return msg[code]||('Не удалось включить микрофон: '+code+'. '+String(e?.message||'').slice(0,100));
  }
  async function stopAll(message){
    mode='';listenEpoch++;clearInterval(clock);clock=0;clearTimeout(segment);segment=0;
@@ -94,7 +94,7 @@
      poll=window.setInterval(()=>{
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
-       if(rms>.006){loud=true;lastLoud=Date.now();}
+       if(rms>.0035){loud=true;lastLoud=Date.now();}
        if(mode==='manual' && loud && Date.now()-start>1550 && Date.now()-lastLoud>1200)end();
        if(epoch!==listenEpoch || !mode)end();
      },110);
@@ -125,7 +125,7 @@
    try{
      const resp=await db.functions.invoke(ENDPOINT,{body:form});
      if(epoch!==listenEpoch||!mode)return null;
-     if(resp.error){info(cloudError(resp.error));return null;}
+     if(resp.error){let detail=null;try{detail=await resp.error.context?.json?.();}catch{}info(cloudError({message:resp.error.message,code:detail?.error||''}));return null;}
      return String(resp.data?.text||'').trim();
    }catch(e){if(epoch===listenEpoch)info(cloudError(e));return null;}
    finally{busy=false;}
@@ -181,6 +181,7 @@
    }
    starting=true;
    await stopAll();
+   starting=true;
    mode=newMode;listenEpoch++;const epoch=listenEpoch;wakeStart=Date.now();clipCount=0;controls();
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
@@ -198,6 +199,8 @@
    field=panel.querySelector('.rva-input');
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
+   const note=panel.querySelector('.rva-note');
+   if(note)note.textContent='Новый режим: после твоего разрешения короткие фразы распознаются через сервер CRM и OpenAI. Записи не сохраняются в CRM. Лимит 60 фраз в день, ожидание «Привет, Ресанта» автоматически отключается через 5 минут. При закрытии окна микрофон выключается.';
    mic.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('manual');},true);
    wake.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('wake');},true);
    panel.querySelector('.rva-close')?.addEventListener('click',()=>{void stopAll();},true);
