@@ -54,8 +54,15 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  if(run!==epoch)return;
  if(result.error){let detail='';try{const d=await result.error.context?.json?.();detail=d?.error||'';}catch{}
   throw new Error(detail||result.error.message||'voice_failed');}
- const blob=result.data instanceof Blob ? result.data : null;
- if(!blob||blob.size<300)throw new Error('empty_audio');
+ // Supabase FunctionsClient returns Blob only for application/octet-stream.
+ // Wrap decoded bytes with an explicit WAV MIME so browsers play SpeechKit audio reliably.
+ const rawBlob=result.data instanceof Blob?result.data:null;
+ if(!rawBlob||rawBlob.size<300)throw new Error('empty_audio_response');
+ const header=new Uint8Array(await rawBlob.slice(0,12).arrayBuffer());
+ const riff=String.fromCharCode(...header.slice(0,4));
+ const wave=String.fromCharCode(...header.slice(8,12));
+ if(isYandex && (riff!=='RIFF'||wave!=='WAVE'))throw new Error('yandex_invalid_wav');
+ const blob=isYandex?new Blob([rawBlob],{type:'audio/wav'}):rawBlob;
  outputUrl=URL.createObjectURL(blob);
  output=new Audio(outputUrl);output.preload='auto';
  await new Promise((resolve,reject)=>{
