@@ -150,6 +150,8 @@ function render(d,mrc){
   const state=dangerState(d);
   root.classList.remove('state-green','state-amber','state-red');root.classList.add('state-'+state);
   const errors=Number(p?.errors||0);
+  const verifiedRemoved=Number(w?.verified_removed_urls||0);
+  const actualPriceIssues=Number(w?.blocking_price_issues||0);
   const expected=Number(w.cards||0),success=Number(g?.success||0);
   const coverage=expected?n(expected):'—';
   const reqActive=rq&&['queued','claimed'].includes(String(rq.status));
@@ -165,6 +167,7 @@ function render(d,mrc){
     ${warningHtml(d)}
     <div class="tri21ctl-fresh ${freshClass}">${freshIcon} <b>${workingAt?'Рабочий снимок собственного парсера: '+dt(workingAt):'Время рабочего снимка не определено'}</b>${workingAt?' · '+ageText(workingAt):''}. Карточки: ${n(w.cards)}; реестр целей: ${n(rg.targets)}${rg.changed_since_last_good?' · реестр изменился, нужен новый полный сбор':''}; TOP: ${t.finished_at?'проверен '+dt(t.finished_at):'нет подтверждённого полного запуска'}.</div>
     ${errText?`<div class="tri21ctl-alert red">❗ <strong>Что произошло:</strong> ${esc(errText)}<br><span style="font-weight:500">Рабочие данные не заменяются неполным запуском — CRM оставляет последний полностью проверенный снимок.</span></div>`:''}
+    ${verifiedRemoved>0?`<div class="tri21ctl-fresh ok" style="background:#F8FAFC;border-color:#CBD5E1;color:#334155">ℹ️ <b>Удалённые страницы товаров: ${n(verifiedRemoved)}.</b> 21vek подтвердил HTTP 404/410; для этих позиций нет проверенной текущей цены и наличия. Они не считаются ошибкой полного сбора, не подменяются исторической ценой и не участвуют в выводах о действующей цене. Ошибок цены по остальным карточкам: ${n(actualPriceIssues)}.</div>`:''}
     <div class="tri21ctl-grid">
       <div class="tri21ctl-kpi"><span>Карточки</span><b>${coverage}</b></div>
       <div class="tri21ctl-kpi"><span>В наличии</span><b>${n(w.in_stock)}</b></div>
