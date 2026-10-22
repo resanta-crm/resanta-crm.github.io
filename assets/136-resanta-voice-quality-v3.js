@@ -101,7 +101,7 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  if(isYandex && msg.length>240)throw new Error('voice_chunk_too_long');
  const session=await window.crmEnsureFreshSessionV236166?.(false).catch(()=>null);
  if(!session?.access_token)throw new Error('no_session');
- setStatus(isYandex?'Яндекс готовит русский голос…':'Готовлю естественный голос…');
+ if(!isYandex)setStatus('Готовлю естественный голос…'); // keep per-part progress visible for Lera/Dasha
  const result=await db.functions.invoke(isYandex?'crm-voice-yandex-tts-v1':'crm-voice-tts-v1',{body:{text:voiceText,voice}});
  if(run!==epoch)return;
  if(result.error){let detail='';try{const d=await result.error.context?.json?.();detail=d?.error||'';}catch{}
