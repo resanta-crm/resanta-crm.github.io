@@ -91,9 +91,11 @@ export function directSalesAnswer(sales,focus,month){
   if(!manager)return 'По менеджеру '+focus+' за '+label+' в CRM нет утверждённого плана и проверенного факта KPI. Не буду подменять их задолженностью или данными других менеджеров.';
   const pct=Number(manager.plan_pct);
   const percentage=Number.isFinite(pct)?pct.toLocaleString('ru-RU',{maximumFractionDigits:1})+'%':'нет расчёта';
+  const gap=Number(manager.to_plan);
+  const variance=gap<0?'план перевыполнен на '+money(Math.abs(gap)):'до плана '+money(gap);
   return 'Продажи менеджера '+manager.manager_name+' за '+label+': план '+money(manager.plan)+
     ', факт '+money(manager.actual)+', выполнение '+percentage+
-    ', до плана '+money(manager.to_plan)+'.'+last+incomplete;
+    ', '+variance+'.'+last+incomplete;
  }
  const managers=Array.isArray(sales.managers)?sales.managers:[];
  if(!managers.length)return 'За '+label+' в проверенном источнике нет данных о планах и продажах менеджеров.';
