@@ -153,9 +153,17 @@ window.crmResantaVoiceSpeakV3=async function(message){
        if(run!==epoch)break;
        const why=String(e?.message||e);
        console.warn('AI360 Yandex narration stopped at segment '+(i+1)+':',why);
-       setStatus(why.includes('tts_daily_limit')
-          ?'Дневной лимит Яндекс исчерпан: озвучено '+completed+' из '+chunks.length+' частей. Полный ответ доступен текстом.'
-          :'Яндекс прервал озвучку на части '+(i+1)+' из '+chunks.length+' ('+why+'). Полный ответ доступен текстом.');
+       let explanation;
+       if(why.includes('tts_daily_limit')){
+         explanation='Дневной лимит озвучки Яндекс исчерпан (40 фрагментов или 5 000 символов).';
+       }else if(why.includes('tts_quota_config_mismatch')){
+         explanation='На сервере не совпадают ограничения озвучки. Ошибка конфигурации, а не проблема голоса.';
+       }else if(why.includes('tts_quota_check_unavailable')||why.includes('quota_unavailable')){
+         explanation='Сервер пока не смог проверить лимит озвучки. Можно повторить попытку.';
+       }else{
+         explanation='Яндекс не смог озвучить эту часть ('+why+').';
+       }
+       setStatus(explanation+' Озвучено '+completed+' из '+chunks.length+' фрагментов. Полный ответ остался текстом.');
        break; // Do not silently replace the selected voice with Microsoft voices.
      }
    }
