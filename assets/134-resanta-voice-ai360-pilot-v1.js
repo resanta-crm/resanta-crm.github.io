@@ -100,7 +100,7 @@
     addLine('Вы', input);
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
-    if (!query) { answer('Привет! Слушаю тебя. Спроси о задачах, клиентах, визитах или попроси открыть раздел CRM.'); return; }
+    if (!query) { answer('Привет! Слушаю тебя. Чем могу помочь?'); return; }
 
     // Optional sales/KPI dialogue. No background requests; director action only.
     if (typeof window.crmAI360SalesHandleV1 === 'function') {
