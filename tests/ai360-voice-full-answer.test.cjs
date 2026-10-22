@@ -14,7 +14,7 @@ function context(voice){
    pause(){}
  }
  const synthesis={cancel:()=>{},getVoices:()=>[]};
- const document={hidden:false,querySelector:()=>null,addEventListener:()=>{}};
+ const document={hidden:false,querySelector:()=>null,getElementById:()=>({style:{display:'block'}}),addEventListener:()=>{}};
  const window={localStorage:storage,speechSynthesis:synthesis,setInterval:()=>1,setTimeout:setTimeout,
   addEventListener:()=>{},crmEnsureFreshSessionV236166:async()=>({access_token:'test'})};
  const sandbox={
