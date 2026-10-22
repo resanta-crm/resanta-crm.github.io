@@ -132,7 +132,7 @@ function mount(){
  wrap.append(title,select,testBtn);
  actions.insertBefore(wrap,mute.parentElement);
  const caption=document.createElement('div');
- caption.textContent='Лера и Даша — готовые русские голоса Yandex SpeechKit, не фирменный голос Алисы. При выборе Яндекса текст короткого ответа (до 240 символов) отправляется в SpeechKit после согласия. Лимит 20 ответов и 5000 символов в день. Для работы требуется API-ключ Yandex Cloud на сервере. Голос браузера бесплатный.';
+ caption.textContent='Лера и Даша — готовые русские голоса Yandex SpeechKit, не фирменный голос Алисы. При выборе Яндекса текст короткого ответа (до 240 символов) отправляется в SpeechKit после согласия. Лимит 20 ответов и 5000 символов в день. Голос браузера бесплатный.';
  caption.style.cssText='color:#b6c7db;font-size:10px;line-height:1.45';
  wrap.after(caption);
  fillVoices();
