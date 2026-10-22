@@ -78,13 +78,20 @@ Deno.serve(async(req:Request)=>{
  if(!snapshot || typeof snapshot!=='object')return reply(req,{error:'empty_sales_snapshot'},503);
  let verifiedFocus='';
  if(requestedManager){
+  // Source of truth for valid managers is current users roster, NOT the limited KPI-plan table.
+  const profileMatch=await svc.from('users').select('name,role').eq('role','manager')
+   .ilike('name',requestedManager).limit(2);
+  if(profileMatch.error)return reply(req,{error:'staff_directory_unavailable'},503);
+  if((profileMatch.data||[]).length!==1 ||
+     String(profileMatch.data![0].name).toLocaleLowerCase('ru-RU')!==requestedManager.toLocaleLowerCase('ru-RU'))
+    return reply(req,{error:'unknown_manager'},400);
+  verifiedFocus=String(profileMatch.data![0].name);
   const manager=(Array.isArray(snapshot.managers)?snapshot.managers:[]).find(
-   (m:any)=>String(m?.manager_name||'').toLocaleLowerCase('ru-RU')===requestedManager.toLocaleLowerCase('ru-RU')
+   (m:any)=>String(m?.manager_name||'').toLocaleLowerCase('ru-RU')===verifiedFocus.toLocaleLowerCase('ru-RU')
   );
-  if(!manager)return reply(req,{answer:'По этому сотруднику в подключённом источнике нет подтверждённого персонального плана и факта KPI. Не стану придумывать цифры.',month:monthRaw,freshness:snapshot.freshness||null,source:'CRM: manager_kpi_plans',scope:'Нет проверенного персонального KPI'});
-  verifiedFocus=String(manager.manager_name);
-  snapshot.managers=[manager]; // The LLM sees only the targeted manager, not a whole-team list.
-  snapshot.scope+='; персональный ответ только по '+verifiedFocus;
+  snapshot.managers=manager?[manager]:[];
+  snapshot.scope+='; персональный ответ только по '+verifiedFocus+
+   (manager?'':' (утверждённый KPI в выбранном месяце отсутствует)');
  }
  // Read-only operational evidence; only the already verified director can request it.
  // Fail explicitly rather than pretending to know tasks, visits or debtor status.
