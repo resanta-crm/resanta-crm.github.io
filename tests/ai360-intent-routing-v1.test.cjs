@@ -78,6 +78,13 @@ const url=pathToFileURL(path.resolve('supabase/functions/crm-ai360-director-v1/i
  assert.deepEqual(r.verifyAnswer('sales','У Шкуран 5 клиентов с просроченной задолженностью'),{ok:false,reason:'unrelated_topic'});
  assert.equal(r.verifyAnswer('sales','Продажи Шкуран по плану 153000 BYN, факт 46696 BYN').ok,true);
  assert.equal(r.verifyAnswer('debt','Просроченная задолженность составляет 50 тысяч').ok,true);
+ assert.equal(r.verifyAnswer('debt','Просроченная задолженность — 50 249,13 BYN',r.selectEvidence('debt',null,ops)).ok,true,
+   'must accept verified balance in Russian formatting');
+ assert.equal(r.verifyAnswer('debt','Просроченная задолженность — 99 999,99 BYN',r.selectEvidence('debt',null,ops)).reason,'ungrounded_currency_value',
+   'must reject unverified debt value even if topic is right');
+ assert.equal(r.verifyAnswer('clients','У клиента продажи упали на 80,00 BYN',r.selectEvidence('clients',null,ops)).ok,true,
+   'client loss must be accepted only when present in selected evidence');
+ assert.equal(r.verifyAnswer('clients','У клиента продажи упали на 1250,99 BYN',r.selectEvidence('clients',null,ops)).reason,'ungrounded_currency_value');
  assert.equal(r.verifyAnswer('tasks','По маршрутам всё отлично, вчера посетили клиентов').ok,false);
  assert.equal(r.fallbackAnswer('debt','Шкуран',ops,sales).includes('50'),true);
  assert.equal(r.fallbackAnswer('sales','Шкуран',ops,sales),straightforward);
