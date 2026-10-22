@@ -6,7 +6,7 @@ const bytes=new Uint8Array(1100);
 bytes.set(Buffer.from('RIFF'),0);bytes.set(Buffer.from('WAVE'),8);
 function context(voice){
  const invoked=[];
- const consents=new Map([['resanta-ai360-yandex-consent-v4','yes'],['resanta-ai360-yandex-voice-v4',voice]]);
+ const consents=new Map([['resanta-ai360-yandex-consent-monthly-v5','yes'],['resanta-ai360-yandex-voice-v4',voice]]);
  const storage={getItem:key=>consents.get(key)||null,setItem:(key,v)=>consents.set(key,v)};
  class FakeAudio{
    addEventListener(type,fn){this[type]=fn;}
@@ -23,6 +23,7 @@ function context(voice){
   URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{}},
   db:{functions:{invoke:async(name,{body})=>{
     assert.equal(name,'crm-voice-yandex-tts-v1');
+    if(body.kind==='status')return {data:{budget:{month:'2026-10',reserved_rub:5.36,limit_rub:5000}}};
     assert(body.text.length<=205,'fragment too long '+body.text.length);
     invoked.push({...body});
     return {data:new Blob([bytes])};
@@ -53,5 +54,9 @@ function context(voice){
  assert(pieces.join(' ').includes('Шкуран: 43,9%'));
  assert(pieces.join(' ').endsWith('Конец ответа.'));
  assert(!pieces.join(' ').includes('**'));
- console.log('AI360 sequential full-answer Lera/Dasha and Markdown cleanup: OK');
+ const byn=styled.window.crmAI360SpeechChunksV4('Выручка 159000 BYN, недобор 35440.52 BYN.');
+ assert.equal(byn.join(' ').includes('BYN'),false,'BYN must not be read as letters');
+ assert(byn.join(' ').includes('159000 белорусских рублей'));
+ assert(byn.join(' ').includes('35440.52 белорусских рублей'));
+ console.log('AI360 full Lera/Dasha answers, BYN Russian pronunciation and formatting: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
