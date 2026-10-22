@@ -9,6 +9,7 @@ on:
       - 'assets/137-resanta-ai360-lazy-launch-v1.js'
       - 'assets/138-resanta-ai360-sales-bridge-v1.js'
       - '.github/workflows/validate-ai360-js.yml'
+      - 'tests/ai360-voice-full-answer.test.cjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,3 +28,5 @@ jobs:
           done
           grep -q 'optional voice module paused' index.html
           grep -q '137-resanta-ai360-lazy-launch-v1.js' index.html
+      - name: Test full Yandex answer playback
+        run: node tests/ai360-voice-full-answer.test.cjs
