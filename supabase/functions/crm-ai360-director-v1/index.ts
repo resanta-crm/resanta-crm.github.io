@@ -12,7 +12,7 @@ const cors = (o:string|null) => ({
 const reply=(req:Request,data:unknown,status=200)=>new Response(JSON.stringify(data),{
  status,headers:{...cors(req.headers.get('Origin')),'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}
 });
-const todayMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit'}).format(new Date());
+const todayMonth=()=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit'}).formatToParts(new Date());const y=parts.find(p=>p.type==='year')?.value;const m=parts.find(p=>p.type==='month')?.value;return `${y}-${m}`;};
 const instr = [
  'Ты — РЕСАНТА AI 360°, русскоязычный помощник директора филиальной сети ГК «Ресанта».',
  'Отвечай по-русски, естественно и предметно, максимум 600 символов. Контекст предыдущих реплик нужен для уточняющих вопросов.',
