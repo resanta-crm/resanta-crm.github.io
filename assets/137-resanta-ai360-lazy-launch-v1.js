@@ -6,9 +6,9 @@ if(/Android/i.test(navigator.userAgent||'') || window.__resantaAI360LazyLaunchV1
 window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=5',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=6',
  './assets/135-resanta-voice-capture-fix-v2.js?v=5',
- './assets/136-resanta-voice-quality-v3.js?v=7',
+ './assets/136-resanta-voice-quality-v3.js?v=9',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=2'
 ];
 function owner(){
