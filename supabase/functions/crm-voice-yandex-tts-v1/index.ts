@@ -65,7 +65,13 @@ Deno.serve(async(req:Request)=>{
  if(!VOICES.has(voice))return json({error:'invalid_voice'},400,origin);
  if(text.length<1||text.length>240)return json({error:'text_length_240'},400,origin);
  const claim=await supabase.rpc('crm_voice_yandex_tts_claim_v2',{p_user_id:user.id,p_characters:text.length});
- if(claim.error)return json({error:'quota_unavailable'},503,origin);
+ if(claim.error){
+  // PG check-constraint mismatch used to appear as opaque quota_unavailable.
+  // Never print request contents or personal data into the Edge logs.
+  const code=String(claim.error.code||'');
+  console.warn('SpeechKit quota RPC error code',code||'unknown');
+  return json({error:code==='23514'?'tts_quota_config_mismatch':'tts_quota_check_unavailable'},503,origin);
+ }
  if(!claim.data)return json({error:'tts_daily_limit'},429,origin);
  const headers:Record<string,string>={'Authorization':'Api-Key '+apiKey,'Content-Type':'application/json'};
  if(folderId)headers['x-folder-id']=folderId;
