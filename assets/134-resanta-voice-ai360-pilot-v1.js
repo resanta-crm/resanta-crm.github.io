@@ -82,11 +82,17 @@
     if (!input) return;
     addLine('Вы', input);
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
-    let query = normalized.replace(/(?:^|\s)привет\s+ресанта\s*/i, ' ').trim();
+    let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
     if (!query) { answer('Привет! Слушаю тебя. Спроси о задачах, клиентах, визитах или попроси открыть раздел CRM.'); return; }
 
     const stats = snapshot();
-    if (/(кто|какие|что).*(проблем|важн|сигнал|контрол|сегодня|утро)|(что|какие)\s+сегодня/.test(query)) {
+    // Commercial questions must take precedence over generic "today / what's important" patterns.
+    if (/(продаж|оборота?|отгруз|выручк|реализаци)/.test(query)) {
+      const ok=openPage('sales','Продажи');
+      answer(ok ? 'Открываю раздел продаж. Цифры за сегодня пока нужно смотреть в отчёте 1С: голосовой модуль ещё не подключён к достоверному расчёту оборота на дату. Я не буду подменять продажи количеством задач.' : 'Раздел продаж сейчас недоступен. Проверь меню CRM.');
+      return;
+    }
+    if (/(что\s+(сегодня\s+)?важн|какие\s+(сегодня\s+)?проблем|проблем.*сегодня|сигнал|что\s+контрол|что\s+на\s+сегодня|что\s+за\s+утро)/.test(query)) {
       if (!stats) { answer('Данные CRM ещё загружаются. Повтори вопрос после появления показателей на дашборде.'); return; }
       answer('По загруженным данным CRM: рабочих задач ' + stats.tasks +
         (stats.overdue === null ? '' : ', просроченных ' + stats.overdue) +
