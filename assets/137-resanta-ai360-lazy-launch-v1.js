@@ -10,7 +10,7 @@ const scripts=[
  './assets/135-resanta-voice-capture-fix-v2.js?v=6',
  './assets/136-resanta-voice-quality-v3.js?v=10',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
- './assets/138-resanta-ai360-sales-bridge-v1.js?v=3'
+ './assets/138-resanta-ai360-sales-bridge-v1.js?v=4'
 ];
 function owner(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
