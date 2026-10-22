@@ -4,6 +4,9 @@
  */
 (function(){
 'use strict';
+ // v23.7.14: 21 Oct Android incident; avoid optional voice APIs on all Android browsers and WebViews.
+ if (/Android/i.test(navigator.userAgent || '')) return;
+
 if(window.__resantaVoiceQualityV3)return;
 window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;

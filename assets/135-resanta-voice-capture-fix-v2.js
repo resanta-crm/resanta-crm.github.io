@@ -5,6 +5,9 @@
  */
 (function(){
  'use strict';
+ // v23.7.14: 21 Oct Android incident; avoid optional voice APIs on all Android browsers and WebViews.
+ if (/Android/i.test(navigator.userAgent || '')) return;
+
  if(window.__resantaVoiceCaptureV2)return;
  window.__resantaVoiceCaptureV2=true;
  const ENDPOINT='crm-voice-transcribe-v1';
