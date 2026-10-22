@@ -35,6 +35,7 @@ TIMEOUT=max(10,int(os.environ.get("SHADOW_HTTP_TIMEOUT","25")))
 SKIP_RECENT_HOURS=max(0.0,float(os.environ.get("SHADOW_SKIP_RECENT_COMPLETE_HOURS","0")))
 SNAPSHOT_BATCH_SIZE=max(10,int(os.environ.get("SHADOW_SNAPSHOT_BATCH_SIZE","75")))
 RAW_BATCH_SIZE=max(5,int(os.environ.get("SHADOW_RAW_BATCH_SIZE","15")))
+# v23.6.447: independently confirm vanished URLs; retain full-snapshot safety checks.
 PARSER_VERSION="shadow-v1.1"
 UA="ResantaCRM-21vekShadow/1.0 (+https://resanta-crm.by)"
 
