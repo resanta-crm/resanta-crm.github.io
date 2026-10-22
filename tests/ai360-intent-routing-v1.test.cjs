@@ -42,7 +42,7 @@ const url=pathToFileURL(path.resolve('supabase/functions/crm-ai360-director-v1/i
  const ops={
   period:{as_of:'2026-10-22'},scope:'Шкуран',warnings:['only linked clients'],
   client_summary:{active_clients:229,buying_clients_in_month:10,yoy_down_clients:7},
-  declining_clients:[{client_name:'Тестовый клиент',closed_year_ago:100,closed_month:20}],
+  declining_clients:[{client_name:'Тестовый клиент',closed_year_ago:100,closed_month:20,loss:80}],
   debt_summary:{amount:50249.13,debtor_rows:5,report_date:'2026-10-22'},
   overdue_debtors:[{client_name:'Тестовый должник',debt_overdue:50249.13}],
   task_summary:{open_tasks:170,overdue_tasks:127},
