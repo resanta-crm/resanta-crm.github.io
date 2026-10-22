@@ -1,0 +1,29 @@
+name: Validate AI360 optional JavaScript
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/138-resanta-ai360-sales-bridge-v1.js'
+      - '.github/workflows/validate-ai360-js.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  syntax:
+    name: AI360 syntax check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check isolated voice modules with Node
+        run: |
+          set -euo pipefail
+          for file in assets/134-resanta-voice-ai360-pilot-v1.js assets/135-resanta-voice-capture-fix-v2.js assets/136-resanta-voice-quality-v3.js assets/137-resanta-ai360-lazy-launch-v1.js assets/138-resanta-ai360-sales-bridge-v1.js; do
+            node --check "$file"
+          done
+          grep -q 'optional voice module paused' index.html
+          grep -q '137-resanta-ai360-lazy-launch-v1.js' index.html
