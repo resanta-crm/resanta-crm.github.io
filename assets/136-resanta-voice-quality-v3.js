@@ -12,7 +12,7 @@ window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
 let current='yandex:lera',epoch=0,prevVisible=true;
 const VOICE_KEY='resanta-ai360-yandex-voice-v4';
-const CONSENT_KEY='resanta-ai360-yandex-consent-v4';
+const CONSENT_KEY='resanta-ai360-yandex-consent-monthly-v5';
 try {
  const saved=window.localStorage?.getItem(VOICE_KEY);
  if(saved==='yandex:lera'||saved==='yandex:dasha')current=saved;
@@ -21,7 +21,7 @@ try {
 function remember(key,value){try{window.localStorage?.setItem(key,value);}catch(_){}}
 function approveYandex(){
  if(approvedYandex)return true;
- const ok=window.confirm('Включить озвучку ответов РЕСАНТА AI голосами Яндекс Лера и Даша? Полный текст будет безопасно разбиваться на короткие фразы и отправляться через сервер CRM в Yandex SpeechKit. Услуга платная: до 40 фраз и 5000 символов за день для твоей учётной записи. Разрешить?');
+ const ok=window.confirm('Включить озвучку ответов РЕСАНТА AI голосами Яндекс Лера и Даша? Полный текст будет безопасно разбиваться на короткие фразы и отправляться через сервер CRM в Yandex SpeechKit. Услуга платная, расчётный лимит: до 5 000 российских рублей за календарный месяц для Яндекс SpeechKit v3 general. Этот лимит не включает OpenAI и другие расходы. Разрешить?');
  if(!ok)return false;
  approvedYandex=true;
  remember(CONSENT_KEY,'yes');
@@ -35,6 +35,7 @@ function cleanSpeech(t){
   .replace(/(^|\n)\s*(?:\d+[.)]\s*|[•-]\s+)/g,'$1')
   .replace(/[*_`#]/g,'')
   .replace(/\r?\n/g,'. ')
+  .replace(/\bBYN\b/gi,'белорусских рублей')
   .replace(/\s+/g,' ').replace(/\.{2,}/g,'.').trim();
 }
 // SpeechKit v3: a standard utterance must stay within 250 characters and 24 seconds.
@@ -154,10 +155,10 @@ window.crmResantaVoiceSpeakV3=async function(message){
        const why=String(e?.message||e);
        console.warn('AI360 Yandex narration stopped at segment '+(i+1)+':',why);
        let explanation;
-       if(why.includes('tts_daily_limit')){
-         explanation='Дневной лимит озвучки Яндекс исчерпан (40 фрагментов или 5 000 символов).';
-       }else if(why.includes('tts_quota_config_mismatch')){
-         explanation='На сервере не совпадают ограничения озвучки. Ошибка конфигурации, а не проблема голоса.';
+       if(why.includes('tts_monthly_budget_exhausted')){
+         explanation='Месячный бюджет Яндекс-озвучки 5 000 российских рублей исчерпан.';
+       }else if(why.includes('tts_monthly_budget_unavailable')){
+         explanation='Сервер временно не смог проверить месячный бюджет озвучки. Расход не подтверждён.';
        }else if(why.includes('tts_quota_check_unavailable')||why.includes('quota_unavailable')){
          explanation='Сервер пока не смог проверить лимит озвучки. Можно повторить попытку.';
        }else{
@@ -208,7 +209,7 @@ function mount(){
  wrap.append(title,select,testBtn);
  actions.insertBefore(wrap,mute.parentElement);
  const caption=document.createElement('div');
- caption.textContent='Только Лера и Даша · Яндекс SpeechKit. Длинный ответ автоматически произносится целиком несколькими фразами после согласия. Ограничение расходов: до 40 фраз и 5000 символов за день. При ошибке полный текст ответа остаётся на экране.';
+ caption.textContent='Только Лера и Даша · Яндекс SpeechKit v3. Длинный ответ произносится по частям. Месячный расчётный бюджет Яндекс-озвучки — 5 000 ₽ (РФ, с НДС). Распознавание и интеллект OpenAI отдельно. При ошибке полный ответ остаётся на экране.';
  caption.style.cssText='color:#b6c7db;font-size:10px;line-height:1.45';
  wrap.after(caption);
  fillVoices();
