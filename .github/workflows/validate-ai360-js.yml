@@ -10,6 +10,8 @@ on:
       - 'assets/138-resanta-ai360-sales-bridge-v1.js'
       - 'assets/139-resanta-ai360-staff-resolver-v1.js'
       - 'tests/ai360-manager-voice-dialogue.test.cjs'
+      - 'tests/ai360-intent-routing-v1.test.cjs'
+      - 'supabase/functions/crm-ai360-director-v1/intent-router.mjs'
       - '.github/workflows/validate-ai360-js.yml'
       - 'tests/ai360-voice-full-answer.test.cjs'
   workflow_dispatch:
@@ -34,3 +36,4 @@ jobs:
         run: |
           node tests/ai360-voice-full-answer.test.cjs
           node tests/ai360-manager-voice-dialogue.test.cjs
+          node tests/ai360-intent-routing-v1.test.cjs
