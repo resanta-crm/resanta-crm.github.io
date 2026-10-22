@@ -35,6 +35,14 @@
     historyEl.scrollTop = historyEl.scrollHeight;
   }
   function speak(message) {
+    if (typeof window.crmResantaVoiceSpeakV3 === 'function' && visible()) {
+      if (state.silent) { state.speaking=false; resumeWake(); return; }
+      state.speaking=true;
+      Promise.resolve().then(()=>window.crmResantaVoiceSpeakV3(String(message).slice(0,450)))
+        .catch(e=>console.warn('Resanta voice synthesis',e))
+        .finally(()=>{state.speaking=false;resumeWake();});
+      return;
+    }
     if (!visible() || state.silent || !('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
       state.speaking = false; resumeWake(); return;
     }
