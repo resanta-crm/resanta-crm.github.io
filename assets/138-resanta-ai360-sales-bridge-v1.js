@@ -72,7 +72,7 @@ window.crmAI360SalesHandleV1=function(query,ui){
  // Speech recognition can mistake "по продажам" for "по родню".
  // Repair ONLY within a real sales/client conversation with a second commercial cue.
  // An unrelated mention of family must never be forcibly rewritten.
- if(history.length>0 && /\bкак быть\b/i.test(text) &&
+ if(history.length>0 && /(?:^|\s)как\s+быть(?=[\s?.!,]|$)/i.test(text) &&
      /по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu.test(text) &&
      /(клиент|задач|купил|покуп|закуп|выруч|продаж|ру[дт]нев)/i.test(text)){
    text=text.replace(/по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu,'по продажам');
