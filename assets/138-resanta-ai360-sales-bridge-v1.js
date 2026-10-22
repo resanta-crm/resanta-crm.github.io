@@ -12,8 +12,8 @@ let history=[],pending=false,lastMonth=null,lastManager=null,pendingMatch=null,s
 const topic=/(продаж|выруч|оборот|отгруз|реализац|выполн|кпи|kpi|отста|план|филиал|менеджер|сети\b)/i;
 const follow=/(почему|из-за чего|за счет чего|что предлага|что делать|как исправ|что дальше|какая причин|а кто|а если|сравни|что измен|какие действ|а у него|а он)/i;
 const globalIntent=/(по всей сети|всех менеджеров|у всех|в целом|общ[аяие].*продаж|сравни.*менеджер|по филиалам)/i;
-const yes=/^(да|верно|правильно|это он|именно|ага|давай|точно)(\b|$)/i;
-const no=/^(нет|не он|неверно|другого|другая|неа)(\b|$)/i;
+const yes=/^(да|верно|правильно|это он|именно|ага|давай|точно)(?:\s|$)/i;
+const no=/^(нет|не он|неверно|другого|другая|неа)(?:\s|$)/i;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
   typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
