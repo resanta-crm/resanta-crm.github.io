@@ -10,10 +10,58 @@
 if(window.__resantaVoiceQualityV3)return;
 window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
-let current='auto',epoch=0,prevVisible=true;
-const SUPPORTED=['shimmer','onyx'];
+let current='yandex:lera',epoch=0,prevVisible=true;
+const VOICE_KEY='resanta-ai360-yandex-voice-v4';
+const CONSENT_KEY='resanta-ai360-yandex-consent-v4';
+try {
+ const saved=window.localStorage?.getItem(VOICE_KEY);
+ if(saved==='yandex:lera'||saved==='yandex:dasha')current=saved;
+ approvedYandex=window.localStorage?.getItem(CONSENT_KEY)==='yes';
+} catch (_) { /* private browsing may deny storage; consent then stays in memory */ }
+function remember(key,value){try{window.localStorage?.setItem(key,value);}catch(_){}}
+function approveYandex(){
+ if(approvedYandex)return true;
+ const ok=window.confirm('Включить озвучку ответов РЕСАНТА AI голосами Яндекс Лера и Даша? Полный текст будет безопасно разбиваться на короткие фразы и отправляться через сервер CRM в Yandex SpeechKit. Услуга платная: до 40 фраз и 5000 символов за день для твоей учётной записи. Разрешить?');
+ if(!ok)return false;
+ approvedYandex=true;
+ remember(CONSENT_KEY,'yes');
+ return true;
+}
 const allowed=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
-const short=(t)=>String(t||'').trim().slice(0,350);
+function cleanSpeech(t){
+ return String(t||'')
+  .replace(/\*\*([^*]+)\*\*/g,'$1')
+  .replace(/__([^_]+)__/g,'$1')
+  .replace(/(^|\n)\s*(?:\d+[.)]\s*|[•-]\s+)/g,'$1')
+  .replace(/[*_`#]/g,'')
+  .replace(/\r?\n/g,'. ')
+  .replace(/\s+/g,' ').replace(/\.{2,}/g,'.').trim();
+}
+// SpeechKit v3: a standard utterance must stay within 250 characters and 24 seconds.
+// 205 characters also leaves a duration margin for slower Russian narration.
+function speechChunks(t,max=205){
+ const remaining=cleanSpeech(t), result=[];
+ let rest=remaining;
+ while(rest.length>max){
+  const candidate=rest.slice(0,max);
+  let cut=0;
+  for(const match of candidate.matchAll(/[.!?;:]\s+/g)){
+    const pos=match.index+match[0].length;
+    if(pos>=Math.floor(max*0.52))cut=pos;
+  }
+  if(!cut)for(const match of candidate.matchAll(/,\s+/g)){
+    const pos=match.index+match[0].length;
+    if(pos>=Math.floor(max*0.65))cut=pos;
+  }
+  if(!cut){const pos=candidate.lastIndexOf(' ');cut=pos>Math.floor(max*0.5)?pos:max;}
+  const piece=rest.slice(0,cut).trim();
+  if(piece)result.push(piece);
+  rest=rest.slice(cut).trim();
+ }
+ if(rest)result.push(rest);
+ return result;
+}
+window.crmAI360SpeechChunksV4=speechChunks;
 const setStatus=(txt)=>{const el=panel?.querySelector('.rva-status');if(el)el.textContent=txt;};
 function stopSpeech(){
  epoch++;
@@ -49,7 +97,8 @@ function localSpeak(msg,run){
 }
 async function cloudSpeak(msg,voice,run,provider='openai'){
  const isYandex=provider==='yandex';
- const voiceText=isYandex?(msg.length>240?msg.slice(0,238).replace(/\s+\S*$/,'')+'…':msg):msg;
+ const voiceText=msg;
+ if(isYandex && msg.length>240)throw new Error('voice_chunk_too_long');
  const session=await window.crmEnsureFreshSessionV236166?.(false).catch(()=>null);
  if(!session?.access_token)throw new Error('no_session');
  setStatus(isYandex?'Яндекс готовит русский голос…':'Готовлю естественный голос…');
@@ -66,6 +115,9 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  const wave=String.fromCharCode(...header.slice(8,12));
  if(isYandex && (riff!=='RIFF'||wave!=='WAVE'))throw new Error('yandex_invalid_wav');
  const blob=isYandex?new Blob([rawBlob],{type:'audio/wav'}):rawBlob;
+ // Release the previous completed part, preserving the newest playback.
+ if(output){try{output.pause();}catch(_){}output=null;}
+ if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
  outputUrl=URL.createObjectURL(blob);
  output=new Audio(outputUrl);output.preload='auto';
  await new Promise((resolve,reject)=>{
@@ -78,44 +130,57 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  });
 }
 window.crmResantaVoiceSpeakV3=async function(message){
- const msg=short(message);
+ const msg=cleanSpeech(message);
  if(!msg||!allowed())return;
- const run=++epoch;
+ stopSpeech(); // A new reply cancels every older audio clip and queue.
+ const run=epoch;
  window.__resantaVoiceOutputBusy=true;
  try{
-   if(current.startsWith('yandex:')&&approvedYandex){
-     try{await cloudSpeak(msg,current.slice(7),run,'yandex');}
-     catch(e){if(run===epoch){console.warn('Resanta Yandex voice unavailable',String(e));
-       const cause=String(e.message||'ошибка');
-       setStatus(cause.includes('yandex_credentials_required')?'Yandex Cloud ещё не подключён: нужен API-ключ SpeechKit в настройках Supabase. Озвучиваю системным голосом.':
-         'Русский голос Яндекса пока недоступен ('+cause+'). Озвучиваю системным голосом.');
-       await localSpeak(msg,run);
-     }}
-   }else if(current.startsWith('cloud:')&&approvedCloud){
-     try{await cloudSpeak(msg,current.slice(6),run);}
-     catch(e){if(run===epoch){console.warn('Resanta cloud voice unavailable',String(e));setStatus('Живой голос недоступен ('+String(e.message||'ошибка')+'). Переключился на системный.');await localSpeak(msg,run);}}
-   }else await localSpeak(msg,run);
+   if(!current.startsWith('yandex:')||!approvedYandex){
+     setStatus('Выбрана Лера. Нажми «▶ Проверить», чтобы разрешить озвучку через Яндекс.');
+     return;
+   }
+   const chunks=speechChunks(msg);
+   let completed=0;
+   for(let i=0;i<chunks.length;i++){
+     if(run!==epoch||!allowed()||panel?.hidden||document.hidden)break;
+     const name=current.endsWith('dasha')?'Даша':'Лера';
+     setStatus('🔊 '+name+' озвучивает ответ: фраза '+(i+1)+' из '+chunks.length);
+     try{
+       await cloudSpeak(chunks[i],current.slice(7),run,'yandex');
+       if(run===epoch)completed++;
+     }catch(e){
+       if(run!==epoch)break;
+       const why=String(e?.message||e);
+       console.warn('AI360 Yandex narration stopped at segment '+(i+1)+':',why);
+       setStatus(why.includes('tts_daily_limit')
+          ?'Дневной лимит Яндекс исчерпан: озвучено '+completed+' из '+chunks.length+' частей. Полный ответ доступен текстом.'
+          :'Яндекс прервал озвучку на части '+(i+1)+' из '+chunks.length+' ('+why+'). Полный ответ доступен текстом.');
+       break; // Do not silently replace the selected voice with Microsoft voices.
+     }
+   }
+   if(run===epoch && completed===chunks.length)setStatus('✅ '+(current.endsWith('dasha')?'Даша':'Лера')+' озвучила ответ полностью ('+completed+' '+(completed===1?'фраза':'фраз')+').');
  }finally{
    if(run===epoch){
-     if(output){try{output.pause();}catch{}output=null;}
+     if(output){try{output.pause();}catch(_){}output=null;}
      if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
-     await new Promise(r=>setTimeout(r,350));
+     await new Promise(r=>setTimeout(r,250));
      if(run===epoch)window.__resantaVoiceOutputBusy=false;
    }
  }
 };
+
 function fillVoices(){
  if(!select)return;
- const value=current;
  select.textContent='';
- const opt=(v,t)=>{const o=document.createElement('option');o.value=v;o.textContent=t;select.appendChild(o);};
- opt('yandex:lera','🇷🇺 Яндекс · Лера (friendly)');
- opt('yandex:dasha','🇷🇺 Яндекс · Даша (friendly)');
- opt('auto','Русский голос браузера');
- const ru=(window.speechSynthesis?.getVoices?.()||[]).filter(v=>/^ru([_-]|$)/i.test(v.lang||''));
- ru.forEach(v=>opt('native:'+v.voiceURI,'В Windows: '+v.name));
- // Former OpenAI TTS voices hidden: pilot uses Russian SpeechKit voices.
- select.value=[...select.options].some(o=>o.value===value)?value:'auto';
+ for(const [value,title] of [
+  ['yandex:lera','🇷🇺 Яндекс · Лера (friendly)'],
+  ['yandex:dasha','🇷🇺 Яндекс · Даша (friendly)']
+ ]){
+  const option=document.createElement('option');option.value=value;option.textContent=title;select.appendChild(option);
+ }
+ if(current!=='yandex:lera'&&current!=='yandex:dasha')current='yandex:lera';
+ select.value=current;
 }
 function mount(){
  panel=document.querySelector('.rva-window');
@@ -135,35 +200,24 @@ function mount(){
  wrap.append(title,select,testBtn);
  actions.insertBefore(wrap,mute.parentElement);
  const caption=document.createElement('div');
- caption.textContent='Лера и Даша — готовые русские голоса Yandex SpeechKit, не фирменный голос Алисы. При выборе Яндекса текст короткого ответа (до 240 символов) отправляется в SpeechKit после согласия. Лимит 20 ответов и 5000 символов в день. Голос браузера бесплатный.';
+ caption.textContent='Только Лера и Даша · Яндекс SpeechKit. Длинный ответ автоматически произносится целиком несколькими фразами после согласия. Ограничение расходов: до 40 фраз и 5000 символов за день. При ошибке полный текст ответа остаётся на экране.';
  caption.style.cssText='color:#b6c7db;font-size:10px;line-height:1.45';
  wrap.after(caption);
  fillVoices();
- window.speechSynthesis?.addEventListener?.('voiceschanged',fillVoices);
+ if(!approvedYandex)setStatus('Основной голос — Лера. Нажми «▶ Проверить» и разреши Яндекс SpeechKit один раз.');
  select.addEventListener('change',()=>{
-   const chosen=select.value;stopSpeech();
-   if(chosen.startsWith('yandex:')&&!approvedYandex){
-      const yes=confirm('Включить русский голос Yandex SpeechKit (Лера или Даша)? Для озвучивания текст ответа (до 240 символов) будет отправляться через защищённый сервер CRM в Yandex Cloud. Сервис тарифицируется по запросам; лимит 20 ответов в день. Это не оригинальный голос Алисы. Разрешить?');
-      if(!yes){select.value=current;return;}
-      approvedYandex=true;
-   }
-   if(chosen.startsWith('cloud:')&&!approvedCloud){
-      const yes=confirm('Использовать нейросетевую озвучку OpenAI? Текст ответа (максимум 350 символов) отправляется через защищённый сервер CRM в облачный сервис. Это платная API-услуга; установлен лимит 20 озвучиваний и 5000 символов на день. Голос сгенерирован ИИ и не является голосом Алисы. Разрешить?');
-      if(!yes){select.value=current;return;}
-      approvedCloud=true;
-   }
+   const chosen=select.value;
+   if(chosen!=='yandex:lera'&&chosen!=='yandex:dasha'){select.value=current;return;}
+   if(!approveYandex()){select.value=current;return;}
+   stopSpeech();
    current=chosen;
-   if(chosen.startsWith('yandex:')){
-     setStatus('Проверяю подключение Yandex SpeechKit…');
-     Promise.resolve(db.functions.invoke('crm-voice-yandex-tts-v1',{body:{kind:'status'}})).then(resp=>{
-       if(current!==chosen)return;
-       if(resp.error) {setStatus('Не удалось проверить подключение Яндекса. Перезайди в CRM или попробуй позднее.');return;}
-       setStatus(resp.data?.configured?'Голос '+(chosen.endsWith('lera')?'Лера':'Даша')+' выбран. API-ключ найден на сервере. Нажми «Проверить» для настоящего теста.':'Голоса Лера и Даша добавлены, но Yandex Cloud пока не подключён: нужен API-ключ SpeechKit в секретах Supabase.');
-     }).catch(()=>{if(current===chosen)setStatus('Проверка подключения Яндекса временно недоступна.');});
-   }else setStatus('Голос выбран. Нажми «Проверить» для прослушивания.');
+   remember(VOICE_KEY,current);
+   setStatus('Голос '+(chosen.endsWith('lera')?'Лера':'Даша')+' закреплён. Можно задавать вопросы.');
  });
  testBtn.addEventListener('click',()=>{
    if(!allowed())return;
+   if(!approveYandex()){setStatus('Разрешение на озвучку через Яндекс пока не дано.');return;}
+   remember(VOICE_KEY,current);
    stopSpeech();
    void window.crmResantaVoiceSpeakV3('Здравствуйте! Я голосовой помощник Ресанта. Могу помочь открыть разделы CRM и проверить задачи.');
  });
