@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
+import { classify,needsSales,needsOperations,selectEvidence,directSalesAnswer,verifyAnswer,fallbackAnswer } from './intent-router.mjs';
 
 // Explicit director-only opt-in pilot; no scheduled AI, no changes to CRM source records.
 const ORIGINS = new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -16,6 +17,9 @@ const todayMonth=()=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Eur
 const instr = [
  'Ты — РЕСАНТА AI 360°, русскоязычный помощник директора филиальной сети ГК «Ресанта».',
  'Отвечай по-русски, естественно и предметно, обычно 400–850 символов, в подробном анализе до 1100. Следуй контексту предыдущих реплик.',
+ 'ТЕКУЩИЙ ВОПРОС ВСЕГДА ВАЖНЕЕ истории диалога. Поле intent задано надёжным серверным маршрутизатором: отвечай строго на его тему.',
+ 'При intent=debt описывай долги, НЕ подменяй их продажами; при intent=tasks только задачи; при intent=clients назови клиентов. Не переключайся на тему из history.',
+ 'Источник evidence умышленно содержит только выбранные сервером сведения. Отсутствующие поля не считай нулём и не придумывай их.',
  'Единственный источник чисел — приложенные серверные snapshot (sales и operations). Никогда не придумывай планы, обороты, клиентов, причины или прогнозы.',
  'В snapshot менеджеры с планами, а не все филиалы. Данные сети содержат и нераспределённую выручку. Нельзя выдавать планы менеджеров за планы филиалов.',
  'Данные выручки помесячные. В sales только текущий неполный месяц и ориентировочный прошлый год; сравнение их некорректно как одинаковых периодов. В operations для клиентов верно сравнение completed_month и completed_year_ago — два полных месяца.',
@@ -66,19 +70,11 @@ Deno.serve(async(req:Request)=>{
  const monthRaw=String(payload?.month||todayMonth());
  const nowMonth=todayMonth();
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthRaw)||monthRaw<'2025-01'||monthRaw>nowMonth)return reply(req,{error:'month_not_supported'},400);
- const secret=Deno.env.get('OPENAI_API_KEY');
- if(!secret)return reply(req,{error:'llm_not_configured'},503);
  const requestedManager=String(payload?.focusManager||'').trim().slice(0,80);
- let snapshot:any;
- try{
-  const result=await svc.rpc('crm_ai360_sales_kpi_snapshot_v1',{p_month:monthRaw+'-01'});
-  if(result.error)throw result.error;
-  snapshot=result.data;
- }catch(e){console.warn('AI360 snapshot error',String((e as Error)?.message||e).slice(0,160));return reply(req,{error:'sales_data_unavailable'},503);}
- if(!snapshot || typeof snapshot!=='object')return reply(req,{error:'empty_sales_snapshot'},503);
+ const intent=classify(question);
  let verifiedFocus='';
  if(requestedManager){
-  // Source of truth for valid managers is current users roster, NOT the limited KPI-plan table.
+  // Validate independently of KPI-plan existence: some staff have clients but no approved plan.
   const profileMatch=await svc.from('users').select('name,role').eq('role','manager')
    .ilike('name',requestedManager).limit(2);
   if(profileMatch.error)return reply(req,{error:'staff_directory_unavailable'},503);
@@ -86,28 +82,52 @@ Deno.serve(async(req:Request)=>{
      String(profileMatch.data![0].name).toLocaleLowerCase('ru-RU')!==requestedManager.toLocaleLowerCase('ru-RU'))
     return reply(req,{error:'unknown_manager'},400);
   verifiedFocus=String(profileMatch.data![0].name);
-  const manager=(Array.isArray(snapshot.managers)?snapshot.managers:[]).find(
-   (m:any)=>String(m?.manager_name||'').toLocaleLowerCase('ru-RU')===verifiedFocus.toLocaleLowerCase('ru-RU')
-  );
-  snapshot.managers=manager?[manager]:[];
-  snapshot.scope+='; персональный ответ только по '+verifiedFocus+
-   (manager?'':' (утверждённый KPI в выбранном месяце отсутствует)');
  }
- // Read-only operational evidence; only the already verified director can request it.
- // Fail explicitly rather than pretending to know tasks, visits or debtor status.
- let operations:any;
- try{
-  const ops=await svc.rpc('crm_ai360_operations_snapshot_v1',{
-   p_manager:verifiedFocus||null, p_month:monthRaw+'-01'
-  });
-  if(ops.error)throw ops.error;
-  operations=ops.data;
-  if(!operations || typeof operations!=='object')throw new Error('operations_snapshot_empty');
- }catch(e){
-  console.warn('AI360 operations RPC failed',String((e as Error)?.code||(e as Error)?.message||e).slice(0,110));
-  return reply(req,{error:'operations_unavailable'},503);
+ let snapshot:any=null;
+ if(needsSales(intent)){
+  try{
+   const result=await svc.rpc('crm_ai360_sales_kpi_snapshot_v1',{p_month:monthRaw+'-01'});
+   if(result.error)throw result.error;
+   snapshot=result.data;
+  }catch(e){
+   console.warn('AI360 sales snapshot unavailable',String((e as Error)?.code||(e as Error)?.message||e).slice(0,130));
+   return reply(req,{error:'sales_data_unavailable'},503);
+  }
+  if(!snapshot||typeof snapshot!=='object')return reply(req,{error:'empty_sales_snapshot'},503);
+  if(verifiedFocus){
+   const manager=(Array.isArray(snapshot.managers)?snapshot.managers:[]).find(
+    (m:any)=>String(m?.manager_name||'').toLocaleLowerCase('ru-RU')===verifiedFocus.toLocaleLowerCase('ru-RU'));
+   snapshot.managers=manager?[manager]:[];
+   snapshot.scope+='; персональная аналитика только по '+verifiedFocus+
+      (manager?'':' (план KPI для этого менеджера не найден)');
+  }
  }
- // Each actual paid conversation is claimed only after all requested data is verified.
+ // Strict deterministic answer: direct questions about sales never reach the LLM.
+ // It cannot substitute PДЗ data or make up an unrelated action plan.
+ if(intent==='sales'){
+  const answer=directSalesAnswer(snapshot,verifiedFocus,monthRaw);
+  return reply(req,{answer,month:monthRaw,intent,answer_verified:true,generated_by:'crm_rules',
+   freshness:snapshot?.freshness||null,source:'CRM: purchase_history, manager_kpi_plans, crm_import_status',
+   scope:verifiedFocus||'sales_and_kpi'});
+ }
+ let operations:any=null;
+ if(needsOperations(intent)){
+  try{
+   const ops=await svc.rpc('crm_ai360_operations_snapshot_v1',{
+    p_manager:verifiedFocus||null,p_month:monthRaw+'-01'
+   });
+   if(ops.error)throw ops.error;
+   operations=ops.data;
+   if(!operations||typeof operations!=='object')throw new Error('empty_operations');
+  }catch(e){
+   console.warn('AI360 operations snapshot unavailable',String((e as Error)?.code||(e as Error)?.message||e).slice(0,130));
+   return reply(req,{error:'operations_unavailable'},503);
+  }
+ }
+ const evidence=selectEvidence(intent,snapshot,operations);
+ const secret=Deno.env.get('OPENAI_API_KEY');
+ if(!secret)return reply(req,{error:'llm_not_configured'},503);
+ // Only calls that actually need explanation/recommendations consume the LLM quota.
  const claim=await svc.rpc('crm_ai360_llm_claim_v1',{p_user_id:user.id});
  if(claim.error)return reply(req,{error:'quota_unavailable'},503);
  if(claim.data!==true)return reply(req,{error:'llm_daily_limit'},429);
@@ -115,7 +135,10 @@ Deno.serve(async(req:Request)=>{
   role:m?.role==='assistant'?'assistant':'user',
   content:String(m?.content||'').slice(0,600)
  })).filter((m:any)=>m.content):[];
- const messages=[{role:'system',content:instr},{role:'user',content:JSON.stringify({month:monthRaw,history,question,focus_manager:verifiedFocus||null,sales:snapshot,operations})}];
+ const messages=[{role:'system',content:instr},{role:'user',content:JSON.stringify({
+   current_question:question,intent,focus_manager:verifiedFocus||null,month:monthRaw,
+   history_for_context_only:history,evidence
+ })}];
  let upstream:Response;
  try{
   upstream=await fetch('https://api.openai.com/v1/chat/completions',{
@@ -126,8 +149,13 @@ Deno.serve(async(req:Request)=>{
  }catch{return reply(req,{error:'llm_temporarily_unavailable'},502);}
  if(!upstream.ok){console.warn('AI360 upstream',upstream.status);return reply(req,{error:upstream.status===429?'llm_rate_limited':'llm_request_failed'},upstream.status===429?429:502);}
  const obj=await upstream.json().catch(()=>null);
- const answer=String(obj?.choices?.[0]?.message?.content||'').trim().slice(0,1500);
- if(!answer)return reply(req,{error:'llm_empty_answer'},502);
- return reply(req,{answer,month:monthRaw,freshness:snapshot.freshness||null,
-  source:'CRM: purchase_history, manager_kpi_plans, clients, tasks, visits, route_plans, client_debt, crm_import_status',scope:snapshot.scope,operations_as_of:operations?.period?.as_of||null});
+ const candidate=String(obj?.choices?.[0]?.message?.content||'').trim().slice(0,1500);
+ if(!candidate)return reply(req,{error:'llm_empty_answer'},502);
+ const check=verifyAnswer(intent,candidate);
+ const answer=check.ok?candidate:fallbackAnswer(intent,verifiedFocus,operations,snapshot);
+ if(!check.ok)console.warn('AI360 prevented off-topic answer: intent='+intent+' reason='+check.reason);
+ return reply(req,{answer,month:monthRaw,intent,answer_verified:check.ok,
+  quality_guard:check.ok?null:check.reason,generated_by:check.ok?'llm_checked':'crm_safe_fallback',
+  freshness:snapshot?.freshness||null,source:'CRM: selected verified sources for '+intent,
+  scope:verifiedFocus||'network',operations_as_of:operations?.period?.as_of||null});
 });
