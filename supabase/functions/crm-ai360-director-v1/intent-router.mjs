@@ -114,7 +114,32 @@ const markers={
  analysis:/(продаж|клиент|закуп|причин|фактор|падени|отстав|задач)/i,
  multi:/(продаж|задолж|пдз|долг)/i
 };
-export function verifyAnswer(kind,answer){
+function groundedAmounts(evidence){
+ const values=[];
+ const moneyKey=/(?:^plan$|^actual$|^to_plan$|amount|revenue|^loss$|^debt_overdue$|^closed_month$|^closed_year_ago$|^current_month$|^closed_delta$|^year_ago_sales_linked$|^closed_sales_linked$|^current_sales_linked$)/i;
+ function walk(obj){
+   if(!obj || typeof obj!=='object')return;
+   if(Array.isArray(obj)){for(const x of obj)walk(x);return;}
+   for(const [key,value] of Object.entries(obj)){
+     if(moneyKey.test(key) && value!==null && value!=='' && Number.isFinite(Number(value)))
+       values.push(Number(value));
+     if(value&&typeof value==='object')walk(value);
+   }
+ }
+ walk(evidence);
+ return values;
+}
+function parseSpokenAmount(raw){
+ let text=String(raw||'').replace(/[\s\u00a0\u202f]/g,'').trim();
+ if(!text)return NaN;
+ const last=Math.max(text.lastIndexOf('.'),text.lastIndexOf(','));
+ const fraction=last>=0?text.slice(last+1):'';
+ if(last>=0 && /^\d{1,2}$/.test(fraction))
+   text=text.slice(0,last).replace(/[.,]/g,'')+'.'+fraction;
+ else text=text.replace(/[.,]/g,'');
+ return Number(text);
+}
+export function verifyAnswer(kind,answer,evidence=null){
  const s=String(answer||'').trim();
  if(s.length<25)return {ok:false,reason:'empty_or_too_short'};
  if(!markers[kind]?.test(s))return {ok:false,reason:'unrelated_topic'};
@@ -122,6 +147,14 @@ export function verifyAnswer(kind,answer){
    return {ok:false,reason:'sales_answered_with_debt'};
  if(kind==='debt'&&/(план продаж|фактические продажи)/i.test(s)&&!/(задолж|долг|дебитор|пдз)/i.test(s))
    return {ok:false,reason:'debt_answered_with_sales'};
+ if(evidence){
+   const grounded=groundedAmounts(evidence);
+   for(const match of s.matchAll(/(-?\d[\d\s\u00a0\u202f.,]{0,24}?)\s*(?:BYN|белорусск\w*\s+рубл?\w*|бел[.\s]+руб\w*)/giu)){
+     const spoken=parseSpokenAmount(match[1]);
+     if(!Number.isFinite(spoken) || !grounded.some(value=>Math.abs(value-spoken)<=0.021))
+       return {ok:false,reason:'ungrounded_currency_value'};
+   }
+ }
  return {ok:true};
 }
 export function fallbackAnswer(kind,focus,ops,sales){
