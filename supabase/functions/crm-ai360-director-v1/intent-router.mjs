@@ -45,7 +45,7 @@ export function selectEvidence(kind,sales,ops){
      freshness:sales.freshness,warnings:sales.warnings
    };
  }
- if(ops){
+ if(ops&&kind!=='sales'){
    const v={period,scope:ops.scope,warnings:ops.warnings};
    if(['analysis','recommendations','multi','clients'].includes(kind)){
      v.client_summary=ops.client_summary;
