@@ -290,7 +290,10 @@
   window.addEventListener('pagehide',()=>{setWake(false);window.speechSynthesis?.cancel();});
   // Opt in to local recognition only if this browser actually has a Russian pack.
   if (Recognition && typeof Recognition.available === 'function') {
-    Recognition.available({langs:['ru-RU'],processLocally:true}).then(status=>{state.localReady=status==='available';}).catch(()=>{});
+    try {
+      Promise.resolve(Recognition.available({langs:['ru-RU'],processLocally:true}))
+        .then(status=>{state.localReady=status==='available';}).catch(()=>{});
+    } catch (_) { /* Browsers may restrict on-device probing through permissions policy. */ }
   }
   reconcile();state.timer=window.setInterval(reconcile,1600);
 })();
