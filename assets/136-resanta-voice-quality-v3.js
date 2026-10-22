@@ -142,7 +142,15 @@ function mount(){
       if(!yes){select.value=current;return;}
       approvedCloud=true;
    }
-   current=chosen;setStatus(chosen.startsWith('yandex:')?'Выбран русский голос Яндекса. Нажми «Проверить». Если доступ Yandex Cloud ещё не настроен, появится понятное сообщение.':'Голос выбран. Нажми «Проверить» для прослушивания.');
+   current=chosen;
+   if(chosen.startsWith('yandex:')){
+     setStatus('Проверяю подключение Yandex SpeechKit…');
+     Promise.resolve(db.functions.invoke('crm-voice-yandex-tts-v1',{body:{kind:'status'}})).then(resp=>{
+       if(current!==chosen)return;
+       if(resp.error) {setStatus('Не удалось проверить подключение Яндекса. Перезайди в CRM или попробуй позднее.');return;}
+       setStatus(resp.data?.configured?'Голос '+(chosen.endsWith('lera')?'Лера':'Даша')+' выбран. API-ключ найден на сервере. Нажми «Проверить» для настоящего теста.':'Голоса Лера и Даша добавлены, но Yandex Cloud пока не подключён: нужен API-ключ SpeechKit в секретах Supabase.');
+     }).catch(()=>{if(current===chosen)setStatus('Проверка подключения Яндекса временно недоступна.');});
+   }else setStatus('Голос выбран. Нажми «Проверить» для прослушивания.');
  });
  testBtn.addEventListener('click',()=>{
    if(!allowed())return;
