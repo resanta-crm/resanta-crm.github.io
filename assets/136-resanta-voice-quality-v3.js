@@ -6,7 +6,7 @@
 'use strict';
 if(window.__resantaVoiceQualityV3)return;
 window.__resantaVoiceQualityV3=true;
-let panel,select,testBtn,output=null,outputUrl='',browserDone=null,approvedCloud=false;
+let panel,select,testBtn,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false;
 let current='auto',epoch=0,prevVisible=true;
 const SUPPORTED=['shimmer','onyx'];
 const allowed=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
@@ -16,6 +16,7 @@ function stopSpeech(){
  epoch++;
  window.__resantaVoiceOutputBusy=false;
  if(output){try{output.pause();output.currentTime=0;}catch{}output=null;}
+ if(audioDone){const resolve=audioDone;audioDone=null;resolve();}
  if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
  try{speechSynthesis.cancel();}catch{}
  if(browserDone){const resolve=browserDone;browserDone=null;resolve();}
@@ -56,9 +57,11 @@ async function cloudSpeak(msg,voice,run){
  outputUrl=URL.createObjectURL(blob);
  output=new Audio(outputUrl);output.preload='auto';
  await new Promise((resolve,reject)=>{
-  const done=()=>{output?.removeEventListener('ended',done);resolve();};
+  let settled=false;
+  const done=()=>{if(settled)return;settled=true;if(audioDone===done)audioDone=null;resolve();};
+  audioDone=done;
   output.addEventListener('ended',done,{once:true});
-  output.addEventListener('error',()=>reject(new Error('audio_device_error')),{once:true});
+  output.addEventListener('error',()=>{if(!settled){settled=true;audioDone=null;reject(new Error('audio_device_error'));}},{once:true});
   Promise.resolve(output.play()).catch(()=>reject(new Error('autoplay_denied')));
  });
 }
