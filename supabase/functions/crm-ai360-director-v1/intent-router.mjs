@@ -6,7 +6,7 @@ const num=(value)=>Number.isFinite(Number(value))?Number(value):0;
 export const money=(value)=>num(value).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 export function classify(question){
  const q=norm(question).trim();
- const commercial=/(продаж|выруч|оборот|отгруз|реализац|кпи|kpi|выполн|недобор|сколько.{0,24}продал|план.{0,20}(?:продаж|отгруз))/.test(q);
+ const commercial=/(продаж|выруч|оборот|отгруз|реализац|кпи|kpi|выполн|недобор|план\s+и\s+факт|план\s+факт|сколько.{0,24}продал|план.{0,20}(?:продаж|отгруз))/.test(q);
  const debt=/(долг|задолж|дебит|пдз|оплат|не плат|просроч.{0,18}(?:долг|задолж|платеж))/.test(q);
  const task=/(задач|поруч|задани|что постав|что поруч)/.test(q);
  const route=/(маршрут|запланир.{0,20}(?:визит|посещ)|план.{0,20}(?:визит|посещ))/.test(q);
