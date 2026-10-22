@@ -102,7 +102,7 @@
    });
  }
  function cloudError(error){
-   const code=String(error?.context?.error||error?.message||error?.code||'');
+   const code=String(error?.code||error?.context?.error||error?.message||'');
    if(/voice_daily_limit|429|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (60 фраз).';
    if(/speech_provider_unconfigured|503/.test(code))return 'Сервис речи ещё не настроен на сервере CRM.';
    if(/audio_(size|duration)/.test(code))return 'Фраза слишком длинная. Повтори короче.';
@@ -138,7 +138,7 @@
    try{
      const clip=await capture(10,epoch);
      if(epoch!==listenEpoch || mode!=='manual')return;
-     if(!clip?.loud){info('Не услышал звука с микрофона. Проверь выбранное устройство ввода и уровень громкости.');await stopAll();return;}
+     if(clip && !clip.loud)info('Уровень микрофона низкий. Всё равно пробую распознать записанную фразу…');
      const phrase=await transcribe(clip,epoch);
      if(epoch!==listenEpoch||mode!=='manual')return;
      if(phrase){await stopAll();submit(phrase);}
