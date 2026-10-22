@@ -16,7 +16,7 @@ function allowed(){
 }
 function parseMonth(query){
  const q=String(query||'').toLowerCase();
- const entry=Object.entries(MONTHS).find(([name])=>q.includes(name));
+ const entry=Object.entries(MONTHS).find(([name])=>name==='ма'?/(?:^|\s)ма[йя](?=\s|$)/.test(q):q.includes(name));
  if(!entry)return null;
  const explicit=q.match(/\b20(25|26)\b/);
  const year=explicit?Number(explicit[0]):new Date().getFullYear();
