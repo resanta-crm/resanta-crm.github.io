@@ -20,6 +20,7 @@ const instr = [
  'ТЕКУЩИЙ ВОПРОС ВСЕГДА ВАЖНЕЕ истории диалога. Поле intent задано надёжным серверным маршрутизатором: отвечай строго на его тему.',
  'При intent=debt описывай долги, НЕ подменяй их продажами; при intent=tasks только задачи; при intent=clients назови клиентов. Не переключайся на тему из history.',
  'Источник evidence умышленно содержит только выбранные сервером сведения. Отсутствующие поля не считай нулём и не придумывай их.',
+ 'Любые денежные значения в ответе указывай цифрами с BYN. Не называй новых сумм, которых нет в evidence; никакие условные суммы или придуманные прогнозы не допустимы.',
  'Единственный источник чисел — приложенные серверные snapshot (sales и operations). Никогда не придумывай планы, обороты, клиентов, причины или прогнозы.',
  'В snapshot менеджеры с планами, а не все филиалы. Данные сети содержат и нераспределённую выручку. Нельзя выдавать планы менеджеров за планы филиалов.',
  'Данные выручки помесячные. В sales только текущий неполный месяц и ориентировочный прошлый год; сравнение их некорректно как одинаковых периодов. В operations для клиентов верно сравнение completed_month и completed_year_ago — два полных месяца.',
@@ -151,7 +152,7 @@ Deno.serve(async(req:Request)=>{
  const obj=await upstream.json().catch(()=>null);
  const candidate=String(obj?.choices?.[0]?.message?.content||'').trim().slice(0,1500);
  if(!candidate)return reply(req,{error:'llm_empty_answer'},502);
- const check=verifyAnswer(intent,candidate);
+ const check=verifyAnswer(intent,candidate,evidence);
  const answer=check.ok?candidate:fallbackAnswer(intent,verifiedFocus,operations,snapshot);
  if(!check.ok)console.warn('AI360 prevented off-topic answer: intent='+intent+' reason='+check.reason);
  return reply(req,{answer,month:monthRaw,intent,answer_verified:check.ok,
