@@ -130,14 +130,18 @@ function ask(text,ui,confirmedManager){
     }
     if(hit.kind==='exact')focus=hit.manager;
    }
-   if(!focus && globalIntent.test(text))lastManager=null;
-   if(!focus && lastManager && follow.test(text) && !globalIntent.test(text))focus=lastManager;
+   const networkAsked=globalIntent.test(text) && !focus;
+   if(networkAsked)lastManager=null;
+   // A specific manager remains the current subject of the conversation,
+   // including brand-new questions such as "Какие клиенты ей нужны?"
+   // and "Кого отгрузить?", not just "почему" follow-ups.
+   if(!focus && !networkAsked && lastManager && history.length)focus=lastManager;
    const explicitMonth=parseMonth(text);
-   const selectedMonth=explicitMonth||((history.length&&follow.test(text))?lastMonth:null);
+   const selectedMonth=explicitMonth||((focus && history.length)?lastMonth:null);
    const payload={message:text,history:history.slice(-6)};
    if(selectedMonth)payload.month=selectedMonth;
    if(focus)payload.focusManager=focus;
-   ui.textStatus('Проверяю продажи и KPI в CRM…');
+   ui.textStatus(focus?'Проверяю подтверждённые данные '+focus+' в CRM…':'Проверяю общие данные сети в CRM…');
    const result=await db.functions.invoke(ENDPOINT,{body:payload});
    if(result.error)throw new Error(await popError(result.error));
    if(!allowed())return;
@@ -147,6 +151,7 @@ function ask(text,ui,confirmedManager){
    history=history.slice(-6);
    lastMonth=String(result.data?.month||'');
    if(focus)lastManager=focus;
+   if(!focus && networkAsked)lastManager=null;
    ui.answer(answer);
   }catch(e){if(allowed())ui.answer(reason(String(e?.message||e)));}
   finally{pending=false;window.__resantaAI360PendingV1=false;}
