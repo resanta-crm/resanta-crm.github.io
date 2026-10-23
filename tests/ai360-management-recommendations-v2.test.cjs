@@ -39,6 +39,8 @@ const fs=require('node:fs');
  assert(plan.includes('проект одного поручения'));
  assert(plan.includes('ничего не создано'));
  assert(plan.includes('Потенциальная отгрузка не подтверждена'));
+ assert(plan.includes('В ПДЗ есть запись с таким же названием: 25') && plan.includes('Сверить контрагента по реквизитам'),
+ 'exact-name matching should flag the same client debt but require counterparty verification');
  assert(!plan.includes('МИСАС')&&!plan.includes('Шанс-Хоум'));
  const cross={...ops,declining_clients:[{...ops.declining_clients[0],manager_name:'Руднев'}]};
  assert(r.managerActionPlan(cross,'Шкуран',sales).includes('чужим клиентам'));
