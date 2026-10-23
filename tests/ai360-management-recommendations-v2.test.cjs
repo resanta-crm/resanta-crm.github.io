@@ -32,7 +32,7 @@ const fs=require('node:fs');
  assert(plan.includes('отставание от плана, не доказательство общего падения выручки'));
  assert(plan.includes('27 октября 2026 года') && plan.includes('28 октября 2026 года'));
  assert(plan.includes('уже в маршруте'));
- assert(plan.includes('повторно не назначать'));
+ assert(plan.includes('Не назначать повторно'));
  assert(plan.includes('Сначала проверить 2 открытых задач'));
  assert(plan.includes('Сначала проверить 1 просроченных задач'));
  assert(plan.toLowerCase().includes('проверить существующие маршруты'));
