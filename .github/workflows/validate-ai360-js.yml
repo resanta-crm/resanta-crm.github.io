@@ -11,6 +11,7 @@ on:
       - 'assets/139-resanta-ai360-staff-resolver-v1.js'
       - 'tests/ai360-manager-voice-dialogue.test.cjs'
       - 'tests/ai360-intent-routing-v1.test.cjs'
+      - 'tests/ai360-management-recommendations-v2.test.cjs'
       - 'tests/ai360-remembered-wake-session.test.cjs'
       - 'supabase/functions/crm-ai360-director-v1/intent-router.mjs'
       - '.github/workflows/validate-ai360-js.yml'
@@ -38,4 +39,5 @@ jobs:
           node tests/ai360-voice-full-answer.test.cjs
           node tests/ai360-manager-voice-dialogue.test.cjs
           node tests/ai360-intent-routing-v1.test.cjs
+          node tests/ai360-management-recommendations-v2.test.cjs
           node tests/ai360-remembered-wake-session.test.cjs
