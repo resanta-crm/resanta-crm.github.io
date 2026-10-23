@@ -74,9 +74,10 @@ export function selectEvidence(kind,sales,ops){
  return root;
 }
 const MONTHS=['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MONTHS_NOM=['','январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 export function monthLabel(raw){
  const match=String(raw||'').match(/^(20\d\d)-(0[1-9]|1[0-2])$/);
- return match?MONTHS[Number(match[2])]+' '+match[1]+' года':String(raw||'неизвестный месяц');
+ return match?MONTHS_NOM[Number(match[2])]+' '+match[1]+' года':String(raw||'неизвестный месяц');
 }
 export function dateLabel(raw){
  const m=String(raw||'').slice(0,10).match(/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
@@ -135,7 +136,7 @@ export function directClientAnswer(ops,focus){
   return (i+1)+'. '+c.client_name+': снижение '+money(c.loss)+
    ', последнее посещение '+(c.last_visit?dateLabel(c.last_visit):'не установлено')+', '+next+', '+tasks;
  }).join('; ');
- return 'Проверила только клиентов, закреплённых за '+focus+'. Наибольшее снижение закупок за '+period+' по сравнению с '+prev+': '+bullets+
+ return 'Проверила только клиентов, закреплённых за '+focus+'. Сравнение завершённых месяцев: '+period+' и '+prev+'. Клиенты с наибольшим снижением: '+bullets+
  '. Это не подтверждённые заказы и не гарантированный объём отгрузки. До встречи проверить потребность, незакрытые заявки, наличие товаров и условия оплаты; поручения только после согласования.';
 }
 // Grounded, short spoken executive briefing. Full evidence remains onscreen.
@@ -169,7 +170,7 @@ export function managerActionPlan(ops,focus,sales=null){
   head+=' Выполнение плана '+num(m.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+
    '%, до плана '+money(gap)+'. Это отставание от плана, не доказательство общего падения выручки.';
  }
- head+='\nСнижение закупок отдельных клиентов: '+closed+' к '+yearAgo+'. Это не подтверждённые заказы и не прогноз отгрузок.';
+ head+='\nСравниваются завершённые месяцы: '+closed+' и '+yearAgo+'. Снижение закупок отдельных клиентов не равно подтверждённым заказам или прогнозу отгрузок.';
  if(!candidates.length)return head+'\nНет достоверных примеров снижения у закреплённых клиентов. Нужно проверить открытые заявки, потребность и доступные остатки, а не придумывать заказ.';
  const sameName=(a,b)=>norm(a).replace(/\s+/g,' ').trim()===norm(b).replace(/\s+/g,' ').trim();
  const bullets=candidates.map((c,i)=>{
