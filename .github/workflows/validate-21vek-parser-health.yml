@@ -6,6 +6,7 @@ on:
       - 'assets/80-triovist-21vek-control-v236107.js'
       - 'assets/100-safe-upgrades-loader-v236272.js'
       - 'supabase/migrations/20261022_triovist_21vek_status_tombstone_health_v236448.sql'
+      - 'supabase/migrations/20261023_triovist_21vek_status_fast_tombstone_v236449.sql'
       - 'tools/triovist_21vek_shadow_sync.py'
       - 'tools/test_triovist_21vek_unavailable.py'
       - '.github/workflows/validate-21vek-parser-health.yml'
@@ -38,5 +39,12 @@ jobs:
           for clause in ('verified_removed_urls','blocking_price_issues','Удалённые страницы товаров'):
               assert clause in ui, clause
           assert "'23.6.448'" in Path("assets/100-safe-upgrades-loader-v236272.js").read_text()
-          print("Parser health preserves failures and explains verified unavailable cards")
+          fast=Path("supabase/migrations/20261023_triovist_21vek_status_fast_tombstone_v236449.sql").read_text().lower()
+          assert 'with candidates as materialized' in fast
+          assert 's.run_id=c.snapshot_run_id' in fast
+          assert 's.run_id::text=split_part' not in fast, 'performance regression: index unusable'
+          assert 'v_live_price_issues:=greatest(0,v_nonpositive-v_verified_removed_urls)' in fast
+          assert 'нет доступа к статусу 21vek' in fast, 'must not remove director/manager authorization'
+          assert 'v_promotion_pending' in fast, 'real stale-data protection must remain'
+          print("21vek optimized status: indexed narrow candidates; health and auth preserved")
           PY
