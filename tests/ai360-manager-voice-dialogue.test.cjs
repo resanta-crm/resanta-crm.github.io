@@ -62,6 +62,16 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  await wait();
  result=calls.filter(x=>x.kind!=='directory').at(-1);
  assert.equal(result.focusManager,'Шкуран');
+ // Exact failure from the director's recording: a new TOPIC without an explicit
+ // surname must NOT silently switch from Shkuran's portfolio to whole network.
+ assert.equal(window.crmAI360SalesHandleV1('Какие клиенты ей нужно отгрузить?',ui),true);
+ await wait();
+ result=calls.filter(x=>x.kind!=='directory').at(-1);
+ assert.equal(result.focusManager,'Шкуран','implicit client question must keep Shkuran');
+ assert.equal(window.crmAI360SalesHandleV1('А какие у неё просроченные долги?',ui),true);
+ await wait();
+ result=calls.filter(x=>x.kind!=='directory').at(-1);
+ assert.equal(result.focusManager,'Шкуран','new debt topic must keep Shkuran');
  assert.equal(window.crmAI360SalesHandleV1('У каких клиентов Руднева снизились закупки?',ui),true);
  await wait();
  result=calls.filter(x=>x.kind!=='directory').at(-1);
