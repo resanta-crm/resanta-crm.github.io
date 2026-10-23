@@ -131,10 +131,14 @@ export function verifyManagerOperations(ops,focus){
  return {ok:true};
 }
 export function detectForeignClientMention(answer,foreignClients){
- const t=norm(answer).replace(/\s+/g,' ').trim();
+ const t=' '+norm(answer).replace(/[^а-яa-z0-9]+/g,' ').replace(/\s+/g,' ').trim()+' ';
+ const legal=new Set(['ооо','чтуп','чп','ип','чсуп','чтсуп','чсупп','учп','зао','оао','оодо']);
+ const generic=new Set(['сервис','магазин','торговля','технологии','строй','инструменты','компания','центр','торг']);
  for(const name of foreignClients||[]){
-  const n=norm(name).replace(/\s+/g,' ').trim();
-  if(n.length>=9 && t.includes(n))return name;
+  const n=norm(name).replace(/[^а-яa-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+  if(n.length>=9 && t.includes(' '+n+' '))return name;
+  const core=n.split(' ').filter(w=>!legal.has(w)).join(' ');
+  if(core.length>=5 && !generic.has(core) && t.includes(' '+core+' '))return name;
  }
  return null;
 }
