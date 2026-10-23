@@ -39,7 +39,7 @@ const fs=require('node:fs');
  assert(plan.includes('проект задачи на согласование'));
  assert(plan.includes('не создавались'));
  assert(plan.includes('не гарантируют возврат объёма'));
- assert(plan.includes('В ПДЗ есть запись с таким же названием: 25') && plan.includes('Сверить контрагента по реквизитам'),
+ assert(plan.includes('ПДЗ с таким же юридическим названием: 25') && plan.includes('Сверить контрагента по реквизитам'),
  'exact-name matching should flag the same client debt but require counterparty verification');
  assert(!plan.includes('МИСАС')&&!plan.includes('Шанс-Хоум'));
  assert(plan.includes('Ответственный: Шкуран'));
