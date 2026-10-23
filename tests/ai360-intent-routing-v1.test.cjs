@@ -62,6 +62,9 @@ const url=pathToFileURL(path.resolve('supabase/functions/crm-ai360-director-v1/i
  const safeClients=r.directClientAnswer(opsOwned,'Шкуран');
  assert(safeClients.includes('ЛельТехноТорг ООО'));
  assert(safeClients.includes('Руд Буд ЧТУП'));
+ assert(safeClients.includes('повторно не назначать') && safeClients.includes('2026-10-25'));
+ assert(safeClients.includes('ближайший визит не найден'));
+ assert(safeClients.includes('поручения только после согласования'));
  assert(!safeClients.includes('МИСАС'));
  assert(!safeClients.includes('Шанс-Хоум'));
  assert.equal(r.verifyManagerOperations(opsOwned,'Шкуран').ok,true);
