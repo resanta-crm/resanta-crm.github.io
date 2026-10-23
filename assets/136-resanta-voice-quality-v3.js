@@ -27,6 +27,9 @@ function approveYandex(){
  remember(CONSENT_KEY,'yes');
  return true;
 }
+// A deliberate first wake activation also requests permission for the neural voice.
+window.crmResantaVoiceAuthorizeV3=approveYandex;
+window.crmResantaVoiceHasConsentV3=()=>approvedYandex;
 const allowed=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
 function cleanSpeech(t){
  return String(t||'')
@@ -151,7 +154,7 @@ window.crmResantaVoiceSpeakV3=async function(message){
  window.__resantaVoiceOutputBusy=true;
  try{
    if(!current.startsWith('yandex:')||!approvedYandex){
-     setStatus('Выбрана Лера. Нажми «▶ Проверить», чтобы разрешить озвучку через Яндекс.');
+     setStatus('Голос Яндекса ещё не разрешён. Включи «Привет, Ресанта» и подтверди озвучку. Кнопка проверки необязательна.');
      return;
    }
    const chunks=speechChunks(msg);
@@ -219,21 +222,28 @@ function mount(){
  select=document.createElement('select');select.setAttribute('aria-label','Голос помощника');
  select.style.cssText='background:#fff;color:#11203d;border-radius:7px;padding:7px;max-width:100%;min-width:175px;flex:1;font-size:12px;border:1px solid #6a82a2';
  testBtn=document.createElement('button');
- testBtn.type='button';testBtn.className='rva-btn';testBtn.textContent='▶ Проверить';testBtn.style.padding='7px';
- wrap.append(title,select,testBtn);
+ testBtn.type='button';testBtn.className='rva-btn';testBtn.textContent='▶ Послушать пример голоса';testBtn.style.padding='7px';
+ wrap.append(title,select);
  actions.insertBefore(wrap,mute.parentElement);
  const caption=document.createElement('div');
  caption.textContent='Только Лера и Даша · Яндекс SpeechKit v3. Длинный ответ произносится по частям. Месячный расчётный бюджет Яндекс-озвучки — 5 000 ₽ (РФ, с НДС). Распознавание и интеллект OpenAI отдельно. При ошибке полный ответ остаётся на экране.';
  caption.style.cssText='color:#b6c7db;font-size:10px;line-height:1.45';
  wrap.after(caption);
+ const optionalPreview=document.createElement('details');
+ optionalPreview.style.cssText='font-size:11px;color:#b6c7db';
+ const summary=document.createElement('summary');
+ summary.textContent='Проверка звучания (необязательно)';
+ summary.style.cssText='cursor:pointer';
+ optionalPreview.append(summary,testBtn);
+ caption.after(optionalPreview);
  budgetLabel=document.createElement('div');
  budgetLabel.setAttribute('aria-live','polite');
  budgetLabel.style.cssText='color:#e0eaff;font-size:11px;line-height:1.4;margin-top:1px';
  budgetLabel.textContent='Расход Яндекс-озвучки: проверяю месячный бюджет…';
- caption.after(budgetLabel);
+ optionalPreview.after(budgetLabel);
  void refreshMonthlyBudget();
  fillVoices();
- if(!approvedYandex)setStatus('Основной голос — Лера. Нажми «▶ Проверить» и разреши Яндекс SpeechKit один раз.');
+ if(!approvedYandex)setStatus('Основной голос — Лера. Разрешение озвучки появится при первом включении «Привет, Ресанта». Проверка голоса необязательна.');
  select.addEventListener('change',()=>{
    const chosen=select.value;
    if(chosen!=='yandex:lera'&&chosen!=='yandex:dasha'){select.value=current;return;}
