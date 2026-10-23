@@ -18,20 +18,22 @@
   let root, trigger, statusEl, historyEl, field, wakeBtn, micBtn, muteBtn;
   let lastDetailedResponse='';
   function briefVoiceText(message){
-    const full=String(message||'').trim();
-    if(full.length<=490)return full;
-    const words=full.replace(/\*\*/g,'').replace(/\s+/g,' ').trim();
-    // Keep the key point audible; complete written response is unchanged.
-    let end=words.lastIndexOf('. ',360);
-    if(end>140)end+=1;
-    if(end<140)end=words.lastIndexOf(';',360);
-    if(end<140)end=words.lastIndexOf(' ',360);
-    if(end<140)end=Math.min(360,words.length);
-    return words.slice(0,end+1).trim()+
-      ' Полный ответ на экране. Если хочешь всё услышать, скажи: расскажи подробнее.';
+    const raw=String(message||'').replace(/\*\*/g,'').replace(/\s+/g,' ').trim();
+    if(raw.length<=190)return raw;
+    // Keep a complete thought rather than cut in the middle of a figure/SKU.
+    const first=raw.slice(0,175);
+    let end=first.lastIndexOf('. ');
+    if(end>=85)end+=1;
+    else {
+      end=first.lastIndexOf('; ');
+      if(end>=85)end+=1;
+      else end=first.lastIndexOf(' ');
+    }
+    const intro=raw.slice(0,Math.max(80,end)).trim().replace(/[,;:]+$/,'');
+    return intro+' Полный план на экране.';
   }
 
-  function allowed() {
+    function allowed() {
     try {
       return typeof currentUser !== 'undefined' && !!currentUser?.id &&
         typeof currentProfile !== 'undefined' && currentProfile?.role === 'boss' &&
@@ -81,15 +83,19 @@
       window.speechSynthesis.speak(utter);
     } catch (_) { state.speaking = false; resumeWake(); }
   }
-  function answer(message) {
+  function answer(message,options={}) {
     addLine('РЕСАНТА AI',message);
-    textStatus('Готов к следующему вопросу');
-    const text=String(message||'');
-    if(text.length>490){
+    const text=String(message||'').trim();
+    const verifiedBrief=typeof options?.speechSummary==='string'&&options.speechSummary.length<=230?
+      options.speechSummary.trim():'';
+    const compact=verifiedBrief||(text.length>225?briefVoiceText(text):'');
+    if(compact && compact!==text){
       lastDetailedResponse=text;
-      speak(briefVoiceText(text),{shortSummary:true});
+      textStatus('Готовлю краткий голосовой итог…');
+      speak(compact,{shortSummary:true});
     }else{
       lastDetailedResponse='';
+      textStatus('Готовлю голосовой ответ…');
       speak(text);
     }
   }
@@ -126,6 +132,11 @@
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
     if (!query) { answer('Привет! Слушаю тебя. Чем могу помочь?'); return; }
+    if(/^(?:(?:лера|ресанта)\s+)?(?:остановись|останови\s+(?:речь|озвучку)|хватит\s+говорить|замолчи)$/.test(query)){
+      window.crmResantaVoiceStopV3?.();
+      textStatus('Озвучка остановлена. Можешь задать следующий вопрос.');
+      return;
+    }
     if(/^(?:большое\s+)?спасибо(?:\s+(?:большое|тебе|вам))?$|^благодарю(?:\s+тебя)?$|^спасибочки$/.test(query)){
       answer('Пожалуйста! Обращайся, если понадобится ещё что-нибудь.');
       return;
@@ -315,8 +326,8 @@
       <div class="rva-control"><div class="rva-status" aria-live="polite">Микрофон пока выключен</div>
       <div class="rva-actions"><button class="rva-btn primary rva-mic" type="button">🎤 Спросить голосом</button><button class="rva-btn rva-wake" type="button" aria-pressed="false">◉ Включить «Привет, Ресанта»</button></div>
       <div class="rva-q"><input class="rva-input" type="text" maxlength="300" placeholder="Или напиши вопрос…" aria-label="Вопрос помощнику"><button class="rva-btn primary rva-send" type="button">➤</button></div>
-      <div class="rva-actions"><button class="rva-btn rva-mute" type="button">🔊 Озвучка включена</button></div>
-      <div class="rva-note">По умолчанию микрофон выключен. При включении распознавания браузер может передавать звук своему провайдеру. Фоновая фраза действует только в открытом окне. Запись и история диалога не сохраняются. Пилот не отправляет запросы платному ИИ и не изменяет данные CRM.</div></div>`;
+      <div class="rva-actions"><button class="rva-btn rva-mute" type="button">🔊 Озвучка включена</button><button class="rva-btn rva-stop-audio" type="button" title="Остановить текущий голосовой ответ">■ Остановить речь</button></div>
+      <div class="rva-note">По умолчанию микрофон выключен. При включении распознавания браузер может передавать звук своему провайдеру. Фоновая фраза действует только в открытом окне. Запись и история диалога не сохраняются. Директорский помощник использует ограниченные платные запросы для анализа. Рабочие записи CRM не изменяет.</div></div>`;
     document.body.appendChild(root);
     historyEl=root.querySelector('.rva-history');statusEl=root.querySelector('.rva-status');field=root.querySelector('.rva-input');
     wakeBtn=root.querySelector('.rva-wake');micBtn=root.querySelector('.rva-mic');muteBtn=root.querySelector('.rva-mute');
@@ -324,7 +335,7 @@
       if(!allowed())return;
       root.hidden=!root.hidden;trigger.setAttribute('aria-expanded',String(!root.hidden));
       if(root.hidden)closePanel();
-      else if(!historyEl.children.length)answer('Привет! Я пилот голосового помощника. Могу показать задачи, клиентов, визиты и открыть разделы CRM.');
+      else if(!historyEl.children.length)answer('Привет! Я РЕСАНТА AI 360°. Могу проверить продажи, клиентов, долги и маршруты.');
     });
     root.querySelector('.rva-close').addEventListener('click',closePanel);
     micBtn.addEventListener('click',()=>{setWake(false); startListening('manual');});
@@ -335,6 +346,10 @@
       setWake(true);
     });
     muteBtn.addEventListener('click',()=>{state.silent=!state.silent;if(state.silent){window.speechSynthesis?.cancel();state.speaking=false;resumeWake();}updateButtons();});
+    root.querySelector('.rva-stop-audio')?.addEventListener('click',()=>{
+      window.crmResantaVoiceStopV3?.();
+      textStatus('Озвучка остановлена. Можно задать следующий вопрос.');
+    });
     const submit=()=>{const q=field.value.trim(); if(!q)return;field.value=''; handleCommand(q);};
     root.querySelector('.rva-send').addEventListener('click',submit);
     field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit();}});
