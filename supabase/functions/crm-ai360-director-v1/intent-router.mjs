@@ -119,6 +119,60 @@ export function directClientAnswer(ops,focus){
  return 'Проверила только клиентов, закреплённых за '+focus+'. Наибольшее снижение закупок за '+period+' по сравнению с '+prev+': '+bullets+
  '. Это не готовые заказы и не гарантированный объём отгрузки. Рекомендую поставить проверку текущей потребности, остатков, незакрытых заявок и условий оплаты, затем согласовать с менеджером конкретные сроки и суммы.';
 }
+// Director actions are generated only from verified current-manager records.
+// Not a prediction of orders, nor permission to write a task or schedule.
+export function managerActionPlan(ops,focus,sales=null){
+ const ownership=verifyManagerOperations(ops,focus);
+ if(!focus || !ownership.ok)return 'Нет подтверждённого персонального закрепления клиентов. Не буду создавать рекомендации по чужим клиентам.';
+ const candidates=Array.isArray(ops.declining_clients)?ops.declining_clients:[];
+ const asOf=String(ops.period?.as_of||'').slice(0,10);
+ const month=String(ops.period?.last_closed_month||'последний закрытый месяц');
+ const manager=(sales?.managers||[]).find(x=>norm(x.manager_name)===norm(focus));
+ let head='Проект действий для '+focus+'. Данные по клиентам — за '+month+' по сравнению с соответствующим месяцем прошлого года.';
+ if(manager && Number(manager.plan)>0)head+=' План выполнен на '+num(manager.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+
+   '%. Это отставание от плана, не доказательство общего падения выручки.';
+ if(!candidates.length)return head+' Клиентов с проверенным снижением в этой выборке нет. Нужно уточнить реальную потребность и доступные заказы, прежде чем обещать отгрузку.';
+ const items=candidates.slice(0,3).map((c,i)=>{
+  const date=String(c.next_route||'').slice(0,10);
+  const scheduled=/^\d{4}-\d\d-\d\d$/.test(date)&&(!asOf||date>=asOf);
+  let action=scheduled?
+   'Визит уже запланирован на '+date+' — повторно не назначать. До визита уточнить потребность, возможные заявки, наличие товара и условия оплаты.':
+   'Проверить существующий маршрут и согласовать удобную дату контакта; не создавать дублирующий визит.';
+  const open=Number(c.open_tasks)||0,late=Number(c.overdue_tasks)||0;
+  if(late>0)action+=' По клиенту '+late+' просроченных задач: прежде проверить их исполнение.';
+  else if(open>0)action+=' Уже открыто '+open+' задач: проверить содержание, не дублировать поручения.';
+  else action+=' Если задач нет, предложить директору проект одного поручения на согласование.';
+  const loss=Number(c.loss)>0?' (снижение закупок '+money(c.loss)+')':'';
+  return (i+1)+'. '+c.client_name+loss+'. '+action+' После контакта зафиксировать подтверждённую заявку или причину отказа.';
+ });
+ return head+' '+items.join(' ')+' Все поручения — только предложения, в CRM ничего не создано. Потенциальная отгрузка не подтверждена.';
+}
+export function debtPriorityAnswer(ops,focus){
+ if(!ops||!ops.debt_summary)return 'Сверенный отчёт ПДЗ пока недоступен. Не стану назначать взыскание без подтверждённой задолженности.';
+ const check=verifyManagerOperations(ops,focus);
+ if(focus&&!check.ok)return 'Не удалось подтвердить должников менеджера '+focus+'. Нельзя приписывать чужую задолженность.';
+ const s=ops.debt_summary;
+ const report=String(s.report_date||'').slice(0,10)||'дата не указана';
+ const creditors=(Array.isArray(ops.overdue_debtors)?ops.overdue_debtors:[]);
+ const important=creditors.filter(x=>Number(x.debt_overdue)>=1).sort((a,b)=>{
+  const av=Number(a.debt_overdue),bv=Number(b.debt_overdue);
+  return bv-av||Number(b.debt_overdue_days)-Number(a.debt_overdue_days);
+ });
+ const tiny=creditors.filter(x=>Number(x.debt_overdue)>0&&Number(x.debt_overdue)<1);
+ const title='ПДЗ '+(focus||'сети')+' по отчёту '+report+': '+money(s.amount)+
+  ', должников '+num(s.debtor_rows)+'.';
+ const rows=important.slice(0,3).map((c,i)=>{
+  const days=Math.max(0,Number(c.debt_overdue_days)||0);
+  const action=days>=30?'Длительная просрочка: сверить документы и согласовать график оплаты.':
+   Number(c.debt_overdue)>=10000?'Крупный долг: связаться с клиентом и получить подтверждённую дату платежа.':
+   'Сверить задолженность и согласовать дату оплаты.';
+  return (i+1)+'. '+c.client_name+': '+money(c.debt_overdue)+', просрочка '+days+' дн. '+action;
+ });
+ const remainder=tiny.length?' Мелкие остатки до 1 BYN ('+tiny.length+' поз.) — на сверку, без приоритетного прозвона.':'';
+ return title+' Приоритет по сумме и сроку: '+(rows.length?rows.join(' '):'существенных просроченных сумм в выборке нет.')+
+  remainder+' Это проект действий, платежи и задачи не изменялись.';
+}
+
 export function verifyManagerOperations(ops,focus){
  if(!focus)return {ok:true};
  if(!ops||String(ops.scope||'').trim().toLocaleLowerCase('ru-RU')!==String(focus).trim().toLocaleLowerCase('ru-RU'))
