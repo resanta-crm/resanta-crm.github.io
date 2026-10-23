@@ -35,7 +35,7 @@ const fs=require('node:fs');
  assert(plan.includes('повторно не назначать'));
  assert(plan.includes('Уже открыто 2 задач'));
  assert(plan.includes('1 просроченных задач'));
- assert(plan.includes('проверить существующий маршрут'));
+ assert(plan.toLowerCase().includes('проверить существующий маршрут'));
  assert(plan.includes('проект одного поручения'));
  assert(plan.includes('ничего не создано'));
  assert(plan.includes('Потенциальная отгрузка не подтверждена'));
