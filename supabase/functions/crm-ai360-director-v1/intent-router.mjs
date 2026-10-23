@@ -144,7 +144,7 @@ export function managerActionPlan(ops,focus,sales=null){
   else action+=' Если задач нет, предложить директору проект одного поручения на согласование.';
   // Debtor rows do not have CRM client_id. Do not join on aliases, substrings,
   // amount similarity or fuzzy names: match exact legal-name string only.
-  const sameName=(a,b)=>norm(a).replace(/\\s+/g,' ').trim()===norm(b).replace(/\\s+/g,' ').trim();
+  const sameName=(a,b)=>norm(a).replace(/\s+/g,' ').trim()===norm(b).replace(/\s+/g,' ').trim();
   const verifiedNameDebt=(ops.overdue_debtors||[]).find(d=>
     sameName(d.client_name,c.client_name)&&
     norm(d.manager_name).split(/\\s+/)[0]===norm(focus).trim());
