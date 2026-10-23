@@ -199,6 +199,7 @@
    }catch(e){await stopAll(reason(e));}
  }
  async function wakeLoop(epoch){
+   let partialHelloAt=0;
    try{
      while(mode==='wake' && epoch===listenEpoch && isOwner() && panel && !panel.hidden && !document.hidden){
        // No five-minute cutoff for explicitly enabled foreground dialogue.
@@ -222,10 +223,24 @@
          await waitForAssistant(epoch,'wake');
          if(epoch===listenEpoch&&mode==='wake')info('Слушаю следующий вопрос…');
        }else{
+         // SpeechKit can split "Привет, Ресанта" into two short clips.
+         // Both words are still required; a lone "Привет" never activates AI.
+         if(/^привет[\s,.!?]*$/i.test(phrase)){
+           partialHelloAt=Date.now();
+           info('Услышала «Привет». Скажи «Ресанта», чтобы активировать помощника.');
+           continue;
+         }
          const match=WAIT_RE.exec(phrase);
-         if(!match){info('Слышу речь, но жду «Привет, Ресанта». Распознано: '+phrase.slice(0,65));continue;}
-         const rest=phrase.slice(match.index+match[0].length).trim().replace(/^[\s,.!?]+/,'');
-         wakeHeard=true; // Activation lasts at most five minutes in explicitly enabled wake mode.
+         const separate=partialHelloAt>0&&Date.now()-partialHelloAt<=15000?
+           /^(?:ресанта|резанта|рясанта|рисанта)(?=$|[\s,.!?—-])/i.exec(phrase):null;
+         partialHelloAt=0;
+         if(!match&&!separate){
+           info('Слышу речь, но жду «Привет, Ресанта». Распознано: '+phrase.slice(0,65));
+           continue;
+         }
+         const prefix=match||separate;
+         const rest=phrase.slice(prefix.index+prefix[0].length).trim().replace(/^[\s,.!?]+/,'');
+         wakeHeard=true;
          if(rest){
            submit(rest);
            await waitForAssistant(epoch,'wake');
