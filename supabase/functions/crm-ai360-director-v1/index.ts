@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
-import { classify,needsSales,needsOperations,selectEvidence,directSalesAnswer,verifyAnswer,fallbackAnswer } from './intent-router.mjs';
+import { classify,needsSales,needsOperations,selectEvidence,directSalesAnswer,directClientAnswer,verifyManagerOperations,detectForeignClientMention,verifyAnswer,fallbackAnswer } from './intent-router.mjs';
 
 // Explicit director-only opt-in pilot; no scheduled AI, no changes to CRM source records.
 const ORIGINS = new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -30,6 +30,8 @@ const instr = [
  'Отрицательная месячная выручка может быть возвратом или корректировкой: её причина без дополнительных первичных документов неизвестна. Процент падения ниже -100% при отрицательной выручке описывай осторожно.',
  'В visits хранится фиксация посещений, а не доказательство GPS. Не выдавай плановые маршруты за выполненные визиты. Задачи, маршруты и ПДЗ отображают срез as_of, даже если продажи выбраны за старый период.',
  'Вопрос о конкретном клиенте отвечай только по фактически присланным данным; не придумывай клиентские карточки или результаты встреч. В ответе перечисляй 1-3 клиента, сумму снижения, последнюю дату визита, открытые задачи, ближайший маршрут, ПДЗ, если данные доступны.',
+ 'СТРОГО ЗАПРЕЩЕНО предлагать клиентам менеджера чужие торговые точки. Названия клиентов можно упоминать только из evidence.operations.declining_clients или overdue_tasks_sample, уже проверенных по закреплению. Даже если в истории упоминались другие клиенты — не используй их в персональных рекомендациях.',
+ 'Снижение закупок в прошлом месяце НЕ означает подтверждённый заказ или потенциальную отгрузку сейчас. Не обещай выполнение плана без проверки потребности, заявок, остатков и условий оплаты.',
  'Рекомендации должны быть конкретными: клиент, действие, исполнитель, проверяемый срок и критерий результата. Любые поручения — только ЧЕРНОВИК на согласование, никаких фактических записей.',
  'Указывай месяц, BYN и дату последней загрузки данных при цифрах. Если источник старый, предупреждай.',
  'Если пользователь спрашивает почему произошло отставание, различай наблюдаемые факты и гипотезы. Предлагай, что проверить в CRM, не утверждая неподтвержденных причин.',
@@ -125,6 +127,30 @@ Deno.serve(async(req:Request)=>{
    return reply(req,{error:'operations_unavailable'},503);
   }
  }
+ // Hard server-side ownership check. In particular, a scoped client query
+ // must never quietly become a whole-network recommendation.
+ if(verifiedFocus && operations){
+   const check=verifyManagerOperations(operations,verifiedFocus);
+   if(!check.ok){
+     console.warn('AI360 blocked mismatched manager operations',check.reason);
+     return reply(req,{error:'manager_client_scope_mismatch'},503);
+   }
+ }
+ if(intent==='clients'){
+   const answer=directClientAnswer(operations,verifiedFocus);
+   return reply(req,{answer,month:monthRaw,intent,answer_verified:!!verifiedFocus,
+     generated_by:'crm_rules',source:'CRM: clients, purchase_history, visits, route_plans',
+     scope:verifiedFocus||'no_explicit_manager',operations_as_of:operations?.period?.as_of||null});
+ }
+ let foreignClientNames:string[]=[];
+ if(verifiedFocus && (intent==='recommendations'||intent==='analysis')){
+   // Read-only, capped current roster. A failed check fails closed, rather than
+   // permit client names known to belong to a different current manager.
+   const others=await svc.from('clients').select('name').neq('manager_name',verifiedFocus)
+     .eq('is_archived',false).eq('to_delete',false).limit(900);
+   if(others.error)return reply(req,{error:'manager_client_scope_unavailable'},503);
+   foreignClientNames=(others.data||[]).map((c:any)=>String(c.name||'')).filter(Boolean);
+ }
  const evidence=selectEvidence(intent,snapshot,operations);
  const secret=Deno.env.get('OPENAI_API_KEY');
  if(!secret)return reply(req,{error:'llm_not_configured'},503);
@@ -152,7 +178,9 @@ Deno.serve(async(req:Request)=>{
  const obj=await upstream.json().catch(()=>null);
  const candidate=String(obj?.choices?.[0]?.message?.content||'').trim().slice(0,1500);
  if(!candidate)return reply(req,{error:'llm_empty_answer'},502);
- const check=verifyAnswer(intent,candidate,evidence);
+ const foreignMention=foreignClientNames.length?detectForeignClientMention(candidate,foreignClientNames):null;
+ const check=foreignMention?{ok:false,reason:'foreign_client_mentioned'}:verifyAnswer(intent,candidate,evidence);
+ if(foreignMention)console.warn('AI360 blocked a foreign client in manager recommendation');
  const answer=check.ok?candidate:fallbackAnswer(intent,verifiedFocus,operations,snapshot);
  if(!check.ok)console.warn('AI360 prevented off-topic answer: intent='+intent+' reason='+check.reason);
  return reply(req,{answer,month:monthRaw,intent,answer_verified:check.ok,
