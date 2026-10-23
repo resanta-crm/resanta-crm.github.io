@@ -142,6 +142,17 @@ export function managerActionPlan(ops,focus,sales=null){
   if(late>0)action+=' По клиенту '+late+' просроченных задач: прежде проверить их исполнение.';
   else if(open>0)action+=' Уже открыто '+open+' задач: проверить содержание, не дублировать поручения.';
   else action+=' Если задач нет, предложить директору проект одного поручения на согласование.';
+  // Debtor rows do not have CRM client_id. Do not join on aliases, substrings,
+  // amount similarity or fuzzy names: match exact legal-name string only.
+  const sameName=(a,b)=>norm(a).replace(/\\s+/g,' ').trim()===norm(b).replace(/\\s+/g,' ').trim();
+  const verifiedNameDebt=(ops.overdue_debtors||[]).find(d=>
+    sameName(d.client_name,c.client_name)&&
+    norm(d.manager_name).split(/\\s+/)[0]===norm(focus).trim());
+  if(verifiedNameDebt&&Number(verifiedNameDebt.debt_overdue)>=1){
+    action+=' В ПДЗ есть запись с таким же названием: '+money(verifiedNameDebt.debt_overdue)+
+      ', просрочка '+Math.max(0,Number(verifiedNameDebt.debt_overdue_days)||0)+
+      ' дн. Сверить контрагента по реквизитам и условия оплаты до обсуждения новой отгрузки.';
+  }
   const loss=Number(c.loss)>0?' (снижение закупок '+money(c.loss)+')':'';
   return (i+1)+'. '+c.client_name+loss+'. '+action+' После контакта зафиксировать подтверждённую заявку или причину отказа.';
  });
