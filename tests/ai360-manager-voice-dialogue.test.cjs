@@ -31,10 +31,12 @@ ctx.db={functions:{invoke:async (n,opts)=>{
  if(opts.body.kind==='directory')return {data:{staff}};
  return {data:{answer:opts.body.focusManager?
    'Персональная аналитика '+opts.body.focusManager:'Сводка по всем',
+   speech_summary:'Проверенный краткий итог для директора.',
    month:'2026-10'}};
 }}};
 vm.runInNewContext(fs.readFileSync('assets/138-resanta-ai360-sales-bridge-v1.js','utf8'),ctx);
-const ui={answer:t=>answers.push(t),textStatus:()=>{}};
+let spokenSummaries=[];
+const ui={answer:(t,options)=>{answers.push(t);if(options?.speechSummary)spokenSummaries.push(options.speechSummary);},textStatus:()=>{}};
 const wait=()=>new Promise(r=>setTimeout(r,30));
 (async()=>{
  assert.equal(window.crmAI360SalesHandleV1('какие продажи у менеджера орудия',ui),true);
@@ -68,6 +70,12 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  await wait();
  result=calls.filter(x=>x.kind!=='directory').at(-1);
  assert.equal(result.focusManager,'Шкуран','implicit client question must keep Shkuran');
+ assert.equal(window.crmAI360SalesHandleV1('Там порекомендую, чтобы она продала и закрыла свой план',ui),true);
+ await wait();
+ result=calls.filter(x=>x.kind!=='directory').at(-1);
+ assert.equal(result.focusManager,'Шкуран','garbled recommendation must retain Shkuran');
+ assert(spokenSummaries.includes('Проверенный краткий итог для директора.'),
+   'spoken executive summary must reach the voice UI separately from full answer');
  assert.equal(window.crmAI360SalesHandleV1('А какие у неё просроченные долги?',ui),true);
  await wait();
  result=calls.filter(x=>x.kind!=='directory').at(-1);
@@ -119,6 +127,8 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  assert(!pilot.includes('Пока это пилот голосового управления.'),'do not read obsolete pilot fallback');
  assert(pilot.includes("спасибо")&&pilot.includes('Пожалуйста! Обращайся'),'natural gratitude');
  assert(pilot.includes('lastDetailedResponse')&&pilot.includes('briefVoiceText')&&pilot.includes('Озвучиваю предыдущий ответ полностью.'),'short voice and on-demand full replay');
+ assert(pilot.includes('rva-stop-audio')&&pilot.includes('crmResantaVoiceStopV3'),'visible stop-speech action is wired');
+ assert(pilot.includes('options.speechSummary'),'server summary is used for short audio');
  assert(p.includes('partialHelloAt')&&p.includes('Date.now()-partialHelloAt<=15000'),'split greeting recover');
  assert(p.includes("Услышала «Привет»."),'single hello must request second wake word');
  console.log('Manager scope continuity, greeting, Russian customer references, concise voice and gratitude: OK');
