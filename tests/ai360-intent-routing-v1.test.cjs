@@ -50,6 +50,26 @@ const url=pathToFileURL(path.resolve('supabase/functions/crm-ai360-director-v1/i
   route_summary:{planned_next30:72,approved_next30:60},
   visit_summary:{visits_90d:150,last_visit:'2026-10-22'}
  };
+ const opsOwned={
+   ...ops,scope:'Шкуран',
+   declining_clients:[
+    {client_name:'ЛельТехноТорг ООО',manager_name:'Шкуран',loss:1318.65,last_visit:'2026-10-10',next_route:null},
+    {client_name:'Руд Буд ЧТУП',manager_name:'Шкуран',loss:985.27,last_visit:null,next_route:'2026-10-25'}
+   ],
+   overdue_debtors:[{manager_name:'Шкуран Татьяна Григорьевна'}],
+   overdue_tasks_sample:[{manager_name:'Шкуран',title:'Связаться с клиентом'}]
+ };
+ const safeClients=r.directClientAnswer(opsOwned,'Шкуран');
+ assert(safeClients.includes('ЛельТехноТорг ООО'));
+ assert(safeClients.includes('Руд Буд ЧТУП'));
+ assert(!safeClients.includes('МИСАС'));
+ assert(!safeClients.includes('Шанс-Хоум'));
+ assert.equal(r.verifyManagerOperations(opsOwned,'Шкуран').ok,true);
+ assert.equal(r.verifyManagerOperations({...opsOwned,declining_clients:[{client_name:'МИСАС ООО',manager_name:'Руднев',loss:21602.41}]},'Шкуран').reason,'foreign_declining_client');
+ assert.equal(r.verifyManagerOperations({...opsOwned,scope:'вся доступная клиентская сеть'},'Шкуран').reason,'manager_scope_mismatch');
+ assert.equal(r.detectForeignClientMention('Поручить менеджеру МИСАС ООО проверить объём закупок',['МИСАС ООО','Шанс-Хоум ООО']),'МИСАС ООО');
+ assert.equal(r.detectForeignClientMention('Нужно проверить клиента Шанс-Хоум',['Шанс-Хоум ООО']),'Шанс-Хоум ООО');
+ assert.equal(r.detectForeignClientMention('У ЛельТехноТорг есть падение',['МИСАС ООО','Шанс-Хоум ООО']),null);
  const straightforward=r.directSalesAnswer(sales,'Шкуран','2026-10');
  assert(straightforward.includes('Шкуран'));
  assert(straightforward.includes('46\u00a0696,19')||straightforward.includes('46 696,19'));
