@@ -255,12 +255,20 @@
      userOptIn=true;
    }
    if(newMode==='wake'){
-     const authorized=window.crmResantaVoiceAuthorizeV3?.();
-     // Only ask Yandex consent from an explicit user gesture; after reloading
-     // saved consent is restored by the neural speech module.
-     if(!automatic && authorized===false){
-       info('Разреши Яндекс Леру или Дашу для озвучки, затем включи фразу снова.');
+     // No background consent dialogs on auto-reopen; if saved neural consent
+     // is missing, require a visible user click instead of listening silently.
+     if(automatic && window.crmResantaVoiceHasConsentV3?.()!==true){
+       autoWakeBlocked=true;
+       info('Чтобы Лера отвечала голосом, один раз нажми «Привет, Ресанта» и разреши Яндекс.');
        return;
+     }
+     if(!automatic){
+       const authorize=window.crmResantaVoiceAuthorizeV3;
+       const authorized=typeof authorize==='function'&&authorize();
+       if(!authorized){
+         info('Разреши Яндекс Леру или Дашу для озвучки, затем включи фразу снова.');
+         return;
+       }
      }
    }
    starting=true;
