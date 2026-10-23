@@ -57,7 +57,17 @@ function context(voice){
  const byn=styled.window.crmAI360SpeechChunksV4('Выручка 159000 BYN, недобор 35440.52 BYN.');
  assert.equal(byn.join(' ').includes('BYN'),false,'BYN must not be read as letters');
  assert(byn.join(' ').includes('159000 белорусских рублей'));
- assert(byn.join(' ').includes('35440.52 белорусских рублей'));
+ assert(byn.join(' ').includes('35440 белорусских рублей 52 копейки'));
+ const ruble=styled.window.crmAI360SpeechChunksV4('Долг 1 BYN, задолженность 2 BYN, возврат 21 BYN. Остаток 0.06 BYN.').join(' ');
+ assert(ruble.includes('1 белорусский рубль'));
+ assert(ruble.includes('2 белорусских рубля'));
+ assert(ruble.includes('21 белорусский рубль'));
+ assert(ruble.includes('0 белорусских рублей 6 копеек'));
+ const rubleFormatted=styled.window.crmAI360SpeechChunksV4('Факт 46 965,42 BYN, план 153 000,00 BYN.').join(' ');
+ assert(rubleFormatted.includes('46 965 белорусских рублей 42 копейки'));
+ assert(rubleFormatted.includes('153 000 белорусских рублей'));
+ assert(!rubleFormatted.includes('BYN'));
+
  const dates=styled.window.crmAI360SpeechChunksV4(
   'Продажи менеджера Шкуран за 10.2026. Последняя загрузка 23.10.2026. Визит 2026-10-27. Данные за 2026-09.'
  ).join(' ');
