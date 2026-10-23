@@ -105,6 +105,39 @@ export function directSalesAnswer(sales,focus,month){
   (sales.network_revenue!==undefined?' Общая выручка из импорта: '+money(sales.network_revenue)+'.':'')+
   last+incomplete;
 }
+export function directClientAnswer(ops,focus){
+ if(!focus)return 'Уточни менеджера или скажи «по всей сети», чтобы я не смешала клиентов разных территорий.';
+ if(!ops || String(ops.scope||'').toLocaleLowerCase('ru-RU')!==String(focus).toLocaleLowerCase('ru-RU'))
+  return 'Не удалось подтвердить закрепление клиентов за '+focus+'. Чужих клиентов предлагать не буду.';
+ const list=Array.isArray(ops.declining_clients)?ops.declining_clients:[];
+ if(list.some(c=>String(c.manager_name||'').toLocaleLowerCase('ru-RU')!==String(focus).toLocaleLowerCase('ru-RU')))
+  return 'Обнаружено несоответствие закрепления клиентов за '+focus+'. Рекомендации временно не показываю.';
+ const period=ops.period?.last_closed_month||'последний закрытый месяц';
+ const prev=ops.period?.last_closed_year_ago||'соответствующий месяц год назад';
+ if(!list.length)return 'По закреплённым за '+focus+' клиентам нет подтверждённых примеров снижения закупок в сравнении '+period+' с '+prev+'. Для плана отгрузок нужна проверка заявок и остатков.';
+ const bullets=list.slice(0,3).map((c,i)=>String(i+1)+'. '+c.client_name+': снижение '+money(c.loss)+'; последнее посещение '+(c.last_visit||'не установлено')+'; ближайший плановый визит '+(c.next_route||'не найден')).join('; ');
+ return 'Проверила только клиентов, закреплённых за '+focus+'. Наибольшее снижение закупок за '+period+' по сравнению с '+prev+': '+bullets+
+ '. Это не готовые заказы и не гарантированный объём отгрузки. Рекомендую поставить проверку текущей потребности, остатков, незакрытых заявок и условий оплаты, затем согласовать с менеджером конкретные сроки и суммы.';
+}
+export function verifyManagerOperations(ops,focus){
+ if(!focus)return {ok:true};
+ if(!ops||String(ops.scope||'').trim().toLocaleLowerCase('ru-RU')!==String(focus).trim().toLocaleLowerCase('ru-RU'))
+  return {ok:false,reason:'manager_scope_mismatch'};
+ const match=(manager)=>String(manager||'').trim().toLocaleLowerCase('ru-RU')===String(focus).trim().toLocaleLowerCase('ru-RU');
+ const sameSurname=(name)=>String(name||'').trim().split(/\s+/)[0].toLocaleLowerCase('ru-RU')===String(focus).trim().toLocaleLowerCase('ru-RU');
+ if((ops.declining_clients||[]).some(x=>!match(x.manager_name)))return {ok:false,reason:'foreign_declining_client'};
+ if((ops.overdue_tasks_sample||[]).some(x=>!match(x.manager_name)))return {ok:false,reason:'foreign_task'};
+ if((ops.overdue_debtors||[]).some(x=>!sameSurname(x.manager_name)))return {ok:false,reason:'foreign_debtor_assignment'};
+ return {ok:true};
+}
+export function detectForeignClientMention(answer,foreignClients){
+ const t=norm(answer).replace(/\s+/g,' ').trim();
+ for(const name of foreignClients||[]){
+  const n=norm(name).replace(/\s+/g,' ').trim();
+  if(n.length>=9 && t.includes(n))return name;
+ }
+ return null;
+}
 const markers={
  sales:/(продаж|выруч|оборот|отгруз|план|выполн|факт)/i,
  debt:/(долг|задолж|дебит|пдз|просроч|оплат)/i,
