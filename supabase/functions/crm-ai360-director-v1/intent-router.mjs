@@ -115,9 +115,19 @@ export function directClientAnswer(ops,focus){
  const period=ops.period?.last_closed_month||'последний закрытый месяц';
  const prev=ops.period?.last_closed_year_ago||'соответствующий месяц год назад';
  if(!list.length)return 'По закреплённым за '+focus+' клиентам нет подтверждённых примеров снижения закупок в сравнении '+period+' с '+prev+'. Для плана отгрузок нужна проверка заявок и остатков.';
- const bullets=list.slice(0,3).map((c,i)=>String(i+1)+'. '+c.client_name+': снижение '+money(c.loss)+'; последнее посещение '+(c.last_visit||'не установлено')+'; ближайший плановый визит '+(c.next_route||'не найден')).join('; ');
+ const bullets=list.slice(0,3).map((c,i)=>{
+  const route=String(c.next_route||'').slice(0,10);
+  const scheduled=/^\d{4}-\d{2}-\d{2}$/.test(route)&&route>=String(ops.period?.as_of||'');
+  const next=scheduled?'визит уже в маршруте на '+route+' — повторно не назначать':
+    'ближайший визит не найден — сверить маршрут';
+  const open=Number(c.open_tasks)||0;
+  const tasks=open>0?'открыто '+open+' задач — проверить перед новыми поручениями':
+    'задач не видно — сначала проверить потребность';
+  return (i+1)+'. '+c.client_name+': снижение '+money(c.loss)+
+   ', последнее посещение '+(c.last_visit||'не установлено')+', '+next+', '+tasks;
+ }).join('; ');
  return 'Проверила только клиентов, закреплённых за '+focus+'. Наибольшее снижение закупок за '+period+' по сравнению с '+prev+': '+bullets+
- '. Это не готовые заказы и не гарантированный объём отгрузки. Рекомендую поставить проверку текущей потребности, остатков, незакрытых заявок и условий оплаты, затем согласовать с менеджером конкретные сроки и суммы.';
+ '. Это не подтверждённые заказы и не гарантированный объём отгрузки. До встречи проверить потребность, незакрытые заявки, наличие товаров и условия оплаты; поручения только после согласования.';
 }
 // Director actions are generated only from verified current-manager records.
 // Not a prediction of orders, nor permission to write a task or schedule.
