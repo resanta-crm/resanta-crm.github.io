@@ -31,6 +31,36 @@ function approveYandex(){
 window.crmResantaVoiceAuthorizeV3=approveYandex;
 window.crmResantaVoiceHasConsentV3=()=>approvedYandex;
 const allowed=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
+// Only speech text is normalized. Screen figures, source dates and CRM data stay unchanged.
+const MONTH_GEN=['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const MONTH_NOM=['','январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+const DAY_ORD=['','первого','второго','третьего','четвёртого','пятого','шестого','седьмого','восьмого','девятого','десятого','одиннадцатого','двенадцатого','тринадцатого','четырнадцатого','пятнадцатого','шестнадцатого','семнадцатого','восемнадцатого','девятнадцатого','двадцатого'];
+function speechYear(year){
+ const n=Number(year);
+ if(n>=2021&&n<=2029)return 'две тысячи двадцать '+DAY_ORD[n-2020]+' года';
+ if(n===2020)return 'две тысячи двадцатого года';
+ return String(year)+' года';
+}
+function speechDay(day){
+ const n=Number(day);
+ if(n>=1&&n<=20)return DAY_ORD[n];
+ if(n>=21&&n<=29)return 'двадцать '+DAY_ORD[n-20];
+ if(n===30)return 'тридцатого';
+ if(n===31)return 'тридцать первого';
+ return String(day);
+}
+function pronounceDates(value){
+ return String(value||'')
+  .replace(/\b(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b/g,
+   (_,y,m,d)=>speechDay(d)+' '+MONTH_GEN[Number(m)]+' '+speechYear(y))
+  .replace(/\b(0?[1-9]|[12]\d|3[01])\.(0?[1-9]|1[0-2])\.(20\d{2})\b/g,
+   (full,d,m,y)=>Number(d)<=31&&Number(m)<=12?
+    speechDay(d)+' '+MONTH_GEN[Number(m)]+' '+speechYear(y):full)
+  .replace(/\b(20\d{2})-(0[1-9]|1[0-2])\b/g,
+   (_,y,m)=>MONTH_NOM[Number(m)]+' '+speechYear(y))
+  .replace(/\b(0?[1-9]|1[0-2])\.(20\d{2})\b/g,
+   (_,m,y)=>MONTH_NOM[Number(m)]+' '+speechYear(y));
+}
 function cleanSpeech(t){
  return String(t||'')
   .replace(/\*\*([^*]+)\*\*/g,'$1')
@@ -39,6 +69,7 @@ function cleanSpeech(t){
   .replace(/[*_`#]/g,'')
   .replace(/\r?\n/g,'. ')
   .replace(/\bBYN\b/gi,'белорусских рублей')
+  .replace(/.+/s,phrase=>pronounceDates(phrase))
   .replace(/\s+/g,' ').replace(/\.{2,}/g,'.').trim();
 }
 // SpeechKit v3: a standard utterance must stay within 250 characters and 24 seconds.
@@ -146,7 +177,7 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
   Promise.resolve(output.play()).catch(()=>reject(new Error('autoplay_denied')));
  });
 }
-window.crmResantaVoiceSpeakV3=async function(message){
+window.crmResantaVoiceSpeakV3=async function(message,options={}){
  const msg=cleanSpeech(message);
  if(!msg||!allowed())return;
  stopSpeech(); // A new reply cancels every older audio clip and queue.
@@ -184,7 +215,9 @@ window.crmResantaVoiceSpeakV3=async function(message){
        break; // Do not silently replace the selected voice with Microsoft voices.
      }
    }
-   if(run===epoch && completed===chunks.length)setStatus('✅ '+(current.endsWith('dasha')?'Даша':'Лера')+' озвучила ответ полностью ('+completed+' '+(completed===1?'фраза':'фраз')+').');
+   if(run===epoch && completed===chunks.length)setStatus(options?.shortSummary?
+     '✅ Озвучен краткий итог ('+completed+' '+(completed===1?'фраза':'фраз')+'). Полный анализ остался на экране. Скажи «расскажи подробнее» для полной озвучки.':
+     '✅ '+(current.endsWith('dasha')?'Даша':'Лера')+' озвучила ответ полностью ('+completed+' '+(completed===1?'фраза':'фраз')+').');
    if(run===epoch)void refreshMonthlyBudget();
  }finally{
    if(run===epoch){
