@@ -244,7 +244,7 @@ export function verifyAnswer(kind,answer,evidence=null){
  // is not a factual implication of plan execution at 30.7%. The manager KPI
  // snapshot explicitly has no comparable manager YoY baseline.
  if(kind==='analysis' && evidence?.sales){
-   const broadFall=/(?:значительн\w*\s+)?(?:падени\w*|снижен\w*|сокращени\w*)\s+(?:общ\w*\s+)?(?:выручк\w*|продаж\w*|оборот\w*)|(?:выручк\w*|продаж\w*|оборот\w*)\s+(?:снизил\w*|упал\w*|сократил\w*)/i;
+   const broadFall=/(?:значительн[а-яё]*\s+)?(?:падени[а-яё]*|снижен[а-яё]*|сокращени[а-яё]*)\s+(?:общ[а-яё]*\s+)?(?:выручк[а-яё]*|продаж[а-яё]*|оборот[а-яё]*)|(?:выручк[а-яё]*|продаж[а-яё]*|оборот[а-яё]*)\s+(?:снизил[а-яё]*|упал[а-яё]*|сократил[а-яё]*)/i;
    const explicitClosedPeriod=/(?:за|в)\s+(?:последн\w*\s+)?(?:закрыт\w*|завершенн\w*|сентябр\w*|август\w*|июл\w*)\s+(?:месяц\w*|период\w*|20\d{2})|по\s+сравнен\w*\s+с\s+(?:аналогичн\w*|прошл\w*)/i;
    if(broadFall.test(s)&&!explicitClosedPeriod.test(s))
      return {ok:false,reason:'unproven_general_revenue_decline'};
