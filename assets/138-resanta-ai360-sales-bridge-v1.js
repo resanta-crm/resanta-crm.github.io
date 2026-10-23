@@ -9,7 +9,7 @@ if(/Android/i.test(navigator.userAgent||'')||window.crmAI360SalesHandleV1)return
 const ENDPOINT='crm-ai360-director-v1';
 const MONTHS={январ:1,феврал:2,март:3,апрел:4,ма:5,июн:6,июл:7,август:8,сентябр:9,октябр:10,ноябр:11,декабр:12};
 let history=[],pending=false,lastMonth=null,lastManager=null,pendingMatch=null,staffCache=null;
-const topic=/(продаж|выруч|оборот|отгруз|реализац|выполн|кпи|kpi|отста|план|филиал|менеджер|сет[ьи]|клиент|задач|маршрут|посещ|визит|пд[зэ]|долг|задолж|дебит|просроч|поруч|закуп|покуп)/i;
+const topic=/(продаж|выруч|оборот|отгруз|реализац|выполн|кпи|kpi|отста|план|филиал|менеджер|сет[ьи]|клиент|задач|маршрут|посещ|визит|пд[зэ]|долг|задолж|дебит|просроч|поруч|закуп|покуп|порекоменд|посоветуй|подскажи|что ей сделат|как быть)/i;
 const follow=/(почему|из-за чего|за счет чего|что предлага|что делать|как исправ|что дальше|какая причин|а кто|а если|сравни|что измен|какие действ|а у него|а он|что с ними|а что с|что с его|что у него|как быть|что порекоменду|чтобы эти клиенты|эти клиенты|их посещал|когда был|проверь долг|какие риски|составь поручен|готовь поручен|у кого больше)/i;
 const globalIntent=/(по всей сети|всех менеджеров|у всех|в целом|общ[аяие].*продаж|сравни.*менеджер|по филиалам|по всем клиентам|всей клиентской базе|у кого из менеджеров|кто из менеджеров|всех филиалов)/i;
 const yes=/^(да|верно|правильно|это он|именно|ага|давай|точно)(?:\s|$)/i;
@@ -152,7 +152,10 @@ function ask(text,ui,confirmedManager){
    lastMonth=String(result.data?.month||'');
    if(focus)lastManager=focus;
    if(!focus && networkAsked)lastManager=null;
-   ui.answer(answer);
+   const rawSummary=String(result.data?.speech_summary||'').trim();
+   // The server authorizes and grounds this optional summary. Client merely
+   // uses it for speech; full verified text always appears unchanged.
+   ui.answer(answer,rawSummary&&rawSummary.length<=230?{speechSummary:rawSummary}:undefined);
   }catch(e){if(allowed())ui.answer(reason(String(e?.message||e)));}
   finally{pending=false;window.__resantaAI360PendingV1=false;}
  })();
