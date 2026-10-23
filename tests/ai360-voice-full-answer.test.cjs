@@ -58,5 +58,17 @@ function context(voice){
  assert.equal(byn.join(' ').includes('BYN'),false,'BYN must not be read as letters');
  assert(byn.join(' ').includes('159000 белорусских рублей'));
  assert(byn.join(' ').includes('35440.52 белорусских рублей'));
- console.log('AI360 full Lera/Dasha answers, BYN Russian pronunciation and formatting: OK');
+ const dates=styled.window.crmAI360SpeechChunksV4(
+  'Продажи менеджера Шкуран за 10.2026. Последняя загрузка 23.10.2026. Визит 2026-10-27. Данные за 2026-09.'
+ ).join(' ');
+ assert(dates.includes('октябрь две тысячи двадцать шестого года'),'Russian month/year should be spoken naturally');
+ assert(dates.includes('двадцать третьего октября две тысячи двадцать шестого года'),'full date must be an ordinal');
+ assert(dates.includes('двадцать седьмого октября'),'ISO CRM visit date must speak naturally');
+ assert(dates.includes('сентябрь две тысячи двадцать шестого года'),'ISO month should be localized');
+ assert(!dates.includes('10.2026')&&!dates.includes('23.10.2026')&&!dates.includes('2026-10-27'));
+ const decimals=styled.window.crmAI360SpeechChunksV4('Выполнение 30,7%, рост 12.5%, артикул 63/6/39.').join(' ');
+ assert(decimals.includes('30,7%')&&decimals.includes('12.5%')&&decimals.includes('63/6/39'),
+   'percentage decimals and SKU must not be mistaken for dates');
+ assert(code.includes('options?.shortSummary'),'TTS must label a brief answer as a brief answer');
+ console.log('AI360 full Lera/Dasha answers, Russian month/full dates, concise voice status and BYN formatting: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
