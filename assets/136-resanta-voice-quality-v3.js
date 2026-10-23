@@ -146,6 +146,13 @@ function stopSpeech(){
  try{speechSynthesis.cancel();}catch{}
  if(browserDone){const resolve=browserDone;browserDone=null;resolve();}
 }
+// The visible stop button can interrupt SpeechKit without revoking mic permission.
+window.crmResantaVoiceStopV3=()=>{
+ if(!allowed()||!panel||panel.hidden)return false;
+ stopSpeech();
+ setStatus('■ Озвучка остановлена. Полный текст ответа остался на экране.');
+ return true;
+};
 function pickBrowserVoice(){
  const voices=window.speechSynthesis?.getVoices?.()||[];
  const ru=voices.filter(v=>/^ru([_-]|$)/i.test(v.lang||''));
