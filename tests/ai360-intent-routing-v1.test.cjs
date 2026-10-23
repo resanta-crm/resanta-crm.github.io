@@ -105,6 +105,10 @@ const url=pathToFileURL(path.resolve('supabase/functions/crm-ai360-director-v1/i
  assert.equal(r.verifyAnswer('clients','У клиента продажи упали на 80,00 BYN',r.selectEvidence('clients',null,ops)).ok,true,
    'client loss must be accepted only when present in selected evidence');
  assert.equal(r.verifyAnswer('clients','У клиента продажи упали на 1250,99 BYN',r.selectEvidence('clients',null,ops)).reason,'ungrounded_currency_value');
+ assert.equal(r.verifyAnswer('analysis','У Шкуран отставание от плана, это значительное снижение выручки.',r.selectEvidence('analysis',sales,ops)).reason,'unproven_general_revenue_decline',
+ 'do not mislabel low plan execution as actual revenue decline');
+ assert.equal(r.verifyAnswer('analysis','У Шкуран выполнение плана 30,5%, отставание от плана. Требуется проверить клиентов.',r.selectEvidence('analysis',sales,ops)).ok,true);
+ assert(r.fallbackAnswer('analysis','Шкуран',ops,sales).includes('не доказательство падения общей выручки'));
  assert.equal(r.verifyAnswer('tasks','По маршрутам всё отлично, вчера посетили клиентов').ok,false);
  assert.equal(r.fallbackAnswer('debt','Шкуран',ops,sales).includes('50'),true);
  assert.equal(r.fallbackAnswer('sales','Шкуран',ops,sales),straightforward);
