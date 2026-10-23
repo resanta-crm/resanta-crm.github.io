@@ -31,7 +31,7 @@
  function visiblePanel(){return isOwner()&&panel&&!panel.hidden&&panel.isConnected&&!document.hidden;}
 
  const isOwner=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
- function info(t){if(status)status.textContent=t;}
+ function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status)status.textContent=t;}
  function controls(){
    if(wake){
      wake.textContent=mode==='wake'?'■ Выключить «Привет, Ресанта»':
@@ -166,7 +166,9 @@
  async function waitForAssistant(epoch,expectedMode){
    // UI dispatch queues the neural voice on the next microtask.
    await new Promise(r=>setTimeout(r,260));
-   const until=Date.now()+32000;
+   // Long, explicitly requested full playback may exceed 32 seconds.
+   // Keep the microphone inactive until speech actually ends or is stopped.
+   const until=Date.now()+120000;
    while(epoch===listenEpoch && mode===expectedMode && isOwner() && panel && !panel.hidden && !document.hidden &&
          Date.now()<until && (window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1 ||
                               window.speechSynthesis?.speaking)){
