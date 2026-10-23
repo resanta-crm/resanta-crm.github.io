@@ -240,6 +240,15 @@ export function verifyAnswer(kind,answer,evidence=null){
    return {ok:false,reason:'sales_answered_with_debt'};
  if(kind==='debt'&&/(план продаж|фактические продажи)/i.test(s)&&!/(задолж|долг|дебитор|пдз)/i.test(s))
    return {ok:false,reason:'debt_answered_with_sales'};
+ // Without a same-period, same-method network revenue comparison, "sales fell"
+ // is not a factual implication of plan execution at 30.7%. The manager KPI
+ // snapshot explicitly has no comparable manager YoY baseline.
+ if(kind==='analysis' && evidence?.sales){
+   const broadFall=/(?:значительн\w*\s+)?(?:падени\w*|снижен\w*|сокращени\w*)\s+(?:общ\w*\s+)?(?:выручк\w*|продаж\w*|оборот\w*)|(?:выручк\w*|продаж\w*|оборот\w*)\s+(?:снизил\w*|упал\w*|сократил\w*)/i;
+   const explicitClosedPeriod=/(?:за|в)\s+(?:последн\w*\s+)?(?:закрыт\w*|завершенн\w*|сентябр\w*|август\w*|июл\w*)\s+(?:месяц\w*|период\w*|20\d{2})|по\s+сравнен\w*\s+с\s+(?:аналогичн\w*|прошл\w*)/i;
+   if(broadFall.test(s)&&!explicitClosedPeriod.test(s))
+     return {ok:false,reason:'unproven_general_revenue_decline'};
+ }
  if(evidence){
    const grounded=groundedAmounts(evidence);
    for(const match of s.matchAll(/(-?\d[\d\s\u00a0\u202f.,]{0,24}?)\s*(?:BYN|белорусск\w*\s+рубл?\w*|бел[.\s]+руб\w*)/giu)){
@@ -253,6 +262,15 @@ export function verifyAnswer(kind,answer,evidence=null){
 export function fallbackAnswer(kind,focus,ops,sales){
  const manager=focus?' у '+focus:'';
  if(kind==='sales')return directSalesAnswer(sales,focus,sales?.month);
+ if(kind==='analysis'&&focus&&sales){
+  const manager=(sales.managers||[]).find(m=>norm(m.manager_name)===norm(focus));
+  const pct=manager?num(manager.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1}):null;
+  const count=Number(ops?.client_summary?.yoy_down_clients)||0;
+  return 'У '+focus+(pct?' выполнение плана продаж '+pct+'%.':' пока нет утверждённого персонального KPI.')+
+   ' Это отставание от плана, не доказательство падения общей выручки.'+
+   (ops?' Среди закреплённых клиентов '+count+' имеют снижение связанных закупок за последний завершённый месяц к аналогичному месяцу прошлого года.':'')+
+   ' Для решения сначала проверить конкретных клиентов, уже назначенные визиты, открытые задачи и условия оплаты. Причины пока требуют подтверждения.';
+ }
  if(kind==='debt'&&ops?.debt_summary){
   const x=ops.debt_summary;
   return 'По последнему отчёту ПДЗ'+manager+': просроченная задолженность '+money(x.amount)+
