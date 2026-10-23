@@ -15,10 +15,31 @@
  let mode='',stream=null,context=null,analyser=null,src=null,clock=0,segment=0,starting=false,busy=false;
  let wakeHeard=false,wakeStart=0,clipCount=0,activeRecorder=null,userOptIn=false,listenEpoch=0;
  const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта)(?=$|[^а-яё])/i;
+ // Persist only explicit consent. Never auto-open the voice panel, never
+ // start a microphone on the CRM login screen or when the tab is hidden.
+ const AUTO_WAKE_KEY='resanta-ai360-wake-window-optin-v1';
+ let autoWakeWanted=false,autoAttemptedThisOpen=false,lastOpen=false,autoWakeBlocked=false;
+ try{autoWakeWanted=window.localStorage?.getItem(AUTO_WAKE_KEY)==='yes';}catch(_){}
+ if(autoWakeWanted)userOptIn=true;
+ function saveAutoWake(v){
+   autoWakeWanted=!!v;
+   try{
+     if(v)window.localStorage?.setItem(AUTO_WAKE_KEY,'yes');
+     else window.localStorage?.removeItem(AUTO_WAKE_KEY);
+   }catch(_){}
+ }
+ function visiblePanel(){return isOwner()&&panel&&!panel.hidden&&panel.isConnected&&!document.hidden;}
+
  const isOwner=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
  function info(t){if(status)status.textContent=t;}
  function controls(){
-   if(wake)wake.textContent=mode==='wake'?'■ Отключить фразу':'◉ Включить «Привет, Ресанта»';
+   if(wake){
+     wake.textContent=mode==='wake'?'■ Выключить «Привет, Ресанта»':
+       autoWakeWanted?'◉ Включить постоянный режим':'◉ Включить «Привет, Ресанта»';
+     wake.setAttribute('aria-pressed',String(mode==='wake'));
+     wake.title=autoWakeWanted?'Автоматически включать при открытии окна помощника (можно выключить)':
+       'После разрешения запомнить режим на этом компьютере';
+   }
    if(mic)mic.textContent=mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
  }
  function reason(e){
@@ -180,7 +201,12 @@
  async function wakeLoop(epoch){
    try{
      while(mode==='wake' && epoch===listenEpoch && isOwner() && panel && !panel.hidden && !document.hidden){
-       if(Date.now()-wakeStart > 5*60*1000){await stopAll('Для экономии отключил микрофон через 5 минут. Включи фразу снова, когда нужно.');break;}
+       // No five-minute cutoff for explicitly enabled foreground dialogue.
+       // Safety: closing the window, hiding the tab, leaving the account,
+       // losing the mic, or hitting the existing recognition quota stops it.
+       if(!autoWakeWanted && Date.now()-wakeStart > 5*60*1000){
+         await stopAll('Сеанс записи завершён. Включи фразу снова.');break;
+       }
        if(clipCount>=50){await stopAll('Завершил сеанс для ограничения расходов на распознавание.');break;}
        if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1){await new Promise(r=>setTimeout(r,350));continue;}
        const clip=await capture(5,epoch);
@@ -213,24 +239,43 @@
      }
    }catch(e){if(epoch===listenEpoch)await stopAll(reason(e));}
  }
- async function start(newMode){
+ async function start(newMode,automatic=false){
    if(starting)return;
-   if(mode===newMode){await stopAll('Микрофон выключен');return;}
+   if(automatic && (!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
+   if(mode===newMode){
+     if(newMode==='wake'&&!automatic)saveAutoWake(false);
+     await stopAll('Микрофон выключен. Постоянная активация отключена.');
+     return;
+   }
    if(!isOwner())return;
    if(!userOptIn){
-     const yes=window.confirm('РЕСАНТА AI: для надёжного распознавания русского голоса короткие аудиофрагменты будут отправляться через защищённый сервер CRM в облачный сервис распознавания. Запись не сохраняется в CRM. Стоимость около $0.003 за минуту аудио, общий лимит 60 фраз за день. Режим «Привет, Ресанта» автоматически выключается через 5 минут. Разрешить?');
+     if(automatic)return;
+     const yes=window.confirm('РЕСАНТА AI: включить режим «Привет, Ресанта» и запомнить разрешение на этом компьютере? Микрофон будет работать ТОЛЬКО в открытом окне помощника и активной вкладке CRM. Звуковые фразы отправляются для распознавания через защищённый сервер CRM (до 60 фраз в сутки); записи в CRM не сохраняются. Режим выключается при закрытии окна или скрытии вкладки, и его можно отключить вручную. Разрешить?');
      if(!yes)return;
      userOptIn=true;
+   }
+   if(newMode==='wake'){
+     const authorized=window.crmResantaVoiceAuthorizeV3?.();
+     // Only ask Yandex consent from an explicit user gesture; after reloading
+     // saved consent is restored by the neural speech module.
+     if(!automatic && authorized===false){
+       info('Разреши Яндекс Леру или Дашу для озвучки, затем включи фразу снова.');
+       return;
+     }
    }
    starting=true;
    await stopAll();
    starting=true;
    mode=newMode;listenEpoch++;const epoch=listenEpoch;wakeStart=Date.now();clipCount=0;controls();
+   if(newMode==='wake'&&!automatic)saveAutoWake(true);
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
      if(newMode==='manual'){info('Слушаю команду. Максимум 10 секунд.');manualLoop(epoch);}
      else{info('Микрофон включён: ожидаю «Привет, Ресанта»');wakeLoop(epoch);}
-   }catch(e){await stopAll(reason(e));}
+   }catch(e){
+     await stopAll(reason(e));
+     if(automatic)autoWakeBlocked=true; // No permission or device retry loop.
+   }
  }
  function init(){
    panel=document.querySelector('.rva-window');
@@ -243,14 +288,33 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Скажи «Привет, Ресанта» — помощник ответит и выслушает вопрос. В ручном режиме один вопрос записывается после приветствия, в режиме активации можно продолжить разговор до 5 минут. Распознавание — через сервер CRM после разрешения, максимум 60 фраз в сутки. При закрытии окна микрофон выключается.';
+   if(note)note.textContent='«Привет, Ресанта» можно включить один раз: настройка запомнится для этого компьютера. При открытии окна помощника в активной вкладке микрофон подключится автоматически (если разрешает браузер). Закрой окно или выключи фразу — микрофон остановится. До 60 распознаваний в день; запись в CRM не сохраняется.';
    mic.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('manual');},true);
-   wake.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('wake');},true);
+   wake.addEventListener('click',e=>{
+     e.stopImmediatePropagation();e.preventDefault();
+     autoWakeBlocked=false;
+     void start('wake');
+   },true);
    panel.querySelector('.rva-close')?.addEventListener('click',()=>{void stopAll();},true);
    controls();return true;
  }
- document.addEventListener('visibilitychange',()=>{if(document.hidden && mode)void stopAll('Микрофон выключен: CRM свёрнута.');});
+ document.addEventListener('visibilitychange',()=>{
+   if(document.hidden && mode)void stopAll('Микрофон выключен: вкладка скрыта.');
+   if(!document.hidden){autoAttemptedThisOpen=false;autoWakeBlocked=false;}
+ });
  window.addEventListener('pagehide',()=>{void stopAll();});
- window.setInterval(()=>{if(!panel)init();else if(mode && (!isOwner()||panel.hidden||!panel.isConnected))void stopAll();},650);
+ window.setInterval(()=>{
+   if(!panel)init();
+   if(!panel)return;
+   const open=!!visiblePanel();
+   if(!open){
+     if(lastOpen)autoAttemptedThisOpen=false;
+     if(mode)void stopAll();
+   }else if(autoWakeWanted && !autoAttemptedThisOpen && mode!=='wake' && !starting && !autoWakeBlocked){
+     autoAttemptedThisOpen=true; // At most one automatic getUserMedia request per open.
+     void start('wake',true);
+   }
+   lastOpen=open;
+ },650);
  init();
 })();
