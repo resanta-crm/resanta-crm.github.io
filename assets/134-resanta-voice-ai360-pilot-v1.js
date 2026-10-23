@@ -16,6 +16,19 @@
   const state = { wake:false, active:false, awaiting:false, speaking:false,
     silent:false, recognition:null, localReady:false, mounted:false, timer:0, pendingRestart:0 };
   let root, trigger, statusEl, historyEl, field, wakeBtn, micBtn, muteBtn;
+  let lastDetailedResponse='';
+  function briefVoiceText(message){
+    const full=String(message||'').trim();
+    if(full.length<=490)return full;
+    const words=full.replace(/\*\*/g,'').replace(/\s+/g,' ').trim();
+    // Keep the key point audible; complete written response is unchanged.
+    let end=words.lastIndexOf('.',360);
+    if(end<140)end=words.lastIndexOf(';',360);
+    if(end<140)end=words.lastIndexOf(' ',360);
+    if(end<140)end=Math.min(360,words.length);
+    return words.slice(0,end+1).trim()+
+      ' Полный ответ на экране. Если хочешь всё услышать, скажи: расскажи подробнее.';
+  }
 
   function allowed() {
     try {
@@ -67,7 +80,18 @@
       window.speechSynthesis.speak(utter);
     } catch (_) { state.speaking = false; resumeWake(); }
   }
-  function answer(message) { addLine('РЕСАНТА AI', message); textStatus('Готов к следующему вопросу'); speak(message); }
+  function answer(message) {
+    addLine('РЕСАНТА AI',message);
+    textStatus('Готов к следующему вопросу');
+    const text=String(message||'');
+    if(text.length>490){
+      lastDetailedResponse=text;
+      speak(briefVoiceText(text));
+    }else{
+      lastDetailedResponse='';
+      speak(text);
+    }
+  }
   function hasLoadedSnapshot() {
     return !!document.querySelector('#dash-kpi .kpi') &&
       typeof allClients !== 'undefined' && Array.isArray(allClients) &&
@@ -101,6 +125,18 @@
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
     if (!query) { answer('Привет! Слушаю тебя. Чем могу помочь?'); return; }
+    if(/^(?:большое\s+)?спасибо(?:\s+(?:большое|тебе|вам))?$|^благодарю(?:\s+тебя)?$|^спасибочки$/.test(query)){
+      answer('Пожалуйста! Обращайся, если понадобится ещё что-нибудь.');
+      return;
+    }
+    if(/^(?:расскажи|прочитай|озвучь)\s+(?:подробнее|полностью|весь\s+ответ)$|^подробнее$/.test(query)){
+      if(lastDetailedResponse){
+        addLine('РЕСАНТА AI','Озвучиваю предыдущий ответ полностью.');
+        textStatus('Озвучиваю полный ответ');
+        speak(lastDetailedResponse);
+      }else answer('Последний ответ уже был коротким. Что ещё проверить?');
+      return;
+    }
 
     // Optional sales/KPI dialogue. No background requests; director action only.
     if (typeof window.crmAI360SalesHandleV1 === 'function') {
@@ -172,7 +208,7 @@
       }
     }
     if (/^(стоп|замолчи|хватит|тише)$/.test(query)) { window.speechSynthesis?.cancel(); textStatus('Озвучивание остановлено'); return; }
-    answer('Пока это пилот голосового управления. Я могу открыть продажи, маршруты, задачи, задолженность или показать сводку по задачам и клиентам. Полноценный ИИ-анализ продаж добавим отдельным проверенным этапом.');
+    answer('Уточни, пожалуйста, вопрос. Могу проверить продажи, клиентов, маршруты и поручения по конкретному менеджеру.');
   }
   function stopRecognition() {
     clearTimeout(state.pendingRestart);
