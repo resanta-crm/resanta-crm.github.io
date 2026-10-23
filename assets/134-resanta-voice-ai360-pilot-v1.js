@@ -22,7 +22,8 @@
     if(full.length<=490)return full;
     const words=full.replace(/\*\*/g,'').replace(/\s+/g,' ').trim();
     // Keep the key point audible; complete written response is unchanged.
-    let end=words.lastIndexOf('.',360);
+    let end=words.lastIndexOf('. ',360);
+    if(end>140)end+=1;
     if(end<140)end=words.lastIndexOf(';',360);
     if(end<140)end=words.lastIndexOf(' ',360);
     if(end<140)end=Math.min(360,words.length);
@@ -56,11 +57,11 @@
     while (historyEl.children.length > 12) historyEl.removeChild(historyEl.firstChild);
     historyEl.scrollTop = historyEl.scrollHeight;
   }
-  function speak(message) {
+  function speak(message,options={}) {
     if (typeof window.crmResantaVoiceSpeakV3 === 'function' && visible()) {
       if (state.silent) { state.speaking=false; resumeWake(); return; }
       state.speaking=true;
-      Promise.resolve().then(()=>window.crmResantaVoiceSpeakV3(String(message)))
+      Promise.resolve().then(()=>window.crmResantaVoiceSpeakV3(String(message),options))
         .catch(e=>console.warn('Resanta voice synthesis',e))
         .finally(()=>{state.speaking=false;resumeWake();});
       return;
@@ -86,7 +87,7 @@
     const text=String(message||'');
     if(text.length>490){
       lastDetailedResponse=text;
-      speak(briefVoiceText(text));
+      speak(briefVoiceText(text),{shortSummary:true});
     }else{
       lastDetailedResponse='';
       speak(text);
