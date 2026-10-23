@@ -61,6 +61,31 @@ function pronounceDates(value){
   .replace(/\b(0?[1-9]|1[0-2])\.(20\d{2})\b/g,
    (_,m,y)=>MONTH_NOM[Number(m)]+' '+speechYear(y));
 }
+function rubleWord(n){
+ const a=Math.abs(Number(n))%100,unit=a%10;
+ if(a>=11&&a<=14)return 'белорусских рублей';
+ if(unit===1)return 'белорусский рубль';
+ if(unit>=2&&unit<=4)return 'белорусских рубля';
+ return 'белорусских рублей';
+}
+function kopeckWord(n){
+ const a=Math.abs(Number(n))%100,unit=a%10;
+ if(a>=11&&a<=14)return 'копеек';
+ if(unit===1)return 'копейка';
+ if(unit>=2&&unit<=4)return 'копейки';
+ return 'копеек';
+}
+function pronounceBYN(value){
+ return String(value||'').replace(
+  /(^|[^\d])(\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[,.](\d{1,2}))?\s+BYN\b/giu,
+  (full,prefix,units,coins)=>{
+   const value=Number(units.replace(/[ \u00a0\u202f]/g,''));
+   if(!Number.isSafeInteger(value))return full;
+   const whole=units+' '+rubleWord(value);
+   return prefix+whole+(coins && Number(coins)>0?
+     ' '+Number(coins)+' '+kopeckWord(Number(coins)):'');
+  });
+}
 function cleanSpeech(t){
  return String(t||'')
   .replace(/\*\*([^*]+)\*\*/g,'$1')
@@ -68,6 +93,7 @@ function cleanSpeech(t){
   .replace(/(^|\n)\s*(?:\d+[.)]\s*|[•-]\s+)/g,'$1')
   .replace(/[*_`#]/g,'')
   .replace(/\r?\n/g,'. ')
+  .replace(/.+/s,phrase=>pronounceBYN(phrase))
   .replace(/\bBYN\b/gi,'белорусских рублей')
   .replace(/.+/s,phrase=>pronounceDates(phrase))
   .replace(/\s+/g,' ').replace(/\.{2,}/g,'.').trim();
