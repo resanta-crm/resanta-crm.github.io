@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
-import { classify,needsSales,needsOperations,selectEvidence,directSalesAnswer,directClientAnswer,managerActionPlan,debtPriorityAnswer,verifyManagerOperations,detectForeignClientMention,verifyAnswer,fallbackAnswer } from './intent-router.mjs';
+import { classify,needsSales,needsOperations,selectEvidence,directSalesAnswer,directClientAnswer,managerActionPlan,managementSpeech,debtPriorityAnswer,verifyManagerOperations,detectForeignClientMention,verifyAnswer,fallbackAnswer } from './intent-router.mjs';
 
 // Explicit director-only opt-in pilot; no scheduled AI, no changes to CRM source records.
 const ORIGINS = new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -152,7 +152,9 @@ Deno.serve(async(req:Request)=>{
    const regardingDebt=/(долг|задолж|дебит|пд[зэ]|оплат|просроч)/i.test(question);
    const answer=regardingDebt?debtPriorityAnswer(operations,verifiedFocus):
      managerActionPlan(operations,verifiedFocus,snapshot);
-   return reply(req,{answer,month:monthRaw,intent,answer_verified:true,
+   const speech_summary=regardingDebt?'Проверила долги '+verifiedFocus+'. Главные суммы и действия в ответе на экране.':
+     managementSpeech(operations,verifiedFocus,snapshot);
+   return reply(req,{answer,speech_summary,month:monthRaw,intent,answer_verified:true,
      generated_by:'crm_rules',source:'CRM: current manager clients, closed-month sales, visits, routes, tasks, debt',
      scope:verifiedFocus,operations_as_of:operations?.period?.as_of||null});
  }
