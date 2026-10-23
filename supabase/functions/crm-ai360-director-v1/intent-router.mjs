@@ -140,58 +140,63 @@ export function directClientAnswer(ops,focus){
 }
 // Grounded, short spoken executive briefing. Full evidence remains onscreen.
 export function managementSpeech(ops,focus,sales=null){
- const check=verifyManagerOperations(ops,focus);
- if(!focus||!check.ok)return 'Не удалось подтвердить закрепление клиентов. Рекомендации на экране требуют проверки.';
+ if(!focus||!verifyManagerOperations(ops,focus).ok)
+  return 'Закрепление клиентов не подтвердилось. Рекомендации нужно проверить.';
  const m=(sales?.managers||[]).find(x=>norm(x.manager_name)===norm(focus));
- const clients=Array.isArray(ops.declining_clients)?ops.declining_clients.slice(0,2):[];
- const actions=clients.map(c=>{
-   const day=String(c.next_route||'').slice(0,10);
-   const planned=/^\d{4}-\d\d-\d\d$/.test(day) && day>=String(ops.period?.as_of||'');
-   return c.client_name+': '+(planned?'подготовить заказ к визиту '+dateLabel(day):'сверить потребность и маршрут');
- });
  const intro=focus+(m&&Number.isFinite(Number(m.plan_pct))?': план выполнен на '+Number(m.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%.':'.');
- const speech=(intro+' '+actions.join('. ')+'. Детали на экране.').replace(/\s+/g,' ').trim();
- if(speech.length<=220)return speech;
- return (intro+' Приоритет — подготовить предложения к существующим визитам, проверить открытые задачи и долги. Детали на экране.').trim();
+ const candidates=Array.isArray(ops.declining_clients)?ops.declining_clients:[];
+ if(!candidates.length)return intro+' Подтверждённых клиентов для плана действий пока нет. Нужна проверка заявок и потребности.';
+ const first=candidates[0];
+ const date=String(first.next_route||'').slice(0,10);
+ const planned=/^\d{4}-\d\d-\d\d$/.test(date)&&date>=String(ops.period?.as_of||'');
+ const task=planned?'к уже назначенному визиту подготовить предложение':'проверить потребность и существующие задачи';
+ const speech=intro+' По '+first.client_name+' '+task+'. Полный план на экране.';
+ return speech.length<=190?speech:intro+' Подготовить предложения к существующим визитам, проверить задачи и ПДЗ. Полный план на экране.';
 }
 // Director actions are generated only from verified current-manager records.
 // Not a prediction of orders, nor permission to write a task or schedule.
 export function managerActionPlan(ops,focus,sales=null){
  const ownership=verifyManagerOperations(ops,focus);
- if(!focus || !ownership.ok)return 'Нет подтверждённого персонального закрепления клиентов. Не буду создавать рекомендации по чужим клиентам.';
- const candidates=Array.isArray(ops.declining_clients)?ops.declining_clients:[];
+ if(!focus||!ownership.ok)return 'Нет подтверждённого персонального закрепления клиентов. Не буду создавать рекомендации по чужим клиентам.';
+ const candidates=Array.isArray(ops.declining_clients)?ops.declining_clients.slice(0,3):[];
  const asOf=String(ops.period?.as_of||'').slice(0,10);
- const month=monthLabel(ops.period?.last_closed_month);
- const manager=(sales?.managers||[]).find(x=>norm(x.manager_name)===norm(focus));
- let head='Проект действий для '+focus+'. Данные по клиентам — за '+month+' по сравнению с соответствующим месяцем прошлого года.';
- if(manager && Number(manager.plan)>0)head+=' План выполнен на '+num(manager.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+
-   '%. Это отставание от плана, не доказательство общего падения выручки.';
- if(!candidates.length)return head+' Клиентов с проверенным снижением в этой выборке нет. Нужно уточнить реальную потребность и доступные заказы, прежде чем обещать отгрузку.';
- const items=candidates.slice(0,3).map((c,i)=>{
-  const date=String(c.next_route||'').slice(0,10);
-  const scheduled=/^\d{4}-\d\d-\d\d$/.test(date)&&(!asOf||date>=asOf);
+ const closed=monthLabel(ops.period?.last_closed_month);
+ const yearAgo=monthLabel(ops.period?.last_closed_year_ago);
+ const m=(sales?.managers||[]).find(x=>norm(x.manager_name)===norm(focus));
+ let head='План управленческих действий · '+focus+'.';
+ if(m && Number(m.plan)>0){
+  const gap=Math.max(0,Number(m.to_plan)||0);
+  head+=' Выполнение плана '+num(m.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+
+   '%, до плана '+money(gap)+'. Это отставание от плана, не доказательство общего падения выручки.';
+ }
+ head+='\nСнижение закупок отдельных клиентов: '+closed+' к '+yearAgo+'. Это не подтверждённые заказы и не прогноз отгрузок.';
+ if(!candidates.length)return head+'\nНет достоверных примеров снижения у закреплённых клиентов. Нужно проверить открытые заявки, потребность и доступные остатки, а не придумывать заказ.';
+ const sameName=(a,b)=>norm(a).replace(/\s+/g,' ').trim()===norm(b).replace(/\s+/g,' ').trim();
+ const bullets=candidates.map((c,i)=>{
+  const route=String(c.next_route||'').slice(0,10);
+  const scheduled=/^\d{4}-\d\d-\d\d$/.test(route)&&(!asOf||route>=asOf);
   let action=scheduled?
-   'Визит уже запланирован на '+dateLabel(date)+' — повторно не назначать. До визита уточнить потребность, возможные заявки, наличие товара и условия оплаты.':
-   'Проверить существующий маршрут и согласовать удобную дату контакта; не создавать дублирующий визит.';
+   'Визит '+dateLabel(route)+' уже в маршруте. Не назначать повторно. До визита подготовить перечень ранее закупаемых SKU и коммерческое предложение; уточнить потребность и доступность товара.':
+   'Проверить существующие маршруты и согласовать контакт с клиентом; не создавать повторные визиты.';
   const open=Number(c.open_tasks)||0,late=Number(c.overdue_tasks)||0;
-  if(late>0)action+=' По клиенту '+late+' просроченных задач: прежде проверить их исполнение.';
-  else if(open>0)action+=' Уже открыто '+open+' задач: проверить содержание, не дублировать поручения.';
-  else action+=' Если задач нет, предложить директору проект одного поручения на согласование.';
-  // Debtor rows do not have CRM client_id. Do not join on aliases, substrings,
-  // amount similarity or fuzzy names: match exact legal-name string only.
-  const sameName=(a,b)=>norm(a).replace(/\s+/g,' ').trim()===norm(b).replace(/\s+/g,' ').trim();
-  const verifiedNameDebt=(ops.overdue_debtors||[]).find(d=>
-    sameName(d.client_name,c.client_name)&&
-    norm(d.manager_name).split(/\s+/)[0]===norm(focus).trim());
-  if(verifiedNameDebt&&Number(verifiedNameDebt.debt_overdue)>=1){
-    action+=' В ПДЗ есть запись с таким же названием: '+money(verifiedNameDebt.debt_overdue)+
-      ', просрочка '+Math.max(0,Number(verifiedNameDebt.debt_overdue_days)||0)+
-      ' дн. Сверить контрагента по реквизитам и условия оплаты до обсуждения новой отгрузки.';
-  }
-  const loss=Number(c.loss)>0?' (снижение закупок '+money(c.loss)+')':'';
-  return (i+1)+'. '+c.client_name+loss+'. '+action+' После контакта зафиксировать подтверждённую заявку или причину отказа.';
+  if(late>0)action+=' Сначала проверить '+late+' просроченных задач.';
+  else if(open>0)action+=' Сначала проверить '+open+' открытых задач.';
+  else action+=' При отсутствии действующего поручения подготовить проект задачи на согласование.';
+  const match=(ops.overdue_debtors||[]).find(x=>
+   sameName(x.client_name,c.client_name)&&
+   norm(x.manager_name).split(/\s+/)[0]===norm(focus).trim());
+  if(match&&Number(match.debt_overdue)>=1)
+   action+=' ПДЗ с таким же юридическим названием: '+money(match.debt_overdue)+
+    ', просрочка '+Math.max(0,Number(match.debt_overdue_days)||0)+
+    ' дн. Сверить контрагента по реквизитам и условия оплаты до обсуждения новой отгрузки.';
+  const deadline=scheduled?dateLabel(route):'после согласования даты контакта';
+  return (i+1)+'. '+c.client_name+' — снижение '+money(c.loss)+'.\n   Действие: '+action+
+    '\n   Ответственный: '+focus+'. Контроль: '+deadline+'. Результат: подтверждённая потребность/заявка либо документированная причина отказа.';
  });
- return head+' '+items.join(' ')+' Все поручения — только предложения, в CRM ничего не создано. Потенциальная отгрузка не подтверждена.';
+ const totalLoss=candidates.reduce((acc,c)=>acc+Math.max(0,Number(c.loss)||0),0);
+ const limitation='\nТри примера исторического снижения суммарно '+money(totalLoss)+
+  '. Они НЕ покрывают недобор до плана и не гарантируют возврат объёма. Для закрытия плана необходим отдельный анализ подтверждённых заявок и доступных остатков.';
+ return head+'\n'+bullets.join('\n')+limitation+'\nЭто проекты рекомендаций. Поручения и маршруты в CRM не создавались.';
 }
 export function debtPriorityAnswer(ops,focus){
  if(!ops||!ops.debt_summary)return 'Сверенный отчёт ПДЗ пока недоступен. Не стану назначать взыскание без подтверждённой задолженности.';
