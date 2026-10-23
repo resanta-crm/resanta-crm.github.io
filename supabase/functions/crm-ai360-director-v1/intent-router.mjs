@@ -13,7 +13,7 @@ export function classify(question){
  const visit=/(визит|посещ|встреч|когда.{0,45}был[аи]?|давно.{0,12}не был)/.test(q);
  const client=/(клиент|покупат|покупк|закуп|не покуп|не закуп|просел|потерян|сократили закуп)/.test(q);
  const why=/(почему|причин|из-за чего|за счет чего|что повли|объясни отстав|как получилось)/.test(q);
- const recommendation=/(как быть|что делать|что предлага|что порекоменду|как исправ|как увелич|что предприн|какие действия|как вернуть|как застав|чтобы.{0,35}(?:купил|закуп)|составь.{0,15}(?:поруч|задач)|подготовь.{0,15}(?:поруч|задач))/.test(q);
+ const recommendation=/(как быть|что делать|что предлага|что порекоменду|порекоменд|посоветуй|подскажи.{0,35}(?:делат|шаг|действ|план)|что.{0,22}(?:сделат|предпринят)|что.{0,25}ей.{0,20}(?:делат|сделат)|как исправ|как увелич|что предприн|какие действия|как вернуть|как застав|как.{0,20}закрыт.{0,15}план|чтобы.{0,45}(?:купил|закуп|продал|закрыл|выполн)|закры.{0,10}(?:свой\s+)?план|составь.{0,15}(?:поруч|задач|план\s+действ)|подготовь.{0,15}(?:поруч|задач|план\s+действ))/.test(q);
  // Explicit action/causation takes priority over a keyword contained in the sentence.
  if(recommendation)return 'recommendations';
  if(why)return 'analysis';
@@ -73,6 +73,15 @@ export function selectEvidence(kind,sales,ops){
  }
  return root;
 }
+const MONTHS=['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+export function monthLabel(raw){
+ const match=String(raw||'').match(/^(20\d\d)-(0[1-9]|1[0-2])$/);
+ return match?MONTHS[Number(match[2])]+' '+match[1]+' года':String(raw||'неизвестный месяц');
+}
+export function dateLabel(raw){
+ const m=String(raw||'').slice(0,10).match(/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+ return m?Number(m[3])+' '+MONTHS[Number(m[2])]+' '+m[1]+' года':String(raw||'дата не установлена');
+}
 const shortDate=(source)=>{
  const s=String(source||'').slice(0,10);
  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -81,9 +90,9 @@ const shortDate=(source)=>{
 export function directSalesAnswer(sales,focus,month){
  if(!sales)return null;
  const period=String(sales.month||month||'').trim();
- const label=period?period.slice(5,7)+'.'+period.slice(0,4):'текущий месяц';
+ const label=period?monthLabel(period):'текущий месяц';
  const updated=shortDate(sales.freshness?.last_success_at);
- const last=updated?' Последнее обновление продаж: '+updated+'.':'';
+ const last=updated?' Последнее обновление продаж: '+dateLabel(sales.freshness.last_success_at)+'.':'';
  const incomplete=' Текущий месяц ещё не завершён; источник продаж помесячный.';
  const wanted=norm(focus).trim();
  if(wanted){
@@ -112,22 +121,38 @@ export function directClientAnswer(ops,focus){
  const list=Array.isArray(ops.declining_clients)?ops.declining_clients:[];
  if(list.some(c=>String(c.manager_name||'').toLocaleLowerCase('ru-RU')!==String(focus).toLocaleLowerCase('ru-RU')))
   return 'Обнаружено несоответствие закрепления клиентов за '+focus+'. Рекомендации временно не показываю.';
- const period=ops.period?.last_closed_month||'последний закрытый месяц';
- const prev=ops.period?.last_closed_year_ago||'соответствующий месяц год назад';
+ const period=monthLabel(ops.period?.last_closed_month)||'последний закрытый месяц';
+ const prev=monthLabel(ops.period?.last_closed_year_ago)||'соответствующий месяц год назад';
  if(!list.length)return 'По закреплённым за '+focus+' клиентам нет подтверждённых примеров снижения закупок в сравнении '+period+' с '+prev+'. Для плана отгрузок нужна проверка заявок и остатков.';
  const bullets=list.slice(0,3).map((c,i)=>{
   const route=String(c.next_route||'').slice(0,10);
   const scheduled=/^\d{4}-\d{2}-\d{2}$/.test(route)&&route>=String(ops.period?.as_of||'');
-  const next=scheduled?'визит уже в маршруте на '+route+' — повторно не назначать':
+  const next=scheduled?'визит уже в маршруте на '+dateLabel(route)+' — повторно не назначать':
     'ближайший визит не найден — сверить маршрут';
   const open=Number(c.open_tasks)||0;
   const tasks=open>0?'открыто '+open+' задач — проверить перед новыми поручениями':
     'задач не видно — сначала проверить потребность';
   return (i+1)+'. '+c.client_name+': снижение '+money(c.loss)+
-   ', последнее посещение '+(c.last_visit||'не установлено')+', '+next+', '+tasks;
+   ', последнее посещение '+(c.last_visit?dateLabel(c.last_visit):'не установлено')+', '+next+', '+tasks;
  }).join('; ');
  return 'Проверила только клиентов, закреплённых за '+focus+'. Наибольшее снижение закупок за '+period+' по сравнению с '+prev+': '+bullets+
  '. Это не подтверждённые заказы и не гарантированный объём отгрузки. До встречи проверить потребность, незакрытые заявки, наличие товаров и условия оплаты; поручения только после согласования.';
+}
+// Grounded, short spoken executive briefing. Full evidence remains onscreen.
+export function managementSpeech(ops,focus,sales=null){
+ const check=verifyManagerOperations(ops,focus);
+ if(!focus||!check.ok)return 'Не удалось подтвердить закрепление клиентов. Рекомендации на экране требуют проверки.';
+ const m=(sales?.managers||[]).find(x=>norm(x.manager_name)===norm(focus));
+ const clients=Array.isArray(ops.declining_clients)?ops.declining_clients.slice(0,2):[];
+ const actions=clients.map(c=>{
+   const day=String(c.next_route||'').slice(0,10);
+   const planned=/^\d{4}-\d\d-\d\d$/.test(day) && day>=String(ops.period?.as_of||'');
+   return c.client_name+': '+(planned?'подготовить заказ к визиту '+dateLabel(day):'сверить потребность и маршрут');
+ });
+ const intro=focus+(m&&Number.isFinite(Number(m.plan_pct))?': план выполнен на '+Number(m.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%.':'.');
+ const speech=(intro+' '+actions.join('. ')+'. Детали на экране.').replace(/\s+/g,' ').trim();
+ if(speech.length<=220)return speech;
+ return (intro+' Приоритет — подготовить предложения к существующим визитам, проверить открытые задачи и долги. Детали на экране.').trim();
 }
 // Director actions are generated only from verified current-manager records.
 // Not a prediction of orders, nor permission to write a task or schedule.
@@ -136,7 +161,7 @@ export function managerActionPlan(ops,focus,sales=null){
  if(!focus || !ownership.ok)return 'Нет подтверждённого персонального закрепления клиентов. Не буду создавать рекомендации по чужим клиентам.';
  const candidates=Array.isArray(ops.declining_clients)?ops.declining_clients:[];
  const asOf=String(ops.period?.as_of||'').slice(0,10);
- const month=String(ops.period?.last_closed_month||'последний закрытый месяц');
+ const month=monthLabel(ops.period?.last_closed_month);
  const manager=(sales?.managers||[]).find(x=>norm(x.manager_name)===norm(focus));
  let head='Проект действий для '+focus+'. Данные по клиентам — за '+month+' по сравнению с соответствующим месяцем прошлого года.';
  if(manager && Number(manager.plan)>0)head+=' План выполнен на '+num(manager.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+
@@ -146,7 +171,7 @@ export function managerActionPlan(ops,focus,sales=null){
   const date=String(c.next_route||'').slice(0,10);
   const scheduled=/^\d{4}-\d\d-\d\d$/.test(date)&&(!asOf||date>=asOf);
   let action=scheduled?
-   'Визит уже запланирован на '+date+' — повторно не назначать. До визита уточнить потребность, возможные заявки, наличие товара и условия оплаты.':
+   'Визит уже запланирован на '+dateLabel(date)+' — повторно не назначать. До визита уточнить потребность, возможные заявки, наличие товара и условия оплаты.':
    'Проверить существующий маршрут и согласовать удобную дату контакта; не создавать дублирующий визит.';
   const open=Number(c.open_tasks)||0,late=Number(c.overdue_tasks)||0;
   if(late>0)action+=' По клиенту '+late+' просроченных задач: прежде проверить их исполнение.';
@@ -173,7 +198,7 @@ export function debtPriorityAnswer(ops,focus){
  const check=verifyManagerOperations(ops,focus);
  if(focus&&!check.ok)return 'Не удалось подтвердить должников менеджера '+focus+'. Нельзя приписывать чужую задолженность.';
  const s=ops.debt_summary;
- const report=String(s.report_date||'').slice(0,10)||'дата не указана';
+ const report=dateLabel(s.report_date);
  const creditors=(Array.isArray(ops.overdue_debtors)?ops.overdue_debtors:[]);
  const important=creditors.filter(x=>Number(x.debt_overdue)>=1).sort((a,b)=>{
   const av=Number(a.debt_overdue),bv=Number(b.debt_overdue);
