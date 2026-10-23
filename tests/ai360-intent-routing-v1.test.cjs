@@ -104,7 +104,8 @@ const url=pathToFileURL(path.resolve('supabase/functions/crm-ai360-director-v1/i
  assert.equal(r.classify('Какие продажи у Шкуран?'),'sales');
  assert(r.directSalesAnswer(sales,'Шкуран','2026-10').includes('октября 2026 года'));
  assert.equal(r.dateLabel('2026-10-27'),'27 октября 2026 года');
- assert.equal(r.monthLabel('2026-09'),'сентября 2026 года');
+ assert.equal(r.monthLabel('2026-09'),'сентябрь 2026 года');
+ assert(r.directSalesAnswer(sales,'Шкуран','2026-10').includes('за октябрь 2026 года'));
  assert.equal(r.needsSales('debt'),false);
  assert.deepEqual(r.verifyAnswer('sales','У Шкуран 5 клиентов с просроченной задолженностью'),{ok:false,reason:'unrelated_topic'});
  assert.equal(r.verifyAnswer('sales','Продажи Шкуран по плану 153000 BYN, факт 46696 BYN').ok,true);
