@@ -362,6 +362,7 @@
       .rva-status-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #e6edf5;background:white;height:38px;min-height:38px;max-height:38px;box-sizing:border-box;overflow:hidden;flex-shrink:0}
       .rva-status-dot{width:9px;height:9px;border-radius:50%;background:#36a887;flex-shrink:0;box-shadow:0 0 0 3px #3db89120}
       .rva-status{display:block;font-size:12px;color:#38546f;line-height:18px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .rva-mic-meter[hidden]{display:none!important}
       .rva-history{padding:18px 16px 22px;min-height:120px;overflow-y:auto;flex:1;max-height:none;overscroll-behavior:contain}
       .rva-line{margin:0 0 16px;padding:13px 14px;background:white;border:1px solid #e3eaf3;border-radius:14px 14px 14px 5px;box-shadow:0 3px 10px #142c4d0b;font-size:13px;line-height:1.58;overflow-wrap:anywhere;white-space:normal}
       .rva-line[data-speaker="you"]{background:#e5f1ff;border-color:#cadef8;border-radius:14px 14px 5px 14px;margin-left:30px}
