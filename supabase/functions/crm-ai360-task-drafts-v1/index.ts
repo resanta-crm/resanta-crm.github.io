@@ -4,7 +4,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 
 const ORIGINS = new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const OWNER_ID = '544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
-const VITEBSK_REGIONS = new Set(['витебская область','витебск']);
+const PILOT_BRANCH = 'Витебск'; // branch affiliation, NOT client geographic region
 const lastRequest = new Map<string,number>(); // best-effort, worker-local throttle; not a durable quota
 const norm = (x:unknown) => String(x||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
 const cors = (origin:string|null) => ({
@@ -49,7 +49,7 @@ Deno.serve(async(req:Request)=>{
   let payload:any;
   try{payload=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
   if(payload?.kind==='directory'){
-    const users=await svc.from('users').select('name,role').eq('role','manager').eq('region','Витебск').limit(20);
+    const users=await svc.from('users').select('name,role').eq('role','manager').eq('region',PILOT_BRANCH).limit(20);
     if(users.error)return reply(req,{error:'directory_unavailable'},503);
     return reply(req,{staff:users.data||[],mode:'readonly'});
   }
@@ -61,7 +61,7 @@ Deno.serve(async(req:Request)=>{
   if(lastRequest.size>50)lastRequest.clear();
   const requested=payload.manager.trim();
   const managers=await svc.from('users').select('id,name,role,region')
-    .eq('role','manager').eq('region','Витебск').ilike('name',requested).limit(2);
+    .eq('role','manager').eq('region',PILOT_BRANCH).ilike('name',requested).limit(2);
   if(managers.error||managers.data?.length!==1||norm(managers.data[0].name)!==norm(requested))
     return reply(req,{error:'manager_not_found'},400);
   const manager=managers.data[0];
@@ -82,13 +82,19 @@ Deno.serve(async(req:Request)=>{
   if(clients.error)return reply(req,{error:'client_verification_unavailable'},503);
   // Name lookup is capped; never assume uniqueness if the capped result may be incomplete.
   if((clients.data||[]).length>=30)return reply(req,{error:'client_verification_incomplete'},503);
-  const accepted=(clients.data||[]).filter((c:any)=>!c.is_archived&&!c.to_delete
-    && VITEBSK_REGIONS.has(norm(c.region))
-    && (!c.manager_id||c.manager_id===manager.id));
+  // A branch's manager may serve Mozyr/Bobruisk etc. Geographic 'clients.region' is NOT
+  // a branch access key. Enforce Vitebsk pilot through the manager's users.region
+  // and verify the client's current named/ID assignment instead.
+  // Count ALL matching names (including archived rows) before accepting uniqueness.
   const byName=new Map<string,any[]>();
-  for(const c of accepted)byName.set(c.name,[...(byName.get(c.name)||[]),c]);
-  const unique=rows.map((r:any)=>({r,c:(byName.get(r.client_name)||[]).length===1?byName.get(r.client_name)![0]:null}))
-    .filter((x:any)=>x.c).slice(0,8);
+  for(const c of clients.data||[])byName.set(c.name,[...(byName.get(c.name)||[]),c]);
+  const unique=rows.map((r:any)=>{
+    const matched=byName.get(r.client_name)||[];
+    const c=matched.length===1?matched[0]:null;
+    return {r,c:c&&!c.is_archived&&!c.to_delete
+      && norm(c.manager_name)===norm(manager.name)
+      && (!c.manager_id||c.manager_id===manager.id)?c:null};
+  }).filter((x:any)=>x.c).slice(0,8);
   if(!unique.length)return reply(req,{items:[],as_of:today,manager:manager.name,mode:'readonly'});
   const ids=unique.map((x:any)=>x.c.id);
   const tasks=await svc.from('tasks').select('client_id,done,review_status')
