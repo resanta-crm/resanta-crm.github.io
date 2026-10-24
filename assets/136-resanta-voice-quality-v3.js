@@ -299,7 +299,7 @@ function mount(){
  panel=document.querySelector('.rva-window');
  if(!panel||panel.dataset.voiceQualityV3)return false;
  panel.dataset.voiceQualityV3='1';
- const actions=panel.querySelector('.rva-control');
+ const actions=panel.querySelector('.rva-settings-body')||panel.querySelector('.rva-control');
  const mute=panel.querySelector('.rva-mute');
  if(!actions||!mute)return false;
  const wrap=document.createElement('div');
@@ -311,7 +311,8 @@ function mount(){
  testBtn=document.createElement('button');
  testBtn.type='button';testBtn.className='rva-btn';testBtn.textContent='▶ Послушать пример голоса';testBtn.style.padding='7px';
  wrap.append(title,select);
- actions.insertBefore(wrap,mute.parentElement);
+ if(actions.classList?.contains('rva-settings-body'))actions.appendChild(wrap);
+ else actions.insertBefore(wrap,mute.parentElement);
  const caption=document.createElement('div');
  caption.textContent='Только Лера и Даша · Яндекс SpeechKit v3. Длинный ответ произносится по частям. Месячный расчётный бюджет Яндекс-озвучки — 5 000 ₽ (РФ, с НДС). Распознавание и интеллект OpenAI отдельно. При ошибке полный ответ остаётся на экране.';
  caption.style.cssText='color:#b6c7db;font-size:10px;line-height:1.45';
