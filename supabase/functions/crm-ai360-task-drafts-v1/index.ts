@@ -80,6 +80,8 @@ Deno.serve(async(req:Request)=>{
   const clients=await svc.from('clients').select('id,name,manager_id,manager_name,region,is_archived,to_delete')
     .eq('manager_name',manager.name).in('name',names).limit(30);
   if(clients.error)return reply(req,{error:'client_verification_unavailable'},503);
+  // Name lookup is capped; never assume uniqueness if the capped result may be incomplete.
+  if((clients.data||[]).length>=30)return reply(req,{error:'client_verification_incomplete'},503);
   const accepted=(clients.data||[]).filter((c:any)=>!c.is_archived&&!c.to_delete
     && VITEBSK_REGIONS.has(norm(c.region))
     && (!c.manager_id||c.manager_id===manager.id));
