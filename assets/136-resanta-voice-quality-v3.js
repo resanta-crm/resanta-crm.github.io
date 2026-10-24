@@ -10,7 +10,7 @@
 if(window.__resantaVoiceQualityV3)return;
 window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,budgetLabel,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
-let current='yandex:lera',epoch=0,prevVisible=true;
+let current='yandex:lera',epoch=0,prevVisible=true,paused=false;
 const VOICE_KEY='resanta-ai360-yandex-voice-v4';
 const CONSENT_KEY='resanta-ai360-yandex-consent-monthly-v5';
 try {
@@ -138,7 +138,9 @@ async function refreshMonthlyBudget(){
 }
 const setStatus=(txt)=>{const el=panel?.querySelector('.rva-status');if(el)el.textContent=txt;};
 function stopSpeech(){
+ paused=false;
  epoch++;
+ updatePlaybackControls();
  window.__resantaVoiceOutputBusy=false;
  if(output){try{output.pause();output.currentTime=0;}catch{}output=null;}
  if(audioDone){const resolve=audioDone;audioDone=null;resolve();}
@@ -146,6 +148,21 @@ function stopSpeech(){
  try{speechSynthesis.cancel();}catch{}
  if(browserDone){const resolve=browserDone;browserDone=null;resolve();}
 }
+// Playback is independent of the foreground microphone capture.
+function updatePlaybackControls(){
+ const btn=panel?.querySelector('.rva-pause-audio');
+ if(btn){btn.textContent=paused?'▶ Продолжить':'⏸ Пауза';btn.setAttribute('aria-pressed',String(paused));}
+}
+window.crmResantaVoiceTogglePauseV3=()=>{
+ if(!allowed()||!panel||panel.hidden||!window.__resantaVoiceOutputBusy)return false;
+ paused=!paused;
+ if(output){
+  try{if(paused)output.pause();else Promise.resolve(output.play()).catch(e=>setStatus('Не удалось продолжить воспроизведение: '+String(e?.message||e).slice(0,100)));}catch(e){console.warn('Voice pause/resume',e);}
+ }
+ updatePlaybackControls();
+ setStatus(paused?'⏸ Озвучка на паузе.':'🔊 Озвучка продолжается.');
+ return paused;
+};
 // The visible stop button can interrupt SpeechKit without revoking mic permission.
 window.crmResantaVoiceStopV3=()=>{
  if(!allowed()||!panel||panel.hidden)return false;
@@ -222,9 +239,13 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
      return;
    }
    const chunks=speechChunks(msg);
+   updatePlaybackControls();
    let completed=0;
    for(let i=0;i<chunks.length;i++){
-     if(run!==epoch||!allowed()||panel?.hidden||document.hidden)break;
+     if(run!==epoch||!allowed()||panel?.hidden)break;
+     while(paused&&run===epoch&&allowed()&&!panel?.hidden)
+       await new Promise(r=>setTimeout(r,180));
+     if(run!==epoch||!allowed()||panel?.hidden)break;
      const name=current.endsWith('dasha')?'Даша':'Лера';
      setStatus('🔊 '+name+' озвучивает ответ: фраза '+(i+1)+' из '+chunks.length);
      try{
@@ -328,18 +349,20 @@ function mount(){
  });
  mute.addEventListener('click',stopSpeech,true);
  panel.querySelector('.rva-close')?.addEventListener('click',stopSpeech,true);
+ panel.querySelector('.rva-pause-audio')?.addEventListener('click',()=>window.crmResantaVoiceTogglePauseV3());
+ updatePlaybackControls();
  prevVisible=!panel.hidden;
  return true;
 }
 window.setInterval(()=>{
  if(!panel)mount();
  else{
-   const isVisible=!panel.hidden&&allowed()&&!document.hidden;
+   const isVisible=!panel.hidden&&allowed();
    if(!isVisible&&prevVisible)stopSpeech();
    prevVisible=isVisible;
  }
 },800);
 window.addEventListener('pagehide',stopSpeech);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopSpeech();});
+// Tab switching to ChatGPT pauses mic capture in 135, not SpeechKit playback.
 mount();
 })();
