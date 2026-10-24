@@ -4,7 +4,7 @@ const code=fs.readFileSync('assets/136-resanta-voice-quality-v3.js','utf8');
 const speechTest='Отставание менеджеров связано с несколькими возможными факторами. '+('У Шкурана и Ачинович необходимо проверить клиентскую базу, сравнить заказы и динамику. ').repeat(15)+'В конце обязательно проверьте дату отчёта и реальное выполнение плана.';
 const bytes=new Uint8Array(1100);
 bytes.set(Buffer.from('RIFF'),0);bytes.set(Buffer.from('WAVE'),8);
-function context(voice){
+function context(voice,options={}){
  const invoked=[];
  const consents=new Map([['resanta-ai360-yandex-consent-monthly-v5','yes'],['resanta-ai360-yandex-voice-v4',voice]]);
  const storage={getItem:key=>consents.get(key)||null,setItem:(key,v)=>consents.set(key,v)};
@@ -26,6 +26,7 @@ function context(voice){
     if(body.kind==='status')return {data:{budget:{month:'2026-10',reserved_rub:5.36,limit_rub:5000}}};
     assert(body.text.length<=205,'fragment too long '+body.text.length);
     invoked.push({...body});
+    if(options.hideAfterFirst && invoked.length===1)document.hidden=true;
     return {data:new Blob([bytes])};
   }}},
   Audio:FakeAudio,Blob,Uint8Array,console,setTimeout,clearTimeout,
@@ -33,7 +34,7 @@ function context(voice){
  };
  vm.runInNewContext(code,sandbox,{filename:'voice-quality-v3.js'});
  assert(typeof window.crmAI360SpeechChunksV4==='function');
- return {window,invoked,consents};
+ return {window,document,invoked,consents};
 }
 (async()=>{
  for(const voice of ['yandex:lera','yandex:dasha']){
@@ -48,6 +49,12 @@ function context(voice){
   assert(c.invoked.every(x=>x.voice===voice.split(':')[1]));
   assert.equal(c.window.__resantaVoiceOutputBusy,false);
  }
+ const background=context('yandex:lera',{hideAfterFirst:true});
+ await background.window.crmResantaVoiceSpeakV3(speechTest);
+ assert.equal(background.document.hidden,true,'simulated switch to ChatGPT');
+ assert.equal(background.invoked.length,background.window.crmAI360SpeechChunksV4(speechTest).length,
+   'Yandex narration must finish ALL clips even after CRM tab goes to background');
+ assert.equal(background.window.__resantaVoiceOutputBusy,false);
  const styled=context('yandex:lera');
  const speech='**Шкуран**: 43,9%. **Ачинович**: 52,1%. \n1. Проверить клиентов. \n2. Уточнить планы. Конец ответа.';
  const pieces=styled.window.crmAI360SpeechChunksV4(speech);
