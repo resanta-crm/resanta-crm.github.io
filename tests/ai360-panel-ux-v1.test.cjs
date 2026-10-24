@@ -26,8 +26,17 @@ assert(matches('расскажи пожалуйста поподробнее ч�
 assert(matches('хочу услышать полностью'));
 assert(matches('прочитай весь ответ'));
 assert(matches('расскажи подробнее'));
+assert(matches('расскажи мне весь план'),'literal phrase from review must replay last full answer');
+assert(matches('прочитай предыдущий ответ'),'explicit previous answer must replay');
+assert(matches('расскажи весь план полностью'),'natural complete plan must replay');
+assert(!matches('составь новый план продаж'),'new plan request should still route to AI');
 assert(!matches('какие продажи у Шкуран'),'sales question must not be mistaken for full playback');
 assert(pilot.includes('lastSubstantialAnswer'),'short clarifications must not erase long earlier answer');
+assert(pilot.includes('aria-modal="true"'),'feedback must be an accessible popup');
+assert(pilot.includes('transform:translate(-50%,-50%)'),'feedback should float over chat rather than expand composer');
+assert(pilot.includes('max-height:38px')&&pilot.includes('text-overflow:ellipsis'),
+  'voice status must stay one line and not push chat away');
+assert(pilot.includes('rva-feedback-type')&&pilot.includes('Escape'),'error modal must be dismissible');
 for(const clause of ['window.crmResantaVoiceTogglePauseV3','updatePlaybackControls','paused=!paused'])
  assert(voice.includes(clause),'missing audio pause/resume: '+clause);
 assert(voice.includes("panel.querySelector('.rva-mini-playback')?.addEventListener('click'"),'mini player pause must be wired');
