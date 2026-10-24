@@ -152,6 +152,8 @@ function stopSpeech(){
 function updatePlaybackControls(){
  const btn=panel?.querySelector('.rva-pause-audio');
  if(btn){btn.textContent=paused?'▶ Продолжить':'⏸ Пауза';btn.setAttribute('aria-pressed',String(paused));}
+ const mini=panel?.querySelector('.rva-mini-playback');
+ if(mini){mini.textContent=paused?'▶':'⏸';mini.title=paused?'Продолжить озвучку':'Пауза озвучки';mini.setAttribute('aria-pressed',String(paused));}
 }
 window.crmResantaVoiceTogglePauseV3=()=>{
  if(!allowed()||!panel||panel.hidden||!window.__resantaVoiceOutputBusy)return false;
@@ -351,6 +353,7 @@ function mount(){
  mute.addEventListener('click',stopSpeech,true);
  panel.querySelector('.rva-close')?.addEventListener('click',stopSpeech,true);
  panel.querySelector('.rva-pause-audio')?.addEventListener('click',()=>window.crmResantaVoiceTogglePauseV3());
+ panel.querySelector('.rva-mini-playback')?.addEventListener('click',()=>window.crmResantaVoiceTogglePauseV3());
  updatePlaybackControls();
  prevVisible=!panel.hidden;
  return true;
