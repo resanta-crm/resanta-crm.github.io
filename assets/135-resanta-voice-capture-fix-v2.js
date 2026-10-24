@@ -28,7 +28,8 @@
      else window.localStorage?.removeItem(AUTO_WAKE_KEY);
    }catch(_){}
  }
- function visiblePanel(){return isOwner()&&panel&&!panel.hidden&&panel.isConnected&&!document.hidden;}
+ function visiblePanel(){return isOwner()&&panel&&!panel.hidden&&!panel.classList?.contains('rva-mini')&&panel.isConnected&&!document.hidden;}
+ function noiseOnly(t){return /^(?:а|э|эм|мм|м|ну|ээ|эээ|угу)[.!?,\s]*$/i.test(String(t||'').trim());}
 
  const isOwner=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
  function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status)status.textContent=t;}
@@ -196,14 +197,14 @@
        await stopAll();
        if(question)submit(question);
        else info('Вопрос не расслышала. Нажми микрофон ещё раз.');
-     }else if(phrase){await stopAll();submit(phrase);}
+     }else if(phrase && !noiseOnly(phrase)){await stopAll();submit(phrase);}
      else {await stopAll();info('Речь не распознана. Попробуй говорить ближе к микрофону.');}
    }catch(e){await stopAll(reason(e));}
  }
  async function wakeLoop(epoch){
    let partialHelloAt=0;
    try{
-     while(mode==='wake' && epoch===listenEpoch && isOwner() && panel && !panel.hidden && !document.hidden){
+     while(mode==='wake' && epoch===listenEpoch && isOwner() && panel && !panel.hidden && !panel.classList?.contains('rva-mini') && !document.hidden){
        // No five-minute cutoff for explicitly enabled foreground dialogue.
        // Safety: closing the window, hiding the tab, leaving the account,
        // losing the mic, or hitting the existing recognition quota stops it.
@@ -220,6 +221,7 @@
        if(epoch!==listenEpoch||mode!=='wake')break;
        if(phrase===null){await stopAll('Сервер распознавания недоступен. Проверь подключение и попробуй ещё раз.');break;}
        if(!phrase){info('Фраза не распознана. Повтори ближе к микрофону.');continue;}
+       if(noiseOnly(phrase)){info('Фрагмент речи слишком короткий. Продолжаю слушать вопрос.');continue;}
        if(wakeHeard){
          submit(phrase);
          await waitForAssistant(epoch,'wake');
@@ -323,6 +325,11 @@
    panel.querySelector('.rva-close')?.addEventListener('click',()=>{void stopAll();},true);
    controls();return true;
  }
+ // Mini-player is output-only: never keep a hot microphone while collapsed.
+ window.crmResantaVoiceSuspendV2=()=>{
+   if(mode)void stopAll('Микрофон остановлен: помощник свёрнут.');
+   autoAttemptedThisOpen=false;
+ };
  document.addEventListener('visibilitychange',()=>{
    if(document.hidden && mode)void stopAll('Микрофон выключен: вкладка скрыта.');
    if(!document.hidden){autoAttemptedThisOpen=false;autoWakeBlocked=false;}
