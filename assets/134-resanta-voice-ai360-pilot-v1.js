@@ -338,7 +338,8 @@
   }
   function closePanel() {
     setWake(false); window.speechSynthesis?.cancel(); state.speaking=false;
-    if(root)root.hidden=true;
+    if(root){root.hidden=true;root.classList.remove('rva-mini');}
+    feedbackTarget=null;
     if(trigger)trigger.setAttribute('aria-expanded','false');
   }
   function mount() {
@@ -434,11 +435,49 @@
     wakeBtn=root.querySelector('.rva-wake');micBtn=root.querySelector('.rva-mic');muteBtn=root.querySelector('.rva-mute');
     trigger.addEventListener('click',()=>{
       if(!allowed())return;
+      if(root.classList.contains('rva-mini')){root.classList.remove('rva-mini');return;}
       root.hidden=!root.hidden;trigger.setAttribute('aria-expanded',String(!root.hidden));
       if(root.hidden)closePanel();
       else if(!historyEl.children.length)answer('Привет! Я РЕСАНТА AI 360°. Могу проверить продажи, клиентов, долги и маршруты.');
     });
     root.querySelector('.rva-close').addEventListener('click',closePanel);
+    const mini=root.querySelector('.rva-mini-toggle');
+    mini.addEventListener('click',()=>{
+      const shrunk=root.classList.toggle('rva-mini');
+      if(shrunk){
+        root.classList.remove('rva-fullscreen');
+        window.crmResantaVoiceSuspendV2?.();
+        textStatus('Мини-плеер · микрофон приостановлен, озвучка продолжается.');
+      }
+      mini.textContent=shrunk?'▢':'−';
+      mini.title=shrunk?'Развернуть панель':'Свернуть в мини-плеер';
+    });
+    const expand=root.querySelector('.rva-expand');
+    expand.addEventListener('click',()=>{
+      root.classList.remove('rva-mini');mini.textContent='−';
+      const isFull=root.classList.toggle('rva-fullscreen');
+      expand.title=isFull?'Вернуть боковую панель':'На весь экран';
+      expand.setAttribute('aria-pressed',String(isFull));
+    });
+    root.querySelector('.rva-feedback-close')?.addEventListener('click',()=>{
+      const card=root.querySelector('.rva-feedback');
+      if(card)card.hidden=true;
+      feedbackTarget=null;
+    });
+    root.querySelector('.rva-feedback-copy')?.addEventListener('click',()=>{
+      if(!feedbackTarget){textStatus('Выбери ответ Леры для замечания.');return;}
+      const type=root.querySelector('.rva-feedback-type')?.value||'Другая ошибка';
+      const note=(root.querySelector('.rva-feedback-comment')?.value||'').trim().slice(0,500);
+      const report='РЕСАНТА AI 360° · замечание для проверки\n'
+        +'Время (местное): '+new Date().toLocaleString('ru-RU')+'\n'
+        +'Тип: '+type+'\n'
+        +'Вопрос: '+feedbackTarget.question+'\n'
+        +'Ответ: '+feedbackTarget.response+'\n'
+        +'Комментарий: '+(note||'нет')+'\n'
+        +'Версия: голосовой модуль 134, защищённый директорский режим\n'
+        +'Отчёт скопирован вручную пользователем; данные никуда автоматически не отправлены.';
+      void copyExplicitly(report,'Отчёт скопирован. Проверь коммерческие данные перед отправкой в ChatGPT.');
+    });
     micBtn.addEventListener('click',()=>{setWake(false); startListening('manual');});
     wakeBtn.addEventListener('click',()=>{
       if(state.wake){setWake(false);return;}
