@@ -303,31 +303,88 @@
     state.mounted=true;
     const style=document.createElement('style');
     style.textContent=`
-      .rva-launch{border:1px solid #185FA5;border-radius:9px;background:#EFF6FF;color:#185FA5;font-weight:750;font-size:12px;padding:7px 9px;cursor:pointer;white-space:nowrap}
-      .rva-window{position:fixed;z-index:950;right:16px;bottom:18px;width:min(400px,calc(100vw - 24px));max-height:min(80dvh,650px);overflow:hidden;border-radius:16px;background:#101d36;color:#f6faff;box-shadow:0 16px 48px #0005;display:flex;flex-direction:column;font-family:system-ui,Arial,sans-serif}
+      .rva-launch{border:1px solid #185FA5;border-radius:10px;background:#EFF6FF;color:#185FA5;font-weight:750;font-size:12px;padding:7px 10px;cursor:pointer;white-space:nowrap}
+      .rva-window{position:fixed;z-index:950;right:18px;top:64px;bottom:18px;width:min(510px,calc(100vw - 24px));max-height:calc(100dvh - 80px);overflow:hidden;border:1px solid #d6e0ed;border-radius:20px;background:#f6f8fc;color:#172b48;box-shadow:0 16px 52px #142c4d36;display:flex;flex-direction:column;font-family:system-ui,Arial,sans-serif}
       .rva-window[hidden],.rva-launch[hidden]{display:none!important}
-      .rva-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff22}
-      .rva-close{border:0;background:transparent;color:white;font-size:23px;cursor:pointer;padding:2px 6px}
-      .rva-sub{font-size:11px;color:#a6bedb;margin-top:2px}.rva-history{padding:12px 14px;min-height:125px;overflow-y:auto;flex:1;max-height:330px}
-      .rva-line{margin:0 0 12px;font-size:13px;line-height:1.45;overflow-wrap:anywhere}.rva-line strong{display:block;color:#9cc8fc;font-size:11px;margin-bottom:4px}
-      .rva-control{padding:12px 14px 15px;border-top:1px solid #ffffff22;display:grid;gap:8px}.rva-status{font-size:12px;color:#d6e7ff}
-      .rva-actions{display:flex;gap:7px;flex-wrap:wrap}.rva-btn{border:1px solid #6683a8;border-radius:9px;background:#24416a;color:white;padding:8px 10px;cursor:pointer;font-size:12px}
-      .rva-btn.primary{background:#2075cb;border-color:#2075cb}.rva-q{display:flex;gap:6px}.rva-q input{flex:1;min-width:0;border:1px solid #60789d;border-radius:8px;padding:9px;font-size:13px;background:#fff;color:#111}
-      .rva-note{font-size:10px;line-height:1.45;color:#a8bad4}
-      @media(max-width:600px){.rva-window{left:8px;right:8px;bottom:calc(75px + env(safe-area-inset-bottom));width:auto;max-height:70dvh}.rva-launch{padding:6px;min-width:34px;font-size:0}.rva-launch::before{content:"🎙";font-size:18px}}
-    `;
+      .rva-head{padding:16px 18px;display:flex;align-items:center;gap:10px;justify-content:space-between;background:linear-gradient(110deg,#102c52,#194876);color:#fff;flex-shrink:0}
+      .rva-brand{display:flex;align-items:center;gap:10px;min-width:0}
+      .rva-brand-mark{width:38px;height:38px;border-radius:12px;background:#fff2;color:#b6e5ff;display:grid;place-items:center;font-size:22px;flex-shrink:0}
+      .rva-brand-title{font-size:16px;font-weight:790;letter-spacing:.1px}
+      .rva-sub{font-size:11px;color:#b8d5ef;margin-top:3px}
+      .rva-head-buttons{display:flex;align-items:center;gap:4px;flex-shrink:0}
+      .rva-head-buttons button{border:0;background:transparent;color:#d7e9ff;border-radius:8px;width:31px;height:31px;font-size:18px;cursor:pointer}
+      .rva-head-buttons button:hover{background:#fff2}
+      .rva-status-bar{display:flex;align-items:center;gap:8px;padding:10px 17px;border-bottom:1px solid #e6edf5;background:white;min-height:35px;flex-shrink:0}
+      .rva-status-dot{width:9px;height:9px;border-radius:50%;background:#36a887;flex-shrink:0;box-shadow:0 0 0 3px #3db89120}
+      .rva-status{font-size:12px;color:#38546f;line-height:1.45;flex:1}
+      .rva-history{padding:18px 16px 22px;min-height:120px;overflow-y:auto;flex:1;max-height:none;overscroll-behavior:contain}
+      .rva-line{margin:0 0 16px;padding:13px 14px;background:white;border:1px solid #e3eaf3;border-radius:14px 14px 14px 5px;box-shadow:0 3px 10px #142c4d0b;font-size:13px;line-height:1.58;overflow-wrap:anywhere;white-space:normal}
+      .rva-line[data-speaker="you"]{background:#e5f1ff;border-color:#cadef8;border-radius:14px 14px 5px 14px;margin-left:30px}
+      .rva-line strong{display:block;color:#2767aa;font-size:11px;margin-bottom:6px}
+      .rva-line-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px;padding-top:9px;border-top:1px solid #eaf0f7}
+      .rva-line-actions button{color:#355c85;background:#f1f6fc;border:1px solid #e0e9f4;border-radius:7px;font-size:11px;padding:6px 8px;cursor:pointer}
+      .rva-line-actions button:hover{background:#e4f0fe}
+      .rva-control{padding:11px 16px 14px;border-top:1px solid #dfe7f2;display:grid;gap:9px;background:white;flex-shrink:0}
+      .rva-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+      .rva-btn{border:1px solid #c8d9ec;border-radius:10px;background:#ecf4fd;color:#174b7f;padding:9px 11px;cursor:pointer;font-size:12px;font-weight:650}
+      .rva-btn:hover{background:#e0efff}.rva-btn.primary{background:#2075cb;border-color:#2075cb;color:white}
+      .rva-btn[aria-pressed="true"]{background:#e1f7ef;color:#117449;border-color:#9ed8bc}
+      .rva-q{display:flex;gap:7px;align-items:center}.rva-q input{flex:1;min-width:0;border:1px solid #c7d7e8;border-radius:10px;padding:12px;font-size:13px;background:#f8fbff;color:#172b48}
+      .rva-q input:focus{outline:2px solid #a5cff5;outline-offset:1px}
+      .rva-note{font-size:10px;line-height:1.5;color:#627f9d}
+      .rva-settings{border-top:1px solid #e6edf5;padding-top:8px;font-size:12px;color:#395e82}
+      .rva-settings summary{cursor:pointer;list-style:none;user-select:none;padding:3px 0}
+      .rva-settings-body{display:grid;gap:7px;padding:11px 0 4px}
+      .rva-feedback{display:grid;gap:8px;padding:13px;background:#f6f9fd;border:1px solid #dce6f1;border-radius:12px}
+      .rva-feedback[hidden]{display:none!important}
+      .rva-feedback select,.rva-feedback textarea{width:100%;box-sizing:border-box;border:1px solid #bfcee0;background:#fff;color:#17314e;border-radius:8px;padding:8px;font-size:12px}
+      .rva-feedback textarea{min-height:54px;resize:vertical}
+      .rva-feedback small{color:#58738e;font-size:10px}
+      .rva-window.rva-fullscreen{inset:14px;width:auto;max-height:calc(100dvh - 28px)}
+      .rva-window.rva-mini{top:auto;bottom:18px;height:auto;max-height:110px;width:min(405px,calc(100vw - 24px))}
+      .rva-window.rva-mini .rva-history,.rva-window.rva-mini .rva-control,.rva-window.rva-mini .rva-status-bar{display:none}
+      @media(max-width:600px){.rva-window{left:6px;right:6px;top:7px;bottom:7px;width:auto;max-height:calc(100dvh - 14px);border-radius:14px}.rva-window.rva-fullscreen{inset:2px;max-height:calc(100dvh - 4px)}.rva-launch{padding:6px;font-size:0}.rva-launch::before{content:"🎙";font-size:18px}.rva-head{padding:11px}.rva-control{padding:10px}.rva-line{font-size:13px}}`;
     document.head.appendChild(style);
     trigger=document.createElement('button'); trigger.type='button'; trigger.className='rva-launch';
     trigger.textContent='🎙 РЕСАНТА AI';trigger.setAttribute('aria-label','Открыть голосовой помощник РЕСАНТА AI');trigger.hidden=true;trigger.setAttribute('aria-expanded','false');
     top.insertBefore(trigger,top.querySelector('.user-badge'));
     root=document.createElement('section');root.className='rva-window';root.hidden=true;root.setAttribute('role','dialog');root.setAttribute('aria-label','Голосовой помощник РЕСАНТА AI');
-    root.innerHTML=`<div class="rva-head"><div><strong>🎙 РЕСАНТА AI 360°</strong><div class="rva-sub">Пилот · только чтение · только ДФС</div></div><button class="rva-close" type="button" aria-label="Закрыть помощника">×</button></div>
+    root.innerHTML=`<div class="rva-head">
+        <div class="rva-brand"><span class="rva-brand-mark">✦</span><div>
+          <div class="rva-brand-title">РЕСАНТА AI 360°</div>
+          <div class="rva-sub">Твой интеллектуальный помощник · только чтение</div>
+        </div></div>
+        <div class="rva-head-buttons">
+          <button class="rva-mini-toggle" type="button" title="Свернуть в плеер" aria-label="Свернуть">−</button>
+          <button class="rva-expand" type="button" title="На весь экран" aria-label="Развернуть">⛶</button>
+          <button class="rva-close" type="button" aria-label="Закрыть помощника">×</button>
+        </div>
+      </div>
+      <div class="rva-status-bar"><span class="rva-status-dot"></span><span class="rva-status" aria-live="polite">Готова к разговору</span></div>
       <div class="rva-history" role="log" aria-live="polite"></div>
-      <div class="rva-control"><div class="rva-status" aria-live="polite">Микрофон пока выключен</div>
-      <div class="rva-actions"><button class="rva-btn primary rva-mic" type="button">🎤 Спросить голосом</button><button class="rva-btn rva-wake" type="button" aria-pressed="false">◉ Включить «Привет, Ресанта»</button></div>
-      <div class="rva-q"><input class="rva-input" type="text" maxlength="300" placeholder="Или напиши вопрос…" aria-label="Вопрос помощнику"><button class="rva-btn primary rva-send" type="button">➤</button></div>
-      <div class="rva-actions"><button class="rva-btn rva-mute" type="button">🔊 Озвучка включена</button><button class="rva-btn rva-stop-audio" type="button" title="Остановить текущий голосовой ответ">■ Остановить речь</button></div>
-      <div class="rva-note">По умолчанию микрофон выключен. При включении распознавания браузер может передавать звук своему провайдеру. Фоновая фраза действует только в открытом окне. Запись и история диалога не сохраняются. Директорский помощник использует ограниченные платные запросы для анализа. Рабочие записи CRM не изменяет.</div></div>`;
+      <div class="rva-control">
+        <div class="rva-q"><input class="rva-input" type="text" maxlength="300" placeholder="Спроси о продажах, клиентах или задачах…" aria-label="Вопрос помощнику"><button class="rva-btn primary rva-send" type="button" aria-label="Отправить">➤</button></div>
+        <div class="rva-actions"><button class="rva-btn primary rva-mic" type="button">🎤 Спросить</button><button class="rva-btn rva-wake" type="button" aria-pressed="false">◉ «Привет, Ресанта»</button></div>
+        <div class="rva-actions"><button class="rva-btn rva-pause-audio" type="button" aria-pressed="false">⏸ Пауза</button><button class="rva-btn rva-stop-audio" type="button">■ Стоп</button></div>
+        <div class="rva-feedback" hidden>
+          <strong>Отметить ошибку в ответе</strong>
+          <select class="rva-feedback-type" aria-label="Тип ошибки">
+            <option value="Неверные данные">Неверные данные</option>
+            <option value="Не поняла вопрос">Не поняла вопрос</option>
+            <option value="Ошибка озвучки">Ошибка озвучки</option>
+            <option value="Неудобный интерфейс">Неудобный интерфейс</option>
+          </select>
+          <textarea class="rva-feedback-comment" maxlength="500" placeholder="Что именно было не так? (необязательно)"></textarea>
+          <small>Отчёт не отправляется автоматически. Если в ответе есть коммерческие данные CRM, проверь текст перед тем как поделиться им.</small>
+          <div class="rva-actions"><button class="rva-btn primary rva-feedback-copy" type="button">Копировать отчёт</button><button class="rva-btn rva-feedback-close" type="button">Отмена</button></div>
+        </div>
+        <details class="rva-settings"><summary>⚙ Настройки голоса и расходы</summary>
+          <div class="rva-settings-body">
+            <button class="rva-btn rva-mute" type="button">🔊 Озвучка включена</button>
+            <div class="rva-note">Микрофон работает только при открытом помощнике в активной вкладке. При переходе в ChatGPT он отключается, а текущая озвучка может продолжаться. Текст диалога не сохраняется после обновления страницы.</div>
+          </div>
+        </details>
+      </div>`;
     document.body.appendChild(root);
     historyEl=root.querySelector('.rva-history');statusEl=root.querySelector('.rva-status');field=root.querySelector('.rva-input');
     wakeBtn=root.querySelector('.rva-wake');micBtn=root.querySelector('.rva-mic');muteBtn=root.querySelector('.rva-mute');
