@@ -14,6 +14,9 @@
  let panel,mic,wake,status,field,send,meter;
  let mode='',stream=null,context=null,analyser=null,src=null,clock=0,segment=0,starting=false,busy=false;
  let wakeHeard=false,wakeStart=0,clipCount=0,activeRecorder=null,userOptIn=false,listenEpoch=0;
+ // Short-term conversation context stays only in memory; no transcript storage.
+ let resumeConversationUntil=0;
+ const RESUME_WINDOW_MS=3*60*1000;
  const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта)(?=$|[^а-яё])/i;
  // Persist only explicit consent. Never auto-open the voice panel, never
  // start a microphone on the CRM login screen or when the tab is hidden.
@@ -32,7 +35,7 @@
  function noiseOnly(t){return /^(?:а|э|эм|мм|м|ну|ээ|эээ|угу)[.!?,\s]*$/i.test(String(t||'').trim());}
 
  const isOwner=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
- function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status)status.textContent=t;}
+ function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status){status.textContent=t;status.title=String(t||'');}}
  function controls(){
    if(wake){
      wake.textContent=mode==='wake'?'■ Выключить «Привет, Ресанта»':
@@ -262,7 +265,7 @@
    if(starting)return;
    if(automatic && (!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
    if(mode===newMode){
-     if(newMode==='wake'&&!automatic)saveAutoWake(false);
+     if(newMode==='wake'&&!automatic){saveAutoWake(false);resumeConversationUntil=0;}
      await stopAll('Микрофон выключен. Постоянная активация отключена.');
      return;
    }
@@ -290,15 +293,21 @@
        }
      }
    }
+   const continueConversation=automatic&&newMode==='wake'&&resumeConversationUntil>Date.now();
    starting=true;
    await stopAll();
    starting=true;
-   mode=newMode;listenEpoch++;const epoch=listenEpoch;wakeStart=Date.now();clipCount=0;controls();
+   mode=newMode;listenEpoch++;const epoch=listenEpoch;wakeStart=Date.now();clipCount=0;
+   wakeHeard=!!continueConversation;controls();
    if(newMode==='wake'&&!automatic)saveAutoWake(true);
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
      if(newMode==='manual'){info('Слушаю команду. Максимум 10 секунд.');manualLoop(epoch);}
-     else{info('Микрофон включён: ожидаю «Привет, Ресанта»');wakeLoop(epoch);}
+     else{
+       if(continueConversation){resumeConversationUntil=0;info('Продолжаем разговор. Можешь задать вопрос без нового приветствия.');}
+       else info('Микрофон включён: ожидаю «Привет, Ресанта»');
+       wakeLoop(epoch);
+     }
    }catch(e){
      await stopAll(reason(e));
      if(automatic)autoWakeBlocked=true; // No permission or device retry loop.
@@ -322,25 +331,33 @@
      autoWakeBlocked=false;
      void start('wake');
    },true);
-   panel.querySelector('.rva-close')?.addEventListener('click',()=>{void stopAll();},true);
+   panel.querySelector('.rva-close')?.addEventListener('click',()=>{resumeConversationUntil=0;void stopAll();},true);
    controls();return true;
  }
  // Mini-player is output-only: never keep a hot microphone while collapsed.
  window.crmResantaVoiceSuspendV2=()=>{
+   resumeConversationUntil=0;
    if(mode)void stopAll('Микрофон остановлен: помощник свёрнут.');
    autoAttemptedThisOpen=false;
  };
  document.addEventListener('visibilitychange',()=>{
-   if(document.hidden && mode)void stopAll('Микрофон выключен: вкладка скрыта.');
-   if(!document.hidden){autoAttemptedThisOpen=false;autoWakeBlocked=false;}
+   if(document.hidden){
+     // Resume dialogue only if the wake phrase had already been accepted.
+     // Capturing stops immediately while CRM is not in the foreground.
+     resumeConversationUntil=(mode==='wake'&&wakeHeard&&autoWakeWanted&&isOwner()&&
+       panel&&!panel.hidden&&!panel.classList?.contains('rva-mini'))?
+       Date.now()+RESUME_WINDOW_MS:0;
+     if(mode)void stopAll('Микрофон выключен: вкладка скрыта.');
+   }else{autoAttemptedThisOpen=false;autoWakeBlocked=false;}
  });
- window.addEventListener('pagehide',()=>{void stopAll();});
+ window.addEventListener('pagehide',()=>{resumeConversationUntil=0;void stopAll();});
  window.setInterval(()=>{
    if(!panel)init();
    if(!panel)return;
    const open=!!visiblePanel();
    if(!open){
      if(lastOpen)autoAttemptedThisOpen=false;
+     if(panel.hidden||panel.classList?.contains('rva-mini')||!isOwner())resumeConversationUntil=0;
      if(mode)void stopAll();
    }else if(autoWakeWanted && !autoAttemptedThisOpen && mode!=='wake' && !starting && !autoWakeBlocked){
      autoAttemptedThisOpen=true; // At most one automatic getUserMedia request per open.
