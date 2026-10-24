@@ -13,6 +13,7 @@ on:
       - 'tests/ai360-intent-routing-v1.test.cjs'
       - 'tests/ai360-management-recommendations-v2.test.cjs'
       - 'tests/ai360-remembered-wake-session.test.cjs'
+      - 'tests/ai360-panel-ux-v1.test.cjs'
       - 'supabase/functions/crm-ai360-director-v1/intent-router.mjs'
       - '.github/workflows/validate-ai360-js.yml'
       - 'tests/ai360-voice-full-answer.test.cjs'
@@ -41,3 +42,4 @@ jobs:
           node tests/ai360-intent-routing-v1.test.cjs
           node tests/ai360-management-recommendations-v2.test.cjs
           node tests/ai360-remembered-wake-session.test.cjs
+          node tests/ai360-panel-ux-v1.test.cjs
