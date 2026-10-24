@@ -13,9 +13,14 @@ for(const source of [server,draft]){
  assert(!/\.(?:insert|update|delete|upsert|remove)\s*\(/.test(source),
   'read-only stage must not write to CRM');
 }
-for(const s of ["user.id!==OWNER_ID","profile.data?.role!=='boss'","VITEBSK_REGIONS","crm_ai360_operations_snapshot_v1",
+for(const s of ["user.id!==OWNER_ID","profile.data?.role!=='boss'","PILOT_BRANCH","crm_ai360_operations_snapshot_v1",
    "client_verification_unavailable","task_verification_unavailable","route_verification_unavailable",
    "verification_incomplete","mode:'readonly'"])assert(server.includes(s),'missing server safety: '+s);
+assert(server.includes("norm(c.manager_name)===norm(manager.name)"),'must match assigned manager');
+assert(server.includes("(!c.manager_id||c.manager_id===manager.id)"),'verify manager_id when present');
+assert(server.includes("matched.length===1"),'ambiguous client names excluded');
+assert(!server.includes("VITEBSK_REGIONS"),'pilot branch is not client geography');
+assert(server.includes("client_verification_incomplete"),'reject truncated result');
 assert(/CREATE|DROP|ALTER|TRUNCATE/.test(server)===false,'server stage must never include DDL');
 function mock(opts={}){
  const seen=[],lines=[],statuses=[];
@@ -24,7 +29,7 @@ function mock(opts={}){
   window:{
    crmEnsureFreshSessionV236166:async()=>({access_token:'valid-session'}),
    crmAI360StaffResolveV1:{resolve:(q,staff)=>/руднев/i.test(q)
-    ?{kind:'exact',manager:'Иван Руднев'}:{kind:'unknown'}}
+    ?{kind:'exact',manager:'Руднев'}:{kind:'unknown'}}
   },
   navigator:{userAgent:opts.android?'Android':'Windows'},
   document:{hidden:false,getElementById:(id)=>id==='app'?{style:{display:'block'}}:null},
@@ -33,12 +38,12 @@ function mock(opts={}){
    functions:{invoke:async(name,{body})=>{
     seen.push({name,body});
     if(name!=='crm-ai360-task-drafts-v1')throw Error('unknown endpoint');
-    if(body.kind==='directory')return {data:{staff:[{name:'Иван Руднев',role:'manager'}]}};
+    if(body.kind==='directory')return {data:{staff:[{name:'Руднев',role:'manager'}]}};
     if(body.kind==='preview')return {data:{
      mode:opts.badMode?'write':'readonly',
      as_of:'2026-10-24',items:[{
       draft_id:'preview-1',client_id:'example-client',client_name:'Клиент А',
-      manager_name:opts.foreign?'Посторонний менеджер':'Иван Руднев',
+      manager_name:opts.foreign?'Посторонний менеджер':'Руднев',
       title:'Восстановить контакт',text:'Позвонить клиенту',
       basis:'Снижение связанных продаж',expected_result:'Результат звонка',
       criteria:'Запись в CRM',due_date:'2026-10-29',source:'purchase_history'
