@@ -17,6 +17,8 @@
     silent:false, recognition:null, localReady:false, mounted:false, timer:0, pendingRestart:0 };
   let root, trigger, statusEl, historyEl, field, wakeBtn, micBtn, muteBtn;
   let lastDetailedResponse='';
+  let feedbackTarget=null;
+  let lastSubstantialAnswer='';
   function briefVoiceText(message){
     const raw=String(message||'').replace(/\*\*/g,'').replace(/\s+/g,' ').trim();
     if(raw.length<=190)return raw;
@@ -43,20 +45,58 @@
   }
   function visible() { return allowed() && !!root && !root.hidden && !document.hidden; }
   function textStatus(message) { if (statusEl) statusEl.textContent = message; }
+  async function copyExplicitly(value,successMessage){
+    try {
+      if(!navigator.clipboard?.writeText)throw new Error('clipboard_unavailable');
+      await navigator.clipboard.writeText(String(value||''));
+      textStatus(successMessage||'Скопировано. Перед отправкой проверь коммерческие данные.');
+    }catch(_){textStatus('Копирование браузером запрещено. Можно выделить и скопировать текст ответа вручную.');}
+  }
+  function lastUserQuestion(){
+    if(!historyEl)return '';
+    const entries=[...historyEl.querySelectorAll('.rva-line[data-speaker="you"]')];
+    return entries.length?entries[entries.length-1].querySelector('.rva-line-body')?.textContent||'':'';
+  }
+  function showFeedback(response,question){
+    const card=root?.querySelector('.rva-feedback');
+    if(!card)return;
+    feedbackTarget={question:String(question||'').slice(0,300),response:String(response||'').slice(0,6000)};
+    card.hidden=false;
+    card.querySelector('.rva-feedback-comment').value='';
+    card.scrollIntoView?.({block:'nearest',behavior:'smooth'});
+  }
   function addLine(who, message) {
     if (!historyEl) return;
     const wrap = document.createElement('div');
     wrap.className = 'rva-line';
+    wrap.dataset.speaker=who==='Вы'?'you':'assistant';
     const head = document.createElement('strong'); head.textContent = who;
     const txt = document.createElement('div'); const raw = String(message || '');
+    txt.className='rva-line-body';
     txt.style.whiteSpace='pre-line';
     for(const part of raw.split(/(\*\*[^*]+\*\*)/g)){
       if(/^\*\*[^*]+\*\*$/.test(part)){
         const strong=document.createElement('b');strong.textContent=part.slice(2,-2);txt.appendChild(strong);
       }else txt.appendChild(document.createTextNode(part));
     }
-    wrap.append(head, txt); historyEl.appendChild(wrap);
-    while (historyEl.children.length > 12) historyEl.removeChild(historyEl.firstChild);
+    wrap.append(head, txt);
+    if(who==='РЕСАНТА AI' && raw.length>=30){
+      const actions=document.createElement('div'); actions.className='rva-line-actions';
+      const copy=document.createElement('button');copy.type='button';copy.textContent='⧉ Копировать';
+      copy.addEventListener('click',()=>void copyExplicitly(raw,'Ответ скопирован. Проверь коммерческие данные перед отправкой.'));
+      const flag=document.createElement('button');flag.type='button';flag.textContent='⚑ Отметить ошибку';
+      const relatedQuestion=lastUserQuestion();
+      flag.addEventListener('click',()=>showFeedback(raw,relatedQuestion));
+      actions.append(copy,flag);
+      if(raw.length>220){
+        const all=document.createElement('button');all.type='button';all.textContent='▶ Прочитать полностью';
+        all.addEventListener('click',()=>{lastDetailedResponse=raw;speak(raw);});
+        actions.prepend(all);
+      }
+      wrap.appendChild(actions);
+    }
+    historyEl.appendChild(wrap);
+    while (historyEl.children.length > 18) historyEl.removeChild(historyEl.firstChild);
     historyEl.scrollTop = historyEl.scrollHeight;
   }
   function speak(message,options={}) {
@@ -86,6 +126,7 @@
   function answer(message,options={}) {
     addLine('РЕСАНТА AI',message);
     const text=String(message||'').trim();
+    if(text.length>220)lastSubstantialAnswer=text;
     const verifiedBrief=typeof options?.speechSummary==='string'&&options.speechSummary.length<=230?
       options.speechSummary.trim():'';
     const compact=verifiedBrief||(text.length>225?briefVoiceText(text):'');
@@ -94,7 +135,8 @@
       textStatus('Готовлю краткий голосовой итог…');
       speak(compact,{shortSummary:true});
     }else{
-      lastDetailedResponse='';
+      // Brief confirmations must not erase the last detailed analysis.
+      if(!lastDetailedResponse && lastSubstantialAnswer)lastDetailedResponse=lastSubstantialAnswer;
       textStatus('Готовлю голосовой ответ…');
       speak(text);
     }
@@ -141,8 +183,10 @@
       answer('Пожалуйста! Обращайся, если понадобится ещё что-нибудь.');
       return;
     }
-    if(/^(?:расскажи|прочитай|озвучь)\s+(?:подробнее|полностью|весь\s+ответ)$|^подробнее$/.test(query)){
-      if(lastDetailedResponse){
+    const asksForFullNarration=/(?:расскаж|прочита|озвуч|произнес|хочу|можешь|нужно|дай|пожалуйста).{0,105}(?:подробн|поподробн|полност|целиком|весь\s+ответ|услыш|послуш|слушать|не\s+хочу\s+читать)|^(?:подробнее|поподробнее|полностью|прочитай\s+все|вслух)$/.test(query);
+    if(asksForFullNarration){
+      if(lastDetailedResponse || lastSubstantialAnswer){
+        lastDetailedResponse=lastDetailedResponse||lastSubstantialAnswer;
         addLine('РЕСАНТА AI','Озвучиваю предыдущий ответ полностью.');
         textStatus('Озвучиваю полный ответ');
         speak(lastDetailedResponse);
