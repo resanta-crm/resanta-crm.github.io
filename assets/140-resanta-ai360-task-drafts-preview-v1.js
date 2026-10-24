@@ -8,7 +8,7 @@ if(/Android/i.test(navigator.userAgent||'')||root.crmAI360TaskDraftsHandleV1)ret
 const ENDPOINT='crm-ai360-task-drafts-v1';
 const REQUEST=/(?:предлож|подготов|сформир|состав|созда[йт]|покажи)[а-яё]*\s+.{0,55}(?:поручен|задач)|(?:какие|дай)\s+поручен/i;
 const CHOOSE=/(?:согласова|выбер|выбра|остав|утверд|одобр|подтвержда)/i;
-const CANCEL=/(?:отмен|убер|удал|сброс|очист)/i;
+const CANCEL=/(?:отмен|убер|убра|удал|сброс|очист)/i;
 const CHANGE=/(?:измени|поменяй|перенеси|поставь)\s+(?:срок|дату)/i;
 const months={'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,
  'июля':7,'августа':8,'сентября':9,'октября':10,'ноября':11,'декабря':12};
@@ -119,6 +119,10 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
  if(!q)return false;
  if(REQUEST.test(q)){
    if(pending){ui.answer('Предыдущая проверка ещё выполняется.');return true;}
+   if(root.__resantaAI360PendingV1){
+     ui.answer('Дождись окончания предыдущего анализа Леры. Черновики пока не запрашиваю.');
+     return true;
+   }
    items=[];chosen.clear();asOf='';void requestDrafts(q,ui);return true;
  }
  if(!items.length)return false;
