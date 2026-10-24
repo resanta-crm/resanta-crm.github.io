@@ -46,7 +46,8 @@ assert(!voice.includes("document.addEventListener('visibilitychange',()=>{if(doc
  'hiding browser tab must not stop Lera');
 assert(!voice.includes('||panel?.hidden||document.hidden)break'),
  'speech must finish when switching tabs');
-assert(capture.includes("if(document.hidden && mode)void stopAll"),'hidden tab must stop microphone');
+assert(capture.includes("if(document.hidden){")&&capture.includes("if(mode)void stopAll('Микрофон выключен: вкладка скрыта."),
+ 'hidden tab must stop microphone even while saving short-lived dialogue context');
 assert(capture.includes("!panel.classList?.contains('rva-mini')"),'mini player must stop microphone');
 assert(capture.includes('noiseOnly(phrase)'),'skip lone noise fragments');
 assert(loader.includes('Android'),'safe lazy launch still excludes Android');
