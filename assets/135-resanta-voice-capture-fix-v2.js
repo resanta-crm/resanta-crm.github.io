@@ -83,7 +83,7 @@
    meter=document.createElement('progress');meter.className='rva-mic-meter';meter.max=100;meter.value=0;meter.hidden=true;
    meter.setAttribute('aria-label','Уровень звука с микрофона');
    meter.style.cssText='width:calc(100% - 32px);height:5px;accent-color:#64b5f6;display:block;margin:0 16px;flex:0 0 5px;';
-   meter.hidden=true;status?.closest('.rva-status-bar')?.after(meter);
+   meter.hidden=true;status?.parentElement?.after(meter);
  }
  async function permission(){
    if(stream?.active)return;
