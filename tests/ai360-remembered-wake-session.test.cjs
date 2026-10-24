@@ -6,7 +6,9 @@ const code=fs.readFileSync('assets/135-resanta-voice-capture-fix-v2.js','utf8');
 const voiceUI=fs.readFileSync('assets/136-resanta-voice-quality-v3.js','utf8');
 function node(){
  const callbacks={};
+ const classes=new Set();
  return {
+   classList:{contains:n=>classes.has(n),add:n=>classes.add(n),remove:n=>classes.delete(n),toggle:n=>{if(classes.has(n)){classes.delete(n);return false;}classes.add(n);return true;}},
    dataset:{},style:{},hidden:false,isConnected:true,textContent:'',
    listeners:callbacks,after(){},setAttribute(k,v){this[k]=v;},
    addEventListener(type,fn){(callbacks[type]??=[]).push(fn);},
@@ -100,6 +102,21 @@ function harness(saved=false,yandex=true){
   h.wake.click();await h.settle();
   assert.equal(h.counts.microphone,1,'user click can recover without background confirmation prompt');
  }
+ {
+  const h=harness(true,true);
+  h.panel.hidden=false;await h.tick();
+  assert.equal(h.counts.microphone,1,'saved consent connects when panel opens');
+  h.panel.classList.add('rva-mini');
+  h.window.crmResantaVoiceSuspendV2();
+  await h.settle();await h.tick();
+  assert.equal(h.counts.stopped,1,'minimizing releases microphone');
+  assert.equal(h.counts.microphone,1,'mini player never reconnects mic');
+  h.panel.classList.remove('rva-mini');
+  await h.tick();
+  assert.equal(h.counts.microphone,2,'restoring panel reconnects after remembered consent');
+ }
+ assert(code.includes("noiseOnly(phrase)"),'lone filler such as А must not be sent to AI');
+ assert(code.includes("if(noiseOnly(phrase))"),'wake mode must skip filler fragments');
  assert(voiceUI.includes("window.crmResantaVoiceAuthorizeV3=approveYandex"));
  assert(voiceUI.includes("Проверка звучания (необязательно)"));
  assert(voiceUI.includes("testBtn.textContent='▶ Послушать пример голоса'"));
