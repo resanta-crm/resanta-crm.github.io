@@ -400,6 +400,7 @@
           <div class="rva-sub">Твой интеллектуальный помощник · только чтение</div>
         </div></div>
         <div class="rva-head-buttons">
+          <button class="rva-mini-playback" type="button" title="Пауза или продолжить голос" aria-label="Пауза/продолжить">⏸</button>
           <button class="rva-mini-toggle" type="button" title="Свернуть в плеер" aria-label="Свернуть">−</button>
           <button class="rva-expand" type="button" title="На весь экран" aria-label="Развернуть">⛶</button>
           <button class="rva-close" type="button" aria-label="Закрыть помощника">×</button>
