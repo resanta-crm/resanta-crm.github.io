@@ -44,7 +44,7 @@
     } catch (_) { return false; }
   }
   function visible() { return allowed() && !!root && !root.hidden && !document.hidden; }
-  function textStatus(message) { if (statusEl) statusEl.textContent = message; }
+  function textStatus(message) { if(statusEl){statusEl.textContent=message;statusEl.title=String(message||'');} }
   async function copyExplicitly(value,successMessage){
     try {
       if(!navigator.clipboard?.writeText)throw new Error('clipboard_unavailable');
@@ -63,7 +63,7 @@
     feedbackTarget={question:String(question||'').slice(0,300),response:String(response||'').slice(0,6000)};
     card.hidden=false;
     card.querySelector('.rva-feedback-comment').value='';
-    card.scrollIntoView?.({block:'nearest',behavior:'smooth'});
+    card.querySelector('.rva-feedback-type')?.focus();
   }
   function addLine(who, message) {
     if (!historyEl) return;
@@ -183,7 +183,7 @@
       answer('Пожалуйста! Обращайся, если понадобится ещё что-нибудь.');
       return;
     }
-    const asksForFullNarration=/(?:расскаж|прочита|озвуч|произнес|хочу|можешь|нужно|дай|пожалуйста).{0,105}(?:подробн|поподробн|полност|целиком|весь\s+ответ|услыш|послуш|слушать|не\s+хочу\s+читать)|^(?:подробнее|поподробнее|полностью|прочитай\s+все|вслух)$/.test(query);
+    const asksForFullNarration=/(?:расскаж|прочита|озвуч|произнес|хочу|можешь|нужно|дай|пожалуйста).{0,105}(?:подробн|поподробн|полност|целиком|весь\s+ответ|услыш|послуш|слушать|не\s+хочу\s+читать)|^(?:подробнее|поподробнее|полностью|прочитай\s+все|вслух)$|^(?:(?:лера|ресанта)\s+)?(?:расскажи|прочитай|озвучь|зачитай|повтори)\s+(?:(?:мне|пожалуйста)\s+){0,2}(?:(?:весь|полный|предыдущий)\s+)?(?:план|ответ|разбор)(?:\s+(?:целиком|подробно|полностью))?$/.test(query);
     if(asksForFullNarration){
       if(lastDetailedResponse || lastSubstantialAnswer){
         lastDetailedResponse=lastDetailedResponse||lastSubstantialAnswer;
@@ -359,9 +359,9 @@
       .rva-head-buttons{display:flex;align-items:center;gap:4px;flex-shrink:0}
       .rva-head-buttons button{border:0;background:transparent;color:#d7e9ff;border-radius:8px;width:31px;height:31px;font-size:18px;cursor:pointer}
       .rva-head-buttons button:hover{background:#fff2}
-      .rva-status-bar{display:flex;align-items:center;gap:8px;padding:10px 17px;border-bottom:1px solid #e6edf5;background:white;min-height:35px;flex-shrink:0}
+      .rva-status-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #e6edf5;background:white;height:38px;min-height:38px;max-height:38px;box-sizing:border-box;overflow:hidden;flex-shrink:0}
       .rva-status-dot{width:9px;height:9px;border-radius:50%;background:#36a887;flex-shrink:0;box-shadow:0 0 0 3px #3db89120}
-      .rva-status{font-size:12px;color:#38546f;line-height:1.45;flex:1}
+      .rva-status{display:block;font-size:12px;color:#38546f;line-height:18px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .rva-history{padding:18px 16px 22px;min-height:120px;overflow-y:auto;flex:1;max-height:none;overscroll-behavior:contain}
       .rva-line{margin:0 0 16px;padding:13px 14px;background:white;border:1px solid #e3eaf3;border-radius:14px 14px 14px 5px;box-shadow:0 3px 10px #142c4d0b;font-size:13px;line-height:1.58;overflow-wrap:anywhere;white-space:normal}
       .rva-line[data-speaker="you"]{background:#e5f1ff;border-color:#cadef8;border-radius:14px 14px 5px 14px;margin-left:30px}
@@ -380,7 +380,7 @@
       .rva-settings{border-top:1px solid #e6edf5;padding-top:8px;font-size:12px;color:#395e82}
       .rva-settings summary{cursor:pointer;list-style:none;user-select:none;padding:3px 0}
       .rva-settings-body{display:grid;gap:7px;padding:11px 0 4px}
-      .rva-feedback{display:grid;gap:8px;padding:13px;background:#f6f9fd;border:1px solid #dce6f1;border-radius:12px}
+      .rva-feedback{position:absolute;z-index:15;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,calc(100% - 28px));max-height:calc(100% - 45px);box-sizing:border-box;overflow-y:auto;display:grid;gap:10px;padding:18px;background:#fff;border:1px solid #ccdaea;border-radius:16px;box-shadow:0 0 0 100vmax rgba(12,30,55,.36),0 18px 45px #10274350}
       .rva-feedback[hidden]{display:none!important}
       .rva-feedback select,.rva-feedback textarea{width:100%;box-sizing:border-box;border:1px solid #bfcee0;background:#fff;color:#17314e;border-radius:8px;padding:8px;font-size:12px}
       .rva-feedback textarea{min-height:54px;resize:vertical}
@@ -412,7 +412,7 @@
         <div class="rva-q"><input class="rva-input" type="text" maxlength="300" placeholder="Спроси о продажах, клиентах или задачах…" aria-label="Вопрос помощнику"><button class="rva-btn primary rva-send" type="button" aria-label="Отправить">➤</button></div>
         <div class="rva-actions"><button class="rva-btn primary rva-mic" type="button">🎤 Спросить</button><button class="rva-btn rva-wake" type="button" aria-pressed="false">◉ «Привет, Ресанта»</button></div>
         <div class="rva-actions"><button class="rva-btn rva-pause-audio" type="button" aria-pressed="false">⏸ Пауза</button><button class="rva-btn rva-stop-audio" type="button">■ Стоп</button></div>
-        <div class="rva-feedback" hidden>
+        <div class="rva-feedback" role="dialog" aria-modal="true" aria-label="Отметить ошибку" hidden>
           <strong>Отметить ошибку в ответе</strong>
           <select class="rva-feedback-type" aria-label="Тип ошибки">
             <option value="Неверные данные">Неверные данные</option>
@@ -459,6 +459,12 @@
       const isFull=root.classList.toggle('rva-fullscreen');
       expand.title=isFull?'Вернуть боковую панель':'На весь экран';
       expand.setAttribute('aria-pressed',String(isFull));
+    });
+    root.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){
+        const modal=root.querySelector('.rva-feedback');
+        if(modal&&!modal.hidden){e.preventDefault();modal.hidden=true;feedbackTarget=null;}
+      }
     });
     root.querySelector('.rva-feedback-close')?.addEventListener('click',()=>{
       const card=root.querySelector('.rva-feedback');
