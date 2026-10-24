@@ -9,7 +9,7 @@ const loader=fs.readFileSync('assets/137-resanta-ai360-lazy-launch-v1.js','utf8'
 for(const expected of [
  'width:min(510px','rva-history','rva-control','rva-fullscreen','rva-mini-toggle',
  "root.classList.toggle('rva-mini')","root.classList.toggle('rva-fullscreen')",
- 'rva-pause-audio','rva-stop-audio','rva-settings-body',
+ 'rva-pause-audio','rva-mini-playback','rva-stop-audio','rva-settings-body',
  'rva-feedback-type','rva-feedback-copy','Отметить ошибку','Прочитать полностью'
 ])assert(pilot.includes(expected),'missing UI feature: '+expected);
 assert(pilot.includes("root.querySelector('.rva-feedback-copy')?.addEventListener('click'"),
@@ -30,6 +30,7 @@ assert(!matches('какие продажи у Шкуран'),'sales question mus
 assert(pilot.includes('lastSubstantialAnswer'),'short clarifications must not erase long earlier answer');
 for(const clause of ['window.crmResantaVoiceTogglePauseV3','updatePlaybackControls','paused=!paused'])
  assert(voice.includes(clause),'missing audio pause/resume: '+clause);
+assert(voice.includes("panel.querySelector('.rva-mini-playback')?.addEventListener('click'"),'mini player pause must be wired');
 assert(voice.includes('window.addEventListener(\'pagehide\',stopSpeech)'),
  'navigation still stops audio');
 assert(!voice.includes("document.addEventListener('visibilitychange',()=>{if(document.hidden)stopSpeech();});"),
