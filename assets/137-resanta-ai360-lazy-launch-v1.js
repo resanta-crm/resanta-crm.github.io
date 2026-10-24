@@ -6,10 +6,11 @@ if(/Android/i.test(navigator.userAgent||'') || window.__resantaAI360LazyLaunchV1
 window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=12',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=13',
  './assets/135-resanta-voice-capture-fix-v2.js?v=11',
  './assets/136-resanta-voice-quality-v3.js?v=15',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
+ './assets/140-resanta-ai360-task-drafts-preview-v1.js?v=1',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=7'
 ];
 function owner(){
@@ -33,7 +34,15 @@ async function activate(){
  try{
    for(const src of scripts){
      if(!owner())throw new Error('Сессия директора закрыта');
-     await load(src);
+     // Task drafts are optional: a failed sidecar must never block the existing Lera.
+     try { await load(src); }
+     catch (e) {
+       if (src.includes('/140-resanta-ai360-task-drafts-preview-v1.js')) {
+         console.warn('AI360 optional draft preview unavailable:',e);
+         continue;
+       }
+       throw e;
+     }
    }
    if(!owner())throw new Error('Сессия директора закрыта');
    ready=true;button.hidden=true;

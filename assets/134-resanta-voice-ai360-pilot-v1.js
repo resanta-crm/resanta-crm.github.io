@@ -194,6 +194,12 @@
       return;
     }
 
+    // Optional read-only task drafts. NEVER creates or approves a CRM task.
+    if (typeof window.crmAI360TaskDraftsHandleV1 === 'function') {
+      try { if (window.crmAI360TaskDraftsHandleV1(query, {answer, textStatus})) return; }
+      catch (e) { console.warn('AI360 draft preview unavailable', e); }
+    }
+
     // Optional sales/KPI dialogue. No background requests; director action only.
     if (typeof window.crmAI360SalesHandleV1 === 'function') {
       try { if (window.crmAI360SalesHandleV1(query, {answer, textStatus})) return; }
