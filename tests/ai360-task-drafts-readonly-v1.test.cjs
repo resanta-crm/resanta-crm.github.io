@@ -68,7 +68,7 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(a.handler('измени срок первого на 29 октября',a.ui),true);
  assert(a.lines.at(-1).includes('2026-10-29'));
  assert.equal(a.handler('выбери первое',a.ui),true);
- assert(a.lines.at(-1).includes('Пока ничего не создано'),'selecting a draft never creates a task');
+ assert(a.lines.at(-1).includes('Пока только тест'),'selecting a draft never creates a task');
  assert.equal(a.seen.length,1,'selection cannot send additional server requests');
  assert.equal(a.handler('отмени все',a.ui),true);
  assert(a.lines.at(-1).includes('Никакие задачи не были созданы'));
