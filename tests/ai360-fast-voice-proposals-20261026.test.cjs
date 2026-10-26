@@ -32,6 +32,7 @@ assert.equal(engine.mentionedManager('предложи поручения для
 assert.equal(engine.mentionedManager('предложи поручения',roster),null);
 assert(text.includes("payload?.kind==='preview_query'"),'single-call server entrypoint');
 assert(text.includes("await Promise.all(["),'independent task/route checks in parallel');
+assert(text.includes("const chosen:any[]=[]"),'select distinct task categories if actual data supports them');
 assert(client.includes("kind:'preview_query',message:question"),'one request from browser');
 assert(!client.includes("body:{kind:'directory'"),'no redundant directory roundtrip');
 assert(!/\.(?:insert|upsert|update|delete)\s*\(/.test(text+client+voice),'no CRM writes introduced');
