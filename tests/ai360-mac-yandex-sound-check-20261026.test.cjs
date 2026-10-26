@@ -67,7 +67,7 @@ function harness({accept=true,fail=false}={}){
  const a=harness({accept:true});
  assert.equal(a.tts,0,'no audio generation on page load');
  a.btn.click();
- await new Promise(done=>setTimeout(done,80));
+ await new Promise(done=>setTimeout(done,380));
  assert.equal(a.confirmation,1,'test asks explicit consent on fresh Mac');
  assert.equal(a.tts,1,'test sends exactly one Yandex synthesis call');
  assert(a.feedback.textContent.includes('✅'),'success visible in persistent label');
@@ -76,7 +76,7 @@ function harness({accept=true,fail=false}={}){
  assert.equal(b.tts,0,'denied consent never generates paid audio');
  assert(b.feedback.textContent.includes('не разрешена'));
  const c=harness({fail:true});
- c.btn.click();await new Promise(done=>setTimeout(done,70));
+ c.btn.click();await new Promise(done=>setTimeout(done,380));
  assert.equal(c.tts,1);
  assert(c.feedback.textContent.includes('⚠️'),'error visible even if main status later changes');
  assert(src.includes("if(!actions||!mute){panel=null;return false;}"),'mount does not lock out retries on missing controls');
