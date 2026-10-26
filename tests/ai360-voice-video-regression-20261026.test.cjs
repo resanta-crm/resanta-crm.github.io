@@ -61,7 +61,7 @@ function harness(){
  return {panel,win,counts,tick,settle,visibility,close};
 }
 (async()=>{
- assert(loader.includes('135-resanta-voice-capture-fix-v2.js?v=12'),'new capture must be cache busted');
+ assert(loader.includes('135-resanta-voice-capture-fix-v2.js?v=13'),'new capture must be cache busted');
  const h=harness(),test=h.win.__ai360Test;
  await h.tick();
  assert.equal(h.counts.mic,0,'no microphone before panel opened');
