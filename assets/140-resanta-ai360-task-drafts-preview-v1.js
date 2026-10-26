@@ -76,36 +76,37 @@ async function requestDrafts(question,ui){
  root.__resantaAI360PendingV1=true;
  ui.textStatus('Проверяю клиентов и существующие задачи…');
  try{
+   const started=Date.now();
    const session=typeof root.crmEnsureFreshSessionV236166==='function'
     ?await root.crmEnsureFreshSessionV236166(false)
     :await db.auth.getSession().then(x=>x?.data?.session);
    if(!session?.access_token)throw new Error('not_authorized');
-   const directory=await db.functions.invoke(ENDPOINT,{body:{kind:'directory'}});
-   if(directory.error)throw new Error(await responseError(directory.error));
-   if(epoch!==requestEpoch||!allowed())return;
-   const roster=Array.isArray(directory.data?.staff)?directory.data.staff:[];
-   const resolver=root.crmAI360StaffResolveV1;
-   if(!resolver?.resolve)throw new Error('staff_directory_unavailable');
-   const hit=resolver.resolve(question,roster);
-   if(hit.kind!=='exact'){
-      ui.answer('Назови однозначно фамилию менеджера Витебска. Например: «Лера, предложи поручения для Руднева». При сомнительном распознавании задачи не готовлю.');
-      return;
+   // The endpoint resolves the spoken surname AGAINST the authenticated CRM
+   // directory on the server. One network roundtrip, no untrusted local mapping.
+   const result=await db.functions.invoke(ENDPOINT,{body:{kind:'preview_query',message:question}});
+   if(result.error){
+     const code=await responseError(result.error);
+     if(code==='manager_not_found_or_ambiguous'){
+       ui.answer('Не уверена, какого менеджера ты назвал. Уточни фамилию Витебского филиала: Руднев, Ачинович или Шкуран. Черновики не созданы.');
+       return;
+     }
+     throw new Error(code);
    }
-   const result=await db.functions.invoke(ENDPOINT,{body:{kind:'preview',manager:hit.manager}});
-   if(result.error)throw new Error(await responseError(result.error));
+   const manager=String(result.data?.manager||'').trim();
+   if(!manager||manager.length>80)throw new Error('invalid_server_response');
    if(epoch!==requestEpoch||!allowed())return;
    if(result.data?.mode!=='readonly'||!Array.isArray(result.data.items)||result.data.items.length>3)
      throw new Error('invalid_server_response');
    const raw=result.data.items;
    // Reject incomplete or unrelated results; do not infer or fabricate clients.
-   if(raw.some(x=>!x.client_id||!x.client_name||x.manager_name!==hit.manager||
+   if(raw.some(x=>!x.client_id||!x.client_name||x.manager_name!==manager||
       !x.due_date||!x.text||!x.basis||!x.expected_result||!x.criteria))
      throw new Error('invalid_server_response');
    asOf=safe(result.data.as_of,10);
    items=raw.map(x=>({...x}));chosen.clear();
-   ui.textStatus('Черновики проверены · запись отключена');
+   ui.textStatus('Черновики проверены за '+((Date.now()-started)/1000).toFixed(1)+' с · запись отключена');
    ui.answer(summary(),{speechSummary:items.length?
-     'Нашла '+items.length+' предложения для '+hit.manager+'. Все они пока черновики. Скажи, что изменить или убрать.':
+     'Нашла '+items.length+' предложения для '+manager+'. Все они пока черновики. Скажи, что изменить или убрать.':
      'По выбранному менеджеру нет новых безопасных предложений. Возможно, уже есть открытые поручения или маршруты.'});
  }catch(e){
    if(epoch===requestEpoch&&allowed())ui.answer('Не удалось подготовить достоверные черновики: '+safe(e?.message)+'. Никакие задачи не созданы.');
