@@ -194,10 +194,18 @@
       return;
     }
 
-    // Optional read-only task drafts. NEVER creates or approves a CRM task.
+    // Route all explicit task approvals to the dedicated, separately confirmed
+    // module. If its optional script is missing/fails, NEVER let a command to
+    // approve a task fall through to the analytics/LLM chat.
+    const approvalCommand=/(?:соглас(?:ую|уем|ует|уете|овать|уй|уйте|овыва[а-я]*)|утвержда[а-я]*|утверд(?:ить|и|ите)|одобря[а-я]*|одобр(?:ить|и|ите)|согласен\s+на|согласна\s+на)/i.test(query)
+      &&/(?:перв[а-я]*|втор[а-я]*|трет[а-я]*|выбранн[а-я]*|поручен[а-я]*|задач[а-я]*|[1-3])/.test(query);
     if (typeof window.crmAI360TaskDraftsHandleV1 === 'function') {
       try { if (window.crmAI360TaskDraftsHandleV1(query, {answer, textStatus})) return; }
-      catch (e) { console.warn('AI360 draft preview unavailable', e); }
+      catch (e) { console.warn('AI360 task approval module failed', e); }
+    }
+    if(approvalCommand){
+      answer('Не могу безопасно выполнить согласование: модуль черновиков недоступен или не распознал команду. Перезапусти Леру и сначала запроси поручения для нужного менеджера. Ничего не создано.');
+      return;
     }
 
     // Optional sales/KPI dialogue. No background requests; director action only.

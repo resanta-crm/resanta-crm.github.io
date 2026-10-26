@@ -12,7 +12,25 @@ const CHOOSE=/(?:согласова|выбер|выбра|остав|утвер�
 const CANCEL=/(?:отмен|убер|убра|удал|сброс|очист)/i;
 const CHANGE=/(?:измени|поменяй|перенеси|поставь)\s+(?:срок|дату)/i;
 const CHANGE_TEXT=/(?:измени|поменяй)\s+(?:текст|содержание)\s+(?:первого|второго|третьего|[1-3])\s+(?:на|:)\s+(.+)/i;
-const PREPARE=/(?:согласова|утверд|одобр)/i;
+// Approval intent includes natural first-person Russian forms, but is NEVER commit.
+const PREPARE=/(?:соглас(?:ую|уем|ует|уете|овать|уй|уйте|овыва[а-яё]*)|утвержда[а-яё]*|утверд(?:ить|и|ите)|одобря[а-яё]*|одобр(?:ить|и|ите)|согласен\s+на|согласна\s+на)/i;
+const APPROVAL_SUBJECT=/(?:перв[а-яё]*|втор[а-яё]*|трет[а-яё]*|[1-3]|выбранн[а-яё]*|поручен[а-яё]*|задач[а-яё]*)/i;
+const PILOT_MANAGERS=[['руднев','Руднев'],['ачинович','Ачинович'],['шкуран','Шкуран']];
+function approvalIntent(text){
+ return PREPARE.test(text)&&APPROVAL_SUBJECT.test(text);
+}
+// Detect explicitly named staff and forbid cross-manager approvals. Unknown names
+// after "для менеджера / для / менеджера" are also refused, not guessed.
+function specifiedManager(text){
+ const q=String(text||'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
+ const names=PILOT_MANAGERS.filter(([stem])=>
+  new RegExp('(?:^|[^а-я])'+stem+'(?:а|у|ым|ом|е)?(?=$|[^а-я])','u').test(q)).map(x=>x[1]);
+ if(names.length>1)return {kind:'ambiguous'};
+ const raw=q.match(/(?:^|\s)(?:для|менеджера|менеджеру)\s+(?:менеджера\s+)?([а-я-]{4,})(?=$|[^а-я])/u);
+ if(raw && !names.length)return {kind:'unknown'};
+ if(names.length===1)return {kind:'exact',name:names[0]};
+ return {kind:'none'};
+}
 const FINAL_CONFIRM=/^подтверждаю создание поручений[.!?]*$/i;
 const FINAL_REJECT=/^(?:не подтверждаю|отказываюсь|отмена создания|не создавать)[.!?]*$/i;
 const months={'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,
@@ -210,6 +228,20 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
    }
    items=[];chosen.clear();asOf='';approval=null;void requestDrafts(q,ui);return true;
  }
+ if(approvalIntent(q)){
+   if(!items.length){
+     ui.answer('Сначала попроси Леру предложить поручения для нужного менеджера. Сейчас активных черновиков нет, согласовывать нечего. Ничего не создано.');
+     return true;
+   }
+   const target=specifiedManager(q);
+   const assigned=[...new Set(items.map(x=>x.manager_name))];
+   if(target.kind==='ambiguous'||target.kind==='unknown'||
+     (target.kind==='exact'&&(assigned.length!==1||target.name!==assigned[0]))){
+     approval=null;chosen.clear();
+     ui.answer('Остановила согласование: названный менеджер не совпадает с исполнителем активных черновиков или фамилия неоднозначна. Сначала запроси поручения для нужного менеджера. Ничего не создано.');
+     return true;
+   }
+ }
  if(!items.length)return false;
  if(CANCEL.test(q)){
    const ns=numbers(q);
@@ -241,19 +273,19 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
    ui.answer('Срок черновика №'+ns[0]+' изменён на '+date+'. Никакие задачи не созданы.\n'+summary());
    return true;
  }
- if(PREPARE.test(q)){
+ if(approvalIntent(q)){
    if(!items.length){ui.answer('Сначала попроси Леру предложить поручения.');return true;}
    const ns=numbers(q);
-   if(!ns.length&&!chosen.size){ui.answer('Назови номера поручений: «Согласовать первое и третье» или сначала выбери их.');return true;}
+   if(!ns.length&&!chosen.size){ui.answer('Назови номера поручений: «Согласую первое» или сначала выбери их.');return true;}
    if(ns.length)chosen=new Set(ns);
    approval=null;void approvalRequest('validate',ui);return true;
  }
  if(CHOOSE.test(q)){
    const ns=numbers(q);
-   if(!ns.length){ui.answer('Назови номера черновиков для выбора. Функция создания пока отключена.');return true;}
+   if(!ns.length){ui.answer('Назови номера черновиков для выбора. Запись возможна только после отдельного подтверждения.');return true;}
    chosen=new Set(ns);approval=null;
    ui.answer('Отмечены для дальнейшей проверки черновики: '+ns.join(', ')+
-     '. Это НЕ согласование и НЕ создание задач. Сохранение в CRM пока выключено.');
+     '. Пока ничего не создано. Для подготовки записи скажи «Согласую первое».');
    return true;
  }
  if(/^(?:покажи|прочитай|перечисли)\s+(?:черновик|поручен)/i.test(q)){
@@ -261,5 +293,5 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
  }
  return false;
 };
-root.crmAI360TaskDraftsPreviewInternalsV1={validDay,numbers,newDueDate};
+root.crmAI360TaskDraftsPreviewInternalsV1={validDay,numbers,newDueDate,approvalIntent,specifiedManager};
 })(window);
