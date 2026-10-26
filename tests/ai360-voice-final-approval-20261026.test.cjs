@@ -28,6 +28,7 @@ function setup(opts={}){
        if(name==='crm-ai360-task-drafts-v1')return {data:{
         mode:'readonly',manager:'Руднев',as_of:'2026-10-26',items:[sample,sampleTwo]}};
        if(name==='crm-ai360-task-approval-v1'){
+        if(body.kind==='list_test')return {data:{mode:'test_list',items:[{manager_name:'Руднев',client_name:'Клиент А',title:'Восстановить продажи',due_date:'2026-11-03'}]}};
         if(body.kind==='validate')return {data:{mode:'ready',created:0,
           items:body.items.map(x=>({...x}))}};
         if(body.kind==='commit_test')return opts.failCommit?
@@ -71,9 +72,13 @@ function setup(opts={}){
  assert.equal(a.calls.filter(x=>x.body.kind==='commit').length,0);
  assert.equal(a.handler('подтверждаю сохранение тестовых поручений',a.ui),true);
  assert.equal(a.calls.length,3,'confirmation replay cannot create again in same page');
- assert(a.answers.at(-1).includes('Нет тестовых черновиков'));
+ assert(a.answers.at(-1).includes('Нет подготовленных к тестовому сохранению'));
+ assert.equal(a.handler('покажи тестовые поручения',a.ui),true);
+ await a.tick();
+ assert.equal(a.calls[3].body.kind,'list_test');
+ assert.equal(a.calls.filter(x=>x.body.kind==='commit_test').length,1);
  a.handler('подтверждаю создание поручений',a.ui);
- assert.equal(a.calls.length,3,'old production command blocked');
+ assert.equal(a.calls.length,4,'old production command blocked');
  const b=setup();
  b.handler('предложи поручения для Руднева',b.ui);await b.tick();
  b.handler('согласовать первое',b.ui);await b.tick();
