@@ -363,9 +363,13 @@
    if(document.hidden){
      // Resume dialogue only if the wake phrase had already been accepted.
      // Capturing stops immediately while CRM is not in the foreground.
-     resumeConversationUntil=(mode==='wake'&&autoWakeWanted&&isOwner()&&
-       acceptedWakeUntil>Date.now()&&panel&&!panel.hidden&&!panel.classList?.contains('rva-mini'))?
+     // Switching tabs starts a fresh 3-minute grace window even if the
+     // active (foreground) conversation had already lasted longer than 3 minutes.
+     const hadAcceptedDialogue=mode==='wake'&&(wakeHeard||acceptedWakeUntil>Date.now());
+     resumeConversationUntil=(hadAcceptedDialogue&&autoWakeWanted&&isOwner()&&
+       panel&&!panel.hidden&&!panel.classList?.contains('rva-mini'))?
        Date.now()+RESUME_WINDOW_MS:0;
+     acceptedWakeUntil=resumeConversationUntil;
      if(mode)void stopAll('Микрофон выключен: вкладка скрыта.');
    }else{autoAttemptedThisOpen=false;autoWakeBlocked=false;}
  });
