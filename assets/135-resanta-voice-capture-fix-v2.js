@@ -17,7 +17,22 @@
  // Short-term conversation context stays only in memory; no transcript storage.
  let resumeConversationUntil=0;
  const RESUME_WINDOW_MS=3*60*1000;
+ // Once explicitly accepted, keep an ephemeral conversation lease. No persistence:
+ // it survives a short tab switch, never logout, minimization or explicit mic off.
+ let acceptedWakeUntil=0;
  const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта)(?=$|[^а-яё])/i;
+ // "Лера" is an intentional alternative wake word ONLY inside an opted-in,
+ // visible, foreground voice session. Standalone assistant wake is not background access.
+ const LERA_RE=/^лера(?=$|[\s,.!?—-])/i;
+ function wakeCommand(phrase,partialHelloAt,now=Date.now()){
+   const utterance=String(phrase||'').trim();
+   const matched=WAIT_RE.exec(utterance)||LERA_RE.exec(utterance);
+   const separated=(!matched&&partialHelloAt>0&&now-partialHelloAt<=15000)?
+     /^(?:ресанта|резанта|рясанта|рисанта)(?=$|[\s,.!?—-])/i.exec(utterance):null;
+   const prefix=matched||separated;
+   if(!prefix)return null;
+   return utterance.slice(prefix.index+prefix[0].length).trim().replace(/^[\s,.!?—-]+/,'');
+ }
  // Persist only explicit consent. Never auto-open the voice panel, never
  // start a microphone on the CRM login screen or when the tab is hidden.
  const AUTO_WAKE_KEY='resanta-ai360-wake-window-optin-v1';
@@ -123,7 +138,8 @@
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
        if(rms>.0035){loud=true;lastLoud=Date.now();}
-       if(loud && Date.now()-start>1250 && Date.now()-lastLoud>(mode==='wake'?950:1200))end();
+       // Allow a natural thinking pause in a multi-part director command; keep bounded clips.
+       if(loud && Date.now()-start>1250 && Date.now()-lastLoud>(mode==='wake'?1700:1450))end();
        if(epoch!==listenEpoch || !mode)end();
      },110);
      timer=window.setTimeout(end,sec*1000);
@@ -163,9 +179,9 @@
    field.value=text;send.click();
  }
  function greetingOnly(text){
-   const match=WAIT_RE.exec(String(text||'').trim());
-   if(!match)return false;
-   return !String(text).slice(match.index+match[0].length).replace(/[\s,.!?]+/g,'');
+   const phrase=String(text||'').trim();
+   const match=WAIT_RE.exec(phrase)||LERA_RE.exec(phrase);
+   return !!match&&!phrase.slice(match.index+match[0].length).replace(/[\s,.!?—-]+/g,'');
  }
  async function waitForAssistant(epoch,expectedMode){
    // UI dispatch queues the neural voice on the next microtask.
@@ -216,7 +232,7 @@
        }
        if(clipCount>=50){await stopAll('Завершил сеанс для ограничения расходов на распознавание.');break;}
        if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1){await new Promise(r=>setTimeout(r,350));continue;}
-       const clip=await capture(5,epoch);
+       const clip=await capture(9,epoch);
        if(epoch!==listenEpoch||mode!=='wake')break;
        if(!clip?.loud){info(wakeHeard?'Жду вопрос после приветствия…':'Микрофон включён: ожидаю «Привет, Ресанта»');continue;}
        clipCount++;
@@ -226,7 +242,12 @@
        if(!phrase){info('Фраза не распознана. Повтори ближе к микрофону.');continue;}
        if(noiseOnly(phrase)){info('Фрагмент речи слишком короткий. Продолжаю слушать вопрос.');continue;}
        if(wakeHeard){
-         submit(phrase);
+         // Speaker may use "Лера," again during an active conversation.
+         const addressed=LERA_RE.exec(phrase);
+         const question=addressed?phrase.slice(addressed[0].length).trim().replace(/^[\s,.!?—-]+/,''):phrase;
+         acceptedWakeUntil=Date.now()+RESUME_WINDOW_MS;
+         if(question)submit(question);
+         else submit('Привет, Ресанта');
          await waitForAssistant(epoch,'wake');
          if(epoch===listenEpoch&&mode==='wake')info('Слушаю следующий вопрос…');
        }else{
@@ -237,17 +258,14 @@
            info('Услышала «Привет». Скажи «Ресанта», чтобы активировать помощника.');
            continue;
          }
-         const match=WAIT_RE.exec(phrase);
-         const separate=partialHelloAt>0&&Date.now()-partialHelloAt<=15000?
-           /^(?:ресанта|резанта|рясанта|рисанта)(?=$|[\s,.!?—-])/i.exec(phrase):null;
+         const rest=wakeCommand(phrase,partialHelloAt);
          partialHelloAt=0;
-         if(!match&&!separate){
-           info('Слышу речь, но жду «Привет, Ресанта». Распознано: '+phrase.slice(0,65));
+         if(rest===null){
+           info('Слышу речь, но жду «Привет, Ресанта» или «Лера». Распознано: '+phrase.slice(0,65));
            continue;
          }
-         const prefix=match||separate;
-         const rest=phrase.slice(prefix.index+prefix[0].length).trim().replace(/^[\s,.!?]+/,'');
          wakeHeard=true;
+         acceptedWakeUntil=Date.now()+RESUME_WINDOW_MS;
          if(rest){
            submit(rest);
            await waitForAssistant(epoch,'wake');
@@ -265,7 +283,7 @@
    if(starting)return;
    if(automatic && (!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
    if(mode===newMode){
-     if(newMode==='wake'&&!automatic){saveAutoWake(false);resumeConversationUntil=0;}
+     if(newMode==='wake'&&!automatic){saveAutoWake(false);resumeConversationUntil=0;acceptedWakeUntil=0;}
      await stopAll('Микрофон выключен. Постоянная активация отключена.');
      return;
    }
@@ -293,7 +311,8 @@
        }
      }
    }
-   const continueConversation=automatic&&newMode==='wake'&&resumeConversationUntil>Date.now();
+   const continueConversation=automatic&&newMode==='wake'&&resumeConversationUntil>Date.now()&&
+     acceptedWakeUntil>Date.now()&&isOwner()&&visiblePanel();
    starting=true;
    await stopAll();
    starting=true;
@@ -324,19 +343,19 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='«Привет, Ресанта» можно включить один раз: настройка запомнится для этого компьютера. При открытии окна помощника в активной вкладке микрофон подключится автоматически (если разрешает браузер). Закрой окно или выключи фразу — микрофон остановится. До 60 распознаваний в день; запись в CRM не сохраняется.';
+   if(note)note.textContent='Включи голосовой режим кнопкой, затем скажи «Привет, Ресанта» или «Лера» и вопрос. После принятой активации можно продолжать разговор, а при возвращении из другой вкладки в течение 3 минут — без нового приветствия. Микрофон работает только в открытой панели и активной вкладке, выключается при закрытии и сворачивании. До 60 распознаваний в день; записи в CRM не сохраняются.';
    mic.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('manual');},true);
    wake.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
      autoWakeBlocked=false;
      void start('wake');
    },true);
-   panel.querySelector('.rva-close')?.addEventListener('click',()=>{resumeConversationUntil=0;void stopAll();},true);
+   panel.querySelector('.rva-close')?.addEventListener('click',()=>{resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();},true);
    controls();return true;
  }
  // Mini-player is output-only: never keep a hot microphone while collapsed.
  window.crmResantaVoiceSuspendV2=()=>{
-   resumeConversationUntil=0;
+   resumeConversationUntil=0;acceptedWakeUntil=0;
    if(mode)void stopAll('Микрофон остановлен: помощник свёрнут.');
    autoAttemptedThisOpen=false;
  };
@@ -344,20 +363,22 @@
    if(document.hidden){
      // Resume dialogue only if the wake phrase had already been accepted.
      // Capturing stops immediately while CRM is not in the foreground.
-     resumeConversationUntil=(mode==='wake'&&wakeHeard&&autoWakeWanted&&isOwner()&&
-       panel&&!panel.hidden&&!panel.classList?.contains('rva-mini'))?
+     resumeConversationUntil=(mode==='wake'&&autoWakeWanted&&isOwner()&&
+       acceptedWakeUntil>Date.now()&&panel&&!panel.hidden&&!panel.classList?.contains('rva-mini'))?
        Date.now()+RESUME_WINDOW_MS:0;
      if(mode)void stopAll('Микрофон выключен: вкладка скрыта.');
    }else{autoAttemptedThisOpen=false;autoWakeBlocked=false;}
  });
- window.addEventListener('pagehide',()=>{resumeConversationUntil=0;void stopAll();});
+ window.addEventListener('pagehide',()=>{resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();});
  window.setInterval(()=>{
    if(!panel)init();
    if(!panel)return;
    const open=!!visiblePanel();
    if(!open){
      if(lastOpen)autoAttemptedThisOpen=false;
-     if(panel.hidden||panel.classList?.contains('rva-mini')||!isOwner())resumeConversationUntil=0;
+     if(panel.hidden||panel.classList?.contains('rva-mini')||!isOwner()){
+       resumeConversationUntil=0;acceptedWakeUntil=0;
+     }
      if(mode)void stopAll();
    }else if(autoWakeWanted && !autoAttemptedThisOpen && mode!=='wake' && !starting && !autoWakeBlocked){
      autoAttemptedThisOpen=true; // At most one automatic getUserMedia request per open.
