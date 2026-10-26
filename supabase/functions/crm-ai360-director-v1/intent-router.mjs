@@ -57,6 +57,7 @@ export function selectEvidence(kind,sales,ops){
    }
    if(['analysis','recommendations','multi','tasks'].includes(kind)){
      v.task_summary=ops.task_summary;
+     v.task_review_breakdown=ops.task_review_breakdown;
      v.overdue_tasks_sample=ops.overdue_tasks_sample;
    }
    if(['analysis','recommendations','multi','routes'].includes(kind))
@@ -331,8 +332,16 @@ export function fallbackAnswer(kind,focus,ops,sales){
  }
  if(kind==='tasks'&&ops?.task_summary){
   const x=ops.task_summary;
+  const b=ops.task_review_breakdown;
+  if(b)return 'Задачи'+manager+': открыто '+num(b.open_tasks)+
+    ', с прошедшим сроком '+num(b.overdue_due_date)+
+    '. Среди них '+num(b.approved_overdue)+' согласованных, '+
+    num(b.stale_review_overdue)+' со статусом «требует пересмотра»'+
+    (num(b.other_status_overdue)?', ещё '+num(b.other_status_overdue)+' с другим статусом':'')+
+    '. Статус «требует пересмотра» не доказывает невыполнение.';
   return 'Задачи'+manager+': открыто '+num(x.open_tasks)+
-   ', из них просрочено '+num(x.overdue_tasks)+'. Для конкретного поручения запроси перечень клиентов и сроки.';
+   ', из них просрочено '+num(x.overdue_tasks)+
+   ' по дате. Статус выполнения этих задач требуется проверить.';
  }
  if(kind==='routes'&&ops?.route_summary){
   return 'Маршруты'+manager+': запланировано на ближайшие 30 дней '+num(ops.route_summary.planned_next30)+
