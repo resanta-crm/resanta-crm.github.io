@@ -75,6 +75,11 @@ function harness(saved=false,yandex=true){
   assert.equal(h.counts.microphone,1,'one user gesture starts session');
   assert.equal(h.local.get('resanta-ai360-wake-window-optin-v1'),'yes');
   assert.equal(h.wake['aria-pressed'],'true');
+  h.mic.click();await h.settle();
+  assert.equal(h.counts.microphone,1,'manual mic cannot re-request while wake mode is active');
+  assert.equal(h.counts.stopped,0,'manual mic must not stop continuous listening');
+  assert(h.status.textContent.includes('Постоянный режим уже слушает'),
+    'explain that a second mic click is unnecessary');
   h.panel.hidden=true;await h.tick();
   assert.equal(h.counts.stopped,1,'closing assistant releases mic');
   h.panel.hidden=false;await h.tick();
@@ -134,5 +139,8 @@ function harness(saved=false,yandex=true){
  assert(code.includes("if(clipCount>=50)"),'wake mode must keep transcription cap');
  assert(code.includes("document.hidden")&&code.includes("panel.hidden"),'wake must stop on hidden tab or closed panel');
  assert(code.includes("getUserMedia"),'native mic permission still required');
+ assert(code.includes("const clip=await capture(5,epoch)"),'manual command has five second capture limit');
+ assert(code.includes("const second=await capture(5,epoch)"),'one-shot follow-up also five seconds');
+ assert(code.includes("const clip=await capture(9,epoch)"),'continuous mode retains nine seconds for long commands');
  console.log('AI360 remembered foreground voice activation, opt-in, no login mic, session stop and optional preview: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
