@@ -86,6 +86,7 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,10));
  assert(server.includes("payload?.kind==='preview_query'"),'one-call server endpoint available');
  assert(server.includes("mentionedManager(payload.message,roster.data||[])"),'server resolves only CRM staff');
  assert(server.includes("await Promise.all(["),'task and route duplicate checks run concurrently');
- assert(server.includes("const plan=draftFor(x.r,today)"),'evidence-based per-client draft rule is active');
+ assert(server.includes("plan:draftFor(x.r,today)"),'evidence-based per-client draft rule is active');
+ assert(server.includes("const chosen:any[]=[]"),'choose distinct evidence-grounded tasks when possible');
  console.log('AI360 task draft staging: 14 read-only/role/voice/date/rollback invariants PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
