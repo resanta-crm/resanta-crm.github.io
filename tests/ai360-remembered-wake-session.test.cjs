@@ -119,12 +119,13 @@ function harness(saved=false,yandex=true){
    'tab return keeps only three-minute ephemeral conversation state');
  assert(code.includes("wakeHeard=!!continueConversation"),
    'automatic foreground restart recovers already accepted wake phrase');
- assert(code.includes("mode==='wake'&&wakeHeard&&autoWakeWanted&&isOwner()"),
-   'only previously activated director dialogue can continue');
+ assert(code.includes("const hadAcceptedDialogue=mode==='wake'&&(wakeHeard||acceptedWakeUntil>Date.now())") &&
+   code.includes("resumeConversationUntil=(hadAcceptedDialogue&&autoWakeWanted&&isOwner()"),
+   'only previously activated, explicitly opted-in director dialogue can continue');
  assert(code.includes("if(document.hidden){")&&code.includes("if(mode)void stopAll('Микрофон выключен: вкладка скрыта."),
    'hidden tab stops mic even when conversation remains active');
- assert(code.includes("resumeConversationUntil=0;void stopAll();"),
-   'page navigation and explicit close must revoke continuation');
+ assert(code.includes("resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();"),
+   'page navigation and explicit close must revoke both ephemeral conversation leases');
  assert(code.includes("noiseOnly(phrase)"),'lone filler such as А must not be sent to AI');
  assert(code.includes("if(noiseOnly(phrase))"),'wake mode must skip filler fragments');
  assert(voiceUI.includes("window.crmResantaVoiceAuthorizeV3=approveYandex"));
