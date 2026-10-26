@@ -196,9 +196,15 @@ Deno.serve(async(req:Request)=>{
  // Director decision drafts are deterministic when the manager is known.
  // This prevents duplicate route/task actions or unsupported promises of shipment.
  if(intent==='recommendations'&&verifiedFocus){
-   const regardingDebt=/(долг|задолж|дебит|пд[зэ]|оплат|просроч)/i.test(question);
-   const answer=regardingDebt?debtPriorityAnswer(operations,verifiedFocus):
-     managerActionPlan(operations,verifiedFocus,snapshot);
+   // A generic "просроченная задача" is not a debtor/payment.
+   const regardingDebt=/(долг|задолж|дебит|пд[зэ]|оплат|просроч.{0,25}(?:долг|задолж|платеж|платёж)|(?:долг|платеж|платёж).{0,25}просроч)/i.test(question);
+   const review=operations?.task_review_breakdown;
+   const taskNote=!regardingDebt&&review?
+     ' По задачам с прошедшим сроком: '+review.approved_overdue+
+     ' согласованных и '+review.stale_review_overdue+
+     ' со статусом «требует пересмотра». Последние нельзя автоматически считать невыполненными.':'';
+   const answer=(regardingDebt?debtPriorityAnswer(operations,verifiedFocus):
+     managerActionPlan(operations,verifiedFocus,snapshot))+taskNote;
    const speech_summary=regardingDebt?'Проверила долги '+verifiedFocus+'. Главные суммы и действия в ответе на экране.':
      managementSpeech(operations,verifiedFocus,snapshot);
    return reply(req,{answer,speech_summary,month:monthRaw,intent,answer_verified:true,
