@@ -55,7 +55,7 @@ function draftFor(row:any, today:string){
     kind==='recovery'?'Причина и план восстановления закупок со сроком зафиксированы в CRM.':
     'Зафиксированы сумма/дата следующего заказа или причина отказа.';
   const visitBasis=lastValid?' Последний сохранённый визит: '+last+'.':' Сохранённых визитов в CRM не найдено.';
-  return {title,text:action,expected_result:outcome,criteria,priority:(bigDrop||stale)?'высокий':'средний',
+  return {kind,title,text:action,expected_result:outcome,criteria,priority:(bigDrop||stale)?'высокий':'средний',
     basis_detail:' Разница: '+delta.toFixed(2)+' BYN (снижение '+(drop*100).toFixed(1)+'%).'+visitBasis};
 }
 function words(value:string){
@@ -167,9 +167,18 @@ Deno.serve(async(req:Request)=>{
     return reply(req,{error:'verification_incomplete'},503);
   const busy=new Set((tasks.data||[]).map((x:any)=>x.client_id));
   const scheduled=new Set((routes.data||[]).map((x:any)=>x.client_id));
-  const items=unique.filter((x:any)=>!busy.has(x.c.id)&&!scheduled.has(x.c.id))
-    .slice(0,3).map((x:any,i:number)=>{
-      const plan=draftFor(x.r,today);
+  const verified=unique.filter((x:any)=>!busy.has(x.c.id)&&!scheduled.has(x.c.id))
+    .map((x:any)=>({...x,plan:draftFor(x.r,today)}));
+  // Select factually different next actions when the evidence permits;
+  // fall back to highest-ranked remaining clients, never invent diversity.
+  const chosen:any[]=[];
+  for(const kind of ['visit','recovery','order']){
+    const match=verified.find((x:any)=>x.plan.kind===kind&&!chosen.includes(x));
+    if(match)chosen.push(match);
+  }
+  for(const x of verified)if(chosen.length<3&&!chosen.includes(x))chosen.push(x);
+  const items=chosen.slice(0,3).map((x:any,i:number)=>{
+      const plan=x.plan;
       return {
         draft_id:'preview-'+(i+1),client_id:x.c.id,client_name:x.c.name,
         manager_name:manager.name,title:plan.title,text:plan.text,
