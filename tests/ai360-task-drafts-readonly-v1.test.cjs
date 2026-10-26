@@ -67,7 +67,7 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,10));
  assert(a.lines.some(s=>s.includes('Клиент А')));
  assert.equal(a.handler('измени срок первого на 29 октября',a.ui),true);
  assert(a.lines.at(-1).includes('2026-10-29'));
- assert.equal(a.handler('согласовать первое',a.ui),true);
+ assert.equal(a.handler('выбери первое',a.ui),true);
  assert(a.lines.at(-1).includes('НЕ согласование'));
  assert.equal(a.seen.length,1,'selection cannot send additional server requests');
  assert.equal(a.handler('отмени все',a.ui),true);
