@@ -15,6 +15,7 @@ const sampleTwo={...sample,draft_id:'preview-2',
 function setup(opts={}){
  const calls=[],answers=[],statuses=[];
  const ctx={
+  console,
   window:{
    crypto:{randomUUID:()=>approvalId},
    crmEnsureFreshSessionV236166:async()=>({access_token:'mock'}),
