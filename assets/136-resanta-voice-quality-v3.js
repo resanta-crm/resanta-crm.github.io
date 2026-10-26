@@ -10,6 +10,7 @@
 if(window.__resantaVoiceQualityV3)return;
 window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,budgetLabel,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
+let checkBtn=null,checkFeedback=null,checkBusy=false;
 let current='yandex:lera',epoch=0,prevVisible=true,paused=false;
 const VOICE_KEY='resanta-ai360-yandex-voice-v4';
 const CONSENT_KEY='resanta-ai360-yandex-consent-monthly-v5';
@@ -231,18 +232,18 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
 }
 window.crmResantaVoiceSpeakV3=async function(message,options={}){
  const msg=cleanSpeech(message);
- if(!msg||!allowed())return;
+ if(!msg||!allowed())return {ok:false,reason:'director_or_text_unavailable'};
  stopSpeech(); // A new reply cancels every older audio clip and queue.
  const run=epoch;
  window.__resantaVoiceOutputBusy=true;
  try{
    if(!current.startsWith('yandex:')||!approvedYandex){
      setStatus('Голос Яндекса ещё не разрешён. Включи «Привет, Ресанта» и подтверди озвучку. Кнопка проверки необязательна.');
-     return;
+     return {ok:false,reason:'yandex_consent_required'};
    }
    const chunks=speechChunks(msg);
    updatePlaybackControls();
-   let completed=0;
+   let completed=0,failedReason='';
    for(let i=0;i<chunks.length;i++){
      if(run!==epoch||!allowed()||panel?.hidden)break;
      while(paused&&run===epoch&&allowed()&&!panel?.hidden)
@@ -256,6 +257,7 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
      }catch(e){
        if(run!==epoch)break;
        const why=String(e?.message||e);
+       failedReason=why;
        console.warn('AI360 Yandex narration stopped at segment '+(i+1)+':',why);
        let explanation;
        if(why.includes('tts_monthly_budget_exhausted')){
@@ -264,6 +266,10 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
          explanation='Сервер временно не смог проверить месячный бюджет озвучки. Расход не подтверждён.';
        }else if(why.includes('tts_quota_check_unavailable')||why.includes('quota_unavailable')){
          explanation='Сервер пока не смог проверить лимит озвучки. Можно повторить попытку.';
+       }else if(why.includes('autoplay_denied')){
+         explanation='Браузер заблокировал воспроизведение звука. Разреши звук для сайта и повтори проверку.';
+       }else if(why.includes('audio_device_error')){
+         explanation='Браузер не смог воспроизвести аудио. Проверь устройство вывода звука Mac.';
        }else{
          explanation='Яндекс не смог озвучить эту часть ('+why+').';
        }
@@ -275,6 +281,7 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
      '✅ Озвучен краткий итог ('+completed+' '+(completed===1?'фраза':'фраз')+'). Полный анализ остался на экране. Скажи «расскажи подробнее» для полной озвучки.':
      '✅ '+(current.endsWith('dasha')?'Даша':'Лера')+' озвучила ответ полностью ('+completed+' '+(completed===1?'фраза':'фраз')+').');
    if(run===epoch)void refreshMonthlyBudget();
+   return {ok:completed===chunks.length&&chunks.length>0,reason:failedReason||'playback_interrupted',played:completed,total:chunks.length};
  }finally{
    if(run===epoch){
      if(output){try{output.pause();}catch(_){}output=null;}
@@ -300,10 +307,61 @@ function fillVoices(){
 function mount(){
  panel=document.querySelector('.rva-window');
  if(!panel||panel.dataset.voiceQualityV3)return false;
- panel.dataset.voiceQualityV3='1';
  const actions=panel.querySelector('.rva-settings-body')||panel.querySelector('.rva-control');
  const mute=panel.querySelector('.rva-mute');
- if(!actions||!mute)return false;
+ if(!actions||!mute){panel=null;return false;}
+ // Mark mounted only when the complete voice UI is ready, so recovery remains possible.
+ panel.dataset.voiceQualityV3='1';
+ // Keep the actual sound test visible, rather than hidden two disclosures deep.
+ // A test never runs on login or reload: the director must click and consent.
+ const soundActions=panel.querySelector('.rva-stop-audio')?.parentElement;
+ if(soundActions){
+   const checkRow=document.createElement('div');checkRow.className='rva-sound-check';
+   checkRow.style.cssText='display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:2px 0 4px';
+   checkBtn=document.createElement('button');checkBtn.type='button';checkBtn.className='rva-btn rva-test-yandex-sound';
+   checkBtn.textContent='🔊 Проверить звук Леры';
+   checkBtn.style.cssText='background:#e5f0ff;border:1px solid #93b8e7;color:#174475;font-weight:700';
+   checkFeedback=document.createElement('span');checkFeedback.className='rva-sound-check-feedback';
+   checkFeedback.setAttribute('role','status');checkFeedback.setAttribute('aria-live','polite');
+   checkFeedback.style.cssText='font-size:12px;color:#31577f;flex:1 1 180px';
+   checkFeedback.textContent=approvedYandex?
+     'Голос разрешён в этом браузере. Нажми для проверки воспроизведения.':
+     'Голос Яндекса ещё не разрешён в этом браузере.';
+   checkRow.append(checkBtn,checkFeedback);
+   soundActions.after(checkRow);
+ }
+ async function testYandexAudio(){
+   if(checkBusy||!allowed())return;
+   if(!approveYandex()){
+     if(checkFeedback)checkFeedback.textContent='Озвучка не разрешена. Никаких запросов Яндексу не отправлено.';
+     setStatus('Озвучка не разрешена. Для проверки нажми «Проверить звук Леры» и согласись с условиями.');
+     return;
+   }
+   remember(VOICE_KEY,current);
+   checkBusy=true;
+   if(checkBtn)checkBtn.disabled=true;
+   if(testBtn)testBtn.disabled=true;
+   if(checkFeedback)checkFeedback.textContent='Проверяю Яндекс и воспроизведение звука…';
+   setStatus('🔊 Проверяю озвучку Яндекс на этом Mac…');
+   try{
+     const outcome=await window.crmResantaVoiceSpeakV3(
+       'Привет! Я Лера. Если ты меня слышишь, звук работает.');
+     if(checkFeedback){
+       checkFeedback.textContent=outcome?.ok?
+         '✅ Яндекс озвучил тест. Если звук не слышен, проверь громкость и выход Mac.':
+         '⚠️ Тест не воспроизведён: '+String(outcome?.reason||'неизвестная причина').slice(0,100);
+     }
+   }catch(e){
+     const why=String(e?.message||e).slice(0,100);
+     if(checkFeedback)checkFeedback.textContent='⚠️ Проверка не завершилась: '+why;
+     setStatus('Проверка озвучки завершилась ошибкой: '+why);
+   }finally{
+     checkBusy=false;
+     if(checkBtn)checkBtn.disabled=false;
+     if(testBtn)testBtn.disabled=false;
+   }
+ }
+ if(checkBtn)checkBtn.addEventListener('click',()=>{void testYandexAudio();});
  const wrap=document.createElement('div');
  wrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;align-items:center';
  const title=document.createElement('label');
@@ -343,13 +401,7 @@ function mount(){
    remember(VOICE_KEY,current);
    setStatus('Голос '+(chosen.endsWith('lera')?'Лера':'Даша')+' закреплён. Можно задавать вопросы.');
  });
- testBtn.addEventListener('click',()=>{
-   if(!allowed())return;
-   if(!approveYandex()){setStatus('Разрешение на озвучку через Яндекс пока не дано.');return;}
-   remember(VOICE_KEY,current);
-   stopSpeech();
-   void window.crmResantaVoiceSpeakV3('Здравствуйте! Я голосовой помощник Ресанта. Могу помочь открыть разделы CRM и проверить задачи.');
- });
+ testBtn.addEventListener('click',()=>{void testYandexAudio();});
  mute.addEventListener('click',stopSpeech,true);
  panel.querySelector('.rva-close')?.addEventListener('click',stopSpeech,true);
  panel.querySelector('.rva-pause-audio')?.addEventListener('click',()=>window.crmResantaVoiceTogglePauseV3());
