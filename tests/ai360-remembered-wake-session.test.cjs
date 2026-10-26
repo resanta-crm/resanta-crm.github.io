@@ -123,8 +123,8 @@ function harness(saved=false,yandex=true){
    'only previously activated director dialogue can continue');
  assert(code.includes("if(document.hidden){")&&code.includes("if(mode)void stopAll('Микрофон выключен: вкладка скрыта."),
    'hidden tab stops mic even when conversation remains active');
- assert(code.includes("resumeConversationUntil=0;void stopAll();"),
-   'page navigation and explicit close must revoke continuation');
+ assert(code.includes("resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();"),
+   'page navigation and explicit close must revoke both ephemeral conversation leases');
  assert(code.includes("noiseOnly(phrase)"),'lone filler such as А must not be sent to AI');
  assert(code.includes("if(noiseOnly(phrase))"),'wake mode must skip filler fragments');
  assert(voiceUI.includes("window.crmResantaVoiceAuthorizeV3=approveYandex"));
