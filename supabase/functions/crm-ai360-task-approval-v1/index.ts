@@ -1,12 +1,13 @@
-// RESANTA AI360: director-only explicit final approval of existing read-only proposals.
-// Never called automatically. No client-side DB write. Supabase JWT + owner + branch checks.
-// PostgREST multi-row INSERT is atomic. A partial unique DB index enforces one open
-// voice-approved task per client across Edge isolates and concurrent approvals.
+// RESANTA AI360: TEST-ONLY approved draft storage. No writes to tasks.
+// Manager cannot see stored test drafts. Real task creation is DISABLED server-side.
+// Manual consent, director-only JWT, ownership recheck, stable test IDs.
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 
 const OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
-const SOURCE='ai360_voice_approved';
+const SOURCE='ai360_voice_test_only';
+const TEST_TABLE='ai360_voice_test_drafts_v1';
+const TEST_CONFIRMATION='подтверждаю сохранение тестовых поручений';
 const norm=x=>String(x||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
 const cors=origin=>({
   'Access-Control-Allow-Origin':ORIGINS.has(origin||'')?origin:'https://resanta-crm.by',
@@ -35,9 +36,9 @@ function validDate(str,now){
   return (d.getTime()-Date.parse(now+'T00:00:00Z'))/86400000<=90;
 }
 function validInput(body){
-  if(!body||!['validate','commit'].includes(body.kind))return false;
+  if(!body||!['validate','commit_test'].includes(body.kind))return false;
   if(!validUuid(body.approval_id)||!Array.isArray(body.items)||body.items.length<1||body.items.length>3)return false;
-  if(body.kind==='commit'&&body.confirmation!=='подтверждаю создание поручений')return false;
+  if(body.kind==='commit_test'&&body.confirmation!==TEST_CONFIRMATION)return false;
   const ids=new Set();
   return body.items.every(row=>{
     if(!row||!validUuid(row.client_id)||ids.has(row.client_id))return false;
@@ -52,7 +53,7 @@ function validInput(body){
   });
 }
 async function stableTaskId(approval,client){
-  const bytes=new TextEncoder().encode(approval+'|'+client+'|ai360-voice-v1');
+  const bytes=new TextEncoder().encode(approval+'|'+client+'|ai360-private-test-draft-v1');
   const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
   const b=hash.slice(0,16);b[6]=(b[6]&15)|80;b[8]=(b[8]&63)|128;
   const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -80,6 +81,14 @@ Deno.serve(async req=>{
     return error(req,'not_authorized',403);
   let body;
   try{body=await req.json();}catch{return error(req,'invalid_request',400);}
+  if(body?.kind==='list_test'){
+    // A strict read-only test ledger, never the main public tasks list.
+    const saved=await svc.from(TEST_TABLE)
+      .select('id,client_name,manager_name,title,text,due_date,status,created_at')
+      .eq('created_by',user.id).order('created_at',{ascending:false}).limit(12);
+    if(saved.error)return error(req,'test_drafts_unavailable',503);
+    return respond(req,{mode:'test_list',items:saved.data||[],count:(saved.data||[]).length});
+  }
   if(!validInput(body))return error(req,'invalid_request',400);
   const day=today();
   if(!body.items.every(x=>validDate(x.due_date,day)))return error(req,'invalid_due_date',400);
@@ -97,13 +106,13 @@ Deno.serve(async req=>{
   const keys=await Promise.all(ids.map(id=>stableTaskId(body.approval_id,id)));
   // An exact replay has stable primary keys and cannot create a second task,
   // even after the original is completed.
-  const existing=await svc.from('tasks').select('id,client_id,source')
+  const existing=await svc.from(TEST_TABLE).select('id,client_id,created_by')
     .in('id',keys).limit(4);
   if(existing.error)return error(req,'task_verification_unavailable',503);
   if(existing.data?.length){
     const all=keys.length===existing.data.length&&
-      keys.every((id,i)=>existing.data.some(t=>t.id===id&&t.client_id===ids[i]&&t.source===SOURCE));
-    return all?respond(req,{mode:'already_created',created:0,task_ids:keys}):
+      keys.every((id,i)=>existing.data.some(t=>t.id===id&&t.client_id===ids[i]&&t.created_by===user.id));
+    return all?respond(req,{mode:'already_test_saved',created:0,saved:0,test_ids:keys}):
       error(req,'approval_id_conflict',409);
   }
 
@@ -164,19 +173,33 @@ Deno.serve(async req=>{
     };
   });
 
-  if(body.kind==='validate')return respond(req,{mode:'ready',items:rows.map(r=>({
+  if(body.kind==='validate')return respond(req,{mode:'ready',storage:'director_test_only',items:rows.map(r=>({
     client_id:r.client_id,client_name:body.items.find(x=>x.client_id===r.client_id)?.client_name,
     manager_name:r.manager_name,title:r.title,text:r.text,due_date:r.due_date,
     expected_result:r.expected_result,criteria:r.criteria
   })),created:0});
 
-  // Creation requires an exact, explicit spoken confirmation, never "да" or
-  // automatic intent inference. One PostgREST INSERT is a single DB transaction.
-  const inserted=await svc.from('tasks').insert(rows).select('id,client_id');
+  // TEST MODE ONLY. Explicitly forbid any INSERT into the operational tasks table.
+  // Saved entries never surface in manager tasks, sales analytics, or notifications.
+  if(body.kind!=='commit_test')return error(req,'real_task_creation_disabled',403);
+  const testRows=rows.map((r,i)=>({
+    id:r.id,approval_id:body.approval_id,client_id:r.client_id,
+    client_name:body.items[i].client_name,manager_id:r.manager_id,
+    manager_name:r.manager_name,title:r.title,text:r.text,
+    due_date:r.due_date,priority:r.priority,basis:r.basis,
+    expected_result:r.expected_result,criteria:r.criteria,
+    status:'test_draft',created_by:user.id
+  }));
+  // One atomic multi-row insert in a separate director-only table.
+  const inserted=await svc.from(TEST_TABLE).insert(testRows)
+    .select('id,client_id,status');
   if(inserted.error){
-    if(inserted.error.code==='23505')return error(req,'duplicate_blocked',409);
-    return error(req,'insert_failed',503);
+    if(inserted.error.code==='23505')return error(req,'duplicate_test_blocked',409);
+    return error(req,'test_save_failed',503);
   }
-  if(inserted.data?.length!==rows.length)return error(req,'unverified_insert',503);
-  return respond(req,{mode:'created',created:rows.length,task_ids:keys});
+  if(inserted.data?.length!==testRows.length||
+    inserted.data.some(x=>x.status!=='test_draft'))
+    return error(req,'unverified_test_save',503);
+  return respond(req,{mode:'test_saved',saved:testRows.length,created:0,
+    test_ids:keys,storage:'director_test_only',visible_to_manager:false});
 });

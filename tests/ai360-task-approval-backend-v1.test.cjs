@@ -17,14 +17,14 @@ function due(){
  return d.toISOString().slice(0,10);
 }
 function harness(opts={}){
- let handler=null,writes=0,stored=[],busy=!!opts.busy;
+ let handler=null,writes=0,stored=[],busy=!!opts.busy,taskWrites=0;
  const db={
   auth:{getUser:async()=>({data:{user:{id:opts.guest?'nobody':director}}})},
   rpc:async()=>({data:{period:{as_of:day(),last_closed_month:'09.2026',last_closed_year_ago:'09.2025'},
     declining_clients:[{client_name:'Клиент А',closed_year_ago:1000,closed_month:450,open_tasks:0,next_route:null}]}}),
   from:table=>{
     const query={
-      select(){return this;},eq(){return this;},in(){return this;},
+      select(){return this;},eq(){return this;},in(){return this;},order(){return this;},
       gte(){return this;},lte(){return this;},or(){return this;},
       maybeSingle:async()=>({data:opts.unauthorizedProfile?
         {name:'Злоумышленник',role:'manager'}:{name:'Александр Паюшин',role:'boss'}}),
@@ -33,13 +33,17 @@ function harness(opts={}){
         if(table==='clients')return {data:[{id:client,name:'Клиент А',manager_id:manager,
           manager_name:'Руднев',is_archived:false,to_delete:false}]};
         if(table==='route_plans')return {data:busy?[{client_id:client}]:[]};
-        if(table==='tasks')return {data:stored};
+        if(table==='tasks')return {data:[]};
+        if(table==='ai360_voice_test_drafts_v1')return {data:stored};
         throw Error('Unexpected table '+table);
       },
       insert(rows){
+        if(table==='tasks'){taskWrites++;throw Error('production write forbidden');}
+        assert.equal(table,'ai360_voice_test_drafts_v1');
         writes++;
-        stored.push(...rows.map(x=>({id:x.id,client_id:x.client_id,source:x.source})));
-        return {select:async()=>({data:rows.map(x=>({id:x.id,client_id:x.client_id}))})};
+        stored.push(...rows.map(x=>({id:x.id,client_id:x.client_id,created_by:director,
+          manager_name:x.manager_name,title:x.title,due_date:x.due_date,status:x.status})));
+        return {select:async()=>({data:rows.map(x=>({id:x.id,client_id:x.client_id,status:x.status}))})};
       }
     };
     return query;
@@ -65,8 +69,8 @@ function harness(opts={}){
     criteria:'Следующий шаг в CRM'};
  return {call:async body=>{const res=await handler(request(body));return {status:res.status,data:res.json()};},
    payload:(kind='validate')=>({kind,approval_id:approval,items:[proposal],
-       ...(kind==='commit'?{confirmation:'подтверждаю создание поручений'}:{})}),
-   writes:()=>writes};
+       ...(kind==='commit_test'?{confirmation:'подтверждаю сохранение тестовых поручений'}:{})}),
+   writes:()=>writes,taskWrites:()=>taskWrites};
 }
 (async()=>{
  const a=harness();
@@ -75,31 +79,33 @@ function harness(opts={}){
  assert.equal(ready.data.mode,'ready');
  assert.equal(ready.data.created,0);
  assert.equal(a.writes(),0,'validation must never insert');
- const invalid=await a.call({...a.payload('commit'),confirmation:'да'});
+ const invalid=await a.call({...a.payload('commit_test'),confirmation:'да'});
  assert.equal(invalid.status,400,'generic yes cannot authorize a write');
  assert.equal(a.writes(),0);
- const created=await a.call(a.payload('commit'));
+ const created=await a.call(a.payload('commit_test'));
  assert.equal(created.status,200);
- assert.equal(created.data.mode,'created');
- assert.equal(created.data.created,1);
+ assert.equal(created.data.mode,'test_saved');
+ assert.equal(created.data.saved,1);
+ assert.equal(created.data.created,0);
  assert.equal(a.writes(),1);
- const replay=await a.call(a.payload('commit'));
+ const replay=await a.call(a.payload('commit_test'));
  assert.equal(replay.status,200);
- assert.equal(replay.data.mode,'already_created');
+ assert.equal(replay.data.mode,'already_test_saved');
  assert.equal(a.writes(),1,'replay does not insert again');
  const conflict=harness({busy:true});
- const denied=await conflict.call(conflict.payload('commit'));
+ const denied=await conflict.call(conflict.payload('commit_test'));
  assert.equal(denied.status,409);
  assert.equal(conflict.writes(),0);
  const guest=harness({guest:true});
- const forbidden=await guest.call(guest.payload('commit'));
+ const forbidden=await guest.call(guest.payload('commit_test'));
  assert.equal(forbidden.status,403);
  assert.equal(guest.writes(),0);
  const role=harness({unauthorizedProfile:true});
- const noRole=await role.call(role.payload('commit'));
+ const noRole=await role.call(role.payload('commit_test'));
  assert.equal(noRole.status,403);
  assert.equal(role.writes(),0);
- assert(server.includes("insert(rows).select('id,client_id')"),'batch insertion is one transaction');
- assert(server.includes("SOURCE='ai360_voice_approved'"),'reserved index source');
- console.log('AI360 approval backend: validate 0 writes, exact confirmation, atomic insert, idempotency, no guest access, conflicts blocked PASS');
+ assert(server.includes("from(TEST_TABLE).insert(testRows)"),'writes only isolated table');
+ assert(!server.includes("from('tasks').insert("),'NO production insert exists');
+ assert.equal(a.taskWrites(),0,'manager tasks remain unchanged');
+ console.log('AI360 test-only backend: validate no writes, real task writes 0, isolated commit, replay and owner guard PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

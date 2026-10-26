@@ -28,11 +28,12 @@ function setup(opts={}){
        if(name==='crm-ai360-task-drafts-v1')return {data:{
         mode:'readonly',manager:'Руднев',as_of:'2026-10-26',items:[sample,sampleTwo]}};
        if(name==='crm-ai360-task-approval-v1'){
+        if(body.kind==='list_test')return {data:{mode:'test_list',items:[{manager_name:'Руднев',client_name:'Клиент А',title:'Восстановить продажи',due_date:'2026-11-03'}]}};
         if(body.kind==='validate')return {data:{mode:'ready',created:0,
           items:body.items.map(x=>({...x}))}};
-        if(body.kind==='commit')return opts.failCommit?
+        if(body.kind==='commit_test')return opts.failCommit?
           {error:{message:'connection_lost'}}:
-          {data:{mode:'created',created:body.items.length,task_ids:body.items.map(x=>x.client_id)}};
+          {data:{mode:'test_saved',saved:body.items.length,created:0,test_ids:body.items.map(x=>x.client_id)}};
        }
        throw Error('unexpected invocation');
       }}}
@@ -54,33 +55,43 @@ function setup(opts={}){
  assert.equal(a.calls.length,2);
  assert.equal(a.calls[1].body.kind,'validate');
  assert.equal(a.calls[1].body.items.length,2);
- assert(a.answers.at(-1).includes('Пока ничего НЕ СОЗДАНО'));
+ assert(a.answers.at(-1).includes('Менеджеры их НЕ увидят'));
+ assert(!a.calls.some(x=>x.body.kind==='commit'),'no real commit mode allowed');
  assert.equal(a.handler('да',a.ui),true);
  assert.equal(a.calls.length,2,'a generic yes must not commit');
  assert(a.answers.at(-1).includes('скажи точно'));
- assert.equal(a.handler('подтверждаю создание поручений',a.ui),true);
+ assert.equal(a.calls.length,2);
+ assert.equal(a.handler('подтверждаю сохранение тестовых поручений',a.ui),true);
  await a.tick();
  assert.equal(a.calls.length,3);
- assert.equal(a.calls[2].body.confirmation,'подтверждаю создание поручений');
+ assert.equal(a.calls[2].body.confirmation,'подтверждаю сохранение тестовых поручений');
  assert.equal(a.calls[2].body.approval_id,approvalId);
- assert.equal(a.calls[2].body.kind,'commit');
- assert(a.answers.at(-1).includes('2 поручений созданы'));
- assert.equal(a.handler('подтверждаю создание поручений',a.ui),true);
+ assert.equal(a.calls[2].body.kind,'commit_test');
+ assert(a.answers.at(-1).includes('2 поручений сохранено'));
+ assert(a.answers.at(-1).includes('Рабочих задач создано: 0'));
+ assert.equal(a.calls.filter(x=>x.body.kind==='commit').length,0);
+ assert.equal(a.handler('подтверждаю сохранение тестовых поручений',a.ui),true);
  assert.equal(a.calls.length,3,'confirmation replay cannot create again in same page');
- assert(a.answers.at(-1).includes('Нет подготовленных'));
+ assert(a.answers.at(-1).includes('Нет подготовленных к тестовому сохранению'));
+ assert.equal(a.handler('покажи тестовые поручения',a.ui),true);
+ await a.tick();
+ assert.equal(a.calls[3].body.kind,'list_test');
+ assert.equal(a.calls.filter(x=>x.body.kind==='commit_test').length,1);
+ a.handler('подтверждаю создание поручений',a.ui);
+ assert.equal(a.calls.length,4,'old production command blocked');
  const b=setup();
  b.handler('предложи поручения для Руднева',b.ui);await b.tick();
  b.handler('согласовать первое',b.ui);await b.tick();
  b.handler('отмена создания',b.ui);
  assert.equal(b.calls.length,2,'cancellation must not commit');
- b.handler('подтверждаю создание поручений',b.ui);
+ b.handler('подтверждаю сохранение тестовых поручений',b.ui);
  assert.equal(b.calls.length,2);
  const c=setup();
  c.handler('предложи поручения для Руднева',c.ui);await c.tick();
  c.handler('согласовать первое',c.ui);await c.tick();
  const id0=c.calls[1].body.approval_id;
  c.handler('измени срок первого на 10 ноября 2026',c.ui);
- c.handler('подтверждаю создание поручений',c.ui);
+ c.handler('подтверждаю сохранение тестовых поручений',c.ui);
  assert.equal(c.calls.length,2,'changing date must invalidate pending confirmation');
  c.handler('согласовать первое',c.ui);await c.tick();
  assert(c.calls[2].body.items[0].due_date==='2026-11-10');
@@ -91,8 +102,8 @@ function setup(opts={}){
  assert(!/db\.from\(['"]tasks['"]\)\.insert/.test(client),'browser may not write tasks');
  for(const needed of ['user.id!==OWNER_ID','profile.data?.role!==\'boss\'',
   'manager_not_found','client_ownership_changed','conflicting_task_or_route',
-  'confirmation!==\'подтверждаю создание поручений\'','approval_id_conflict',
-  "source:SOURCE", "mode:'created'"]){
+  'TEST_CONFIRMATION','approval_id_conflict',
+  "const TEST_TABLE='ai360_voice_test_drafts_v1'", "mode:'test_saved'"]){
    assert(server.includes(needed),'approval backend missing safety '+needed);
  }
  console.log('AI360 voice approval: two explicit steps; no yes, cancel, edit, role/Android and idempotent intent PASS');
