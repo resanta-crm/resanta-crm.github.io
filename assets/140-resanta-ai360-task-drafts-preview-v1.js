@@ -7,6 +7,8 @@
 if(/Android/i.test(navigator.userAgent||'')||root.crmAI360TaskDraftsHandleV1)return;
 const ENDPOINT='crm-ai360-task-drafts-v1';
 const APPROVAL_ENDPOINT='crm-ai360-task-approval-v1';
+const LIST_TEST=/^(?:покажи|проверь|перечисли)\s+(?:мои\s+)?(?:тестов[а-яё]*|пробн[а-яё]*)\s+(?:поручен[а-яё]*|задач[а-яё]*)/i;
+const OLD_REAL_CONFIRM=/^подтверждаю создание поручений[.!?]*$/i;
 const REQUEST=/(?:предлож|подготов|сформир|состав|созда[йт]|покажи)[а-яё]*\s+.{0,55}(?:поручен|задач)|(?:какие|дай)\s+поручен/i;
 const CHOOSE=/(?:согласова|выбер|выбра|остав|утверд|одобр|подтвержда)/i;
 const CANCEL=/(?:отмен|убер|убра|удал|сброс|очист)/i;
@@ -31,7 +33,7 @@ function specifiedManager(text){
  if(names.length===1)return {kind:'exact',name:names[0]};
  return {kind:'none'};
 }
-const FINAL_CONFIRM=/^подтверждаю создание поручений[.!?]*$/i;
+const FINAL_CONFIRM=/^подтверждаю сохранение тестовых поручений[.!?]*$/i;
 const FINAL_REJECT=/^(?:не подтверждаю|отказываюсь|отмена создания|не создавать)[.!?]*$/i;
 const months={'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,
  'июля':7,'августа':8,'сентября':9,'октября':10,'ноября':11,'декабря':12};
@@ -87,7 +89,7 @@ function summary(){
   '\nИсточник: '+safe(x.source,130)
  ).join('\n\n')+
  '\n\nСкажи «изменить срок первого на 29 октября», «убрать второе» или «выбрать первое и третье».'+
- '\nПока только черновики. Для подготовки записи скажи «Согласовать первое». Создание требует отдельного точного подтверждения.';
+ '\nТЕСТОВЫЙ РЕЖИМ. Рабочие поручения отключены. Для проверки скажи «Согласую первое». Менеджеры не увидят сохранённые тестовые черновики.';
 }
 async function responseError(error){
  try{if(error?.context?.json)return safe((await error.context.json())?.error||error.message);}catch(_){}
@@ -127,7 +129,7 @@ async function requestDrafts(question,ui){
      throw new Error('invalid_server_response');
    asOf=safe(result.data.as_of,10);
    items=raw.map(x=>({...x}));chosen.clear();approval=null;
-   ui.textStatus('Черновики проверены за '+((Date.now()-started)/1000).toFixed(1)+' с · ещё не созданы');
+   ui.textStatus('ТЕСТ • Черновики проверены за '+((Date.now()-started)/1000).toFixed(1)+' с · менеджеры не видят');
    ui.answer(summary(),{speechSummary:items.length?
      'Нашла '+items.length+' предложения для '+manager+'. Все они пока черновики. Скажи, что изменить или убрать.':
      'По выбранному менеджеру нет новых безопасных предложений. Возможно, уже есть открытые поручения или маршруты.'});
@@ -139,6 +141,25 @@ async function requestDrafts(question,ui){
 }
 // Preparation verifies real CRM ownership and duplicates, but cannot create tasks.
 // The user must separately say the exact explicit final command.
+async function showSavedTests(ui){
+ if(approvalBusy)return;
+ approvalBusy=true;root.__resantaAI360PendingV1=true;
+ ui.textStatus('Проверяю закрытые тестовые поручения…');
+ try{
+  const res=await db.functions.invoke(APPROVAL_ENDPOINT,{body:{kind:'list_test'}});
+  if(res.error)throw new Error(await responseError(res.error));
+  if(!allowed())return;
+  if(res.data?.mode!=='test_list'||!Array.isArray(res.data.items))throw new Error('invalid_test_list');
+  const lines=res.data.items.slice(0,12).map((r,i)=>(i+1)+'. '+
+    safe(r.manager_name,70)+' / '+safe(r.client_name,90)+
+    ' — '+safe(r.title,100)+'; срок '+safe(r.due_date,12)+
+    '; статус ТЕСТОВЫЙ ЧЕРНОВИК').join('\n');
+  ui.answer(lines?'ТВОИ ЗАКРЫТЫЕ ТЕСТОВЫЕ ПОРУЧЕНИЯ (менеджеры их не видят):\n'+lines:
+    'Сохранённых тестовых поручений пока нет. Настоящие задачи не создавались.');
+ }catch(e){
+  if(allowed())ui.answer('Не удалось прочитать тестовые черновики: '+safe(e?.message,130));
+ }finally{approvalBusy=false;root.__resantaAI360PendingV1=false;}
+}
 function payloadFor(indices){
  return indices.map(n=>{
    const x=items[n-1];
@@ -156,18 +177,18 @@ async function approvalRequest(kind,ui){
    return;
  }
  if(kind==='commit'&&!approval){
-   ui.answer('Нет поручений, подготовленных к созданию. Сначала скажи «Согласовать первое».');
+   ui.answer('Нет черновиков к тестовому сохранению. Сначала скажи «Согласую первое».');
    return;
  }
  approvalBusy=true;root.__resantaAI360PendingV1=true;
  ui.textStatus(kind==='validate'?'Проверяю выбранные поручения перед созданием…':
-  'Создаю подтверждённые поручения…');
+  'Сохраняю ТЕСТОВЫЕ черновики только для директора…');
  try{
    const id=kind==='validate'?root.crypto?.randomUUID?.():approval.id;
    if(!id)throw new Error('secure_random_unavailable');
    const entries=kind==='validate'?payloadFor(chosenIndices):approval.items;
-   const body={kind,approval_id:id,items:entries};
-   if(kind==='commit')body.confirmation='подтверждаю создание поручений';
+   const body={kind:kind==='commit'?'commit_test':kind,approval_id:id,items:entries};
+   if(kind==='commit')body.confirmation='подтверждаю сохранение тестовых поручений';
    const response=await db.functions.invoke(APPROVAL_ENDPOINT,{body});
    if(response.error)throw new Error(await responseError(response.error));
    if(!allowed())return;
@@ -182,23 +203,23 @@ async function approvalRequest(kind,ui){
      const lines=confirmed.map((r,i)=>(i+1)+'. '+safe(r.client_name,100)+
        '; '+safe(r.manager_name,100)+'; срок '+safe(r.due_date,12)+
        '; '+safe(r.title,120)+'; '+safe(r.text,190)).join('\n');
-     ui.answer('К СОЗДАНИЮ ПОДГОТОВЛЕНО '+confirmed.length+
-       ' ПОРУЧЕНИЙ. Пока ничего НЕ СОЗДАНО.\n'+lines+
-       '\n\nДля записи в CRM произнеси ТОЧНО «Подтверждаю создание поручений». '+
+     ui.answer('ТЕСТОВЫЙ РЕЖИМ. К СОХРАНЕНИЮ '+confirmed.length+
+       ' ЧЕРНОВИКОВ. Менеджеры их НЕ увидят.\n'+lines+
+       '\n\nДля сохранения тестовых черновиков скажи ТОЧНО «Подтверждаю сохранение тестовых поручений». '+
        'Или скажи «Отмена создания».',{speechSummary:
-       'Поручения проверены, но ещё не созданы. Для записи скажи: Подтверждаю создание поручений.'});
+       'Это тестовые черновики. Менеджеры их не увидят. Для сохранения скажи: Подтверждаю сохранение тестовых поручений.'});
    }else{
-     if(response.data?.mode==='created'||response.data?.mode==='already_created'){
-       const created=response.data.mode==='created';
-       ui.answer(created?
-         'Подтверждено: '+Number(response.data.created)+' поручений созданы в CRM.':
-         'Эти поручения уже были созданы ранее. Повторных задач нет.');
+     if(response.data?.mode==='test_saved'||response.data?.mode==='already_test_saved'){
+       const fresh=response.data.mode==='test_saved';
+       ui.answer(fresh?
+         '✅ ТЕСТ: '+Number(response.data.saved)+' поручений сохранено в закрытом журнале директора. Руднев их не видит. Рабочих задач создано: 0. Скажи «Покажи тестовые поручения».':
+         '✅ Эти тестовые поручения уже сохранены. Повторных записей нет. Руднев ничего не видит.');
        approval=null;items=[];chosen.clear();
-     }else throw new Error('invalid_commit_result');
+     }else throw new Error('invalid_test_commit_result');
    }
  }catch(e){
-   if(allowed())ui.answer('Операция не подтверждена: '+safe(e?.message,150)+
-     '. Проверь состояние задач в CRM перед повтором. Автоматически запрос не повторяю.');
+   if(allowed())ui.answer('Тестовое сохранение не подтверждено: '+safe(e?.message,150)+
+     '. Скажи «Покажи тестовые поручения» перед повтором. Рабочие задачи отключены.');
    // Retain approval ID for an idempotent manual retry in case of network error.
  }finally{
    approvalBusy=false;root.__resantaAI360PendingV1=false;
@@ -210,15 +231,20 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
  const q=String(query||'').trim().replace(/^лера[,.!?]?\s*/i,'').slice(0,500);
  if(!q)return false;
  if(approvalBusy){ui.answer('Предыдущее согласование ещё проверяется.');return true;}
+ if(OLD_REAL_CONFIRM.test(q)){
+   ui.answer('Создание НАСТОЯЩИХ задач на время теста заблокировано. Сохраняются только закрытые черновики директора.');
+   return true;
+ }
+ if(LIST_TEST.test(q)){void showSavedTests(ui);return true;}
  if(approval&&FINAL_REJECT.test(q)){
    approval=null;ui.answer('Подтверждение отменено. Никакие задачи не созданы.');return true;
  }
  if(FINAL_CONFIRM.test(q)){
-   if(!approval){ui.answer('Нет подготовленных к созданию поручений. Сначала согласуй номера.');return true;}
+   if(!approval){ui.answer('Нет подготовленных к тестовому сохранению черновиков. Сначала согласуй номера.');return true;}
    void approvalRequest('commit',ui);return true;
  }
  if(approval&&/(?:подтвержд|создавай|давай созда|сохрани|^(?:да|ага|ок|хорошо|согласен)[.!?]*$)/i.test(q)){
-   ui.answer('Чтобы избежать случайной записи, скажи точно «Подтверждаю создание поручений», или «Отмена создания».');return true;
+   ui.answer('ТЕСТ: для сохранения закрытых черновиков скажи точно «Подтверждаю сохранение тестовых поручений», или «Отмена создания».');return true;
  }
  if(REQUEST.test(q)){
    if(pending){ui.answer('Предыдущая проверка ещё выполняется.');return true;}
@@ -285,7 +311,7 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
    if(!ns.length){ui.answer('Назови номера черновиков для выбора. Запись возможна только после отдельного подтверждения.');return true;}
    chosen=new Set(ns);approval=null;
    ui.answer('Отмечены для дальнейшей проверки черновики: '+ns.join(', ')+
-     '. Пока ничего не создано. Для подготовки записи скажи «Согласую первое».');
+     '. Пока только тест. Для сохранения закрытых черновиков скажи «Согласую первое».');
    return true;
  }
  if(/^(?:покажи|прочитай|перечисли)\s+(?:черновик|поручен)/i.test(q)){
