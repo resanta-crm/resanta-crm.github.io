@@ -38,8 +38,8 @@ function mock(opts={}){
    functions:{invoke:async(name,{body})=>{
     seen.push({name,body});
     if(name!=='crm-ai360-task-drafts-v1')throw Error('unknown endpoint');
-    if(body.kind==='directory')return {data:{staff:[{name:'Руднев',role:'manager'}]}};
-    if(body.kind==='preview')return {data:{
+    if(body.kind==='preview_query')return {data:{
+     manager:'Руднев',
      mode:opts.badMode?'write':'readonly',
      as_of:'2026-10-24',items:[{
       draft_id:'preview-1',client_id:'example-client',client_name:'Клиент А',
@@ -61,15 +61,15 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,10));
  const a=mock();
  assert.equal(a.handler('лера предложи поручения для руднева',a.ui),true);
  await tick();
- assert.equal(a.seen.filter(x=>x.body.kind==='directory').length,1);
- assert.equal(a.seen.filter(x=>x.body.kind==='preview').length,1);
+ assert.equal(a.seen.filter(x=>x.body.kind==='preview_query').length,1,'single server-validated preview request');
+ assert.equal(a.seen.length,1,'no additional directory roundtrip');
  assert(a.lines.some(s=>s.includes('НИЧЕГО НЕ СОХРАНЕНО')));
  assert(a.lines.some(s=>s.includes('Клиент А')));
  assert.equal(a.handler('измени срок первого на 29 октября',a.ui),true);
  assert(a.lines.at(-1).includes('2026-10-29'));
  assert.equal(a.handler('согласовать первое',a.ui),true);
  assert(a.lines.at(-1).includes('НЕ согласование'));
- assert.equal(a.seen.length,2,'selection cannot send additional server requests');
+ assert.equal(a.seen.length,1,'selection cannot send additional server requests');
  assert.equal(a.handler('отмени все',a.ui),true);
  assert(a.lines.at(-1).includes('Никакие задачи не были созданы'));
  assert.equal(a.internals.validDay(31,2,2026),null,'impossible deadline rejected');
@@ -83,5 +83,9 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,10));
  assert(c.lines.some(x=>x.includes('Никакие задачи не созданы')),'non-readonly response must fail closed');
  assert.equal(mock({guest:true}).handler('предложи поручения Рудневу',{answer:()=>{}}),false);
  assert.equal(mock({android:true}).handler,undefined,'Android must never load draft voice handler');
+ assert(server.includes("payload?.kind==='preview_query'"),'one-call server endpoint available');
+ assert(server.includes("mentionedManager(payload.message,roster.data||[])"),'server resolves only CRM staff');
+ assert(server.includes("await Promise.all(["),'task and route duplicate checks run concurrently');
+ assert(server.includes("const plan=draftFor(x.r,today)"),'evidence-based per-client draft rule is active');
  console.log('AI360 task draft staging: 14 read-only/role/voice/date/rollback invariants PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
