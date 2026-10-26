@@ -42,7 +42,11 @@ function validInput(body){
   return body.items.every(row=>{
     if(!row||!validUuid(row.client_id)||ids.has(row.client_id))return false;
     ids.add(row.client_id);
-    return typeof row.manager_name==='string'&&row.manager_name.length<=80&&
+    return typeof row.manager_name==='string'&&row.manager_name.length>=3&&row.manager_name.length<=80&&
+      typeof row.client_name==='string'&&row.client_name.length>=2&&row.client_name.length<=200&&
+      typeof row.title==='string'&&row.title.length<=110&&
+      typeof row.expected_result==='string'&&row.expected_result.length<=300&&
+      typeof row.criteria==='string'&&row.criteria.length<=300&&
       typeof row.due_date==='string'&&
       typeof row.text==='string'&&row.text.trim().length>=8&&row.text.trim().length<=500;
   });
@@ -162,7 +166,8 @@ Deno.serve(async req=>{
 
   if(body.kind==='validate')return respond(req,{mode:'ready',items:rows.map(r=>({
     client_id:r.client_id,client_name:body.items.find(x=>x.client_id===r.client_id)?.client_name,
-    manager_name:r.manager_name,title:r.title,text:r.text,due_date:r.due_date
+    manager_name:r.manager_name,title:r.title,text:r.text,due_date:r.due_date,
+    expected_result:r.expected_result,criteria:r.criteria
   })),created:0});
 
   // Creation requires an exact, explicit spoken confirmation, never "да" or
