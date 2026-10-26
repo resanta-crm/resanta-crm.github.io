@@ -59,7 +59,10 @@
      wake.title=autoWakeWanted?'Автоматически включать при открытии окна помощника (можно выключить)':
        'После разрешения запомнить режим на этом компьютере';
    }
-   if(mic)mic.textContent=mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
+   if(mic){
+     mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
+     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Ручная запись: до 5 секунд. Для длинных команд используй постоянный режим.';
+   }
  }
  function reason(e){
    const code=String(e?.name||e?.code||'');
@@ -197,7 +200,7 @@
  }
  async function manualLoop(epoch){
    try{
-     const clip=await capture(10,epoch);
+     const clip=await capture(5,epoch);
      if(epoch!==listenEpoch || mode!=='manual')return;
      if(clip && !clip.loud)info('Уровень микрофона низкий. Всё равно пробую распознать записанную фразу…');
      const phrase=await transcribe(clip,epoch);
@@ -209,7 +212,7 @@
        await waitForAssistant(epoch,'manual');
        if(epoch!==listenEpoch||mode!=='manual')return;
        info('Слушаю вопрос после приветствия…');
-       const second=await capture(10,epoch);
+       const second=await capture(5,epoch);
        if(epoch!==listenEpoch||mode!=='manual')return;
        const question=await transcribe(second,epoch);
        if(epoch!==listenEpoch||mode!=='manual')return;
@@ -321,7 +324,7 @@
    if(newMode==='wake'&&!automatic)saveAutoWake(true);
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
-     if(newMode==='manual'){info('Слушаю команду. Максимум 10 секунд.');manualLoop(epoch);}
+     if(newMode==='manual'){info('Слушаю разовую команду (до 5 секунд)…');manualLoop(epoch);}
      else{
        if(continueConversation){resumeConversationUntil=0;info('Продолжаем разговор. Можешь задать вопрос без нового приветствия.');}
        else info('Микрофон включён: ожидаю «Привет, Ресанта»');
@@ -343,8 +346,15 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Включи голосовой режим кнопкой, затем скажи «Привет, Ресанта» или «Лера» и вопрос. После принятой активации можно продолжать разговор, а при возвращении из другой вкладки в течение 3 минут — без нового приветствия. Микрофон работает только в открытой панели и активной вкладке, выключается при закрытии и сворачивании. До 60 распознаваний в день; записи в CRM не сохраняются.';
-   mic.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();void start('manual');},true);
+   if(note)note.textContent='Два способа: «Спросить голосом» — одна короткая команда (до 5 секунд); «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 60 распознаваний в день; записи в CRM не сохраняются.';
+   mic.addEventListener('click',e=>{
+     e.stopImmediatePropagation();e.preventDefault();
+     if(mode==='wake'){
+       info('Постоянный режим уже слушает. Просто произнеси вопрос — второй микрофон не нужен.');
+       return;
+     }
+     void start('manual');
+   },true);
    wake.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
      autoWakeBlocked=false;
