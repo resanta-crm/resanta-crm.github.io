@@ -229,8 +229,7 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
      ui.answer('Назови номер и новый текст от 8 до 500 символов.');return true;
    }
    items[ns[0]-1].text=value;chosen.clear();approval=null;
-   ui.answer('Текст черновика '+ns[0]+' изменён. Перед созданием понадобится новое подтверждение.
-'+summary());
+   ui.answer('Текст черновика '+ns[0]+' изменён. Перед созданием понадобится новое подтверждение.\n'+summary());
    return true;
  }
  if(CHANGE.test(q)){
