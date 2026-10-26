@@ -199,7 +199,7 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
    if(!approval){ui.answer('Нет подготовленных к созданию поручений. Сначала согласуй номера.');return true;}
    void approvalRequest('commit',ui);return true;
  }
- if(approval&&/(?:подтвержд|создавай|давай созда|сохрани)/i.test(q)){
+ if(approval&&/(?:подтвержд|создавай|давай созда|сохрани|^(?:да|ага|ок|хорошо|согласен)[.!?]*$)/i.test(q)){
    ui.answer('Чтобы избежать случайной записи, скажи точно «Подтверждаю создание поручений», или «Отмена создания».');return true;
  }
  if(REQUEST.test(q)){
@@ -244,8 +244,9 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
  if(PREPARE.test(q)){
    if(!items.length){ui.answer('Сначала попроси Леру предложить поручения.');return true;}
    const ns=numbers(q);
-   if(!ns.length){ui.answer('Назови номера поручений: «Согласовать первое и третье».');return true;}
-   chosen=new Set(ns);approval=null;void approvalRequest('validate',ui);return true;
+   if(!ns.length&&!chosen.size){ui.answer('Назови номера поручений: «Согласовать первое и третье» или сначала выбери их.');return true;}
+   if(ns.length)chosen=new Set(ns);
+   approval=null;void approvalRequest('validate',ui);return true;
  }
  if(CHOOSE.test(q)){
    const ns=numbers(q);
