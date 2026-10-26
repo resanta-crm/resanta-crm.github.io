@@ -53,7 +53,7 @@ function harness(){
  vm.runInNewContext(exposed,{
   window:win,navigator:nav,document:doc,console,
   currentUser:{id:'director'},currentProfile:{role:'boss',name:'Александр Паюшин'},
-  MediaRecorder:Recorder,setTimeout,clearTimeout,Date:Clock,Blob,Uint8Array,FormData
+  MediaRecorder:Recorder,setTimeout,clearTimeout,clearInterval(){},Date:Clock,Blob,Uint8Array,FormData
  },{filename:'voice-video-regression.js'});
  async function settle(){for(let i=0;i<24;i++)await Promise.resolve();}
  async function tick(){for(const i of intervals.filter(i=>i.ms===650))i.fn();await settle();}
