@@ -13,7 +13,7 @@ const CANCEL=/(?:отмен|убер|убра|удал|сброс|очист)/i;
 const CHANGE=/(?:измени|поменяй|перенеси|поставь)\s+(?:срок|дату)/i;
 const CHANGE_TEXT=/(?:измени|поменяй)\s+(?:текст|содержание)\s+(?:первого|второго|третьего|[1-3])\s+(?:на|:)\s+(.+)/i;
 // Approval intent includes natural first-person Russian forms, but is NEVER commit.
-const PREPARE=/(?:соглас(?:ую|уем|ует|уете|овать|уй|уйте|овыва[а-яё]*)|утвержда[а-яё]*|утверд(?:ить|и|ите)|одобря[а-яё]*|одобр(?:ить|и|ите)|согласен\\s+на|согласна\\s+на)/i;
+const PREPARE=/(?:соглас(?:ую|уем|ует|уете|овать|уй|уйте|овыва[а-яё]*)|утвержда[а-яё]*|утверд(?:ить|и|ите)|одобря[а-яё]*|одобр(?:ить|и|ите)|согласен\s+на|согласна\s+на)/i;
 const APPROVAL_SUBJECT=/(?:перв[а-яё]*|втор[а-яё]*|трет[а-яё]*|[1-3]|выбранн[а-яё]*|поручен[а-яё]*|задач[а-яё]*)/i;
 const PILOT_MANAGERS=[['руднев','Руднев'],['ачинович','Ачинович'],['шкуран','Шкуран']];
 function approvalIntent(text){
@@ -26,7 +26,7 @@ function specifiedManager(text){
  const names=PILOT_MANAGERS.filter(([stem])=>
   new RegExp('(?:^|[^а-я])'+stem+'(?:а|у|ым|ом|е)?(?=$|[^а-я])','u').test(q)).map(x=>x[1]);
  if(names.length>1)return {kind:'ambiguous'};
- const raw=q.match(/(?:^|\s)(?:для|менеджера|менеджеру)\s+(?:менеджера\s+)?([а-я-]{4,})(?:\b|$)/u);
+ const raw=q.match(/(?:^|\s)(?:для|менеджера|менеджеру)\s+(?:менеджера\s+)?([а-я-]{4,})(?=$|[^а-я])/u);
  if(raw && !names.length)return {kind:'unknown'};
  if(names.length===1)return {kind:'exact',name:names[0]};
  return {kind:'none'};
