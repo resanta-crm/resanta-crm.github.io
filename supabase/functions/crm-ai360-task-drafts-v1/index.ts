@@ -1,5 +1,5 @@
 // RESANTA AI360 / task proposals v1. STAGED: read-only, director/Vitebsk only.
-// Not deployed. No insert/update/delete, no task creation, no LLM generation.
+// Deployed endpoint: strictly read-only. No insert/update/delete, no task creation, no LLM generation.
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 
 const ORIGINS = new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -27,7 +27,48 @@ function deadline(today:string){
   while(days<5){d.setUTCDate(d.getUTCDate()+1);if(d.getUTCDay()!==0&&d.getUTCDay()!==6)days++;}
   return d.toISOString().slice(0,10);
 }
-function titleOf(row:any){return 'Восстановить контакт и уточнить потребность';}
+// Evidence-only rule engine: no invented SKUs, budgets, reasons or promises.
+function draftFor(row:any, today:string){
+  const oldSales=Number(row.closed_year_ago)||0;
+  const newSales=Number(row.closed_month)||0;
+  const delta=Math.max(0,oldSales-newSales);
+  const drop=oldSales>0?delta/oldSales:0;
+  const last=typeof row.last_visit==='string'?row.last_visit.slice(0,10):'';
+  const lastValid=/^\d{4}-\d\d-\d\d$/.test(last)&&last<=today;
+  const daysFromVisit=lastValid?Math.floor((Date.parse(today+'T12:00:00Z')-Date.parse(last+'T12:00:00Z'))/86400000):null;
+  const stale=daysFromVisit===null||daysFromVisit>45;
+  const bigDrop=drop>=0.5;
+  const kind=stale?'visit':bigDrop?'recovery':'order';
+  const title=kind==='visit'?'Назначить визит и восстановить контакт':
+    kind==='recovery'?'Разобраться с резким падением закупок':'Уточнить потребность и подготовить повторный заказ';
+  const action=kind==='visit'?
+    'Связаться с клиентом и согласовать дату визита. На встрече уточнить потребность и причины снижения связанных закупок.':
+    kind==='recovery'?
+    'Выяснить, почему связанные закупки снизились более чем наполовину, и согласовать следующий конкретный шаг по заказу.':
+    'Проверить актуальную потребность клиента, уточнить сроки и ориентировочную сумму следующего заказа.';
+  const outcome=kind==='visit'?
+    'Дата и цель визита либо записанная причина отказа; следующий шаг по закупкам.':
+    kind==='recovery'?
+    'Подтверждённая клиентом причина изменения закупок и согласованный следующий шаг со сроком.':
+    'Согласованная дата и сумма возможного следующего заказа либо подтверждённая причина отказа.';
+  const criteria=kind==='visit'?'Дата визита или причина отказа и следующий шаг записаны в CRM.':
+    kind==='recovery'?'Причина и план восстановления закупок со сроком зафиксированы в CRM.':
+    'Зафиксированы сумма/дата следующего заказа или причина отказа.';
+  const visitBasis=lastValid?' Последний сохранённый визит: '+last+'.':' Сохранённых визитов в CRM не найдено.';
+  return {kind,title,text:action,expected_result:outcome,criteria,priority:(bigDrop||stale)?'высокий':'средний',
+    basis_detail:' Разница: '+delta.toFixed(2)+' BYN (снижение '+(drop*100).toFixed(1)+'%).'+visitBasis};
+}
+function words(value:string){
+  return norm(value).replace(/ё/g,'е').split(/[^а-яa-z0-9-]+/).filter(Boolean);
+}
+function mentionedManager(question:string,roster:any[]){
+  const queryWords=words(question);
+  const matched=roster.filter(m=>{
+    const surname=words(m.name).at(-1)||'';
+    return surname.length>=4&&queryWords.some(w=>w===surname||(w.startsWith(surname)&&w.length<=surname.length+3));
+  });
+  return matched.length===1?matched[0]:null;
+}
 Deno.serve(async(req:Request)=>{
   const origin=req.headers.get('Origin');
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(origin)});
@@ -53,18 +94,32 @@ Deno.serve(async(req:Request)=>{
     if(users.error)return reply(req,{error:'directory_unavailable'},503);
     return reply(req,{staff:users.data||[],mode:'readonly'});
   }
-  if(payload?.kind!=='preview'||typeof payload?.manager!=='string'||payload.manager.length>80)
+  const isQuery=payload?.kind==='preview_query';
+  if((!isQuery&&payload?.kind!=='preview')||
+    (isQuery?(typeof payload?.message!=='string'||payload.message.trim().length<10||payload.message.length>300):
+      (typeof payload?.manager!=='string'||payload.manager.length>80)))
     return reply(req,{error:'invalid_request'},400);
   const stamp=Date.now(),last=lastRequest.get(user.id)||0;
-  if(stamp-last<20000)return reply(req,{error:'try_again_later'},429);
+  if(stamp-last<4000)return reply(req,{error:'try_again_later'},429);
   lastRequest.set(user.id,stamp);
   if(lastRequest.size>50)lastRequest.clear();
-  const requested=payload.manager.trim();
-  const managers=await svc.from('users').select('id,name,role,region')
-    .eq('role','manager').eq('region',PILOT_BRANCH).ilike('name',requested).limit(2);
-  if(managers.error||managers.data?.length!==1||norm(managers.data[0].name)!==norm(requested))
-    return reply(req,{error:'manager_not_found'},400);
-  const manager=managers.data[0];
+  let manager:any=null;
+  if(isQuery){
+    // One verified server request instead of directory + preview roundtrips.
+    const roster=await svc.from('users').select('id,name,role,region')
+      .eq('role','manager').eq('region',PILOT_BRANCH).limit(20);
+    if(roster.error||(roster.data||[]).length>=20)
+      return reply(req,{error:'directory_unavailable'},503);
+    manager=mentionedManager(payload.message,roster.data||[]);
+  }else{
+    const requested=payload.manager.trim();
+    const managers=await svc.from('users').select('id,name,role,region')
+      .eq('role','manager').eq('region',PILOT_BRANCH).ilike('name',requested).limit(2);
+    if(managers.error||managers.data?.length!==1||norm(managers.data[0].name)!==norm(requested))
+      return reply(req,{error:'manager_not_found'},400);
+    manager=managers.data[0];
+  }
+  if(!manager)return reply(req,{error:'manager_not_found_or_ambiguous'},400);
   const today=todayInMinsk();
   const result=await svc.rpc('crm_ai360_operations_snapshot_v1',{
     p_manager:manager.name,p_month:today.slice(0,7)+'-01'
@@ -97,31 +152,44 @@ Deno.serve(async(req:Request)=>{
   }).filter((x:any)=>x.c).slice(0,8);
   if(!unique.length)return reply(req,{items:[],as_of:today,manager:manager.name,mode:'readonly'});
   const ids=unique.map((x:any)=>x.c.id);
-  const tasks=await svc.from('tasks').select('client_id,done,review_status')
-    .in('client_id',ids).or('done.eq.false,done.is.null').limit(150);
+  // Independent read-only checks can run in parallel; fail closed on either error.
+  const [tasks,routes]=await Promise.all([
+    svc.from('tasks').select('client_id,done,review_status')
+      .in('client_id',ids).or('done.eq.false,done.is.null').limit(150),
+    svc.from('route_plans').select('client_id,visit_date,removed')
+      .in('client_id',ids).gte('visit_date',today).lte('visit_date',deadline(today))
+      .or('removed.eq.false,removed.is.null').limit(150)
+  ]);
   if(tasks.error)return reply(req,{error:'task_verification_unavailable'},503);
-  const routes=await svc.from('route_plans').select('client_id,visit_date,removed')
-    .in('client_id',ids).gte('visit_date',today).lte('visit_date',deadline(today))
-    .or('removed.eq.false,removed.is.null').limit(150);
   if(routes.error)return reply(req,{error:'route_verification_unavailable'},503);
   // Fail closed on truncated checks: never claim no duplicates when results are incomplete.
   if((tasks.data||[]).length>=150||(routes.data||[]).length>=150)
     return reply(req,{error:'verification_incomplete'},503);
   const busy=new Set((tasks.data||[]).map((x:any)=>x.client_id));
   const scheduled=new Set((routes.data||[]).map((x:any)=>x.client_id));
-  const items=unique.filter((x:any)=>!busy.has(x.c.id)&&!scheduled.has(x.c.id))
-    .slice(0,3).map((x:any,i:number)=>({
-      draft_id:'preview-'+(i+1),client_id:x.c.id,client_name:x.c.name,
-      manager_name:manager.name,title:titleOf(x.r),
-      text:'Связаться с клиентом, уточнить причину изменения закупок и следующий заказ.',
-      due_date:deadline(today),priority:'средний',
-      basis:'По связанным продажам CRM: '+period.last_closed_month+' — '+Number(x.r.closed_month).toFixed(2)
-        +' BYN; '+period.last_closed_year_ago+' — '+Number(x.r.closed_year_ago).toFixed(2)+' BYN.',
-      expected_result:'Зафиксирован результат переговоров и конкретный следующий шаг по заказу.',
-      criteria:'Итог разговора и следующий шаг записаны в CRM.',
-      source:'purchase_history + clients + tasks + route_plans',
-      as_of:today
-    }));
+  const verified=unique.filter((x:any)=>!busy.has(x.c.id)&&!scheduled.has(x.c.id))
+    .map((x:any)=>({...x,plan:draftFor(x.r,today)}));
+  // Select factually different next actions when the evidence permits;
+  // fall back to highest-ranked remaining clients, never invent diversity.
+  const chosen:any[]=[];
+  for(const kind of ['visit','recovery','order']){
+    const match=verified.find((x:any)=>x.plan.kind===kind&&!chosen.includes(x));
+    if(match)chosen.push(match);
+  }
+  for(const x of verified)if(chosen.length<3&&!chosen.includes(x))chosen.push(x);
+  const items=chosen.slice(0,3).map((x:any,i:number)=>{
+      const plan=x.plan;
+      return {
+        draft_id:'preview-'+(i+1),client_id:x.c.id,client_name:x.c.name,
+        manager_name:manager.name,title:plan.title,text:plan.text,
+        due_date:deadline(today),priority:plan.priority,
+        basis:'Связанные продажи CRM: '+period.last_closed_month+' — '+Number(x.r.closed_month).toFixed(2)
+          +' BYN; '+period.last_closed_year_ago+' — '+Number(x.r.closed_year_ago).toFixed(2)+' BYN.'+plan.basis_detail,
+        expected_result:plan.expected_result,criteria:plan.criteria,
+        source:'purchase_history + visits + clients + tasks + route_plans',
+        as_of:today
+      };
+    });
   return reply(req,{items,as_of:today,manager:manager.name,mode:'readonly',
     warning:'Сравниваются только связанные с клиентом продажи завершённого месяца. Черновики не являются задачами и не сохраняются.'});
 });
