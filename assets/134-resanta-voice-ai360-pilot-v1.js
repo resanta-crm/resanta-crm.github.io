@@ -127,13 +127,19 @@
     addLine('РЕСАНТА AI',message);
     const text=String(message||'').trim();
     if(text.length>220)lastSubstantialAnswer=text;
+    // The verified proactive briefing has exactly five distinct factual
+    // priorities and should speak all five, not the generic 150-character teaser.
+    // Other long CRM answers retain their existing concise speech behavior.
+    const directorBriefVoice=typeof options?.briefingVoiceText==='string'&&
+      options.briefingVoiceText.length>=80&&options.briefingVoiceText.length<=3600?
+      options.briefingVoiceText.trim():'';
     const verifiedBrief=typeof options?.speechSummary==='string'&&options.speechSummary.length<=230?
       options.speechSummary.trim():'';
-    const compact=verifiedBrief||(text.length>225?briefVoiceText(text):'');
+    const compact=directorBriefVoice||verifiedBrief||(text.length>225?briefVoiceText(text):'');
     if(compact && compact!==text){
       lastDetailedResponse=text;
-      textStatus('Готовлю краткий голосовой итог…');
-      speak(compact,{shortSummary:true});
+      textStatus(directorBriefVoice?'Озвучиваю пять приоритетов директора…':'Готовлю краткий голосовой итог…');
+      speak(compact,{shortSummary:!directorBriefVoice});
     }else{
       // Brief confirmations must not erase the last detailed analysis.
       if(!lastDetailedResponse && lastSubstantialAnswer)lastDetailedResponse=lastSubstantialAnswer;
