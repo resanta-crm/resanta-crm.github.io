@@ -30,3 +30,7 @@ jobs:
           node tests/ai360-topic-switch-20261027.test.cjs
       - name: Task approval remains test-only
         run: node tests/ai360-task-approval-backend-v1.test.cjs
+      - name: Voice and director briefing regressions
+        run: |
+          node tests/ai360-voice-final-approval-20261026.test.cjs
+          node tests/ai360-director-proactive-brief-v1.test.cjs
