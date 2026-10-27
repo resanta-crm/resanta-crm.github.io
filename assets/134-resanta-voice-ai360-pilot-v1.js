@@ -208,6 +208,16 @@
       return;
     }
 
+    // The director briefing has its own authenticated read-only data source.
+    // It takes precedence over generic analytics on the explicit briefing intent.
+    if (typeof window.crmAI360DirectorBriefHandleV1 === 'function') {
+      try { if (window.crmAI360DirectorBriefHandleV1(query, {answer, textStatus})) return; }
+      catch (e) { console.warn('AI360 director briefing unavailable',e); }
+    }
+    if(/(?:брифинг(?:\s+директора)?|приоритет[а-яё]*\s+(?:дня|на\s+сегодня))/i.test(query)){
+      answer('Не удалось открыть защищённый брифинг директора. Перезагрузи окно Леры. Данные CRM не менялись.');
+      return;
+    }
     // Optional sales/KPI dialogue. No background requests; director action only.
     if (typeof window.crmAI360SalesHandleV1 === 'function') {
       try { if (window.crmAI360SalesHandleV1(query, {answer, textStatus})) return; }
