@@ -9,7 +9,7 @@ const DOMAINS=new Set(['sales','operations','promotions','triovist','vip','payme
 const ru=(s:any)=>String(s||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е');
 const safe=(s:any)=>String(s??'').replace(/[\r\n]+/g,' ').trim().slice(0,160);
 const cash=(n:any)=>Number(n||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
-const cors=(o:string|null)=>({'Access-Control-Allow-Origin':ORIGINS.has(o)?o:'https://resanta-crm.by',
+const cors=(o:string|null)=>({'Access-Control-Allow-Origin':o && ORIGINS.has(o)?o:'https://resanta-crm.by',
  'Access-Control-Allow-Headers':'authorization,apikey,x-client-info,content-type',
  'Access-Control-Allow-Methods':'OPTIONS,POST','Vary':'Origin'});
 const reply=(req:Request,data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{
@@ -75,7 +75,7 @@ async function validManager(svc:any,candidate:string|null):Promise<string|null>{
  const x=ru(candidate);
  const got=await svc.from('users').select('name,role').eq('role','manager').limit(70);
  if(got.error)throw new Error('staff_directory_unavailable');
- const matches=(got.data||[]).filter(p=>{
+ const matches=(got.data||[]).filter((p:any)=>{
   const name=ru(p.name);const pieces=name.split(/\s+/);
   return name===x || pieces.some(part=>part===x);
  });
@@ -104,7 +104,7 @@ function renderOperations(d:any,focus:string|null,question:string){
  if(/задач|поруч|просроч/.test(targeted))s.push('Открыто задач: '+Number(tasks.open_tasks||0)+', с истекшим сроком '+Number(tasks.overdue_tasks||0)+'. Статус выполнения нужно проверить.');
  if(!s.length)s.push('ПДЗ: '+cash(debt.amount)+'. Клиентов со снижением закупок: '+Number(v.yoy_down_clients||0)+'. Открытых задач: '+Number(tasks.open_tasks||0)+'.');
  if(d.declining_clients?.length && /клиент|почему|кому|куда|заех|забы|план|что делать/.test(targeted)){
-  const names=d.declining_clients.slice(0,3).map(x=>safe(x.client_name)+' (снижение '+cash(x.loss)+', визит '+String(x.last_visit||'нет даты')+', маршрут '+String(x.next_route||'нет даты')+')');
+  const names=d.declining_clients.slice(0,3).map((x:any)=>safe(x.client_name)+' (снижение '+cash(x.loss)+', визит '+String(x.last_visit||'нет даты')+', маршрут '+String(x.next_route||'нет даты')+')');
   s.push('Требуют проверки: '+names.join('; ')+'.');
  }
  return (focus?'По '+focus+'. ':'')+s.join(' ');
@@ -112,7 +112,7 @@ function renderOperations(d:any,focus:string|null,question:string){
 function renderSales(s:any,manager:string|null){
  const m=Array.isArray(s?.managers)?s.managers:[];
  if(manager){
-  const x=m.find(x=>ru(x.manager_name)===ru(manager));
+  const x=m.find((x:any)=>ru(x.manager_name)===ru(manager));
   if(!x)return 'Для '+manager+' нет подтверждённого KPI за выбранный месяц. Нельзя подставлять общий оборот вместо персонального плана.';
   return 'По '+manager+': план '+cash(x.plan)+', факт '+cash(x.actual)+', выполнение '+Number(x.plan_pct||0).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%, до плана '+cash(Math.max(0,Number(x.to_plan)||0))+'.';
  }
@@ -218,7 +218,7 @@ Deno.serve(async(req:Request)=>{
     const r=await svc.rpc('crm_ai360_sales_kpi_snapshot_v1',{p_month:month+'-01'});
     if(r.error||!r.data)throw new Error('sales_snapshot');
     const snapshot=r.data;
-    if(manager)snapshot.managers=(snapshot.managers||[]).filter(x=>ru(x.manager_name)===ru(manager));
+    if(manager)snapshot.managers=(snapshot.managers||[]).filter((x:any)=>ru(x.manager_name)===ru(manager));
     reports.push(put(domain,'crm_ai360_sales_kpi_snapshot_v1',snapshot?.freshness?.last_success_at||now,
       renderSales(snapshot,manager)));return;
    }
