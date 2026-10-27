@@ -12,6 +12,7 @@ assert.equal(df.role,'branch_director');
 assert.equal(gomel.scope.branch_id,'gomel');
 assert.equal(mpp.scope.manager_id,'mpp');
 assert.equal(triovist.role,'triovist_manager');
+assert.equal(principal('tv','manager','triovist',{trustedManagerId:'tv'}).allowed,false,'cannot downgrade unverified Triovist staff to field manager');
 assert.equal(principal('user','boss').allowed,false,'boss is not automatically network-wide');
 assert.equal(principal('manager','manager').allowed,false,'manager requires verified assignment');
 assert.equal(principal('office','office_manager',{trustedManagerId:'office'}).allowed,false);
@@ -27,6 +28,7 @@ assert.equal(authorizeVoiceRequest(mpp,{domain:'triovist'}).allowed,false);
 assert.equal(authorizeVoiceRequest(triovist,{domain:'triovist'}).allowed,true);
 assert.equal(authorizeVoiceRequest(triovist,{domain:'routes'}).allowed,false);
 assert.equal(authorizeVoiceRequest(df,{domain:'triovist'}).allowed,false);
+assert.equal(authorizeVoiceRequest(df,{domain:'payments'}).allowed,false,'payments require independent RPC privilege even for DF');
 for (const actor of [dfs,df,gomel,mpp,triovist]) {
   assert.equal(authorizeVoiceRequest(actor,{domain:'payments',operation:'approve'}).allowed,false);
   assert.equal(authorizeVoiceRequest(actor,{domain:'tasks',operation:'create'}).allowed,false);
