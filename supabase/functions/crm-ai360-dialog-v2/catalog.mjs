@@ -36,6 +36,7 @@ export function clampDomains(names,max=4){
  for(const name of Array.isArray(names)?names:[]){if(typeof name==='string'&&allowed.has(name)&&!out.includes(name))out.push(name);if(out.length>=max)break;}
  return out;
 }
+/** @param {any} svc @param {string} id @param {{manager?:string|null,signal?:AbortSignal|null}} [options] */
 export async function collectTool(svc,id,{manager=null,signal=null}={}){
  const tool=getTool(id);
  if(!tool)return {domain:id,error:'unknown_domain'};
