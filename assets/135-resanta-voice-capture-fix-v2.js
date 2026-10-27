@@ -14,6 +14,7 @@
  let panel,mic,wake,status,field,send,meter;
  let mode='',stream=null,context=null,analyser=null,src=null,clock=0,segment=0,starting=false,busy=false;
  let wakeHeard=false,wakeStart=0,clipCount=0,activeRecorder=null,userOptIn=false,listenEpoch=0;
+ let transcriptFailure='';
  // Short-term conversation context stays only in memory; no transcript storage.
  let resumeConversationUntil=0;
  const RESUME_WINDOW_MS=3*60*1000;
@@ -61,7 +62,7 @@
    }
    if(mic){
      mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
-     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Ручная запись: до 9 секунд. Нажми снова для нового вопроса.';
+     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Ручная запись: до 12 секунд. Повторное нажатие завершит фразу.';
    }
  }
  function reason(e){
@@ -140,9 +141,9 @@
      poll=window.setInterval(()=>{
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
-       if(rms>.0035){loud=true;lastLoud=Date.now();}
+       if(rms>.0020){loud=true;lastLoud=Date.now();}
        // Allow a natural thinking pause in a multi-part director command; keep bounded clips.
-       if(loud && Date.now()-start>1250 && Date.now()-lastLoud>(mode==='wake'?1700:1450))end();
+       if(loud && Date.now()-start>3000 && Date.now()-lastLoud>(mode==='wake'?2200:2700))end();
        if(epoch!==listenEpoch || !mode)end();
      },110);
      timer=window.setTimeout(end,sec*1000);
@@ -150,7 +151,7 @@
  }
  function cloudError(error){
    const code=String(error?.code||error?.context?.error||error?.message||'');
-   if(/voice_daily_limit|429|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (60 фраз).';
+   if(/voice_daily_limit|429|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (180 фраз). Это не ошибка микрофона.';
    if(/speech_provider_unconfigured|503/.test(code))return 'Сервис речи ещё не настроен на сервере CRM.';
    if(/audio_(size|duration)/.test(code))return 'Фраза слишком длинная. Повтори короче.';
    if(/not_authorized|401|403/.test(code))return 'Доступ к серверу речи не подтверждён. Перезайди в CRM.';
@@ -158,13 +159,14 @@
    return 'Не удалось распознать речь через сервер. Ошибка: '+code.slice(0,120);
  }
  async function transcribe(clip,epoch){
+   transcriptFailure='';
    if(!clip||epoch!==listenEpoch || !mode)return null;
    if(!clip.blob?.size || clip.blob.size<900)return '';
-   if(clip.blob.size>500000){info('Запись слишком большая. Скажи короче.');return '';}
+   if(clip.blob.size>500000){transcriptFailure='Запись слишком большая. Скажи короче.';info(transcriptFailure);return null;}
    let session=null;
    try{session=await window.crmEnsureFreshSessionV236166?.(false);}
-   catch(e){info('CRM потеряла авторизацию. Обнови страницу и войди заново.');return null;}
-   if(!session?.access_token){info('Не удалось подтвердить сессию CRM.');return null;}
+   catch(e){transcriptFailure='CRM потеряла авторизацию. Обнови страницу и войди заново.';info(transcriptFailure);return null;}
+   if(!session?.access_token){transcriptFailure='Не удалось подтвердить сессию CRM.';info(transcriptFailure);return null;}
    const form=new FormData(),type=clip.blob.type||'audio/webm';
    form.append('audio',new File([clip.blob], 'question.'+(type.includes('mp4')?'mp4':'webm'),{type}));
    form.append('duration',String(Math.min(16.4,clip.duration)));
@@ -172,9 +174,9 @@
    try{
      const resp=await db.functions.invoke(ENDPOINT,{body:form});
      if(epoch!==listenEpoch||!mode)return null;
-     if(resp.error){let detail=null;try{detail=await resp.error.context?.json?.();}catch{}info(cloudError({message:resp.error.message,code:detail?.error||''}));return null;}
+     if(resp.error){let detail=null;try{detail=await resp.error.context?.json?.();}catch{}transcriptFailure=cloudError({message:resp.error.message,code:detail?.error||''});info(transcriptFailure);return null;}
      return String(resp.data?.text||'').trim();
-   }catch(e){if(epoch===listenEpoch)info(cloudError(e));return null;}
+   }catch(e){transcriptFailure=cloudError(e);if(epoch===listenEpoch)info(transcriptFailure);return null;}
    finally{busy=false;}
  }
  function submit(command){
@@ -200,11 +202,12 @@
  }
  async function manualLoop(epoch){
    try{
-     const clip=await capture(9,epoch);
+     const clip=await capture(12,epoch);
      if(epoch!==listenEpoch || mode!=='manual')return;
-     if(clip && !clip.loud)info('Уровень микрофона низкий. Всё равно пробую распознать записанную фразу…');
+     if(clip && !clip.loud)info('Микрофон улавливает очень тихий сигнал. Проверяю запись через сервер…');
      const phrase=await transcribe(clip,epoch);
      if(epoch!==listenEpoch||mode!=='manual')return;
+     if(phrase===null){await stopAll(transcriptFailure||'Сервис распознавания недоступен.');return;}
      if(phrase && greetingOnly(phrase)){
        // Manual mode: after 'Привет, Ресанта' reply, listen for exactly ONE follow-up
        // without converting an explicit manual session into persistent hot-mic mode.
@@ -212,15 +215,16 @@
        await waitForAssistant(epoch,'manual');
        if(epoch!==listenEpoch||mode!=='manual')return;
        info('Слушаю вопрос после приветствия…');
-       const second=await capture(9,epoch);
+       const second=await capture(12,epoch);
        if(epoch!==listenEpoch||mode!=='manual')return;
        const question=await transcribe(second,epoch);
        if(epoch!==listenEpoch||mode!=='manual')return;
+       if(question===null){await stopAll(transcriptFailure||'Сервис распознавания недоступен.');return;}
        await stopAll();
        if(question)submit(question);
        else info('Вопрос не расслышала. Нажми микрофон ещё раз.');
      }else if(phrase && !noiseOnly(phrase)){await stopAll();submit(phrase);}
-     else {await stopAll();info('Речь не распознана. Попробуй говорить ближе к микрофону.');}
+     else {await stopAll();info('Не получила слова из записи. Проверь, какой микрофон выбран в Яндекс Браузере.');}
    }catch(e){await stopAll(reason(e));}
  }
  async function wakeLoop(epoch){
@@ -235,13 +239,14 @@
        }
        if(clipCount>=50){await stopAll('Завершил сеанс для ограничения расходов на распознавание.');break;}
        if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1){await new Promise(r=>setTimeout(r,350));continue;}
-       const clip=await capture(9,epoch);
+       if(!stream?.active){await stopAll('Микрофон отключился. Проверь устройство ввода Яндекс Браузера.');break;}
+       const clip=await capture(12,epoch);
        if(epoch!==listenEpoch||mode!=='wake')break;
        if(!clip?.loud){info(wakeHeard?'Жду вопрос после приветствия…':'Микрофон включён: ожидаю «Привет, Ресанта»');continue;}
        clipCount++;
        const phrase=await transcribe(clip,epoch);
        if(epoch!==listenEpoch||mode!=='wake')break;
-       if(phrase===null){await stopAll('Сервер распознавания недоступен. Проверь подключение и попробуй ещё раз.');break;}
+       if(phrase===null){await stopAll(transcriptFailure||'Сервер распознавания недоступен.');break;}
        if(!phrase){info('Фраза не распознана. Повтори ближе к микрофону.');continue;}
        if(noiseOnly(phrase)){info('Фрагмент речи слишком короткий. Продолжаю слушать вопрос.');continue;}
        if(wakeHeard){
@@ -286,6 +291,12 @@
    if(starting)return;
    if(automatic && (!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
    if(mode===newMode){
+     // A second manual click completes a phrase and sends it; never silently
+     // discard speech already recorded by cancelling the session.
+     if(newMode==='manual' && activeRecorder?.state==='recording'){
+       activeRecorder.stop();info('Завершаю запись и распознаю вопрос…');return;
+     }
+     if(newMode==='manual' && busy){info('Запись уже распознаётся…');return;}
      if(newMode==='wake'&&!automatic){saveAutoWake(false);resumeConversationUntil=0;acceptedWakeUntil=0;}
      await stopAll('Микрофон выключен. Постоянная активация отключена.');
      return;
@@ -324,7 +335,7 @@
    if(newMode==='wake'&&!automatic)saveAutoWake(true);
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
-     if(newMode==='manual'){info('Слушаю разовую команду (до 9 секунд)…');manualLoop(epoch);}
+     if(newMode==='manual'){info('Слушаю вопрос (до 12 секунд). Нажми кнопку повторно, чтобы закончить раньше.');manualLoop(epoch);}
      else{
        if(continueConversation){resumeConversationUntil=0;info('Продолжаем разговор. Можешь задать вопрос без нового приветствия.');}
        else info('Микрофон включён: ожидаю «Привет, Ресанта»');
@@ -346,7 +357,7 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Два способа: «Спросить голосом» — один вопрос (до 9 секунд); «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 60 распознаваний в день; записи в CRM не сохраняются.';
+   if(note)note.textContent='Два способа: «Спросить голосом» — один вопрос (до 12 секунд); «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 180 распознаваний в день; записи в CRM не сохраняются.';
    mic.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
      // The manual button must work even if wake mode was enabled.
