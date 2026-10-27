@@ -78,13 +78,13 @@ window.crmAI360SalesHandleV1=function(query,ui){
    text=text.replace(/по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu,'по продажам');
  }
  const awaiting=pendingMatch!==null;
- // A new named CRM area is a topic change, not a follow-up about the last manager.
- // Never attach a stale manager to a Triovist/21vek, markdown, promotion or inventory question.
- const newArea=/(триовист|21\s*век|21vek|уценк|стенд|акци|остатк|склад|товар)/i.test(text);
- const explicitManagerDiscussion=/(менеджер|руднев|шкуран|ачинович|сидорович)/i.test(text);
- if(newArea&&!explicitManagerDiscussion){
+ // Explicit section switches must not inherit a manager or month from a previous dialogue.
+ // Resolve pending confirmations first: an unrelated keyword must never bypass approval.
+ const switchArea=/(?:^|\\s)(?:триовист|21\\s*век|21vek|уценк[а-я]*|стенд[а-я]*|акци[а-я]*|остатк[а-я]*|склад[а-я]*)(?:\\s|$)/i.test(text);
+ const namedManager=/(?:^|\\s)(?:руднев[а-я]*|шкуран[а-я]*|ачинович[а-я]*|сидорович[а-я]*)(?:\\s|$)/i.test(text);
+ if(!awaiting && switchArea && !namedManager){
    lastManager=null;lastMonth=null;history=[];
-   return false; // Existing CRM navigation/fallback handles this area; do not invent analytics.
+   return false; // Keep existing navigation; do not improvise data about unconnected sections.
  }
  if(!awaiting&&!topic.test(text)&&!(history.length>0&&follow.test(text)))return false;
  if(pending){ui.answer('Предыдущий аналитический вопрос ещё обрабатывается.');return true;}
