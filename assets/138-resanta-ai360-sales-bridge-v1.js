@@ -78,6 +78,14 @@ window.crmAI360SalesHandleV1=function(query,ui){
    text=text.replace(/по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu,'по продажам');
  }
  const awaiting=pendingMatch!==null;
+ // A new named CRM area is a topic change, not a follow-up about the last manager.
+ // Never attach a stale manager to a Triovist/21vek, markdown, promotion or inventory question.
+ const newArea=/(триовист|21\\s*век|21vek|уценк|стенд|акци|остатк|склад|товар)/i.test(text);
+ const explicitManagerDiscussion=/(менеджер|руднев|шкуран|ачинович|сидорович)/i.test(text);
+ if(newArea&&!explicitManagerDiscussion){
+   lastManager=null;lastMonth=null;history=[];
+   return false; // Existing CRM navigation/fallback handles this area; do not invent analytics.
+ }
  if(!awaiting&&!topic.test(text)&&!(history.length>0&&follow.test(text)))return false;
  if(pending){ui.answer('Предыдущий аналитический вопрос ещё обрабатывается.');return true;}
  if(awaiting){
