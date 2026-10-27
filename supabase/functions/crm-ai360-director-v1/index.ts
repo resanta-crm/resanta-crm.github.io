@@ -17,7 +17,7 @@ const reply=(req:Request,data:unknown,status=200)=>new Response(JSON.stringify(d
 const todayMonth=()=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit'}).formatToParts(new Date());const y=parts.find(p=>p.type==='year')?.value;const m=parts.find(p=>p.type==='month')?.value;return `${y}-${m}`;};
 const todayInMinsk=()=>{
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
- const value=key=>parts.find(x=>x.type===key)?.value||'';
+ const value=(key:string)=>parts.find(x=>x.type===key)?.value||'';
  return value('year')+'-'+value('month')+'-'+value('day');
 };
 async function taskReviewBreakdown(svc:any,manager:string){
@@ -104,7 +104,7 @@ Deno.serve(async(req:Request)=>{
    .order('end_date',{ascending:true}).limit(50);
   if(query.error)return reply(req,{error:'promotions_unavailable'},503);
   const rows=Array.isArray(query.data)?query.data:[];
-  const count=Number.isSafeInteger(query.count)?query.count:rows.length;
+  const count=(typeof query.count==='number' && Number.isSafeInteger(query.count))?query.count:rows.length;
   const dateLabel=today.slice(8,10)+'.'+today.slice(5,7)+'.'+today.slice(0,4);
   const head=count?'На '+dateLabel+' в CRM '+count+' действующих акций со статусом «В работе».':
     'На '+dateLabel+' в CRM нет акций со статусом «В работе», действующих по датам.';
@@ -151,7 +151,7 @@ Deno.serve(async(req:Request)=>{
    if(result.error)throw result.error;
    snapshot=result.data;
   }catch(e){
-   console.warn('AI360 sales snapshot unavailable',String((e as Error)?.code||(e as Error)?.message||e).slice(0,130));
+   console.warn('AI360 sales snapshot unavailable',String((e as {code?:string;message?:string})?.code||(e as Error)?.message||e).slice(0,130));
    return reply(req,{error:'sales_data_unavailable'},503);
   }
   if(!snapshot||typeof snapshot!=='object')return reply(req,{error:'empty_sales_snapshot'},503);
@@ -181,7 +181,7 @@ Deno.serve(async(req:Request)=>{
    operations=ops.data;
    if(!operations||typeof operations!=='object')throw new Error('empty_operations');
   }catch(e){
-   console.warn('AI360 operations snapshot unavailable',String((e as Error)?.code||(e as Error)?.message||e).slice(0,130));
+   console.warn('AI360 operations snapshot unavailable',String((e as {code?:string;message?:string})?.code||(e as Error)?.message||e).slice(0,130));
    return reply(req,{error:'operations_unavailable'},503);
   }
  }
@@ -253,7 +253,7 @@ Deno.serve(async(req:Request)=>{
    if(others.error)return reply(req,{error:'manager_client_scope_unavailable'},503);
    foreignClientNames=(others.data||[]).map((c:any)=>String(c.name||'')).filter(Boolean);
  }
- const evidence=selectEvidence(intent,snapshot,operations);
+ const evidence:any=selectEvidence(intent,snapshot,operations);
  const secret=Deno.env.get('OPENAI_API_KEY');
  if(!secret)return reply(req,{error:'llm_not_configured'},503);
  // Only calls that actually need explanation/recommendations consume the LLM quota.
