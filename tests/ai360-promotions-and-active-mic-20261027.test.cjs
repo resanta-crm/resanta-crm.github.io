@@ -9,14 +9,14 @@ const launcher=fs.readFileSync('assets/137-resanta-ai360-lazy-launch-v1.js','utf
 assert.ok(server.indexOf('user.id!==OWNER_ID') < server.indexOf("payload?.kind==='promotions_today'"),'promo endpoint is behind director auth');
 assert.match(server,/\.eq\('status','in_work'\)\.lte\('start_date',today\)\.gte\('end_date',today\)/);
 assert.match(server,/answer_verified:true,intent:'promotions'/);
-assert.match(capture,/const clip=await capture\(9,epoch\)/);
-assert.match(capture,/const second=await capture\(9,epoch\)/);
+assert.match(capture,/const clip=await capture\(12,epoch\)/);
+assert.match(capture,/const second=await capture\(12,epoch\)/);
 const micIdx=capture.indexOf("mic.addEventListener('click'");
 const wakeIdx=capture.indexOf("wake.addEventListener('click'",micIdx);
 const micHandler=capture.slice(micIdx,wakeIdx);
 assert.match(micHandler,/void start\('manual'\)/);
 assert.doesNotMatch(micHandler,/if\(mode==='wake'\)/);
-assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=14/);
+assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=15/);
 assert.match(launcher,/138-resanta-ai360-sales-bridge-v1.js\?v=8/);
 const sends=[],answers=[];
 const ctx={
