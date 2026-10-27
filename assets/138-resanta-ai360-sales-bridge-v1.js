@@ -78,8 +78,17 @@ window.crmAI360SalesHandleV1=function(query,ui){
    text=text.replace(/по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu,'по продажам');
  }
  const awaiting=pendingMatch!==null;
- if(!awaiting&&!topic.test(text)&&!(history.length>0&&follow.test(text)))return false;
  if(pending){ui.answer('Предыдущий аналитический вопрос ещё обрабатывается.');return true;}
+ // Explicit section switches must not inherit a manager or month from a previous dialogue.
+ // Resolve pending confirmations first: an unrelated keyword must never bypass approval.
+ const switchArea=/(?:^|\s)(?:триовист|21\s*век|21vek|уценк[а-я]*|стенд[а-я]*|акци[а-я]*|остатк[а-я]*|склад[а-я]*)(?:\s|$)/i.test(text);
+ const namedManager=/(?:^|\s)(?:руднев[а-я]*|шкуран[а-я]*|ачинович[а-я]*|сидорович[а-я]*)(?:\s|$)/i.test(text);
+ if(!awaiting && switchArea && !namedManager){
+   lastManager=null;lastMonth=null;history=[];
+   return false; // Keep existing navigation; do not improvise data about unconnected sections.
+ }
+ if(!awaiting&&!topic.test(text)&&!(history.length>0&&follow.test(text)))return false;
+
  if(awaiting){
   const choice=pendingMatch;
   if(no.test(text)){
@@ -137,7 +146,10 @@ function ask(text,ui,confirmedManager){
    // and "Кого отгрузить?", not just "почему" follow-ups.
    if(!focus && !networkAsked && lastManager && history.length)focus=lastManager;
    const explicitMonth=parseMonth(text);
-   const selectedMonth=explicitMonth||((focus && history.length)?lastMonth:null);
+   // Keep the previous period only for the same manager. A new manager or
+   // network-wide question must never reuse an unrelated manager's month.
+   const sameManager=!!focus && !!lastManager && focus===lastManager && history.length>0;
+   const selectedMonth=explicitMonth||(sameManager?lastMonth:null);
    const payload={message:text,history:history.slice(-6)};
    if(selectedMonth)payload.month=selectedMonth;
    if(focus)payload.focusManager=focus;
@@ -151,7 +163,7 @@ function ask(text,ui,confirmedManager){
    history=history.slice(-6);
    lastMonth=String(result.data?.month||'');
    if(focus)lastManager=focus;
-   if(!focus && networkAsked)lastManager=null;
+   if(!focus && networkAsked){lastManager=null;lastMonth=null;history=[];}
    const rawSummary=String(result.data?.speech_summary||'').trim();
    // The server authorizes and grounds this optional summary. Client merely
    // uses it for speech; full verified text always appears unchanged.
