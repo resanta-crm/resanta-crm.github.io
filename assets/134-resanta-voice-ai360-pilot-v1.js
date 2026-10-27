@@ -224,6 +224,10 @@
       answer('Не удалось открыть защищённый брифинг директора. Перезагрузи окно Леры. Данные CRM не менялись.');
       return;
     }
+    if (typeof window.crmAI360UnifiedDialogHandleV1 === 'function') {
+      try { if (window.crmAI360UnifiedDialogHandleV1(query, {answer, textStatus})) return; }
+      catch (e) { console.warn('AI360 unified conversation unavailable',e); }
+    }
     // Optional sales/KPI dialogue. No background requests; director action only.
     if (typeof window.crmAI360SalesHandleV1 === 'function') {
       try { if (window.crmAI360SalesHandleV1(query, {answer, textStatus})) return; }
