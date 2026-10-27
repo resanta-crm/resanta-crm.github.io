@@ -6,7 +6,7 @@ if(/Android/i.test(navigator.userAgent||'') || window.__resantaAI360LazyLaunchV1
 window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=15',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=16',
  './assets/135-resanta-voice-capture-fix-v2.js?v=13',
  './assets/136-resanta-voice-quality-v3.js?v=16',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
