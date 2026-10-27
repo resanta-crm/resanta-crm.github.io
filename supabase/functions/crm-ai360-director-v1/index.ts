@@ -94,6 +94,31 @@ Deno.serve(async(req:Request)=>{
  let payload:any;
  try{payload=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
  if(payload?.kind==='status')return reply(req,{ready:!!Deno.env.get('OPENAI_API_KEY'),mode:'director_readonly'});
+ if(payload?.kind==='promotions_today'){
+  // Authoritative read-only answer, after the verified director JWT and profile.
+  // Only actively running, date-valid promotions; rejected/draft proposals are excluded.
+  const today=todayInMinsk();
+  const query=await svc.from('promotions')
+   .select('title,client_name,start_date,end_date,mechanics,status',{count:'exact'})
+   .eq('status','in_work').lte('start_date',today).gte('end_date',today)
+   .order('end_date',{ascending:true}).limit(50);
+  if(query.error)return reply(req,{error:'promotions_unavailable'},503);
+  const rows=Array.isArray(query.data)?query.data:[];
+  const count=Number.isSafeInteger(query.count)?query.count:rows.length;
+  const dateLabel=today.slice(8,10)+'.'+today.slice(5,7)+'.'+today.slice(0,4);
+  const head=count?'На '+dateLabel+' в CRM '+count+' действующих акций со статусом «В работе».':
+    'На '+dateLabel+' в CRM нет акций со статусом «В работе», действующих по датам.';
+  const items=rows.slice(0,8).map((p:any,i:number)=>{
+    const title=String(p.title||'Акция без названия').replace(/[\\r\\n]+/g,' ').slice(0,120);
+    const client=String(p.client_name||'Клиент не указан').replace(/[\\r\\n]+/g,' ').slice(0,90);
+    const end=String(p.end_date||'').slice(0,10);
+    return (i+1)+'. '+title+' — '+client+(end?', до '+end.slice(8,10)+'.'+end.slice(5,7):'');
+  });
+  const answer=head+(items.length?'\n'+items.join('\n'):'')+
+    (count>items.length?'\nПоказаны первые '+items.length+' из '+count+'. Полный список — в разделе «Акции».':'');
+  return reply(req,{answer,answer_verified:true,intent:'promotions',generated_by:'crm_rules',
+    as_of:today,count,shown:items.length,source:'CRM: promotions, status=in_work, active date range'});
+ }
  if(payload?.kind==='directory'){
   // Director-only, read-only roster; no email, IDs, or contact details returned.
   const roster=await svc.from('users').select('name,role').eq('role','manager').limit(60);
