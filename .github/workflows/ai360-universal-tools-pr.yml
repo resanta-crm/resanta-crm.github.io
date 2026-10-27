@@ -2,6 +2,10 @@ name: AI360 universal tools safety
 on:
   pull_request:
     paths:
+      - 'index.html'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'tests/ai360-universal-browser-20261027.test.cjs'
       - 'supabase/functions/_shared/ai360-universal-catalog.mjs'
       - 'supabase/functions/crm-ai360-dialog-v2/**'
       - 'tests/ai360-universal-tools-20261027.test.mjs'
@@ -22,6 +26,9 @@ jobs:
           node --check supabase/functions/_shared/ai360-universal-catalog.mjs
           node --check supabase/functions/crm-ai360-dialog-v2/catalog.mjs
           node tests/ai360-universal-tools-20261027.test.mjs
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node tests/ai360-universal-browser-20261027.test.cjs
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
