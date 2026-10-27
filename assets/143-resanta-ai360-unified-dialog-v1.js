@@ -30,7 +30,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  const question=String(text||'').trim().slice(0,400);
  if(!question)return false;
  // Navigation remains a local, explicit CRM UI operation.
- if(/^(?:открой|перейди|вернись|покажи раздел)\b/i.test(question))return false;
+ if(/^(?:открой|перейди|вернись|покажи раздел)(?:\s|$)/i.test(question))return false;
  if(pending){ui.answer('Ещё проверяю предыдущий вопрос в CRM.');return true;}
  pending=true;window.__resantaAI360PendingV1=true;
  ui.textStatus('Подбираю проверенные источники CRM…');
