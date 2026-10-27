@@ -28,3 +28,5 @@ jobs:
         run: |
           node tests/ai360-conversation-context-20261027.test.mjs
           node tests/ai360-topic-switch-20261027.test.cjs
+      - name: Task approval remains test-only
+        run: node tests/ai360-task-approval-backend-v1.test.cjs
