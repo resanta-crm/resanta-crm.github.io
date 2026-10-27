@@ -9,6 +9,7 @@ const today=()=>{const z=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Minsk
 const base=server.replace(/^import [^\n]+\n/m,'')
  .replace('let body:any;','let body;')
  .replaceAll('(x:any)','(x)').replaceAll('(a:any,b:any)','(a,b)')
+ .replace("req.headers.get('Origin')!:","req.headers.get('Origin'):")
  .replace('const warnings:string[]=[];','const warnings=[];')
  .replace('const items:any[]=[];','const items=[];');
 function harness({guest=false,triUnavailable=false,missingOps=false}={}){
