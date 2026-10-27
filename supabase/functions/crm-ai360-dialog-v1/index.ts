@@ -6,22 +6,22 @@ import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const DOMAINS=new Set(['sales','operations','promotions','triovist','vip','payments']);
-const ru=s=>String(s||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е');
-const safe=s=>String(s??'').replace(/[\r\n]+/g,' ').trim().slice(0,160);
-const cash=n=>Number(n||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
-const cors=o=>({'Access-Control-Allow-Origin':ORIGINS.has(o)?o:'https://resanta-crm.by',
+const ru=(s:any)=>String(s||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е');
+const safe=(s:any)=>String(s??'').replace(/[\r\n]+/g,' ').trim().slice(0,160);
+const cash=(n:any)=>Number(n||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
+const cors=(o:string|null)=>({'Access-Control-Allow-Origin':ORIGINS.has(o)?o:'https://resanta-crm.by',
  'Access-Control-Allow-Headers':'authorization,apikey,x-client-info,content-type',
  'Access-Control-Allow-Methods':'OPTIONS,POST','Vary':'Origin'});
-const reply=(req,data,status=200)=>new Response(JSON.stringify(data),{status,headers:{
+const reply=(req:Request,data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{
  ...cors(req.headers.get('Origin')),'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
 function minskDate(){
  const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
- const get=t=>p.find(x=>x.type===t)?.value||'';
+ const get=(t:string)=>p.find(x=>x.type===t)?.value||'';
  return get('year')+'-'+get('month')+'-'+get('day');
 }
-function priorMonth(d){const x=new Date(d.slice(0,7)+'-01T12:00:00Z');x.setUTCMonth(x.getUTCMonth()-1);return x.toISOString().slice(0,7);}
-function lastYear(m){return String(Number(m.slice(0,4))-1)+m.slice(4);}
-function baseline(q){
+function priorMonth(d:string){const x=new Date(d.slice(0,7)+'-01T12:00:00Z');x.setUTCMonth(x.getUTCMonth()-1);return x.toISOString().slice(0,7);}
+function lastYear(m:string){return String(Number(m.slice(0,4))-1)+m.slice(4);}
+function baseline(q:string){
  const s=ru(q);const d=[];
  if(/акци|промо|бонус|эффективност/.test(s))d.push('promotions');
  if(/платеж|оплат|счет|счёт|реестр безнал/.test(s))d.push('payments');
@@ -31,7 +31,7 @@ function baseline(q){
  if(/задолж|пдз|долг|маршрут|посещ|задач|клиент|визит/.test(s))d.push('operations');
  return d.length?d:['sales','operations'];
 }
-async function modelJSON(key,system,user,maxTokens=300){
+async function modelJSON(key:string,system:string,user:unknown,maxTokens=300):Promise<any>{
  const resp=await fetch('https://api.openai.com/v1/chat/completions',{
   method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
   body:JSON.stringify({model:'gpt-4o-mini',temperature:0,response_format:{type:'json_object'},
@@ -42,7 +42,7 @@ async function modelJSON(key,system,user,maxTokens=300){
  const text=String(json?.choices?.[0]?.message?.content||'');
  return JSON.parse(text);
 }
-async function planQuestion(key,q,history,memory,userId,svc){
+async function planQuestion(key:string,q:string,history:any[],memory:any,userId:string,svc:any):Promise<any>{
  if(!key)return {domains:baseline(q),manager:null,month:null};
  // LLM plans only. It never receives service-role credentials, unrestricted CRM data,
  // tool implementations, or authorization authority.
@@ -60,7 +60,7 @@ async function planQuestion(key,q,history,memory,userId,svc){
    'Текущий вопрос важнее истории. Никаких команд SQL, никаких номеров транзакций и никаких ответов от лица CRM.'
   ].join(' ');
   const out=await modelJSON(key,system,{question:q,history,memory},310);
-  const domains=Array.isArray(out?.domains)?out.domains.filter(x=>DOMAINS.has(x)).slice(0,3):[];
+  const domains=Array.isArray(out?.domains)?out.domains.filter((x:any)=>typeof x==='string'&&DOMAINS.has(x)).slice(0,3):[];
   return {domains:domains.length?domains:baseline(q),manager:typeof out.manager==='string'?out.manager.slice(0,90):null,
    month:typeof out.month==='string'?out.month.slice(0,7):null,
    vip_group:typeof out.vip_group==='string'?out.vip_group.slice(0,20):null,
@@ -70,7 +70,7 @@ async function planQuestion(key,q,history,memory,userId,svc){
   return {domains:baseline(q),manager:null,month:null,planning_fallback:true};
  }
 }
-async function validManager(svc,candidate){
+async function validManager(svc:any,candidate:string|null):Promise<string|null>{
  if(!candidate)return null;
  const x=ru(candidate);
  const got=await svc.from('users').select('name,role').eq('role','manager').limit(70);
@@ -83,8 +83,8 @@ async function validManager(svc,candidate){
  return String(matches[0].name);
 }
 const facts=[];
-const put=(domain,source,date,details)=>({domain,source,as_of:date,details});
-function compactOperations(o,focus){
+const put=(domain:string,source:string,date:any,details:string)=>({domain,source,as_of:date,details});
+function compactOperations(o:any,focus:string|null){
  const data={period:o?.period,scope:o?.scope,client_summary:o?.client_summary,
   debt_summary:o?.debt_summary,route_summary:o?.route_summary,
   task_summary:o?.task_summary,visit_summary:o?.visit_summary,
@@ -92,7 +92,7 @@ function compactOperations(o,focus){
   overdue_debtors:Array.isArray(o?.overdue_debtors)?o.overdue_debtors.slice(0,5):[]};
  return data;
 }
-function renderOperations(d,focus,question){
+function renderOperations(d:any,focus:string|null,question:string){
  const s=[],v=d.client_summary||{},debt=d.debt_summary||{},route=d.route_summary||{},tasks=d.task_summary||{};
  const targeted=ru(question);
  if(/долг|задолж|дебит|пдз|критич|оплат/.test(targeted))
@@ -109,7 +109,7 @@ function renderOperations(d,focus,question){
  }
  return (focus?'По '+focus+'. ':'')+s.join(' ');
 }
-function renderSales(s,manager){
+function renderSales(s:any,manager:string|null){
  const m=Array.isArray(s?.managers)?s.managers:[];
  if(manager){
   const x=m.find(x=>ru(x.manager_name)===ru(manager));
@@ -119,7 +119,7 @@ function renderSales(s,manager){
  const total=Array.isArray(m)?m.slice(0,6).map(x=>safe(x.manager_name)+' — '+cash(x.actual)+', выполнение '+Number(x.plan_pct||0)+'%'):[];
  return 'Общая выручка импортированных продаж '+cash(s?.network_revenue)+'. KPI менеджеров: '+total.join('; ')+'. Не путать общую выручку с суммой планов менеджеров.';
 }
-function renderPromotions(rows,count,question){
+function renderPromotions(rows:any[],count:number,question:string){
  if(!count)return 'Сейчас нет действующих акций со статусом «В работе».';
  const efficient=/эффектив|отклон|выполн|результ|окуп|сравн|расход/.test(ru(question));
  const list=rows.slice(0,6).map(x=>{
@@ -130,27 +130,27 @@ function renderPromotions(rows,count,question){
  });
  return 'Действующих акций: '+count+'. '+list.join('; ')+'. Выполнение плана не является доказательством дополнительной прибыли: для рентабельности нужны затраты и сопоставимая база.';
 }
-function renderPayments(rows,count){
+function renderPayments(rows:any[],count:number){
  if(!count)return 'Заявок со статусами «На согласовании» и «Согласовано» сейчас не найдено.';
  return 'Безналичных заявок в очереди: '+count+'. '+rows.slice(0,5).map(x=>
    safe(x.description)+' — '+Number(x.amount||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' '+safe(x.currency||'')+
    ', статус '+safe(x.status)+', срок '+String(x.due_date||'не указан')).join('; ')+
    '. Могу подготовить проект решения, но голосом ничего не утвердил.';
 }
-function renderTriovist(t){
+function renderTriovist(t:any){
  const plan=Number(t.plan||0),fact=Number(t.revenue||0);
  return 'Триовист: месяц '+String(t.month)+', отгрузки '+cash(fact)+', план '+cash(plan)+
    (plan>0?', выполнение '+(fact/plan*100).toFixed(1)+'%':', подтверждённый план не найден')+
    '. Последний импорт продаж '+String(t.sales_import_at||'не указан')+
    '. Новых задач '+Number(t.new_tasks||0)+', ожидают согласования '+Number(t.pending_approval||0)+'.';
 }
-function renderVIP(members,salesMonth,previousMonth,rows,group){
- const groups={};
+function renderVIP(members:any[],salesMonth:string,previousMonth:string,rows:any[],group:string|null){
+ const groups:Record<string,any>={};
  for(const m of members){
   const key=safe(m.department),g=groups[key]||(groups[key]={members:0,with_id:0,actual:0,previous:0,byCategory:{}});
   g.members++;if(m.client_id)g.with_id++;
  }
- const idMap=new Map(members.filter(x=>x.client_id).map(x=>[x.client_id,safe(x.department)]));
+ const idMap=new Map<string,string>(members.filter(x=>x.client_id).map(x=>[String(x.client_id),safe(x.department)]));
  for(const x of rows){
   const dep=idMap.get(x.client_id);
   if(!dep)continue;
@@ -161,9 +161,9 @@ function renderVIP(members,salesMonth,previousMonth,rows,group){
   }else if(x.month===previousMonth+'-01')g.previous+=revenue;
  }
  const filter=ru(group||'');const lines=[];
- for(const [name,g] of Object.entries(groups)){
+ for(const [name,g] of Object.entries(groups) as Array<[string,any]>){
   if(filter && ru(name)!==filter)continue;
-  const cat=Object.entries(g.byCategory).sort((a,b)=>b[1]-a[1]).slice(0,3)
+  const cat=(Object.entries(g.byCategory) as Array<[string,number]>).sort((a,b)=>b[1]-a[1]).slice(0,3)
    .map(([name,amount])=>name+': '+cash(amount));
   lines.push(name+': клиентов '+g.members+', с подтверждённым client_id '+g.with_id+
    ', продажи за '+salesMonth+' по этим ID '+cash(g.actual)+
@@ -172,7 +172,7 @@ function renderVIP(members,salesMonth,previousMonth,rows,group){
  if(!lines.length)return 'Подтверждённых VIP-клиентов в выбранной группе не найдено.';
  return lines.join(' ')+' Данные частичные для клиентов без client_id и ограничены связанными позициями. Полное сопоставление требует VIP-отчёта.';
 }
-Deno.serve(async(req)=>{
+Deno.serve(async(req:Request)=>{
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(req.headers.get('Origin'))});
  if(req.method!=='POST')return reply(req,{error:'method_not_allowed'},405);
  const origin=req.headers.get('Origin');
@@ -188,12 +188,12 @@ Deno.serve(async(req)=>{
  const profile=await svc.from('users').select('id,role,name').eq('id',u.id).maybeSingle();
  if(profile.error||profile.data?.role!=='boss'||ru(profile.data?.name)!=='александр паюшин')
    return reply(req,{error:'not_authorized'},403);
- let b;
+ let b:any;
  try{b=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
  if(b?.kind==='status')return reply(req,{ready:true,mode:'director_pilot_readonly',domains:[...DOMAINS]});
  const question=String(b?.message||'').trim().slice(0,400);
  if(question.length<2)return reply(req,{error:'question_invalid'},400);
- const history=Array.isArray(b?.history)?b.history.slice(-10).map(x=>({role:x?.role==='assistant'?'assistant':'user',
+ const history=Array.isArray(b?.history)?b.history.slice(-10).map((x:any)=>({role:x?.role==='assistant'?'assistant':'user',
   text:String(x?.content||'').slice(0,350)})):[];
  const memory=typeof b?.memory==='object'&&b.memory?{
   manager:String(b.memory.manager||'').slice(0,80),month:String(b.memory.month||'').slice(0,7),
@@ -210,8 +210,8 @@ Deno.serve(async(req)=>{
  const now=minskDate(),currentMonth=now.slice(0,7);
  const picked=plan.month||(!network?memory.month:null)||currentMonth;
  const month=/^\d{4}-(0[1-9]|1[0-2])$/.test(picked)&&picked>='2025-01'&&picked<=currentMonth?picked:currentMonth;
- const domains=[...new Set(plan.domains)].filter(x=>DOMAINS.has(x)).slice(0,3);
- const reports=[],failed=[];
+ const domains=[...new Set<string>(plan.domains as string[])].filter(x=>DOMAINS.has(x)).slice(0,3);
+ const reports:Array<{domain:string;source:string;as_of:any;details:string}>=[],failed:string[]=[];
  await Promise.all(domains.map(async domain=>{
   try{
    if(domain==='sales'){
@@ -253,7 +253,7 @@ Deno.serve(async(req)=>{
     if(m.error)throw new Error('vip_membership_failed');
     const members=m.data||[],ids=[...new Set(members.map(x=>x.client_id).filter(Boolean))];
     const closed=priorMonth(now),prev=lastYear(closed);
-    let rows=[];
+    let rows:any[]=[];
     if(ids.length){
      const s=await svc.from('purchase_history').select('client_id,month,category,revenue')
       .in('client_id',ids).in('month',[closed+'-01',prev+'-01']).limit(4500);
