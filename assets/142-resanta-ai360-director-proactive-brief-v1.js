@@ -13,6 +13,26 @@ function allowed(){
  document.getElementById('app')?.style.display!=='none';}catch{return false;}
 }
 const safe=(v,max=200)=>String(v??'').trim().slice(0,max);
+const ordinal=['Первый','Второй','Третий','Четвёртый','Пятый'];
+// Speech is a *fact-based* spoken rendering of the same five server cards, not
+// a separate LLM summary. No table names, import internals or stale warnings
+// spoken aloud. Exact figures and recommended decisions remain grounded.
+function speechBrief(data){
+ if(!Array.isArray(data?.cards)||data.cards.length!==5)return '';
+ const spoken=data.cards.map((c,i)=>{
+   if(!c?.fact||!c?.title||!c?.action)return '';
+   const action=String(c.action).trim();
+   const period=action.search(/[.!?](?:\s|$)/);
+   const firstAction=(period>=0?action.slice(0,period+1):action).slice(0,240).trim();
+   return ordinal[i]+' приоритет. '+safe(c.title,130)+'. '+
+     safe(c.fact,500)+'. Что делать: '+firstAction;
+ });
+ if(spoken.some(x=>!x))return '';
+ return ('Брифинг директора на '+safe(data.as_of,10)+'. '+
+   spoken.join(' ')+' Все пять направлений проверены. '+
+   'Подробные источники и ограничения есть на экране. '+
+   'Никакие поручения не созданы.').replace(/\s+/g,' ').trim();
+}
 async function errorCode(err){
  try{const json=await err?.context?.json?.();return String(json?.error||err?.message||'request_failed');}
  catch{return String(err?.message||'request_failed');}
@@ -29,7 +49,15 @@ function present(data){
   '\nПредлагаю: '+safe(x.action,400)+
   '\nИсточник: '+safe(x.source,180)+' · данные '+safe(x.as_of,35);
  });
- const warnings=Array.isArray(data.warnings)?data.warnings.slice(0,5).map(x=>'• '+safe(x,250)):[];
+ const warnings=Array.isArray(data.warnings)?data.warnings.slice(0,5).map(x=>{
+  // Do not cut source warnings mid-word or mid-sentence like the previous
+  // arbitrary 250-character clipping did.
+  const value=String(x??'').trim();
+  if(value.length<=850)return '• '+value;
+  const prefix=value.slice(0,820);
+  const sentence=prefix.match(/^[\s\S]*[.!?](?=\s|$)/);
+  return '• '+(sentence&&sentence[0].length>=320?sentence[0]:prefix.replace(/\s+\S*$/,'')+'…');
+}):[];
  return title+lines.join('\n')+
   (warnings.length?'\n\n**Проверить качество данных:**\n'+warnings.join('\n'):'')+
   '\n\n**Только рекомендации. Ничего не создано, никому не отправлено.**';
@@ -52,7 +80,7 @@ async function requestBrief(ui){
    if(!allowed())return;
    const message=present(res.data);
    lastAsOf=String(res.data.as_of);
-   ui.answer(message,{speechSummary:safe(res.data.speech_summary,220)});
+   ui.answer(message,{briefingVoiceText:speechBrief(res.data)});
    if(feedback)feedback.textContent='Брифинг '+lastAsOf+' готов · 5 приоритетов · только чтение';
  }catch(e){
    if(!allowed())return;
