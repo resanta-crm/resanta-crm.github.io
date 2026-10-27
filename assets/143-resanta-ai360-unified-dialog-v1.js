@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(/Android/i.test(navigator.userAgent||'')||window.crmAI360UnifiedDialogHandleV1)return;
-const ENDPOINT='crm-ai360-dialog-v1';
+const ENDPOINT='crm-ai360-dialog-v2';
 let history=[],memory={},pending=false;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
@@ -40,9 +40,12 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
     ?await window.crmEnsureFreshSessionV236166(false)
     :await db.auth.getSession().then(x=>x?.data?.session);
    if(!session?.access_token)throw new Error('not_authorized');
-   const result=await db.functions.invoke(ENDPOINT,{body:{
-    message:question,history:history.slice(-10),memory
-   }});
+   const payload={message:question,history:history.slice(-10),memory};
+   let result=await db.functions.invoke(ENDPOINT,{body:payload});
+   // Only unknown endpoint is retried with stable v1; never double a failed
+   // database request during a service slowdown or authentication error.
+   if(result.error && Number(result.error?.context?.status)===404)
+     result=await db.functions.invoke('crm-ai360-dialog-v1',{body:payload});
    if(result.error)throw new Error(await errorCode(result.error));
    if(!allowed())return;
    const data=result.data||{};
