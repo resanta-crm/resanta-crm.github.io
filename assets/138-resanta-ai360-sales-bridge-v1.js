@@ -146,7 +146,10 @@ function ask(text,ui,confirmedManager){
    // and "Кого отгрузить?", not just "почему" follow-ups.
    if(!focus && !networkAsked && lastManager && history.length)focus=lastManager;
    const explicitMonth=parseMonth(text);
-   const selectedMonth=explicitMonth||((focus && history.length)?lastMonth:null);
+   // Keep the previous period only for the same manager. A new manager or
+   // network-wide question must never reuse an unrelated manager's month.
+   const sameManager=!!focus && !!lastManager && focus===lastManager && history.length>0;
+   const selectedMonth=explicitMonth||(sameManager?lastMonth:null);
    const payload={message:text,history:history.slice(-6)};
    if(selectedMonth)payload.month=selectedMonth;
    if(focus)payload.focusManager=focus;
@@ -160,7 +163,7 @@ function ask(text,ui,confirmedManager){
    history=history.slice(-6);
    lastMonth=String(result.data?.month||'');
    if(focus)lastManager=focus;
-   if(!focus && networkAsked)lastManager=null;
+   if(!focus && networkAsked){lastManager=null;lastMonth=null;history=[];}
    const rawSummary=String(result.data?.speech_summary||'').trim();
    // The server authorizes and grounds this optional summary. Client merely
    // uses it for speech; full verified text always appears unchanged.
