@@ -218,8 +218,13 @@ async function approvalRequest(kind,ui){
      }else throw new Error('invalid_test_commit_result');
    }
  }catch(e){
-   if(allowed())ui.answer('Тестовое сохранение не подтверждено: '+safe(e?.message,150)+
-     '. Скажи «Покажи тестовые поручения» перед повтором. Рабочие задачи отключены.');
+   if(allowed()){
+     const code=String(e?.message||e);
+     ui.answer(code==='test_client_already_saved'?
+       'По этому клиенту уже есть сохранённый тестовый черновик. Второй не создаю. Скажи «Покажи тестовые поручения», затем запроси новые предложения для Руднева. Рабочие задачи отключены.':
+       'Тестовое сохранение не подтверждено: '+safe(code,150)+
+       '. Скажи «Покажи тестовые поручения» перед повтором. Рабочие задачи отключены.');
+   }
    // Retain approval ID for an idempotent manual retry in case of network error.
  }finally{
    approvalBusy=false;root.__resantaAI360PendingV1=false;

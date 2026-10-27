@@ -116,6 +116,13 @@ Deno.serve(async req=>{
       error(req,'approval_id_conflict',409);
   }
 
+  // A second voice session must not save the SAME client again under another approval_id.
+  // Database trigger also serializes concurrent inserts, avoiding a check-then-insert race.
+  const prior=await svc.from(TEST_TABLE).select('client_id').eq('created_by',user.id)
+    .in('client_id',ids).limit(4);
+  if(prior.error||prior.data?.length>=4)return error(req,'test_draft_verification_unavailable',503);
+  if((prior.data||[]).length)return error(req,'test_client_already_saved',409);
+
   // Re-check every proposed client against the current authenticated manager,
   // current decline snapshot, existing tasks and future routes.
   const snap=await svc.rpc('crm_ai360_operations_snapshot_v1',{

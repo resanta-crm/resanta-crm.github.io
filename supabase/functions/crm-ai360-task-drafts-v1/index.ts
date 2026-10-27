@@ -153,21 +153,26 @@ Deno.serve(async(req:Request)=>{
   if(!unique.length)return reply(req,{items:[],as_of:today,manager:manager.name,mode:'readonly'});
   const ids=unique.map((x:any)=>x.c.id);
   // Independent read-only checks can run in parallel; fail closed on either error.
-  const [tasks,routes]=await Promise.all([
+  const [tasks,routes,savedTests]=await Promise.all([
     svc.from('tasks').select('client_id,done,review_status')
       .in('client_id',ids).or('done.eq.false,done.is.null').limit(150),
     svc.from('route_plans').select('client_id,visit_date,removed')
       .in('client_id',ids).gte('visit_date',today).lte('visit_date',deadline(today))
-      .or('removed.eq.false,removed.is.null').limit(150)
+      .or('removed.eq.false,removed.is.null').limit(150),
+    svc.from('ai360_voice_test_drafts_v1').select('client_id')
+      .eq('created_by',user.id).in('client_id',ids).limit(30)
   ]);
   if(tasks.error)return reply(req,{error:'task_verification_unavailable'},503);
   if(routes.error)return reply(req,{error:'route_verification_unavailable'},503);
+  if(savedTests.error||(savedTests.data||[]).length>=30)
+    return reply(req,{error:'test_draft_verification_unavailable'},503);
   // Fail closed on truncated checks: never claim no duplicates when results are incomplete.
   if((tasks.data||[]).length>=150||(routes.data||[]).length>=150)
     return reply(req,{error:'verification_incomplete'},503);
   const busy=new Set((tasks.data||[]).map((x:any)=>x.client_id));
   const scheduled=new Set((routes.data||[]).map((x:any)=>x.client_id));
-  const verified=unique.filter((x:any)=>!busy.has(x.c.id)&&!scheduled.has(x.c.id))
+  const alreadyTested=new Set((savedTests.data||[]).map((x:any)=>x.client_id));
+  const verified=unique.filter((x:any)=>!busy.has(x.c.id)&&!scheduled.has(x.c.id)&&!alreadyTested.has(x.c.id))
     .map((x:any)=>({...x,plan:draftFor(x.r,today)}));
   // Select factually different next actions when the evidence permits;
   // fall back to highest-ranked remaining clients, never invent diversity.
