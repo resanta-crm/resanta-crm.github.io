@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import { deriveVoicePrincipal,authorizeVoiceRequest,sessionMemoryKey } from '../supabase/functions/_shared/ai360-access-policy.mjs';
+const principal = (id,role,access_scope='standard',extra={}) =>
+  deriveVoicePrincipal({authUserId:id,profile:{id,role,access_scope},networkDirectorId:'dfs',...extra});
+const dfs=principal('dfs','boss');
+const df=principal('df','boss','standard',{trustedBranchId:'vitebsk'});
+const gomel=principal('gomel','boss','standard',{trustedBranchId:'gomel'});
+const mpp=principal('mpp','manager','standard',{trustedManagerId:'mpp'});
+const triovist=principal('tv','manager','triovist',{trustedTriovistAccess:true});
+assert.equal(dfs.scope.kind,'network');
+assert.equal(df.role,'branch_director');
+assert.equal(gomel.scope.branch_id,'gomel');
+assert.equal(mpp.scope.manager_id,'mpp');
+assert.equal(triovist.role,'triovist_manager');
+assert.equal(principal('tv','manager','triovist',{trustedManagerId:'tv'}).allowed,false,'cannot downgrade unverified Triovist staff to field manager');
+assert.equal(principal('user','boss').allowed,false,'boss is not automatically network-wide');
+assert.equal(principal('manager','manager').allowed,false,'manager requires verified assignment');
+assert.equal(principal('office','office_manager',{trustedManagerId:'office'}).allowed,false);
+assert.equal(deriveVoicePrincipal({authUserId:'A',profile:{id:'B',role:'boss'},networkDirectorId:'A'}).allowed,false);
+assert.equal(authorizeVoiceRequest(dfs,{domain:'vip'}).allowed,true);
+assert.equal(authorizeVoiceRequest(df,{domain:'clients',targetScope:{kind:'branch',branch_id:'vitebsk'}}).allowed,true);
+assert.equal(authorizeVoiceRequest(df,{domain:'clients',targetScope:{kind:'branch',branch_id:'gomel'}}).allowed,false);
+assert.equal(authorizeVoiceRequest(gomel,{domain:'routes',targetScope:{kind:'branch',branch_id:'vitebsk'}}).allowed,false);
+assert.equal(authorizeVoiceRequest(mpp,{domain:'clients',targetScope:{kind:'manager',manager_id:'mpp'}}).allowed,true);
+assert.equal(authorizeVoiceRequest(mpp,{domain:'clients',targetScope:{kind:'manager',manager_id:'another'}}).allowed,false);
+assert.equal(authorizeVoiceRequest(mpp,{domain:'payments'}).allowed,false);
+assert.equal(authorizeVoiceRequest(mpp,{domain:'triovist'}).allowed,false);
+assert.equal(authorizeVoiceRequest(triovist,{domain:'triovist'}).allowed,true);
+assert.equal(authorizeVoiceRequest(triovist,{domain:'routes'}).allowed,false);
+assert.equal(authorizeVoiceRequest(df,{domain:'triovist'}).allowed,false);
+assert.equal(authorizeVoiceRequest(df,{domain:'payments'}).allowed,false,'payments require independent RPC privilege even for DF');
+for (const actor of [dfs,df,gomel,mpp,triovist]) {
+  assert.equal(authorizeVoiceRequest(actor,{domain:'payments',operation:'approve'}).allowed,false);
+  assert.equal(authorizeVoiceRequest(actor,{domain:'tasks',operation:'create'}).allowed,false);
+}
+assert.equal(authorizeVoiceRequest(dfs,{domain:'payments',operation:'prepare'}).allowed,true);
+assert.equal(authorizeVoiceRequest(df,{domain:'payments',operation:'prepare'}).allowed,false);
+assert.equal(authorizeVoiceRequest(mpp,{domain:'tasks',operation:'prepare'}).allowed,true);
+assert.equal(authorizeVoiceRequest(dfs,{domain:'undefined-module'}).allowed,false);
+assert.notEqual(sessionMemoryKey(dfs,'1234567890abcdef'),sessionMemoryKey(df,'1234567890abcdef'));
+assert.equal(sessionMemoryKey(df,'bad'),null);
+console.log('PASS: multi-role network/branch/manager permissions and write denials');
