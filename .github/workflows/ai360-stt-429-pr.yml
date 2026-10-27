@@ -1,0 +1,29 @@
+name: AI360 voice 429 and capture regression
+on:
+  pull_request:
+    paths:
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'index.html'
+      - 'tests/ai360-voice-stt-429-regression-20261027.test.cjs'
+      - 'supabase/migrations/20261027195100_ai360_voice_claim_180_v1.sql'
+      - '.github/workflows/ai360-stt-429-pr.yml'
+permissions:
+  contents: read
+jobs:
+  stt-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser syntax
+        run: |
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+      - name: Real STT quota failure flow and microphone recovery
+        run: |
+          node tests/ai360-voice-stt-429-regression-20261027.test.cjs
+          node tests/ai360-promotions-and-active-mic-20261027.test.cjs
