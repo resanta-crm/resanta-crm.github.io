@@ -1,0 +1,29 @@
+name: AI360 universal tools safety
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/_shared/ai360-universal-catalog.mjs'
+      - 'supabase/functions/crm-ai360-dialog-v2/**'
+      - 'tests/ai360-universal-tools-20261027.test.mjs'
+      - '.github/workflows/ai360-universal-tools-pr.yml'
+permissions:
+  contents: read
+jobs:
+  read-only-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Safe catalog and all CRM domain checks
+        run: |
+          node --check supabase/functions/_shared/ai360-universal-catalog.mjs
+          node --check supabase/functions/crm-ai360-dialog-v2/catalog.mjs
+          node tests/ai360-universal-tools-20261027.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck unified dialogue
+        run: deno check supabase/functions/crm-ai360-dialog-v2/index.ts
