@@ -77,7 +77,7 @@ async function validManager(svc:any,candidate:string|null):Promise<string|null>{
  if(got.error)throw new Error('staff_directory_unavailable');
  const matches=(got.data||[]).filter((p:any)=>{
   const name=ru(p.name);const pieces=name.split(/\s+/);
-  return name===x || pieces.some(part=>part===x);
+  return name===x || pieces.some(part=>part===x || (x.startsWith(part) && /^(?:а|у|е|ом|ым|ой|ей)$/.test(x.slice(part.length))));
  });
  if(matches.length!==1)throw new Error('manager_not_unique');
  return String(matches[0].name);
@@ -201,7 +201,9 @@ Deno.serve(async(req:Request)=>{
  }:{};
  let plan=await planQuestion(Deno.env.get('OPENAI_API_KEY')||'',question,history,memory,u.id,svc);
  const network=/по всей сети|все менеджеры|всех менеджеров|общ(?:ая|ие) продаж|в целом по сети/i.test(question);
- const candidate=network?null:(plan.manager||(!plan.manager?memory.manager:null));
+ const sameEmployeeTopic=plan.domains.every((domain:string)=>domain==='sales'||domain==='operations') &&
+  ['sales','operations'].includes(String(memory.domain||''));
+ const candidate=network?null:(plan.manager||(sameEmployeeTopic?memory.manager:null));
  let manager=null;
  try{manager=await validManager(svc,candidate);}catch(e){
   return reply(req,{answer:'Уточни, пожалуйста, фамилию менеджера: я не могу однозначно подтвердить сотрудника в CRM.',
