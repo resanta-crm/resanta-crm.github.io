@@ -2,6 +2,7 @@ name: AI360 grounded voice and promotions
 on:
   pull_request:
     paths:
+      - 'index.html'
       - 'assets/135-resanta-voice-capture-fix-v2.js'
       - 'assets/137-resanta-ai360-lazy-launch-v1.js'
       - 'assets/138-resanta-ai360-sales-bridge-v1.js'
