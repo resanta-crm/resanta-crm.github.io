@@ -1,0 +1,20 @@
+name: AI360 microphone checks
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'tests/ai360-mic-repeat-20261027.test.cjs'
+      - '.github/workflows/ai360-microphone-pr.yml'
+permissions:
+  contents: read
+jobs:
+  mic-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/134-resanta-voice-ai360-pilot-v1.js
+      - run: node tests/ai360-mic-repeat-20261027.test.cjs

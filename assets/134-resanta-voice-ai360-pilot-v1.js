@@ -14,7 +14,7 @@
   const WAKE = /(?:^|\s)привет[\s,!.\-–—]+ресанта(?:[\s,!.?]|$)/i;
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const state = { wake:false, active:false, awaiting:false, speaking:false,
-    silent:false, recognition:null, localReady:false, mounted:false, timer:0, pendingRestart:0 };
+    silent:false, recognition:null, localReady:false, mounted:false, timer:0, pendingRestart:0, manualRestart:0, manualSequence:0 };
   let root, trigger, statusEl, historyEl, field, wakeBtn, micBtn, muteBtn;
   let lastDetailedResponse='';
   let feedbackTarget=null;
@@ -360,6 +360,21 @@
     if (wakeBtn) {wakeBtn.textContent=state.wake?'■ Отключить фразу':'◉ Включить «Привет, Ресанта»';wakeBtn.setAttribute('aria-pressed',String(state.wake));}
     if (muteBtn) muteBtn.textContent=state.silent?'🔇 Озвучка выключена':'🔊 Озвучка включена';
   }
+  function restartManualMic() {
+    // Manual button always allows another question; release the old browser recognizer
+    // before starting a replacement. Invalidate earlier delayed starts on every click.
+    const sequence=++state.manualSequence;
+    clearTimeout(state.manualRestart);
+    state.manualRestart=0;
+    if(!visible())return;
+    setWake(false);
+    textStatus('Перезапускаю микрофон…');
+    state.manualRestart=setTimeout(()=>{
+      state.manualRestart=0;
+      if(sequence!==state.manualSequence||!visible())return;
+      startListening('manual');
+    },450);
+  }
   function setWake(on) {
     state.wake=!!on; state.awaiting=false; stopRecognition();
     window.speechSynthesis?.cancel();state.speaking=false;updateButtons();
@@ -367,6 +382,7 @@
     else textStatus('Фоновая голосовая активация выключена');
   }
   function closePanel() {
+    ++state.manualSequence;clearTimeout(state.manualRestart);state.manualRestart=0;
     setWake(false); window.speechSynthesis?.cancel(); state.speaking=false;
     if(root){root.hidden=true;root.classList.remove('rva-mini');}
     feedbackTarget=null;
@@ -516,7 +532,7 @@
         +'Отчёт скопирован вручную пользователем; данные никуда автоматически не отправлены.';
       void copyExplicitly(report,'Отчёт скопирован. Проверь коммерческие данные перед отправкой в ChatGPT.');
     });
-    micBtn.addEventListener('click',()=>{setWake(false); startListening('manual');});
+    micBtn.addEventListener('click',restartManualMic);
     wakeBtn.addEventListener('click',()=>{
       if(state.wake){setWake(false);return;}
       if(!Recognition){textStatus('Этот браузер не поддерживает распознавание речи.');return;}
@@ -540,12 +556,12 @@
     const ok=allowed();
     trigger.hidden=!ok;
     if(!ok && !root.hidden)closePanel();
-    if(!ok && state.active)stopRecognition();
+    if(!ok){++state.manualSequence;clearTimeout(state.manualRestart);state.manualRestart=0;if(state.active)stopRecognition();}
   }
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden) {setWake(false);window.speechSynthesis?.cancel();state.speaking=false;}
+    if(document.hidden) {++state.manualSequence;clearTimeout(state.manualRestart);setWake(false);window.speechSynthesis?.cancel();state.speaking=false;}
   });
-  window.addEventListener('pagehide',()=>{setWake(false);window.speechSynthesis?.cancel();});
+  window.addEventListener('pagehide',()=>{++state.manualSequence;clearTimeout(state.manualRestart);setWake(false);window.speechSynthesis?.cancel();});
   // Opt in to local recognition only if this browser actually has a Russian pack.
   if (Recognition && typeof Recognition.available === 'function') {
     try {

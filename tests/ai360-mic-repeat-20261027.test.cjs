@@ -1,0 +1,26 @@
+'use strict';
+const fs=require('node:fs');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+const code=fs.readFileSync('assets/134-resanta-voice-ai360-pilot-v1.js','utf8');
+assert.match(code,/micBtn\.addEventListener\('click',restartManualMic\)/);
+const begin=code.indexOf('  function restartManualMic() {');
+const end=code.indexOf('  function setWake(on)',begin);
+assert.ok(begin>=0&&end>begin,'manual restart function exists');
+const snippet=code.slice(begin,end);
+assert.match(snippet,/clearTimeout\(state\.manualRestart\)/);
+assert.match(snippet,/sequence!==state\.manualSequence/);
+assert.match(snippet,/startListening\('manual'\)/);
+const callbacks=new Map();let serial=0,started=0,stopped=0;
+const state={manualSequence:0,manualRestart:0};
+const ctx={state,visible:()=>true,setWake:()=>{stopped++},textStatus:()=>{},startListening:()=>{started++},
+clearTimeout:id=>callbacks.delete(id),setTimeout:cb=>{const id=++serial;callbacks.set(id,cb);return id}};
+vm.runInNewContext(snippet+'\nthis.restartManualMic=restartManualMic;',ctx);
+ctx.restartManualMic();ctx.restartManualMic();
+assert.equal(callbacks.size,1,'only latest scheduled recognition survives rapid clicks');
+for(const cb of callbacks.values())cb();
+assert.equal(started,1,'one active microphone launch');
+assert.equal(stopped,2,'previous recognizer released first');
+assert.match(code,/function closePanel\(\) \{\s*\+\+state\.manualSequence;clearTimeout\(state\.manualRestart\)/);
+assert.match(code,/if\(document\.hidden\) \{\+\+state\.manualSequence;clearTimeout\(state\.manualRestart\)/);
+console.log('PASS microphone repeated click and shutdown cancellation');
