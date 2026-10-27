@@ -1,0 +1,36 @@
+name: AI360 grounded voice and promotions
+on:
+  pull_request:
+    paths:
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/138-resanta-ai360-sales-bridge-v1.js'
+      - 'supabase/functions/crm-ai360-director-v1/**'
+      - 'tests/ai360-promotions-and-active-mic-20261027.test.cjs'
+      - '.github/workflows/ai360-grounded-voice-pr.yml'
+permissions:
+  contents: read
+jobs:
+  grounded-voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+          node --check assets/138-resanta-ai360-sales-bridge-v1.js
+      - name: Root-cause regression
+        run: |
+          node tests/ai360-promotions-and-active-mic-20261027.test.cjs
+          node tests/ai360-topic-switch-20261027.test.cjs
+          node tests/ai360-task-approval-backend-v1.test.cjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Edge Function typecheck
+        run: deno check supabase/functions/crm-ai360-director-v1/index.ts
