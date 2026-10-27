@@ -1,0 +1,30 @@
+name: AI360 context checks
+on:
+  pull_request:
+    paths:
+      - 'assets/138-resanta-ai360-sales-bridge-v1.js'
+      - 'supabase/functions/crm-ai360-director-v1/**'
+      - 'tests/ai360-conversation-context-20261027.test.mjs'
+      - 'tests/ai360-topic-switch-20261027.test.cjs'
+      - '.github/workflows/ai360-context-pr.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  context-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check assets/138-resanta-ai360-sales-bridge-v1.js
+          node --check supabase/functions/crm-ai360-director-v1/conversation-context.mjs
+          node --check supabase/functions/crm-ai360-director-v1/intent-router.mjs
+      - name: Conversation regression
+        run: |
+          node tests/ai360-conversation-context-20261027.test.mjs
+          node tests/ai360-topic-switch-20261027.test.cjs
