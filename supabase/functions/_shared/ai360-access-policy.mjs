@@ -20,8 +20,10 @@ export function deriveVoicePrincipal({authUserId, profile, networkDirectorId, tr
   if(profile.role==='boss' && trustedBranchId)
     return {allowed:true,role:'branch_director',subject:uid,
       scope:{kind:'branch',branch_id:String(trustedBranchId)}};
-  if(profile.role==='manager' && trustedTriovistAccess===true && profile.access_scope==='triovist')
+  if(profile.role==='manager' && profile.access_scope==='triovist'){
+    if(trustedTriovistAccess!==true)return deny('triovist_membership_not_verified');
     return {allowed:true,role:'triovist_manager',subject:uid,scope:{kind:'triovist'}};
+  }
   if(profile.role==='manager' && trustedManagerId)
     return {allowed:true,role:'field_manager',subject:uid,
       scope:{kind:'manager',manager_id:String(trustedManagerId)}};
@@ -38,8 +40,8 @@ export function authorizeVoiceRequest(principal, {domain,operation='read',target
     return deny('payment_prepare_forbidden');
   if(principal.role==='network_director')return {allowed:true,scope:principal.scope};
   if(principal.role==='branch_director'){
-    if(!branchDomains.has(domain)&&domain!=='payments')return deny('domain_outside_branch_access');
-    if(operation==='prepare'&&domain==='payments')return deny('payment_prepare_forbidden');
+    if(domain==='payments')return deny('payment_access_needs_separate_rpc_permission');
+    if(!branchDomains.has(domain))return deny('domain_outside_branch_access');
     if(targetScope && (targetScope.kind!=='branch'||targetScope.branch_id!==principal.scope.branch_id))
       return deny('branch_scope_mismatch');
     return {allowed:true,scope:principal.scope};
