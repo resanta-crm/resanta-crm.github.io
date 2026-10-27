@@ -151,7 +151,7 @@
  }
  function cloudError(error){
    const code=String(error?.code||error?.context?.error||error?.message||'');
-   if(/voice_daily_limit|429|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (180 фраз). Это не ошибка микрофона.';
+   if(/voice_daily_limit|429|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (300 фраз). Это не ошибка микрофона.';
    if(/speech_provider_unconfigured|503/.test(code))return 'Сервис речи ещё не настроен на сервере CRM.';
    if(/audio_(size|duration)/.test(code))return 'Фраза слишком длинная. Повтори короче.';
    if(/not_authorized|401|403/.test(code))return 'Доступ к серверу речи не подтверждён. Перезайди в CRM.';
@@ -357,7 +357,7 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Два способа: «Спросить голосом» — один вопрос (до 12 секунд); «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 180 распознаваний в день; записи в CRM не сохраняются.';
+   if(note)note.textContent='Два способа: «Спросить голосом» — один вопрос (до 12 секунд); «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 300 распознаваний в день; записи в CRM не сохраняются.';
    mic.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
      // The manual button must work even if wake mode was enabled.
