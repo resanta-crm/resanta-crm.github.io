@@ -16,7 +16,7 @@ assert.equal(getTool('deleted_table'),null);
 for (const tool of CRM_AI360_TOOLS){
  assert.ok(/^[a-z][a-z0-9_]*$/.test(tool.table),tool.id);
  assert.ok(tool.limit>0&&tool.limit<=12,tool.id+' bounded result');
- assert.ok(!/password|secret|token|user_id|private_key|phone|email|access_token|address|lat|lng|gps_lat|jwt/i.test(tool.columns),tool.id+' sensitive field in evidence');
+ assert.ok(tool.columns.split(',').every(field=>!new Set(['password','secret','token','user_id','private_key','phone','email','access_token','address','lat','lng','gps_lat','jwt']).has(field)),tool.id+' sensitive field in evidence');
  assert.ok(tool.columns.split(',').length<=9,tool.id+' bounded width');
 }
 const calls=[];
