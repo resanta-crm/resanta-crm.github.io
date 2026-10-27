@@ -382,6 +382,7 @@
     else textStatus('Фоновая голосовая активация выключена');
   }
   function closePanel() {
+    ++state.manualSequence;clearTimeout(state.manualRestart);state.manualRestart=0;
     setWake(false); window.speechSynthesis?.cancel(); state.speaking=false;
     if(root){root.hidden=true;root.classList.remove('rva-mini');}
     feedbackTarget=null;
@@ -555,7 +556,7 @@
     const ok=allowed();
     trigger.hidden=!ok;
     if(!ok && !root.hidden)closePanel();
-    if(!ok && state.active)stopRecognition();
+    if(!ok){++state.manualSequence;clearTimeout(state.manualRestart);state.manualRestart=0;if(state.active)stopRecognition();}
   }
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden) {++state.manualSequence;clearTimeout(state.manualRestart);setWake(false);window.speechSynthesis?.cancel();state.speaking=false;}
