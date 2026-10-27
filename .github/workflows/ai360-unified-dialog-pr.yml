@@ -1,0 +1,34 @@
+name: AI360 unified dialog verification
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-dialog-v1/**'
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'index.html'
+      - 'tests/ai360-unified-dialog-v1.test.cjs'
+      - '.github/workflows/ai360-unified-dialog-pr.yml'
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser JS and dialog regression
+        run: |
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node tests/ai360-unified-dialog-v1.test.cjs
+          node tests/ai360-task-approval-backend-v1.test.cjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Server typecheck
+        run: deno check supabase/functions/crm-ai360-dialog-v1/index.ts
