@@ -80,7 +80,7 @@ window.crmAI360SalesHandleV1=function(query,ui){
  const awaiting=pendingMatch!==null;
  // A new named CRM area is a topic change, not a follow-up about the last manager.
  // Never attach a stale manager to a Triovist/21vek, markdown, promotion or inventory question.
- const newArea=/(триовист|21\\s*век|21vek|уценк|стенд|акци|остатк|склад|товар)/i.test(text);
+ const newArea=/(триовист|21\s*век|21vek|уценк|стенд|акци|остатк|склад|товар)/i.test(text);
  const explicitManagerDiscussion=/(менеджер|руднев|шкуран|ачинович|сидорович)/i.test(text);
  if(newArea&&!explicitManagerDiscussion){
    lastManager=null;lastMonth=null;history=[];
