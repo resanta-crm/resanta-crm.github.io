@@ -30,7 +30,7 @@ function baseline(q:string){
  if(/вип|vip/.test(s))d.push('vip');
  if(/продаж|выруч|оборот|план|кпи/.test(s))d.push('sales');
  if(/задолж|пдз|долг|маршрут|посещ|задач|клиент|визит/.test(s))d.push('operations');
- const topics=[[/склад|остатк|налич|резерв/i,'stock'],[/тсд|комплект|отгрузочн/i,'warehouse_orders'],[/приемк|приёмк/i,'warehouse_receiving'],[/инвентаризац/i,'warehouse_inventory'],[/уценк/i,'markdown'],[/стенд/i,'stands'],[/конкурент|демпинг/i,'competitors'],[/карточк|контент/i,'cards_21vek'],[/ошибк.*карточ/i,'card_issues'],[/прайс|мрц/i,'mrc'],[/поступлен|безнал.*поступ/i,'cash'],[/парсер/i,'parser'],[/инфографик/i,'infographics'],[/обновлен|импорт|свежест/i,'imports'],[/рекомендац.*вип/i,'vip_actions'],[/бюджет.*акц/i,'promotion_budgets']];
+ const topics:Array<[RegExp,string]>=[[/склад|остатк|налич|резерв/i,'stock'],[/тсд|комплект|отгрузочн/i,'warehouse_orders'],[/приемк|приёмк/i,'warehouse_receiving'],[/инвентаризац/i,'warehouse_inventory'],[/уценк/i,'markdown'],[/стенд/i,'stands'],[/конкурент|демпинг/i,'competitors'],[/карточк|контент/i,'cards_21vek'],[/ошибк.*карточ/i,'card_issues'],[/прайс|мрц/i,'mrc'],[/поступлен|безнал.*поступ/i,'cash'],[/парсер/i,'parser'],[/инфографик/i,'infographics'],[/обновлен|импорт|свежест/i,'imports'],[/рекомендац.*вип/i,'vip_actions'],[/бюджет.*акц/i,'promotion_budgets']];
  for(const [pattern,name] of topics)if(pattern.test(s))d.push(name);
  return d.length?d:['sales','operations'];
 }
@@ -263,7 +263,7 @@ Deno.serve(async(req:Request)=>{
     const evidence=limited.map((item:any)=>Object.fromEntries(Object.entries(item).map(([k,v])=>
       [k,typeof v==='string'?safe(v):v])));
     const body=JSON.stringify(evidence).slice(0,2400);
-    reports.push(put(domain,result.source,now, 'Выборка ограничена '+result.max_rows+' строками, не весь раздел. '+body));
+    reports.push(put(domain,result.source||domain,now, 'Выборка ограничена '+result.max_rows+' строками, не весь раздел. '+body));
     return;
    }
    if(domain==='sales'){
