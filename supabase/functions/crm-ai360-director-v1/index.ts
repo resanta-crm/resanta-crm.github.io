@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
+import { resolveConversationIntent } from './conversation-context.mjs';
 import { classify,needsSales,needsOperations,selectEvidence,directSalesAnswer,directClientAnswer,managerActionPlan,managementSpeech,debtPriorityAnswer,verifyManagerOperations,detectForeignClientMention,verifyAnswer,fallbackAnswer } from './intent-router.mjs';
 
 // Explicit director-only opt-in pilot; no scheduled AI, no changes to CRM source records.
@@ -105,7 +106,8 @@ Deno.serve(async(req:Request)=>{
  const nowMonth=todayMonth();
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthRaw)||monthRaw<'2025-01'||monthRaw>nowMonth)return reply(req,{error:'month_not_supported'},400);
  const requestedManager=String(payload?.focusManager||'').trim().slice(0,80);
- const intent=classify(question);
+ const conversation=resolveConversationIntent(question,payload?.history,classify);
+ const intent=conversation.intent;
  let verifiedFocus='';
  if(requestedManager){
   // Validate independently of KPI-plan existence: some staff have clients but no approved plan.
