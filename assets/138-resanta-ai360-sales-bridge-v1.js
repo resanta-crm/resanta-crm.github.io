@@ -42,7 +42,8 @@ function reason(code){
   not_authorized:'Сервер запретил доступ. Проверь учётную запись директора.',
   month_not_supported:'Такой месяц пока недоступен для анализа.',
   quota_unavailable:'Лимит запросов сейчас проверить не удалось.',
-  operations_unavailable:'Не удалось проверить клиентов, задачи, маршруты или ПДЗ. Я не буду придумывать показатели — повтори запрос позднее.'
+  operations_unavailable:'Не удалось проверить клиентов, задачи, маршруты или ПДЗ. Я не буду придумывать показатели — повтори запрос позднее.',
+  promotions_unavailable:'Не удалось прочитать действующие акции из CRM. Непроверенный список не показываю.'
  };
  return known[code]||'Сейчас не удалось получить проверенный аналитический ответ. Данные CRM не менялись.';
 }
@@ -76,6 +77,13 @@ window.crmAI360SalesHandleV1=function(query,ui){
      /по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu.test(text) &&
      /(клиент|задач|купил|покуп|закуп|выруч|продаж|ру[дт]нев)/i.test(text)){
    text=text.replace(/по\s+(?:родню|родне|родни|родня|рудню)(?=[\s?.!,]|$)/iu,'по продажам');
+ }
+ // Campaigns are a separate verified CRM domain. Never inherit a manager's
+ // sales/KPI scope or hand this question to the generic keyword fallback.
+ if(/акци[а-яё]*/i.test(text) && !/^(?:соглас|утверд|отмен|созда|добав|закры|поменя)/i.test(text)){
+   if(pending){ui.answer('Предыдущий вопрос ещё обрабатывается.');return true;}
+   pendingMatch=null;lastManager=null;lastMonth=null;history=[];
+   return askPromotions(ui);
  }
  const awaiting=pendingMatch!==null;
  if(pending){ui.answer('Предыдущий аналитический вопрос ещё обрабатывается.');return true;}
@@ -111,6 +119,25 @@ window.crmAI360SalesHandleV1=function(query,ui){
  }
  return ask(text,ui,null);
 };
+function askPromotions(ui){
+ pending=true;window.__resantaAI360PendingV1=true;
+ ui.textStatus('Проверяю действующие акции в CRM…');
+ (async()=>{
+  try{
+   const session=typeof window.crmEnsureFreshSessionV236166==='function'
+     ?await window.crmEnsureFreshSessionV236166(false):await db.auth.getSession().then(x=>x?.data?.session);
+   if(!session?.access_token)throw new Error('not_authorized');
+   const result=await db.functions.invoke(ENDPOINT,{body:{kind:'promotions_today'}});
+   if(result.error)throw new Error(await popError(result.error));
+   if(!allowed())return;
+   const answer=String(result.data?.answer||'').trim();
+   if(!answer||result.data?.answer_verified!==true)throw new Error('promotions_unavailable');
+   ui.answer(answer);
+  }catch(e){if(allowed())ui.answer(reason(String(e?.message||e)));}
+  finally{pending=false;window.__resantaAI360PendingV1=false;}
+ })();
+ return true;
+}
 function ask(text,ui,confirmedManager){
  pending=true;
  window.__resantaAI360PendingV1=true;
