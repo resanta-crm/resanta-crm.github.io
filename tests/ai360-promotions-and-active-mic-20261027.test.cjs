@@ -16,7 +16,7 @@ const wakeIdx=capture.indexOf("wake.addEventListener('click'",micIdx);
 const micHandler=capture.slice(micIdx,wakeIdx);
 assert.match(micHandler,/void start\('manual'\)/);
 assert.doesNotMatch(micHandler,/if\(mode==='wake'\)/);
-assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=15/);
+assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=16/);
 assert.match(launcher,/138-resanta-ai360-sales-bridge-v1.js\?v=8/);
 const sends=[],answers=[];
 const ctx={
