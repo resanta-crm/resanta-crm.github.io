@@ -1,0 +1,22 @@
+name: AI360 multi-role security checks
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/_shared/ai360-access-policy.mjs'
+      - 'tests/ai360-multirole-auth-20261027.test.mjs'
+      - '.github/workflows/ai360-multirole-pr.yml'
+permissions:
+  contents: read
+jobs:
+  authorization-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: node --check supabase/functions/_shared/ai360-access-policy.mjs
+      - name: Server permission isolation
+        run: node tests/ai360-multirole-auth-20261027.test.mjs
