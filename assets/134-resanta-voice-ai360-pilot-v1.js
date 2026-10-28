@@ -127,6 +127,12 @@
     addLine('РЕСАНТА AI',message);
     const text=String(message||'').trim();
     if(text.length>220)lastSubstantialAnswer=text;
+    // Detail-on-demand can display a full answer without forcing TTS.
+    if(options?.noVoice===true){
+      lastDetailedResponse=text;
+      textStatus('Подробный разбор показан на экране. Можешь задать следующий вопрос.');
+      return;
+    }
     // The verified proactive briefing has exactly five distinct factual
     // priorities and should speak all five, not the generic 150-character teaser.
     // Other long CRM answers retain their existing concise speech behavior.
@@ -135,7 +141,7 @@
       options.briefingVoiceText.trim():'';
     const verifiedBrief=typeof options?.speechSummary==='string'&&options.speechSummary.length<=230?
       options.speechSummary.trim():'';
-    const compact=directorBriefVoice||verifiedBrief||(text.length>225?briefVoiceText(text):'');
+    const compact=options?.fullVoice===true?'':(directorBriefVoice||verifiedBrief||(text.length>225?briefVoiceText(text):''));
     if(compact && compact!==text){
       lastDetailedResponse=text;
       textStatus(directorBriefVoice?'Озвучиваю пять приоритетов директора…':'Готовлю краткий голосовой итог…');
@@ -188,6 +194,12 @@
     if(/^(?:большое\s+)?спасибо(?:\s+(?:большое|тебе|вам))?$|^благодарю(?:\s+тебя)?$|^спасибочки$/.test(query)){
       answer('Пожалуйста! Обращайся, если понадобится ещё что-нибудь.');
       return;
+    }
+    // The latest question «Хочешь подробнее?» belongs to the unified dialogue.
+    // Handle yes/no/screen before legacy «read full answer» text patterns.
+    if(typeof window.crmAI360UnifiedDialogFollowupV3==='function'){
+      try{if(window.crmAI360UnifiedDialogFollowupV3(query,{answer,textStatus}))return;}
+      catch(e){console.warn('AI360 followup unavailable',e);}
     }
     const asksForFullNarration=/(?:расскаж|прочита|озвуч|произнес|хочу|можешь|нужно|дай|пожалуйста).{0,105}(?:подробн|поподробн|полност|целиком|весь\s+ответ|услыш|послуш|слушать|не\s+хочу\s+читать)|^(?:подробнее|поподробнее|полностью|прочитай\s+все|вслух)$|^(?:(?:лера|ресанта)\s+)?(?:расскажи|прочитай|озвучь|зачитай|повтори)\s+(?:(?:мне|пожалуйста)\s+){0,2}(?:(?:весь|полный|предыдущий)\s+)?(?:план|ответ|разбор)(?:\s+(?:целиком|подробно|полностью))?$/.test(query);
     if(asksForFullNarration){
