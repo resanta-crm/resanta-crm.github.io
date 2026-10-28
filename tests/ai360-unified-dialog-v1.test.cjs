@@ -36,7 +36,7 @@ const flush=()=>new Promise(r=>setTimeout(r,20));
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Какие продажи у Руднева?',ui),true);
  await flush();
  assert.equal(calls.length,1);
- assert.equal(calls[0].n,'crm-ai360-dialog-v3');
+ assert.equal(calls[0].n,'crm-ai360-dialog-v4');
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('А какие у него забытые клиенты?',ui),true);
  await flush();
  assert.equal(calls.length,2);
