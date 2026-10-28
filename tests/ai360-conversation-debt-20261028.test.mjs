@@ -21,7 +21,7 @@ const answer=normalizeVoicePair({brief:'Я понял. Я готов объяс�
 assert.ok(answer.brief.includes('Я поняла'));
 assert.ok(answer.brief.includes('Я готова'));
 assert.ok(answer.detail.startsWith('Поняла,'));
-assert.equal(classifyFollowup('Да, давай!'),'other'); // free phrase should go through model, not wrongly approve any CRM action
+assert.equal(classifyFollowup('Да, давай!'),'yes'); // natural spoken confirmation of the pending offer
 assert.equal(classifyFollowup('да'),'yes');
 assert.equal(classifyFollowup('покажи на экране'),'screen');
 assert.equal(classifyFollowup('нет'),'no');
