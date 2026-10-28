@@ -97,3 +97,49 @@ test('structured answer parser rejects malformed JSON', () => {
     { type: 'output_text', text: '{"brief":"x"}' }
   ] }] }), null);
 });
+
+import { taskScope, readTasks } from '../supabase/functions/crm-ai360-dialog-v4/task-read.mjs';
+
+test('today follow-up retains the prior date scope', () => {
+  assert.equal(taskScope('Какие сегодня задачи у Руднева?', []), 'today');
+  assert.equal(taskScope('А у Шкурана?', [{ text: 'Какие сегодня задачи у Руднева?' }]), 'today');
+  assert.equal(taskScope('Просроченные задачи', []), 'overdue');
+  assert.equal(taskScope('Покажи открытые задачи', []), 'open');
+});
+
+test('today tasks use due_date, not created_at, and report complete count', async () => {
+  const calls = [];
+  const rows = Array.from({ length: 6 }, (_, i) => ({
+    title: 'Тестовое поручение ' + (i + 1), manager_name: 'Руднев',
+    due_date: '2026-10-28', priority: 'high', review_status: 'approved'
+  }));
+  const builder = {
+    select(cols, opts) { calls.push(['select', cols, opts]); return this; },
+    eq(k, v) { calls.push(['eq', k, v]); return this; },
+    lt(k, v) { calls.push(['lt', k, v]); return this; },
+    order(k, opts) { calls.push(['order', k, opts]); return this; },
+    async limit(n) { calls.push(['limit', n]); return { data: rows, count: 6, error: null }; }
+  };
+  const out = await readTasks({ from: name => { calls.push(['from', name]); return builder; } },
+    'Руднев', 'Какие задачи у Руднева сегодня?', [], '2026-10-28');
+  assert.ok(calls.some(x => x[0] === 'eq' && x[1] === 'due_date' && x[2] === '2026-10-28'));
+  assert.ok(calls.some(x => x[0] === 'eq' && x[1] === 'review_status' && x[2] === 'approved'));
+  assert.ok(calls.some(x => x[0] === 'eq' && x[1] === 'done' && x[2] === false));
+  assert.ok(calls.some(x => x[0] === 'eq' && x[1] === 'manager_name' && x[2] === 'Руднев'));
+  assert.ok(calls.some(x => x[0] === 'order' && x[1] === 'due_date'));
+  assert.ok(!calls.some(x => x[0] === 'order' && x[1] === 'created_at'));
+  assert.equal(out.total_matching, 6);
+  assert.equal(out.returned, 6);
+  assert.equal(out.partial, false);
+});
+
+test('task reader does not claim that a capped sample is the whole result', async () => {
+  const builder = {
+    select() { return this; }, eq() { return this; }, lt() { return this; },
+    order() { return this; },
+    async limit() { return { data: [{ title: 'Тест' }], count: 27, error: null }; }
+  };
+  const out = await readTasks({ from: () => builder }, null, 'Покажи все', [], '2026-10-28');
+  assert.equal(out.total_matching, 27);
+  assert.equal(out.partial, true);
+});
