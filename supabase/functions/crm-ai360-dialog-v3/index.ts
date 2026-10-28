@@ -276,24 +276,10 @@ Deno.serve(async(req:Request)=>{
    // blocks other sections; timeout returns unavailable instead of guessing.
    // Debt is an audited full aggregate; never treat 6 sample rows as the whole ledger.
    if(domain==='debt'){
-    const r=await svc.rpc('crm_ai360_operations_snapshot_v1',{p_manager:manager,p_month:month+'-01'});
+    const r=await svc.rpc('crm_ai360_debt_snapshot_v1',{p_manager:manager});
     if(r.error||!r.data)throw new Error('debt_snapshot');
     if(manager&&ru(r.data.scope)!==ru(manager))throw new Error('manager_scope_mismatch');
     debtRecord=debtEvidence(r.data,manager);
-    // A bounded extra read only when user explicitly requests a manager breakdown.
-    if(!manager && /по менеджер|по каждом|у кого|шкуран.*руднев|кто отвечает/i.test(question)
-        && debtRecord.report_date){
-     const detail=await svc.from('client_debt').select('manager_name,debt_overdue,report_date')
-       .eq('report_date',debtRecord.report_date).gt('debt_overdue',0).limit(150);
-     if(!detail.error && Array.isArray(detail.data)){
-      const grp:Record<string,{count:number,amount:number}>={};
-      for(const x of detail.data){const who=safe(x.manager_name||'не указан');const g=grp[who]||(grp[who]={count:0,amount:0});
-       g.count++;g.amount+=Number(x.debt_overdue||0);}
-      const rows=Object.entries(grp).sort((a,b)=>b[1].amount-a[1].amount)
-       .map(([name,x])=>name+': '+cash(x.amount)+', '+x.count+' записей');
-      debtRecord.detail+=' Разбивка по ответственным (не полная если реестр >150 записей): '+rows.join('; ')+'.';
-     }
-    }
     reports.push(put(domain,debtRecord.source,debtRecord.report_date||'нет даты',debtRecord.detail));
     return;
    }
@@ -316,16 +302,21 @@ Deno.serve(async(req:Request)=>{
       renderSales(snapshot,manager)));return;
    }
    if(domain==='operations'){
-    const r=await svc.rpc('crm_ai360_operations_snapshot_v1',{p_manager:manager,p_month:month+'-01'});
+    const isDebt=/задолж|пдз|дебит|долг|просроч/i.test(question) &&
+      !/маршрут|визит|посещ|заех|задач|клиент/i.test(question);
+    const r=isDebt
+      ?await svc.rpc('crm_ai360_debt_snapshot_v1',{p_manager:manager})
+      :await svc.rpc('crm_ai360_operations_snapshot_v1',{p_manager:manager,p_month:month+'-01'});
     if(r.error||!r.data)throw new Error('operations_snapshot');
-    const d=compactOperations(r.data,manager);
-    if(manager&&ru(d.scope)!==ru(manager))throw new Error('manager_scope_mismatch');
-    const isDebt=/задолж|пдз|дебит|долг|просроч/i.test(question);
+    if(manager&&ru(r.data.scope)!==ru(manager))throw new Error('manager_scope_mismatch');
     if(isDebt){
       debtRecord=debtEvidence(r.data,manager);
       reports.push(put(domain,debtRecord.source,debtRecord.report_date||'нет даты',debtRecord.detail));
-    }else reports.push(put(domain,'crm_ai360_operations_snapshot_v1',d.period?.as_of||now,
-      renderOperations(d,manager,question)));
+    }else{
+      const d=compactOperations(r.data,manager);
+      reports.push(put(domain,'crm_ai360_operations_snapshot_v1',d.period?.as_of||now,
+        renderOperations(d,manager,question)));
+    }
     return;
    }
    if(domain==='promotions'){
