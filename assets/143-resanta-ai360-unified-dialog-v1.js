@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 if(/Android/i.test(navigator.userAgent||'')||window.crmAI360UnifiedDialogHandleV1)return;
-const ENDPOINT='crm-ai360-dialog-v3';
+const ENDPOINT='crm-ai360-dialog-v4';
 let history=[],memory={},pending=false,awaitingDetail=null;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
@@ -68,7 +68,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    // Only unknown endpoint is retried with stable v1; never double a failed
    // database request during a service slowdown or authentication error.
    if(result.error && Number(result.error?.context?.status)===404)
-     result=await db.functions.invoke('crm-ai360-dialog-v2',{body:payload});
+     result=await db.functions.invoke('crm-ai360-dialog-v3',{body:payload});
    if(result.error)throw new Error(await errorCode(result.error));
    if(!allowed())return;
    const data=result.data||{};
