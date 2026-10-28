@@ -132,8 +132,17 @@ Deno.serve(async req => {
     month: String(body.memory.month || '').slice(0, 7),
     domain: String(body.memory.domain || '').slice(0, 30)
   } : {};
-  const quota = await svc.rpc('crm_ai360_llm_claim_v1', { p_user_id: userId });
-  if (quota.error || quota.data !== true) return respond(req, { error: 'ai_quota_exhausted', answer_verified: false }, 429);
+  // Per-dialog reservation shared with legacy v3, existing Yandex TTS spend and daily limit.
+  // Claim is transactional; accounting is restricted to the Supabase service role.
+  const claimResult = await svc.rpc('crm_ai360_core_claim_v2', { p_user_id: userId, p_reserve_rub: 8 });
+  if (claimResult.error) return respond(req, { error: 'budget_meter_unavailable', answer_verified: false }, 503);
+  const claim = claimResult.data || {};
+  if (claim.allowed !== true) return respond(req, {
+    error: String(claim.reason || 'budget_limit_reached'),
+    daily_limit: claim.daily_limit || 300, budget_rub: claim.budget_rub || 5000,
+    budget_used_rub: claim.used_rub || null, answer_verified: false
+  }, 429);
+  const claimId = String(claim.claim_id || '');
   const day = localDay(), allowedMonth = period(memory.month, day.slice(0, 7), day);
   const invalidSources = [];
   let lastManager = null, lastMonth = allowedMonth, lastDomain = '';
@@ -167,13 +176,18 @@ Deno.serve(async req => {
       return { domain, error: 'source_unavailable' };
     }
   };
+  let inputTokens = 0, outputTokens = 0, rounds = 0;
   const request = async payload => {
     const res = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST', headers: { Authorization: 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: AbortSignal.timeout(14000)
     });
-    if (!res.ok) throw new Error('openai_status_' + res.status);
-    return await res.json();
+    if (!res.ok) throw new Error('openai_upstream_' + res.status);
+    const data = await res.json();
+    rounds++;
+    inputTokens += Math.max(0, Number(data?.usage?.input_tokens || 0));
+    outputTokens += Math.max(0, Number(data?.usage?.output_tokens || 0));
+    return data;
   };
   const output = await runToolCore({
     question, history, memory: { ...memory,
@@ -181,10 +195,27 @@ Deno.serve(async req => {
       today: day, available_domains: DOMAINS },
     domains: DOMAINS, readTool, request
   });
+  // Cost from official gpt-5.4-mini standard text token tariffs:
+  // USD 0.75 / million input and USD 4.50 / million output.
+  // 100 RUB per USD is intentionally above the 28 Oct CBR rate (80.5307).
+  // This protective FX rate may be revised via a reviewed migration.
+  const actualRub = Math.min(8, (inputTokens * 0.75 + outputTokens * 4.5) * 100 / 1000000);
+  const settlement = await svc.rpc('crm_ai360_core_finish_v2', {
+    p_claim_id: claimId, p_actual_rub: Number(actualRub.toFixed(4)),
+    p_input_tokens: Math.floor(inputTokens), p_output_tokens: Math.floor(outputTokens),
+    p_rounds: rounds, p_status: output.pair ? 'ok' : 'failed'
+  });
+  if (settlement.error || settlement.data?.ok !== true) {
+    return respond(req, { error: 'budget_settlement_unavailable', answer_verified: false }, 503);
+  }
   const pair = output.pair;
   if (!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
-    answer_verified: false, error: output.error || 'unavailable', mode: 'director_readonly_v4'
+    answer_verified: false,
+    error: /^openai_upstream_429/.test(String(output.error||'')) ? 'openai_provider_rate_limit' :
+      /AbortError|TimeoutError|abort/.test(String(output.error||'')) ? 'openai_provider_timeout' :
+      'analysis_unavailable',
+    mode: 'director_readonly_v4'
   }, 200);
   const safe = x => String(x || '').replace(/<[^>]*>/g, '').trim();
   const answer = safe(pair.brief).slice(0, 450);
