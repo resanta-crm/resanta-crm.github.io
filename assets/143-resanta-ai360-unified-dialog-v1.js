@@ -3,7 +3,7 @@
 'use strict';
 if(/Android/i.test(navigator.userAgent||'')||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-dialog-v4';
-let history=[],memory={},pending=false,awaitingDetail=null;
+let history=[],memory={},pending=false,awaitingDetail=null,pilotFallback=false;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
   typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
@@ -21,7 +21,8 @@ function pretty(code){
   staff_directory_unavailable:'Справочник менеджеров сейчас не отвечает.',
   manager_not_unique:'Не удалось однозначно определить менеджера. Назови фамилию ещё раз.',
   question_invalid:'Повтори вопрос, пожалуйста.',
-  server_configuration_missing:'Сервер аналитики временно недоступен.'
+  server_configuration_missing:'Сервер аналитики временно недоступен.',
+  pilot_fallback:'Новое ядро временно недоступно. Переключилась на стабильную Леру. Повтори вопрос, пожалуйста.'
  };
  return messages[code]||'Не получилось получить проверенные данные CRM. Повтори вопрос позднее. Ничего не изменено.';
 }
@@ -64,12 +65,22 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
    const payload={message:question,history:history.slice(-10),memory};
-   let result=await db.functions.invoke(ENDPOINT,{body:payload});
+   const usingPilot=!pilotFallback;
+   let result=await db.functions.invoke(usingPilot?ENDPOINT:'crm-ai360-dialog-v3',{body:payload});
    // Only unknown endpoint is retried with stable v1; never double a failed
    // database request during a service slowdown or authentication error.
    if(result.error && Number(result.error?.context?.status)===404)
      result=await db.functions.invoke('crm-ai360-dialog-v3',{body:payload});
+   if(usingPilot&&(result.error||result.data?.error)){
+     const issue=result.error?await errorCode(result.error):String(result.data.error);
+     if(!/not_authorized|ai_quota_exhausted|question_invalid/.test(issue)&&
+        ![400,401,403,429].includes(Number(result.error?.context?.status))){
+       pilotFallback=true;
+       throw new Error('pilot_fallback');
+     }
+   }
    if(result.error)throw new Error(await errorCode(result.error));
+   if(result.data?.error)throw new Error(String(result.data.error));
    if(!allowed())return;
    const data=result.data||{};
    const brief=String(data.brief||data.answer||'').trim();
