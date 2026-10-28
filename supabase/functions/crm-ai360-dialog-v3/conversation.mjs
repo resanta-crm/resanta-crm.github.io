@@ -3,6 +3,7 @@
 const num=n=>Number.isFinite(Number(n))?Number(n):0;
 const money=n=>num(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' белорусских рублей';
 const short=s=>String(s??'').replace(/[\r\n\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,150);
+/** @param {any} snapshot @param {string|null} [manager] */
 export function debtEvidence(snapshot,manager=null){
  const debt=snapshot?.debt_summary||{};
  const rows=Array.isArray(snapshot?.overdue_debtors)?snapshot.overdue_debtors.slice(0,8):[];
