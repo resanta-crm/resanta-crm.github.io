@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool } from './catalog.mjs';
 import { runToolCore } from './core.mjs';
 import { readTasks } from './task-read.mjs';
+import { requestContext, effectiveManager, guardVoicePair } from './context.mjs';
 
 // Isolated read-only director pilot. v3 is NOT imported, replaced or modified.
 const ORIGINS = new Set(['https://resanta-crm.by', 'https://www.resanta-crm.by']);
@@ -48,8 +49,11 @@ async function managedRead(svc, domain, manager, month, day) {
     const managers = Array.isArray(d.managers) ? d.managers : [];
     const selected = manager ? managers.filter(x => normalize(x.manager_name) === normalize(manager)) : managers.slice(0, 15);
     return { domain, source: 'crm_ai360_sales_kpi_snapshot_v1', month,
-      as_of: d.freshness?.last_success_at || null, network_revenue: d.network_revenue,
-      managers: selected, partial: !manager && managers.length > selected.length };
+      scope: manager?'manager':'network', manager:manager||null, currency:'BYN',
+      as_of: d.freshness?.last_success_at || null,
+      network_revenue: manager?null:d.network_revenue,
+      managers:selected, partial:!manager&&managers.length>selected.length,
+      note:manager?'Only this manager; network turnover intentionally excluded':'Network totals and individual managers are separate measurements' };
   }
   if (domain === 'debt') {
     const r = await svc.rpc('crm_ai360_debt_snapshot_v1', { p_manager: manager });
@@ -74,9 +78,12 @@ async function managedRead(svc, domain, manager, month, day) {
   if (domain === 'triovist') {
     const r = await svc.rpc('crm_ai360_triovist_brief_v1', { p_month: month + '-01' });
     if (r.error || !r.data) throw new Error('triovist_unavailable');
-    return { domain, source: 'crm_ai360_triovist_brief_v1', month, as_of: r.data.sales_import_at,
-      plan: r.data.plan, revenue: r.data.revenue, new_tasks: r.data.new_tasks,
-      pending_approval: r.data.pending_approval, partial: false };
+    return { domain, source:'crm_ai360_triovist_brief_v1',
+      scope:'client_all',owner:'Триовист',currency:'BYN',month,
+      as_of:r.data.sales_import_at,plan:r.data.plan,revenue:r.data.revenue,
+      new_tasks:r.data.new_tasks,pending_approval:r.data.pending_approval,
+      partner_stock_date:r.data.partner_stock_date,chekhov_stock_date:r.data.chekhov_stock_date,
+      partial:false,warning:'TOTAL TRIOVIST CLIENT ONLY; never attribute revenue or plan to Rudnev, Shkuran or any manager; Belarusian rubles (BYN), not RUB' };
   }
   if (domain === 'promotions') {
     const r = await svc.from('promotions').select('title,client_name,start_date,end_date,sales_plan,confirmed_sales,actual_spend,status', { count: 'exact' })
@@ -144,33 +151,54 @@ Deno.serve(async req => {
   }, 429);
   const claimId = String(claim.claim_id || '');
   const day = localDay(), allowedMonth = period(memory.month, day.slice(0, 7), day);
-  const invalidSources = [];
-  let lastManager = null, lastMonth = allowedMonth, lastDomain = '';
-  const network = /по всей сети|все менеджеры|всех менеджеров|общая продаж|в целом по сети/i.test(question);
+  const directory=await svc.from('users').select('name').eq('role','manager').limit(100);
+  if(directory.error)return respond(req,{error:'staff_directory_unavailable',answer_verified:false},503);
+  const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
+  const subject=requestContext(question,memory,managerNames);
+  const invalidSources=[], evidence=[];
+  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='';
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
+    const target=effectiveManager(domain,subject);
+    if(target.error)return {domain,error:target.error,message:'Requested manager-specific breakdown is not available in this source. Do not use client totals instead.'};
     let manager;
     try {
-      // Server authorizes employee identity, never trust model strings as SQL filters.
-      manager = await resolveManager(svc, network ? null : (args.manager || memory.manager || null));
-    } catch {
-      return { domain, error: 'manager_not_unique', message: 'Specify employee surname uniquely' };
+      // Subject is resolved from the CURRENT user question, not an AI-supplied name.
+      manager=await resolveManager(svc,target.manager);
+    }catch{
+      return {domain,error:'manager_not_unique',message:'Specify an exact employee surname'};
     }
     const month = period(args.month, allowedMonth, day);
     lastManager = manager;
     lastMonth = month;
     lastDomain = domain;
     try {
-      if (domain === 'tasks') return await readTasks(svc, manager, question, history, day);
-      const managed = await managedRead(svc, domain, manager, month, day);
-      if (managed) return managed;
+      if(domain==='tasks'){
+        const t=await readTasks(svc,manager,question,history,day);
+        evidence.push(t);return t;
+      }
+      if(domain==='clients'){
+        const risk=await svc.rpc('crm_ai360_client_risk_v41',{p_manager:manager,p_month:month+'-01'});
+        if(risk.error||!risk.data)throw new Error('client_analytics_unavailable');
+        const t={domain,source:'crm_ai360_client_risk_v41',...risk.data,clients:(risk.data.clients||[]).slice(0,5),partial:(risk.data.matched_risky_clients||0)>5};
+        evidence.push(t);return t;
+      }
+      if(domain==='stock'){
+        const stock=await svc.rpc('crm_ai360_stock_snapshot_v41',{p_warehouse:'Витебск'});
+        if(stock.error||!stock.data)throw new Error('stock_analytics_unavailable');
+        const t={domain,source:'crm_ai360_stock_snapshot_v41',...stock.data,largest_onhand_skus:(stock.data.largest_onhand_skus||[]).slice(0,5),partial:true};
+        evidence.push(t);return t;
+      }
+      const managed=await managedRead(svc,domain,manager,month,day);
+      if(managed){evidence.push(managed);return managed;}
       const tool = getTool(domain);
       if (!tool) return { domain, error: 'unknown_domain' };
       const result = await collectTool(svc, domain, { manager, signal: AbortSignal.timeout(4500) });
       if (result.error) throw new Error('source_unavailable');
-      return { ...result, as_of: day, partial: true,
-        warning: 'Sample only; do not claim this is the full dataset' };
+      const t={...result,scope:manager?'manager':'network',manager:manager||null,
+        as_of:day,partial:true,warning:'This is a short sample; not a complete dataset or verified business conclusion.'};
+      evidence.push(t);return t;
     } catch {
       invalidSources.push(domain);
       return { domain, error: 'source_unavailable' };
@@ -191,6 +219,8 @@ Deno.serve(async req => {
   };
   const output = await runToolCore({
     question, history, memory: { ...memory,
+      manager:subject.manager||'',subject:subject.subject,
+      subject_is_client:subject.client,explicit_manager:subject.explicitManager||null,
       catalog: CRM_AI360_TOOLS.map(x => x.id + ': ' + x.label).join('; '),
       today: day, available_domains: DOMAINS },
     domains: DOMAINS, readTool, request
@@ -208,8 +238,8 @@ Deno.serve(async req => {
   if (settlement.error || settlement.data?.ok !== true) {
     return respond(req, { error: 'budget_settlement_unavailable', answer_verified: false }, 503);
   }
-  const pair = output.pair;
-  if (!pair) return respond(req, {
+  const pair=evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null;
+  if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
     answer_verified: false,
     error: /^openai_upstream_429/.test(String(output.error||'')) ? 'openai_provider_rate_limit' :
@@ -224,10 +254,10 @@ Deno.serve(async req => {
   return respond(req, {
     answer, brief: answer, detail, followup_question: offer, intent: 'unified_dialog',
     answer_verified: false, // LLM output has not been independently reconciled to the source.
-    sources: output.used, failed_domains: invalidSources, partial_sources: [],
-    month: lastMonth, manager: lastManager,
-    mode: 'director_readonly_v4', engine: 'gpt-5.4-mini',
-    memory: { ...memory, month: lastMonth, manager: lastManager || '',
-      domain: lastDomain || output.used[0]?.split('/')[0] || memory.domain || '' }
+    sources:output.used,failed_domains:invalidSources,partial_sources:evidence.filter(x=>x.partial).map(x=>x.domain),
+    auto_corrected:!!pair.corrected,month:lastMonth,manager:subject.manager||null,
+    mode:'director_readonly_v41',engine:'gpt-5.4-mini',
+    memory:{...memory,month:lastMonth,manager:subject.manager||'',
+      subject:subject.subject,domain:lastDomain||output.used[0]?.split('/')[0]||memory.domain||''}
   });
 });

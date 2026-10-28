@@ -62,7 +62,15 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
  // Navigation remains a local, explicit CRM UI operation.
- if(/^(?:открой|перейди|вернись|покажи раздел)(?:\s|$)/i.test(question))return false;
+ if(/^(?:открой|перейди|вернись|покажи раздел)(?:\s|$)/i.test(question)){
+   // Explicit navigation is a subject boundary. Don't carry Rudnev into Triovist.
+   const name=question.toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
+   const client=/триовист|тривист|21\s*век|21vek/.test(name);
+   history=[];awaitingDetail=null;
+   memory={manager:'',subject:client?'client':'network',
+     domain:client?'triovist':''};
+   return false;
+ }
  if(pending){ui.answer('Ещё проверяю предыдущий вопрос в CRM.');return true;}
  pending=true;window.__resantaAI360PendingV1=true;
  ui.textStatus('Подбираю проверенные источники CRM…');
