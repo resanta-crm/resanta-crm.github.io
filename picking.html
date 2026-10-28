@@ -85,7 +85,7 @@ button,input,select{font:inherit}.hidden{display:none!important}html,body{width:
 </div>
 <script>
 'use strict';
-const PICKING_APP_VERSION='2026-10-20-v23.6.440-offline-safe';
+const PICKING_APP_VERSION='2026-10-28-v23.6.441-auto-reconnect';
 const SUPABASE_URL='https://baqchjtvtmcfzwjjluhs.supabase.co';
 const TSD_GATEWAYS=[
  'https://baqchjtvtmcfzwjjluhs.functions.supabase.co/warehouse-tsd-gateway-v1',
@@ -573,6 +573,22 @@ async function refreshVisible(){
   $('session-warning').textContent='Не удалось обновить заказы: '+String(e?.message||e)+(orders.length?' · показываю сохранённые заказы.':'');
  }
 }
+// Probe again after a failed request even if Android never fires a new online event.
+// Do not discard saved orders or the durable scan queue while disconnected.
+let recoveryInFlight=false;
+async function pollConnectionAndOrders(){
+ if(!session?.token||busy||scanWorker||!moduleVisible()||recoveryInFlight)return;
+ recoveryInFlight=true;
+ try{
+  if(!netReachable){
+   const probe=await runConnectivityChecks(false);
+   if(!probe?.api&&!probe?.gateway)return;
+   if(scanQueue.length){processScanQueue();flushDiag();return}
+   flushDiag();
+  }
+  await refreshVisible();
+ }finally{recoveryInFlight=false}
+}
 async function boot(){
  session=loadSession();
  if(!session){clearInterval(pollTimer);pollTimer=null;show('app-view',false);show('pair-view',true);return}
@@ -585,7 +601,7 @@ async function boot(){
  if(moduleVisible())await refreshVisible();
  if(scanQueue.length&&session?.token)processScanQueue();
  setTimeout(flushDiag,600);
- clearInterval(pollTimer);pollTimer=setInterval(()=>{if(!busy&&!scanWorker&&moduleVisible()&&netReachable)refreshVisible()},8000);
+ clearInterval(pollTimer);pollTimer=setInterval(()=>{pollConnectionAndOrders().catch(()=>{})},8000);
 }
 document.querySelectorAll('[data-pair-device]').forEach(b=>b.addEventListener('click',()=>{
  $('pair-device').value=b.dataset.pairDevice||'';
