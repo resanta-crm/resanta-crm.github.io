@@ -44,7 +44,7 @@ test('normal text preserved with simple speech-friendly corrections',()=>{
  const r=guardVoicePair({brief:'В сэмпле 5 строк',detail:'Детали по BYN',offer:'Продолжить?'},{evidence:[],managers});
  assert.equal(r.corrected,false);assert.match(r.brief,/неполной выборке/);
  assert.match(r.detail,/белорусских рублей/);
- assert.match(localeSpeech('SKU'),'артикулов');
+ assert.equal(localeSpeech('SKU'),'артикулов');
 });
 test('server source contracts include scope and full analytics RPCs',()=>{
  const server=fs.readFileSync('supabase/functions/crm-ai360-dialog-v4/index.ts','utf8');
