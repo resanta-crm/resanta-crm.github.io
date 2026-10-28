@@ -22,6 +22,15 @@ function pretty(code){
   manager_not_unique:'Не удалось однозначно определить менеджера. Назови фамилию ещё раз.',
   question_invalid:'Повтори вопрос, пожалуйста.',
   server_configuration_missing:'Сервер аналитики временно недоступен.',
+  daily_dialog_limit:'Лимит AI-диалогов на сегодня — 300. Завтра он обновится. Распознавание голоса учитывается отдельно.',
+  monthly_budget_exhausted:'Месячный бюджет AI 360° — 5 000 российских рублей — исчерпан. Данные CRM не изменены.',
+  budget_limit_reached:'Достигнуто ограничение бюджета AI 360°. Новые запросы остановлены, чтобы избежать лишних расходов.',
+  budget_meter_unavailable:'Сервис контроля расходов временно недоступен. Запрос остановлен безопасно — ничего не списано.',
+  budget_settlement_unavailable:'Ответ получен, но не удалось подтвердить учёт расходов. Данные CRM не изменены. Попробуй позднее.',
+  openai_provider_rate_limit:'OpenAI временно ограничил запросы на своей стороне. Наш дневной лимит здесь ни при чём.',
+  openai_provider_timeout:'OpenAI не ответил вовремя. Попробуй повторить короткий вопрос.',
+  analysis_unavailable:'Ядро AI 360° не смогло подтвердить результат. Данные CRM не изменены. Попробуй уточнить вопрос.',
+  ai_quota_exhausted:'Достигнуто ограничение обращений к OpenAI. Это не лимит микрофона.',
   pilot_fallback:'Новое ядро временно недоступно. Переключилась на стабильную Леру. Повтори вопрос, пожалуйста.'
  };
  return messages[code]||'Не получилось получить проверенные данные CRM. Повтори вопрос позднее. Ничего не изменено.';
@@ -73,7 +82,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
      result=await db.functions.invoke('crm-ai360-dialog-v3',{body:payload});
    if(usingPilot&&(result.error||result.data?.error)){
      const issue=result.error?await errorCode(result.error):String(result.data.error);
-     if(!/not_authorized|ai_quota_exhausted|question_invalid/.test(issue)&&
+     if(!/not_authorized|ai_quota_exhausted|question_invalid|daily_dialog_limit|monthly_budget_exhausted|budget_limit_reached|budget_meter_unavailable/.test(issue)&&
         ![400,401,403,429].includes(Number(result.error?.context?.status))){
        pilotFallback=true;
        throw new Error('pilot_fallback');
