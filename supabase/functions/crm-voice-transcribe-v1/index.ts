@@ -36,6 +36,14 @@ Deno.serve(async(req:Request)=>{
  const quota=await svc.rpc('crm_voice_claim_v1',{p_user_id:user.id});
  if(quota.error)return out({error:'quota_unavailable'},503,origin);
  if(!quota.data)return out({error:'voice_daily_limit'},429,origin);
+ // Exact clip duration is estimated at gpt-transcribe's $0.0045/minute.
+ // The budget claim shares a 5,000 RUB monthly pool with the AI text core and Yandex voice.
+ const budget=await svc.rpc('crm_ai360_stt_claim_v2',{p_user_id:user.id,p_duration_seconds:duration});
+ if(budget.error)return out({error:'speech_budget_meter_unavailable'},503,origin);
+ if(budget.data?.allowed!==true)return out({
+   error:budget.data?.reason==='monthly_budget_exhausted'?'speech_monthly_budget_exhausted':'speech_budget_unavailable',
+   budget:budget.data||null
+ },429,origin);
  const form=new FormData();
  form.append('model','gpt-transcribe');
  form.append('languages[]','ru');
