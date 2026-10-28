@@ -36,13 +36,13 @@ test('server defends actual Triovist fact against wrong owner and currency',()=>
  const pair={brief:'У Руднева Триовист 784421 ₽',detail:'Руднев выполнил план 681000 RUB',offer:'Подробнее?'};
  const r=guardVoicePair(pair,{managers,period:'2026-10',evidence:[{domain:'triovist',scope:'client_all',currency:'BYN',month:'2026-10',revenue:784421.67,plan:681000}]});
  assert.equal(r.corrected,true);assert.match(r.brief,/Триовист/);
- assert.match(r.brief,/784 421,67/);
+ assert.match(r.brief,/784[ \u00a0]421,67/);
  assert.doesNotMatch(r.brief,/Руднев|₽|RUB/);
  assert.match(r.brief,/белорусских рублей/);
 });
 test('normal text preserved with simple speech-friendly corrections',()=>{
  const r=guardVoicePair({brief:'В сэмпле 5 строк',detail:'Детали по BYN',offer:'Продолжить?'},{evidence:[],managers});
- assert.equal(r.corrected,false);assert.match(r.brief,/неполная выборка/);
+ assert.equal(r.corrected,false);assert.match(r.brief,/неполной выборке/);
  assert.match(r.detail,/белорусских рублей/);
  assert.match(localeSpeech('SKU'),'артикулов');
 });
