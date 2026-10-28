@@ -8,6 +8,7 @@ const evidence=debtEvidence({
   {client_name:'Крупный долг',debt_overdue:45000,debt_overdue_days:10,manager_name:'Шкуран',report_date:'2026-10-27'},
   {client_name:'Долг давний',debt_overdue:0.06,debt_overdue_days:124,manager_name:'Руднев',report_date:'2026-10-27'}
  ],
+ manager_totals:[{manager_name:'Шкуран Татьяна',amount:46511.37,debtor_rows:6},{manager_name:'Руднев Александр',amount:43067.85,debtor_rows:22}],
  warnings:['ПДЗ: сопоставление менеджера по первому слову ФИО']
 });
 assert.equal(evidence.count,41);
@@ -15,6 +16,8 @@ assert.equal(evidence.report_date,'2026-10-27');
 assert.ok(evidence.summary.includes('111'));
 assert.ok(evidence.summary.includes('30 дней'));
 assert.ok(evidence.detail.includes('Долг давний'));
+assert.ok(evidence.detail.includes('Шкуран Татьяна'));
+assert.ok(evidence.summary.includes('Шкуран Татьяна'));
 assert.ok(evidence.detail.includes('Не приравнивать'));
 assert.equal(evidence.limited_clients,true);
 const answer=normalizeVoicePair({brief:'Я понял. Я готов объяснить.',detail:'Понял, здесь требуется проверка.',offer:'Хочешь подробнее?'},{});
@@ -33,6 +36,12 @@ const html=fs.readFileSync('index.html','utf8');
 assert.ok(server.indexOf('u.id!==OWNER_ID')<server.indexOf('const question='));
 assert.ok(server.includes("profile.data?.role!=='boss'"));
 assert.ok(server.includes("svc.rpc('crm_ai360_operations_snapshot_v1'"));
+assert.ok(server.includes("svc.rpc('crm_ai360_debt_snapshot_v1'"), 'debt must use only narrow snapshot');
+const sql=fs.readFileSync('supabase/migrations/20261028130000_ai360_debt_snapshot_v1.sql','utf8');
+assert.ok(sql.includes('SET statement_timeout TO \'3500ms\''));
+assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.crm_ai360_debt_snapshot_v1(text) FROM PUBLIC'));
+assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.crm_ai360_debt_snapshot_v1(text) TO service_role'));
+assert.ok(!/\bINSERT\s+INTO\b|\bUPDATE\s+public\.|\bDELETE\s+FROM\b/i.test(sql),'debt source must be read only');
 assert.ok(server.includes("debtEvidence(r.data,manager)"));
 assert.ok(server.indexOf("if(domain==='debt')")<server.indexOf("if(getTool(domain))"));
 assert.ok(server.includes("text:{format:{type:'json_schema'"));
