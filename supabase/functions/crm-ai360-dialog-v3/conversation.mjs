@@ -9,6 +9,8 @@ export function debtEvidence(snapshot,manager=null){
  const rows=Array.isArray(snapshot?.overdue_debtors)?snapshot.overdue_debtors.slice(0,8):[];
  const date=debt.report_date||null, n=Number(debt.debtor_rows||0);
  const warning=Array.isArray(snapshot?.warnings)?snapshot.warnings.filter(x=>/ПДЗ|дебит|долг/.test(String(x))).slice(0,2):[];
+ const byManager=Array.isArray(snapshot?.manager_totals)?snapshot.manager_totals.slice(0,15):[];
+ const managerBreakdown=byManager.map(x=>short(x.manager_name)+': '+money(x.amount)+', '+num(x.debtor_rows)+' записей').join('; ');
  const heading=(manager?'По менеджеру '+short(manager)+'. ':'')+'ПДЗ: отчёт '+(date||'без подтверждённой даты')+
   '. Всего записей с просрочкой '+n+', просроченная сумма '+money(debt.amount)+
   '. Записей со сроком 30 и более дней '+num(debt.rows_30d)+
@@ -21,11 +23,12 @@ export function debtEvidence(snapshot,manager=null){
  });
  const detail=heading+' Крупнейшие подтверждённые должники по сумме (не весь реестр): '+
   (top.length?top.join('; '):'связанный список отсутствует')+
-  '. Не приравнивать максимальное число дней просрочки к наибольшей сумме долга.'+
+  '. Ответственные менеджеры: '+(managerBreakdown||'отдельная разбивка недоступна')+'. Не приравнивать максимальное число дней просрочки к наибольшей сумме долга.'+
   (warning.length?' Ограничения источника: '+warning.map(short).join('; '):'');
  const terse=(manager?'По '+short(manager)+': ':'')+'по отчёту '+(date||'без даты')+
   ' просрочено '+money(debt.amount)+', '+n+' записей.'+
   ' Срок от 30 дней — '+num(debt.rows_30d)+' записей.'+
+  (!manager&&byManager.length?' Наибольшая сумма по менеджерам: '+short(byManager[0].manager_name)+' — '+money(byManager[0].amount)+'.':'')+
   (rows.length?' Крупнейший должник: '+short(rows[0].client_name)+' — '+money(rows[0].debt_overdue)+'.':'')+
   ' Хочешь, разберу крупнейших должников и действия по ним?';
  return {summary:terse,detail,report_date:date,count:n,
