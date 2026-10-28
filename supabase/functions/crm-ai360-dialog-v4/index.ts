@@ -136,6 +136,7 @@ Deno.serve(async req => {
   if (quota.error || quota.data !== true) return respond(req, { error: 'ai_quota_exhausted', answer_verified: false }, 429);
   const day = localDay(), allowedMonth = period(memory.month, day.slice(0, 7), day);
   const invalidSources = [];
+  let lastManager = null, lastMonth = allowedMonth, lastDomain = '';
   const network = /по всей сети|все менеджеры|всех менеджеров|общая продаж|в целом по сети/i.test(question);
   const readTool = async args => {
     const domain = args.domain;
@@ -148,6 +149,9 @@ Deno.serve(async req => {
       return { domain, error: 'manager_not_unique', message: 'Specify employee surname uniquely' };
     }
     const month = period(args.month, allowedMonth, day);
+    lastManager = manager;
+    lastMonth = month;
+    lastDomain = domain;
     try {
       if (domain === 'tasks') return await readTasks(svc, manager, question, history, day);
       const managed = await managedRead(svc, domain, manager, month, day);
@@ -190,8 +194,9 @@ Deno.serve(async req => {
     answer, brief: answer, detail, followup_question: offer, intent: 'unified_dialog',
     answer_verified: false, // LLM output has not been independently reconciled to the source.
     sources: output.used, failed_domains: invalidSources, partial_sources: [],
-    month: allowedMonth, manager: memory.manager || null,
+    month: lastMonth, manager: lastManager,
     mode: 'director_readonly_v4', engine: 'gpt-5.4-mini',
-    memory: { ...memory, domain: output.used[0]?.split('/')[0] || memory.domain || '' }
+    memory: { ...memory, month: lastMonth, manager: lastManager || '',
+      domain: lastDomain || output.used[0]?.split('/')[0] || memory.domain || '' }
   });
 });
