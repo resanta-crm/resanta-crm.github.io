@@ -181,13 +181,13 @@ Deno.serve(async req => {
       if(domain==='clients'){
         const risk=await svc.rpc('crm_ai360_client_risk_v41',{p_manager:manager,p_month:month+'-01'});
         if(risk.error||!risk.data)throw new Error('client_analytics_unavailable');
-        const t={domain,source:'crm_ai360_client_risk_v41',...risk.data};
+        const t={domain,source:'crm_ai360_client_risk_v41',...risk.data,clients:(risk.data.clients||[]).slice(0,5),partial:(risk.data.matched_risky_clients||0)>5};
         evidence.push(t);return t;
       }
       if(domain==='stock'){
         const stock=await svc.rpc('crm_ai360_stock_snapshot_v41',{p_warehouse:'Витебск'});
         if(stock.error||!stock.data)throw new Error('stock_analytics_unavailable');
-        const t={domain,source:'crm_ai360_stock_snapshot_v41',...stock.data};
+        const t={domain,source:'crm_ai360_stock_snapshot_v41',...stock.data,largest_onhand_skus:(stock.data.largest_onhand_skus||[]).slice(0,5),partial:true};
         evidence.push(t);return t;
       }
       const managed=await managedRead(svc,domain,manager,month,day);
@@ -238,7 +238,7 @@ Deno.serve(async req => {
   if (settlement.error || settlement.data?.ok !== true) {
     return respond(req, { error: 'budget_settlement_unavailable', answer_verified: false }, 503);
   }
-  const pair=guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth});
+  const pair=evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null;
   if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
     answer_verified: false,
