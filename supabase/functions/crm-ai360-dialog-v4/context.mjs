@@ -22,7 +22,11 @@ export function clientTopic(question){
 export function requestContext(question,memory,managers){
  const explicit=namedManager(question,managers);
  const network=isNetworkQuestion(question);
- const client=clientTopic(question);
+ const explicitClient=clientTopic(question);
+ const contextFollowup=/^(?:а\s|а\?|сколько|какой план|что предлагаешь|расскажи подробнее|а почему)/i.test(norm(question));
+ const otherSection=/(?:склад|остатк|пд[зс]|gps|джипиэс|маршрут|клиент[ыа]?|задач|акци|менеджер)/i.test(norm(question));
+ const client=explicitClient||(!explicitClient&&!otherSection&&!explicit&&
+   memory?.subject==='client'&&contextFollowup);
  const prior=typeof memory?.manager==='string'&&managers.includes(memory.manager)?memory.manager:null;
  const manager=network?null:(explicit||(client?null:prior));
  return {explicitManager:explicit,manager,network,client,
