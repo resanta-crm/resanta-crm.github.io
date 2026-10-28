@@ -50,8 +50,8 @@ assert.ok(!/\.update\(|\.insert\(|\.upsert\(|\.delete\(/.test(server),'no CRM wr
 assert.ok(core.includes("crmAI360UnifiedDialogFollowupV3(query"));
 assert.ok(core.includes("options?.noVoice===true"));
 assert.ok(core.includes("options?.fullVoice===true"));
-assert.ok(loader.includes('143-resanta-ai360-unified-dialog-v1.js?v=3'));
-assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=29'));
+assert.ok(loader.includes('143-resanta-ai360-unified-dialog-v1.js?v=4'));
+assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=30'));
 const events=[],requests=[];
 let response={brief:'Отчёт: 111 тысяч. Хочешь подробности?',detail:'Проверенный полный разбор по отчёту от 27 октября.',followup_question:'Хочешь подробнее?',memory:{domain:'debt',month:'2026-10',manager:''}};
 const ctx={
@@ -69,7 +69,7 @@ const delay=()=>new Promise(res=>setTimeout(res,35));
 assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Сколько просроченной ПДЗ?',ui),true);
 await delay();
 assert.equal(requests.length,1);
-assert.equal(requests[0].name,'crm-ai360-dialog-v3');
+assert.equal(requests[0].name,'crm-ai360-dialog-v4');
 assert.equal(events[0].text,response.brief);
 assert.equal(events[0].options.fullVoice,true);
 assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('да',ui),true);
