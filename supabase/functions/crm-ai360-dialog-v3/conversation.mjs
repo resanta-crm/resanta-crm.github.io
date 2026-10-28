@@ -38,7 +38,7 @@ export function normalizeVoicePair(input,fallback){
  const detail=clean(raw.detail).slice(0,3200)||clean(fallback?.detail).slice(0,3200)||brief;
  const offer=clean(raw.offer).slice(0,170)||'Хочешь, расскажу подробнее?';
  // Only assistant's first-person gender is normalized. Never alter employee names or source data.
- const feminine=s=>s.replace(/\bЯ понял\b/gi,'Я поняла').replace(/\bЯ готов\b/gi,'Я готова').replace(/\bПонял, /gi,'Поняла, ');
+ const feminine=s=>s.replace(/Я понял(?![А-Яа-яЁё])/gi,'Я поняла').replace(/Я готов(?![А-Яа-яЁё])/gi,'Я готова').replace(/(^|[.!?] )Понял,/gi,'$1Поняла,');
  return {brief:feminine(brief),detail:feminine(detail),offer:feminine(offer)};
 }
 export function classifyFollowup(value){
