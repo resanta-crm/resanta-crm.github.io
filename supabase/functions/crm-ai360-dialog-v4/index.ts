@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool } from './catalog.mjs';
 import { runToolCore } from './core.mjs';
+import { readTasks } from './task-read.mjs';
 
 // Isolated read-only director pilot. v3 is NOT imported, replaced or modified.
 const ORIGINS = new Set(['https://resanta-crm.by', 'https://www.resanta-crm.by']);
@@ -38,33 +39,6 @@ async function resolveManager(svc, name) {
   });
   if (matches.length !== 1) throw new Error('manager_not_unique');
   return String(matches[0].name);
-}
-function scopeFromQuestion(question, history) {
-  const last = normalize(question);
-  const contextual = /^(а у|а что|у него|у нее|а сейчас)/.test(last);
-  const contextText = contextual ? ' ' + normalize(history.slice(-3).map(x => x.text).join(' ')) : '';
-  const text = last + contextText;
-  if (/сегодня|сегодняшн/.test(text)) return 'today';
-  if (/просроч|просроченн|с истекш/.test(text)) return 'overdue';
-  return 'open';
-}
-async function readTasks(svc, manager, question, history, day) {
-  const scope = scopeFromQuestion(question, history);
-  let q = svc.from('tasks')
-    .select('id,title,text,manager_name,due_date,done,review_status,priority,created_at', { count: 'exact' })
-    .eq('done', false).eq('review_status', 'approved');
-  if (manager) q = q.eq('manager_name', manager);
-  if (scope === 'today') q = q.eq('due_date', day);
-  if (scope === 'overdue') q = q.lt('due_date', day);
-  const { data, count, error } = await q.order('due_date', { ascending: true }).limit(20);
-  if (error) throw new Error('tasks_source_unavailable');
-  const rows = (data || []).map(x => ({
-    title: short(x.title || x.text), manager_name: short(x.manager_name),
-    due_date: x.due_date, priority: x.priority, review_status: x.review_status
-  }));
-  return { domain: 'tasks', source: 'tasks', report_date: day,
-    filters: { scope, done: false, review_status: 'approved', manager },
-    total_matching: count, returned: rows.length, partial: (count ?? 0) > rows.length, rows };
 }
 async function managedRead(svc, domain, manager, month, day) {
   if (domain === 'sales') {
@@ -162,13 +136,14 @@ Deno.serve(async req => {
   if (quota.error || quota.data !== true) return respond(req, { error: 'ai_quota_exhausted', answer_verified: false }, 429);
   const day = localDay(), allowedMonth = period(memory.month, day.slice(0, 7), day);
   const invalidSources = [];
+  const network = /по всей сети|все менеджеры|всех менеджеров|общая продаж|в целом по сети/i.test(question);
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
     let manager;
     try {
       // Server authorizes employee identity, never trust model strings as SQL filters.
-      manager = await resolveManager(svc, args.manager || memory.manager || null);
+      manager = await resolveManager(svc, network ? null : (args.manager || memory.manager || null));
     } catch {
       return { domain, error: 'manager_not_unique', message: 'Specify employee surname uniquely' };
     }
