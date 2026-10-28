@@ -151,7 +151,10 @@
  }
  function cloudError(error){
    const code=String(error?.code||error?.context?.error||error?.message||'');
-   if(/voice_daily_limit|429|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (300 фраз). Это не ошибка микрофона.';
+   if(/speech_monthly_budget_exhausted/.test(code))return 'Месячный бюджет РЕСАНТА AI 360° достиг 5 000 рублей. Запись остановлена для защиты расходов.';
+   if(/speech_budget_meter_unavailable|speech_budget_unavailable/.test(code))return 'Учёт расходов речи временно недоступен. Запись не отправлена в OpenAI.';
+   if(/voice_daily_limit|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (300 фраз). Это не ошибка микрофона.';
+   if(/speech_provider_rate_limit/.test(code))return 'OpenAI временно ограничил распознавание речи, это не лимит CRM.';
    if(/speech_provider_unconfigured|503/.test(code))return 'Сервис речи ещё не настроен на сервере CRM.';
    if(/audio_(size|duration)/.test(code))return 'Фраза слишком длинная. Повтори короче.';
    if(/not_authorized|401|403/.test(code))return 'Доступ к серверу речи не подтверждён. Перезайди в CRM.';

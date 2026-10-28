@@ -1,0 +1,38 @@
+name: AI360 shared budget and voice safety
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/*ai360*budget*v2.sql'
+      - 'supabase/migrations/*ai360*daily*300.sql'
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'supabase/functions/crm-voice-transcribe-v1/**'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'tests/ai360-budget-v2-contract.test.mjs'
+      - '.github/workflows/ai360-budget-v2.yml'
+  push:
+    branches: [feature/ai360-budget-v2-20261028]
+permissions:
+  contents: read
+jobs:
+  read-only-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax checks
+        run: |
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --check supabase/functions/crm-ai360-dialog-v4/core.mjs
+          node --check supabase/functions/crm-ai360-dialog-v4/task-read.mjs
+      - name: Policy and tool regression tests
+        run: |
+          node --test tests/ai360-budget-v2-contract.test.mjs
+          node --test tests/ai360-core-v4-smoke.test.mjs
+          node tests/ai360-universal-browser-20261027.test.cjs
+          node tests/ai360-conversation-debt-20261028.test.mjs
+          node tests/ai360-voice-stt-429-regression-20261027.test.cjs
