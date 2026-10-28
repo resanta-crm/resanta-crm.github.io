@@ -42,8 +42,9 @@ export function effectiveManager(domain,context){
 }
 export function localeSpeech(value){
  return String(value||'')
-  .replace(/\bв\s+(?:сэмпле|семпле|sample)\b/gi,'в неполной выборке')
-  .replace(/\b(?:сэмпл|семпл|sample)\b/gi,'неполная выборка')
+  .replace(/в\s+с[эе]мпле/giu,'в неполной выборке')
+  .replace(/с[эе]мпл(?:а|е|у|ом)?/giu,'неполная выборка')
+  .replace(/\bsample\b/gi,'неполная выборка')
   .replace(/\b(?:сэмплы|семплы|samples)\b/gi,'неполные выборки')
   .replace(/\bBYN\b/g,'белорусских рублей')
   .replace(/\bRPC\b/g,'серверный расчёт')
