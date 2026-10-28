@@ -42,6 +42,7 @@ export function effectiveManager(domain,context){
 }
 export function localeSpeech(value){
  return String(value||'')
+  .replace(/\bв\s+(?:сэмпле|семпле|sample)\b/gi,'в неполной выборке')
   .replace(/\b(?:сэмпл|семпл|sample)\b/gi,'неполная выборка')
   .replace(/\b(?:сэмплы|семплы|samples)\b/gi,'неполные выборки')
   .replace(/\bBYN\b/g,'белорусских рублей')
