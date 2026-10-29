@@ -207,6 +207,8 @@ function submit(){
  field.value='';const line=document.createElement('div');line.textContent='Вы: '+question;
  line.style.cssText='padding:8px 4px;font-size:12px;color:#445b77;';
  log.appendChild(line);log.scrollTop=log.scrollHeight;
+ // Voice task commands are handled before ordinary read-only analytic questions.
+ if(root.crmAI360BranchTaskHandleV1?.(question))return;
  void read(question);
 }
 function beginMicrophone(){
@@ -232,6 +234,7 @@ function close(){
  if(recognition){try{recognition.abort();}catch{}recognition=null;}
  try{root.speechSynthesis?.cancel();}catch{}
  if(panel)panel.hidden=true;
+ root.crmAI360BranchTaskResetV1?.();
  if(log)log.textContent='';
  last={domain:'',manager:null,month:null,offset:0,client_name:'',group:'',subgroup:'',level:'groups'};
  verified=false;
@@ -249,7 +252,7 @@ function buildPanel(){
  const exit=document.createElement('button');exit.type='button';exit.textContent='Закрыть';
  exit.addEventListener('click',close);heading.append(name,exit);
  const note=document.createElement('small');
- note.textContent='Пилот для директора филиала · только разрешённые данные · без создания задач';
+ note.textContent='Пилот директора Витебска · только разрешённые данные · поручения после отдельного подтверждения';
  const entry=document.createElement('div');entry.style.cssText='display:flex;gap:8px;';
  field=document.createElement('input');field.type='text';field.maxLength=350;
  field.placeholder='Например: продажи Руднева или ПДЗ филиала';
@@ -271,6 +274,7 @@ function buildPanel(){
  speechNote.textContent='🎤 Работает по нажатию, если браузер поддерживает распознавание. Браузер может передавать голос своему сервису; выключается при закрытии окна. Озвучка — системным голосом.';
  panel.append(heading,note,log,entry,actions,status,speechNote);
  document.body.appendChild(panel);
+ root.crmAI360BranchTaskMountV1?.(panel);
 }
 async function open(){
  if(!allowed())return;
@@ -291,7 +295,7 @@ async function open(){
    throw new Error('invalid_staff_capabilities');
   verified=true;
   setStatus('Подключено · только чтение');
-  show('Здравствуйте! Я Лера, помощник руководителя Витебского филиала. Могу проверить продажи и план менеджеров, ПДЗ, задачи, маршруты, визиты, GPS, остатки и закреплённых клиентов. Поручения не создаю.',{speak:false});
+  show('Здравствуйте! Я Лера, помощник руководителя Витебского филиала. Проверяю продажи, ПДЗ, маршруты и клиентов. Также могу подготовить поручение менеджеру. Реальная задача создаётся только после отдельной проверки и подтверждения.',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
