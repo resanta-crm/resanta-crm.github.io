@@ -296,6 +296,7 @@ function submit(){
  log.appendChild(line);log.scrollTop=log.scrollHeight;
  // Voice task commands are handled before ordinary read-only analytic questions.
  if(root.crmAI360BranchTaskHandleV1?.(question))return;
+ if(root.crmLprV1?.voice(question,{answer:show}))return;
  void read(question);
 }
 function beginMicrophone(){

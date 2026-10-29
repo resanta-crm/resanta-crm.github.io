@@ -1,0 +1,34 @@
+name: LPR birthdays and my mileage
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/148-resanta-ai360-staff-identity-v1.js'
+      - 'assets/149-lpr-v1.js'
+      - 'assets/150-my-mileage-v1.js'
+      - 'supabase/functions/crm-lpr-birthdays-v1/**'
+      - 'supabase/functions/crm-my-mileage-v1/**'
+      - 'supabase/migrations/20261029_lpr_birthdays_private_v1.sql'
+      - 'tests/lpr-mileage-v1.test.mjs'
+      - '.github/workflows/lpr-mileage-v1.yml'
+  push:
+    branches: [main]
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/149-lpr-v1.js
+      - run: node --check assets/150-my-mileage-v1.js
+      - run: node --check assets/148-resanta-ai360-staff-identity-v1.js
+      - run: node --check assets/134-resanta-voice-ai360-pilot-v1.js
+      - run: node --check assets/144-resanta-ai360-branch-voice-v1.js
+      - run: node --check --input-type=module < supabase/functions/crm-lpr-birthdays-v1/index.ts
+      - run: node --check --input-type=module < supabase/functions/crm-my-mileage-v1/index.ts
+      - run: node --test tests/lpr-mileage-v1.test.mjs
+      - run: node --test tests/ai360-branch-premium-parity.test.mjs tests/ai360-branch-director-task-confirmation.test.mjs tests/ai360-field-manager-shared-voice.test.mjs
