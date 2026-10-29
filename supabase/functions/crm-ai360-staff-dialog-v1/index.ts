@@ -3,7 +3,7 @@
 // No write APIs, no service-role data returned to LLM without a branch-scope check.
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {runToolCore,CORE_MODEL} from './core.mjs';
-const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
+import {staffPermission} from './permissions.mjs';
 const NAMES=['Руднев','Ачинович','Шкуран'];
 const DOMAINS=['sales','debt','clients','tasks','routes','visits','gps','stock','client_detail'];
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -38,11 +38,14 @@ Deno.serve(async req=>{
  if(!url||!key||!anon||!openai)return reply(req,{error:'server_unconfigured'},503);
  const svc=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
  const logged=await svc.auth.getUser(token).catch(()=>null);
- if(logged?.data?.user?.id!==SID)return reply(req,{error:'not_authorized'},403);
- const prof=await svc.from('users').select('id,name,role,region').eq('id',SID).maybeSingle();
- if(prof.error||prof.data?.id!==SID||prof.data?.role!=='boss'||
-    norm(prof.data?.name)!=='сидарович к.н.'||prof.data?.region!=='Витебск')
+ const userId=logged?.data?.user?.id;
+ if(!userId)return reply(req,{error:'not_authorized'},403);
+ const prof=await svc.from('users').select('id,name,role,region').eq('id',userId).maybeSingle();
+ const permission=staffPermission(userId,prof.data);
+ if(prof.error||!permission||!['branch_director','field_manager'].includes(permission.tier))
   return reply(req,{error:'not_authorized'},403);
+ const permitted=permission.tier==='field_manager'?[permission.name]:NAMES;
+ const domains=permission.domains.filter(d=>DOMAINS.includes(d));
  let body;
  try{body=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
  const question=typeof body?.question==='string'?body.question.trim().slice(0,350):'';
@@ -55,7 +58,12 @@ Deno.serve(async req=>{
  if(directMatches.length>1)return reply(req,{error:'ambiguous_manager'},400);
  const priorManager=NAMES.find(x=>norm(x)===norm(body?.memory?.manager||''))||null;
  const contextFollowup=/^(?:а |и |ещё|еще|что ещё|что еще|расскажи|дальше|покажи|сколько)/i.test(question);
- const subject=directMatches[0]||(contextFollowup?priorManager:null);
+ // Never allow a manager to select another employee. A named colleague in the
+ // question is not an authorization; reject before any LLM or CRM source reads.
+ if(permission.tier==='field_manager'&&directMatches.some(x=>x!==permission.name))
+  return reply(req,{error:'manager_outside_own_portfolio'},403);
+ const subject=permission.tier==='field_manager'?permission.name:
+   directMatches[0]||(contextFollowup?priorManager:null);
  const memory={
   manager:subject||'',month,domain:'',
   client:typeof body.memory?.client==='string'?body.memory.client.slice(0,120):'',
@@ -69,7 +77,7 @@ Deno.serve(async req=>{
   content:String(x?.content||'').slice(0,250)
  })):[];
  // Claim before ALL LLM requests: same per-user budget as director and paid voice.
- const claim=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:SID,p_reserve_rub:8});
+ const claim=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:userId,p_reserve_rub:8});
  if(claim.error)return reply(req,{error:'budget_unavailable'},503);
  if(claim.data?.allowed!==true)return reply(req,{
   error:'ai360_daily_or_monthly_limit',reason:claim.data?.reason||'budget_reached'
@@ -91,13 +99,13 @@ Deno.serve(async req=>{
  // Server rescopes tool arguments, regardless of what an LLM proposes.
  const readTool=async args=>{
   const domain=typeof args.domain==='string'?args.domain:'';
-  if(!DOMAINS.includes(domain))return {domain,error:'not_authorized_domain'};
+  if(!domains.includes(domain))return {domain,error:'not_authorized_domain'};
   const proposed=typeof args.manager==='string'?args.manager.slice(0,90):null;
   const selected=subject||proposed;
-  if(selected&&!NAMES.some(x=>norm(x)===norm(selected)))
+  if(selected&&!permitted.some(x=>norm(x)===norm(selected)))
    return {domain,error:'outside_branch_scope'};
   const outgoing={
-   kind:'read',domain,manager:subject||selected||null,month,
+   kind:'read',domain,manager:permission.tier==='field_manager'?permission.name:subject||selected||null,month,
    offset:Number.isSafeInteger(args.offset)?Math.min(200,Math.max(0,args.offset)):0,
    client_name:typeof args.client==='string'?args.client.slice(0,150):null,
    level:args.level||'groups',group:args.group||null,subgroup:args.subgroup||null,
@@ -114,9 +122,9 @@ Deno.serve(async req=>{
   if(!response.ok)return {domain,error:'source_not_authorized_or_unavailable'};
   const evidence=await response.json().catch(()=>null);
   if(!evidence||evidence.answer_verified!==true||evidence.read_only!==true||
-     evidence.scope?.role!=='branch_director'||evidence.domain!==domain||
+     evidence.scope?.role!==permission.tier||evidence.domain!==domain||
      !Array.isArray(evidence.scope.managers)||!evidence.scope.managers.length||
-     evidence.scope.managers.some(x=>!NAMES.includes(x))||
+     evidence.scope.managers.some(x=>!permitted.includes(x))||
      (subject&&evidence.scope.managers.some(x=>x!==subject)))
     return {domain,error:'source_scope_invalid'};
   // Evidence is the staff gateway's already-minimized, verified payload.
@@ -126,9 +134,11 @@ Deno.serve(async req=>{
  };
  const output=await runToolCore({
   question,history,memory:{...memory,today:day,
-   role:'branch_director',permitted_managers:NAMES,
-   instruction:'Только Витебск. Никогда не создавай поручение самостоятельно.'},
-  domains:DOMAINS,readTool,request,preferredDomain:null
+   role:permission.tier,permitted_managers:permitted,
+   instruction:permission.tier==='field_manager'?
+     'Только собственные клиенты и показатели. Создание поручений строго запрещено.':
+     'Только Витебск. Поручения создавать только через отдельное подтверждение директора филиала.'},
+  domains,readTool,request,preferredDomain:null
  });
  const cost=Math.min(8,(inputTokens*.75+outputTokens*4.5)*100/1000000);
  const settle=await svc.rpc('crm_ai360_core_finish_v2',{
@@ -141,7 +151,7 @@ Deno.serve(async req=>{
  const pair=output.pair;
  const answer=[pair.brief,pair.detail,pair.offer].map(x=>String(x||'').trim()).filter(Boolean).join('\n');
  return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:true,read_only:true,
-  model:CORE_MODEL,scope:'Витебск',subject_manager:subject,month,
+  model:CORE_MODEL,scope:'Витебск',role:permission.tier,subject_manager:subject,month,
   answer:answer.slice(0,4000),speech_summary:pair.brief.slice(0,400),offer:pair.offer,
   domains_used:output.used,as_of:day,
   memory:{manager:subject||'',month,client:memory.client,group:memory.group,subgroup:memory.subgroup,
