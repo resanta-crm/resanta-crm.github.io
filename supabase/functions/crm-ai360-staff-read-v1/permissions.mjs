@@ -25,7 +25,10 @@ export function staffPermission(userId,profile){
 }
 export function targetManagers(permission,domain,requestedManager){
  if(!permission||!permission.domains.includes(domain))return null;
- if(permission.tier==='triovist_category')return domain==='triovist_tasks'?[permission.name]:null;
+ if(permission.tier==='triovist_category'){
+  if(requestedManager&&norm(requestedManager)!==norm(permission.name))return null;
+  return domain==='triovist_tasks'?[permission.name]:null;
+ }
  if(permission.tier==='field_manager'){
   if(requestedManager&&norm(requestedManager)!==norm(permission.name))return null;
   return [permission.name];
