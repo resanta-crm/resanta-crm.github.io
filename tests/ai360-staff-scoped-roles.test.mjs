@@ -91,7 +91,7 @@ test('Server side role enforcement and client validation precede sensitive data 
   "svc.auth.getUser(token)","select('id,name,role,region')",
   "const permission=staffPermission(user.id,profileRes.data)",
   "const managers=targetManagers(permission,domain,",
-  ".eq('name',name).in('manager_name',managers)",
+  ".ilike('name',escapedName).in('manager_name',managers)",
   "if((verify.data||[]).length!==1)throw new Error('client_not_in_authorized_portfolio')",
   "p_client_id:client.id",
   "kind==='capabilities'","body?.kind!=='read'",
