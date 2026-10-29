@@ -45,7 +45,7 @@ function mock({id=SID,name='Сидарович К.Н.',role='boss',region='Ви�
  vm.runInNewContext(source,context);
  return {api:w.crmAI360BranchVoicePilotV1,top,doc,elements,calls,context};
 }
-test('Launcher loads with zero requests and is only visible to exact Sidarovich login',()=>{
+test('Shared launcher loads for allowlisted roles but excludes owner or malformed profiles',()=>{
  const x=mock();
  assert.ok(x.api);
  assert.equal(x.api.allowed(),true);
@@ -53,7 +53,7 @@ test('Launcher loads with zero requests and is only visible to exact Sidarovich 
  assert.equal(x.top.children.filter(e=>e.className==='rsa-branch-launch').length,1);
  for(const bad of [
   {id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',name:'Александр Паюшин'},
-  {id:'19dd9943-99ae-47c4-a39c-4f82a11059a6',name:'Руднев',role:'manager'},
+  {id:'19dd9943-99ae-47c4-a39c-4f82a11059a6',name:'Руднев',role:'boss'},
   {id:SID,name:'Сидарович'},
   {id:SID,region:'Гомель'}
  ]){
@@ -128,7 +128,7 @@ test('Server read-only endpoint and no cross-user state in browser',()=>{
  assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
  assert.ok(source.includes("const ENDPOINT='crm-ai360-staff-read-v1'"));
  assert.ok(staffIdentity.includes("'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'"));
- assert.ok(source.includes("data?.real_task_creation_enabled!==true"));
+ assert.ok(source.includes("data?.real_task_creation_enabled!==role()?.can_create_tasks"));
  assert.ok(source.includes("payload?.read_only!==true"));
  assert.ok(!source.includes("crm-ai360-dialog-v4"));
  assert.ok(!source.includes("crm-ai360-task-real-approval-v1"));
