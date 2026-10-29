@@ -95,7 +95,7 @@ test('Server side role enforcement and client validation precede sensitive data 
   "if((verify.data||[]).length!==1)throw new Error('client_not_in_authorized_portfolio')",
   "p_client_id:client.id",
   "kind==='capabilities'","body?.kind!=='read'",
-  "voice_enabled:permission.tier==='branch_director'","real_task_creation_enabled:permission.tier==='branch_director'"
+  "voice_enabled:['branch_director','field_manager'].includes(permission.tier)","real_task_creation_enabled:permission.tier==='branch_director'"
  ])assert.ok(server.includes(token),token);
  assert.ok(!server.includes(".insert(")&&!server.includes(".update(")&&!server.includes(".delete("));
  assert.ok(server.indexOf('const permission=staffPermission')<server.indexOf('const result=await readStaff('));
