@@ -101,6 +101,8 @@ export async function readTriovist(svc,permission,userEmail,profileEmail,domain,
  return {source:def.table,scope:'assigned_categories',manager_name:permission.name,
   group_names:groups,requested_group:exactGroup,external_21vek_category:
     def.groupColumn==='category'&&requested?requested:null,group_count:groups.length,
+  category_taxonomy:def.groupColumn==='category'?
+    '21vek website category; not the CRM-assigned product group':'CRM assigned product group',
   ...page,warning:page.has_more?'Это только часть записей; можно запросить продолжение.':
    'Выборка охватывает только личные категории в указанном источнике; не всю сеть.'};
 }
