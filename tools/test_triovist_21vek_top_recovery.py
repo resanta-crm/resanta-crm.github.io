@@ -129,7 +129,7 @@ class ResumeTests(unittest.TestCase):
         with patch.object(top,'rest_get',side_effect=self.fake_get),\
              patch.object(top,'rest_get_all',side_effect=self.fake_all),\
              patch.object(top,'rest_patch',side_effect=self.fake_patch):
-            with self.assertRaisesRegex(RuntimeError,'keyword changed'):
+            with self.assertRaisesRegex(RuntimeError,'failed keyword no longer matches|keyword changed'):
                 top.resume_failed_run(self.run['id'],changed,groups)
         self.assertEqual(self.patches,[])
     def test_four_attempts_cannot_loop_forever(self):
