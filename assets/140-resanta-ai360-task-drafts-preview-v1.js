@@ -255,19 +255,25 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
  if(!q)return false;
  if(approvalBusy){ui.answer('Предыдущее согласование ещё проверяется.');return true;}
  if(OLD_REAL_CONFIRM.test(q)){
-   ui.answer('Создание НАСТОЯЩИХ задач на время теста заблокировано. Сохраняются только закрытые черновики директора.');
-   return true;
+   if(!realMode||!approval||approval.real!==true){
+     ui.answer('Нет отдельно проверенных реальных поручений. Сначала скажи «Подготовь реальные поручения для Руднева» и согласуй номера. Ничего не создано.');
+     return true;
+   }
+   void approvalRequest('commit',ui);return true;
  }
  if(LIST_TEST.test(q)){void showSavedTests(ui);return true;}
  if(approval&&FINAL_REJECT.test(q)){
-   approval=null;ui.answer('Подтверждение отменено. Никакие задачи не созданы.');return true;
+   approval=null;realMode=false;ui.answer('Подтверждение отменено. Никакие задачи не созданы.');return true;
  }
  if(FINAL_CONFIRM.test(q)){
+   if(realMode){ui.answer('Это реальные поручения. Для создания скажи точно «Подтверждаю создание поручений».');return true;}
    if(!approval){ui.answer('Нет подготовленных к тестовому сохранению черновиков. Сначала согласуй номера.');return true;}
    void approvalRequest('commit',ui);return true;
  }
  if(approval&&/(?:подтвержд|создавай|давай созда|сохрани|^(?:да|ага|ок|хорошо|согласен)[.!?]*$)/i.test(q)){
-   ui.answer('ТЕСТ: для сохранения закрытых черновиков скажи точно «Подтверждаю сохранение тестовых поручений», или «Отмена создания».');return true;
+   ui.answer(realMode?'Для РЕАЛЬНОГО создания скажи точно «Подтверждаю создание поручений», или «Отмена создания».':
+     'ТЕСТ: для сохранения черновиков скажи точно «Подтверждаю сохранение тестовых поручений», или «Отмена создания».');
+   return true;
  }
  if(REQUEST.test(q)){
    if(pending){ui.answer('Предыдущая проверка ещё выполняется.');return true;}
@@ -275,7 +281,9 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
      ui.answer('Дождись окончания предыдущего анализа Леры. Черновики пока не запрашиваю.');
      return true;
    }
-   items=[];chosen.clear();asOf='';approval=null;void requestDrafts(q,ui);return true;
+   items=[];chosen.clear();asOf='';approval=null;
+   realMode=/(?:реальн|настоящ|рабоч|боев)/i.test(q);
+   void requestDrafts(q,ui);return true;
  }
  if(approvalIntent(q)){
    if(!items.length){
@@ -295,7 +303,7 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
  if(CANCEL.test(q)){
    const ns=numbers(q);
    if(!ns.length||/все|целиком|полностью/.test(q)){
-     items=[];chosen.clear();approval=null;requestEpoch++;
+     items=[];chosen.clear();approval=null;realMode=false;requestEpoch++;
      ui.answer('Черновики отменены. Никакие задачи не были созданы.');
    }else{
      for(const n of ns.slice().reverse())items.splice(n-1,1);
@@ -334,7 +342,8 @@ root.crmAI360TaskDraftsHandleV1=function(query,ui){
    if(!ns.length){ui.answer('Назови номера черновиков для выбора. Запись возможна только после отдельного подтверждения.');return true;}
    chosen=new Set(ns);approval=null;
    ui.answer('Отмечены для дальнейшей проверки черновики: '+ns.join(', ')+
-     '. Пока только тест. Для сохранения закрытых черновиков скажи «Согласую первое».');
+     (realMode?'. Для создания настоящей задачи сначала скажи «Согласую первое».':
+     '. Пока только тест. Для сохранения черновиков скажи «Согласую первое».'));
    return true;
  }
  if(/^(?:покажи|прочитай|перечисли)\s+(?:черновик|поручен)/i.test(q)){
