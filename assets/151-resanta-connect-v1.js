@@ -13,7 +13,7 @@
  let filterText='';
  const dbClient=()=>typeof db!=='undefined'?db:null;
  const profile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
- const isOpen=()=>$('app')?.dataset?.activePage==='connect';
+ const isOpen=()=>$('app')?.dataset?.activePage==='connect'&&$('app')?.style?.display!=='none'&&!!profile();
  const staffName=id=>staff.find(x=>x.id===id)?.name||'Сотрудник';
  const ownMember=id=>members.find(x=>x.user_id===actor&&x.room_id===id);
  const roomLabel=r=>{
