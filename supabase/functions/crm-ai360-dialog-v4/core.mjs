@@ -33,6 +33,8 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
   'На каждый новый вопрос сначала прочитай хотя бы один нужный источник CRM через crm_read.',
   'Сама выбирай дополнительные источники последовательно, когда они нужны для объяснения ситуации.',
   'Только подтверждённые данные инструментов являются фактами. Учитывай дату отчёта и ограничения выборки.',
+  'В любом зарегистрированном разделе CRM ответ ограничен страницей данных. Если has_more=true, ОБЯЗАТЕЛЬНО скажи, что показана только часть и есть продолжение. Не называй неизвестное число записей, не говори «все», если total_count_known=false.',
+  'Если пользователь просит дальше или остальные, продолжи последнюю страницу именно того же раздела, без смены сущности и фильтра. Отвечай с данными новой страницы, не повторяй предыдущую.',
   'В каждом источнике scope, owner и currency являются обязательными ограничителями смысла: клиент Триовист, менеджер и сеть не взаимозаменяемы.',
   'Данные scope=client_all — ВСЕГО по клиенту Триовист. Никогда не называй их продажами Руднева, Шкурана или иного сотрудника.',
   'Любые продажи в Беларуси, включая Триовист, относятся к BYN (белорусские рубли), никогда не ₽ и не российские рубли.',
@@ -101,7 +103,7 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
    const group=typeof args.group==='string'?args.group.slice(0,120):null;
    const subgroup=typeof args.subgroup==='string'?args.subgroup.slice(0,120):null;
    const offset=Number.isInteger(args.offset)?Math.min(200,Math.max(0,args.offset)):0;
-   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'')+(level?'/'+level+'/'+(group||'')+'/'+(subgroup||'')+'/'+offset:'');
+   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'')+(level?'/'+level+'/'+(group||'')+'/'+(subgroup||''):'')+'/'+offset;
    let result;
    if(!domains.includes(domain))result={error:'invalid_domain'};
    else if(seen.has(key))result={error:'already_read'};
