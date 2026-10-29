@@ -53,7 +53,9 @@ Deno.serve(async req=>{
    requestedMonth>='2025-01'&&requestedMonth<=currentMonth?requestedMonth:currentMonth;
  const directMatches=NAMES.filter(name=>norm(question).includes(norm(name).slice(0,4)));
  if(directMatches.length>1)return reply(req,{error:'ambiguous_manager'},400);
- const subject=directMatches[0]||null;
+ const priorManager=NAMES.find(x=>norm(x)===norm(body?.memory?.manager||''))||null;
+ const contextFollowup=/^(?:а |и |ещё|еще|что ещё|что еще|расскажи|дальше|покажи|сколько)/i.test(question);
+ const subject=directMatches[0]||(contextFollowup?priorManager:null);
  const memory={
   manager:subject||'',month,domain:'',
   client:typeof body.memory?.client==='string'?body.memory.client.slice(0,120):'',
