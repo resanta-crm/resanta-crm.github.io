@@ -15,7 +15,7 @@ const variants=name=>{
  if(x.includes('home'))out.add(x.replace('home','hom'));
  if(x.endsWith('a')&&x.length>=5){out.add(x.slice(0,-1)+'y');out.add(x.slice(0,-1)+'u');}
  else if(x.length>=6&&!/[aeiouy]$/.test(x)){out.add(x+'a');out.add(x+'u');}
- return [...out].filter(y=>y.length>=5);
+ return [...out].filter(y=>y.length>=3);
 };
 function bigrams(s){const a=[];for(let i=0;i<s.length-1;i++)a.push(s.slice(i,i+2));return a;}
 function dice(a,b){
@@ -25,8 +25,9 @@ function dice(a,b){
  let n=0;for(const x of bb){const c=freq.get(x)||0;if(c){n++;freq.set(x,c-1)}}
  return 2*n/(aa.length+bb.length||1);
 }
-function scoreText(text,key){
- if(!key||key.length<5)return 0;
+function scoreText(text,key,tokens){
+ if(!key||key.length<3)return 0;
+ if(key.length<5)return tokens.includes(key)?1:0;
  if(text.includes(key))return 1;
  let best=0;
  for(const len of [key.length-2,key.length-1,key.length,key.length+1,key.length+2]){
@@ -40,9 +41,10 @@ function scoreText(text,key){
 }
 export const voicedClientMatches=(question,clients)=>{
  const query=fold(question).slice(0,240);
+ const tokens=String(question||'').toLocaleLowerCase('ru-RU').split(/[^a-zа-яё0-9]+/i).map(fold);
  const ranked=(clients||[]).map(c=>{
   const keys=variants(c.name);
-  return {...c,matchScore:Math.max(0,...keys.map(k=>scoreText(query,k)))};
+  return {...c,matchScore:Math.max(0,...keys.map(k=>scoreText(query,k,tokens)))};
  }).filter(x=>x.matchScore>=0.68)
  .sort((a,b)=>b.matchScore-a.matchScore||String(a.name).localeCompare(String(b.name),'ru'));
  return ranked.slice(0,6);
