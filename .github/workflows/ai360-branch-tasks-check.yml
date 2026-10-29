@@ -1,0 +1,33 @@
+name: AI360 branch director approved tasks
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-branch-task-approval-v1/**'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/145-resanta-ai360-branch-task-approval-v1.js'
+      - 'tests/ai360-branch-director-task-confirmation.test.mjs'
+      - 'index.html'
+      - '.github/workflows/ai360-branch-tasks-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-branch-task-approval-v1/**'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/145-resanta-ai360-branch-task-approval-v1.js'
+      - 'tests/ai360-branch-director-task-confirmation.test.mjs'
+      - 'index.html'
+      - '.github/workflows/ai360-branch-tasks-check.yml'
+jobs:
+  approval-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/144-resanta-ai360-branch-voice-v1.js
+      - run: node --check assets/145-resanta-ai360-branch-task-approval-v1.js
+      - run: node --check --input-type=module < supabase/functions/crm-ai360-branch-task-approval-v1/index.ts
+      - run: node --test tests/ai360-branch-director-task-confirmation.test.mjs
+      - run: node --test tests/ai360-sidarovich-voice-pilot.test.mjs tests/ai360-staff-scoped-roles.test.mjs
