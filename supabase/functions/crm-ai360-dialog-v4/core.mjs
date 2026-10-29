@@ -103,7 +103,7 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
    const group=typeof args.group==='string'?args.group.slice(0,120):null;
    const subgroup=typeof args.subgroup==='string'?args.subgroup.slice(0,120):null;
    const offset=Number.isInteger(args.offset)?Math.min(200,Math.max(0,args.offset)):0;
-   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'')+(level?'/'+level+'/'+(group||'')+'/'+(subgroup||''):'')+'/'+offset;
+   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'')+(level?'/'+level+'/'+(group||'')+'/'+(subgroup||'')+'/'+offset:'')+(offset>0&&!level?'/'+offset:'');
    let result;
    if(!domains.includes(domain))result={error:'invalid_domain'};
    else if(seen.has(key))result={error:'already_read'};
