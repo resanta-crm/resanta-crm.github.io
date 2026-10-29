@@ -1,0 +1,26 @@
+name: AI360 all 34 domains coverage and pagination
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'tests/ai360-all-34-domain-coverage.test.mjs'
+      - '.github/workflows/ai360-all-domains-coverage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'tests/ai360-all-34-domain-coverage.test.mjs'
+      - '.github/workflows/ai360-all-domains-coverage.yml'
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check supabase/functions/crm-ai360-dialog-v4/catalog.mjs
+      - run: node --check supabase/functions/crm-ai360-dialog-v4/core.mjs
+      - run: node --test tests/ai360-all-34-domain-coverage.test.mjs
+      - run: node --test tests/ai360-voice-platform-check.mjs tests/ai360-manager-sales-source.test.mjs
