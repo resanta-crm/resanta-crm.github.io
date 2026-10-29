@@ -8,12 +8,12 @@ let button=null,loading=false,ready=false;
 const scripts=[
  './assets/134-resanta-voice-ai360-pilot-v1.js?v=17',
  './assets/135-resanta-voice-capture-fix-v2.js?v=16',
- './assets/136-resanta-voice-quality-v3.js?v=16',
+ './assets/136-resanta-voice-quality-v3.js?v=17',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
  './assets/140-resanta-ai360-task-drafts-preview-v1.js?v=6',
  './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=2',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
- './assets/143-resanta-ai360-unified-dialog-v1.js?v=6'
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=7'
 ];
 function owner(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
