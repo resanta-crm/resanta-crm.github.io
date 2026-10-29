@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>РЕСАНТА CONNECT · Тестовый пилот №126</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#172235;background:#f2f5fa}
+*{box-sizing:border-box}
+body{margin:0}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.top{background:#113e72;color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top strong{font-size:18px}.top small{opacity:.8}
+.shell{height:calc(100dvh - 63px);display:grid;grid-template-columns:minmax(240px,310px) 1fr}
+.sidebar{background:white;border-right:1px solid #dbe3ed;display:flex;flex-direction:column;min-height:0}
+.bar{padding:13px;border-bottom:1px solid #e6ebf3}
+.bar h2{font-size:15px;margin:0 0 10px}
+.buttons{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid #c9d6e7;border-radius:9px;background:white;padding:8px 12px;color:#164373;font-size:13px}
+.btn.primary{background:#1763aa;border-color:#1763aa;color:white}
+.btn.danger{color:#a33}
+.rooms{overflow-y:auto;flex:1}
+.room{border:0;border-bottom:1px solid #edf0f5;width:100%;padding:15px 12px;text-align:left;background:white;display:flex;flex-direction:column;gap:3px}
+.room.active{background:#eaf2fb}
+.room:hover{background:#f2f6fc}
+.room small{color:#718096;font-size:11px}
+.chat{display:flex;flex-direction:column;min-width:0;min-height:0}
+.chathead{background:white;border-bottom:1px solid #dbe3ed;padding:13px 18px;min-height:57px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chathead b{display:block;font-size:15px}
+.chathead small{display:block;color:#738397;font-size:11px}
+.messages{flex:1;overflow:auto;padding:22px;display:flex;flex-direction:column;gap:8px}
+.bubble{max-width:min(82%,650px);background:white;border:1px solid #e4eaf2;padding:10px 12px;border-radius:13px;overflow-wrap:anywhere;white-space:pre-wrap}
+.bubble.mine{align-self:flex-end;background:#dbeefd;border-color:#c7e0f8}
+.bubble .who{color:#436585;font-weight:600;font-size:11px;margin-bottom:3px}
+.bubble .when{font-size:10px;color:#8595a7;margin-top:4px;text-align:right}
+.empty{margin:auto;color:#64758b;text-align:center;line-height:1.5;padding:20px}
+.composer{padding:12px;background:white;border-top:1px solid #dbe3ed;display:flex;align-items:end;gap:8px}
+.composer textarea{flex:1;min-height:40px;max-height:130px;resize:vertical;border:1px solid #ccd6e4;border-radius:10px;padding:10px;outline-color:#1763aa}
+.notice{padding:7px 14px;background:#fff8dd;color:#6d5611;font-size:12px;text-align:center}
+.notice.error{background:#ffe8e8;color:#a42424}
+dialog{border:1px solid #dbe3ed;border-radius:15px;padding:23px;width:min(460px,94vw);box-shadow:0 16px 60px #26385a3f}
+dialog::backdrop{background:#15284470}
+dialog h3{margin:0 0 15px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field input,.field select{border:1px solid #c6d4e5;border-radius:8px;padding:9px;width:100%}
+.people{border:1px solid #e4e9f0;padding:6px;max-height:180px;overflow:auto;border-radius:8px}
+.person{display:flex;align-items:center;gap:7px;padding:7px 5px;font-size:13px}
+.person small{color:#66768a}
+.login{max-width:430px;margin:14vh auto;padding:24px;border:1px solid #dae3ef;border-radius:16px;background:white}
+.login h2{margin-top:0}
+.login p{font-size:13px;color:#667b94}
+.hidden{display:none!important}
+@media(max-width:640px){.top{padding:10px}.top strong{font-size:15px}.shell{grid-template-columns:115px minmax(0,1fr)}.bar{padding:8px}.buttons{flex-direction:column}.btn{padding:8px 6px;font-size:12px}.room{padding:9px 5px}.room small{display:none}.messages{padding:9px}.bubble{max-width:97%;font-size:13px}.chathead{padding:9px}.composer{padding:7px}.composer textarea{min-width:0}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div><strong>РЕСАНТА CONNECT 360°</strong> <small>· Пилот №126, Витебск</small></div>
+  <span id="account-label">Без подключения</span>
+</header>
+<div id="notice" class="notice">Тестовый контур: сообщения доступны только участникам чата. Рабочая CRM не затрагивается.</div>
+<section class="login" id="login-screen">
+  <h2>Тестовый вход</h2>
+  <p>Используйте только учётную запись отдельного тестового Supabase-проекта. Никаких новых сотрудников здесь создавать нельзя.</p>
+  <form id="login-form">
+    <div class="field"><label for="email">Email</label><input id="email" type="email" required autocomplete="username"></div>
+    <div class="field"><label for="password">Пароль</label><input id="password" type="password" required autocomplete="current-password"></div>
+    <button class="btn primary" type="submit">Войти в тестовый чат</button>
+  </form>
+</section>
+<main class="shell hidden" id="main-screen">
+  <aside class="sidebar">
+    <div class="bar">
+      <h2>Рабочие чаты</h2>
+      <div class="buttons">
+        <button class="btn primary" id="create-room" type="button">+ Новый чат</button>
+        <button class="btn" id="reload-rooms" type="button">Обновить</button>
+      </div>
+    </div>
+    <div id="rooms" class="rooms"></div>
+  </aside>
+  <section class="chat">
+    <div class="chathead">
+      <div><b id="chat-title">Выберите чат</b><small id="chat-details"></small></div>
+      <button id="invite-btn" class="btn hidden" type="button">Пригласить</button>
+    </div>
+    <div id="messages" class="messages"><p class="empty">Создайте первый чат с коллегами из тестового Витебска.</p></div>
+    <form id="composer" class="composer hidden">
+      <textarea id="message-body" maxlength="4000" placeholder="Сообщение..." required></textarea>
+      <button id="send-btn" class="btn primary" type="submit">Отправить</button>
+    </form>
+  </section>
+</main>
+<dialog id="room-dialog">
+  <form id="create-form">
+    <h3>Создать чат</h3>
+    <div class="field"><label for="room-kind">Тип чата</label>
+      <select id="room-kind"><option value="direct">Личный</option><option value="group">Групповой</option><option value="channel">Официальный канал (директор)</option></select>
+    </div>
+    <div class="field" id="title-field"><label for="room-name">Название группы</label><input id="room-name" maxlength="100" placeholder="Например, Склад Витебск"></div>
+    <div class="field"><label>Кого пригласить</label><div id="people" class="people"></div></div>
+    <div class="buttons"><button class="btn primary" id="create-submit" type="submit">Создать</button><button class="btn" id="create-cancel" type="button">Отмена</button></div>
+  </form>
+</dialog>
+<dialog id="invite-dialog">
+  <form id="invite-form">
+    <h3>Пригласить коллегу</h3>
+    <div class="field"><label for="invite-user">Сотрудник</label><select id="invite-user"></select></div>
+    <div class="buttons"><button class="btn primary" type="submit">Пригласить</button><button class="btn" id="invite-cancel" type="button">Отмена</button></div>
+  </form>
+</dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<script defer src="./app.js"></script>
+</body>
+</html>
