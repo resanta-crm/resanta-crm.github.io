@@ -1,11 +1,33 @@
-/* Director proactive briefing v1. Only on click/voice request after opening Lera.
-   Read-only CRM data. No writes, no background polling and no automatic messages. */
+/* AI360 director proactivity v2. Once daily after the director explicitly opens Lera.
+   Verified read-only CRM brief, no hidden polling, no CRM writes or automatic tasks. */
 (function(){
 'use strict';
 if(/Android/i.test(navigator.userAgent||'')||window.crmAI360DirectorBriefHandleV1)return;
 const ENDPOINT='crm-ai360-director-briefing-v1';
 const INTENT=/(?:брифинг(?:\s+директора)?|приоритет[а-яё]*\s+(?:дня|на\s+сегодня)|(?:главн[а-яё]*|важн[а-яё]*)\s+(?:проблем[а-яё]*|риск[а-яё]*)\s+(?:на\s+сегодня|дня)|что\s+сегодня\s+(?:важн[а-яё]*|главн[а-яё]*))/i;
-let pending=false,lastAsOf='',button=null,feedback=null,ownerVisible=false;
+let pending=false,lastAsOf='',button=null,feedback=null,proactiveToggle=null;
+const SEEN_KEY='resanta-ai360-brief-seen-daily-v2';
+const OPT_KEY='resanta-ai360-brief-enabled-v2';
+let attemptAt=0;
+function stored(key){try{return window.localStorage?.getItem(key)||'';}catch{return '';}}
+function save(key,value){try{window.localStorage?.setItem(key,value);}catch{}}
+function todayMinsk(){
+ const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',
+  year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const part=x=>parts.find(p=>p.type===x)?.value||'';
+ return part('year')+'-'+part('month')+'-'+part('day');
+}
+function panelVisible(){
+ const panel=document.querySelector('.rva-window');
+ return Boolean(panel&&!panel.hidden&&!document.hidden&&!panel.classList.contains('rva-mini'));
+}
+function enabled(){return stored(OPT_KEY)!=='off';}
+function toggleTitle(){
+ if(proactiveToggle){
+  proactiveToggle.textContent='Автобрифинг: '+(enabled()?'включён':'выключен');
+  proactiveToggle.setAttribute('aria-pressed',String(enabled()));
+ }
+}
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
  typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
@@ -32,6 +54,15 @@ function speechBrief(data){
    spoken.join(' ')+' Все пять направлений проверены. '+
    'Подробные источники и ограничения есть на экране. '+
    'Никакие поручения не созданы.').replace(/\s+/g,' ').trim();
+}
+// Only one or two grounded actionable signals are voiced automatically.
+// The complete five-source explanation remains visible in the transcript.
+function shortProactiveSpeech(data){
+ const cards=(data?.cards||[]).filter(c=>c?.attention&&['high','medium'].includes(c.level));
+ const selected=cards.length?cards.slice(0,2):(data?.cards||[]).slice(0,1);
+ const note=selected.map(c=>safe(c.title,55)+'. '+safe(c.fact,70)).join('; ');
+ return ('Я проверила CRM. '+(note||'Директорский брифинг готов.')+
+  ' Все пять направлений на экране. Для подробностей скажи «расскажи подробнее».').slice(0,225);
 }
 async function errorCode(err){
  try{const json=await err?.context?.json?.();return String(json?.error||err?.message||'request_failed');}
@@ -62,9 +93,9 @@ function present(data){
   (warnings.length?'\n\n**Проверить качество данных:**\n'+warnings.join('\n'):'')+
   '\n\n**Только рекомендации. Ничего не создано, никому не отправлено.**';
 }
-async function requestBrief(ui){
- if(pending){ui.answer('Брифинг уже проверяется. Дождись результата этого запроса.');return;}
- if(!allowed())return;
+async function requestBrief(ui,{auto=false}={}){
+ if(pending){if(!auto)ui.answer('Брифинг уже проверяется. Дождись результата этого запроса.');return;}
+ if(!allowed()||(auto&&!panelVisible()))return;
  pending=true;
  if(button)button.disabled=true;
  window.__resantaAI360PendingV1=true;
@@ -77,14 +108,17 @@ async function requestBrief(ui){
    if(!session?.access_token)throw new Error('not_authorized');
    const res=await db.functions.invoke(ENDPOINT,{body:{kind:'director_brief'}});
    if(res.error)throw new Error(await errorCode(res.error));
-   if(!allowed())return;
+   if(!allowed()||(auto&&!panelVisible()))return;
    const message=present(res.data);
    lastAsOf=String(res.data.as_of);
-   ui.answer(message,{briefingVoiceText:speechBrief(res.data)});
+   ui.answer(message,auto?{speechSummary:shortProactiveSpeech(res.data)}:
+     {briefingVoiceText:speechBrief(res.data)});
+   if(auto)save(SEEN_KEY,lastAsOf);
    if(feedback)feedback.textContent='Брифинг '+lastAsOf+' готов · 5 приоритетов · только чтение';
  }catch(e){
    if(!allowed())return;
    const code=String(e?.message||e);
+   if(auto){if(feedback)feedback.textContent='Автобрифинг недоступен: можно запустить кнопкой';return;}
    const detail=code==='source_unavailable'?'Источник продаж или операций CRM не ответил. Цифры не придумываю.':
       code==='not_authorized'?'Директорская сессия недоступна.':
       'Не удалось собрать брифинг ('+safe(code,80)+'). Ничего не менялось.';
@@ -94,6 +128,18 @@ async function requestBrief(ui){
    pending=false;window.__resantaAI360PendingV1=false;if(button)button.disabled=false;
  }
 }
+// Called ONLY on a real user action opening the already loaded voice panel.
+window.crmAI360DirectorProactiveOpenV2=function(ui){
+ if(!allowed()||!panelVisible()||!enabled()||pending||
+  window.__resantaAI360PendingV1)return false;
+ const day=todayMinsk();
+ if(stored(SEEN_KEY)===day)return false;
+ const now=Date.now();
+ if(now-attemptAt<20000)return false;
+ attemptAt=now;
+ void requestBrief(ui,{auto:true});
+ return true;
+};
 window.crmAI360DirectorBriefHandleV1=function(text,ui){
  if(!allowed()||!INTENT.test(String(text||'')))return false;
  void requestBrief(ui);return true;
@@ -111,9 +157,19 @@ function mount(){
  button.style.cssText='background:#e6efff;border:1px solid #96b5de;color:#154878;font-weight:750';
  feedback=document.createElement('span');feedback.className='rva-director-brief-status';
  feedback.style.cssText='color:#526d8b;font-size:11px;flex:1 1 170px';
- feedback.textContent='По запросу · без создания задач';
+ feedback.textContent='Автобрифинг при открытии · один раз в день · без создания задач';
  feedback.setAttribute('role','status');
- div.append(button,feedback);
+ proactiveToggle=document.createElement('button');
+ proactiveToggle.type='button';proactiveToggle.className='rva-btn rva-proactive-toggle';
+ proactiveToggle.title='Автоматический брифинг после открытия Леры: только чтение CRM, не создаёт поручений';
+ proactiveToggle.style.cssText='font-size:11px;max-width:160px';
+ toggleTitle();
+ proactiveToggle.addEventListener('click',()=>{
+   save(OPT_KEY,enabled()?'off':'on');
+   toggleTitle();
+   if(feedback)feedback.textContent=enabled()?'Автобрифинг включён':'Автобрифинг отключён';
+ });
+ div.append(button,proactiveToggle,feedback);
  actions.after(div);
  button.addEventListener('click',()=>{
    const core=window.crmAI360DirectorBriefHandleV1;
