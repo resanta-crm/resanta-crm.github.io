@@ -39,7 +39,7 @@ test('The same OpenAI tool core is reauthorized by server role and personal JWT'
  for(const literal of [
   "const permission=staffPermission(userId,prof.data)",
   "['branch_director','field_manager','triovist_category'].includes(permission.tier)",
-  "permission.tier==='field_manager'?[permission.name]:NAMES",
+  "permission.tier==='branch_director'?NAMES:[permission.name]",
   "if(!domains.includes(domain))",
   "if(selected&&!permitted.some",
   "manager:permission.tier==='field_manager'?permission.name",
