@@ -14,7 +14,7 @@ function mock({id=SID,name='Сидарович К.Н.',role='boss',region='Ви�
    appendChild(x){this.children.push(x);return x},
    insertBefore(x){this.children.push(x)},addEventListener(k,cb){this.listeners[k]=cb},
    click(){this.listeners.click?.()},focus(){},
-   getAttribute(){return null}
+   getAttribute(){return null},querySelector(){return null}
   };elements.push(e);return e;
  }
  const top=element(),app=element();
