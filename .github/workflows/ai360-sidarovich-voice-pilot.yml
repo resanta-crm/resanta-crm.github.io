@@ -1,0 +1,27 @@
+name: AI360 Sidarovich branch voice pilot
+on:
+  pull_request:
+    paths:
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'tests/ai360-sidarovich-voice-pilot.test.mjs'
+      - 'index.html'
+      - '.github/workflows/ai360-sidarovich-voice-pilot.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'tests/ai360-sidarovich-voice-pilot.test.mjs'
+      - 'index.html'
+      - '.github/workflows/ai360-sidarovich-voice-pilot.yml'
+jobs:
+  safe-sidarovich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/144-resanta-ai360-branch-voice-v1.js
+      - run: node --test tests/ai360-sidarovich-voice-pilot.test.mjs
+      - run: node --test tests/ai360-staff-scoped-roles.test.mjs
