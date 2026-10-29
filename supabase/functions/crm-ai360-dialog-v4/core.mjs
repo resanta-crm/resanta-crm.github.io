@@ -7,8 +7,9 @@ export function readToolDefinition(domains){
   strict:true,parameters:{type:'object',additionalProperties:false,properties:{
    domain:{type:'string',enum:domains},
    manager:{type:['string','null']},
-   month:{type:['string','null']}
-  },required:['domain','manager','month']}
+   month:{type:['string','null']},
+   client:{type:['string','null'],description:'A specific client company from the user question, never invented. Null if irrelevant.'}
+  },required:['domain','manager','month','client']}
  };
 }
 export function parseModelPair(response){
@@ -35,6 +36,10 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
   'Любые продажи в Беларуси, включая Триовист, относятся к BYN (белорусские рубли), никогда не ₽ и не российские рубли.',
   'Складские количества — штуки, а не деньги. Не утверждай перелимит или залежалость без нормативов и проверенной истории оборота.',
   'Факты о падающих клиентах брать из crm_ai360_client_risk_v41 за три полных месяца. Выборка top-N — не все клиенты.',
+  'Если пользователь называет клиента и спрашивает, какие товарные группы упали, выбери client_groups с точным именем клиента из пользовательского вопроса.',
+  'Если пользователь спрашивает, есть ли у клиента утверждённый маршрут или открытые задачи сегодня либо завтра, используй client_schedule.',
+  'Не выдумывай маршрут, задачи, причину падения или обещание визита. Предлагай только черновик действия, ничего не записывая.',
+  'Даты произноси естественно: «28 октября», «29 октября», «1 ноября»; не читай «28.10» по цифрам.',
   'Деловая грамотная русская речь: говори понятно, без слов сэмпл, RPC, JSON, API, тулы и других технических терминов.',
   'Никаких реальных действий в CRM не выполняй. Поручения и платежи — предложения, не согласования.',
   'Краткий ответ brief до 350 символов; подробный detail до 2600; offer — один конкретный вопрос о продолжении.',
@@ -70,14 +75,15 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
    const domain=String(args.domain||'');
    const manager=typeof args.manager==='string'?args.manager.slice(0,90):null;
    const month=typeof args.month==='string'?args.month.slice(0,7):null;
-   const key=domain+'/'+(manager||'')+'/'+(month||'');
+   const client=typeof args.client==='string'?args.client.slice(0,90):null;
+   const key=domain+'/'+(manager||'')+'/'+(month||'')+'/'+(client||'');
    let result;
    if(!domains.includes(domain))result={error:'invalid_domain'};
    else if(seen.has(key))result={error:'already_read'};
    else if(seen.size>=CORE_LIMITS.maxTools)result={error:'request_budget_reached'};
    else{
     seen.add(key);
-    try{result=await readTool({domain,manager,month});}
+    try{result=await readTool({domain,manager,month,client});}
     catch{result={error:'source_unavailable'};}
    }
    input.push({type:'function_call_output',call_id:call.call_id,
