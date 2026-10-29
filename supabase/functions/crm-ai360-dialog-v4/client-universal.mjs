@@ -13,7 +13,7 @@ const variants=name=>{
  }
  // Russian sound "Хом" vs English "Home"; drop silent 'e' for fuzzy candidates.
  if(x.includes('home'))out.add(x.replace('home','hom'));
- if(x.endsWith('a')&&x.length>=5){out.add(x.slice(0,-1)+'y');out.add(x.slice(0,-1)+'u');}
+ if(x.endsWith('a')&&x.length>=4){out.add(x.slice(0,-1)+'y');out.add(x.slice(0,-1)+'u');}
  else if(x.length>=6&&!/[aeiouy]$/.test(x)){out.add(x+'a');out.add(x+'u');}
  return [...out].filter(y=>y.length>=3);
 };
