@@ -102,10 +102,10 @@ test('No background requests on initialization; no user switch to owner data',()
  assert.equal(calls,0);
 });
 test('Deploy includes the right versioned modules and keeps owner launcher',()=>{
- assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=7'));
+ assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=8'));
  assert.ok(page.includes('145-resanta-ai360-branch-task-approval-v1.js?v=2'));
- assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=2'));
- assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=2'));
+ assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=3'));
+ assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=3'));
  assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
  assert.match(voice,/crmAI360BranchUnifiedHandleV1\?\.\(q/);
  assert.match(voice,/crmAI360BranchTaskHandleV1\?\.\(question\)/);
