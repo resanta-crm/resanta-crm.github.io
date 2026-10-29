@@ -17,9 +17,11 @@ Deno.serve(async(req:Request)=>{
  const authRes=await svc.auth.getUser(token).catch(()=>null);
  const user=authRes?.data?.user;
  if(!user?.id||!user.email)return out({error:'not_authorized'},401,origin);
- const prof=await svc.from('users').select('name,role').eq('email',user.email.toLowerCase()).maybeSingle();
+ const prof=await svc.from('users').select('id,name,role,region').eq('id',user.id).maybeSingle();
  const pname=String(prof.data?.name||'').trim().split(/\s+/).join(' ').toLocaleLowerCase('ru-RU');
- if(prof.error||prof.data?.role!=='boss'||pname!=='александр паюшин')return out({error:'not_authorized'},403,origin);
+ const isOwner=user.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&prof.data?.role==='boss'&&pname==='александр паюшин';
+ const isBranch=user.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'&&prof.data?.role==='boss'&&pname==='сидарович к.н.'&&prof.data?.region==='Витебск';
+ if(prof.error||(!isOwner&&!isBranch))return out({error:'not_authorized'},403,origin);
  const apiKey=Deno.env.get('OPENAI_API_KEY');
  if(!apiKey)return out({error:'speech_provider_unconfigured'},503,origin);
  const contentLength=Number(req.headers.get('content-length')||0);
