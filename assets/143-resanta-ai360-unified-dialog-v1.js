@@ -3,7 +3,7 @@
 'use strict';
 if(/Android/i.test(navigator.userAgent||'')||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-dialog-v4';
-let history=[],memory={},pending=false,awaitingDetail=null,pilotFallback=false;
+let history=[],memory={},pending=false,awaitingDetail=null;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
   typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
@@ -31,7 +31,7 @@ function pretty(code){
   openai_provider_timeout:'OpenAI не ответил вовремя. Попробуй повторить короткий вопрос.',
   analysis_unavailable:'Ядро AI 360° не смогло подтвердить результат. Данные CRM не изменены. Попробуй уточнить вопрос.',
   ai_quota_exhausted:'Достигнуто ограничение обращений к OpenAI. Это не лимит микрофона.',
-  pilot_fallback:'Новое ядро временно недоступно. Переключилась на стабильную Леру. Повтори вопрос, пожалуйста.'
+  new_core_unavailable:'Единое ядро Леры временно недоступно. На старую аналитику не переключаюсь, чтобы не перепутать данные клиента.'
  };
  return messages[code]||'Не получилось получить проверенные данные CRM. Повтори вопрос позднее. Ничего не изменено.';
 }
@@ -82,20 +82,10 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
    const payload={message:question,history:history.slice(-10),memory};
-   const usingPilot=!pilotFallback;
-   let result=await db.functions.invoke(usingPilot?ENDPOINT:'crm-ai360-dialog-v3',{body:payload});
-   // Only unknown endpoint is retried with stable v1; never double a failed
-   // database request during a service slowdown or authentication error.
-   if(result.error && Number(result.error?.context?.status)===404)
-     result=await db.functions.invoke('crm-ai360-dialog-v3',{body:payload});
-   if(usingPilot&&(result.error||result.data?.error)){
-     const issue=result.error?await errorCode(result.error):String(result.data.error);
-     if(!/not_authorized|ai_quota_exhausted|question_invalid|daily_dialog_limit|monthly_budget_exhausted|budget_limit_reached|budget_meter_unavailable/.test(issue)&&
-        ![400,401,403,429].includes(Number(result.error?.context?.status))){
-       pilotFallback=true;
-       throw new Error('pilot_fallback');
-     }
-   }
+   // One verified backend only. Never silently downgrade to an older AI engine.
+   const result=await db.functions.invoke(ENDPOINT,{body:payload});
+   if(Number(result.error?.context?.status)===404)
+     throw new Error('new_core_unavailable');
    if(result.error)throw new Error(await errorCode(result.error));
    if(result.data?.error)throw new Error(String(result.data.error));
    if(!allowed())return;
