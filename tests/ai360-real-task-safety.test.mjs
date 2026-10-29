@@ -13,7 +13,8 @@ test('Real task server must authenticate director and recheck ownership, live so
   "proposal_expired", "validDate(x.due_date,day)",
   "stableTaskId(", "const SOURCE='ai360_voice_approved'",
   "confirmation!==TEST_CONFIRMATION", "body.kind!=='commit_real'",
-  ".from('tasks').insert(rows)", "review_status:'approved'"
+  ".from('tasks').insert(rows)", "review_status:'approved'",
+  "verifyApprovalToken", "approval_token:approvalToken", "approval_token_invalid_or_expired"
  ]) assert.ok(server.includes(expected),expected);
  assert.ok(server.indexOf("if(body.kind!=='commit_real')")<server.indexOf(".from('tasks').insert(rows)"));
  assert.ok(!server.includes('ai360_voice_test_drafts_v1'));
@@ -21,6 +22,7 @@ test('Real task server must authenticate director and recheck ownership, live so
 test('No task is created without separate exact per-proposal confirmation',async()=>{
  const calls=[],answers=[];
  const C='11111111-1111-4111-8111-111111111111',A='22222222-2222-4222-8222-222222222222';
+ const token='1793270000000.'+'a'.repeat(64);
  const sample={client_id:C,client_name:'МИСАС ООО',manager_name:'Руднев',
    title:'Разобраться со снижением закупок',text:'Уточнить у клиента причину снижения заказов.',
    due_date:'2026-11-04',basis:'Клиент снизил закупки',expected_result:'Названа причина и следующий шаг.',
@@ -28,7 +30,7 @@ test('No task is created without separate exact per-proposal confirmation',async
  const serverCalls={
   'crm-ai360-task-drafts-v1':body=>({mode:'readonly',manager:'Руднев',as_of:'2026-10-29',items:[sample]}),
   'crm-ai360-task-real-approval-v1':body=>{
-    if(body.kind==='validate')return {mode:'ready_real',created:0,items:[{...sample}]};
+    if(body.kind==='validate')return {mode:'ready_real',created:0,items:[{...sample}],approval_token:token};
     if(body.kind==='commit_real')return {mode:'created_real',created:1,task_ids:[A],visible_to_manager:true};
     throw new Error('unexpected real action');
   },
@@ -61,6 +63,7 @@ test('No task is created without separate exact per-proposal confirmation',async
  assert.equal(calls[2].name,'crm-ai360-task-real-approval-v1');
  assert.equal(calls[2].body.kind,'commit_real');
  assert.equal(calls[2].body.confirmation,'подтверждаю создание поручений');
+ assert.equal(calls[2].body.approval_token,token);
  assert.equal(calls[2].body.approval_id,A,'same id after validation');
  assert.equal(calls[2].body.items[0].client_id,C);
  assert.match(answers.at(-1),/созданы 1 реальных поручений/);
