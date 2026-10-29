@@ -8,8 +8,10 @@ export function readToolDefinition(domains){
    domain:{type:'string',enum:domains},
    manager:{type:['string','null']},
    month:{type:['string','null']},
-   client:{type:['string','null'],description:'A specific client company from the user question, never invented. Null if irrelevant.'}
-  },required:['domain','manager','month','client']}
+   client:{type:['string','null'],description:'Specific customer from the user question or verified conversation follow-up'},
+   level:{type:['string','null'],enum:['groups','subgroups','sku',null]},
+   group:{type:['string','null']},subgroup:{type:['string','null']},offset:{type:'integer'}
+  },required:['domain','manager','month','client','level','group','subgroup','offset']}
  };
 }
 export function parseModelPair(response){
@@ -36,7 +38,9 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
   'Любые продажи в Беларуси, включая Триовист, относятся к BYN (белорусские рубли), никогда не ₽ и не российские рубли.',
   'Складские количества — штуки, а не деньги. Не утверждай перелимит или залежалость без нормативов и проверенной истории оборота.',
   'Факты о падающих клиентах брать из crm_ai360_client_risk_v41 за три полных месяца. Выборка top-N — не все клиенты.',
-  'Если пользователь называет клиента и спрашивает, какие товарные группы упали, выбери client_groups с точным именем клиента из пользовательского вопроса.',
+  'Для ЛЮБОГО клиента используй client_detail: сначала level=groups, затем по запросу level=subgroups с названием группы, затем level=sku с группой и подгруппой. Никогда не выдумывай SKU.',
+  'На вопросы какие подгруппы? и какие артикулы? используй подтверждённый контекст client,group,subgroup. Если неизвестна подгруппа, уточни.',
+  'При неточном имени клиента используй серверное сопоставление; если несколько вариантов — уточни, а не приписывай продажи другой компании.',
   'Если пользователь спрашивает, есть ли у клиента утверждённый маршрут или открытые задачи сегодня либо завтра, используй client_schedule.',
   'Не выдумывай маршрут, задачи, причину падения или обещание визита. Предлагай только черновик действия, ничего не записывая.',
   'Даты произноси естественно: «28 октября», «29 октября», «1 ноября»; не читай «28.10» по цифрам.',
@@ -76,14 +80,18 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
    const manager=typeof args.manager==='string'?args.manager.slice(0,90):null;
    const month=typeof args.month==='string'?args.month.slice(0,7):null;
    const client=typeof args.client==='string'?args.client.slice(0,90):null;
-   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'');
+   const level=['groups','subgroups','sku'].includes(args.level)?args.level:null;
+   const group=typeof args.group==='string'?args.group.slice(0,120):null;
+   const subgroup=typeof args.subgroup==='string'?args.subgroup.slice(0,120):null;
+   const offset=Number.isInteger(args.offset)?Math.min(200,Math.max(0,args.offset)):0;
+   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'')+(level?'/'+level+'/'+(group||'')+'/'+(subgroup||'')+'/'+offset:'');
    let result;
    if(!domains.includes(domain))result={error:'invalid_domain'};
    else if(seen.has(key))result={error:'already_read'};
    else if(seen.size>=CORE_LIMITS.maxTools)result={error:'request_budget_reached'};
    else{
     seen.add(key);
-    try{result=await readTool({domain,manager,month,client});}
+    try{result=await readTool({domain,manager,month,client,level,group,subgroup,offset});}
     catch{result={error:'source_unavailable'};}
    }
    input.push({type:'function_call_output',call_id:call.call_id,
