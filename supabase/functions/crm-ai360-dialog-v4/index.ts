@@ -142,7 +142,9 @@ Deno.serve(async req => {
     domain: String(body.memory.domain || '').slice(0, 30),
     client: String(body.memory.client || '').slice(0, 90),
     group: String(body.memory.group || '').slice(0, 120),
-    subgroup: String(body.memory.subgroup || '').slice(0, 120)
+    subgroup: String(body.memory.subgroup || '').slice(0, 120),
+    offset: Math.min(200,Math.max(0,Number(body.memory.offset)||0)),
+    level: String(body.memory.level || '').slice(0, 12)
   } : {};
   // Per-dialog reservation shared with legacy v3, existing Yandex TTS spend and daily limit.
   // Claim is transactional; accounting is restricted to the Supabase service role.
@@ -161,7 +163,7 @@ Deno.serve(async req => {
   const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
   const subject=requestContext(question,memory,managerNames);
   const invalidSources=[], evidence=[];
-  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='',lastGroup='',lastSubgroup='';
+  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='',lastGroup='',lastSubgroup='',lastLevel='',lastNextOffset=0;
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
@@ -180,7 +182,7 @@ Deno.serve(async req => {
     lastDomain = domain;
     try {
       if(domain==='client_detail'){
-        const resolved=await resolveAnyClient(svc,{
+        const resolved=args.serverResolvedClient||await resolveAnyClient(svc,{
           question,memoryClient:memory.client||'',hint:args.client||''
         });
         if(resolved.error){
@@ -188,7 +190,9 @@ Deno.serve(async req => {
              message:'Please confirm customer name. Never reuse another customer sales.'};
           evidence.push(t);return t;
         }
-        const level=['groups','subgroups','sku'].includes(args.level)?args.level:'groups';
+        const askedSubgroups=/(подгрупп|подкатегори)/i.test(question);
+        const askedSku=/(артикул|конкретн.*товар|sku|модел[ьи]|по позици)/i.test(question);
+        const level=args.serverForceLevel===true&&['groups','subgroups','sku'].includes(args.level)?args.level:(askedSku?'sku':askedSubgroups?'subgroups':(['groups','subgroups','sku'].includes(args.level)?args.level:'groups'));
         const sameClient=String(resolved.name)===String(memory.client||'');
         const group=level==='groups'?null:(args.group||(sameClient?memory.group:null)||null);
         const subgroup=level==='sku'?(args.subgroup||(sameClient?memory.subgroup:null)||null):null;
@@ -200,7 +204,8 @@ Deno.serve(async req => {
           const t={domain,error:'subgroup_required',message:'Ask which product subgroup to expand.'};
           evidence.push(t);return t;
         }
-        const offset=Math.min(200,Math.max(0,Number(args.offset)||0));
+        const continuation=/\b(?:дальше|продолж|следующ|остальн|еще|ещё)\w*/i.test(question);
+        const offset=Math.min(200,Math.max(0,(continuation&&sameClient&&memory.level===level&&Number(args.offset)===0)?Number(memory.offset||0):Number(args.offset)||0));
         const r=await svc.rpc('crm_ai360_client_drilldown_v43',{
           p_client_id:resolved.id,p_level:level,p_group:group,p_subgroup:subgroup,
           p_month:month+'-01',p_limit:level==='sku'?6:12,p_offset:offset
@@ -225,6 +230,7 @@ Deno.serve(async req => {
           offset:data.offset,has_more:data.has_more,items:rows,
           note:'Scope limited to linked purchase_history.client_id; absent SKU codes labelled, not invented.'};
         lastClientName=resolved.name;
+        lastLevel=level;lastNextOffset=data.has_more?offset+rows.length:0;
         lastGroup=level==='groups'?(rows.find(x=>Number(x.delta_byn)<0)?.category||''):String(group);
         lastSubgroup=level==='subgroups'?(rows.find(x=>Number(x.delta_byn)<0)?.subgroup||''):
           (level==='sku'?String(subgroup):'');
@@ -285,6 +291,117 @@ Deno.serve(async req => {
       return { domain, error: 'source_unavailable' };
     }
   };
+
+  // Deterministic customer sales route. Never let the language model substitute network sales.
+  const customerAnalysis=/(продаж|отклонен|динамик|паден|анализ|разбор|групп|подгрупп|артикул|sku|товар)/i.test(question);
+  const customerNamed=/(?:клиент|клиента|клиенту|клиентом|компани[июея]|покупател[ьяюем])\s+[а-яёa-z0-9«"]/i.test(question);
+  const customerFollowup=!!memory.client&&/(подгрупп|групп|артикул|sku|товар|продолж|дальше|остальн|еще|ещё|что\s+по|паден|динамик)/i.test(question)&&!/(все\s+клиенты|всех\s+клиентов|вся\s+сеть)/i.test(question);
+  const namedWithoutPrefix=customerAnalysis&&!customerNamed&&!customerFollowup
+    ?await resolveAnyClient(svc,{question,memoryClient:''}):null;
+  if(customerAnalysis&&(customerNamed||customerFollowup||namedWithoutPrefix?.method==='explicit_name')){
+    const resolved=namedWithoutPrefix||await resolveAnyClient(svc,{question,memoryClient:memory.client||''});
+    const money=v=>Math.round(Number(v)||0).toLocaleString('ru-RU',{maximumFractionDigits:0});
+    const amt=v=>money(Math.abs(Number(v)||0))+' белорусских рублей';
+    const ending=delta=>Number(delta)<0?'снижение на '+amt(delta):Number(delta)>0?'рост на '+amt(delta):'без изменений';
+    const clean=v=>String(v||'').replace(/[\r\n\t]/g,' ').slice(0,110);
+    const itemChoice=(items,query,field)=>{
+      const words=(String(query).toLocaleLowerCase('ru-RU').match(/[а-яёa-z]{4,}/g)||[]);
+      const scored=(items||[]).map(it=>{
+        const label=String(it[field]||'').toLocaleLowerCase('ru-RU');
+        const tokens=label.match(/[а-яёa-z]{4,}/g)||[];
+        return {it,match:tokens.filter(w=>words.some(q=>q.startsWith(w.slice(0,5))||w.startsWith(q.slice(0,5)))).length};
+      }).sort((a,b)=>b.match-a.match);
+      return scored[0]?.match>0?scored[0].it:((items||[]).find(x=>Number(x.delta_byn)<0)||(items||[])[0]);
+    };
+    let brief='',detail='',offer='',verified=false;
+    if(resolved.error){
+      const suggestions=(resolved.candidates||[]).slice(0,3).map(clean);
+      brief=suggestions.length?'Уточни, пожалуйста, клиента: '+suggestions.join(' или ')+'.':'Не смогла однозначно найти этого клиента в справочнике CRM.';
+      detail=brief;offer='Назови точное имя компании, как оно записано в CRM.';
+    }else{
+      const read=async(level,group=null,subgroup=null,offset=0)=>readTool({
+        domain:'client_detail',month:allowedMonth,client:resolved.name,level,group,subgroup,offset,
+        serverForceLevel:true,serverResolvedClient:resolved
+      });
+      const continuation=/(?:дальше|продолж|следующ|остальн|еще|ещё)/i.test(question);
+      const requestedLevel=continuation&&['groups','subgroups','sku'].includes(memory.level)?memory.level:'groups';
+      const pageOffset=continuation?Math.max(0,Math.min(200,Number(memory.offset)||0)):0;
+      let groups=null,subs=null,skus=null;
+      let groupName='',subgroupName='';
+      if(requestedLevel==='groups'){
+        groups=await read('groups',null,null,pageOffset);
+        if(!groups.error&&groups.items?.length){
+          const g=itemChoice(groups.items,question,'category');
+          groupName=clean(g?.category);
+          if(!continuation){
+            subs=await read('subgroups',groupName);
+            if(!subs.error&&subs.items?.length){
+              subgroupName=clean(itemChoice(subs.items,question,'subgroup')?.subgroup);
+              if(subgroupName)skus=await read('sku',groupName,subgroupName);
+            }
+          }
+        }
+      }else if(requestedLevel==='subgroups'){
+        groupName=clean(memory.group);
+        if(groupName){
+          subs=await read('subgroups',groupName,null,pageOffset);
+          subgroupName=clean(itemChoice(subs.items||[],question,'subgroup')?.subgroup);
+        }
+      }else{
+        groupName=clean(memory.group);subgroupName=clean(memory.subgroup);
+        if(groupName&&subgroupName)skus=await read('sku',groupName,subgroupName,pageOffset);
+      }
+      const primary=groups||subs||skus;
+      if(!primary||primary.error){
+        brief='Клиента '+clean(resolved.name)+' нашла, но подробный отчёт по его продажам сейчас недоступен.';
+        detail=brief+' Не буду подменять его продажами всей сети.';
+        offer='Повторить запрос клиентской аналитики?';
+      }else{
+        const periodName=String(primary.current_period||'').replace('..',' — ');
+        const headline='Клиент «'+clean(resolved.name)+'», период '+periodName+'. ';
+        const total=groups?'Продажи '+amt(groups.current_byn)+', '+ending(groups.delta_byn)+'. ':'';
+        const lines=[];
+        if(groups){
+          const a=(groups.items||[]).slice(0,12).map(x=>clean(x.category)+': '+ending(x.delta_byn));
+          lines.push('Отклонения по группам: '+(a.join('; ')||'данных нет')+'.');
+        }
+        if(subs&&!subs.error){
+          const a=(subs.items||[]).slice(0,12).map(x=>clean(x.subgroup)+': '+ending(x.delta_byn));
+          lines.push('В группе «'+groupName+'» подгруппы: '+(a.join('; ')||'данных нет')+'.');
+        }
+        if(skus&&!skus.error){
+          const a=(skus.items||[]).slice(0,6).map(x=>(x.sku?'Артикул '+clean(x.sku)+', ':'Без кода, ')+clean(x.product)+': '+ending(x.delta_byn));
+          lines.push('В подгруппе «'+subgroupName+'» товары: '+(a.join('; ')||'данных нет')+'.');
+        }
+        const deepest=skus&&!skus.error?skus:subs&&!subs.error?subs:groups;
+        if(deepest?.has_more)lines.push('Показана только часть списка: следующие позиции доступны по команде продолжения.');
+        lines.push('Рекомендация: уточнить у клиента причины снижения заказов, проверить наличие ключевых товаров и согласовать предложение по потерянным артикулам. Причины падения по продажам не доказаны.');
+        const pickG=groups?.items?.find(x=>Number(x.delta_byn)<0);
+        const pickSub=subs?.items?.find(x=>Number(x.delta_byn)<0);
+        const pickSku=skus?.items?.find(x=>Number(x.delta_byn)<0);
+        brief=(headline+total+(pickG?'Главное снижение в группе «'+clean(pickG.category)+'» на '+amt(pickG.delta_byn)+'. ':'')+(pickSub?'Подгруппа «'+clean(pickSub.subgroup)+'» — '+amt(pickSub.delta_byn)+'. ':'')+(pickSku?'Артикул '+clean(pickSku.sku||pickSku.product)+' — '+amt(pickSku.delta_byn)+'.':'')).slice(0,430);
+        detail=(headline+total+lines.join(' ')).slice(0,3000);
+        const hasMore=Boolean((skus&&!skus.error?skus:subs&&!subs.error?subs:groups)?.has_more);
+        offer=hasMore?'Продолжить список остальных позиций?':'Проверить следующие группы или сформировать рекомендации менеджеру?';
+        verified=true;
+      }
+    }
+    const settled=await svc.rpc('crm_ai360_core_finish_v2',{
+      p_claim_id:claimId,p_actual_rub:0,p_input_tokens:0,p_output_tokens:0,p_rounds:0,p_status:'ok'
+    });
+    if(settled.error||settled.data?.ok!==true)return respond(req,{error:'budget_settlement_unavailable',answer_verified:false},503);
+    return respond(req,{
+      answer:brief,brief,detail,followup_question:offer,intent:'verified_customer_drilldown',
+      answer_verified:verified,sources:verified?['crm_ai360_client_drilldown_v43']:[],
+      failed_domains:invalidSources,partial_sources:[],auto_corrected:false,
+      month:lastMonth,manager:null,mode:'director_readonly_customer_v1',engine:'deterministic_crm',
+      memory:{...memory,manager:'',month:lastMonth,client:resolved.name||'',
+        group:lastGroup||memory.group||'',subgroup:lastSubgroup||memory.subgroup||'',
+        level:lastLevel||memory.level||'',offset:lastClientName?lastNextOffset:0,
+        subject:'client',domain:'client_detail'}
+    });
+  }
+
   let inputTokens = 0, outputTokens = 0, rounds = 0;
   const request = async payload => {
     const res = await fetch('https://api.openai.com/v1/responses', {
@@ -342,6 +459,8 @@ Deno.serve(async req => {
       client:lastClientName||(subject.subject==='client'?memory.client||'':''),
       group:lastGroup||((subject.subject==='client'&&!lastClientName)?memory.group||'':''),
       subgroup:lastSubgroup||((subject.subject==='client'&&!lastClientName)?memory.subgroup||'':''),
+      level:lastLevel||((subject.subject==='client'&&!lastClientName)?memory.level||'':''),
+      offset:lastClientName?lastNextOffset:((subject.subject==='client')?Number(memory.offset||0):0),
       subject:subject.subject,domain:lastDomain||output.used[0]?.split('/')[0]||memory.domain||''}
   });
 });
