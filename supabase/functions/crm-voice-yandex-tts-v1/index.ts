@@ -50,10 +50,12 @@ Deno.serve(async(req:Request)=>{
  const authRes=await supabase.auth.getUser(token).catch(()=>null);
  const user=authRes?.data?.user;
  if(!user?.id||!user.email)return json({error:'unauthorized'},401,origin);
- const {data:profile,error:profileError}=await supabase.from('users').select('name,role')
-   .eq('email',user.email.trim().toLowerCase()).maybeSingle();
+ const {data:profile,error:profileError}=await supabase.from('users').select('id,name,role,region')
+   .eq('id',user.id).maybeSingle();
  const name=String(profile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
- if(profileError||profile?.role!=='boss'||name!=='александр паюшин')return json({error:'forbidden'},403,origin);
+ const isOwner=user.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&profile?.role==='boss'&&name==='александр паюшин';
+ const isBranch=user.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'&&profile?.role==='boss'&&name==='сидарович к.н.'&&profile?.region==='Витебск';
+ if(profileError||(!isOwner&&!isBranch))return json({error:'forbidden'},403,origin);
  let payload:any;
  try{payload=await req.json();}catch{return json({error:'invalid_json'},400,origin);}
  const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
