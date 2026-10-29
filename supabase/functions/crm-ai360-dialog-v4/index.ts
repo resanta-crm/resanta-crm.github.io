@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
-import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool } from './catalog.mjs';
+import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoiceDomain, getVoiceCapabilities } from './catalog.mjs';
 import { runToolCore } from './core.mjs';
 import { readTasks } from './task-read.mjs';
 import { requestContext, effectiveManager, guardVoicePair } from './context.mjs';
@@ -131,6 +131,7 @@ Deno.serve(async req => {
   let body;
   try { body = await req.json(); } catch { return respond(req, { error: 'bad_json' }, 400); }
   if (body?.kind === 'status') return respond(req, { ready: true, mode: 'director_readonly_v4', domains: DOMAINS });
+  if (body?.kind === 'capabilities') return respond(req,{ready:true,mode:'director_readonly_v5',capabilities:getVoiceCapabilities(),sections_registered:getVoiceCapabilities().length});
   const question = String(body?.message || '').trim().slice(0, 400);
   if (question.length < 2) return respond(req, { error: 'question_invalid' }, 400);
   const history = Array.isArray(body.history) ? body.history.slice(-6).map(x => ({
@@ -415,13 +416,14 @@ Deno.serve(async req => {
     outputTokens += Math.max(0, Number(data?.usage?.output_tokens || 0));
     return data;
   };
+  const preferredDomain=inferVoiceDomain(question)||(/^(а\s|ещё|еще|какие|покажи|расскажи|а теперь|продолж)/i.test(question)&&DOMAINS.includes(memory.domain)?memory.domain:null);
   const output = await runToolCore({
     question, history, memory: { ...memory,
       manager:subject.manager||'',subject:subject.subject,client:memory.client||'',
       subject_is_client:subject.client,explicit_manager:subject.explicitManager||null,
       catalog: CRM_AI360_TOOLS.map(x => x.id + ': ' + x.label).join('; '),
       today: day, available_domains: DOMAINS },
-    domains: DOMAINS, readTool, request
+    domains: DOMAINS, readTool, request, preferredDomain
   });
   // Cost from official gpt-5.4-mini standard text token tariffs:
   // USD 0.75 / million input and USD 4.50 / million output.
