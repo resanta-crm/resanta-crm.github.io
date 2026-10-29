@@ -35,7 +35,7 @@ const checks = [
   }],
   ['Identity is server-derived from auth.uid', () => {
     assert.ok(count(sql,/auth\.uid\(\)/g)>=4);
-    assert.doesNotMatch(sql,/user_metadata|raw_user_meta_data/i);
+    assert.doesNotMatch(sql.split('\n').filter(line => !/^\s*--/.test(line)).join('\n'),/user_metadata|raw_user_meta_data/i);
   }],
   ['Prototype refuses production database', () => {
     assert.match(ui,/config\.url\.includes\(PRODUCTION_PROJECT\)/);
