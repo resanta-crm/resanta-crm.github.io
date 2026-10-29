@@ -186,6 +186,7 @@
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
     if (!query) { answer('Привет! Слушаю тебя. Чем могу помочь?'); return; }
+    if(window.crmLprV1?.voice(query,{answer}))return;
     if(/^(?:(?:лера|ресанта)\s+)?(?:остановись|останови\s+(?:речь|озвучку)|хватит\s+говорить|замолчи)$/.test(query)){
       window.crmResantaVoiceStopV3?.();
       textStatus('Озвучка остановлена. Можешь задать следующий вопрос.');
