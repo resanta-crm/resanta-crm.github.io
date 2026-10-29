@@ -65,7 +65,16 @@ Deno.serve(async(req:Request)=>{
   '4fd79fa0-232d-4768-8099-25f47923cc4f':'шкуран'};
  const isField=FIELD_IDS.has(user.id)&&profile?.role==='manager'&&
    profile?.region==='Витебск'&&name===expectedManagers[user.id];
-  if(profileError||(!isOwner&&!isBranch&&!isField))return json({error:'forbidden'},403,origin);
+
+ const TRI_USERS={
+  '6efa656e-45c6-473b-a853-89eccb9ee43a':'александренко',
+  '9076ccde-a8cc-47e3-b71e-c31170b693ff':'кришталь'
+ };
+ const isTriovist=Object.prototype.hasOwnProperty.call(TRI_USERS,user.id)&&
+   profile?.role==='manager'&&
+   profile?.region==='Триовист / 21vek.by'&&
+   name===TRI_USERS[user.id];
+   if(profileError||(!isOwner&&!isBranch&&!isField&&!isTriovist))return json({error:'forbidden'},403,origin);
  let payload:any;
  try{payload=await req.json();}catch{return json({error:'invalid_json'},400,origin);}
  const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
