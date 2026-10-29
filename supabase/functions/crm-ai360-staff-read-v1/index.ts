@@ -19,8 +19,9 @@ const today=()=>{
 const pageSize=6;
 const sanitizeRows=(rows,columns)=>rows.map(r=>Object.fromEntries(columns.map(k=>[k,r[k]??null])));
 const clampString=(s,n)=>typeof s==='string'&&s.length<=n?s.trim():'';
-async function scopedTable(svc,table,columns,sort,managers,{offset=0,filter=null,ascending=false}={}){
+async function scopedTable(svc,table,columns,sort,managers,{offset=0,filter=null,ascending=false,date=null}={}){
  let q=svc.from(table).select(columns.join(',')).in('manager_name',managers);
+ if(date&&table==='route_plans')q=q.eq('visit_date',date);
  if(filter==='active')q=q.or('done.eq.false,done.is.null');
  if(filter==='not_archived')q=q.or('is_archived.eq.false,is_archived.is.null');
  q=q.order(sort,{ascending}).range(offset,offset+pageSize);
@@ -83,7 +84,7 @@ async function readStaff(svc,permission,managers,domain,body,day){
  }
  if(domain==='clients')return scopedTable(svc,'clients',['name','manager_name','client_status','sku_count'],'created_at',managers,{offset,filter:'not_archived'});
  if(domain==='tasks')return scopedTable(svc,'tasks',['title','manager_name','priority','due_date','review_status'],'due_date',managers,{offset,filter:'active',ascending:true});
- if(domain==='routes')return scopedTable(svc,'route_plans',['client_name','manager_name','visit_date','status','approved','visited'],'visit_date',managers,{offset});
+ if(domain==='routes')return scopedTable(svc,'route_plans',['client_name','manager_name','visit_date','status','approved','visited'],'visit_date',managers,{offset,date:body.when==='today'?day:null});
  if(domain==='visits')return scopedTable(svc,'visits',['manager_name','date','goal','result','goal_achieved'],'date',managers,{offset});
  if(domain==='gps')return scopedTable(svc,'gps_workday_aggregates',['manager_name','work_date','physical_stops','planned_count','visited_count','missed_count','aggregation_status'],'work_date',managers,{offset});
  if(domain==='triovist_tasks')return scopedTable(svc,'triovist_ai_tasks',['manager_name','title','status','priority_score','due_date'],'updated_at',managers,{offset});
@@ -120,7 +121,7 @@ Deno.serve(async req=>{
  if(body?.kind==='capabilities')return reply(req,{
   ready:true,mode:'staff_scoped_readonly_pilot_v1',role:permission.tier,
   domains:permission.domains,own_name:permission.name,source_permissions:'server_immutable_allowlist',
-  voice_enabled:false,real_task_creation_enabled:false
+  voice_enabled:permission.tier==='branch_director',real_task_creation_enabled:permission.tier==='branch_director'
  });
  if(body?.kind!=='read')return error(req,'invalid_kind',400);
  const domain=clampString(body.domain,40);
@@ -132,7 +133,7 @@ Deno.serve(async req=>{
   return reply(req,{
    mode:'staff_scoped_readonly_pilot_v1',answer_verified:true,domain,as_of:day,
    scope:{role:permission.tier,managers},
-   data:result,read_only:true,voice_enabled:false
+   data:result,read_only:true,voice_enabled:permission.tier==='branch_director'
   });
  }catch(e){
   const msg=String(e?.message||'read_unavailable');
