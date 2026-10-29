@@ -50,7 +50,7 @@ async function allowedClients(u){
  let vipIds=new Set();
  if(ids.length){
    const {data:membership,error:e}=await SVC.from('vip_membership_v236429')
-    .select('client_id').eq('active',true).in('client_id',ids);
+    .select('client_id').eq('active',true).limit(4000);
    if(e)throw Error('vip_membership_unavailable');
    vipIds=new Set((membership||[]).map(x=>x.client_id));
  }
