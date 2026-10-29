@@ -7,6 +7,7 @@
 if(/Android/i.test(navigator.userAgent||'')||root.crmAI360TaskDraftsHandleV1)return;
 const ENDPOINT='crm-ai360-task-drafts-v1';
 const APPROVAL_ENDPOINT='crm-ai360-task-approval-v1';
+const REAL_APPROVAL_ENDPOINT='crm-ai360-task-real-approval-v1';
 const LIST_TEST=/^(?:покажи|проверь|перечисли)\s+(?:мои\s+)?(?:тестов[а-яё]*|пробн[а-яё]*)\s+(?:поручен[а-яё]*|задач[а-яё]*)/i;
 const OLD_REAL_CONFIRM=/^подтверждаю создание поручений[.!?]*$/i;
 const REQUEST=/(?:предлож|подготов|сформир|состав|созда[йт]|покажи)[а-яё]*\s+.{0,55}(?:поручен|задач)|(?:какие|дай)\s+поручен/i;
@@ -37,7 +38,7 @@ const FINAL_CONFIRM=/^подтверждаю сохранение тестовы
 const FINAL_REJECT=/^(?:не подтверждаю|отказываюсь|отмена создания|не создавать)[.!?]*$/i;
 const months={'января':1,'февраля':2,'марта':3,'апреля':4,'мая':5,'июня':6,
  'июля':7,'августа':8,'сентября':9,'октября':10,'ноября':11,'декабря':12};
-let pending=false,items=[],asOf='',chosen=new Set(),requestEpoch=0,approvalBusy=false,approval=null;
+let pending=false,items=[],asOf='',chosen=new Set(),requestEpoch=0,approvalBusy=false,approval=null,realMode=false;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
   typeof currentProfile!=='undefined'&&currentProfile?.role==='boss' &&
@@ -89,7 +90,8 @@ function summary(){
   '\nИсточник: '+safe(x.source,130)
  ).join('\n\n')+
  '\n\nСкажи «изменить срок первого на 29 октября», «убрать второе» или «выбрать первое и третье».'+
- '\nТЕСТОВЫЙ РЕЖИМ. Рабочие поручения отключены. Для проверки скажи «Согласую первое». Менеджеры не увидят сохранённые тестовые черновики.';
+ (realMode?'\nРЕАЛЬНЫЕ ПОРУЧЕНИЯ: пока НИЧЕГО не создано. Назови номера для согласования; после проверки потребуется отдельная точная фраза подтверждения.':
+ '\nТЕСТОВЫЙ РЕЖИМ. Рабочие поручения отключены. Для проверки скажи «Согласую первое». Менеджеры не увидят сохранённые тестовые черновики.');
 }
 async function responseError(error){
  try{if(error?.context?.json)return safe((await error.context.json())?.error||error.message);}catch(_){}
@@ -129,9 +131,9 @@ async function requestDrafts(question,ui){
      throw new Error('invalid_server_response');
    asOf=safe(result.data.as_of,10);
    items=raw.map(x=>({...x}));chosen.clear();approval=null;
-   ui.textStatus('ТЕСТ • Черновики проверены за '+((Date.now()-started)/1000).toFixed(1)+' с · менеджеры не видят');
+   ui.textStatus((realMode?'РЕАЛЬНЫЕ • предложения ещё не созданы':'ТЕСТ • менеджеры не видят')+' · проверено за '+((Date.now()-started)/1000).toFixed(1)+' с');
    ui.answer(summary(),{speechSummary:items.length?
-     'Нашла '+items.length+' предложения для '+manager+'. Все они пока черновики. Скажи, что изменить или убрать.':
+     'Нашла '+items.length+' предложения для '+manager+'. Ничего ещё не создано. Скажи, что изменить или убрать.':
      'По выбранному менеджеру нет новых безопасных предложений. Возможно, уже есть открытые поручения или маршруты.'});
  }catch(e){
    if(epoch===requestEpoch&&allowed())ui.answer('Не удалось подготовить достоверные черновики: '+safe(e?.message)+'. Никакие задачи не созданы.');
