@@ -343,11 +343,11 @@ async function open(){
   const data=response.data;
   if(seq!==epoch||!panelVisible()||data?.ready!==true||
    data?.role!=='branch_director'||data?.own_name!=='Сидарович К.Н.'||
-   data?.voice_enabled!==false||data?.real_task_creation_enabled!==false||
+   data?.voice_enabled!==true||data?.real_task_creation_enabled!==true||
    !Array.isArray(data.domains)||!data.domains.includes('sales'))
    throw new Error('invalid_staff_capabilities');
   verified=true;
-  setStatus('Подключено · только чтение');
+  setStatus('Подключено · голос OpenAI + Яндекс · поручения с подтверждением');
   show('Здравствуйте! Я Лера, помощник Витебского филиала. Слушаю через OpenAI, говорю голосом Яндекса. Могу проанализировать менеджеров и подготовить поручения после вашего подтверждения.',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
