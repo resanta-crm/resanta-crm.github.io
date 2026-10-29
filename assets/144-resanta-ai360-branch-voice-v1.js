@@ -40,7 +40,7 @@ function show(message,{speak=true}={}){
  p.style.cssText='white-space:pre-wrap;padding:10px 12px;background:#f2f7ff;border:1px solid #d6e6fb;border-radius:10px;margin-top:10px;font-size:13px;line-height:1.5;';
  p.textContent=String(message||'').slice(0,MAX_ANSWER);
  log.appendChild(p);log.scrollTop=log.scrollHeight;
- if(speak)say(String(message||'').slice(0,340));
+ if(speak)say(String(message||'').slice(0,1100));
 }
 function setStatus(message){if(status)status.textContent=text(message);}
 function managerFrom(q){
@@ -188,6 +188,9 @@ async function managerBrief(manager,month,started){
 
 async function read(q){
  if(busy||!panelVisible())return;
+ // Director-grade AI orchestration on the same OpenAI model; server limits every read
+ // to branch-authorized data and never delegates task creation to the model.
+ if(root.crmAI360BranchUnifiedHandleV1?.(q,{show,setStatus,authorized:panelVisible}))return;
  const parsed=parseQuestion(q);
  if(parsed.domain==='manager_brief'){
   const seq=++epoch;
@@ -268,6 +271,7 @@ function close(){
  root.crmAI360BranchPremiumVoiceV1?.stop();
  if(panel)panel.hidden=true;
  root.crmAI360BranchPremiumVoiceV1?.stop();
+ root.crmAI360BranchUnifiedResetV1?.();
  root.crmAI360BranchTaskResetV1?.();
  if(log)log.textContent='';
  last={domain:'',manager:null,month:null,offset:0,client_name:'',group:'',subgroup:'',level:'groups'};
