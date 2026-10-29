@@ -29,9 +29,9 @@ function db(){
  const records={
   triovist_group_assignments:catalog,
   triovist_21vek_registry_v236214:[
-   {manager_email:OWNERS.Александренко.email,category:'Инструмент',sku:'111',product_name:'Дрель',registry_snapshot_date:'2026-10-28'},
-   {manager_email:OWNERS.Кришталь.email,category:'Садовая техника',sku:'222',product_name:'Бензопила',registry_snapshot_date:'2026-10-28'},
-   {manager_email:OWNERS.Александренко.email,category:'Садовая техника',sku:'333',product_name:'Ошибочно отнесено',registry_snapshot_date:'2026-10-28'}
+   {manager_email:OWNERS.Александренко.email,category:'Строительный инструмент',sku:'111',product_name:'Дрель',registry_snapshot_date:'2026-10-28'},
+   {manager_email:OWNERS.Кришталь.email,category:'Дом и сад',sku:'222',product_name:'Бензопила',registry_snapshot_date:'2026-10-28'},
+   {manager_email:OWNERS.Кришталь.email,category:'Строительный инструмент',sku:'333',product_name:'Ошибочно отнесено',registry_snapshot_date:'2026-10-28'}
   ]
  };
  const svc={from(table){
@@ -62,7 +62,7 @@ test('Both real CRM users have exact role/region and only assigned Triovist doma
  }
  assert.equal(Object.keys(TRIOVIST_DOMAINS).length,5);
 });
-test('21vek records use live group assignments AND authorized email as row-level filters',async()=>{
+test('21vek categories differ from CRM groups: email scopes the product, assignment verifies user',async()=>{
  const {svc,calls}=db();
  const p=getPerm('Александренко'),e=OWNERS.Александренко.email;
  const r=await readTriovist(svc,p,e,e,'triovist_cards',{offset:0});
@@ -70,12 +70,14 @@ test('21vek records use live group assignments AND authorized email as row-level
  assert.deepEqual(r.group_names,['Инструмент','Оборудование']);
  assert.deepEqual(r.items.map(i=>i.sku),['111']);
  assert.ok(calls.some(x=>x[0]==='eq'&&x[1]==='triovist_21vek_registry_v236214'&&x[2]==='manager_email'&&x[3]===e));
- assert.ok(calls.some(x=>x[0]==='in'&&x[1]==='triovist_21vek_registry_v236214'&&x[2]==='category'&&x[3].length===2));
+ assert.ok(!calls.some(x=>x[0]==='in'&&x[1]==='triovist_21vek_registry_v236214'&&x[2]==='category'));
+ const scoped=await readTriovist(svc,p,e,e,'triovist_cards',{group:'Строительный инструмент'});
+ assert.deepEqual(scoped.items.map(i=>i.sku),['111']);
 });
 test('One category manager cannot request the colleague categories, credentials or tasks',async()=>{
  const {svc}=db();
  const p=getPerm('Александренко'),email=OWNERS.Александренко.email;
- await assert.rejects(readTriovist(svc,p,email,email,'triovist_cards',{group:'Садовая техника'}),/triovist_group_outside_scope/);
+ await assert.rejects(readTriovist(svc,p,email,email,'triovist_tasks',{group:'Садовая техника'}),/triovist_group_outside_scope/);
  await assert.rejects(readTriovist(svc,p,email,OWNERS.Кришталь.email,'triovist_cards',{}),/triovist_email_mismatch/);
  await assert.rejects(readTriovist(svc,p,email,email,'triovist_market',{}),/triovist_domain_denied/);
  const q=await readTriovist(svc,p,email,email,'triovist_groups',{});
