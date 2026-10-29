@@ -1,0 +1,25 @@
+name: AI360 staff scoped access guards
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-staff-read-v1/**'
+      - 'tests/ai360-staff-scoped-roles.test.mjs'
+      - '.github/workflows/ai360-staff-scope-guards.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-staff-read-v1/**'
+      - 'tests/ai360-staff-scoped-roles.test.mjs'
+      - '.github/workflows/ai360-staff-scope-guards.yml'
+jobs:
+  authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check supabase/functions/crm-ai360-staff-read-v1/permissions.mjs
+      - run: node --check --input-type=module < supabase/functions/crm-ai360-staff-read-v1/index.ts
+      - run: node --test tests/ai360-staff-scoped-roles.test.mjs
