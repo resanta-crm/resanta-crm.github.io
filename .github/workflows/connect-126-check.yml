@@ -1,0 +1,45 @@
+name: CONNECT 126 safety checks
+on:
+  pull_request:
+    paths:
+      - "tests/connect-126.test.js"
+      - "assets/151-resanta-connect-v1.*"
+      - "index.html"
+      - "supabase/migrations/20261029190000_connect_v1.sql"
+      - "supabase/migrations/20261029191000_connect_v1_perf.sql"
+      - ".github/workflows/connect-126-check.yml"
+  push:
+    branches:
+      - "feature/connect-126-vitebsk-pilot"
+    paths:
+      - "tests/connect-126.test.js"
+      - "assets/151-resanta-connect-v1.*"
+      - "index.html"
+      - "supabase/migrations/20261029190000_connect_v1.sql"
+      - ".github/workflows/connect-126-check.yml"
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check JavaScript syntax
+        run: |
+          node --check assets/151-resanta-connect-v1.js
+          node --check tests/connect-126.test.js
+      - name: Verify security boundary and feature isolation
+        run: node tests/connect-126.test.js
+      - name: Verify only approved CRM entrypoint and new CONNECT assets changed
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          git diff --name-only origin/main...HEAD > /tmp/connect-files
+          cat /tmp/connect-files
+          if grep -Ev '^(tests/connect-126\.test\.js$|assets/151-resanta-connect-v1\.(js|css)$|index\.html$|supabase/migrations/20261029190000_connect_v1\.sql$|supabase/migrations/20261029191000_connect_v1_perf\.sql$|\.github/workflows/connect-126-check\.yml$)' /tmp/connect-files; then
+            echo 'Unexpected production file modification!' >&2
+            exit 1
+          fi
