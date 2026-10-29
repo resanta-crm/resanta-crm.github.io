@@ -72,6 +72,22 @@ test('Routing understands normal manager voice questions and retains source iden
  assert.equal(parse('Сколько просроченных задач').domain,'tasks');
  const next=parse('Дальше',{domain:'routes',manager:'Руднев',month:'2026-10',offset:6});
  assert.equal(next.domain,'routes');assert.equal(next.offset,6);assert.equal(next.manager,'Руднев');
+ const intro=parse('Лера, проанализируй клиента МИСАС ООО');
+ assert.equal(intro.domain,'client_detail');
+ assert.equal(intro.client_name,'мисас ооо');
+ const scoped={domain:'client_detail',client_name:'мисас ооо',group:'',subgroup:'',
+    level:'groups',offset:0,month:'2026-10'};
+ const groups=parse('Покажи подгруппы в группе Садовая техника',scoped);
+ assert.equal(groups.domain,'client_detail');
+ assert.equal(groups.client_name,'мисас ооо');
+ assert.equal(groups.level,'subgroups');
+ assert.equal(groups.group,'садовая техника');
+ const products=parse('Покажи артикулы в подгруппе Мойки высокого давления',
+   {...scoped,group:'садовая техника',level:'subgroups'});
+ assert.equal(products.domain,'client_detail');
+ assert.equal(products.level,'sku');
+ assert.equal(products.group,'садовая техника');
+ assert.equal(products.subgroup,'мойки высокого давления');
  assert.equal(parse('Какая погода').domain,null);
 });
 test('Formatting preserves source facts and warns KPI is not network turnover',()=>{
