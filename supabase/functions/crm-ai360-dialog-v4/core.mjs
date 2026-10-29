@@ -76,7 +76,7 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
    const manager=typeof args.manager==='string'?args.manager.slice(0,90):null;
    const month=typeof args.month==='string'?args.month.slice(0,7):null;
    const client=typeof args.client==='string'?args.client.slice(0,90):null;
-   const key=domain+'/'+(manager||'')+'/'+(month||'')+'/'+(client||'');
+   const key=domain+'/'+(manager||'')+'/'+(month||'')+(client?'/'+client:'');
    let result;
    if(!domains.includes(domain))result={error:'invalid_domain'};
    else if(seen.has(key))result={error:'already_read'};
