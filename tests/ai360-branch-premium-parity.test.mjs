@@ -60,6 +60,16 @@ test('Today routes are truly SQL-filtered to Minsk current date, not tomorrow',(
  assert.match(voice,/\['шкур','Шкуран'\]/);
  assert.match(voice,/manager_brief/);
 });
+test('Today route summary is computed from all scoped rows, not six preview rows',()=>{
+ assert.match(staffRead,/head:true,count:'exact'/);
+ assert.match(staffRead,/route_summary:\{date,total_routes:total,confirmed_routes:confirmed/);
+ assert.match(staffRead,/visited_routes:visited/);
+ assert.match(staffRead,/total-visited/);
+ assert.match(voice,/if\(domain==='routes'&&data.route_summary\)/);
+ assert.match(voice,/Всего точек/);
+ assert.match(voice,/без отметки посещения/);
+});
+
 test('Branch premium speech cannot fall back to robotic browser voice',()=>{
  assert.match(voice,/crmAI360BranchPremiumVoiceV1\?\.speak/);
  assert.match(voice,/crmAI360BranchPremiumVoiceV1\.listen/);
@@ -90,8 +100,8 @@ test('No background requests on initialization; no user switch to owner data',()
  assert.equal(calls,0);
 });
 test('Deploy includes the right versioned modules and keeps owner launcher',()=>{
- assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=5'));
- assert.ok(page.includes('145-resanta-ai360-branch-task-approval-v1.js?v=1'));
+ assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=6'));
+ assert.ok(page.includes('145-resanta-ai360-branch-task-approval-v1.js?v=2'));
  assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=1'));
  assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=1'));
  assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));

@@ -98,6 +98,20 @@ function parseQuestion(raw,previous=last){
 
 function formatted(domain,data,scope){
  const managers=Array.isArray(scope?.managers)?scope.managers.join(', '):'Витебск';
+ if(domain==='routes'&&data.route_summary){
+  const sum=data.route_summary;
+  const detailed=(data.items||[]).map(r=>text(r.client_name)+
+    ': '+(r.visited?'отмечено посещение':'посещение пока не отмечено')+
+    (r.approved?', маршрут подтверждён':', ожидает подтверждения'));
+  return 'Маршрут · '+managers+' · '+text(sum.date)+
+   '. Всего точек '+n(sum.total_routes)+
+   ', подтверждено '+n(sum.confirmed_routes)+
+   ', посещено '+n(sum.visited_routes)+
+   ', без отметки посещения '+n(sum.not_yet_visited)+'.\n'+
+   'Первые '+(data.items||[]).length+' точек:\n'+
+   (detailed.join('\n')||'В маршруте нет подтверждённых точек.')+
+   (data.has_more?'\nЭто часть списка. Для остальных точек скажи «дальше».':'');
+ }
  if(domain==='sales'){
   const rows=(data.managers||[]).map(r=>{
    const v=Number(r.plan_pct);

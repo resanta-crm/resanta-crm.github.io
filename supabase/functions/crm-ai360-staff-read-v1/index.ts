@@ -84,7 +84,30 @@ async function readStaff(svc,permission,managers,domain,body,day){
  }
  if(domain==='clients')return scopedTable(svc,'clients',['name','manager_name','client_status','sku_count'],'created_at',managers,{offset,filter:'not_archived'});
  if(domain==='tasks')return scopedTable(svc,'tasks',['title','manager_name','priority','due_date','review_status'],'due_date',managers,{offset,filter:'active',ascending:true});
- if(domain==='routes')return scopedTable(svc,'route_plans',['client_name','manager_name','visit_date','status','approved','visited'],'visit_date',managers,{offset,date:body.when==='today'?day:null});
+ if(domain==='routes'){
+  const date=body.when==='today'?day:null;
+  const page=await scopedTable(svc,'route_plans',
+   ['client_name','manager_name','visit_date','status','approved','visited'],
+   'visit_date',managers,{offset,date});
+  if(!date)return page;
+  // The page contains at most six rows; obtain exact scoped totals separately
+  // instead of misrepresenting six as the size of today's approved route.
+  const countQuery=(column,value)=> {
+   let query=svc.from('route_plans').select('manager_name',{head:true,count:'exact'})
+     .in('manager_name',managers).eq('visit_date',date);
+   if(column)query=query.eq(column,value);
+   return query;
+  };
+  const totals=await Promise.all([
+   countQuery(null,null),countQuery('approved',true),countQuery('visited',true)
+  ]);
+  if(totals.some(r=>r.error||!Number.isSafeInteger(r.count)))
+   throw new Error('route_summary_unavailable');
+  const [total,confirmed,visited]=totals.map(x=>x.count);
+  return {...page,route_summary:{date,total_routes:total,confirmed_routes:confirmed,
+   visited_routes:visited,not_yet_visited:Math.max(0,total-visited),
+   total_count_known:true,scope:'authorized_managers'}};
+ }
  if(domain==='visits')return scopedTable(svc,'visits',['manager_name','date','goal','result','goal_achieved'],'date',managers,{offset});
  if(domain==='gps')return scopedTable(svc,'gps_workday_aggregates',['manager_name','work_date','physical_stops','planned_count','visited_count','missed_count','aggregation_status'],'work_date',managers,{offset});
  if(domain==='triovist_tasks')return scopedTable(svc,'triovist_ai_tasks',['manager_name','title','status','priority_score','due_date'],'updated_at',managers,{offset});
