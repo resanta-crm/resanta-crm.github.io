@@ -69,5 +69,5 @@ test('Test approvals remain separate from real task endpoint',()=>{
  assert.ok(uiSource.includes("const APPROVAL_ENDPOINT='crm-ai360-task-approval-v1'"));
  assert.ok(uiSource.includes("const REAL_APPROVAL_ENDPOINT='crm-ai360-task-real-approval-v1'"));
  assert.ok(uiSource.includes("realMode=/(?:реальн|настоящ|рабоч|боев)/i.test(q)"));
- assert.ok(uiSource.includes("realMode?'commit_real':'commit_test'"));
+ assert.ok(uiSource.includes("live?'commit_real':'commit_test'"));
 });
