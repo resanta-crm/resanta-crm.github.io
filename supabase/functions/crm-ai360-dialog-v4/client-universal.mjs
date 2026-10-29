@@ -6,13 +6,19 @@ const fold=s=>String(s||'').toLocaleLowerCase('ru-RU').split('').map(c=>CYR[c]??
 const trimLegal=s=>s.replace(/(?:ooo|odo|zao|chup|ip)$/,'');
 const variants=name=>{
  const x=trimLegal(fold(name));const out=new Set([x]);
+ if(x.startsWith('elhom'))out.add(x.slice(2));
+ if(x.startsWith('elhome'))out.add(x.slice(2));
  if(x.startsWith('el')&&x.length>9)out.add(x.slice(2));
  if(x.startsWith('le')&&x.length>9)out.add(x.slice(2));
  for(const prefix of ['sadovyytsentr','torgovyytsentr','magazin','ooo']){
   if(x.startsWith(prefix)&&x.length>prefix.length+5)out.add(x.slice(prefix.length));
  }
  // Russian sound "Хом" vs English "Home"; drop silent 'e' for fuzzy candidates.
- if(x.includes('home'))out.add(x.replace('home','hom'));
+ if(x.includes('home'))out.add(x.replaceAll('home','hom'));
+ if(x.includes('hom'))out.add(x.replaceAll('hom','home'));
+ if(x.includes('garden'))out.add(x.replaceAll('garden','garden'));
+ if(x.includes('elhom'))out.add(x.replace(/^el/,'').replace('hom','home'));
+ if(x.includes('homgarden'))out.add('homegarden');
  if(x.endsWith('a')&&x.length>=4){out.add(x.slice(0,-1)+'y');out.add(x.slice(0,-1)+'u');}
  else if(x.length>=6&&!/[aeiouy]$/.test(x)){out.add(x+'a');out.add(x+'u');}
  return [...out].filter(y=>y.length>=3);
@@ -50,6 +56,10 @@ export const voicedClientMatches=(question,clients)=>{
  return ranked.slice(0,6);
 };
 export function chooseClientMatch(question,clients,{memoryClient='',hint=''}={}){
+ const normalizedQuestion=fold(question).replaceAll('home','hom');
+ const explicit=(clients||[]).filter(c=>variants(c.name).some(key=>key.length>=7&&normalizedQuestion.includes(key.replaceAll('home','hom'))));
+ if(explicit.length===1)return {id:explicit[0].id,name:explicit[0].name,manager:explicit[0].manager_name,method:'explicit_name'};
+ if(explicit.length>1)return {error:'client_ambiguous',candidates:explicit.slice(0,4).map(c=>c.name)};
  const ranked=voicedClientMatches(question,clients);
  const strong=ranked.filter(x=>x.matchScore>=0.78);
  const top=strong[0];
@@ -59,9 +69,9 @@ export function chooseClientMatch(question,clients,{memoryClient='',hint=''}={})
   return {id:top.id,name:top.name,manager:top.manager_name,method:'phonetic_directory'};
  }
  // A confirmed, server-matched client may persist across short drilldown follow-ups.
- const followup=/^\s*(?:а\s|какие|покажи|по\s+подгрупп|по\s+артикул|по\s+товар|конкретн|что\s+у\s+него|что\s+из)/i.test(String(question||''));
- const explicitOther=/(?:другого клиента|по клиенту|у клиента|по компании|у компании)/i.test(String(question||''));
- if(followup&&!explicitOther&&memoryClient){
+ const followup=/^\s*(?:а\s|какие|покажи|по\s+подгрупп|по\s+артикул|по\s+товар|конкретн|что\s+у\s+него|что\s+из|дальше|продолж|следующ|остальн|еще|ещё|все\s+остальн|детальн|а\s+теперь)/i.test(String(question||''));
+ const explicitOther=/(?:другого клиента|по клиенту|у клиента|по компании|у компании|сменим клиента)/i.test(String(question||''));
+ if((followup||/(групп|подгрупп|артикул|sku|товар|падени|динамик|мойк)/i.test(String(question||'')))&&!explicitOther&&memoryClient){
   const matches=clients.filter(x=>fold(x.name)===fold(memoryClient));
   if(matches.length===1)return {id:matches[0].id,name:matches[0].name,manager:matches[0].manager_name,method:'confirmed_followup'};
  }
