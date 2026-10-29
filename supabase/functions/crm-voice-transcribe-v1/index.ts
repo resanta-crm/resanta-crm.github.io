@@ -21,7 +21,17 @@ Deno.serve(async(req:Request)=>{
  const pname=String(prof.data?.name||'').trim().split(/\s+/).join(' ').toLocaleLowerCase('ru-RU');
  const isOwner=user.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&prof.data?.role==='boss'&&pname==='александр паюшин';
  const isBranch=user.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'&&prof.data?.role==='boss'&&pname==='сидарович к.н.'&&prof.data?.region==='Витебск';
- if(prof.error||(!isOwner&&!isBranch))return out({error:'not_authorized'},403,origin);
+
+ const FIELD_IDS=new Set(['19dd9943-99ae-47c4-a39c-4f82a11059a6',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f']);
+ const expectedManagers={
+  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'руднев',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'ачинович',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f':'шкуран'};
+ const isField=FIELD_IDS.has(user.id)&&prof.data?.role==='manager'&&
+   prof.data?.region==='Витебск'&&pname===expectedManagers[user.id];
+  if(prof.error||(!isOwner&&!isBranch&&!isField))return out({error:'not_authorized'},403,origin);
  const apiKey=Deno.env.get('OPENAI_API_KEY');
  if(!apiKey)return out({error:'speech_provider_unconfigured'},503,origin);
  const contentLength=Number(req.headers.get('content-length')||0);
