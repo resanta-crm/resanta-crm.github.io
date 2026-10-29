@@ -9,8 +9,8 @@ function load(path,guard){
  if(flights.has(path))return flights.get(path);
  const p=new Promise(resolve=>{
    const s=document.createElement('script');
-   // Only the 21vek status UI needs fresh assets for v23.6.448; keep other CRM modules on their existing cache version.
-   s.src='./'+path+'?v='+(path==='assets/80-triovist-21vek-control-v236107.js'?'23.6.448':V);
+   // Only the 21vek status UI needs fresh assets for safe 424 recovery diagnostics; keep other CRM modules on their existing cache version.
+   s.src='./'+path+'?v='+(path==='assets/80-triovist-21vek-control-v236107.js'?'23.6.450':V);
    s.async=true;
    s.onload=()=>resolve(!!window[guard]);
    s.onerror=()=>{console.warn('SAFE '+V+' module failed',path);resolve(false)};
