@@ -90,7 +90,7 @@ test('Malformed date or offset cannot authorize arbitrary pages',()=>{
 });
 test('Server side role enforcement and client validation precede sensitive data read',()=>{
  for(const token of [
-  "svc.auth.getUser(token)","select('id,name,role,region')",
+  "svc.auth.getUser(token)","select('id,name,role,region,email')",
   "const permission=staffPermission(user.id,profileRes.data)",
   "const managers=targetManagers(permission,domain,",
   ".ilike('name',escapedName).in('manager_name',managers)",
