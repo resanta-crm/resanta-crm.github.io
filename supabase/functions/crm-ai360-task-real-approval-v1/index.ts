@@ -61,6 +61,34 @@ async function stableTaskId(approval,client){
 }
 const error=(req,code,status=409)=>respond(req,{error:code,created:0},status);
 
+// Signed and time-limited proof of a specific server-validated proposal.
+// The key never leaves the Edge Function and does not travel to the browser.
+const enc=new TextEncoder();
+async function approvalKey(secret){
+ return crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);
+}
+function approvalBytes(userId,id,expires,items){
+ return enc.encode(JSON.stringify({version:1,scope:'AI360_REAL_TASK',userId,id,expires,items}));
+}
+async function makeApprovalToken(secret,userId,id,items){
+ const expires=Date.now()+600000;
+ const signature=await crypto.subtle.sign('HMAC',await approvalKey(secret),
+   approvalBytes(userId,id,expires,items));
+ const hex=[...new Uint8Array(signature)].map(x=>x.toString(16).padStart(2,'0')).join('');
+ return String(expires)+'.'+hex;
+}
+async function verifyApprovalToken(secret,userId,id,items,value){
+ const raw=String(value||'');
+ const match=/^(\d{13})\.([0-9a-f]{64})$/.exec(raw);
+ if(!match)return false;
+ const expires=Number(match[1]),stamp=Date.now();
+ if(!Number.isSafeInteger(expires)||expires<=stamp||expires>stamp+600000)return false;
+ const signature=new Uint8Array((match[2].match(/../g)||[]).map(x=>parseInt(x,16)));
+ return crypto.subtle.verify('HMAC',await approvalKey(secret),signature,
+   approvalBytes(userId,id,expires,items));
+}
+
+
 Deno.serve(async req=>{
   const origin=req.headers.get('Origin');
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(origin)});
@@ -165,11 +193,18 @@ Deno.serve(async req=>{
     };
   });
 
-  if(body.kind==='validate')return respond(req,{mode:'ready_real',storage:'operational_tasks_after_confirmation',items:rows.map(r=>({
-    client_id:r.client_id,client_name:body.items.find(x=>x.client_id===r.client_id)?.client_name,
-    manager_name:r.manager_name,title:r.title,text:r.text,due_date:r.due_date,
-    expected_result:r.expected_result,criteria:r.criteria
-  })),created:0});
+  const approvedItems=rows.map((r,i)=>({
+    client_id:r.client_id,client_name:body.items[i].client_name,
+    manager_name:r.manager_name,title:r.title,text:r.text,
+    due_date:r.due_date,expected_result:r.expected_result,criteria:r.criteria
+  }));
+  if(body.kind==='validate'){
+    const approvalToken=await makeApprovalToken(secret,user.id,body.approval_id,approvedItems);
+    return respond(req,{mode:'ready_real',storage:'operational_tasks_after_confirmation',
+      items:approvedItems,approval_token:approvalToken,expires_in_seconds:600,created:0});
+  }
+  if(!await verifyApprovalToken(secret,user.id,body.approval_id,approvedItems,body.approval_token))
+    return error(req,'approval_token_invalid_or_expired',403);
 
   // The user has explicitly confirmed the exact approved action payload.
   // DB unique constraints guard concurrent AI360 approvals on the same open client.
