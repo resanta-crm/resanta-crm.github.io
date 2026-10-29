@@ -1,0 +1,30 @@
+name: AI360 proactive director brief
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/142-resanta-ai360-director-proactive-brief-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'tests/ai360-proactive-open-daily.test.mjs'
+      - '.github/workflows/ai360-proactive-daily-brief.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/142-resanta-ai360-director-proactive-brief-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'tests/ai360-proactive-open-daily.test.mjs'
+      - '.github/workflows/ai360-proactive-daily-brief.yml'
+jobs:
+  proactive-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/134-resanta-voice-ai360-pilot-v1.js
+      - run: node --check assets/142-resanta-ai360-director-proactive-brief-v1.js
+      - run: node --check assets/137-resanta-ai360-lazy-launch-v1.js
+      - run: node --test tests/ai360-proactive-open-daily.test.mjs
