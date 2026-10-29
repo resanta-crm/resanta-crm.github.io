@@ -232,8 +232,8 @@ Deno.serve(async req => {
         evidence.push(t);return t;
       }
       if(domain==='client_groups'||domain==='client_schedule'){
-        const resolved=await resolveClient(svc,{
-          client:args.client,question,remembered:memory.client
+        const resolved=await resolveAnyClient(svc,{
+          question,memoryClient:memory.client||'',hint:args.client||''
         });
         if(resolved.error){
           const t={domain,error:resolved.error,candidates:resolved.candidates||[],
