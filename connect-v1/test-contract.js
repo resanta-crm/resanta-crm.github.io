@@ -12,6 +12,7 @@ const readme = read('README.md');
 const native = fs.readFileSync(path.join(root,'..','assets','151-resanta-connect-v1.js'),'utf8');
 const nativeCss = fs.readFileSync(path.join(root,'..','assets','151-resanta-connect-v1.css'),'utf8');
 const crm = fs.readFileSync(path.join(root,'..','index.html'),'utf8');
+const migration = fs.readFileSync(path.join(root,'..','supabase','migrations','20261029190000_connect_v1.sql'),'utf8');
 const count = (s,re) => [...s.matchAll(re)].length;
 const checks = [
   ['RLS applied to each chat table', () => {
@@ -55,6 +56,13 @@ const checks = [
     assert.doesNotMatch(page,/assets\/01-crm-core|assets\/03-triovist-routes/);
     assert.match(page,/src="\.\/config\.js"/);
     assert.match(page,/src="\.\/app\.js"/);
+  }],
+  ['Deployment migration preserves isolated chat schema and RLS', () => {
+    assert.match(migration,/create table if not exists public.connect_rooms_v1/i);
+    assert.match(migration,/create policy connect_messages_read_v1/i);
+    assert.match(migration,/grant execute on function public.connect_create_room_v1/i);
+    assert.doesNotMatch(migration,/drop table|truncate table|delete from public\./i);
+    assert.doesNotMatch(migration,/alter table public\.(users|clients|visits|tasks)\b/i);
   }],
   ['Native CRM menu and same authenticated Supabase client', () => {
     assert.match(crm,/id="nav-connect"/);
