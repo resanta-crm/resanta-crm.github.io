@@ -13,6 +13,8 @@ import os
 import sys
 import urllib.error
 import urllib.request
+import urllib.parse
+from datetime import datetime,timezone
 
 SUPABASE_URL=(os.environ.get("SUPABASE_URL") or "").strip().rstrip("/")
 SUPABASE_KEY=(os.environ.get("SUPABASE_KEY") or "").strip()
@@ -49,6 +51,77 @@ def write_output(**values):
             f.write(f"{k}={str(v).lower() if isinstance(v,bool) else v}\n")
 
 
+def rest_get(table: str, params: dict) -> list[dict]:
+    query=urllib.parse.urlencode(params)
+    request=urllib.request.Request(
+        f"{SUPABASE_URL}/rest/v1/{table}?{query}",
+        headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"},
+        method="GET")
+    with urllib.request.urlopen(request,timeout=35) as response:
+        data=json.loads(response.read().decode("utf-8"))
+    if not isinstance(data,list):
+        raise RuntimeError(f"Invalid recovery response from {table}")
+    return data
+
+
+def recover_failed_top(result: dict, mode: str) -> bool:
+    """Lightweight scheduled detection of a failed TOP paired with full cards.
+
+    No DB writes and no staging here. A targeted run reuses only its own
+    verified snapshots; repeated failures have bounded cooldown/attempts.
+    """
+    full=rest_get("triovist_21vek_shadow_runs",{
+        "select":"id,started_at,finished_at,total_targets,success_count,error_count,status",
+        "status":"eq.complete","order":"started_at.desc","limit":"1"})
+    if not full:
+        return False
+    card=full[0]
+    targets=int(card.get("total_targets") or 0)
+    if targets<1 or int(card.get("success_count") or -1)!=targets or int(card.get("error_count") or 0)!=0:
+        return False
+    # A newer card collection, even if it fails, invalidates this TOP pairing.
+    next_cards=rest_get("triovist_21vek_shadow_runs",{
+        "select":"id","started_at":f"gt.{card['started_at']}","limit":"1"})
+    if next_cards:
+        return False
+    runs=rest_get("triovist_21vek_top_runs",{
+        "select":"id,status,parser_version,total_targets,total_keywords,started_at,finished_at,notes",
+        "status":"in.(failed,partial)","total_targets":f"eq.{targets}",
+        "started_at":f"gte.{card['finished_at']}",
+        "order":"started_at.desc","limit":"1"})
+    if not runs:
+        return False
+    run=runs[0]
+    if run.get("parser_version")!="top-shadow-v0.7":
+        return False
+    start=datetime.fromisoformat(str(run["started_at"]).replace("Z","+00:00"))
+    age=(datetime.now(timezone.utc)-start).total_seconds()
+    if age<0 or age>24*3600:
+        return False
+    notes=run.get("notes") if isinstance(run.get("notes"),dict) else {}
+    attempts=int(notes.get("recovery_attempts") or 0)
+    if attempts>=4:
+        print(json.dumps({"top_recovery":"exhausted","attempts":attempts,
+                          "run_id":run["id"],"latest_complete":False}),flush=True)
+        return False
+    last=notes.get("last_recovery_at")
+    if last:
+        since=(datetime.now(timezone.utc)-datetime.fromisoformat(str(last).replace("Z","+00:00"))).total_seconds()
+        if since<min(3600,600*(2**max(0,attempts-1))):
+            return False
+    failed=rest_get("triovist_21vek_top_snapshots",{
+        "select":"keyword","run_id":f"eq.{run['id']}",
+        "error_text":"not.is.null","limit":"12"})
+    if not failed:
+        return False
+    if len({str(x.get("keyword") or "") for x in failed})>10:
+        return False
+    result.update(run=True,mode=mode,do_parse=False,do_top=True,do_promote=True,
+                  top_resume_run_id=run["id"],limit="2500",top_limit="500",
+                  skip_recent="0")
+    return True
+
+
 def apply_recovery(result: dict, mode: str) -> bool:
     recovery=rpc("triovist_21vek_recovery_gate_v236404",{})
     if not recovery.get("recovery_needed"):
@@ -81,6 +154,7 @@ def claim():
         "limit":"2500",
         "top_limit":"500",
         "skip_recent":"0",
+        "top_resume_run_id":"",
     }
 
     if event=="push":
@@ -92,7 +166,7 @@ def claim():
                 do_parse=True,do_top=True,do_promote=True,
                 limit="2500",top_limit="500",skip_recent="0"
             )
-        elif not apply_recovery(result,"promotion_recovery_after_push"):
+        elif not apply_recovery(result,"promotion_recovery_after_push") and not recover_failed_top(result,"top_keyword_recovery_after_push"):
             # A code push must never create a partial "complete" parser run.
             # If there is nothing to recover, keep this workflow cheap/no-op.
             result.update(
@@ -134,7 +208,8 @@ def claim():
                 limit="2500",top_limit="500",skip_recent="0"
             )
         else:
-            apply_recovery(result,"promotion_recovery")
+            if not apply_recovery(result,"promotion_recovery"):
+                recover_failed_top(result,"top_keyword_recovery")
 
     write_output(**result)
     print(json.dumps(result,ensure_ascii=False),flush=True)
