@@ -22,4 +22,11 @@ root.crmAI360StaffIdentityV1=()=>{
   return Object.freeze({...p,id:currentUser.id,can_create_tasks:p.tier==='branch_director'});
  }catch{return null;}
 };
+// Both optional CRM features have separate server RBAC and never run network requests on boot.
+for(const file of ['149-lpr-v1.js','150-my-mileage-v1.js']){
+ const tag=document.createElement('script');
+ tag.src='./assets/'+file+'?v=1';
+ tag.defer=true;
+ document.body.appendChild(tag);
+}
 })(window);
