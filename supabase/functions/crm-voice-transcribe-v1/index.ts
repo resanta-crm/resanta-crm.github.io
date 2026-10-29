@@ -31,7 +31,16 @@ Deno.serve(async(req:Request)=>{
   '4fd79fa0-232d-4768-8099-25f47923cc4f':'шкуран'};
  const isField=FIELD_IDS.has(user.id)&&prof.data?.role==='manager'&&
    prof.data?.region==='Витебск'&&pname===expectedManagers[user.id];
-  if(prof.error||(!isOwner&&!isBranch&&!isField))return out({error:'not_authorized'},403,origin);
+
+ const TRI_USERS={
+  '6efa656e-45c6-473b-a853-89eccb9ee43a':'александренко',
+  '9076ccde-a8cc-47e3-b71e-c31170b693ff':'кришталь'
+ };
+ const isTriovist=Object.prototype.hasOwnProperty.call(TRI_USERS,user.id)&&
+   prof.data?.role==='manager'&&
+   prof.data?.region==='Триовист / 21vek.by'&&
+   pname===TRI_USERS[user.id];
+   if(prof.error||(!isOwner&&!isBranch&&!isField&&!isTriovist))return out({error:'not_authorized'},403,origin);
  const apiKey=Deno.env.get('OPENAI_API_KEY');
  if(!apiKey)return out({error:'speech_provider_unconfigured'},503,origin);
  const contentLength=Number(req.headers.get('content-length')||0);
