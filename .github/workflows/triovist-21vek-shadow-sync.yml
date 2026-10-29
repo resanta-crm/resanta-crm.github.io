@@ -16,7 +16,7 @@ on:
     - cron: '17 3 * * *'
     # Резерв карточек: 08:17 по Минску. TOP и production-promote здесь не повторяем.
     - cron: '17 5 * * *'
-    # Каждые 10 минут: ручная очередь + лёгкое восстановление готовой публикации.
+    # Каждые 10 минут: ручная очередь + восстановление ошибочных TOP-запросов и готовой публикации.
     - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
@@ -87,8 +87,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           TOP_LIMIT: ${{ steps.gate.outputs.top_limit }}
+          TOP_RECOVER_RUN_ID: ${{ steps.gate.outputs.top_resume_run_id }}
         run: |
-          echo "21vek TOP keywords=$TOP_LIMIT"
+          echo "21vek TOP keywords=$TOP_LIMIT recover=${TOP_RECOVER_RUN_ID:+targeted}"
           TOP_KEYWORD_LIMIT="$TOP_LIMIT" \
           TOP_KEYWORD_OFFSET='0' \
           TOP_DELAY_SECONDS='0.18' \
