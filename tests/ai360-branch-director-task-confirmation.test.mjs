@@ -12,7 +12,7 @@ test('Real writes require exact Sidarovich account, profile and Vitebsk manager'
   "targetManagers(perm,'tasks',draft.manager_name)",
   ".eq('role','manager').eq('region','Витебск')",
   ".eq('manager_name',manager.name)","client_not_assigned_to_manager",
-  "source:SOURCE","source:'ai360_branch_voice_approved'"
+  "source:SOURCE","const SOURCE='ai360_branch_voice_approved'"
  ]){
   assert.ok(backend.includes(x)||ui.includes(x),x);
  }
