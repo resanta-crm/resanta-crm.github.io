@@ -8,7 +8,7 @@
 if(/Android/i.test(navigator.userAgent||'')||root.crmAI360BranchVoicePilotV1)return;
 const STAFF_ID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-staff-read-v1';
-const STEMS=[['руднев','Руднев'],['ачинович','Ачинович'],['шкуран','Шкуран']];
+const STEMS=[['рудн','Руднев'],['ачинов','Ачинович'],['шкур','Шкуран']];
 const MONTHS=[['январ',1],['феврал',2],['март',3],['апрел',4],['ма',5],['июн',6],['июл',7],['август',8],['сентябр',9],['октябр',10],['ноябр',11],['декабр',12]];
 const MAX_ANSWER=4000;
 const normalize=x=>String(x??'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/\s+/g,' ').trim();
@@ -29,15 +29,10 @@ function allowed(){
 }
 function panelVisible(){return Boolean(allowed()&&panel&&!panel.hidden&&!document.hidden);}
 function say(message){
- if(!panelVisible()||muted||!root.speechSynthesis||!root.SpeechSynthesisUtterance)return;
- try{
-  root.speechSynthesis.cancel();
-  const u=new root.SpeechSynthesisUtterance(String(message||'').slice(0,500));
-  u.lang='ru-RU';u.rate=1.03;
-  const voice=(root.speechSynthesis.getVoices?.()||[]).find(v=>/^ru[-_]/i.test(v.lang||''));
-  if(voice)u.voice=voice;
-  root.speechSynthesis.speak(u);
- }catch(e){console.warn('AI360 branch voice playback unavailable',String(e).slice(0,70));}
+ if(!panelVisible()||muted)return;
+ // Shared paid provider engines: OpenAI transcription, Yandex SpeechKit narration.
+ // No robotic browser fallback in this branch pilot.
+ void root.crmAI360BranchPremiumVoiceV1?.speak(String(message||'').slice(0,1200));
 }
 function show(message,{speak=true}={}){
  if(!panelVisible()||!log)return;
@@ -69,6 +64,7 @@ function parseQuestion(raw,previous=last){
    /(?:групп|подгрупп|артикул|sku|категори)/.test(q)&&
    /^(?:покажи|какие|дай|расскажи|а\s|назови|выведи)/.test(q);
  const domain=continuation&&previous.domain?previous.domain:
+   /(?:что|какие|чем).*?(?:обсуд|подсвет|предлож|порекоменд|сделать).*?(?:рудн|ачинов|шкур)|(?:обсуд|подсвет|предлож).*?(?:с |для )(?:рудн|ачинов|шкур)/.test(q)?'manager_brief':
    /пдз|долг|задолж|дебитор|просроч.*оплат/.test(q)?'debt':
    /gps|джипиэс|геолокац/.test(q)?'gps':
    /склад|остатк|наличи.*товар/.test(q)?'stock':
@@ -81,7 +77,8 @@ function parseQuestion(raw,previous=last){
    /продаж|продал|выруч|оборот|план|факт|кпи|kpi/.test(q)?'sales':null;
  const month=monthFrom(q)||(continuation?previous.month:null);
  const payload={kind:'read',domain,manager:namedManager||(continuation?previous.manager:null),
-  month,offset:continuation?previous.offset:0};
+  month,offset:continuation?previous.offset:0,
+  when:/\bсегодня\b|на сегодня/.test(q)?'today':null};
  if(domain==='client_detail'){
   const match=q.match(/(?:^|\s)(?:по\s+)?клиент(?:у|а|ом)?\s+[«"]?(.+?)(?=\s+(?:в\s+(?:группе|подгруппе)|групп[а-я]*|подгрупп[а-я]*|артикул[а-я]*|sku|за\s+(?:20\d{2}|[а-я]+))|$)/);
   const named=match?.[1]?.replace(/["»«]/g,'').trim().slice(0,150)||'';
@@ -148,9 +145,55 @@ function formatted(domain,data,scope){
   (lines.join('\n')||'В этой выборке записи не найдены.')+
   (data.has_more?'\nПоказана только часть записей. Скажи «дальше».':'\nЭто только выбранный раздел, не аудит всей базы.');
 }
+async function managerBrief(manager,month,started){
+ if(!manager){show('Назови менеджера Витебска: Руднев, Ачинович или Шкуран.');return;}
+ busy=true;if(send)send.disabled=true;if(mic)mic.disabled=true;
+ setStatus('Проверяю продажи, ПДЗ и задачи '+manager+'…');
+ try{
+  const sources=['sales','debt','tasks'];
+  const values=await Promise.all(sources.map(domain=>db.functions.invoke(ENDPOINT,{
+   body:{kind:'read',domain,manager,month,offset:0}
+  })));
+  if(!panelVisible()||started!==epoch)return;
+  const data={};
+  for(let i=0;i<values.length;i++){
+   const res=values[i];const p=res.data;
+   if(res.error||!p||p.answer_verified!==true||p.read_only!==true||
+     p.domain!==sources[i]||p.scope?.role!=='branch_director'||
+     !Array.isArray(p.scope?.managers)||p.scope.managers.length!==1||p.scope.managers[0]!==manager)
+    throw Error('manager_brief_source_unverified');
+   data[sources[i]]=p.data;
+  }
+  const m=(data.sales.managers||[]).find(x=>x.manager_name===manager);
+  const debt=(data.debt.manager_totals||[]).find(x=>x.manager_name===manager);
+  const toDiscuss=[];
+  if(m)toDiscuss.push('План и продажи: '+amount(m.actual)+' из '+amount(m.plan)+
+   ', выполнение '+Number(m.plan_pct||0).toLocaleString('ru-RU',{maximumFractionDigits:1})+
+   '%. Уточнить подтверждённые отгрузки и следующие заказы.');
+  if(debt&&n(debt.amount)>0)toDiscuss.push('ПДЗ: '+amount(debt.amount)+
+    '. Попросить даты закрытия просрочки и план работы с должниками.');
+  const tasks=(data.tasks.items||[]);
+  if(tasks.length)toDiscuss.push('Незакрытые задачи: '+tasks.length+
+   (data.tasks.has_more?' или больше (показана часть)':' в текущей выборке')+
+   '. Проверить сроки и результаты.');
+  toDiscuss.push('Проверить клиентскую базу, падающих клиентов и ближайший маршрут отдельно, прежде чем утверждать новые поручения.');
+  show('Что обсудить с '+manager+' на основании CRM:\n'+toDiscuss.map((x,i)=>(i+1)+'. '+x).join('\n')+
+   '\nЭто проверенные сигналы, не утверждение о причинах падения продаж. При желании подготовлю поручение.');
+  setStatus('Проверены три источника CRM · '+manager);
+ }catch(e){
+  if(panelVisible()&&started===epoch)show('Не смогла проверить все источники по '+manager+
+   '. Частичную аналитику не выдаю за подтверждённую.',{speak:false});
+ }finally{if(started===epoch){busy=false;if(send)send.disabled=false;if(mic)mic.disabled=false;}}
+}
+
 async function read(q){
  if(busy||!panelVisible())return;
  const parsed=parseQuestion(q);
+ if(parsed.domain==='manager_brief'){
+  const seq=++epoch;
+  void managerBrief(parsed.manager,parsed.month,seq);
+  return;
+ }
  if(!parsed.domain){
   show('Уточни раздел: продажи, ПДЗ, задачи, маршруты, визиты, GPS, остатки или клиенты.');
   return;
@@ -213,27 +256,18 @@ function submit(){
 }
 function beginMicrophone(){
  if(!panelVisible()||busy)return;
- if(!Recognition){show('Распознавание речи недоступно в этом браузере. Введи вопрос текстом.',{speak:false});return;}
- try{
-  if(recognition){recognition.abort();recognition=null;}
-  root.speechSynthesis?.cancel();
-  const r=new Recognition();recognition=r;r.lang='ru-RU';r.continuous=false;
-  r.interimResults=false;r.maxAlternatives=1;
-  r.onresult=e=>{
-   if(recognition!==r||!panelVisible())return;
-   const heard=String(e.results?.[0]?.[0]?.transcript||'').trim().slice(0,350);
-   if(heard){field.value=heard;submit();}
-  };
-  r.onerror=e=>{if(recognition===r&&panelVisible())setStatus('Распознавание: '+text(e?.error||'ошибка'));};
-  r.onend=()=>{if(recognition===r){recognition=null;if(panelVisible()&&!busy)setStatus('Микрофон выключен');}};
-  setStatus('Слушаю один вопрос…');r.start();
- }catch{setStatus('Не удалось включить микрофон. Используй текстовый ввод.');}
+ if(!root.crmAI360BranchPremiumVoiceV1){
+  show('Голосовой движок временно недоступен. Используй текстовый вопрос.',{speak:false});
+  return;
+ }
+ root.crmAI360BranchPremiumVoiceV1.listen();
 }
 function close(){
  epoch++;busy=false;
  if(recognition){try{recognition.abort();}catch{}recognition=null;}
- try{root.speechSynthesis?.cancel();}catch{}
+ root.crmAI360BranchPremiumVoiceV1?.stop();
  if(panel)panel.hidden=true;
+ root.crmAI360BranchPremiumVoiceV1?.stop();
  root.crmAI360BranchTaskResetV1?.();
  if(log)log.textContent='';
  last={domain:'',manager:null,month:null,offset:0,client_name:'',group:'',subgroup:'',level:'groups'};
@@ -261,20 +295,39 @@ function buildPanel(){
  send=document.createElement('button');send.type='button';send.textContent='➤';send.addEventListener('click',submit);
  entry.append(field,send);
  const actions=document.createElement('div');actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;';
- mic=document.createElement('button');mic.textContent='🎤 Задать вопрос';mic.addEventListener('click',beginMicrophone);
- mute=document.createElement('button');mute.textContent='🔊 Голос включён';mute.addEventListener('click',()=>{
-  muted=!muted;mute.textContent=muted?'🔇 Голос выключен':'🔊 Голос включён';
-  if(muted)try{root.speechSynthesis?.cancel();}catch{}
+ mic=document.createElement('button');mic.textContent='🎤 Спросить через OpenAI';mic.addEventListener('click',beginMicrophone);
+ mute=document.createElement('button');mute.textContent='🔊 Лера · Яндекс';mute.addEventListener('click',()=>{
+  muted=!muted;mute.textContent=muted?'🔇 Голос выключен':'🔊 Лера · Яндекс';
+  root.crmAI360BranchPremiumVoiceV1?.setMuted(muted);
  });
- actions.append(mic,mute);
+ const wake=document.createElement('button');wake.type='button';
+ wake.textContent='◉ Привет, Ресанта';
+ wake.addEventListener('click',()=>{
+  const active=root.crmAI360BranchPremiumVoiceV1?.toggleWake()||false;
+  wake.textContent=active?'■ Выключить ожидание':'◉ Привет, Ресанта';
+ });
+ const voiceSwitch=document.createElement('button');voiceSwitch.type='button';
+ voiceSwitch.textContent='Голос: Лера';
+ let useDasha=false;
+ voiceSwitch.addEventListener('click',()=>{
+  useDasha=!useDasha;
+  root.crmAI360BranchPremiumVoiceV1?.setVoice(useDasha?'dasha':'lera');
+  voiceSwitch.textContent=useDasha?'Голос: Даша':'Голос: Лера';
+ });
+ actions.append(mic,wake,mute,voiceSwitch);
  status=document.createElement('div');status.style.cssText='font-size:11px;color:#54708e;';
  status.setAttribute('role','status');status.textContent='Только чтение · готова к вопросу';
  log=document.createElement('div');log.className='rsa-branch-log';log.setAttribute('role','log');
  const speechNote=document.createElement('small');
- speechNote.textContent='🎤 Работает по нажатию, если браузер поддерживает распознавание. Браузер может передавать голос своему сервису; выключается при закрытии окна. Озвучка — системным голосом.';
+ speechNote.textContent='Речь распознаётся OpenAI, озвучка — Яндекс Лера/Даша. Ожидание «Привет, Ресанта» включается вручную и прекращается при закрытии окна. Голос передаётся внешним сервисам.';
  panel.append(heading,note,log,entry,actions,status,speechNote);
  document.body.appendChild(panel);
  root.crmAI360BranchTaskMountV1?.(panel);
+ root.crmAI360BranchPremiumVoiceV1?.bind({
+  panel,authorized:panelVisible,
+  onTranscript:q=>{if(panelVisible()&&field){field.value=q;submit();}},
+  onStatus:setStatus
+ });
 }
 async function open(){
  if(!allowed())return;
@@ -295,7 +348,7 @@ async function open(){
    throw new Error('invalid_staff_capabilities');
   verified=true;
   setStatus('Подключено · только чтение');
-  show('Здравствуйте! Я Лера, помощник руководителя Витебского филиала. Проверяю продажи, ПДЗ, маршруты и клиентов. Также могу подготовить поручение менеджеру. Реальная задача создаётся только после отдельной проверки и подтверждения.',{speak:false});
+  show('Здравствуйте! Я Лера, помощник Витебского филиала. Слушаю через OpenAI, говорю голосом Яндекса. Могу проанализировать менеджеров и подготовить поручения после вашего подтверждения.',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
