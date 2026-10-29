@@ -10,11 +10,9 @@ const WAKE=/^(?:(?:привет[\s,!.—-]+(?:ресанта|резанта))|л
 let clipEpoch=0,playEpoch=0,stream=null,recorder=null,player=null,mediaUrl='',wakeOn=false,loops=0,oneShot=false;
 let onQuestion=null,onInfo=null,allowedNow=null,voice='lera',muted=false,activePanel=null;
 function allowed(){
- try{return typeof currentUser!=='undefined'&&currentUser?.id===SID&&
-  typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
-  String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='сидарович к.н.'&&
-  currentProfile?.region==='Витебск'&&!document.hidden&&activePanel&&!activePanel.hidden&&allowedNow?.();
- }catch{return false;}
+ const identity=root.crmAI360StaffIdentityV1?.();
+ return !!identity&&['branch_director','field_manager'].includes(identity.tier)&&
+  !document.hidden&&activePanel&&!activePanel.hidden&&allowedNow?.();
 }
 function info(s){if(allowed())onInfo?.(String(s||'').slice(0,150));}
 function stopSpeech(){
