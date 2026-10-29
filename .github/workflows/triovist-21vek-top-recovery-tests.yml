@@ -2,6 +2,8 @@ name: 21vek TOP retry and safe resumable promotion
 on:
   pull_request:
     paths:
+      - 'assets/80-triovist-21vek-control-v236107.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
       - 'tools/triovist_21vek_top_shadow.py'
       - 'tools/triovist_21vek_refresh_gate.py'
       - 'tools/test_triovist_21vek_top_recovery.py'
@@ -10,6 +12,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'assets/80-triovist-21vek-control-v236107.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
       - 'tools/triovist_21vek_top_shadow.py'
       - 'tools/triovist_21vek_refresh_gate.py'
       - 'tools/test_triovist_21vek_top_recovery.py'
@@ -27,6 +31,8 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install requests beautifulsoup4
+      - run: node --check assets/80-triovist-21vek-control-v236107.js
+      - run: node --check assets/100-safe-upgrades-loader-v236272.js
       - run: python -m py_compile tools/triovist_21vek_top_shadow.py tools/triovist_21vek_refresh_gate.py
       - run: python -m unittest discover -s tools -p 'test_triovist_21vek_top_recovery.py' -v
       - run: python -m unittest discover -s tools -p 'test_triovist_21vek_unavailable.py' -v
@@ -43,5 +49,7 @@ jobs:
           assert "TOP_RECOVER_RUN_ID: ${{ steps.gate.outputs.top_resume_run_id }}" in workflow
           assert "cancel-in-progress: false" in workflow
           assert "triovist_21vek_promote.py" in workflow
+          ui=Path('assets/80-triovist-21vek-control-v236107.js').read_text()
+          assert 'pairedTopMissing' in ui and 'последний успешный TOP' in ui
           print("OK: bounded retry, resume, complete-run gate and unchanged promotion safety")
           PY
