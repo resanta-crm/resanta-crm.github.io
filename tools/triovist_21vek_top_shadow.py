@@ -256,9 +256,16 @@ def wait_delay() -> None:
 
 
 def search_page(session: requests.Session, keyword: str, page: int, search_id: str) -> dict:
+    """Bounded retries for transient 21vek search dependencies (including HTTP 424).
+
+    A 424 ML dependency or upstream idle timeout must not invalidate an entire
+    daily 1724-card run after one short failed request. Respect 429 Retry-After.
+    Never reinterpret a bad response as 'product not in TOP-60'.
+    """
     body=search_body(keyword,page,search_id)
     last_error=None
-    for attempt in range(3):
+    attempts=5
+    for attempt in range(attempts):
         wait_delay()
         try:
             r=session.post(ENDPOINT,json=body,timeout=TIMEOUT,allow_redirects=True)
@@ -271,21 +278,26 @@ def search_page(session: requests.Session, keyword: str, page: int, search_id: s
                     raise RuntimeError('21vek search response has no products array')
                 return data
             error=RuntimeError(f'21vek search HTTP {r.status_code}: {r.text[:300]}')
-            if r.status_code<500 and r.status_code not in (408,425,429):
+            # 424 from search-composer signals a failed ML or product-card dependency.
+            # All other 4xx except temporary throttling/timeouts fail closed.
+            if r.status_code<500 and r.status_code not in (408,424,425,429):
                 raise error
             last_error=error
+            if attempt>=attempts-1:
+                break
             retry=r.headers.get('Retry-After') if r.status_code==429 else None
             if retry:
                 try:
-                    time.sleep(max(1.0,min(30.0,float(retry))))
-                except Exception:
-                    time.sleep(2.0*(attempt+1))
-            elif attempt<2:
-                time.sleep(1.0*(attempt+1))
+                    delay=max(1.0,min(45.0,float(retry)))
+                except (TypeError,ValueError):
+                    delay=min(30.0,2.0*(2**attempt))
+            else:
+                delay=min(30.0,2.0*(2**attempt))
+            time.sleep(delay)
         except (requests.Timeout,requests.ConnectionError) as exc:
             last_error=exc
-            if attempt<2:
-                time.sleep(1.0*(attempt+1))
+            if attempt<attempts-1:
+                time.sleep(min(30.0,2.0*(2**attempt)))
     if last_error is not None:
         raise last_error
     raise RuntimeError('21vek search failed')
@@ -470,13 +482,12 @@ def main() -> None:
                 )
                 if len(snapshots)>=250:
                     rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
-                    rest_upsert('triovist_21vek_top_current',current,'manager_email,card_key',timeout=90)
+                    # Never replace the live TOP mirror with partial/failed data.
                     snapshots=[]
                     current=[]
 
         if snapshots:
             rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
-            rest_upsert('triovist_21vek_top_current',current,'manager_email,card_key',timeout=90)
 
         stats=rest_get_all('triovist_21vek_top_snapshots',{
           'run_id':f'eq.{run_id}','select':'position_exact,top30,top60,error_text'
@@ -487,6 +498,17 @@ def main() -> None:
         outside60=sum(1 for x in stats if x.get('top60') is False and not x.get('error_text'))
         row_errors=sum(1 for x in stats if x.get('error_text'))
         status='complete' if errors==0 and row_errors==0 and len(stats)==len(all_targets) else 'partial'
+        if status=='complete':
+            # Only after complete run validation publish the TOP mirror.
+            verified=rest_get_all('triovist_21vek_top_snapshots',{
+              'run_id':f'eq.{run_id}','select':'*'
+            },page_size=900,timeout=90)
+            if len(verified)!=len(all_targets) or any(x.get('error_text') for x in verified):
+                raise RuntimeError('TOP mirror publication blocked: incomplete verified snapshot')
+            for begin in range(0,len(verified),200):
+                rest_upsert('triovist_21vek_top_current',
+                            [current_row(x) for x in verified[begin:begin+200]],
+                            'manager_email,card_key',timeout=90)
         rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
           'status':status,'requests_count':requests_count,'found_exact_count':found_exact,'top30_count':top30,
           'top60_count':top60,'error_count':errors+row_errors,'finished_at':datetime.now(timezone.utc).isoformat(),
