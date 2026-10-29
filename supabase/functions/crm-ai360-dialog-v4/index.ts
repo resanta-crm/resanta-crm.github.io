@@ -283,10 +283,19 @@ Deno.serve(async req => {
       if(managed){evidence.push(managed);return managed;}
       const tool = getTool(domain);
       if (!tool) return { domain, error: 'unknown_domain' };
-      const result = await collectTool(svc, domain, { manager, signal: AbortSignal.timeout(4500) });
+      const isNextPage=memory.domain===domain&&
+        /(?:дальше|продолж|следующ|остальн|еще|ещё|покажи ещё|покажи еще)/i.test(question);
+      const safeOffset=isNextPage?Math.max(0,Math.min(200,Number(memory.offset)||0)):0;
+      const result = await collectTool(svc, domain, {
+        manager,offset:safeOffset,signal:AbortSignal.timeout(4500)
+      });
       if (result.error) throw new Error('source_unavailable');
+      lastNextOffset=result.has_more?result.next_offset:0;
       const t={...result,scope:manager?'manager':'network',manager:manager||null,
-        as_of:day,partial:true,warning:'This is a short sample; not a complete dataset or verified business conclusion.'};
+        as_of:day,partial:result.has_more,
+        warning:result.has_more?
+          'Only one page of source rows, not all records. Ask to continue for next page. No exact total was calculated.':
+          'Only the selected table and filters were checked. No cross-domain conclusions or unverified total counts.'};
       evidence.push(t);return t;
     } catch {
       invalidSources.push(domain);
@@ -448,7 +457,9 @@ Deno.serve(async req => {
     outputTokens += Math.max(0, Number(data?.usage?.output_tokens || 0));
     return data;
   };
-  const preferredDomain=inferVoiceDomain(question)||(/^(а\s|ещё|еще|какие|покажи|расскажи|а теперь|продолж)/i.test(question)&&DOMAINS.includes(memory.domain)?memory.domain:null);
+  const preferredDomain=inferVoiceDomain(question)||
+     (/^(а\s|и\s|ещё|еще|какие|покажи|расскажи|а теперь|продолж|дальше|остальн|следующ)/i.test(question)&&
+       DOMAINS.includes(memory.domain)?memory.domain:null);
   const output = await runToolCore({
     question, history, memory: { ...memory,
       manager:subject.manager||'',subject:subject.subject,client:memory.client||'',
@@ -494,7 +505,8 @@ Deno.serve(async req => {
       group:lastGroup||((subject.subject==='client'&&!lastClientName)?memory.group||'':''),
       subgroup:lastSubgroup||((subject.subject==='client'&&!lastClientName)?memory.subgroup||'':''),
       level:lastLevel||((subject.subject==='client'&&!lastClientName)?memory.level||'':''),
-      offset:lastClientName?lastNextOffset:((subject.subject==='client')?Number(memory.offset||0):0),
+      offset:lastClientName?lastNextOffset:
+         (getTool(lastDomain)?lastNextOffset:((subject.subject==='client')?Number(memory.offset||0):0)),
       subject:subject.subject,domain:lastDomain||output.used[0]?.split('/')[0]||memory.domain||''}
   });
 });
