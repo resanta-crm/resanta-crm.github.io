@@ -28,7 +28,7 @@ export const CRM_AI360_TOOLS = Object.freeze([
  {id:'infographics',label:'Статус инфографики',table:'triovist_infographic_factory_batches_v5',columns:'status,stage,total_items,completed_items,failed_items,attention_items,created_at',sort:'created_at',limit:5},
  {id:'parser',label:'Обновление парсера 21vek',table:'triovist_market_position_watch_runs_v236352',columns:'status,tracked_count,success_count,error_count,started_at,finished_at',sort:'started_at',limit:6}
 ]);
-export const CRM_AI360_MANAGED_DOMAINS=Object.freeze(['sales','operations','promotions','triovist','vip','payments','client_groups','client_schedule','client_detail']);
+export const CRM_AI360_MANAGED_DOMAINS=Object.freeze(['sales','operations','promotions','triovist','vip','payments','client_schedule','client_detail']);
 export const CRM_AI360_ALL_DOMAINS=Object.freeze([...CRM_AI360_MANAGED_DOMAINS,...CRM_AI360_TOOLS.map(x=>x.id)]);
 export function getTool(id){return CRM_AI360_TOOLS.find(x=>x.id===id)||null;}
 export function clampDomains(names,max=4){
