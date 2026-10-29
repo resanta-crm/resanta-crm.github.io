@@ -5,6 +5,7 @@ import { readTasks } from './task-read.mjs';
 import { requestContext, effectiveManager, guardVoicePair } from './context.mjs';
 import { resolveClient } from './client-identity.mjs';
 import { resolveAnyClient } from './client-universal.mjs';
+import {isManagerSalesQuestion,resolveSalesMonth,formatManagerSales} from './manager-sales.mjs';
 
 // Isolated read-only director pilot. v3 is NOT imported, replaced or modified.
 const ORIGINS = new Set(['https://resanta-crm.by', 'https://www.resanta-crm.by']);
@@ -400,6 +401,37 @@ Deno.serve(async req => {
         group:lastGroup||memory.group||'',subgroup:lastSubgroup||memory.subgroup||'',
         level:lastLevel||memory.level||'',offset:lastClientName?lastNextOffset:0,
         subject:'client',domain:'client_detail'}
+    });
+  }
+
+
+  // A manager's shipment KPI and the network turnover are different source
+  // methodologies. For this exact question use one verified source, never
+  // let the LLM mix manager facts with aggregate sales or total motivation KPI.
+  if(isManagerSalesQuestion(question,{managerNames,memory})){
+    const salesMonth=resolveSalesMonth(question,allowedMonth,day);
+    const snapshot=await svc.rpc('crm_ai360_sales_kpi_snapshot_v1',{p_month:salesMonth+'-01'});
+    const narrative=snapshot.error||!snapshot.data?
+      {error:'manager_sales_source_unavailable'}:
+      formatManagerSales({question,data:snapshot.data,month:salesMonth,managerNames});
+    const settlement=await svc.rpc('crm_ai360_core_finish_v2',{
+      p_claim_id:claimId,p_actual_rub:0,p_input_tokens:0,
+      p_output_tokens:0,p_rounds:0,p_status:narrative.error?'failed':'ok'
+    });
+    if(settlement.error||settlement.data?.ok!==true)
+      return respond(req,{error:'budget_settlement_unavailable',answer_verified:false},503);
+    if(narrative.error)return respond(req,{
+      error:narrative.error,answer_verified:false,
+      answer:'Проверенные продажи менеджеров сейчас недоступны. Не буду подменять их цифрами другого раздела.'
+    },503);
+    return respond(req,{
+      answer:narrative.brief,brief:narrative.brief,detail:narrative.detail,
+      followup_question:narrative.offer,intent:'verified_manager_sales',
+      answer_verified:true,sources:[narrative.source],failed_domains:[],partial_sources:[],
+      month:salesMonth,manager:narrative.manager,mode:'director_manager_kpi_verified_v1',
+      engine:'deterministic_crm',
+      memory:{...memory,month:salesMonth,manager:narrative.manager||'',
+        domain:'sales_managers',subject:'manager',client:'',group:'',subgroup:'',level:'',offset:0}
     });
   }
 
