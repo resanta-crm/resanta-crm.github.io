@@ -118,6 +118,31 @@ test('A voiced task opens a draft, validates, then requires explicit confirmatio
  assert.equal(x.calls[1].body.approval_token,'signed-token-for-test');
  assert.equal(commitButton.disabled,true);
 });
+test('Sidarovich natural voice task without colon prefills details but never creates it',()=>{
+ const x=mock();
+ assert.equal(x.root.crmAI360BranchTaskHandleV1(
+  'создай поручение для Ачинович проверить падающих клиентов.'),true);
+ assert.equal(x.find('select')[0].value,'Ачинович');
+ const title=x.find('input').find(e=>e.maxLength===110);
+ const due=x.find('input').find(e=>e.type==='date');
+ const result=x.find('input').find(e=>e.maxLength===250);
+ assert.match(title.value,/Проверить падающих клиентов/i);
+ assert.match(x.find('textarea')[0].value,/Проверить падающих клиентов/i);
+ assert.match(result.value,/план действий/i);
+ assert.equal(due.value,'','unspecified deadline must not be invented');
+ assert.equal(x.calls.length,0,'no request/writes before explicit user validation');
+ const approval=x.find('button').find(e=>e.textContent==='2. Подтверждаю создание поручения');
+ assert.equal(approval.disabled,true);
+});
+test('Voice tasks addressed to manager in dative without colon are filled safely',()=>{
+ const x=mock();
+ assert.equal(x.root.crmAI360BranchTaskHandleV1(
+  'Лера, создай поручение Рудневу связаться с клиентом и уточнить заказ'),true);
+ assert.equal(x.find('select')[0].value,'Руднев');
+ assert.match(x.find('textarea')[0].value,/Связаться с клиентом и уточнить заказ/i);
+ assert.equal(x.calls.length,0);
+});
+
 test('Changes after validation invalidate confirmation proof',async()=>{
  const x=mock();
  x.root.crmAI360BranchTaskHandleV1('Создай поручение Ачинович: Связаться с клиентом и подтвердить заказ');
