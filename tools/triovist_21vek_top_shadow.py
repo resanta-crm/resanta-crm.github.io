@@ -435,12 +435,14 @@ def resume_failed_run(run_id: str, all_targets: list[dict], groups: list[tuple[s
     if len(runs)!=1:
         raise RuntimeError('TOP recovery run not found')
     run=runs[0]
-    if run.get('status') not in ('failed','partial') or \
+    if run.get('status') not in ('failed','partial','running') or \
        run.get('parser_version')!='top-shadow-v0.7' or \
        int(run.get('total_targets') or -1)!=len(all_targets) or \
        int(run.get('total_keywords') or -1)!=len(groups):
         raise RuntimeError('TOP recovery blocked by incompatible run or target count')
     notes=run.get('notes') if isinstance(run.get('notes'),dict) else {}
+    if run.get('status')=='running' and not notes.get('last_recovery_at'):
+        raise RuntimeError('TOP recovery refused: active/unowned run')
     tries=int(notes.get('recovery_attempts') or 0)
     if tries>=4:
         raise RuntimeError('TOP recovery attempt limit reached; next full daily collection required')
