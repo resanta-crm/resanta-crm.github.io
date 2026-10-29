@@ -59,7 +59,8 @@ export function formatManagerSales({question,data,month,managerNames=[]}){
     offer:'Проверить следующий период?',verified:true,source:'crm_ai360_sales_kpi_snapshot_v1'};
  }
  if(all.length===0)return {error:'manager_kpi_rows_missing'};
- const rows=selected?[selected]:all;
+ const compareNamed=nameMention.length>1&&/(сравн|сопостав)/.test(q)&&!/(по всем|всех)/.test(q);
+ const rows=selected?[selected]:compareNamed?all.filter(r=>nameMention.some(name=>n(name)===n(r.manager_name))):all;
  const lines=rows.map(r=>r.manager_name+': план '+money(r.plan)+', факт '+money(r.actual)+
   ', выполнено '+Number(r.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%, '+
   (Number(r.to_plan)>0?'до плана '+money(r.to_plan):'план закрыт')+'.');
