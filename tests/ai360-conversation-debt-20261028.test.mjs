@@ -51,7 +51,7 @@ assert.ok(core.includes("crmAI360UnifiedDialogFollowupV3(query"));
 assert.ok(core.includes("options?.noVoice===true"));
 assert.ok(core.includes("options?.fullVoice===true"));
 assert.ok(loader.includes('143-resanta-ai360-unified-dialog-v1.js?v=7'));
-assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=33'));
+assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=34'));
 const events=[],requests=[];
 let response={brief:'Отчёт: 111 тысяч. Хочешь подробности?',detail:'Проверенный полный разбор по отчёту от 27 октября.',followup_question:'Хочешь подробнее?',memory:{domain:'debt',month:'2026-10',manager:''}};
 const ctx={
