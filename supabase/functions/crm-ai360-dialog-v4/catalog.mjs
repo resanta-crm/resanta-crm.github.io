@@ -37,20 +37,34 @@ export function clampDomains(names,max=4){
  for(const name of Array.isArray(names)?names:[]){if(typeof name==='string'&&allowed.has(name)&&!out.includes(name))out.push(name);if(out.length>=max)break;}
  return out;
 }
-/** @param {any} svc @param {string} id @param {{manager?:string|null,signal?:AbortSignal|null}} [options] */
-export async function collectTool(svc,id,{manager=null,signal=null}={}){
+/** @param {any} svc @param {string} id
+ * @param {{manager?:string|null,signal?:AbortSignal|null,offset?:number}} [options]
+ * An extra row proves whether more data exist without an expensive exact COUNT
+ * against potentially large 21vek tables. Never claim this page is the full set.
+ */
+export async function collectTool(svc,id,{manager=null,signal=null,offset=0}={}){
  const tool=getTool(id);
  if(!tool)return {domain:id,error:'unknown_domain'};
+ const pageSize=Math.min(12,Math.max(1,tool.limit));
+ const pageOffset=Number.isSafeInteger(offset)?Math.max(0,Math.min(200,offset)):0;
  try{
   let query=svc.from(tool.table).select(tool.columns);
   for(const [column,op,value] of tool.where||[])if(op==='eq')query=query.eq(column,value);
   if(manager&&tool.managerColumn)query=query.eq(tool.managerColumn,manager);
   if(tool.sort)query=query.order(tool.sort,{ascending:false});
-  query=query.limit(Math.min(12,tool.limit));
+  // "+1" is strictly a continuation sentinel and must not be shown as evidence.
+  query=query.range(pageOffset,pageOffset+pageSize);
   if(signal)query=query.abortSignal(signal);
   const {data,error}=await query;
   if(error)return {domain:id,error:'source_unavailable'};
-  return {domain:id,source:tool.table,limited:true,max_rows:tool.limit,rows:(data||[]).slice(0,tool.limit)};
+  const rows=Array.isArray(data)?data:[];
+  const hasMore=rows.length>pageSize;
+  const page=rows.slice(0,pageSize);
+  return {domain:id,source:tool.table,limited:hasMore,partial:hasMore,
+   page_size:pageSize,offset:pageOffset,returned:page.length,has_more:hasMore,
+   next_offset:hasMore?pageOffset+page.length:null,
+   total_count:null,total_count_known:false,
+   rows:page};
  }catch{return {domain:id,error:'source_unavailable'};}
 }
 
