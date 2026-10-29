@@ -28,13 +28,17 @@ async function identity(req){
  if(error||!user||user.id!==a.data.user.id)throw Error('account_unavailable');
  const boss=SIDS.has(user.id)&&user.role==='boss'&&user.region==='Витебск'&&
    (user.id.startsWith('ba55')?normalize(user.name)==='сидарович к.н.':normalize(user.name)==='александр паюшин');
+ const allowedManagerIds={
+  'Руднев':'19dd9943-99ae-47c4-a39c-4f82a11059a6',
+  'Ачинович':'3d935a76-c6fe-44b6-b248-fcbe58c6bf1c',
+  'Шкуран':'4fd79fa0-232d-4768-8099-25f47923cc4f'};
  const manager=user.role==='manager'&&user.region==='Витебск'&&
-   ['Руднев','Ачинович','Шкуран'].includes(user.name);
+   allowedManagerIds[user.name]===user.id;
  if(!boss&&!manager)throw Error('not_authorized');
  return {...user,tier:boss?'director':'manager'};
 }
 async function allowedClients(u){
- let q=SVC.from('clients').select('id,name,manager_name,is_vip').eq('is_archived',false).eq('to_delete',false);
+ let q=SVC.from('clients').select('id,name,manager_name,is_vip').or('is_archived.eq.false,is_archived.is.null').or('to_delete.eq.false,to_delete.is.null');
  if(u.tier==='manager')q=q.eq('manager_name',u.name);
  else if(u.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a')q=q.in('manager_name',['Руднев','Ачинович','Шкуран']);
  // Owner boss can see VIP from whole client base, but not ordinary LPR contacts.
@@ -146,7 +150,7 @@ async function dispatch(req){
  if(!candidates.length)return respond(req,{ok:true,candidates:0,sent:0});
  const ids=[...new Set(candidates.map(c=>c.client_id))];
  const [cr,vr,ur,br]=await Promise.all([
-  SVC.from('clients').select('id,name,manager_name,is_vip').in('id',ids).eq('is_archived',false).eq('to_delete',false),
+  SVC.from('clients').select('id,name,manager_name,is_vip').in('id',ids).or('is_archived.eq.false,is_archived.is.null').or('to_delete.eq.false,to_delete.is.null'),
   SVC.from('vip_membership_v236429').select('client_id').in('client_id',ids).eq('active',true),
   SVC.from('users').select('id,name,role,region').in('name',['Руднев','Ачинович','Шкуран','Сидарович К.Н.','Александр Паюшин']),
   SVC.from('crm_telegram_bindings').select('user_id,chat_id').eq('active',true)
