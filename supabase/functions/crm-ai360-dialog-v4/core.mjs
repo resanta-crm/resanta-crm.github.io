@@ -95,7 +95,7 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
     catch{result={error:'source_unavailable'};}
    }
    input.push({type:'function_call_output',call_id:call.call_id,
-    output:JSON.stringify(result||{error:'no_data'}).slice(0,CORE_LIMITS.evidenceChars)});
+    output:JSON.stringify(result?.domain==='client_detail'?{...result,items:(result.items||[]).slice(0,3),detail_limited:(result.items||[]).length>3}:result||{error:'no_data'}).slice(0,CORE_LIMITS.evidenceChars)});
   }
  }
  return {pair:null,used:[...seen],error:lastError||'round_budget_reached'};
