@@ -1,0 +1,47 @@
+name: 21vek TOP retry and safe resumable promotion
+on:
+  pull_request:
+    paths:
+      - 'tools/triovist_21vek_top_shadow.py'
+      - 'tools/triovist_21vek_refresh_gate.py'
+      - 'tools/test_triovist_21vek_top_recovery.py'
+      - '.github/workflows/triovist-21vek-shadow-sync.yml'
+      - '.github/workflows/triovist-21vek-top-recovery-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/triovist_21vek_top_shadow.py'
+      - 'tools/triovist_21vek_refresh_gate.py'
+      - 'tools/test_triovist_21vek_top_recovery.py'
+      - '.github/workflows/triovist-21vek-shadow-sync.yml'
+      - '.github/workflows/triovist-21vek-top-recovery-tests.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests beautifulsoup4
+      - run: python -m py_compile tools/triovist_21vek_top_shadow.py tools/triovist_21vek_refresh_gate.py
+      - run: python -m unittest discover -s tools -p 'test_triovist_21vek_top_recovery.py' -v
+      - run: python -m unittest discover -s tools -p 'test_triovist_21vek_unavailable.py' -v
+      - name: Verify fail-closed publication and schedule
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          parser=Path("tools/triovist_21vek_top_shadow.py").read_text()
+          gate=Path("tools/triovist_21vek_refresh_gate.py").read_text()
+          workflow=Path(".github/workflows/triovist-21vek-shadow-sync.yml").read_text()
+          assert "'status':'complete'" in parser
+          assert "TOP recovery verification failed" in parser
+          assert "top_resume_run_id" in gate and "do_parse=False,do_top=True,do_promote=True" in gate
+          assert "TOP_RECOVER_RUN_ID: ${{ steps.gate.outputs.top_resume_run_id }}" in workflow
+          assert "cancel-in-progress: false" in workflow
+          assert "triovist_21vek_promote.py" in workflow
+          print("OK: bounded retry, resume, complete-run gate and unchanged promotion safety")
+          PY
