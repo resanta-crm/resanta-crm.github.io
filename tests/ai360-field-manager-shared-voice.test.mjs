@@ -86,7 +86,7 @@ test('Shared premium speech and OpenAI text backend rechecks exact user profiles
   for(const id of Object.values(USER_IDS))assert.ok(s.includes(id),id);
   assert.match(s,/FIELD_IDS\.has\(user\.id\)/);
   assert.match(s,/region==='Витебск'/);
-  assert.match(s,/!isOwner&&!isBranch&&!isField/);
+  assert.match(s,/!isOwner&&!isBranch&&!isField&&!isTriovist/);
  }
  assert.match(server,/staffPermission\(userId,prof\.data\)/);
  assert.match(server,/permission\.tier==='field_manager'\?\[permission\.name\]:NAMES/);
@@ -101,8 +101,8 @@ test('Only branch director can use signed task commit; field managers cannot',()
  assert.match(task,/perm\.tier!=='branch_director'/);
  assert.match(task,/if\(!await verify\(secret,userId/);
  assert.ok(!ui.includes("crm-ai360-branch-task-approval-v1"));
- assert.match(page,/148-resanta-ai360-staff-identity-v1\.js\?v=1/);
- assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=7/);
- assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=2/);
- assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=2/);
+ assert.match(page,/148-resanta-ai360-staff-identity-v1\.js\?v=2/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=8/);
+ assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=3/);
+ assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=3/);
 });
