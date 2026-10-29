@@ -89,7 +89,7 @@ test('Shared premium speech and OpenAI text backend rechecks exact user profiles
   assert.match(s,/!isOwner&&!isBranch&&!isField&&!isTriovist/);
  }
  assert.match(server,/staffPermission\(userId,prof\.data\)/);
- assert.match(server,/permission\.tier==='field_manager'\?\[permission\.name\]:NAMES/);
+ assert.match(server,/permission\.tier==='branch_director'\?NAMES:\[permission\.name\]/);
  assert.match(server,/error:'manager_outside_own_portfolio'/);
  assert.match(server,/evidence\.scope\.managers\.some\(x=>!permitted\.includes\(x\)\)/);
  assert.match(server,/p_user_id:userId/);
