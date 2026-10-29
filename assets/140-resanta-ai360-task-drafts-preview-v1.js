@@ -190,6 +190,7 @@ async function approvalRequest(kind,ui){
    const entries=kind==='validate'?payloadFor(selected):approval.items;
    const body={kind:kind==='commit'?(live?'commit_real':'commit_test'):'validate',
      approval_id:id,items:entries};
+   if(kind==='commit'&&live)body.approval_token=approval.token;
    if(kind==='commit')body.confirmation=live?'подтверждаю создание поручений':
      'подтверждаю сохранение тестовых поручений';
    const endpoint=live?REAL_APPROVAL_ENDPOINT:APPROVAL_ENDPOINT;
@@ -205,7 +206,9 @@ async function approvalRequest(kind,ui){
      if(confirmed.some((r,i)=>r.client_id!==entries[i].client_id||
         r.manager_name!==entries[i].manager_name||r.due_date!==entries[i].due_date||
         r.text!==entries[i].text))throw new Error('mismatched_validation');
-     approval={id,items:confirmed,real:live};
+     const signedToken=live?String(response.data.approval_token||''):'';
+     if(live&&!/^\d{13}\.[0-9a-f]{64}$/.test(signedToken))throw new Error('missing_signed_approval');
+     approval={id,items:confirmed,real:live,token:signedToken};
      const lines=confirmed.map((r,i)=>(i+1)+'. '+safe(r.client_name,100)+
        '; '+safe(r.manager_name,100)+'; срок '+safe(r.due_date,12)+
        '; '+safe(r.title,120)+'; '+safe(r.text,190)).join('\n');
