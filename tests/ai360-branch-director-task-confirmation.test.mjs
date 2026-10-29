@@ -159,7 +159,7 @@ test('Changes after validation invalidate confirmation proof',async()=>{
  assert.equal(x.calls.length,1,'no writes on edited drafts');
 });
 test('Old director pilot stays separate and the new script is cache-busted',()=>{
- assert.match(html,/144-resanta-ai360-branch-voice-v1\.js\?v=7/);
+ assert.match(html,/144-resanta-ai360-branch-voice-v1\.js\?v=8/);
  assert.match(html,/145-resanta-ai360-branch-task-approval-v1\.js\?v=2/);
  assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=35/);
  assert.match(voice,/crmAI360BranchTaskHandleV1\?\.\(question\)/);
