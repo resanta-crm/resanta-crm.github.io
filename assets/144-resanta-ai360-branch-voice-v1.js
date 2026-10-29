@@ -21,7 +21,7 @@ let last={domain:'',manager:null,month:null,offset:0,client_name:'',group:'',sub
 const Recognition=root.SpeechRecognition||root.webkitSpeechRecognition||null;
 function allowed(){
  const p=role();
- return !!p&&(p.tier==='branch_director'||p.tier==='field_manager');
+ return !!p&&['branch_director','field_manager','triovist_category'].includes(p.tier);
 }
 function panelVisible(){return Boolean(allowed()&&panel&&!panel.hidden&&!document.hidden);}
 function say(message){
@@ -60,6 +60,12 @@ function parseQuestion(raw,previous=last){
    /(?:групп|подгрупп|артикул|sku|категори)/.test(q)&&
    /^(?:покажи|какие|дай|расскажи|а\s|назови|выведи)/.test(q);
  const domain=continuation&&previous.domain?previous.domain:
+   role()?.tier==='triovist_category'&&/мои категории|закрепленн.*групп|группы товар/.test(q)?'triovist_groups':
+   role()?.tier==='triovist_category'&&/позици|топ.?60|выдач|ранжир/.test(q)?'triovist_positions':
+   role()?.tier==='triovist_category'&&/ошибк|замечан|проблемн.*карточ|дефект/.test(q)?'triovist_issues':
+   role()?.tier==='triovist_category'&&/инфограф/.test(q)?'triovist_infographics':
+   role()?.tier==='triovist_category'&&/поручен|задач/.test(q)?'triovist_tasks':
+   role()?.tier==='triovist_category'&&/21век|21vek|карточ|товар|ассортимент|категори/.test(q)?'triovist_cards':
    /(?:что|какие|чем).*?(?:обсуд|подсвет|предлож|порекоменд|сделать).*?(?:рудн|ачинов|шкур)|(?:обсуд|подсвет|предлож).*?(?:с |для )(?:рудн|ачинов|шкур)/.test(q)?'manager_brief':
    /пдз|долг|задолж|дебитор|просроч.*оплат/.test(q)?'debt':
    /gps|джипиэс|геолокац/.test(q)?'gps':
@@ -107,6 +113,29 @@ function formatted(domain,data,scope){
    'Первые '+(data.items||[]).length+' точек:\n'+
    (detailed.join('\n')||'В маршруте нет подтверждённых точек.')+
    (data.has_more?'\nЭто часть списка. Для остальных точек скажи «дальше».':'');
+ }
+ if(domain.startsWith('triovist_')){
+  const titles={triovist_groups:'Мои группы 21vek',triovist_cards:'Карточки 21vek',
+   triovist_positions:'Поисковые позиции',triovist_issues:'Замечания к карточкам',
+   triovist_tasks:'Задачи Триовист',triovist_infographics:'Инфографика'};
+  const formatItem={
+   triovist_groups:r=>text(r.group_name),
+   triovist_cards:r=>text(r.sku)+' · '+text(r.product_name)+' · '+text(r.category)+
+     ' · фото '+n(r.photo_count)+' · '+text(r.registry_snapshot_date),
+   triovist_positions:r=>text(r.sku)+' · '+text(r.category)+' · позиция '+
+     text(r.current_position??'нет данных')+' · '+text(r.current_observed_at),
+   triovist_issues:r=>text(r.issue_title)+' · '+text(r.severity)+' · '+text(r.status),
+   triovist_tasks:r=>text(r.title)+' · '+text(r.group_name)+' · '+text(r.status)+
+     ' · срок '+text(r.due_date),
+   triovist_infographics:r=>text(r.sku)+' · '+text(r.group_name)+' · '+text(r.status)+
+     ' · слайдов '+n(r.completed_slides)+' из '+n(r.slide_count)
+  };
+  const rows=(data.items||[]).map(formatItem[domain]||(()=>'' )).filter(Boolean);
+  return (titles[domain]||'Мои категории')+' · '+text(data.manager_name||managers)+
+   '.\nЗакреплено групп: '+n(data.group_count)+'.\n'+
+   (rows.join('\n')||'Записей по выбранному условию нет.')+
+   (data.has_more?'\nПоказана только часть. Скажи «дальше» для продолжения.':'')+
+   '\nТолько категории, закреплённые в CRM. Отчёты могут быть не сегодняшними.';
  }
  if(domain==='sales'){
   const rows=(data.managers||[]).map(r=>{
@@ -236,8 +265,8 @@ async function read(q){
   if(payload?.mode!=='staff_scoped_readonly_pilot_v1'||payload?.answer_verified!==true||
     payload?.read_only!==true||payload.domain!==parsed.domain||
     payload.scope?.role!==role()?.tier||!Array.isArray(payload.scope.managers)||
-    payload.scope.managers.some(name=>!STEMS.some(v=>v[1]===name))||
-    (role()?.tier==='field_manager'&&payload.scope.managers.some(name=>name!==role()?.name)))
+    payload.scope.managers.some(name=>role()?.tier==='branch_director'?
+      !STEMS.some(v=>v[1]===name):name!==role()?.name))
     throw new Error('invalid_scoped_reply');
   const data=payload.data||{};
   const answer=formatted(parsed.domain,data,payload.scope);
@@ -297,12 +326,12 @@ function buildPanel(){
  panel=document.createElement('section');panel.className='rsa-branch-panel';panel.hidden=true;
  panel.setAttribute('role','dialog');panel.setAttribute('aria-label','РЕСАНТА AI · руководитель филиала');
  const heading=document.createElement('div');heading.style.cssText='display:flex;gap:9px;align-items:center;';
- const name=document.createElement('strong');name.textContent='🎙 РЕСАНТА AI · '+(role()?.tier==='field_manager'?'Мои клиенты':'Витебск');
+ const name=document.createElement('strong');name.textContent='🎙 РЕСАНТА AI · '+(role()?.tier==='triovist_category'?'Триовист 21vek':role()?.tier==='field_manager'?'Мои клиенты':'Витебск');
  name.style.flex='1';
  const exit=document.createElement('button');exit.type='button';exit.textContent='Закрыть';
  exit.addEventListener('click',close);heading.append(name,exit);
  const note=document.createElement('small');
- note.textContent=role()?.can_create_tasks?'Директор филиала · данные Витебска · поручения после подтверждения':'Менеджер · только мои клиенты и задачи · без создания поручений';
+ note.textContent=role()?.can_create_tasks?'Директор филиала · данные Витебска · поручения после подтверждения':role()?.tier==='triovist_category'?'Триовист · только закреплённые категории 21vek · без создания поручений':'Менеджер · только мои клиенты и задачи · без создания поручений';
  const entry=document.createElement('div');entry.style.cssText='display:flex;gap:8px;';
  field=document.createElement('input');field.type='text';field.maxLength=350;
  field.placeholder='Например: продажи Руднева или ПДЗ филиала';
@@ -360,11 +389,11 @@ async function open(){
   if(seq!==epoch||!panelVisible()||data?.ready!==true||
    data?.role!==role()?.tier||data?.own_name!==role()?.name||
    data?.voice_enabled!==true||data?.real_task_creation_enabled!==role()?.can_create_tasks||
-   !Array.isArray(data.domains)||!data.domains.includes('sales'))
+   !Array.isArray(data.domains)||!data.domains.includes(role()?.tier==='triovist_category'?'triovist_cards':'sales'))
    throw new Error('invalid_staff_capabilities');
   verified=true;
   setStatus('Подключено · голос OpenAI + Яндекс · поручения с подтверждением');
-  show(role()?.can_create_tasks?'Здравствуйте! Я Лера, помощник Витебского филиала. Анализирую разрешённые данные и готовлю поручения только после подтверждения.':'Здравствуйте! Я Лера, ваш помощник в CRM. Показываю только ваши продажи, клиентов, задачи, маршруты и ПДЗ. Создание поручений недоступно.',{speak:false});
+  show(role()?.can_create_tasks?'Здравствуйте! Я Лера, помощник Витебского филиала. Анализирую разрешённые данные и готовлю поручения только после подтверждения.':role()?.tier==='triovist_category'?'Здравствуйте! Я Лера. Помогу анализировать ваши категории Триовиста: карточки 21vek, позиции, замечания, задачи и инфографику. Поручения не создаю.':'Здравствуйте! Я Лера, ваш помощник в CRM. Показываю только ваши продажи, клиентов, задачи, маршруты и ПДЗ. Создание поручений недоступно.',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
@@ -372,13 +401,13 @@ function mount(){
  if(!top)return;
  if(!launcher){
   launcher=document.createElement('button');launcher.type='button';launcher.className='rsa-branch-launch';
-  launcher.textContent=role()?.tier==='field_manager'?'🎙 Лера · Мои клиенты':'🎙 Лера · Витебск';
+  launcher.textContent=role()?.tier==='triovist_category'?'🎙 Лера · Триовист':role()?.tier==='field_manager'?'🎙 Лера · Мои клиенты':'🎙 Лера · Витебск';
   launcher.style.cssText='border:1px solid #2771ac;border-radius:8px;background:#ebf6ff;color:#15558e;padding:7px 9px;font-size:12px;font-weight:750;cursor:pointer';
   launcher.addEventListener('click',()=>void open());
   top.insertBefore(launcher,top.querySelector('.user-badge'));
  }
  launcher.hidden=!allowed();
- if(allowed())launcher.textContent=role()?.tier==='field_manager'?'🎙 Лера · Мои клиенты':'🎙 Лера · Витебск';
+ if(allowed())launcher.textContent=role()?.tier==='triovist_category'?'🎙 Лера · Триовист':role()?.tier==='field_manager'?'🎙 Лера · Мои клиенты':'🎙 Лера · Витебск';
  if(!allowed()&&panel&&!panel.hidden)close();
 }
 root.crmAI360BranchVoicePilotV1={allowed,parseQuestion,formatted,open,close,submit,beginMicrophone};

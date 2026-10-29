@@ -12,9 +12,10 @@ export const BRANCH_MANAGERS=Object.freeze(['Руднев','Ачинович','�
 export const STAFF_DOMAINS=Object.freeze({
  branch_director:['sales','debt','clients','tasks','routes','visits','gps','stock','client_detail'],
  field_manager:['sales','debt','clients','tasks','routes','visits','client_detail'],
- // Category ownership of 21vek SKUs is not yet stored as enforceable row access.
- // Never return the cross-category card/competitor/MRC catalog to these roles.
- triovist_category:['triovist_tasks']
+ // Category assignments and manager_email are checked against current CRM rows on
+ // every query. The cross-category competitors/MRC catalogs stay off this allowlist.
+ triovist_category:['triovist_tasks','triovist_groups','triovist_cards',
+  'triovist_issues','triovist_positions','triovist_infographics']
 });
 export const norm=x=>String(x||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replaceAll('ё','е');
 export function staffPermission(userId,profile){
@@ -27,7 +28,7 @@ export function targetManagers(permission,domain,requestedManager){
  if(!permission||!permission.domains.includes(domain))return null;
  if(permission.tier==='triovist_category'){
   if(requestedManager&&norm(requestedManager)!==norm(permission.name))return null;
-  return domain==='triovist_tasks'?[permission.name]:null;
+  return permission.domains.includes(domain)?[permission.name]:null;
  }
  if(permission.tier==='field_manager'){
   if(requestedManager&&norm(requestedManager)!==norm(permission.name))return null;

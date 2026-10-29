@@ -2,6 +2,7 @@
 // Promotion to staff voice requires independent STT/TTS grants and end-to-end validation.
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {staffPermission,targetManagers,safeMonth,safeOffset,narrowKpi,narrowDebt} from './permissions.mjs';
+import {readTriovist} from './triovist.mjs';
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
  'Access-Control-Allow-Origin':ORIGINS.has(origin||'')?origin:'https://resanta-crm.by',
@@ -32,9 +33,10 @@ async function scopedTable(svc,table,columns,sort,managers,{offset=0,filter=null
  return {items,partial:has_more,has_more,next_offset:has_more?offset+items.length:null,offset,
    count_known:false,source:table,scope:'authorized_managers'};
 }
-async function readStaff(svc,permission,managers,domain,body,day){
+async function readStaff(svc,permission,managers,domain,body,day,userEmail,profileEmail){
  const offset=safeOffset(body.offset);
  const month=safeMonth(body.month,day);
+ if(permission.tier==='triovist_category')return readTriovist(svc,permission,userEmail,profileEmail,domain,body);
  if(domain==='sales'){
   const r=await svc.rpc('crm_ai360_sales_kpi_snapshot_v1',{p_month:month+'-01'});
   if(r.error||!r.data)throw new Error('sales_unavailable');
@@ -136,7 +138,7 @@ Deno.serve(async req=>{
  const auth=await svc.auth.getUser(token).catch(()=>null);
  const user=auth?.data?.user;
  if(!user?.id)return error(req,'not_authorized',401);
- const profileRes=await svc.from('users').select('id,name,role,region').eq('id',user.id).maybeSingle();
+ const profileRes=await svc.from('users').select('id,name,role,region,email').eq('id',user.id).maybeSingle();
  if(profileRes.error)return error(req,'profile_unavailable',503);
  const permission=staffPermission(user.id,profileRes.data);
  if(!permission)return error(req,'staff_access_not_enabled');
@@ -144,7 +146,7 @@ Deno.serve(async req=>{
  if(body?.kind==='capabilities')return reply(req,{
   ready:true,mode:'staff_scoped_readonly_pilot_v1',role:permission.tier,
   domains:permission.domains,own_name:permission.name,source_permissions:'server_immutable_allowlist',
-  voice_enabled:['branch_director','field_manager'].includes(permission.tier),real_task_creation_enabled:permission.tier==='branch_director'
+  voice_enabled:['branch_director','field_manager','triovist_category'].includes(permission.tier),real_task_creation_enabled:permission.tier==='branch_director'
  });
  if(body?.kind!=='read')return error(req,'invalid_kind',400);
  const domain=clampString(body.domain,40);
@@ -152,7 +154,7 @@ Deno.serve(async req=>{
  if(!managers)return error(req,'domain_or_manager_outside_scope');
  const day=today();
  try{
-  const result=await readStaff(svc,permission,managers,domain,body,day);
+  const result=await readStaff(svc,permission,managers,domain,body,day,user.email,profileRes.data?.email);
   return reply(req,{
    mode:'staff_scoped_readonly_pilot_v1',answer_verified:true,domain,as_of:day,
    scope:{role:permission.tier,managers},

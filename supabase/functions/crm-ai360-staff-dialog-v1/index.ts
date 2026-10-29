@@ -5,7 +5,9 @@ import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {runToolCore,CORE_MODEL} from './core.mjs';
 import {staffPermission} from './permissions.mjs';
 const NAMES=['Руднев','Ачинович','Шкуран'];
-const DOMAINS=['sales','debt','clients','tasks','routes','visits','gps','stock','client_detail'];
+const TRI_NAMES=['Александренко','Кришталь'];
+const DOMAINS=['sales','debt','clients','tasks','routes','visits','gps','stock','client_detail',
+ 'triovist_tasks','triovist_groups','triovist_cards','triovist_issues','triovist_positions','triovist_infographics'];
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const h=origin=>({
  'Access-Control-Allow-Origin':ORIGINS.has(origin||'')?origin:'https://resanta-crm.by',
@@ -42,9 +44,9 @@ Deno.serve(async req=>{
  if(!userId)return reply(req,{error:'not_authorized'},403);
  const prof=await svc.from('users').select('id,name,role,region').eq('id',userId).maybeSingle();
  const permission=staffPermission(userId,prof.data);
- if(prof.error||!permission||!['branch_director','field_manager'].includes(permission.tier))
+ if(prof.error||!permission||!['branch_director','field_manager','triovist_category'].includes(permission.tier))
   return reply(req,{error:'not_authorized'},403);
- const permitted=permission.tier==='field_manager'?[permission.name]:NAMES;
+ const permitted=permission.tier==='branch_director'?NAMES:[permission.name];
  const domains=permission.domains.filter(d=>DOMAINS.includes(d));
  let body;
  try{body=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
@@ -54,15 +56,15 @@ Deno.serve(async req=>{
  const requestedMonth=String(body?.month||'').slice(0,7);
  const month=/^20\d{2}-(0[1-9]|1[0-2])$/.test(requestedMonth)&&
    requestedMonth>='2025-01'&&requestedMonth<=currentMonth?requestedMonth:currentMonth;
- const directMatches=NAMES.filter(name=>norm(question).includes(norm(name).slice(0,4)));
+ const directMatches=[...NAMES,...TRI_NAMES].filter(name=>norm(question).includes(norm(name).slice(0,4)));
  if(directMatches.length>1)return reply(req,{error:'ambiguous_manager'},400);
  const priorManager=NAMES.find(x=>norm(x)===norm(body?.memory?.manager||''))||null;
  const contextFollowup=/^(?:а |и |ещё|еще|что ещё|что еще|расскажи|дальше|покажи|сколько)/i.test(question);
  // Never allow a manager to select another employee. A named colleague in the
  // question is not an authorization; reject before any LLM or CRM source reads.
- if(permission.tier==='field_manager'&&directMatches.some(x=>x!==permission.name))
+ if(permission.tier!=='branch_director'&&directMatches.some(x=>x!==permission.name))
   return reply(req,{error:'manager_outside_own_portfolio'},403);
- const subject=permission.tier==='field_manager'?permission.name:
+ const subject=permission.tier!=='branch_director'?permission.name:
    directMatches[0]||(contextFollowup?priorManager:null);
  const memory={
   manager:subject||'',month,domain:'',
@@ -105,7 +107,7 @@ Deno.serve(async req=>{
   if(selected&&!permitted.some(x=>norm(x)===norm(selected)))
    return {domain,error:'outside_branch_scope'};
   const outgoing={
-   kind:'read',domain,manager:permission.tier==='field_manager'?permission.name:subject||selected||null,month,
+   kind:'read',domain,manager:permission.tier!=='branch_director'?permission.name:subject||selected||null,month,
    offset:Number.isSafeInteger(args.offset)?Math.min(200,Math.max(0,args.offset)):0,
    client_name:typeof args.client==='string'?args.client.slice(0,150):null,
    level:args.level||'groups',group:args.group||null,subgroup:args.subgroup||null,
@@ -135,8 +137,9 @@ Deno.serve(async req=>{
  const output=await runToolCore({
   question,history,memory:{...memory,today:day,
    role:permission.tier,permitted_managers:permitted,
-   instruction:permission.tier==='field_manager'?
-     'Только собственные клиенты и показатели. Создание поручений строго запрещено.':
+   instruction:permission.tier==='triovist_category'?
+     'Только личные категории Триовиста и 21vek. Смотри свежесть импорта, карточки, позиции, ошибки, инфографику и свои задачи. Не выдумывай данные конкурентов; если они запрещены — скажи об этом. Создание поручений строго запрещено.':
+     permission.tier==='field_manager'?'Только собственные клиенты и показатели. Создание поручений строго запрещено.':
      'Только Витебск. Поручения создавать только через отдельное подтверждение директора филиала.'},
   domains,readTool,request,preferredDomain:null
  });
@@ -151,7 +154,7 @@ Deno.serve(async req=>{
  const pair=output.pair;
  const answer=[pair.brief,pair.detail,pair.offer].map(x=>String(x||'').trim()).filter(Boolean).join('\n');
  return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:true,read_only:true,
-  model:CORE_MODEL,scope:'Витебск',role:permission.tier,subject_manager:subject,month,
+  model:CORE_MODEL,scope:permission.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск',role:permission.tier,subject_manager:subject,month,
   answer:answer.slice(0,4000),speech_summary:pair.brief.slice(0,400),offer:pair.offer,
   domains_used:output.used,as_of:day,
   memory:{manager:subject||'',month,client:memory.client,group:memory.group,subgroup:memory.subgroup,

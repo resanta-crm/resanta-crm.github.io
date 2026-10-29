@@ -38,11 +38,11 @@ test('Exactly the owner tool-orchestration module is shared with the branch',()=
 test('The same OpenAI tool core is reauthorized by server role and personal JWT',()=>{
  for(const literal of [
   "const permission=staffPermission(userId,prof.data)",
-  "['branch_director','field_manager'].includes(permission.tier)",
-  "permission.tier==='field_manager'?[permission.name]:NAMES",
+  "['branch_director','field_manager','triovist_category'].includes(permission.tier)",
+  "permission.tier==='branch_director'?NAMES:[permission.name]",
   "if(!domains.includes(domain))",
   "if(selected&&!permitted.some",
-  "manager:permission.tier==='field_manager'?permission.name",
+  "manager:permission.tier!=='branch_director'?permission.name",
   "headers:{'Authorization':'Bearer '+token,'apikey':anon",
   "evidence.answer_verified!==true",
   "evidence.read_only!==true",
@@ -102,10 +102,10 @@ test('No background requests on initialization; no user switch to owner data',()
  assert.equal(calls,0);
 });
 test('Deploy includes the right versioned modules and keeps owner launcher',()=>{
- assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=7'));
+ assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=8'));
  assert.ok(page.includes('145-resanta-ai360-branch-task-approval-v1.js?v=2'));
- assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=2'));
- assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=2'));
+ assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=3'));
+ assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=3'));
  assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
  assert.match(voice,/crmAI360BranchUnifiedHandleV1\?\.\(q/);
  assert.match(voice,/crmAI360BranchTaskHandleV1\?\.\(question\)/);

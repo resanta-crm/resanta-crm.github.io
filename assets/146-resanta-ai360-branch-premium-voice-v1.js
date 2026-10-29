@@ -11,7 +11,7 @@ let clipEpoch=0,playEpoch=0,stream=null,recorder=null,player=null,mediaUrl='',wa
 let onQuestion=null,onInfo=null,allowedNow=null,voice='lera',muted=false,activePanel=null;
 function allowed(){
  const identity=root.crmAI360StaffIdentityV1?.();
- return !!identity&&['branch_director','field_manager'].includes(identity.tier)&&
+ return !!identity&&['branch_director','field_manager','triovist_category'].includes(identity.tier)&&
   !document.hidden&&activePanel&&!activePanel.hidden&&allowedNow?.();
 }
 function info(s){if(allowed())onInfo?.(String(s||'').slice(0,150));}

@@ -49,8 +49,10 @@ test('Rudnev cannot switch his identity by text, client name, or another manager
 });
 test('Triovist managers see only personal 21vek tasks, not cross-category catalogs',()=>{
  const p=staffPermission(al,matching(al));
- assert.deepEqual(p.domains,['triovist_tasks']);
+ assert.deepEqual(p.domains,['triovist_tasks','triovist_groups','triovist_cards',
+  'triovist_issues','triovist_positions','triovist_infographics']);
  assert.deepEqual(targetManagers(p,'triovist_tasks',null),['Александренко']);
+ for(const domain of p.domains)assert.deepEqual(targetManagers(p,domain,null),['Александренко']);
  assert.equal(targetManagers(p,'triovist_tasks','Кришталь'),null);
  for(const x of ['triovist','cards_21vek','competitors','triovist_stock','mrc','clients','cash','payments']){
   assert.equal(targetManagers(p,x,null),null,x);
@@ -88,7 +90,7 @@ test('Malformed date or offset cannot authorize arbitrary pages',()=>{
 });
 test('Server side role enforcement and client validation precede sensitive data read',()=>{
  for(const token of [
-  "svc.auth.getUser(token)","select('id,name,role,region')",
+  "svc.auth.getUser(token)","select('id,name,role,region,email')",
   "const permission=staffPermission(user.id,profileRes.data)",
   "const managers=targetManagers(permission,domain,",
   ".ilike('name',escapedName).in('manager_name',managers)",
