@@ -9,6 +9,9 @@ const sql = read('schema-pilot.sql');
 const ui = read('app.js');
 const page = read('index.html');
 const readme = read('README.md');
+const native = fs.readFileSync(path.join(root,'..','assets','151-resanta-connect-v1.js'),'utf8');
+const nativeCss = fs.readFileSync(path.join(root,'..','assets','151-resanta-connect-v1.css'),'utf8');
+const crm = fs.readFileSync(path.join(root,'..','index.html'),'utf8');
 const count = (s,re) => [...s.matchAll(re)].length;
 const checks = [
   ['RLS applied to each chat table', () => {
@@ -52,6 +55,22 @@ const checks = [
     assert.doesNotMatch(page,/assets\/01-crm-core|assets\/03-triovist-routes/);
     assert.match(page,/src="\.\/config\.js"/);
     assert.match(page,/src="\.\/app\.js"/);
+  }],
+  ['Native CRM menu and same authenticated Supabase client', () => {
+    assert.match(crm,/id="nav-connect"/);
+    assert.match(crm,/id="bn-connect"/);
+    assert.match(crm,/id="page-connect"/);
+    assert.match(crm,/assets\/151-resanta-connect-v1\.js/);
+    assert.match(native,/dbClient=\(\)=>typeof db/);
+    assert.match(native,/goPage\('connect','Чаты'\)/);
+    assert.doesNotMatch(native,/signInWithPassword|createClient\(/);
+  }],
+  ['Native text messages are XSS-safe and membership-scoped', () => {
+    assert.match(native,/node\('div','',message\.body\)/);
+    assert.doesNotMatch(native,/innerHTML\s*=/);
+    assert.match(native,/connect_messages_v1/);
+    assert.match(native,/connect_is_member|ownMember/);
+    assert.ok(nativeCss.includes('#page-connect [hidden]'));
   }],
   ['Docs clarify no production rollout', () => {
     assert.match(readme,/NOT PRODUCTION READY/i);
