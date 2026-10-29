@@ -1,5 +1,5 @@
 // Server orchestration of model-requested, validated read-only CRM tools.
-export const CORE_LIMITS=Object.freeze({rounds:3,maxTools:4,evidenceChars:2200});
+export const CORE_LIMITS=Object.freeze({rounds:3,maxTools:4,evidenceChars:4800});
 export const CORE_MODEL='gpt-5.4-mini';
 export function readToolDefinition(domains){
  return {type:'function',name:'crm_read',
@@ -95,7 +95,7 @@ export async function runToolCore({question,history=[],memory={},domains,readToo
     catch{result={error:'source_unavailable'};}
    }
    input.push({type:'function_call_output',call_id:call.call_id,
-    output:JSON.stringify(result?.domain==='client_detail'?{...result,items:(result.items||[]).slice(0,3),detail_limited:(result.items||[]).length>3}:result||{error:'no_data'}).slice(0,CORE_LIMITS.evidenceChars)});
+    output:JSON.stringify(result?.domain==='client_detail'?{...result,items:(result.items||[]).slice(0,10),detail_limited:(result.items||[]).length>3}:result||{error:'no_data'}).slice(0,CORE_LIMITS.evidenceChars)});
   }
  }
  return {pair:null,used:[...seen],error:lastError||'round_budget_reached'};
