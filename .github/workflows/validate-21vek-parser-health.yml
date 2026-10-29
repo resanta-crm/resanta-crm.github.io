@@ -38,7 +38,7 @@ jobs:
               assert clause in sql, clause
           for clause in ('verified_removed_urls','blocking_price_issues','Удалённые страницы товаров'):
               assert clause in ui, clause
-          assert "'23.6.448'" in Path("assets/100-safe-upgrades-loader-v236272.js").read_text()
+          assert "'23.6.450'" in Path("assets/100-safe-upgrades-loader-v236272.js").read_text()
           fast=Path("supabase/migrations/20261023_triovist_21vek_status_fast_tombstone_v236449.sql").read_text().lower()
           assert 'with candidates as materialized' in fast
           assert 's.run_id=c.snapshot_run_id' in fast

@@ -22,7 +22,19 @@ function ageText(v){
 }
 function parserError(d){
   const promotion=d?.promotion||{};
-  if(promotion.pending)return String(promotion.error_explain||'Сбор 21vek завершён полностью, но свежий снимок не применён в рабочие данные CRM.');
+  if(promotion.pending){
+    const cardAt=Date.parse(d?.parser?.finished_at||'');
+    const topAt=Date.parse(d?.top?.finished_at||'');
+    const pairedTopMissing=Number.isFinite(cardAt)&&
+      (!Number.isFinite(topAt)||topAt<cardAt);
+    if(pairedTopMissing){
+      return 'Карточки 21vek собраны, но новый поисковый TOP ещё не прошёл полную проверку. '+
+       'Временные ошибки запросов автоматически повторяются с ограничением числа попыток. '+
+       'Рабочими остаются последние полностью проверенные данные. '+
+       'Карточки: '+dt(d.parser.finished_at)+'; последний успешный TOP: '+dt(d?.top?.finished_at)+'.';
+    }
+    return String(promotion.error_explain||'Сбор 21vek завершён, но свежий снимок ещё не применён в CRM.');
+  }
   const p=d?.parser||{};
   if(String(p.status||'')!=='failed'&&Number(p.errors||0)<=0)return'';
   return String(p.error_explain||p.error_text||'Сбор завершился не полностью. Рабочий снимок не заменён; используются последние проверенные данные.');
@@ -137,7 +149,7 @@ function dangerState(d){
 }
 function warningHtml(d){
   const st=dangerState(d),promotion=d?.promotion||{};
-  if(promotion.pending)return '<div class="tri21ctl-alert red">🚨 <strong>Сбор 21vek выполнен, но данные не применены.</strong> '+esc(promotion.error_explain||'Свежий полный снимок не переключён в рабочие данные CRM.')+' МРЦ при этом считается по последнему полному успешному сбору, чтобы нарушение цены не скрывалось.</div>';
+  if(promotion.pending)return '<div class="tri21ctl-alert red">🚨 <strong>Сбор 21vek выполнен, но данные не применены.</strong> '+esc(parserError(d)||promotion.error_explain||'Свежий полный снимок не переключён в рабочие данные CRM.')+' МРЦ при этом считается по последнему полному успешному сбору, чтобы нарушение цены не скрывалось.</div>';
   if(st==='red')return '<div class="tri21ctl-alert red">🚨 <strong>21vek сейчас не обновляется корректно.</strong> Не принимайте решение по остаткам, наличию и TOP на основании этого блока до восстановления. Используйте последний хороший снимок и сразу сообщите руководителю, приложив скрин этого статуса.</div>';
   if(st==='amber')return '<div class="tri21ctl-alert amber">⚠️ <strong>Данные 21vek требуют проверки.</strong> Можно видеть последний хороший снимок, но новые решения по остаткам и TOP лучше не принимать до зелёного статуса. Сообщите руководителю и приложите скрин.</div>';
   return'';

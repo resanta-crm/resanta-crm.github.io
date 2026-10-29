@@ -256,9 +256,16 @@ def wait_delay() -> None:
 
 
 def search_page(session: requests.Session, keyword: str, page: int, search_id: str) -> dict:
+    """Bounded retries for transient 21vek search dependencies (including HTTP 424).
+
+    A 424 ML dependency or upstream idle timeout must not invalidate an entire
+    daily 1724-card run after one short failed request. Respect 429 Retry-After.
+    Never reinterpret a bad response as 'product not in TOP-60'.
+    """
     body=search_body(keyword,page,search_id)
     last_error=None
-    for attempt in range(3):
+    attempts=5
+    for attempt in range(attempts):
         wait_delay()
         try:
             r=session.post(ENDPOINT,json=body,timeout=TIMEOUT,allow_redirects=True)
@@ -271,21 +278,26 @@ def search_page(session: requests.Session, keyword: str, page: int, search_id: s
                     raise RuntimeError('21vek search response has no products array')
                 return data
             error=RuntimeError(f'21vek search HTTP {r.status_code}: {r.text[:300]}')
-            if r.status_code<500 and r.status_code not in (408,425,429):
+            # 424 from search-composer signals a failed ML or product-card dependency.
+            # All other 4xx except temporary throttling/timeouts fail closed.
+            if r.status_code<500 and r.status_code not in (408,424,425,429):
                 raise error
             last_error=error
+            if attempt>=attempts-1:
+                break
             retry=r.headers.get('Retry-After') if r.status_code==429 else None
             if retry:
                 try:
-                    time.sleep(max(1.0,min(30.0,float(retry))))
-                except Exception:
-                    time.sleep(2.0*(attempt+1))
-            elif attempt<2:
-                time.sleep(1.0*(attempt+1))
+                    delay=max(1.0,min(45.0,float(retry)))
+                except (TypeError,ValueError):
+                    delay=min(30.0,2.0*(2**attempt))
+            else:
+                delay=min(30.0,2.0*(2**attempt))
+            time.sleep(delay)
         except (requests.Timeout,requests.ConnectionError) as exc:
             last_error=exc
-            if attempt<2:
-                time.sleep(1.0*(attempt+1))
+            if attempt<attempts-1:
+                time.sleep(min(30.0,2.0*(2**attempt)))
     if last_error is not None:
         raise last_error
     raise RuntimeError('21vek search failed')
@@ -407,6 +419,117 @@ def collect_keyword(run_id: str, keyword: str, targets: list[dict]) -> dict:
     }
 
 
+
+def resume_failed_run(run_id: str, all_targets: list[dict], groups: list[tuple[str,list[dict]]]) -> None:
+    """Retry ONLY failed keywords from the same fully recorded TOP run.
+
+    The original run_id and paired shadow are preserved. Unchanged successful
+    rows retain their observed timestamp and ranking; a failed keyword is
+    replaced only with a verified new search result. No other run is promoted.
+    """
+    if not re.fullmatch(r'[0-9a-fA-F-]{36}',run_id):
+        raise RuntimeError('Unsafe TOP recovery id')
+    runs=rest_get('triovist_21vek_top_runs',{
+      'select':'id,status,parser_version,total_targets,total_keywords,requests_count,notes,started_at',
+      'id':f'eq.{run_id}','limit':'2'},timeout=60)
+    if len(runs)!=1:
+        raise RuntimeError('TOP recovery run not found')
+    run=runs[0]
+    if run.get('status') not in ('failed','partial','running') or \
+       run.get('parser_version')!='top-shadow-v0.7' or \
+       int(run.get('total_targets') or -1)!=len(all_targets) or \
+       int(run.get('total_keywords') or -1)!=len(groups):
+        raise RuntimeError('TOP recovery blocked by incompatible run or target count')
+    notes=run.get('notes') if isinstance(run.get('notes'),dict) else {}
+    if run.get('status')=='running' and not notes.get('last_recovery_at'):
+        raise RuntimeError('TOP recovery refused: active/unowned run')
+    tries=int(notes.get('recovery_attempts') or 0)
+    if tries>=4:
+        raise RuntimeError('TOP recovery attempt limit reached; next full daily collection required')
+    # A new shadow means this failed TOP may no longer be paired with today's
+    # promotion. Do not silently combine TOP with a different card snapshot.
+    latest=rest_get('triovist_21vek_shadow_runs',{
+      'select':'id,started_at,finished_at,total_targets,status,success_count,error_count',
+      'status':'eq.complete','order':'started_at.desc','limit':'1'},timeout=60)
+    if len(latest)!=1 or int(latest[0].get('total_targets') or -1)!=len(all_targets) or \
+       int(latest[0].get('success_count') or -1)!=len(all_targets) or \
+       int(latest[0].get('error_count') or 0)!=0:
+        raise RuntimeError('No matching complete card run for TOP recovery')
+    if str(run['started_at'])<str(latest[0]['finished_at']):
+        raise RuntimeError('TOP recovery run predates latest full card run')
+    newer=rest_get('triovist_21vek_shadow_runs',{
+      'select':'id','started_at':f'gt.{run["started_at"]}','limit':'1'},timeout=60)
+    if newer:
+        raise RuntimeError('A newer card run exists; do not revive an old TOP batch')
+
+    previous=rest_get_all('triovist_21vek_top_snapshots',{
+      'run_id':f'eq.{run_id}','select':'manager_email,card_key,keyword,error_text'
+    },page_size=900,timeout=90)
+    keyed={(str(t.get('manager_email') or ''),str(t.get('card_key') or '')):t for t in previous}
+    target_keys={(str(x.get('manager_email') or ''),str(x.get('card_key') or '')) for x in all_targets}
+    if len(previous)!=len(all_targets) or len(keyed)!=len(all_targets) or set(keyed)!=target_keys:
+        raise RuntimeError('TOP recovery refused: snapshot cards mismatch current registry')
+    failed={str(x.get('keyword') or '').casefold().strip() for x in previous if x.get('error_text')}
+    failed.discard('')
+    if len(failed)>12 or (not failed and run.get('status')!='partial'):
+        raise RuntimeError('TOP recovery refused: no safe bounded failed keywords')
+    group_by_name={word.casefold().strip():(word,rows) for word,rows in groups}
+    if not failed.issubset(set(group_by_name)):
+        raise RuntimeError('TOP recovery refused: a failed keyword no longer matches the registry')
+    # Confirm every target still belongs to the same search phrase, not merely
+    # the same card key, so a changed keyword never inherits a prior ranking.
+    for word,rows in groups:
+        for x in rows:
+            old=keyed[(str(x.get('manager_email') or ''),str(x.get('card_key') or ''))]
+            if str(old.get('keyword') or '').casefold().strip()!=word.casefold().strip():
+                raise RuntimeError('TOP recovery refused: target keyword changed')
+    updated=dict(notes,recovery_attempts=tries+1,
+      last_recovery_at=datetime.now(timezone.utc).isoformat(),
+      recovery_keywords=sorted(failed),production_cutover=False)
+    rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},
+               {'status':'running','notes':updated})
+    print(f'TOP RECOVERY {run_id}: {len(failed)} keywords; attempt={tries+1}/4',flush=True)
+
+    added_requests=0
+    try:
+        for keyword_key in sorted(failed):
+            keyword,rows=group_by_name[keyword_key]
+            result=collect_keyword(run_id,keyword,rows)
+            added_requests+=int(result['request_count'])
+            if result['keyword_error']:
+                raise RuntimeError(f'TOP recovery still failing for {keyword!r}: {result["keyword_error"]}')
+            rest_upsert('triovist_21vek_top_snapshots',result['snapshots'],
+                        'run_id,manager_email,card_key',timeout=90)
+        # Verify every row and every key once more before promoting the mirror.
+        all_rows=rest_get_all('triovist_21vek_top_snapshots',{
+          'run_id':f'eq.{run_id}','select':'*'},page_size=900,timeout=90)
+        actual={(str(x.get('manager_email') or ''),str(x.get('card_key') or '')) for x in all_rows}
+        if len(all_rows)!=len(all_targets) or actual!=target_keys or \
+           any(x.get('error_text') for x in all_rows):
+            raise RuntimeError('TOP recovery verification failed: incomplete rows')
+        found=sum(bool(x.get('position_exact')) for x in all_rows)
+        t30=sum(x.get('top30') is True for x in all_rows)
+        t60=sum(x.get('top60') is True for x in all_rows)
+        for begin in range(0,len(all_rows),200):
+            rest_upsert('triovist_21vek_top_current',
+                        [current_row(x) for x in all_rows[begin:begin+200]],
+                        'manager_email,card_key',timeout=90)
+        updated.update(recovery_complete=True,recovered_keywords=len(failed),
+                       stored_rows=len(all_rows),outside_top60=sum(x.get('top60') is False for x in all_rows))
+        rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
+          'status':'complete','requests_count':int(run.get('requests_count') or 0)+added_requests,
+          'found_exact_count':found,'top30_count':t30,'top60_count':t60,'error_count':0,
+          'finished_at':datetime.now(timezone.utc).isoformat(),'notes':updated})
+        print(f'✅ TOP RECOVERED {run_id}: keywords={len(failed)} cards={len(all_rows)} errors=0',flush=True)
+    except Exception as exc:
+        updated['last_recovery_error']=str(exc)[:420]
+        rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
+          'status':'failed','error_count':1,
+          'requests_count':int(run.get('requests_count') or 0)+added_requests,
+          'finished_at':datetime.now(timezone.utc).isoformat(),'notes':updated})
+        raise
+
+
 def main() -> None:
     all_targets=current_targets()
     invalid=[
@@ -421,6 +544,12 @@ def main() -> None:
     canonicalized=sum(1 for x in all_targets if str(x.get('_keyword_source') or '').startswith('canonical_'))
     if any(not str(x.get('keyword') or '').strip() for x in all_targets):
         raise RuntimeError('TOP coverage contract violated: at least one card has no search phrase')
+    resume_id=os.environ.get('TOP_RECOVER_RUN_ID','').strip()
+    if resume_id:
+        if invalid or len(selected)!=len(all_targets):
+            raise RuntimeError('Recovery forbidden: invalid or uncovered registry cards')
+        resume_failed_run(resume_id,all_targets,groups)
+        return
     run_id=insert_run(len(groups),len(all_targets))
     print(
         f'TOP shadow {run_id}: keywords={len(groups)} targets={len(all_targets)} '
@@ -470,13 +599,12 @@ def main() -> None:
                 )
                 if len(snapshots)>=250:
                     rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
-                    rest_upsert('triovist_21vek_top_current',current,'manager_email,card_key',timeout=90)
+                    # Never replace the live TOP mirror with partial/failed data.
                     snapshots=[]
                     current=[]
 
         if snapshots:
             rest_post('triovist_21vek_top_snapshots',snapshots,timeout=90)
-            rest_upsert('triovist_21vek_top_current',current,'manager_email,card_key',timeout=90)
 
         stats=rest_get_all('triovist_21vek_top_snapshots',{
           'run_id':f'eq.{run_id}','select':'position_exact,top30,top60,error_text'
@@ -487,6 +615,17 @@ def main() -> None:
         outside60=sum(1 for x in stats if x.get('top60') is False and not x.get('error_text'))
         row_errors=sum(1 for x in stats if x.get('error_text'))
         status='complete' if errors==0 and row_errors==0 and len(stats)==len(all_targets) else 'partial'
+        if status=='complete':
+            # Only after complete run validation publish the TOP mirror.
+            verified=rest_get_all('triovist_21vek_top_snapshots',{
+              'run_id':f'eq.{run_id}','select':'*'
+            },page_size=900,timeout=90)
+            if len(verified)!=len(all_targets) or any(x.get('error_text') for x in verified):
+                raise RuntimeError('TOP mirror publication blocked: incomplete verified snapshot')
+            for begin in range(0,len(verified),200):
+                rest_upsert('triovist_21vek_top_current',
+                            [current_row(x) for x in verified[begin:begin+200]],
+                            'manager_email,card_key',timeout=90)
         rest_patch('triovist_21vek_top_runs',{'id':f'eq.{run_id}'},{
           'status':status,'requests_count':requests_count,'found_exact_count':found_exact,'top30_count':top30,
           'top60_count':top60,'error_count':errors+row_errors,'finished_at':datetime.now(timezone.utc).isoformat(),
