@@ -189,8 +189,9 @@ Deno.serve(async req => {
           evidence.push(t);return t;
         }
         const level=['groups','subgroups','sku'].includes(args.level)?args.level:'groups';
-        const group=level==='groups'?null:(args.group||memory.group||null);
-        const subgroup=level==='sku'?(args.subgroup||memory.subgroup||null):null;
+        const sameClient=String(resolved.name)===String(memory.client||'');
+        const group=level==='groups'?null:(args.group||(sameClient?memory.group:null)||null);
+        const subgroup=level==='sku'?(args.subgroup||(sameClient?memory.subgroup:null)||null):null;
         if(level!=='groups'&&!group){
           const t={domain,error:'group_required',message:'Ask which product group to expand.'};
           evidence.push(t);return t;
@@ -224,8 +225,9 @@ Deno.serve(async req => {
           offset:data.offset,has_more:data.has_more,items:rows,
           note:'Scope limited to linked purchase_history.client_id; absent SKU codes labelled, not invented.'};
         lastClientName=resolved.name;
-        lastGroup=level==='groups'?'':String(group);
-        lastSubgroup=level==='sku'?String(subgroup):'';
+        lastGroup=level==='groups'?(rows.find(x=>Number(x.delta_byn)<0)?.category||''):String(group);
+        lastSubgroup=level==='subgroups'?(rows.find(x=>Number(x.delta_byn)<0)?.subgroup||''):
+          (level==='sku'?String(subgroup):'');
         lastManager=null;subject.manager=null;subject.subject='client';subject.client=true;
         evidence.push(t);return t;
       }
