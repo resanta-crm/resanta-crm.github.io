@@ -3,6 +3,7 @@
 // Stage 1: broad domain availability; deep factual analysis uses dedicated snapshots/RPCs.
 export const CRM_AI360_TOOLS = Object.freeze([
  {id:'clients',label:'Клиенты и падающие клиенты',table:'clients',columns:'name,manager_name,region,client_status,sku_count,vip_growth_pct,created_at',sort:'created_at',limit:6,managerColumn:'manager_name'},
+ {id:'motivation',label:'Мотивация — планы KPI',table:'manager_kpi_plans',columns:'manager_name,period_month,shipment_plan,akb_plan,new_clients_plan,updated_at',sort:'updated_at',limit:9,managerColumn:'manager_name'},
  {id:'visits',label:'Посещения и переговоры',table:'visits',columns:'date,manager_name,goal,result,goal_achieved,order_received,next_contact_date',sort:'date',limit:6,managerColumn:'manager_name'},
  {id:'routes',label:'Маршруты',table:'route_plans',columns:'visit_date,manager_name,client_name,city,status,approved,visited',sort:'visit_date',limit:8,managerColumn:'manager_name'},
  {id:'tasks',label:'Задачи ИИ',table:'tasks',columns:'title,manager_name,priority,due_date,done,review_status,created_at',sort:'created_at',limit:6,managerColumn:'manager_name',where:[['done','eq',false]]},
@@ -63,6 +64,7 @@ const MANAGED_VOICE_LABELS=Object.freeze({
  client_schedule:'Поручения и маршруты клиента',client_detail:'Группы, подгруппы и SKU клиента'
 });
 const VOICE_ALIASES=Object.freeze([
+ ['motivation',/мотивац|план.*преми|премиальн/i],
  ['warehouse_inventory',/инвентаризац|пересч[её]т.*склад/i],
  ['warehouse_receiving',/при[её]мк|поступлени.*склад|тсд.*приход/i],
  ['warehouse_orders',/комплектац|сборк.*накладн|тсд.*отгруз/i],
