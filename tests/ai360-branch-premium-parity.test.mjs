@@ -60,6 +60,16 @@ test('Today routes are truly SQL-filtered to Minsk current date, not tomorrow',(
  assert.match(voice,/\['шкур','Шкуран'\]/);
  assert.match(voice,/manager_brief/);
 });
+test('Today route summary is computed from all scoped rows, not six preview rows',()=>{
+ assert.match(staffRead,/head:true,count:'exact'/);
+ assert.match(staffRead,/route_summary:\{date,total_routes:total,confirmed_routes:confirmed/);
+ assert.match(staffRead,/visited_routes:visited/);
+ assert.match(staffRead,/total-visited/);
+ assert.match(voice,/if\(domain==='routes'&&data.route_summary\)/);
+ assert.match(voice,/Всего точек/);
+ assert.match(voice,/без отметки посещения/);
+});
+
 test('Branch premium speech cannot fall back to robotic browser voice',()=>{
  assert.match(voice,/crmAI360BranchPremiumVoiceV1\?\.speak/);
  assert.match(voice,/crmAI360BranchPremiumVoiceV1\.listen/);
