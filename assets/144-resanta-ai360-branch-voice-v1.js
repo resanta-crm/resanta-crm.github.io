@@ -6,7 +6,7 @@
 (function(root){
 'use strict';
 if(/Android/i.test(navigator.userAgent||'')||root.crmAI360BranchVoicePilotV1)return;
-const STAFF_ID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
+const role=()=>root.crmAI360StaffIdentityV1?.()||null;
 const ENDPOINT='crm-ai360-staff-read-v1';
 const STEMS=[['рудн','Руднев'],['ачинов','Ачинович'],['шкур','Шкуран']];
 const MONTHS=[['январ',1],['феврал',2],['март',3],['апрел',4],['ма',5],['июн',6],['июл',7],['август',8],['сентябр',9],['октябр',10],['ноябр',11],['декабр',12]];
@@ -20,12 +20,8 @@ let busy=false,verified=false,recognition=null,muted=false,epoch=0;
 let last={domain:'',manager:null,month:null,offset:0,client_name:'',group:'',subgroup:'',level:'groups'};
 const Recognition=root.SpeechRecognition||root.webkitSpeechRecognition||null;
 function allowed(){
- try{return typeof currentUser!=='undefined'&&currentUser?.id===STAFF_ID&&
-  typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
-  normalize(currentProfile?.name)==='сидарович к.н.'&&
-  currentProfile?.region==='Витебск'&&
-  document.getElementById('app')?.style.display!=='none';}
- catch{return false;}
+ const p=role();
+ return !!p&&(p.tier==='branch_director'||p.tier==='field_manager');
 }
 function panelVisible(){return Boolean(allowed()&&panel&&!panel.hidden&&!document.hidden);}
 function say(message){
@@ -170,10 +166,11 @@ async function managerBrief(manager,month,started){
   })));
   if(!panelVisible()||started!==epoch)return;
   const data={};
+  const permittedRole=role();
   for(let i=0;i<values.length;i++){
    const res=values[i];const p=res.data;
    if(res.error||!p||p.answer_verified!==true||p.read_only!==true||
-     p.domain!==sources[i]||p.scope?.role!=='branch_director'||
+     p.domain!==sources[i]||p.scope?.role!==permittedRole?.tier||
      !Array.isArray(p.scope?.managers)||p.scope.managers.length!==1||p.scope.managers[0]!==manager)
     throw Error('manager_brief_source_unverified');
    data[sources[i]]=p.data;
@@ -238,8 +235,9 @@ async function read(q){
   const payload=res.data;
   if(payload?.mode!=='staff_scoped_readonly_pilot_v1'||payload?.answer_verified!==true||
     payload?.read_only!==true||payload.domain!==parsed.domain||
-    payload.scope?.role!=='branch_director'||!Array.isArray(payload.scope.managers)||
-    payload.scope.managers.some(name=>!STEMS.some(v=>v[1]===name)))
+    payload.scope?.role!==role()?.tier||!Array.isArray(payload.scope.managers)||
+    payload.scope.managers.some(name=>!STEMS.some(v=>v[1]===name))||
+    (role()?.tier==='field_manager'&&payload.scope.managers.some(name=>name!==role()?.name)))
     throw new Error('invalid_scoped_reply');
   const data=payload.data||{};
   const answer=formatted(parsed.domain,data,payload.scope);
@@ -299,12 +297,12 @@ function buildPanel(){
  panel=document.createElement('section');panel.className='rsa-branch-panel';panel.hidden=true;
  panel.setAttribute('role','dialog');panel.setAttribute('aria-label','РЕСАНТА AI · руководитель филиала');
  const heading=document.createElement('div');heading.style.cssText='display:flex;gap:9px;align-items:center;';
- const name=document.createElement('strong');name.textContent='🎙 РЕСАНТА AI · Витебск';
+ const name=document.createElement('strong');name.textContent='🎙 РЕСАНТА AI · '+(role()?.tier==='field_manager'?'Мои клиенты':'Витебск');
  name.style.flex='1';
  const exit=document.createElement('button');exit.type='button';exit.textContent='Закрыть';
  exit.addEventListener('click',close);heading.append(name,exit);
  const note=document.createElement('small');
- note.textContent='Пилот директора Витебска · только разрешённые данные · поручения после отдельного подтверждения';
+ note.textContent=role()?.can_create_tasks?'Директор филиала · данные Витебска · поручения после подтверждения':'Менеджер · только мои клиенты и задачи · без создания поручений';
  const entry=document.createElement('div');entry.style.cssText='display:flex;gap:8px;';
  field=document.createElement('input');field.type='text';field.maxLength=350;
  field.placeholder='Например: продажи Руднева или ПДЗ филиала';
@@ -360,13 +358,13 @@ async function open(){
   if(response.error)throw new Error('permission_unavailable');
   const data=response.data;
   if(seq!==epoch||!panelVisible()||data?.ready!==true||
-   data?.role!=='branch_director'||data?.own_name!=='Сидарович К.Н.'||
-   data?.voice_enabled!==true||data?.real_task_creation_enabled!==true||
+   data?.role!==role()?.tier||data?.own_name!==role()?.name||
+   data?.voice_enabled!==true||data?.real_task_creation_enabled!==role()?.can_create_tasks||
    !Array.isArray(data.domains)||!data.domains.includes('sales'))
    throw new Error('invalid_staff_capabilities');
   verified=true;
   setStatus('Подключено · голос OpenAI + Яндекс · поручения с подтверждением');
-  show('Здравствуйте! Я Лера, помощник Витебского филиала. Слушаю через OpenAI, говорю голосом Яндекса. Могу проанализировать менеджеров и подготовить поручения после вашего подтверждения.',{speak:false});
+  show(role()?.can_create_tasks?'Здравствуйте! Я Лера, помощник Витебского филиала. Анализирую разрешённые данные и готовлю поручения только после подтверждения.':'Здравствуйте! Я Лера, ваш помощник в CRM. Показываю только ваши продажи, клиентов, задачи, маршруты и ПДЗ. Создание поручений недоступно.',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
@@ -374,12 +372,13 @@ function mount(){
  if(!top)return;
  if(!launcher){
   launcher=document.createElement('button');launcher.type='button';launcher.className='rsa-branch-launch';
-  launcher.textContent='🎙 Лера · Витебск';
+  launcher.textContent=role()?.tier==='field_manager'?'🎙 Лера · Мои клиенты':'🎙 Лера · Витебск';
   launcher.style.cssText='border:1px solid #2771ac;border-radius:8px;background:#ebf6ff;color:#15558e;padding:7px 9px;font-size:12px;font-weight:750;cursor:pointer';
   launcher.addEventListener('click',()=>void open());
   top.insertBefore(launcher,top.querySelector('.user-badge'));
  }
  launcher.hidden=!allowed();
+ if(allowed())launcher.textContent=role()?.tier==='field_manager'?'🎙 Лера · Мои клиенты':'🎙 Лера · Витебск';
  if(!allowed()&&panel&&!panel.hidden)close();
 }
 root.crmAI360BranchVoicePilotV1={allowed,parseQuestion,formatted,open,close,submit,beginMicrophone};
