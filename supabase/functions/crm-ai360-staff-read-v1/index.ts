@@ -51,8 +51,12 @@ async function readStaff(svc,permission,managers,domain,body,day){
  if(domain==='client_detail'){
   const name=clampString(body.client_name,160);
   if(name.length<2)throw new Error('client_name_required');
+  // Exact case-insensitive comparison, never a wildcard search. Speech recognition
+  // may change letter case; percent/underscore/backslash must not expand access.
+  const escapedName=name.replace(/[\\%_]/g,'\\  const verify=await svc.from('clients').select('id,name,manager_name')
+    .eq('name',name).in('manager_name',managers).or('is_archived.eq.false,is_archived.is.null').limit(2);');
   const verify=await svc.from('clients').select('id,name,manager_name')
-    .eq('name',name).in('manager_name',managers).or('is_archived.eq.false,is_archived.is.null').limit(2);
+    .ilike('name',escapedName).in('manager_name',managers).or('is_archived.eq.false,is_archived.is.null').limit(2);
   if(verify.error)throw new Error('client_verification_unavailable');
   if((verify.data||[]).length!==1)throw new Error('client_not_in_authorized_portfolio');
   const client=verify.data[0];
