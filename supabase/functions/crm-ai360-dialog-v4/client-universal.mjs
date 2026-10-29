@@ -8,7 +8,7 @@ const variants=name=>{
  const x=trimLegal(fold(name));const out=new Set([x]);
  if(x.startsWith('el')&&x.length>9)out.add(x.slice(2));
  if(x.startsWith('le')&&x.length>9)out.add(x.slice(2));
- for(const prefix of ['sadovyitsentr','torgovyytsentr','magazin','ooo']){
+ for(const prefix of ['sadovyytsentr','torgovyytsentr','magazin','ooo']){
   if(x.startsWith(prefix)&&x.length>prefix.length+5)out.add(x.slice(prefix.length));
  }
  // Russian sound "Хом" vs English "Home"; drop silent 'e' for fuzzy candidates.
