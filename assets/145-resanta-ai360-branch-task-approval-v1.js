@@ -52,12 +52,30 @@ function value(){
 function prepareText(query){
  const q=normalize(query);
  const names=managers.filter(m=>q.includes(normalize(m).slice(0,5)));
- if(names.length===1)managerEl.value=names[0];
- const match=String(query).match(/[:：]\s*(.+)/s);
- if(match&&match[1]){
-  const task=match[1].trim().slice(0,480);
-  if(task.length>9){textEl.value=task;titleEl.value=task.slice(0,100);}
+ // An ambiguous manager is never selected from an unrelated mention in the task.
+ if(names.length!==1){
+  if(names.length>1)msg('В команде упомянуты несколько менеджеров. Выбери одного исполнителя.');
+  clearProof();return;
  }
+ const manager=names[0],start=q.indexOf(normalize(manager));
+ managerEl.value=manager;
+ // Spoken requests do not usually contain a colon. The previous parser extracted
+ // only text after ':' and silently left BOTH required task fields empty.
+ let words=q.slice(start+normalize(manager).length)
+  .replace(/^(?:у|а)(?=[\s:：,.!—–-]|$)/,'')
+  .replace(/^[\s:：,.!—–-]+/,'')
+  .replace(/^(?:пожалуйста[,.]?\s*|чтобы\s+)/,'')
+  .trim();
+ if(words.length>=12){
+  words=words.charAt(0).toLocaleUpperCase('ru-RU')+words.slice(1);
+  textEl.value=words.slice(0,500);
+  titleEl.value=words.slice(0,110);
+  if(/падающ|падени[ея]\s+продаж|теряющ/i.test(words)){
+   resultEl.value='Список закреплённых клиентов с падением продаж, выводы и план действий для восстановления продаж.';
+  }
+ }
+ // A due date is not invented from an unspecified spoken request. The manager
+ // must review it and explicitly choose a due date before server validation.
  clearProof();
 }
 function protectedInvoke(kind,body){
@@ -200,7 +218,7 @@ root.crmAI360BranchTaskHandleV1=function(question){
   void commit();return true;
  }
  if(/^(?:лера[,. ]+)?(?:создай|создать|поставь|подготовь|новое|оформи)\s+(?:новое\s+)?(?:поручение|задачу|задача)/.test(s)){
-  showForm();prepareText(question);msg('Подготовила форму поручения. Проверь исполнителя, текст, срок и нажми «Проверить». Никаких задач пока не создала.');
+  showForm();prepareText(question);msg(titleEl?.value?'Заполнила черновик из голосовой команды. Проверь текст и укажи срок, затем нажми «Проверить». Задача пока не создана.':'Открыла форму. Уточни текст поручения и срок, затем нажми «Проверить». Задача пока не создана.');
   return true;
  }
  return false;
