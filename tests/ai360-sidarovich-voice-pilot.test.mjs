@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync('assets/144-resanta-ai360-branch-voice-v1.js','utf8');
+const staffIdentity=fs.readFileSync('assets/148-resanta-ai360-staff-identity-v1.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 function mock({id=SID,name='Сидарович К.Н.',role='boss',region='Витебск',response=null}={}){
@@ -40,6 +41,7 @@ function mock({id=SID,name='Сидарович К.Н.',role='boss',region='Ви�
         {manager_name:'Руднев',plan:159000,actual:154245,plan_pct:97,to_plan:4755}]} }};
    }}}
  };
+ vm.runInNewContext(staffIdentity,context);
  vm.runInNewContext(source,context);
  return {api:w.crmAI360BranchVoicePilotV1,top,doc,elements,calls,context};
 }
@@ -122,10 +124,10 @@ test('Real user click obtains server capabilities before a scoped read',async()=
  assert.equal(x.calls.length,2);
 });
 test('Server read-only endpoint and no cross-user state in browser',()=>{
- assert.ok(html.includes('144-resanta-ai360-branch-voice-v1.js?v=6'));
+ assert.ok(html.includes('144-resanta-ai360-branch-voice-v1.js?v=7'));
  assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
  assert.ok(source.includes("const ENDPOINT='crm-ai360-staff-read-v1'"));
- assert.ok(source.includes("STAFF_ID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'"));
+ assert.ok(staffIdentity.includes("'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'"));
  assert.ok(source.includes("data?.real_task_creation_enabled!==true"));
  assert.ok(source.includes("payload?.read_only!==true"));
  assert.ok(!source.includes("crm-ai360-dialog-v4"));
