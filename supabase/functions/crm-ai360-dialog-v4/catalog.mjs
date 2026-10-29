@@ -52,3 +52,63 @@ export async function collectTool(svc,id,{manager=null,signal=null}={}){
   return {domain:id,source:tool.table,limited:true,max_rows:tool.limit,rows:(data||[]).slice(0,tool.limit)};
  }catch{return {domain:id,error:'source_unavailable'};}
 }
+
+
+// The voice capability registry is generated from the existing explicit safe allowlist.
+// Adding a reviewed CRM_AI360_TOOLS entry automatically enables discovery and routing;
+// arbitrary new public tables are NEVER readable without explicit registration.
+const MANAGED_VOICE_LABELS=Object.freeze({
+ sales:'Продажи и KPI',operations:'Сводка и аналитика',promotions:'Акции',
+ triovist:'Триовист',vip:'VIP-клиенты',payments:'Реестр оплат',
+ client_schedule:'Поручения и маршруты клиента',client_detail:'Группы, подгруппы и SKU клиента'
+});
+const VOICE_ALIASES=Object.freeze([
+ ['warehouse_inventory',/инвентаризац|пересч[её]т.*склад/i],
+ ['warehouse_receiving',/при[её]мк|поступлени.*склад|тсд.*приход/i],
+ ['warehouse_orders',/комплектац|сборк.*накладн|тсд.*отгруз/i],
+ ['stock_freshness',/свежест.*остатк|обновлени.*склад/i],
+ ['triovist_stock',/остатк.*триовист|остатк.*21\s*век/i],
+ ['triovist_tasks',/задач.*триовист|триовист.*задач/i],
+ ['promotion_budgets',/бюджет.*акци|расход.*акци/i],
+ ['card_issues',/ошибк.*карточ|проблем.*карточ/i],
+ ['cards_21vek',/карточк.*21\s*век|карточк.*21vek/i],
+ ['competitors',/конкурент|ценов.*паритет/i],
+ ['infographics',/инфографик/i],
+ ['parser',/парсер|парсинг/i],
+ ['mrc',/мрц|минимальн.*цен/i],
+ ['gps',/gps|джипиэс|геолокац|достоверност.*визит/i],
+ ['routes',/маршрут|план.*посещен/i],
+ ['visits',/визит|посещен|переговор/i],
+ ['debt',/пдз|просроч.*долг|дебиторк|задолженност/i],
+ ['cash',/поступлени.*ден|кассов.*поступлен/i],
+ ['payments',/реестр.*оплат|плат[её]жн.*реестр/i],
+ ['markdown',/уценк/i],
+ ['stands',/стенд/i],
+ ['vip_actions',/vip.*рекомендац|вип.*рекомендац/i],
+ ['vip',/вип.*клиент|vip.*клиент/i],
+ ['promotions',/акци|промо/i],
+ ['stock',/остатк|наличи.*склад/i],
+ ['tasks',/поручен|задач/i],
+ ['clients',/падающ.*клиент|клиентск.*баз/i],
+ ['sales',/продаж|выручк|оборот|kpi|план.*факт/i],
+ ['operations',/сводк|итог.*филиал/i],
+ ['triovist',/триовист|тривист|21\s*век/i]
+]);
+const normalizeLabel=x=>String(x||'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[^а-яa-z0-9]+/g,' ').trim();
+export function getVoiceCapabilities(){
+ return CRM_AI360_ALL_DOMAINS.map(id=>({
+  id,label:getTool(id)?.label||MANAGED_VOICE_LABELS[id]||id,
+  scope:'registered_read_only',requires_owner:true
+ }));
+}
+export function inferVoiceDomain(question){
+ const raw=String(question||'').slice(0,400);
+ if(!raw.trim())return null;
+ for(const [domain,re] of VOICE_ALIASES)if(CRM_AI360_ALL_DOMAINS.includes(domain)&&re.test(raw))return domain;
+ const query=normalizeLabel(raw);
+ const hits=getVoiceCapabilities().filter(x=>{
+  const name=normalizeLabel(x.label);
+  return name.length>=5&&query.includes(name);
+ });
+ return hits.length===1?hits[0].id:null;
+}
