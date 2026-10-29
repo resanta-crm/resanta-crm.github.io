@@ -65,6 +65,9 @@ function parseQuestion(raw,previous=last){
  const q=normalize(raw).replace(/^(?:лера|ресанта)[,.!?\s]*/i,'');
  const continuation=/^(?:дальше|продолж|остальные|следующие|еще|ещё|а дальше|покажи ещё|покажи еще)/.test(q);
  const namedManager=managerFrom(q);
+ const clientFollowup=previous.domain==='client_detail'&&
+   /(?:групп|подгрупп|артикул|sku|категори)/.test(q)&&
+   /^(?:покажи|какие|дай|расскажи|а\s|назови|выведи)/.test(q);
  const domain=continuation&&previous.domain?previous.domain:
    /пдз|долг|задолж|дебитор|просроч.*оплат/.test(q)?'debt':
    /gps|джипиэс|геолокац/.test(q)?'gps':
@@ -72,23 +75,30 @@ function parseQuestion(raw,previous=last){
    /визит|посещен|переговор/.test(q)?'visits':
    /маршрут|план.*поезд/.test(q)?'routes':
    /задач|поручен/.test(q)?'tasks':
-   /клиент|покупател/.test(q)&&/групп|подгрупп|sku|артикул|товар.*по|по.*товар/.test(q)?'client_detail':
+   clientFollowup||(/клиент|покупател/.test(q)&&
+    /групп|подгрупп|sku|артикул|товар.*по|по.*товар|разбор|анализ|динамик|паден/.test(q))?'client_detail':
    /клиент|покупател|база/.test(q)?'clients':
    /продаж|продал|выруч|оборот|план|факт|кпи|kpi/.test(q)?'sales':null;
  const month=monthFrom(q)||(continuation?previous.month:null);
  const payload={kind:'read',domain,manager:namedManager||(continuation?previous.manager:null),
   month,offset:continuation?previous.offset:0};
  if(domain==='client_detail'){
-  const match=q.match(/(?:по\s+)?клиент(?:у|а|ом)?\s+[«"]?(.+?)[»"]?(?:\s+(?:за|групп|подгрупп|артикул|sku|товар)\b|$)/);
-  payload.client_name=match?.[1]?.replace(/["»«]/g,'').trim().slice(0,150)||
-    (continuation?previous.client_name:'');
-  payload.level=/\b(?:sku|артикул)\b|артикул/.test(q)?'sku':
+  const match=q.match(/(?:^|\s)(?:по\s+)?клиент(?:у|а|ом)?\s+[«"]?(.+?)(?=\s+(?:в\s+(?:группе|подгруппе)|групп[а-я]*|подгрупп[а-я]*|артикул[а-я]*|sku|за\s+(?:20\d{2}|[а-я]+))|$)/);
+  const named=match?.[1]?.replace(/["»«]/g,'').trim().slice(0,150)||'';
+  const sameClient=!named||named===previous.client_name;
+  payload.client_name=named||(previous.domain==='client_detail'?previous.client_name:'');
+  payload.level=/sku|артикул/.test(q)?'sku':
     /подгрупп/.test(q)?'subgroups':continuation?previous.level:'groups';
-  payload.group=continuation?previous.group:null;
-  payload.subgroup=continuation?previous.subgroup:null;
+  const groupMatch=q.match(/(?:в\s+группе|группа\s*[:\-])\s*[«"]?(.+?)(?=\s+в\s+подгруппе|[»"]?$)/);
+  const subgroupMatch=q.match(/(?:в\s+подгруппе|подгруппа\s*[:\-])\s*[«"]?(.+?)[»"]?$/);
+  payload.group=(groupMatch?.[1]?.replace(/[»" ]+$/,'').trim().slice(0,120))||
+    (sameClient?previous.group:'')||null;
+  payload.subgroup=(subgroupMatch?.[1]?.replace(/[»" ]+$/,'').trim().slice(0,120))||
+    (sameClient?previous.subgroup:'')||null;
  }
  return payload;
 }
+
 function formatted(domain,data,scope){
  const managers=Array.isArray(scope?.managers)?scope.managers.join(', '):'Витебск';
  if(domain==='sales'){
@@ -120,7 +130,7 @@ function formatted(domain,data,scope){
    '. Период '+text(data.current_period)+'. Суммарное изменение '+amount(data.delta_byn)+
    '.\n'+(lines.join('\n')||'Данных по выбранному уровню нет.')+
    (data.has_more?'\nЭто часть списка. Скажи «дальше».':'')+
-   (data.level==='groups'?'\nДля подгрупп уточни группу товара.':'');
+   (data.level==='groups'?'\nДля детализации скажи «Покажи подгруппы в группе Садовая техника», затем назови нужную подгруппу.':'');
  }
  const fields={
   clients:r=>text(r.name)+' — '+text(r.manager_name)+', '+text(r.client_status||'статус не указан'),
