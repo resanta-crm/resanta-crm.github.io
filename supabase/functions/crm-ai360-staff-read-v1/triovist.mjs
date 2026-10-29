@@ -1,6 +1,8 @@
 // Read-only, assigned-category 21vek content for Triovist managers.
 // NEVER trust frontend manager_email/category or LLM proposal as authorization.
-// Live assignments are read from CRM for every request. No shared competitor, MRC,
+// Live assignments are read from CRM for every request. For registry cards the
+// personally assigned manager_email (not the external 21vek category) is the
+// stable owner tag. No shared competitor, MRC,
 // budget, revenue or cross-category sources in this handler.
 import {norm,safeOffset} from './permissions.mjs';
 export const TRIOVIST_DOMAINS=Object.freeze({
@@ -54,13 +56,21 @@ export async function readTriovist(svc,permission,userEmail,profileEmail,domain,
  const def=TRIOVIST_DOMAINS[domain];
  if(!def)return error('triovist_domain_denied');
  const requested=typeof body.group==='string'?body.group.trim().slice(0,120):'';
- if(requested&&!groups.some(x=>norm(x)===norm(requested)))return error('triovist_group_outside_scope');
- const exactGroup=groups.find(x=>norm(x)===norm(requested))||null;
+ // The 21vek site category ("Строительный инструмент", "Дом и сад") is
+ // NOT the same taxonomy as CRM-assigned business group ("Инструмент",
+ // "Садовая техника"). Therefore never join these two categories by name.
+ // The current registry's server-assigned manager_email is the row owner.
+ // For internal group_name sources, live business group membership is mandatory.
+ if(requested&&def.groupColumn!=='category'&&
+    !groups.some(x=>norm(x)===norm(requested)))return error('triovist_group_outside_scope');
+ const exactGroup=def.groupColumn==='category'?null:
+    (groups.find(x=>norm(x)===norm(requested))||null);
  const offset=safeOffset(body.offset);
  const cols=def.fields.join(',');
  let query=svc.from(def.table).select(cols)
   .eq('manager_email',email).order(def.order,{ascending:false});
- if(def.groupColumn)query=query.in(def.groupColumn,exactGroup?[exactGroup]:groups);
+ if(def.groupColumn==='category'&&requested)query=query.eq('category',requested);
+ if(def.groupColumn==='group_name')query=query.in('group_name',exactGroup?[exactGroup]:groups);
  query=query.range(offset,offset+pageSize);
  const result=await query;
  if(result.error)return error('triovist_source_unavailable');
@@ -74,7 +84,7 @@ export async function readTriovist(svc,permission,userEmail,profileEmail,domain,
   else{
    const owned=await svc.from('triovist_21vek_registry_v236214')
     .select('card_key,category').eq('manager_email',email)
-    .in('category',exactGroup?[exactGroup]:groups).in('card_key',keys).limit(keys.length);
+    .in('card_key',keys).limit(Math.max(keys.length*20,100));
    if(owned.error)return error('triovist_issue_scope_unavailable');
    const allowed=new Set((owned.data||[]).map(x=>x.card_key));
    items=raw.filter(x=>allowed.has(x.card_key));
@@ -89,7 +99,8 @@ export async function readTriovist(svc,permission,userEmail,profileEmail,domain,
   page.next_offset=page.has_more?offset+pageSize:null;
  }
  return {source:def.table,scope:'assigned_categories',manager_name:permission.name,
-  group_names:groups,requested_group:exactGroup,group_count:groups.length,
+  group_names:groups,requested_group:exactGroup,external_21vek_category:
+    def.groupColumn==='category'&&requested?requested:null,group_count:groups.length,
   ...page,warning:page.has_more?'Это только часть записей; можно запросить продолжение.':
    'Выборка охватывает только личные категории в указанном источнике; не всю сеть.'};
 }
