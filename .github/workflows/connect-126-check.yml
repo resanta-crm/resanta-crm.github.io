@@ -1,0 +1,37 @@
+name: CONNECT 126 safety checks
+on:
+  pull_request:
+    paths:
+      - "connect-v1/**"
+      - ".github/workflows/connect-126-check.yml"
+  push:
+    branches:
+      - "feature/connect-126-vitebsk-pilot"
+    paths:
+      - "connect-v1/**"
+      - ".github/workflows/connect-126-check.yml"
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --check connect-v1/app.js
+          node --check connect-v1/config.example.js
+          node --check connect-v1/test-contract.js
+      - name: Verify security boundary and feature isolation
+        run: node connect-v1/test-contract.js
+      - name: Verify only isolated pilot files changed
+        shell: bash
+        run: |
+          git fetch --no-tags origin main --depth=1
+          git diff --name-only origin/main...HEAD > /tmp/connect-files
+          cat /tmp/connect-files
+          if grep -Ev '^(connect-v1/|\.github/workflows/connect-126-check\.yml$)' /tmp/connect-files; then
+            echo 'Unexpected production file modification!' >&2
+            exit 1
+          fi
