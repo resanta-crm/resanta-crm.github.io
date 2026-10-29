@@ -25,9 +25,9 @@ export function russianSpokenDates(raw){
   return valid(+dd,+mm)?p+(+dd)+' '+MONTHS_GEN[+mm-1]:full;
  });
  // Period labels, not quantities. "за 2026-10" -> "за октябрь 2026 года"
- s=s.replace(/\bза\s+(20\d{2})-(0[1-9]|1[0-2])\b/gi,
- (_full,y,m)=>'за '+MONTHS_NOM[+m-1]+' '+y+' года');
- s=s.replace(/\bв\s+(20\d{2})-(0[1-9]|1[0-2])\b/gi,
- (_full,y,m)=>'в '+MONTHS_PREP[+m-1]+' '+y+' года');
+ s=s.replace(/(^|[^\p{L}])за\s+(20\d{2})-(0[1-9]|1[0-2])(?!\d)/giu,
+ (_full,p,y,m)=>p+'за '+MONTHS_NOM[+m-1]+' '+y+' года');
+ s=s.replace(/(^|[^\p{L}])в\s+(20\d{2})-(0[1-9]|1[0-2])(?!\d)/giu,
+ (_full,p,y,m)=>p+'в '+MONTHS_PREP[+m-1]+' '+y+' года');
  return s;
 }
