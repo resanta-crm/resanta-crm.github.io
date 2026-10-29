@@ -173,61 +173,77 @@ function payloadFor(indices){
 async function approvalRequest(kind,ui){
  if(approvalBusy)return;
  if(kind==='validate'&&!items.length)return;
- const chosenIndices=[...chosen].sort((a,b)=>a-b);
- if(kind==='validate'&&!chosenIndices.length){
-   ui.answer('Назови номера поручений для согласования: например «Согласовать первое и третье».');
-   return;
+ const selected=[...chosen].sort((a,b)=>a-b);
+ if(kind==='validate'&&!selected.length){
+   ui.answer('Назови номера: «Согласую первое».');return;
  }
- if(kind==='commit'&&!approval){
-   ui.answer('Нет черновиков к тестовому сохранению. Сначала скажи «Согласую первое».');
-   return;
+ if(kind==='commit'&&(!approval||approval.real!==realMode)){
+   ui.answer('Сначала выбери конкретные поручения и пройди повторную проверку CRM. Ничего не создано.');return;
  }
  approvalBusy=true;root.__resantaAI360PendingV1=true;
- ui.textStatus(kind==='validate'?'Проверяю выбранные поручения перед созданием…':
-  'Сохраняю ТЕСТОВЫЕ черновики только для директора…');
+ const live=realMode;
+ ui.textStatus(kind==='validate'?'Проверяю исполнителя, клиента и дубли…':
+   live?'Создаю подтверждённые поручения в CRM…':'Сохраняю закрытые тестовые черновики…');
  try{
    const id=kind==='validate'?root.crypto?.randomUUID?.():approval.id;
    if(!id)throw new Error('secure_random_unavailable');
-   const entries=kind==='validate'?payloadFor(chosenIndices):approval.items;
-   const body={kind:kind==='commit'?'commit_test':kind,approval_id:id,items:entries};
-   if(kind==='commit')body.confirmation='подтверждаю сохранение тестовых поручений';
-   const response=await db.functions.invoke(APPROVAL_ENDPOINT,{body});
+   const entries=kind==='validate'?payloadFor(selected):approval.items;
+   const body={kind:kind==='commit'?(live?'commit_real':'commit_test'):'validate',
+     approval_id:id,items:entries};
+   if(kind==='commit')body.confirmation=live?'подтверждаю создание поручений':
+     'подтверждаю сохранение тестовых поручений';
+   const endpoint=live?REAL_APPROVAL_ENDPOINT:APPROVAL_ENDPOINT;
+   const response=await db.functions.invoke(endpoint,{body});
    if(response.error)throw new Error(await responseError(response.error));
    if(!allowed())return;
    if(kind==='validate'){
-     if(response.data?.mode!=='ready'||!Array.isArray(response.data.items)||
-       response.data.items.length!==entries.length)throw new Error('invalid_validation');
+     const expected=live?'ready_real':'ready';
+     if(response.data?.mode!==expected||!Array.isArray(response.data.items)||
+       response.data.items.length!==entries.length||response.data.created!==0)
+       throw new Error('invalid_validation');
      const confirmed=response.data.items;
      if(confirmed.some((r,i)=>r.client_id!==entries[i].client_id||
-       r.manager_name!==entries[i].manager_name||r.due_date!==entries[i].due_date))
-       throw new Error('mismatched_validation');
-     approval={id,items:confirmed};
+        r.manager_name!==entries[i].manager_name||r.due_date!==entries[i].due_date||
+        r.text!==entries[i].text))throw new Error('mismatched_validation');
+     approval={id,items:confirmed,real:live};
      const lines=confirmed.map((r,i)=>(i+1)+'. '+safe(r.client_name,100)+
        '; '+safe(r.manager_name,100)+'; срок '+safe(r.due_date,12)+
        '; '+safe(r.title,120)+'; '+safe(r.text,190)).join('\n');
-     ui.answer('ТЕСТОВЫЙ РЕЖИМ. К СОХРАНЕНИЮ '+confirmed.length+
+     if(live)ui.answer('К СОЗДАНИЮ В CRM '+confirmed.length+' РЕАЛЬНЫХ ПОРУЧЕНИЙ. Пока НИЧЕГО НЕ СОЗДАНО.\n'+lines+
+       '\n\nДля окончательного создания скажи ТОЧНО «Подтверждаю создание поручений». '+
+       'После этого менеджеры увидят задачи. Либо скажи «Отмена создания».',
+       {speechSummary:'Проверила реальные поручения. Пока ничего не создала. Для создания скажи: Подтверждаю создание поручений.'});
+     else ui.answer('ТЕСТОВЫЙ РЕЖИМ. К СОХРАНЕНИЮ '+confirmed.length+
        ' ЧЕРНОВИКОВ. Менеджеры их НЕ увидят.\n'+lines+
-       '\n\nДля сохранения тестовых черновиков скажи ТОЧНО «Подтверждаю сохранение тестовых поручений». '+
-       'Или скажи «Отмена создания».',{speechSummary:
-       'Это тестовые черновики. Менеджеры их не увидят. Для сохранения скажи: Подтверждаю сохранение тестовых поручений.'});
+       '\n\nДля сохранения скажи ТОЧНО «Подтверждаю сохранение тестовых поручений». Или скажи «Отмена создания».',
+       {speechSummary:'Это тестовые черновики. Менеджеры их не увидят. Для сохранения скажи: Подтверждаю сохранение тестовых поручений.'});
+   }else if(live){
+     if(!['created_real','already_created_real'].includes(response.data?.mode))
+       throw new Error('unverified_real_commit');
+     const fresh=response.data.mode==='created_real';
+     if(fresh&&Number(response.data.created)!==entries.length)throw new Error('unverified_count');
+     ui.answer(fresh?
+       '✅ Подтверждено: в CRM созданы '+Number(response.data.created)+' реальных поручений. Они доступны исполнителю. Сроки и клиентов можно проверить в разделе «Задачи ИИ».':
+       '✅ Эти реальные поручения уже сохранены. Повторные задачи не созданы.');
+     approval=null;items=[];chosen.clear();realMode=false;
    }else{
-     if(response.data?.mode==='test_saved'||response.data?.mode==='already_test_saved'){
-       const fresh=response.data.mode==='test_saved';
-       ui.answer(fresh?
-         '✅ ТЕСТ: '+Number(response.data.saved)+' поручений сохранено в закрытом журнале директора. Руднев их не видит. Рабочих задач создано: 0. Скажи «Покажи тестовые поручения».':
-         '✅ Эти тестовые поручения уже сохранены. Повторных записей нет. Руднев ничего не видит.');
-       approval=null;items=[];chosen.clear();
-     }else throw new Error('invalid_test_commit_result');
+     if(!['test_saved','already_test_saved'].includes(response.data?.mode))
+       throw new Error('invalid_test_commit_result');
+     const fresh=response.data.mode==='test_saved';
+     ui.answer(fresh?'✅ ТЕСТ: '+Number(response.data.saved)+
+       ' поручений сохранено в закрытом журнале директора. Рабочих задач создано: 0.':
+       '✅ Эти тестовые поручения уже сохранены, повторных записей нет.');
+     approval=null;items=[];chosen.clear();realMode=false;
    }
  }catch(e){
    if(allowed()){
-     const code=String(e?.message||e);
-     ui.answer(code==='test_client_already_saved'?
-       'По этому клиенту уже есть сохранённый тестовый черновик. Второй не создаю. Скажи «Покажи тестовые поручения», затем запроси новые предложения для Руднева. Рабочие задачи отключены.':
-       'Тестовое сохранение не подтверждено: '+safe(code,150)+
-       '. Скажи «Покажи тестовые поручения» перед повтором. Рабочие задачи отключены.');
+     const issue=safe(e?.message,140);
+     ui.answer(live?
+       'Реальное создание не подтверждено: '+issue+
+       '. Проверь раздел «Задачи ИИ» перед повтором. Сохранён тот же номер согласования для защиты от дублей.':
+       'Тестовое сохранение не подтверждено: '+issue+'. Проверь тестовый журнал перед повтором.');
    }
-   // Retain approval ID for an idempotent manual retry in case of network error.
+   // Keep the same approval ID for replay-safe retry.
  }finally{
    approvalBusy=false;root.__resantaAI360PendingV1=false;
  }
