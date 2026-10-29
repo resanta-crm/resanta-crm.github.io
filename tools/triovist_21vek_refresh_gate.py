@@ -86,7 +86,7 @@ def recover_failed_top(result: dict, mode: str) -> bool:
         return False
     runs=rest_get("triovist_21vek_top_runs",{
         "select":"id,status,parser_version,total_targets,total_keywords,started_at,finished_at,notes",
-        "status":"in.(failed,partial)","total_targets":f"eq.{targets}",
+        "status":"in.(failed,partial,running)","total_targets":f"eq.{targets}",
         "started_at":f"gte.{card['finished_at']}",
         "order":"started_at.desc","limit":"1"})
     if not runs:
@@ -100,6 +100,8 @@ def recover_failed_top(result: dict, mode: str) -> bool:
         return False
     notes=run.get("notes") if isinstance(run.get("notes"),dict) else {}
     attempts=int(notes.get("recovery_attempts") or 0)
+    if run.get("status")=="running" and not notes.get("last_recovery_at"):
+        return False
     if attempts>=4:
         print(json.dumps({"top_recovery":"exhausted","attempts":attempts,
                           "run_id":run["id"],"latest_complete":False}),flush=True)
@@ -107,7 +109,10 @@ def recover_failed_top(result: dict, mode: str) -> bool:
     last=notes.get("last_recovery_at")
     if last:
         since=(datetime.now(timezone.utc)-datetime.fromisoformat(str(last).replace("Z","+00:00"))).total_seconds()
-        if since<min(3600,600*(2**max(0,attempts-1))):
+        required=min(3600,600*(2**max(0,attempts-1)))
+        if run.get("status")=="running":
+            required=max(required,1200)  # abandoned workflow, not active recovery
+        if since<required:
             return False
     failed=rest_get("triovist_21vek_top_snapshots",{
         "select":"keyword","run_id":f"eq.{run['id']}",
