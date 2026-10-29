@@ -4,6 +4,7 @@ import { runToolCore } from './core.mjs';
 import { readTasks } from './task-read.mjs';
 import { requestContext, effectiveManager, guardVoicePair } from './context.mjs';
 import { resolveClient } from './client-identity.mjs';
+import { resolveAnyClient } from './client-universal.mjs';
 
 // Isolated read-only director pilot. v3 is NOT imported, replaced or modified.
 const ORIGINS = new Set(['https://resanta-crm.by', 'https://www.resanta-crm.by']);
@@ -139,7 +140,9 @@ Deno.serve(async req => {
     manager: String(body.memory.manager || '').slice(0, 90),
     month: String(body.memory.month || '').slice(0, 7),
     domain: String(body.memory.domain || '').slice(0, 30),
-    client: String(body.memory.client || '').slice(0, 90)
+    client: String(body.memory.client || '').slice(0, 90),
+    group: String(body.memory.group || '').slice(0, 120),
+    subgroup: String(body.memory.subgroup || '').slice(0, 120)
   } : {};
   // Per-dialog reservation shared with legacy v3, existing Yandex TTS spend and daily limit.
   // Claim is transactional; accounting is restricted to the Supabase service role.
@@ -158,7 +161,7 @@ Deno.serve(async req => {
   const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
   const subject=requestContext(question,memory,managerNames);
   const invalidSources=[], evidence=[];
-  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='';
+  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='',lastGroup='',lastSubgroup='';
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
@@ -176,6 +179,58 @@ Deno.serve(async req => {
     lastMonth = month;
     lastDomain = domain;
     try {
+      if(domain==='client_detail'){
+        const resolved=await resolveAnyClient(svc,{
+          question,memoryClient:memory.client||'',hint:args.client||''
+        });
+        if(resolved.error){
+          const t={domain,error:resolved.error,candidates:resolved.candidates||[],
+             message:'Please confirm customer name. Never reuse another customer sales.'};
+          evidence.push(t);return t;
+        }
+        const level=['groups','subgroups','sku'].includes(args.level)?args.level:'groups';
+        const sameClient=String(resolved.name)===String(memory.client||'');
+        const group=level==='groups'?null:(args.group||(sameClient?memory.group:null)||null);
+        const subgroup=level==='sku'?(args.subgroup||(sameClient?memory.subgroup:null)||null):null;
+        if(level!=='groups'&&!group){
+          const t={domain,error:'group_required',message:'Ask which product group to expand.'};
+          evidence.push(t);return t;
+        }
+        if(level==='sku'&&!subgroup){
+          const t={domain,error:'subgroup_required',message:'Ask which product subgroup to expand.'};
+          evidence.push(t);return t;
+        }
+        const offset=Math.min(200,Math.max(0,Number(args.offset)||0));
+        const r=await svc.rpc('crm_ai360_client_drilldown_v43',{
+          p_client_id:resolved.id,p_level:level,p_group:group,p_subgroup:subgroup,
+          p_month:month+'-01',p_limit:level==='sku'?6:12,p_offset:offset
+        });
+        if(r.error||!r.data||r.data.error)throw new Error('client_detail_source_unavailable');
+        const data=r.data;
+        const rows=(data.items||[]).slice(0,level==='sku'?6:12).map(x=>({
+          category:x.category,subgroup:x.subgroup,sku:x.sku,
+          product:x.product?String(x.product).slice(0,100):null,
+          previous_byn:x.previous_byn,current_byn:x.current_byn,
+          delta_byn:x.delta_byn,change_pct:x.change_pct,
+          previous_qty:x.previous_qty,current_qty:x.current_qty,
+          missing_sku:x.missing_sku
+        }));
+        const t={domain,scope:'client_all',source:'crm_ai360_client_drilldown_v43',
+          client_name:resolved.name,manager:resolved.manager,level,currency:'BYN',
+          current_period:data.current_period,previous_period:data.previous_period,
+          group_filter:group,subgroup_filter:subgroup,
+          total_items:data.total_items,falling_items:data.falling_items,
+          current_byn:data.current_byn,previous_byn:data.previous_byn,delta_byn:data.delta_byn,
+          sku_missing_code:data.sku_missing_code,
+          offset:data.offset,has_more:data.has_more,items:rows,
+          note:'Scope limited to linked purchase_history.client_id; absent SKU codes labelled, not invented.'};
+        lastClientName=resolved.name;
+        lastGroup=level==='groups'?(rows.find(x=>Number(x.delta_byn)<0)?.category||''):String(group);
+        lastSubgroup=level==='subgroups'?(rows.find(x=>Number(x.delta_byn)<0)?.subgroup||''):
+          (level==='sku'?String(subgroup):'');
+        lastManager=null;subject.manager=null;subject.subject='client';subject.client=true;
+        evidence.push(t);return t;
+      }
       if(domain==='client_groups'||domain==='client_schedule'){
         const resolved=await resolveClient(svc,{
           client:args.client,question,remembered:memory.client
@@ -285,6 +340,8 @@ Deno.serve(async req => {
     mode:'director_readonly_v41',engine:'gpt-5.4-mini',
     memory:{...memory,month:lastMonth,manager:subject.manager||'',
       client:lastClientName||(subject.subject==='client'?memory.client||'':''),
+      group:lastGroup||((subject.subject==='client'&&!lastClientName)?memory.group||'':''),
+      subgroup:lastSubgroup||((subject.subject==='client'&&!lastClientName)?memory.subgroup||'':''),
       subject:subject.subject,domain:lastDomain||output.used[0]?.split('/')[0]||memory.domain||''}
   });
 });

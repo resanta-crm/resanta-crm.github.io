@@ -1,0 +1,34 @@
+name: AI360 universal client analytics
+on:
+  push:
+    branches: [feature/ai360-clients-universal-v43-20261029]
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'supabase/migrations/*client_drilldown*v43.sql'
+      - 'tests/ai360-v43-client-check.test.mjs'
+      - '.github/workflows/ai360-v43.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate universal client engine
+        run: |
+          node --check supabase/functions/crm-ai360-dialog-v4/core.mjs
+          node --check supabase/functions/crm-ai360-dialog-v4/client-universal.mjs
+          node --check supabase/functions/crm-ai360-dialog-v4/context.mjs
+          node --test tests/ai360-v43-client-check.test.mjs
+      - name: Verify old API contracts and voice
+        run: |
+          node --test tests/ai360-core-v4-smoke.test.mjs
+          node --test tests/ai360-v42-dates-client-groups.test.mjs
+          node --test tests/ai360-v41-context-truth.test.mjs
+          node tests/ai360-universal-browser-20261027.test.cjs
+          node tests/ai360-conversation-debt-20261028.test.mjs

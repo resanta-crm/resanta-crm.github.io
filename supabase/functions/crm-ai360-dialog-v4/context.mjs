@@ -34,7 +34,7 @@ export function requestContext(question,memory,managers){
   resetManager:network||(client&&!explicit),subject:client?'client':manager?'manager':'network'};
 }
 export function effectiveManager(domain,context){
- if(domain==='client_groups'||domain==='client_schedule')return {manager:null,scope:'client_all'};
+ if(domain==='client_groups'||domain==='client_schedule'||domain==='client_detail')return {manager:null,scope:'client_all'};
  if(domain==='triovist'){
   return context.explicitManager?{error:'triovist_personal_attribution_unavailable'}:
    {manager:null,scope:'client_all'};
