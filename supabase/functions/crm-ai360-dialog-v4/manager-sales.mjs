@@ -28,7 +28,7 @@ function staffMention(question,managerNames=[]){
 }
 export function isManagerSalesQuestion(question,{managerNames=[],memory={}}={}){
  const q=n(question);
- const questionIsSales=/(продаж|выруч|оборот|отгруз|реализац|план.*продаж|выполнен.*план|факт.*план|план.*факт)/i.test(q);
+ const questionIsSales=/(продаж|продал|продали|выруч|оборот|отгруз|реализац|план.*продаж|выполнен.*план|факт.*план|план.*факт)/i.test(q);
  const managerNamed=staffMention(q,managerNames);
  const managerScope=/(менеджер|сотрудник|по всем|по остальн|руководител.*продаж)/i.test(q);
  const managerFollowup=memory?.domain==='sales_managers'&&
