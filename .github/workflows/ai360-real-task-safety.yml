@@ -1,0 +1,27 @@
+name: AI360 real tasks consent and safety
+on:
+  pull_request:
+    paths:
+      - 'assets/140-resanta-ai360-task-drafts-preview-v1.js'
+      - 'supabase/functions/crm-ai360-task-real-approval-v1/**'
+      - 'tests/ai360-real-task-safety.test.mjs'
+      - '.github/workflows/ai360-real-task-safety.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/140-resanta-ai360-task-drafts-preview-v1.js'
+      - 'supabase/functions/crm-ai360-task-real-approval-v1/**'
+      - 'tests/ai360-real-task-safety.test.mjs'
+      - '.github/workflows/ai360-real-task-safety.yml'
+jobs:
+  safe-task-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/140-resanta-ai360-task-drafts-preview-v1.js
+      - run: node --check --input-type=module < supabase/functions/crm-ai360-task-real-approval-v1/index.ts
+      - run: node --test tests/ai360-real-task-safety.test.mjs
