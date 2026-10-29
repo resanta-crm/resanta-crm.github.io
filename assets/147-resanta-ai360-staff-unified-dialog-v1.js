@@ -9,11 +9,8 @@ const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-staff-dialog-v1';
 let history=[],memory={},pending=false,epoch=0;
 const allowed=()=>{
- try{return typeof currentUser!=='undefined'&&currentUser?.id===SID&&
-  typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
-  String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='сидарович к.н.'&&
-  currentProfile?.region==='Витебск'&&document.getElementById('app')?.style.display!=='none';
- }catch{return false;}
+ const p=root.crmAI360StaffIdentityV1?.();
+ return !!p&&['branch_director','field_manager'].includes(p.tier);
 };
 function localMonth(q){
  const iso=String(q||'').match(/\b(20\d{2})-(0[1-9]|1[0-2])\b/);
@@ -52,9 +49,10 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    if(!allowed()||!ui.authorized()||run!==epoch)return;
    const data=result.data;
    if(data?.mode!=='staff_ai360_shared_core_v1'||data?.answer_verified!==true||
-    data?.read_only!==true||data?.scope!=='Витебск'||typeof data?.answer!=='string'||
+    data?.read_only!==true||data?.scope!=='Витебск'||data?.role!==root.crmAI360StaffIdentityV1?.()?.tier||typeof data?.answer!=='string'||
     !Array.isArray(data?.domains_used))
     throw Error('unverified_branch_dialog');
+   if(root.crmAI360StaffIdentityV1?.()?.tier==='field_manager'&&data?.subject_manager!==root.crmAI360StaffIdentityV1?.()?.name)throw Error('foreign_manager_reply');
    memory=data.memory||{};
    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,320)});
    history=history.slice(-6);

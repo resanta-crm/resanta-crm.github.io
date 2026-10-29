@@ -35,23 +35,25 @@ test('Exactly the owner tool-orchestration module is shared with the branch',()=
  assert.match(staffDialog,/https:\/\/api\.openai\.com\/v1\/responses/);
  assert.match(staffDialog,/crm-ai360-staff-read-v1/);
 });
-test('Any OpenAI tool call is reauthorized with caller JWT by staff scope before model evidence',()=>{
+test('The same OpenAI tool core is reauthorized by server role and personal JWT',()=>{
  for(const literal of [
-  "logged?.data?.user?.id!==SID",
-  "prof.data?.role!=='boss'",
-  "prof.data?.region!=='Витебск'",
-  "if(!DOMAINS.includes(domain))",
-  "if(selected&&!NAMES.some",
-  "kind:'read',domain,manager:subject||selected||null",
+  "const permission=staffPermission(userId,prof.data)",
+  "['branch_director','field_manager'].includes(permission.tier)",
+  "permission.tier==='field_manager'?[permission.name]:NAMES",
+  "if(!domains.includes(domain))",
+  "if(selected&&!permitted.some",
+  "manager:permission.tier==='field_manager'?permission.name",
   "headers:{'Authorization':'Bearer '+token,'apikey':anon",
   "evidence.answer_verified!==true",
   "evidence.read_only!==true",
-  "evidence.scope?.role!=='branch_director'",
-  "evidence.scope.managers.some(x=>!NAMES.includes(x))"
+  "evidence.scope?.role!==permission.tier",
+  "evidence.scope.managers.some(x=>!permitted.includes(x))",
+  "error:'manager_outside_own_portfolio'"
  ])assert.ok(staffDialog.includes(literal),literal);
- assert.doesNotMatch(staffDialog,/\.from\('tasks'\)\.insert|\.from\('clients'\)\.select/);
+ assert.doesNotMatch(staffDialog,/\\.from\\('tasks'\\)\\.insert|\\.from\\('clients'\\)\\.select/);
  assert.ok(!staffDialog.includes("tasks').insert"));
 });
+
 test('Today routes are truly SQL-filtered to Minsk current date, not tomorrow',()=>{
  assert.match(staffRead,/date&&table==='route_plans'/);
  assert.match(staffRead,/\.eq\('visit_date',date\)/);
@@ -100,10 +102,10 @@ test('No background requests on initialization; no user switch to owner data',()
  assert.equal(calls,0);
 });
 test('Deploy includes the right versioned modules and keeps owner launcher',()=>{
- assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=6'));
+ assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=7'));
  assert.ok(page.includes('145-resanta-ai360-branch-task-approval-v1.js?v=2'));
- assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=1'));
- assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=1'));
+ assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=2'));
+ assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=2'));
  assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
  assert.match(voice,/crmAI360BranchUnifiedHandleV1\?\.\(q/);
  assert.match(voice,/crmAI360BranchTaskHandleV1\?\.\(question\)/);

@@ -144,7 +144,7 @@ Deno.serve(async req=>{
  if(body?.kind==='capabilities')return reply(req,{
   ready:true,mode:'staff_scoped_readonly_pilot_v1',role:permission.tier,
   domains:permission.domains,own_name:permission.name,source_permissions:'server_immutable_allowlist',
-  voice_enabled:permission.tier==='branch_director',real_task_creation_enabled:permission.tier==='branch_director'
+  voice_enabled:['branch_director','field_manager'].includes(permission.tier),real_task_creation_enabled:permission.tier==='branch_director'
  });
  if(body?.kind!=='read')return error(req,'invalid_kind',400);
  const domain=clampString(body.domain,40);
@@ -156,7 +156,7 @@ Deno.serve(async req=>{
   return reply(req,{
    mode:'staff_scoped_readonly_pilot_v1',answer_verified:true,domain,as_of:day,
    scope:{role:permission.tier,managers},
-   data:result,read_only:true,voice_enabled:permission.tier==='branch_director'
+   data:result,read_only:true,voice_enabled:['branch_director','field_manager'].includes(permission.tier)
   });
  }catch(e){
   const msg=String(e?.message||'read_unavailable');

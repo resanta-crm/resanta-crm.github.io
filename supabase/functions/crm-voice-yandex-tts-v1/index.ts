@@ -55,7 +55,17 @@ Deno.serve(async(req:Request)=>{
  const name=String(profile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
  const isOwner=user.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&profile?.role==='boss'&&name==='александр паюшин';
  const isBranch=user.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'&&profile?.role==='boss'&&name==='сидарович к.н.'&&profile?.region==='Витебск';
- if(profileError||(!isOwner&&!isBranch))return json({error:'forbidden'},403,origin);
+
+ const FIELD_IDS=new Set(['19dd9943-99ae-47c4-a39c-4f82a11059a6',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f']);
+ const expectedManagers={
+  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'руднев',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'ачинович',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f':'шкуран'};
+ const isField=FIELD_IDS.has(user.id)&&profile?.role==='manager'&&
+   profile?.region==='Витебск'&&name===expectedManagers[user.id];
+  if(profileError||(!isOwner&&!isBranch&&!isField))return json({error:'forbidden'},403,origin);
  let payload:any;
  try{payload=await req.json();}catch{return json({error:'invalid_json'},400,origin);}
  const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
