@@ -6,8 +6,8 @@ const js=fs.readFileSync('assets/143-resanta-ai360-unified-dialog-v1.js','utf8')
 const loader=fs.readFileSync('assets/137-resanta-ai360-lazy-launch-v1.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
 assert.match(js,/const ENDPOINT='crm-ai360-dialog-v4'/);
-assert.match(loader,/143-resanta-ai360-unified-dialog-v1.js\?v=6/);
-assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=32/);
+assert.match(loader,/143-resanta-ai360-unified-dialog-v1.js\?v=7/);
+assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=33/);
 const calls=[],answers=[];let response='ok';
 const ctx={
  navigator:{userAgent:'Macintosh'}, currentUser:{id:'dfs'},
@@ -34,7 +34,8 @@ const tick=()=>new Promise(r=>setTimeout(r,25));
  response='404';
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Какие есть акции?',ui),true);
  await tick();
- assert.deepEqual(calls.slice(1,3).map(x=>x.name),['crm-ai360-dialog-v4','crm-ai360-dialog-v3']);
+ assert.deepEqual(calls.slice(1,2).map(x=>x.name),['crm-ai360-dialog-v4'],'missing core must not fall back silently');
+ assert.match(String(answers.at(-1)),/Единое ядро Леры временно недоступно/);
  response='503';
  const prev=calls.length;
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Какие остатки?',ui),true);
@@ -43,6 +44,6 @@ const tick=()=>new Promise(r=>setTimeout(r,25));
  response='ok';
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Назови клиентов снова',ui),true);
  await tick();
- assert.equal(calls.at(-1).name,'crm-ai360-dialog-v3','next question uses stable v3 after failed v4');
- console.log('PASS safe lazy v2 browser activation, v1 missing-route fallback and no retry on 503');
+ assert.equal(calls.at(-1).name,'crm-ai360-dialog-v4','next question retries the verified v4 instead of downgrading');
+ console.log('PASS safe lazy activation, no silent fallback after 404/503, recovery on v4');
 })().catch(e=>{console.error(e);process.exitCode=1;});

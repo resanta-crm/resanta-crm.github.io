@@ -1,0 +1,31 @@
+name: AI360 unified voice platform checks
+on:
+  pull_request:
+    paths:
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'tests/ai360-voice-platform-check.mjs'
+      - '.github/workflows/ai360-voice-platform-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'tests/ai360-voice-platform-check.mjs'
+      - '.github/workflows/ai360-voice-platform-check.yml'
+jobs:
+  voice-platform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/136-resanta-voice-quality-v3.js
+      - run: node --check assets/143-resanta-ai360-unified-dialog-v1.js
+      - run: node --check supabase/functions/crm-ai360-dialog-v4/catalog.mjs
+      - run: node --check supabase/functions/crm-ai360-dialog-v4/core.mjs
+      - run: node --test tests/ai360-voice-platform-check.mjs
