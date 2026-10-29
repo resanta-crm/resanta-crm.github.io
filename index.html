@@ -342,6 +342,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 .v2273214-technical{font-size:10px;color:var(--sub)}
 </style>
 
+<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=1">
 </head>
 <body>
 <!-- CRM release: v22.2.6-ui-payments-fix -->
@@ -458,6 +459,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <button class="nav-item" id="nav-alerts" onclick="goPage('alerts','Сигналы')"><span class="icon">🔔</span> Сигналы <span class="alert-dot" id="alert-dot" style="display:none"></span></button>
       <div class="nav-section">Работа</div>
       <button class="nav-item" id="nav-clients" onclick="goPage('clients','Клиенты')"><span class="icon">🏢</span> Клиенты</button>
+      <button class="nav-item" id="nav-connect" onclick="window.crmConnectOpen126&&window.crmConnectOpen126()"><span class="icon">💬</span> Чаты</button>
       <button class="nav-item" id="nav-tasks" onclick="goPage('tasks','Задачи')"><span class="icon">✅</span> Задачи <span class="alert-dot" id="tasks-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-markdown" onclick="goPage('markdown','Уценка')"><span class="icon">🏷️</span> Уценка <span class="alert-dot" id="markdown-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')"><span class="icon">📝</span> Визиты</button>
@@ -492,6 +494,49 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
         <div class="card" id="boss-no-visit-card" style="display:none">
           <div class="card-title">⚠️ Контроль фактических визитов</div>
           <div id="dash-no-visit"></div>
+        </div>
+      </div>
+      <div class="page" id="page-connect">
+        <div class="c126">
+          <div class="c126-top">
+            <div><div class="page-title" style="margin-bottom:0">💬 РЕСАНТА CONNECT 360°</div><p>Корпоративные чаты · Витебск</p></div>
+            <button type="button" class="c126-btn" id="c126-refresh">↻ Обновить</button>
+          </div>
+          <div class="c126-status" id="c126-status">Выберите чат или создайте новый.</div>
+          <div class="c126-grid">
+            <aside class="c126-left">
+              <div class="c126-controls">
+                <button type="button" id="c126-new" class="c126-btn primary">+ Новый чат</button>
+                <input id="c126-filter" placeholder="Поиск чатов" aria-label="Поиск чатов" autocomplete="off">
+              </div>
+              <div id="c126-rooms" class="c126-rooms"></div>
+            </aside>
+            <div class="c126-chat">
+              <div class="c126-head"><div><strong id="c126-name">Выберите чат</strong><small id="c126-info">Только сотрудники CRM</small></div>
+                <button type="button" id="c126-invite" class="c126-btn" hidden>+ Пригласить</button>
+              </div>
+              <div id="c126-messages" class="c126-messages"><div class="c126-empty">Создайте первый чат с коллегой.</div></div>
+              <form id="c126-compose" class="c126-compose" hidden>
+                <textarea id="c126-text" maxlength="4000" rows="2" aria-label="Сообщение" placeholder="Напишите сообщение…" required></textarea>
+                <button type="submit" id="c126-send" class="c126-btn primary">Отправить</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div id="c126-overlay" class="c126-overlay" hidden>
+          <div class="c126-dialog" role="dialog" aria-modal="true" aria-labelledby="c126-dialog-title">
+            <div class="c126-dialog-header"><strong id="c126-dialog-title">Новый чат</strong><button id="c126-close" class="c126-btn" type="button">✕</button></div>
+            <form id="c126-room-form">
+              <label id="c126-kind-label">Тип чата<select id="c126-kind">
+                <option value="direct">Личный чат</option><option value="group">Групповой чат</option><option value="channel">Официальный канал</option>
+              </select></label>
+              <label id="c126-title-label">Название группы<input id="c126-title" maxlength="100" placeholder="Например, Склад Витебск"></label>
+              <div style="font-size:12px;font-weight:600;margin-bottom:5px">Участники</div>
+              <div class="c126-people" id="c126-people"></div>
+              <div class="c126-buttons"><button type="submit" id="c126-save" class="c126-btn primary">Создать</button>
+                <button type="button" id="c126-cancel" class="c126-btn">Отмена</button></div>
+            </form>
+          </div>
         </div>
       </div>
       <div class="page" id="page-alerts">
@@ -886,6 +931,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     <button class="bn-item" id="bn-my-routes" onclick="goPage('my-routes','Мой маршрут')">📅<span>Маршрут</span></button>
     <button class="bn-item" id="bn-route" onclick="goPage('route','Маршрут дня')">🗺️<span>На день</span></button>
     <button class="bn-item" id="bn-workday" style="display:none" onclick="goPage('workday','Рабочий день')">🚗<span>Рабочий день</span></button>
+    <button class="bn-item" id="bn-connect" onclick="window.crmConnectOpen126&&window.crmConnectOpen126()">💬<span>Чаты</span></button>
     <button class="bn-item" id="bn-tasks" onclick="goPage('tasks','Задачи')">✅<span>Задачи</span></button>
     <button class="bn-item" id="bn-markdown" onclick="goPage('markdown','Уценка')">🏷️<span>Уценка</span><span class="alert-dot" id="bn-markdown-dot" style="display:none"></span></button>
     <button class="bn-item" id="bn-visits" onclick="goPage('visits','Визиты')">📝<span>Визиты</span></button>
@@ -1733,5 +1779,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Director-grade OpenAI/Yandex providers and shared model tool core; only upon authenticated open. -->
 <script defer src="./assets/146-resanta-ai360-branch-premium-voice-v1.js?v=3"></script>
 <script defer src="./assets/147-resanta-ai360-staff-unified-dialog-v1.js?v=3"></script>
+<script defer src="./assets/151-resanta-connect-v1.js?v=1"></script>
 </body>
 </html>
