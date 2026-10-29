@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check JavaScript syntax
         run: |
           node --check connect-v1/app.js
@@ -28,7 +30,7 @@ jobs:
       - name: Verify only isolated pilot files changed
         shell: bash
         run: |
-          git fetch --no-tags origin main --depth=1
+          git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD > /tmp/connect-files
           cat /tmp/connect-files
           if grep -Ev '^(connect-v1/|\.github/workflows/connect-126-check\.yml$)' /tmp/connect-files; then
