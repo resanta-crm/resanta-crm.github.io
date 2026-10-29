@@ -502,7 +502,13 @@
       if(root.classList.contains('rva-mini')){root.classList.remove('rva-mini');return;}
       root.hidden=!root.hidden;trigger.setAttribute('aria-expanded',String(!root.hidden));
       if(root.hidden)closePanel();
-      else if(!historyEl.children.length)answer('Привет! Я РЕСАНТА AI 360°. Могу проверить продажи, клиентов, долги и маршруты.');
+      else {
+        if(!historyEl.children.length)answer('Привет! Я РЕСАНТА AI 360°. Могу проверить продажи, клиентов, долги и маршруты.');
+        // Runs only after the explicit director click opening the Lera panel.
+        // Authenticated service returns verified CRM data, no task writes.
+        try{window.crmAI360DirectorProactiveOpenV2?.({answer,textStatus});}
+        catch(e){console.warn('AI360 proactive daily brief unavailable:',e);}
+      }
     });
     root.querySelector('.rva-close').addEventListener('click',closePanel);
     const mini=root.querySelector('.rva-mini-toggle');
