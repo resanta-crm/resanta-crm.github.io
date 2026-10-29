@@ -1,4 +1,5 @@
 // Shared deterministic conversational subject boundaries. No database access or writes.
+import { russianSpokenDates } from './dates.mjs';
 export const KNOWN_ENTITY_DOMAINS=new Set([
  'triovist','triovist_stock','triovist_tasks','competitors','cards_21vek',
  'card_issues','mrc','parser','infographics'
@@ -33,6 +34,7 @@ export function requestContext(question,memory,managers){
   resetManager:network||(client&&!explicit),subject:client?'client':manager?'manager':'network'};
 }
 export function effectiveManager(domain,context){
+ if(domain==='client_groups'||domain==='client_schedule')return {manager:null,scope:'client_all'};
  if(domain==='triovist'){
   return context.explicitManager?{error:'triovist_personal_attribution_unavailable'}:
    {manager:null,scope:'client_all'};
@@ -41,7 +43,7 @@ export function effectiveManager(domain,context){
  return {manager:context.manager,scope:context.manager?'manager':'network'};
 }
 export function localeSpeech(value){
- return String(value||'')
+ return russianSpokenDates(String(value||''))
   .replace(/в\s+с[эе]мпле/giu,'в неполной выборке')
   .replace(/с[эе]мпл(?:а|е|у|ом)?/giu,'неполная выборка')
   .replace(/\bsample\b/gi,'неполная выборка')

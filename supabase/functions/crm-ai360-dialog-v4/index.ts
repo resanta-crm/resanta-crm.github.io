@@ -3,6 +3,7 @@ import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool } from './
 import { runToolCore } from './core.mjs';
 import { readTasks } from './task-read.mjs';
 import { requestContext, effectiveManager, guardVoicePair } from './context.mjs';
+import { resolveClient } from './client-identity.mjs';
 
 // Isolated read-only director pilot. v3 is NOT imported, replaced or modified.
 const ORIGINS = new Set(['https://resanta-crm.by', 'https://www.resanta-crm.by']);
@@ -137,7 +138,8 @@ Deno.serve(async req => {
   const memory = body?.memory && typeof body.memory === 'object' ? {
     manager: String(body.memory.manager || '').slice(0, 90),
     month: String(body.memory.month || '').slice(0, 7),
-    domain: String(body.memory.domain || '').slice(0, 30)
+    domain: String(body.memory.domain || '').slice(0, 30),
+    client: String(body.memory.client || '').slice(0, 90)
   } : {};
   // Per-dialog reservation shared with legacy v3, existing Yandex TTS spend and daily limit.
   // Claim is transactional; accounting is restricted to the Supabase service role.
@@ -156,7 +158,7 @@ Deno.serve(async req => {
   const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
   const subject=requestContext(question,memory,managerNames);
   const invalidSources=[], evidence=[];
-  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='';
+  let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='';
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
@@ -174,6 +176,30 @@ Deno.serve(async req => {
     lastMonth = month;
     lastDomain = domain;
     try {
+      if(domain==='client_groups'||domain==='client_schedule'){
+        const resolved=await resolveClient(svc,{
+          client:args.client,question,remembered:memory.client
+        });
+        if(resolved.error){
+          const t={domain,error:resolved.error,candidates:resolved.candidates||[],
+            message:'No reliable matching client. Ask to confirm the exact customer name.'};
+          evidence.push(t);return t;
+        }
+        const fn=domain==='client_groups'?'crm_ai360_client_groups_v42':'crm_ai360_client_schedule_v42';
+        const params=domain==='client_groups'?
+          {p_client_id:resolved.id,p_month:month+'-01'}:
+          {p_client_id:resolved.id};
+        const result=await svc.rpc(fn,params);
+        if(result.error||!result.data)throw new Error('client_read_unavailable');
+        const {client_id,...data}=result.data;
+        const t={domain,source:fn,...data,
+          groups:Array.isArray(data.groups)?data.groups.slice(0,8):undefined,
+          routes:Array.isArray(data.routes)?data.routes.slice(0,7):undefined,
+          tasks:Array.isArray(data.tasks)?data.tasks.slice(0,7):undefined,
+          partial:Boolean(data.partial||((data.groups||[]).length>8)||((data.routes||[]).length>7)||((data.tasks||[]).length>7))};
+        lastClientName=resolved.name;subject.manager=null;subject.subject='client';subject.client=true;
+        lastManager=null;evidence.push(t);return t;
+      }
       if(domain==='tasks'){
         const t=await readTasks(svc,manager,question,history,day);
         evidence.push(t);return t;
@@ -219,7 +245,7 @@ Deno.serve(async req => {
   };
   const output = await runToolCore({
     question, history, memory: { ...memory,
-      manager:subject.manager||'',subject:subject.subject,
+      manager:subject.manager||'',subject:subject.subject,client:memory.client||'',
       subject_is_client:subject.client,explicit_manager:subject.explicitManager||null,
       catalog: CRM_AI360_TOOLS.map(x => x.id + ': ' + x.label).join('; '),
       today: day, available_domains: DOMAINS },
@@ -258,6 +284,7 @@ Deno.serve(async req => {
     auto_corrected:!!pair.corrected,month:lastMonth,manager:subject.manager||null,
     mode:'director_readonly_v41',engine:'gpt-5.4-mini',
     memory:{...memory,month:lastMonth,manager:subject.manager||'',
+      client:lastClientName||(subject.subject==='client'?memory.client||'':''),
       subject:subject.subject,domain:lastDomain||output.used[0]?.split('/')[0]||memory.domain||''}
   });
 });
