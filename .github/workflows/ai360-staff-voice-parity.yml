@@ -1,0 +1,45 @@
+name: AI360 branch OpenAI/Yandex shared core parity
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-voice-transcribe-v1/**'
+      - 'supabase/functions/crm-voice-yandex-tts-v1/**'
+      - 'supabase/functions/crm-ai360-staff-read-v1/**'
+      - 'supabase/functions/crm-ai360-staff-dialog-v1/**'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/146-resanta-ai360-branch-premium-voice-v1.js'
+      - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'tests/ai360-branch-premium-parity.test.mjs'
+      - '.github/workflows/ai360-staff-voice-parity.yml'
+      - 'index.html'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-voice-transcribe-v1/**'
+      - 'supabase/functions/crm-voice-yandex-tts-v1/**'
+      - 'supabase/functions/crm-ai360-staff-read-v1/**'
+      - 'supabase/functions/crm-ai360-staff-dialog-v1/**'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/146-resanta-ai360-branch-premium-voice-v1.js'
+      - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'tests/ai360-branch-premium-parity.test.mjs'
+      - '.github/workflows/ai360-staff-voice-parity.yml'
+      - 'index.html'
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/144-resanta-ai360-branch-voice-v1.js
+      - run: node --check assets/146-resanta-ai360-branch-premium-voice-v1.js
+      - run: node --check assets/147-resanta-ai360-staff-unified-dialog-v1.js
+      - run: node --check supabase/functions/crm-ai360-staff-dialog-v1/core.mjs
+      - run: node --check --input-type=module < supabase/functions/crm-ai360-staff-dialog-v1/index.ts
+      - run: node --check --input-type=module < supabase/functions/crm-ai360-staff-read-v1/index.ts
+      - run: node --check --input-type=module < supabase/functions/crm-voice-transcribe-v1/index.ts
+      - run: node --check --input-type=module < supabase/functions/crm-voice-yandex-tts-v1/index.ts
+      - run: node --test tests/ai360-branch-premium-parity.test.mjs tests/ai360-staff-scoped-roles.test.mjs tests/ai360-sidarovich-voice-pilot.test.mjs tests/ai360-branch-director-task-confirmation.test.mjs
