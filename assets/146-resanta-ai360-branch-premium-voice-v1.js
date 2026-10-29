@@ -90,16 +90,43 @@ async function capture(run){
  const parts=[];const started=Date.now();
  const r=new MediaRecorder(media,mime?{mimeType:mime}:undefined);recorder=r;
  return new Promise((resolve,reject)=>{
-  let ended=false,clock=0;
-  function finish(){if(ended)return;ended=true;clearTimeout(clock);if(r.state==='recording')r.stop();}
+  let ended=false,clock=0,poll=0,audioContext=null,analyser=null,source=null;
+  let lastLoud=0,heard=false;
+  function release(){
+   clearTimeout(clock);clearInterval(poll);
+   try{source?.disconnect();}catch{}
+   try{analyser?.disconnect();}catch{}
+   if(audioContext)Promise.resolve(audioContext.close()).catch(()=>{});
+  }
+  function finish(){if(ended)return;ended=true;release();if(r.state==='recording')r.stop();}
   r.ondataavailable=e=>{if(e.data?.size)parts.push(e.data);};
-  r.onerror=()=>{clearTimeout(clock);reject(Error('Ошибка записи'));};
+  r.onerror=()=>{release();reject(Error('Ошибка записи'));};
   r.onstop=()=>{
-   clearTimeout(clock);
-   if(recorder===r)recorder=null;
+   release();if(recorder===r)recorder=null;
    resolve({blob:new Blob(parts,{type:r.mimeType||'audio/webm'}),duration:Math.min(16.4,(Date.now()-started)/1000)});
   };
   r.start(250);clock=setTimeout(finish,12000);
+  // The owner's assistant also stops after a natural silence; do not force the
+  // user to wait 12s for every question. Failure of this meter is nonfatal.
+  try{
+   const AudioContextClass=root.AudioContext||root.webkitAudioContext;
+   if(AudioContextClass){
+    audioContext=new AudioContextClass();
+    source=audioContext.createMediaStreamSource(media);
+    analyser=audioContext.createAnalyser();analyser.fftSize=1024;
+    source.connect(analyser);const buffer=new Uint8Array(analyser.fftSize);
+    poll=setInterval(()=>{
+     if(ended)return;
+     analyser.getByteTimeDomainData(buffer);
+     let rms=0;
+     for(const v of buffer){const x=(v-128)/128;rms+=x*x;}
+     rms=Math.sqrt(rms/buffer.length);
+     if(rms>.003){heard=true;lastLoud=Date.now();}
+     if(heard&&Date.now()-started>1750&&Date.now()-lastLoud>1550)finish();
+    },120);
+   }
+  }catch{release();poll=0;}
+
  });
 }
 async function transcribe(record,run){
