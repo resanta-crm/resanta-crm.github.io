@@ -42,7 +42,7 @@ test('The same OpenAI tool core is reauthorized by server role and personal JWT'
   "permission.tier==='branch_director'?NAMES:[permission.name]",
   "if(!domains.includes(domain))",
   "if(selected&&!permitted.some",
-  "manager:permission.tier==='field_manager'?permission.name",
+  "manager:permission.tier!=='branch_director'?permission.name",
   "headers:{'Authorization':'Bearer '+token,'apikey':anon",
   "evidence.answer_verified!==true",
   "evidence.read_only!==true",
