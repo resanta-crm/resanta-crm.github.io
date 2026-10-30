@@ -60,5 +60,16 @@ check('JS parses and UI scripts are deferred from existing CRM',()=>{
  assert.match(html,/155-resanta-connect-permissions-v1\.js/);
  assert.match(html,/155-resanta-connect-permissions-v1\.css/);
 });
+check('Realtime notifications alert incoming messages and call invitations',()=>{
+ const notify=get('assets/153-resanta-connect-notify-v1.js');
+ assert.match(notify,/startRealtime\(id\)/);
+ assert.match(notify,/connect_messages_v1/);
+ assert.match(notify,/startsWith\('📹 Начался видеозвонок'\)/);
+ assert.match(notify,/crmConnectOpenRoom136/);
+ assert.match(chat,/crmConnectOpenRoom136=openInvitedRoom/);
+ assert.match(get('assets/154-resanta-connect-video-v1.js'),/window\.crmConnectVideo131=\{init,chatChanged,join\}/);
+ assert.match(html,/153-resanta-connect-notify-v1\.js\?v=2/);
+ assert.match(html,/154-resanta-connect-video-v1\.js\?v=5/);
+});
 console.log('CONNECT #136 permissions: '+passed+' passed, '+failed+' failed');
 if(failed)process.exitCode=1;
