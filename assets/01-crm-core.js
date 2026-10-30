@@ -1964,7 +1964,7 @@ function canonicalSalesClientName(s){
     .replace(/[^a-zа-я0-9]/gi,'');
 }
 
-function showResetForm() { document.getElementById('login-form').style.display='none'; document.getElementById('reset-form').style.display='block'; }
+function showResetForm() { document.getElementById('login-form').style.display='none'; document.getElementById('reset-form').style.display='block'; const source=document.getElementById('login-email')?.value?.trim();if(source)document.getElementById('reset-email').value=source; }
 function showLoginForm() { document.getElementById('reset-form').style.display='none'; document.getElementById('login-form').style.display='block'; }
 
 // Оборачивает промис таймаутом — чтобы зависший запрос к серверу не вешал
@@ -10296,7 +10296,67 @@ document.querySelectorAll(".modal-bg").forEach(m=>m.addEventListener("click",e=>
 })();
 
 // Auth handling
+
+function crmIsRecoveryUrlV1(){
+ try{
+   const h=new URLSearchParams(location.hash.replace(/^#/,''));
+   const q=new URLSearchParams(location.search);
+   return h.get('type')==='recovery'||q.get('type')==='recovery';
+ }catch(_){return false}
+}
+function crmShowPasswordRecoveryV1(){
+ let screen=document.getElementById('crm-password-recovery-v1');
+ if(screen){screen.style.display='flex';return}
+ screen=document.createElement('div');
+ screen.id='crm-password-recovery-v1';
+ screen.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#f3f6fb;display:flex;align-items:center;justify-content:center;padding:18px;font-family:Arial,sans-serif';
+ screen.innerHTML='<form id="crm-recovery-form-v1" style="background:#fff;border:1px solid #dce5f0;border-radius:14px;padding:26px;width:min(440px,100%);box-shadow:0 10px 35px #152a4a18">'
+  +'<h2 style="margin:0 0 8px;color:#143e65">РЕСАНТА CRM · Новый пароль</h2>'
+  +'<p style="font-size:13px;color:#526176">Ссылка подтверждена. Установите новый пароль для своей учётной записи.</p>'
+  +'<label style="display:block;font-size:12px;margin:12px 0 5px">Новый пароль</label>'
+  +'<input id="crm-recovery-pass-v1" type="password" autocomplete="new-password" required minlength="10" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #cbd5e1;border-radius:8px">'
+  +'<label style="display:block;font-size:12px;margin:12px 0 5px">Повторите новый пароль</label>'
+  +'<input id="crm-recovery-confirm-v1" type="password" autocomplete="new-password" required minlength="10" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #cbd5e1;border-radius:8px">'
+  +'<p style="font-size:12px;color:#6d7c89">Минимум 10 символов: заглавная и строчная латинские буквы и цифра.</p>'
+  +'<div id="crm-recovery-error-v1" role="alert" style="font-size:13px;color:#a11b1b;margin:9px 0"></div>'
+  +'<button type="submit" style="background:#1761a2;color:white;border:0;border-radius:8px;padding:12px 16px;cursor:pointer">Сохранить пароль</button></form>';
+ document.body.appendChild(screen);
+ const form=screen.querySelector('form');
+ form.onsubmit=async(e)=>{
+   e.preventDefault();
+   const value=screen.querySelector('#crm-recovery-pass-v1').value;
+   const confirm=screen.querySelector('#crm-recovery-confirm-v1').value;
+   const error=screen.querySelector('#crm-recovery-error-v1');
+   error.textContent='';
+   if(!(value.length>=10&&/[a-z]/.test(value)&&/[A-Z]/.test(value)&&/[0-9]/.test(value))){error.textContent='Пароль не соответствует требованиям безопасности.';return}
+   if(value!==confirm){error.textContent='Пароли не совпадают.';return}
+   const btn=form.querySelector('button[type=submit]');btn.disabled=true;
+   try{
+     const result=await db.auth.updateUser({password:value});
+     if(result.error)throw result.error;
+     await db.auth.signOut({scope:'local'});
+     try{history.replaceState({},'',location.pathname)}catch(_){}
+     screen.remove();
+     currentUser=null;currentProfile=null;
+     document.body.classList.remove('crm-auditor-mode');
+     document.getElementById('app').style.display='none';
+     document.getElementById('login-wrap').style.display='flex';
+     showLoginForm();
+     const info=document.getElementById('login-info');
+     if(info){info.style.display='block';info.textContent='✅ Пароль сохранён. Теперь войдите по email с новым паролем.'}
+   }catch(err){error.textContent='Не удалось сохранить пароль: '+String(err?.message||err)}
+   finally{btn.disabled=false}
+ };
+}
 async function initAuth(){
+  // Recovery URLs must never bootstrap sales, GPS or warehouse before the
+  // PASSWORD_RECOVERY event has verified the one-time link.
+  if(crmIsRecoveryUrlV1()){
+    document.getElementById('login-wrap').style.display='flex';
+    const info=document.getElementById('login-info');
+    if(info){info.textContent='Проверяем ссылку для смены пароля…';info.style.display='block'}
+    return;
+  }
   const {data:{session}} = await db.auth.getSession();
   if(session && session.user){
     currentUser=session.user;
@@ -10313,8 +10373,9 @@ window.addEventListener('focus',()=>crmEnsureFreshSessionV236166(false).catch(e=
 
 db.auth.onAuthStateChange(async(event,session)=>{
   if(event==='PASSWORD_RECOVERY'){
-    const newPass=prompt('Введите новый пароль (минимум 6 символов):');
-    if(newPass){const {error}=await db.auth.updateUser({password:newPass});if(!error){alert('✅ Пароль изменён! Войдите с новым паролем.');}}
+    // Defer user interaction until the auth callback returns: no auth calls
+    // inside the onAuthStateChange handler (prevents session deadlock).
+    setTimeout(crmShowPasswordRecoveryV1,0);
     return;
   }
   if(event==='SIGNED_OUT'){
