@@ -18,7 +18,7 @@
    'audio/webm':'webm','audio/mp4':'mp4','audio/mpeg':'mp3','audio/ogg':'ogg'
  };
  const OPTIONS={};
- let ready=false, sending=false, recorder=null, recStream=null, recParts=[],recTimer=null,recRoom=null;
+ let ready=false, sending=false, recorder=null, recStream=null, recParts=[],recTimer=null,recWatch=null,recRoom=null;
  let attachmentCache=new Map();
  function say(s,error){OPTIONS.notify?.(s,!!error);}
  function client(){return OPTIONS.client?.();}
@@ -135,6 +135,7 @@
  }
  function clearRecording(){
   if(recTimer){clearTimeout(recTimer);recTimer=null;}
+  if(recWatch){clearInterval(recWatch);recWatch=null;}
   for(const track of recStream?.getTracks?.()||[])try{track.stop();}catch(_){}
   recStream=null;recorder=null;recParts=[];recRoom=null;
   const mic=$('c127-mic');if(mic){mic.textContent='🎙';mic.classList.remove('c127-recording');mic.title='Записать голосовое сообщение';}
@@ -178,6 +179,7 @@
    if(mic){mic.textContent='⏹';mic.classList.add('c127-recording');mic.title='Остановить и отправить запись';}
    say('Идёт запись. Нажмите ⏹, чтобы остановить и отправить (до 90 секунд).');
    recTimer=setTimeout(()=>stopRecording(false),MAX_VOICE_MS);
+   recWatch=setInterval(()=>discardIfNeeded(),400);
   }catch(e){clearRecording();say('Доступ к микрофону не получен: '+errorMsg(e),true);}
  }
  function discardIfNeeded(){if(recorder&&(!active()||room()!==recRoom))stopRecording(true);}
@@ -192,7 +194,7 @@
    if(file)sendFile(file,false);
   });
   mic.addEventListener('click',toggleRecording);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)discardIfNeeded();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&recorder)stopRecording(true);});
  }
  window.crmConnectMedia127={init,sync,syncOne,discardIfNeeded};
 })();
