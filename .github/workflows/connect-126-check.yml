@@ -1,65 +1,40 @@
-name: CONNECT 126 safety checks
+name: CONNECT 126 regression
 on:
   pull_request:
     paths:
-      - "tests/connect-126.test.js"
-      - "tests/connect-127.test.js"
-      - "assets/153-resanta-connect-notify-v1.js"
-      - "supabase/migrations/20261030080000_connect_128_unread.sql"
-      - "tests/connect-128.test.js"
-      - ".github/workflows/connect-128-check.yml"
-      - "assets/152-resanta-connect-media-v1.js"
-      - "supabase/migrations/20261030070000_connect_127_media.sql"
-      - ".github/workflows/connect-127-check.yml"
-      - "assets/151-resanta-connect-v1.*"
       - "index.html"
-      - "supabase/migrations/20261029190000_connect_v1.sql"
-      - "supabase/migrations/20261029191000_connect_v1_perf.sql"
-      - ".github/workflows/connect-126-check.yml"
+      - "assets/151-resanta-connect-v1.js"
+      - "assets/154-resanta-connect-video-v1.js"
+      - "assets/156-resanta-connect-android-push-v1.js"
+      - "supabase/functions/connect-fcm-send/index.ts"
+      - "supabase/migrations/20261030113000_connect_138_push_prep.sql"
+      - "tests/connect-*.test.js"
+      - ".github/workflows/connect-*-check.yml"
   push:
-    branches:
-      - "feature/connect-126-vitebsk-pilot"
-    paths:
-      - "tests/connect-126.test.js"
-      - "tests/connect-127.test.js"
-      - "assets/153-resanta-connect-notify-v1.js"
-      - "supabase/migrations/20261030080000_connect_128_unread.sql"
-      - "tests/connect-128.test.js"
-      - ".github/workflows/connect-128-check.yml"
-      - "assets/152-resanta-connect-media-v1.js"
-      - "supabase/migrations/20261030070000_connect_127_media.sql"
-      - ".github/workflows/connect-127-check.yml"
-      - "assets/151-resanta-connect-v1.*"
-      - "index.html"
-      - "supabase/migrations/20261029190000_connect_v1.sql"
-      - ".github/workflows/connect-126-check.yml"
+    branches: ["feature/connect-138-fcm-push-prep"]
 permissions:
   contents: read
 jobs:
-  contract:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check JavaScript syntax
+      - name: Syntax and CRM CONNECT integration
         run: |
           node --check assets/151-resanta-connect-v1.js
-          node --check tests/connect-126.test.js
-          node --check tests/connect-127.test.js
-          node --check assets/153-resanta-connect-notify-v1.js
-          node --check tests/connect-128.test.js
-          node --check assets/152-resanta-connect-media-v1.js
-      - name: Verify security boundary and feature isolation
-        run: node tests/connect-126.test.js
-      - name: Verify only approved CRM entrypoint and new CONNECT assets changed
-        shell: bash
+          node --check assets/154-resanta-connect-video-v1.js
+          node --check assets/156-resanta-connect-android-push-v1.js
+          node --check tests/connect-138.test.js
+          node tests/connect-126.test.js
+          node tests/connect-138.test.js
+      - name: No unrelated CRM files modified
         run: |
-          git fetch --no-tags origin main
-          git diff --name-only origin/main...HEAD > /tmp/connect-files
+          git diff --name-only origin/main...HEAD >/tmp/connect-files
           cat /tmp/connect-files
-          if grep -Ev '^(tests/connect-126\.test\.js$|tests/connect-127\.test\.js$|tests/connect-128\.test\.js$|assets/153-resanta-connect-notify-v1\.js$|supabase/migrations/20261030080000_connect_128_unread\.sql$|\.github/workflows/connect-128-check\.yml$|assets/152-resanta-connect-media-v1\.js$|supabase/migrations/20261030070000_connect_127_media\.sql$|\.github/workflows/connect-127-check\.yml$|assets/151-resanta-connect-v1\.(js|css)$|index\.html$|supabase/migrations/20261029190000_connect_v1\.sql$|supabase/migrations/20261029191000_connect_v1_perf\.sql$|tests/connect-131\.test\.js$|assets/154-resanta-connect-video-v1\.(js|css)$|supabase/functions/connect-livekit-token/index\.ts$|\.github/workflows/connect-131-check\.yml$|tests/connect-133\.test\.js$|\.github/workflows/connect-133-check\.yml$|\.github/workflows/connect-126-check\.yml$|assets/155-resanta-connect-permissions-v1\.(js|css)|supabase/migrations/20261030105000_connect_136_permissions\.sql|tests/connect-136\.test\.js|\.github/workflows/connect-136-check\.yml|assets/156-resanta-connect-android-push-v1\.js|supabase/migrations/20261030113000_connect_138_push_prep\.sql|tests/connect-138\.test\.js|\.github/workflows/connect-138-check\.yml|supabase/functions/connect-fcm-send/index\.ts)' /tmp/connect-files; then
-            echo 'Unexpected production file modification!' >&2
+          if grep -Ev '^(index\.html|assets/(151-resanta-connect-v1\.js|154-resanta-connect-video-v1\.js|156-resanta-connect-android-push-v1\.js)|supabase/(functions/connect-fcm-send/index\.ts|migrations/20261030113000_connect_138_push_prep\.sql)|tests/connect-(133|136|138)\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136|138)-check\.yml)$' /tmp/connect-files; then
+            echo "Non-CONNECT file touched" >&2
             exit 1
           fi
