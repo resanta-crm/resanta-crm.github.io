@@ -1,0 +1,35 @@
+name: AIR3 isolated pilot checks
+on:
+  pull_request:
+    paths:
+      - 'air3*.html'
+      - 'assets/156-air3-controller-v1.js'
+      - 'supabase/functions/crm-ai360-air3-gateway-v1/**'
+      - 'supabase/migrations/*air3*'
+      - '.github/workflows/air3-pilot-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/crm-ai360-air3-gateway-v1/index.ts
+      - run: node --check assets/156-air3-controller-v1.js
+      - name: Check inline JavaScript without running it
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,subprocess,tempfile
+          for p in [Path('air3.html'),Path('air3-control.html')]:
+              html=p.read_text()
+              for i,script in enumerate(re.findall(r'<script(?:\s+[^>]*)?>([\s\S]*?)</script>',html)):
+                  with tempfile.NamedTemporaryFile(mode='w',suffix='.js') as f:
+                      f.write(script)
+                      f.flush()
+                      subprocess.run(['node','--check',f.name],check=True)
+          PY
