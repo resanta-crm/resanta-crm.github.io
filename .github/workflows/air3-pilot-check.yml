@@ -1,0 +1,81 @@
+name: AIR3 isolated pilot checks
+on:
+  pull_request:
+    paths:
+      - 'air3*.html'
+      - 'assets/156-air3-controller-v1.js'
+      - 'supabase/functions/crm-ai360-air3-gateway-v1/**'
+      - 'supabase/migrations/*air3*'
+      - '.github/workflows/air3-pilot-check.yml'
+      - 'tests/air3-security-smoke.cjs'
+      - 'tests/air3-schema-checks.sql'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/crm-ai360-air3-gateway-v1/index.ts
+      - run: node --check assets/156-air3-controller-v1.js
+      - run: node tests/air3-security-smoke.cjs
+      - name: Check inline JavaScript without running it
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,subprocess,tempfile
+          for p in [Path('air3.html'),Path('air3-control.html')]:
+              html=p.read_text()
+              for i,script in enumerate(re.findall(r'<script(?:\s+[^>]*)?>([\s\S]*?)</script>',html)):
+                  with tempfile.NamedTemporaryFile(mode='w',suffix='.js') as f:
+                      f.write(script)
+                      f.flush()
+                      subprocess.run(['node','--check',f.name],check=True)
+          PY
+  gateway-negative-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure the public gateway rejects unauthenticated access
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1"
+          check() {
+            expected="$1"; shift
+            status=$(curl --fail-with-body --silent --show-error --max-time 15 -o /tmp/air3-response.json -w '%{http_code}' "$@" || true)
+            if [ "$status" != "$expected" ]; then
+              echo "::error::Expected $expected but got $status; body $(cat /tmp/air3-response.json)"
+              exit 1
+            fi
+          }
+          check 403 -X POST "$URL" -H 'Origin: https://example.com' -H 'Content-Type: application/json' --data '{"action":"create"}'
+          check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"create"}'
+          check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"ask","token":"invalid"}'
+          check 204 -X OPTIONS "$URL" -H 'Origin: https://resanta-crm.by' -H 'Access-Control-Request-Method: POST'
+  database-security:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: air3-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test schema and grants in disposable PostgreSQL
+        run: |
+          set -euo pipefail
+          PSQL="docker run --rm --network host -e PGPASSWORD=air3-ci-password -v $PWD:/src:ro postgres:17 psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1"
+          $PSQL -c "CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;"
+          $PSQL -f /src/supabase/migrations/20261030123300_air3_temporary_pairing_v1.sql
+          $PSQL -f /src/tests/air3-schema-checks.sql
