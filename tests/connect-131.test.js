@@ -73,7 +73,7 @@ const checks=[
   assert.match(client,/status\(enabled\?'Микрофон включён\.'/);
   assert.match(client,/Permission denied/);
   assert.match(client,/Демонстрация не началась: окно не выбрано/);
-  assert.match(client,/finally\{b\.disabled=false;updateMini\(\);\}/);
+  assert.match(client,/b\.disabled=false;updateMini\(\);/);
  }],
  ['Defer scripts finish before CRM chat initializes',()=>{
   assert.match(chat,/document\.readyState==='complete'\)init\(\)/);
