@@ -1,0 +1,75 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta http-equiv="Cache-Control" content="no-store">
+<title>РЕСАНТА AI · Очки INMO AIR3</title>
+<style>:root{font-family:system-ui,Arial;background:#071a35;color:#eef5ff}body{max-width:640px;margin:0 auto;padding:24px}h1{font-size:25px}p{line-height:1.5;color:#bccbe1}button,input{border-radius:12px;border:1px solid #6d88ae;padding:15px;font:inherit}button{background:#1967b4;color:white;cursor:pointer;margin:8px 6px 8px 0}button:disabled{opacity:.4}input{background:#142b49;color:#fff;font-size:24px;letter-spacing:5px;width:190px;text-align:center}section{border:1px solid #4b6488;border-radius:16px;padding:20px;margin-top:22px}#answer{white-space:pre-wrap;line-height:1.6;font-size:19px}#status{font-weight:700;color:#9dd1ff}.hidden{display:none}</style></head>
+<body><h1>🥽 РЕСАНТА AI · INMO AIR3</h1><p>Безопасное подключение без пароля CRM. Код создаётся на телефоне или MacBook. Очки не сохраняют токен после закрытия страницы.</p>
+<section id="setup"><h2>Временный вход</h2><label for="code">Код с телефона / MacBook</label><p><input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" placeholder="000000"></p><button id="connect">Подключиться</button><p id="status">Ожидаю код</p></section>
+<section id="assistant" class="hidden"><h2>Лера · безопасный пилот</h2><p>Доступны подтверждённые данные о продажах и ПДЗ. Другие команды пока не подключены.</p><button id="voice">🎙 Спросить голосом</button><button id="sales">Продажи и план</button><button id="debt">Просроченная ПДЗ</button><button id="exit">Завершить работу</button><p id="answer" aria-live="polite">Слушаю вас.</p></section>
+<script>
+(()=>{'use strict';
+const URL='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1';
+const $=id=>document.getElementById(id);
+let pairId='',secret='',token='',poll=null,lastActivity=0,sessionEnd=0,recognition=null;
+const makeSecret=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(40)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+const setStatus=s=>$('status').textContent=s;
+async function post(action,params={}){
+const response=await fetch(URL,{method:'POST',cache:'no-store',referrerPolicy:'no-referrer',headers:{'content-type':'application/json'},body:JSON.stringify({action,...params})});
+const val=await response.json();if(!response.ok||!val.ok)throw Error(val.error||'Ошибка сети');return val;
+}
+function stop(){
+if(poll){clearInterval(poll);poll=null;}
+token='';secret='';pairId='';lastActivity=0;sessionEnd=0;
+if(recognition){try{recognition.stop()}catch{}recognition=null;}
+try{speechSynthesis.cancel()}catch{}
+$('assistant').classList.add('hidden');$('setup').classList.remove('hidden');$('code').value='';setStatus('Подключение закрыто');
+}
+async function begin(){
+try{
+const code=$('code').value.replace(/\D/g,'');if(!/^\d{6}$/.test(code))throw Error('Введите шестизначный код');
+$('connect').disabled=true;secret=makeSecret();
+const r=await post('pair',{code,secret});pairId=r.id;setStatus('Ожидаю подтверждение с телефона или MacBook');
+poll=setInterval(async()=>{
+ try{
+ const s=await post('status',{id:pairId,secret});
+ if(s.status==='approved'){
+  clearInterval(poll);poll=null;
+  const v=await post('redeem',{id:pairId,secret});
+  token=v.token;secret='';sessionEnd=Date.now()+v.expires_in*1000;lastActivity=Date.now();
+  $('setup').classList.add('hidden');$('assistant').classList.remove('hidden');$('answer').textContent='Подключено. Лера готова к запросам о продажах и ПДЗ.';
+ }else if(['revoked','rejected'].includes(s.status)){stop();}
+ }catch(e){stop();setStatus(String(e.message||e))}
+},2300);
+}catch(e){setStatus(String(e.message||e))}finally{$('connect').disabled=false}
+}
+function format(domain,data){
+if(domain==='sales'){
+const ms=(data?.managers||[]).slice(0,6).map(m=>m.manager_name+': план '+Number(m.plan||0).toLocaleString('ru-RU')+', факт '+Number(m.actual||0).toLocaleString('ru-RU')+' белорусских рублей').join('. ');
+return 'Продажи за '+(data?.month||'текущий месяц')+'. '+ms+'. Данные по последнему импорту.';
+}
+if(domain==='debt'){
+const d=data||{};return 'Отчёт о просроченной задолженности. '+(d?.overdue_debtors||[]).slice(0,5).map(x=>x.client_name+': '+Number(x.debt_overdue||0).toLocaleString('ru-RU')+' белорусских рублей').join('. ')+'; по последнему импорту.';
+}
+return 'По этой теме пока нет проверенного источника.';
+}
+async function ask(domain){
+if(!token)return;
+lastActivity=Date.now();$('answer').textContent='Сверяю данные CRM…';
+try{
+const r=await post('ask',{token,domain});const response=format(r.domain,r.data);
+$('answer').textContent=response;
+if('speechSynthesis'in window){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(response.slice(0,1700));u.lang='ru-RU';u.rate=1;speechSynthesis.speak(u)}catch{}}
+}catch(e){$('answer').textContent=String(e.message||e);if(/сеанс|время|доступ|закрыт/i.test(String(e.message||e)))stop();}
+}
+function startVoice(){
+if(!token)return;
+const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!Speech){$('answer').textContent='На этом браузере голосовое распознавание не поддерживается. Используйте кнопки запросов.';return}
+recognition=new Speech();recognition.lang='ru-RU';recognition.interimResults=false;
+recognition.onresult=e=>{const q=String(e.results?.[0]?.[0]?.transcript||'').toLocaleLowerCase('ru-RU');$('answer').textContent='Вы: '+q;if(/пдз|долг|дебитор|задолж/.test(q))ask('debt');else if(/продаж|план|оборот|отгруз/.test(q))ask('sales');else $('answer').textContent='Пока поддерживаются вопросы о продажах и ПДЗ.'};
+recognition.onerror=e=>{$('answer').textContent='Микрофон: '+(e.error||'ошибка')};try{recognition.start();lastActivity=Date.now()}catch(e){$('answer').textContent=String(e.message||e)}
+}
+$('connect').addEventListener('click',begin);$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',()=>{stop()});
+setInterval(()=>{if(token&&(Date.now()>sessionEnd||Date.now()-lastActivity>600000)){stop();setStatus('Временный доступ завершён')}},15000);
+window.addEventListener('pagehide',stop);
+})();
+</script></body></html>
