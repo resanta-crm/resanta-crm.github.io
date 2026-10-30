@@ -6,7 +6,7 @@ on:
       - "assets/156-resanta-connect-android-push-v1.js"
       - "supabase/migrations/20261030113000_connect_138_push_prep.sql"
       - "tests/connect-138.test.js"
-      - ".github/workflows/connect-138-check.yml"
+      - ".github/workflows/connect-*-check.yml"
   push:
     branches: ["feature/connect-138-fcm-push-prep"]
 permissions:
@@ -28,7 +28,11 @@ jobs:
       - name: Do not touch legacy CRM logic
         run: |
           git diff --name-only origin/main...HEAD >/tmp/connect138-files
-          if grep -Ev '^(index\.html|assets/156-resanta-connect-android-push-v1\.js|supabase/migrations/20261030113000_connect_138_push_prep\.sql|tests/connect-138\.test\.js|\.github/workflows/connect-138-check\.yml)$' /tmp/connect138-files; then
+          if grep -Ev '^(index\.html|assets/156-resanta-connect-android-push-v1\.js|supabase/migrations/20261030113000_connect_138_push_prep\.sql|tests/connect-138\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136|138)-check\.yml) /tmp/connect138-files; then
+            echo 'Non-CONNECT file changed' >&2
+            exit 1
+          fi
+ /tmp/connect138-files; then
             echo 'Non-CONNECT file changed' >&2
             exit 1
           fi
