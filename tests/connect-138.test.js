@@ -40,7 +40,7 @@ verify('Notification activation deep links only to validated CRM room ids',()=>{
 });
 verify('No Firebase service secrets in browser or migration',()=>{
  assert.doesNotMatch(js,/service_account|private_key|FCM_SERVER_KEY|SUPABASE_SERVICE_ROLE_KEY|google-services\.json/);
- assert.match(html,/assets\/156-resanta-connect-android-push-v1\.js\?v=1/);
+ assert.match(html,/assets\/156-resanta-connect-android-push-v1\.js\?v=2/);
 });
 verify('FCM server requires sender CRM JWT and exact message ownership',()=>{
  const worker=read('supabase/functions/connect-fcm-send/index.ts');
