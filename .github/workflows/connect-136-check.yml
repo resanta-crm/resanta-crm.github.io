@@ -42,7 +42,11 @@ jobs:
         run: |
           git diff --name-only origin/main...HEAD > /tmp/connect-changes
           cat /tmp/connect-changes
-          if grep -Ev '^(index\.html|assets/(151-resanta-connect-v1\.js|153-resanta-connect-notify-v1\.js|154-resanta-connect-video-v1\.js|155-resanta-connect-permissions-v1\.(js|css))|supabase/(migrations/20261030105000_connect_136_permissions\.sql|functions/connect-livekit-token/index\.ts)|tests/connect-(131|133|136)\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136)-check\.yml)$' /tmp/connect-changes; then
+          if grep -Ev '^(index\.html|assets/(151-resanta-connect-v1\.js|153-resanta-connect-notify-v1\.js|154-resanta-connect-video-v1\.js|155-resanta-connect-permissions-v1\.(js|css))|supabase/(migrations/20261030105000_connect_136_permissions\.sql|functions/connect-livekit-token/index\.ts)|tests/connect-(131|133|136)\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136)-check\.yml|assets/156-resanta-connect-android-push-v1\.js|supabase/migrations/20261030113000_connect_138_push_prep\.sql|tests/connect-138\.test\.js|\.github/workflows/connect-138-check\.yml)
+            echo "Unexpected modification outside CONNECT" >&2
+            exit 1
+          fi
+ /tmp/connect-changes; then
             echo "Unexpected modification outside CONNECT" >&2
             exit 1
           fi
