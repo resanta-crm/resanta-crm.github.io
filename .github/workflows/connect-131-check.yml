@@ -7,6 +7,8 @@ on:
       - "assets/154-resanta-connect-video-v1.*"
       - "supabase/functions/connect-livekit-token/**"
       - "tests/connect-131.test.js"
+      - "tests/connect-133.test.js"
+      - ".github/workflows/connect-133-check.yml"
       - ".github/workflows/connect-1*-check.yml"
   push:
     branches: ["feature/connect-131-livekit-video"]
@@ -25,17 +27,19 @@ jobs:
           node --check assets/151-resanta-connect-v1.js
           node --check assets/154-resanta-connect-video-v1.js
           node --check tests/connect-131.test.js
+          node --check tests/connect-133.test.js
       - name: CRM video and token security contract
         run: |
           node tests/connect-127.test.js
           node tests/connect-128.test.js
           node tests/connect-131.test.js
+          node tests/connect-133.test.js
       - name: Release touches only CONNECT files
         shell: bash
         run: |
           git diff --name-only origin/main...HEAD >/tmp/connect131-files
           cat /tmp/connect131-files
-          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.js|assets/154-resanta-connect-video-v1\.(js|css)|supabase/functions/connect-livekit-token/index\.ts|tests/connect-131\.test\.js|\.github/workflows/connect-(126|127|128|131)-check\.yml)$' /tmp/connect131-files; then
+          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.js|assets/154-resanta-connect-video-v1\.(js|css)|supabase/functions/connect-livekit-token/index\.ts|tests/connect-131\.test\.js|tests/connect-133\.test\.js|\.github/workflows/connect-(126|127|128|131|133)-check\.yml)$' /tmp/connect131-files; then
             echo 'Unexpected legacy CRM file modification!' >&2
             exit 1
           fi
