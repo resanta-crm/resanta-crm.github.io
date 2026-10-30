@@ -34,11 +34,16 @@ jobs:
           node tests/connect-133.test.js
           node tests/connect-136.test.js
           node tests/connect-138.test.js
+          node tests/connect-139.test.js
       - name: No unrelated CRM files modified
         run: |
           git diff --name-only origin/main...HEAD >/tmp/connect-files
           cat /tmp/connect-files
-          if grep -Ev '^(index\.html|assets/(151-resanta-connect-v1\.js|154-resanta-connect-video-v1\.js|156-resanta-connect-android-push-v1\.js)|supabase/(functions/connect-fcm-send/index\.ts|migrations/20261030113000_connect_138_push_prep\.sql)|tests/connect-(133|136|138)\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136|138)-check\.yml)$' /tmp/connect-files; then
+          if grep -Ev '^(index\.html|assets/(144-resanta-ai360-branch-voice-v1|146-resanta-ai360-branch-premium-voice-v1|147-resanta-ai360-staff-unified-dialog-v1|151-resanta-connect-v1|154-resanta-connect-video-v1|156-resanta-connect-android-push-v1|157-resanta-ai360-android-staff-launch-v1)\.js|tests/(connect-(133|136|138|139)\.test\.js|ai360-(sidarovich-voice-pilot|branch-director-task-confirmation|branch-premium-parity|field-manager-shared-voice|triovist-assigned-category-voice)\.test\.mjs)|\.github/workflows/connect-(126|127|128|131|133|136|138|139)-check\.yml)
+            echo "Non-CONNECT file touched" >&2
+            exit 1
+          fi
+ /tmp/connect-files; then
             echo "Non-CONNECT file touched" >&2
             exit 1
           fi
