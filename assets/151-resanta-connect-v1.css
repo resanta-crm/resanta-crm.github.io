@@ -64,3 +64,20 @@
 #page-connect #c127-attach,#page-connect #c127-mic{min-width:36px;min-height:37px}
 @keyframes c127-pulse{from{opacity:1}to{opacity:.6}}
 @media(max-width:710px){#page-connect .c126-compose{flex-wrap:wrap}#page-connect .c126-compose textarea{flex:1 1 110px}#page-connect #c127-attach,#page-connect #c127-mic{min-width:32px}}
+
+/* 128: unread counters, only in CONNECT navigation and own room list */
+#nav-connect,#bn-connect{position:relative}
+#nav-connect .c128-badge,#bn-connect .c128-badge{
+ background:#dc2626;color:#fff;border-radius:999px;
+ font-weight:700;font-size:10px;line-height:17px;
+ min-width:17px;height:17px;display:inline-block;text-align:center;
+ padding:0 4px;margin-left:5px
+}
+#nav-connect .c128-badge[hidden],#bn-connect .c128-badge[hidden]{display:none!important}
+#page-connect .c128-room-count{
+ display:inline-block;min-width:17px;text-align:center;padding:2px 5px;
+ border-radius:999px;background:#2563a6;color:white;font-size:10px;
+ float:right;font-weight:700
+}
+#page-connect .c128-room-count[hidden]{display:none!important}
+#page-connect .c126-top #c128-allow{margin-left:auto}
