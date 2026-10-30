@@ -219,7 +219,7 @@ async function invite(){
    .insert({room_id:callChat,sender_id:ctx.actor(),body})
    .select('id,room_id,sender_id,body,created_at').single();
   if(r.error)throw r.error;
-  if(r.data)ctx.onMessage?.(r.data);
+  if(r.data){ctx.onMessage?.(r.data);window.crmConnectPush138?.sendForMessage?.(r.data.id);}
   status('Приглашение отправлено в этот чат.');
  }catch(e){status('Не удалось отправить приглашение: '+String(e?.message||e),true);}
  finally{button.disabled=false;}
