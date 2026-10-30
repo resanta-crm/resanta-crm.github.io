@@ -34,12 +34,14 @@
   return Number.isFinite(d.valueOf())?d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
  }
  function resetRoom(){
+  window.crmConnectVideo131?.chatChanged(null);
   roomId=null;
   stopSub();
   $('c126-name').textContent='Выберите чат';
   $('c126-info').textContent='Только сотрудники CRM';
   $('c126-compose').hidden=true;
   $('c126-invite').hidden=true;
+  if($('c131-start'))$('c131-start').hidden=true;
   $('c126-messages').replaceChildren(node('div','c126-empty','Создайте первый чат с коллегой.'));
  }
  function stopSub(){
@@ -114,12 +116,14 @@
  async function selectRoom(id){
   const room=rooms.find(x=>x.id===id);
   if(!room||!ownMember(id))throw Error('Чат недоступен.');
+  window.crmConnectVideo131?.chatChanged(id);
   roomId=id;
   window.crmConnectMedia127?.discardIfNeeded();
   $('c126-name').textContent=roomLabel(room);
   $('c126-info').textContent=members.filter(x=>x.room_id===id).length+' участников';
   $('c126-invite').hidden=room.kind==='direct'||ownMember(id)?.role!=='owner';
   $('c126-compose').hidden=false;
+  if($('c131-start'))$('c131-start').hidden=false;
   renderRooms();
   await getMessages();
   if(roomId===id&&isOpen()){
@@ -240,6 +244,10 @@
   window.crmConnectMedia127?.init({
    client:dbClient,roomId:()=>roomId,actor:()=>actor,isOpen,
    notify:notice,onMessage:appendMsg
+  });
+  window.crmConnectVideo131?.init({
+   client:dbClient,roomId:()=>roomId,actor:()=>actor,
+   actorName:()=>staffName(actor),isOpen,notify:notice,onMessage:appendMsg
   });
   document.addEventListener('visibilitychange',()=>{
    if(document.hidden)stopSub();
