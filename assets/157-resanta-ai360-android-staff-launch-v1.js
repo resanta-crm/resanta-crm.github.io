@@ -80,7 +80,7 @@
    button.textContent='🎙 Лера';
    button.style.cssText=[
     'position:fixed','right:12px','bottom:calc(80px + env(safe-area-inset-bottom,0px))',
-    'z-index:9000','padding:10px 12px','border:1px solid #2a76b3',
+    'z-index:900','padding:10px 12px','border:1px solid #2a76b3',
     'border-radius:24px','color:#124a78','background:#e9f5ff',
     'box-shadow:0 4px 14px #082d4555','font-size:13px',
     'font-weight:700','cursor:pointer'
