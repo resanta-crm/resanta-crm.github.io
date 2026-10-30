@@ -73,8 +73,8 @@ async function begin(){
  if(pairingBusy||token)return;
  const cycle=++lifecycle;
  try{
-  const code=$('code').value.replace(/\\D/g,'');
-  if(!/^\\d{6}$/.test(code))throw Error('Введите шестизначный код');
+  const code=$('code').value.replace(/\D/g,'');
+  if(!/^\d{6}$/.test(code))throw Error('Введите шестизначный код');
   pairingBusy=true;$('connect').disabled=true;secret=makeSecret();
   const result=await post('pair',{code,secret});
   if(cycle!==lifecycle)return;
