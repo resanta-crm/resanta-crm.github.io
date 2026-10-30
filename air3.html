@@ -4,13 +4,13 @@
 <style>:root{font-family:system-ui,Arial;background:#071a35;color:#eef5ff}body{max-width:640px;margin:0 auto;padding:24px}h1{font-size:25px}p{line-height:1.5;color:#bccbe1}button,input{border-radius:12px;border:1px solid #6d88ae;padding:15px;font:inherit}button{background:#1967b4;color:white;cursor:pointer;margin:8px 6px 8px 0}button:disabled{opacity:.4}input{background:#142b49;color:#fff;font-size:24px;letter-spacing:5px;width:190px;text-align:center}section{border:1px solid #4b6488;border-radius:16px;padding:20px;margin-top:22px}#answer{white-space:pre-wrap;line-height:1.6;font-size:19px}#status{font-weight:700;color:#9dd1ff}.hidden{display:none}</style></head>
 <body><h1>🥽 РЕСАНТА AI · INMO AIR3</h1><p>Безопасное подключение без пароля CRM. Код создаётся на телефоне или MacBook. Очки не сохраняют токен после закрытия страницы.</p>
 <section id="setup"><h2>Временный вход</h2><label for="code">Код с телефона / MacBook</label><p><input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" placeholder="000000"></p><button id="connect">Подключиться</button><button id="check" class="hidden" type="button">Проверить подтверждение</button><p id="status" aria-live="polite">Ожидаю код</p></section>
-<section id="assistant" class="hidden"><h2>Лера · безопасный пилот</h2><p>Доступны подтверждённые данные о продажах и ПДЗ. Другие команды пока не подключены.</p><button id="voice">🎙 Спросить голосом</button><button id="sales">Продажи и план</button><button id="debt">Просроченная ПДЗ</button><button id="exit">Завершить работу</button><p id="answer" aria-live="polite">Слушаю вас.</p></section>
+<section id="assistant" class="hidden"><h2>Лера · безопасный пилот</h2><p>Доступны подтверждённые данные о продажах и ПДЗ. Другие команды пока не подключены.</p><button id="voice">🎙 Спросить голосом</button><button id="sales">Продажи и план</button><button id="debt">Просроченная ПДЗ</button><button id="exit">Завершить работу</button><p id="connection" role="status" aria-live="polite">Сервер: подключён</p><p id="answer" aria-live="polite">Слушаю вас.</p></section>
 <script>
 (()=>{'use strict';
 const URL='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1';
 const $=id=>document.getElementById(id);
 let pairId='',secret='',token='',poll=null,lastActivity=0,sessionEnd=0,recognition=null;
-let lifecycle=0,pairingBusy=false,pollingBusy=false;
+let lifecycle=0,pairingBusy=false,pollingBusy=false,pingBusy=false;
 const makeSecret=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(40)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
 const setStatus=s=>$('status').textContent=s;
 async function post(action,params={}){
@@ -22,7 +22,7 @@ async function post(action,params={}){
  try{
   const response=await fetch(URL,{method:'POST',cache:'no-store',referrerPolicy:'no-referrer',headers:{'content-type':'text/plain;charset=UTF-8'},body:JSON.stringify({action,...params}),signal:controller.signal});
   const val=await response.json();
-  if(!response.ok||!val.ok)throw Error(val.error||'Ошибка сети');
+  if(!response.ok||!val.ok){const err=new Error(val.error||'Ошибка сети');err.status=response.status;throw err;}
   return val;
  }catch(e){
   if(e&&e.name==='AbortError')throw Error('Нет ответа сервера за 12 секунд. Проверьте интернет на очках.');
@@ -34,7 +34,7 @@ function stop(){
 lifecycle++;
 const active=token;
 if(poll){clearInterval(poll);poll=null;}
-token='';secret='';pairId='';lastActivity=0;sessionEnd=0;pairingBusy=false;pollingBusy=false;
+token='';secret='';pairId='';lastActivity=0;sessionEnd=0;pairingBusy=false;pollingBusy=false;pingBusy=false;
 $('connect').disabled=false;$('check').classList.add('hidden');
 if(recognition){try{recognition.abort()}catch{}recognition=null;}
 try{speechSynthesis.cancel()}catch{}
@@ -63,6 +63,7 @@ async function checkStatus(cycle=lifecycle){
    $('setup').classList.add('hidden');
    $('assistant').classList.remove('hidden');
    $('answer').textContent='Доступ подтверждён. Лера готова к вопросам о продажах и ПДЗ.';
+   $('connection').textContent='Сервер: подключён';
   }else if(state.status==='pending_approval'){
    setStatus('Код принят. На MacBook нажмите «Разрешить вход», затем здесь «Проверить подтверждение».');
   }else if(state.status==='redeemed'){
@@ -131,11 +132,24 @@ recognition.onerror=e=>{if(cycle===lifecycle&&token)$('answer').textContent='М�
 }
 $('connect').addEventListener('click',begin);$('check').addEventListener('click',()=>{void checkStatus()});$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',()=>{stop();setStatus('Локальный выход выполнен. Для гарантированного отключения проверьте сеанс с телефона или MacBook.');});
 setInterval(async()=>{
- if(!token)return;
+ if(!token||pingBusy)return;
  if(Date.now()>sessionEnd||Date.now()-lastActivity>600000){stop();setStatus('Временный доступ завершён');return}
  const cycle=lifecycle,access=token;
- try{await post('ping',{token:access})}
- catch(e){if(cycle===lifecycle&&access===token){stop();setStatus('Сеанс отключён с телефона или MacBook')}}
+ pingBusy=true;
+ try{
+  await post('ping',{token:access});
+  if(cycle===lifecycle&&access===token&&$('connection').textContent!=='Сервер: подключён')
+   $('connection').textContent='Сервер: подключён';
+ }catch(e){
+  if(cycle!==lifecycle||access!==token)return;
+  // A transient network timeout is not proof of revocation. Do not revoke access
+  // because the glasses briefly lost Wi-Fi / paused their browser.
+  if([401,403,410].includes(e.status)){
+   stop();setStatus('Временный доступ отозван или истёк');
+  }else{
+   $('connection').textContent='Нестабильная связь. Проверю снова через 15 секунд.';
+  }
+ }finally{if(cycle===lifecycle)pingBusy=false}
 },15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&pairId&&!token)void checkStatus()});
 window.addEventListener('pagehide',stop);
