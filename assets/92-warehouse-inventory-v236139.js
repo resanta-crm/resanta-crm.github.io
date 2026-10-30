@@ -28,7 +28,7 @@ async function load(){
  try{
   summary=await rpc('warehouse_inventory_summary_v1',{p_session_id:null,p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});
   if(!summary?.has_session){try{refreshState=await rpc('warehouse_inventory_refresh_status_v1',{})}catch(_){refreshState=null}}
-  render()
+  render();renderAuditorFactPanelV1();
  }
  catch(e){if(root)root.innerHTML='<div class="iv-alert iv-red"><b>Не удалось открыть инвентаризацию.</b><br>'+esc(e?.message||e)+'</div>'}
  finally{busy=false}
@@ -202,6 +202,40 @@ async function renderAccess(){
 function userOptions(){
  let arr=[];try{arr=typeof allUsers!=='undefined'&&Array.isArray(allUsers)?allUsers:[]}catch(_){}
  return arr.filter(u=>u&&u.email).map(u=>'<option value="'+esc(u.email)+'">'+esc((u.name||u.email)+' · '+u.email)+'</option>').join('');
+}
+
+function renderAuditorFactPanelV1(){
+ // The original inventory manager screen; no parallel data store.
+ const auditor=typeof currentProfile!=='undefined'
+   &&String(currentProfile?.role||'').toLowerCase()==='auditor'
+   &&String(currentProfile?.email||'').trim().toLowerCase()==='sazonov_ks@resanta.ru';
+ if(!auditor||!root||!summary?.has_session||summary?.session?.status!=='active')return;
+ if(root.querySelector('#iv-auditor-fact-v1'))return;
+ const div=document.createElement('div');div.className='iv-card';div.id='iv-auditor-fact-v1';div.style.marginBottom='12px';
+ div.innerHTML='<h3 style="margin:0 0 8px">📝 Внести фактический остаток</h3>'
+ +'<p class="iv-muted" style="margin:0 0 10px">Впишите артикул и фактическое количество на складе. CRM сохранит значение в текущей инвентаризации, пересчитает расхождение и запишет автора изменения.</p>'
+ +'<div class="iv-tools"><input id="iv-auditor-sku-v1" aria-label="Артикул" placeholder="Артикул (SKU)" autocapitalize="characters">'
+ +'<input id="iv-auditor-qty-v1" aria-label="Фактическое количество" type="number" min="0" max="1000000" step="any" placeholder="Факт, шт." style="max-width:150px">'
+ +'<button class="iv-btn primary" type="button" id="iv-auditor-save-v1">Сохранить факт</button></div>'
+ +'<div id="iv-auditor-result-v1" class="iv-muted" role="status"></div>';
+ const button=div.querySelector('#iv-auditor-save-v1');
+ button.onclick=async()=>{
+  const sku=String(div.querySelector('#iv-auditor-sku-v1')?.value||'').trim();
+  const val=div.querySelector('#iv-auditor-qty-v1')?.value;
+  const qtyValue=Number(val);
+  const result=div.querySelector('#iv-auditor-result-v1');
+  if(!sku||val===''||!Number.isFinite(qtyValue)||qtyValue<0||qtyValue>1000000){
+   result.textContent='Введите артикул и фактическое количество от 0 до 1 000 000.';return;
+  }
+  button.disabled=true;button.textContent='Сохраняю…';
+  try{
+   const saved=await rpc('warehouse_inventory_set_fact_v1',{p_session_id:summary.session.id,p_sku:sku,p_fact_qty:qtyValue});
+   if(saved?.ok===false)throw new Error(saved?.reason||'Артикул не сохранён');
+   await load();
+  }catch(e){result.textContent='Ошибка записи: '+String(e?.message||e);}
+  finally{button.disabled=false;button.textContent='Сохранить факт';}
+ };
+ root.prepend(div);
 }
 function render(){
  if(!root)return;
