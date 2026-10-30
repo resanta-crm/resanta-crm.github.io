@@ -8,6 +8,9 @@ const ctx={};
 const SDK_URL='https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js';
 let ready=false, connecting=false, call=null, callChat=null, sdkLoading=null, monitor=null, requestEpoch=0;
 let minimized=false, callIdentity=null,screenBusy=false,micBusy=false;
+// Recent invitations suppress a reverse notification when the recipient joins.
+const incomingRooms=new Map();
+let invitationBusy=false;
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text??'');return n;};
 const status=(s,bad)=>{const e=$('c131-status');if(e){e.textContent=s;e.classList.toggle('error',!!bad);}};
 function loadSdk(){
@@ -99,12 +102,21 @@ async function leave(quiet=false){
  hide();
  if(!quiet)ctx.notify?.('Видеозвонок завершён.');
 }
-async function join(){
+function rememberIncoming(message){
+ if(!message||message.sender_id===ctx.actor?.()||
+    !String(message.body||'').startsWith('📹 Начался видеозвонок'))return;
+ const ts=Date.parse(message.created_at||'');
+ if(Number.isFinite(ts)&&Date.now()-ts>=0&&Date.now()-ts<4*60*1000)
+  incomingRooms.set(message.room_id,ts+4*60*1000);
+}
+async function join(options){
  if(call){restore();return;}
  if(connecting)return;
  if(!ctx.isOpen?.()||!ctx.roomId?.()||!ctx.actor?.())return;
  if(!window.isSecureContext){ctx.notify?.('Видеосвязь требует HTTPS.',true);return;}
- const selected=ctx.roomId(),expectedActor=ctx.actor(),epoch=++requestEpoch;connecting=true;$('c131-start').disabled=true;
+ const selected=ctx.roomId(),expectedActor=ctx.actor(),epoch=++requestEpoch;
+ const isJoiningIncoming=options?.incoming===true || (incomingRooms.get(selected)||0)>Date.now();
+ connecting=true;$('c131-start').disabled=true;
  $('c131-overlay').hidden=false;status('Проверяем доступ к комнате…');
  let candidate=null;
  try{
@@ -150,6 +162,9 @@ async function join(){
   for(const p of call.remoteParticipants.values())tile(p.identity,p.name);
   count();
   status('Видеозвонок подключён. Камеру и микрофон можно включить отдельно.');
+  // The first participant automatically notifies every permitted chat participant.
+  // A recipient joining an invitation must not create a reciprocal call alert.
+  if(!isJoiningIncoming)void invite(true);
   monitor=setInterval(()=>{
    // Do not automatically minimize an explicitly restored call.
    // Navigation transitions are handled once by MutationObserver below.
@@ -210,8 +225,10 @@ async function toggle(kind){
   b.disabled=false;updateMini();
  }
 }
-async function invite(){
- if(!call||!callChat)return;
+async function invite(automatic=false){
+ if(!call||!callChat||invitationBusy)return;
+ const targetRoom=callChat;
+ invitationBusy=true;
  const button=$('c131-invite');button.disabled=true;
  try{
   const body='📹 Начался видеозвонок. Откройте этот чат и нажмите «Видеозвонок», чтобы присоединиться.';
@@ -219,10 +236,15 @@ async function invite(){
    .insert({room_id:callChat,sender_id:ctx.actor(),body})
    .select('id,room_id,sender_id,body,created_at').single();
   if(r.error)throw r.error;
-  if(r.data){ctx.onMessage?.(r.data);window.crmConnectPush138?.sendForMessage?.(r.data.id);}
-  status('Приглашение отправлено в этот чат.');
+  if(r.data){
+   ctx.onMessage?.(r.data);
+   const pushed=await window.crmConnectPush138?.sendForMessage?.(r.data.id);
+   // Even without FCM delivery, the invite is visible in the durable chat history.
+   if(pushed?.ok===false)status('Приглашение видно в чате, но push пока не подтверждён.',true);
+   else status('📹 Приглашение на видеозвонок создано в чате.');
+  }
  }catch(e){status('Не удалось отправить приглашение: '+String(e?.message||e),true);}
- finally{button.disabled=false;}
+ finally{invitationBusy=false;button.disabled=false;}
 }
 function init(hooks){
  Object.assign(ctx,hooks);
@@ -296,5 +318,5 @@ function chatChanged(_id){
  if(call){updateMini();return;}
  if(connecting&&ctx.isOpen?.()===false)leave(true);
 }
-window.crmConnectVideo131={init,chatChanged,join};
+window.crmConnectVideo131={init,chatChanged,join,rememberIncoming};
 })();
