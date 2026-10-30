@@ -92,12 +92,16 @@
   const host=$('c126-messages');host.replaceChildren();
   if(!rows.length)host.append(node('div','c126-empty','Напишите первое сообщение.'));
   rows.slice().reverse().forEach(appendMsg);
+  await window.crmConnectMedia127?.sync(requested,rows.map(x=>x.id));
  }
  function subscribe(id){
   stopSub();
   channel=dbClient().channel('crm-connect-'+id)
    .on('postgres_changes',{event:'INSERT',schema:'public',table:'connect_messages_v1',filter:'room_id=eq.'+id},e=>{
-    if(isOpen()&&roomId===id&&e.new)appendMsg(e.new);
+    if(isOpen()&&roomId===id&&e.new){
+     appendMsg(e.new);
+     if(e.new.sender_id!==actor)window.setTimeout(()=>window.crmConnectMedia127?.syncOne(e.new.id,e.new.room_id),800);
+    }
    }).subscribe(status=>{
     if(status==='CHANNEL_ERROR'&&isOpen()&&roomId===id)notice('Проблема с онлайн-связью. Нажмите «Обновить».',true);
    });
@@ -106,6 +110,7 @@
   const room=rooms.find(x=>x.id===id);
   if(!room||!ownMember(id))throw Error('Чат недоступен.');
   roomId=id;
+  window.crmConnectMedia127?.discardIfNeeded();
   $('c126-name').textContent=roomLabel(room);
   $('c126-info').textContent=members.filter(x=>x.room_id===id).length+' участников';
   $('c126-invite').hidden=room.kind==='direct'||ownMember(id)?.role!=='owner';
@@ -222,6 +227,10 @@
   });
   $('c126-filter').addEventListener('input',e=>{
    filterText=e.target.value.trim().toLocaleLowerCase('ru-RU');renderRooms();
+  });
+  window.crmConnectMedia127?.init({
+   client:dbClient,roomId:()=>roomId,actor:()=>actor,isOpen,
+   notify:notice,onMessage:appendMsg
   });
   document.addEventListener('visibilitychange',()=>{
    if(document.hidden)stopSub();
