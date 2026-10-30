@@ -3,7 +3,7 @@
 <title>РЕСАНТА AI · Очки INMO AIR3</title>
 <style>:root{font-family:system-ui,Arial;background:#071a35;color:#eef5ff}body{max-width:640px;margin:0 auto;padding:24px}h1{font-size:25px}p{line-height:1.5;color:#bccbe1}button,input{border-radius:12px;border:1px solid #6d88ae;padding:15px;font:inherit}button{background:#1967b4;color:white;cursor:pointer;margin:8px 6px 8px 0}button:disabled{opacity:.4}input{background:#142b49;color:#fff;font-size:24px;letter-spacing:5px;width:190px;text-align:center}section{border:1px solid #4b6488;border-radius:16px;padding:20px;margin-top:22px}#answer{white-space:pre-wrap;line-height:1.6;font-size:19px}#status{font-weight:700;color:#9dd1ff}.hidden{display:none}</style></head>
 <body><h1>🥽 РЕСАНТА AI · INMO AIR3</h1><p>Безопасное подключение без пароля CRM. Код создаётся на телефоне или MacBook. Очки не сохраняют токен после закрытия страницы.</p>
-<section id="setup"><h2>Временный вход</h2><label for="code">Код с телефона / MacBook</label><p><input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" placeholder="000000"></p><button id="connect">Подключиться</button><p id="status">Ожидаю код</p></section>
+<section id="setup"><h2>Временный вход</h2><label for="code">Код с телефона / MacBook</label><p><input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" placeholder="000000"></p><button id="connect">Подключиться</button><button id="check" class="hidden" type="button">Проверить подтверждение</button><p id="status" aria-live="polite">Ожидаю код</p></section>
 <section id="assistant" class="hidden"><h2>Лера · безопасный пилот</h2><p>Доступны подтверждённые данные о продажах и ПДЗ. Другие команды пока не подключены.</p><button id="voice">🎙 Спросить голосом</button><button id="sales">Продажи и план</button><button id="debt">Просроченная ПДЗ</button><button id="exit">Завершить работу</button><p id="answer" aria-live="polite">Слушаю вас.</p></section>
 <script>
 (()=>{'use strict';
@@ -22,7 +22,7 @@ lifecycle++;
 const active=token;
 if(poll){clearInterval(poll);poll=null;}
 token='';secret='';pairId='';lastActivity=0;sessionEnd=0;pairingBusy=false;pollingBusy=false;
-$('connect').disabled=false;
+$('connect').disabled=false;$('check').classList.add('hidden');
 if(recognition){try{recognition.abort()}catch{}recognition=null;}
 try{speechSynthesis.cancel()}catch{}
 $('answer').textContent='';
@@ -31,34 +31,58 @@ $('assistant').classList.add('hidden');$('setup').classList.remove('hidden');$('
 if(active)void fetch(URL,{method:'POST',keepalive:true,cache:'no-store',
 headers:{'content-type':'application/json'},body:JSON.stringify({action:'close',token:active})}).catch(()=>{});
 }
-async function begin(){
-if(pairingBusy||token)return;
-const cycle=++lifecycle;
-try{
-const code=$('code').value.replace(/\D/g,'');if(!/^\d{6}$/.test(code))throw Error('Введите шестизначный код');
-pairingBusy=true;$('connect').disabled=true;secret=makeSecret();
-const result=await post('pair',{code,secret});
-if(cycle!==lifecycle)return;
-pairId=result.id;
-setStatus('Ожидаю подтверждение с телефона или MacBook');
-poll=setInterval(async()=>{
- if(cycle!==lifecycle||pollingBusy)return;
+async function checkStatus(cycle=lifecycle){
+ if(cycle!==lifecycle||!pairId||!secret||token||pollingBusy)return;
  pollingBusy=true;
  try{
- const id=pairId,deviceSecret=secret;
- const s=await post('status',{id,secret:deviceSecret});
- if(cycle!==lifecycle)return;
- if(s.status==='approved'){
-  clearInterval(poll);poll=null;
-  const v=await post('redeem',{id,secret:deviceSecret});
-  if(cycle!==lifecycle){void post('close',{token:v.token}).catch(()=>{});return}
-  token=v.token;secret='';pairingBusy=false;sessionEnd=Date.now()+v.expires_in*1000;lastActivity=Date.now();
-  $('setup').classList.add('hidden');$('assistant').classList.remove('hidden');$('answer').textContent='Подключено. Лера готова к запросам о продажах и ПДЗ.';
- }else if(['revoked','rejected'].includes(s.status)){stop();}
+  const id=pairId,deviceSecret=secret;
+  const state=await post('status',{id,secret:deviceSecret});
+  if(cycle!==lifecycle)return;
+  if(state.status==='approved'){
+   setStatus('MacBook подтвердил вход. Открываю Леру…');
+   const v=await post('redeem',{id,secret:deviceSecret});
+   if(cycle!==lifecycle){void post('close',{token:v.token}).catch(()=>{});return}
+   token=v.token;secret='';pairingBusy=false;
+   sessionEnd=Date.now()+v.expires_in*1000;lastActivity=Date.now();
+   if(poll){clearInterval(poll);poll=null}
+   $('check').classList.add('hidden');
+   $('setup').classList.add('hidden');
+   $('assistant').classList.remove('hidden');
+   $('answer').textContent='Доступ подтверждён. Лера готова к вопросам о продажах и ПДЗ.';
+  }else if(state.status==='pending_approval'){
+   setStatus('Код принят. На MacBook нажмите «Разрешить вход», затем здесь «Проверить подтверждение».');
+  }else if(state.status==='redeemed'){
+   stop();
+   setStatus('Сеанс уже открыт, но очки не получили его. На MacBook отключите старую заявку и создайте новый код.');
+  }else if(['revoked','rejected'].includes(state.status)){
+   stop();setStatus('Подключение отключено на MacBook. Получите новый код.');
+  }else{
+   setStatus('Жду подтверждения с MacBook.');
+  }
+ }catch(e){
+  if(cycle!==lifecycle)return;
+  const message=String(e.message||e);
+  if(/истёк|не найдена|закрыт|запрещён|отозван|неактивна|применён/i.test(message)){
+   stop();setStatus(message+'. Получите новый код.');
+  }else{
+   setStatus('Не удалось проверить подключение: '+message+'. Нажмите «Проверить подтверждение».');
+  }
+ }finally{pollingBusy=false}
+}
+async function begin(){
+ if(pairingBusy||token)return;
+ const cycle=++lifecycle;
+ try{
+  const code=$('code').value.replace(/\\D/g,'');
+  if(!/^\\d{6}$/.test(code))throw Error('Введите шестизначный код');
+  pairingBusy=true;$('connect').disabled=true;secret=makeSecret();
+  const result=await post('pair',{code,secret});
+  if(cycle!==lifecycle)return;
+  pairId=result.id;$('check').classList.remove('hidden');
+  setStatus('Код принят. На MacBook нажмите «Разрешить вход», затем здесь «Проверить подтверждение».');
+  poll=setInterval(()=>{void checkStatus(cycle)},2500);
+  void checkStatus(cycle);
  }catch(e){if(cycle===lifecycle){stop();setStatus(String(e.message||e))}}
- finally{pollingBusy=false}
-},2300);
-}catch(e){if(cycle===lifecycle){stop();setStatus(String(e.message||e))}}
 }
 function format(domain,data){
 if(domain==='sales'){
@@ -91,7 +115,7 @@ recognition=new Speech();recognition.lang='ru-RU';recognition.interimResults=fal
 recognition.onresult=e=>{if(cycle!==lifecycle||!token)return;const q=String(e.results?.[0]?.[0]?.transcript||'').toLocaleLowerCase('ru-RU');$('answer').textContent='Вы: '+q;if(/пдз|долг|дебитор|задолж/.test(q))ask('debt');else if(/продаж|план|оборот|отгруз/.test(q))ask('sales');else $('answer').textContent='Пока поддерживаются вопросы о продажах и ПДЗ.'};
 recognition.onerror=e=>{if(cycle===lifecycle&&token)$('answer').textContent='Микрофон: '+(e.error||'ошибка')};try{recognition.start();lastActivity=Date.now()}catch(e){if(cycle===lifecycle)$('answer').textContent=String(e.message||e)}
 }
-$('connect').addEventListener('click',begin);$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',()=>{stop();setStatus('Локальный выход выполнен. Для гарантированного отключения проверьте сеанс с телефона или MacBook.');});
+$('connect').addEventListener('click',begin);$('check').addEventListener('click',()=>{void checkStatus()});$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',()=>{stop();setStatus('Локальный выход выполнен. Для гарантированного отключения проверьте сеанс с телефона или MacBook.');});
 setInterval(async()=>{
  if(!token)return;
  if(Date.now()>sessionEnd||Date.now()-lastActivity>600000){stop();setStatus('Временный доступ завершён');return}
@@ -99,7 +123,7 @@ setInterval(async()=>{
  try{await post('ping',{token:access})}
  catch(e){if(cycle===lifecycle&&access===token){stop();setStatus('Сеанс отключён с телефона или MacBook')}}
 },15000);
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&token)stop()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&pairId&&!token)void checkStatus()});
 window.addEventListener('pagehide',stop);
 })();
 </script></body></html>
