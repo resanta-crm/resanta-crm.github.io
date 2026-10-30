@@ -63,19 +63,22 @@ Deno.serve(async (req: Request) => {
     const userId = authData.user.id;
 
     // Uses existing RLS and roster validation. No service-role access is used here.
-    const [staffCheck, memberCheck, profileCheck] = await Promise.all([
+    const [staffCheck, memberCheck, profileCheck, permissionCheck] = await Promise.all([
       supabase.rpc("connect_active_staff_v1", { p_user_id: userId }),
       supabase.from("connect_room_members_v1").select("room_id")
         .eq("room_id", roomId).eq("user_id", userId).maybeSingle(),
       supabase.from("users").select("id,name,email").eq("id", userId).maybeSingle(),
+      supabase.from("connect_permissions_v1").select("chat_enabled,video_enabled")
+        .eq("user_id", userId).maybeSingle(),
     ]);
-    if (staffCheck.error || memberCheck.error || profileCheck.error) {
+    if (staffCheck.error || memberCheck.error || profileCheck.error || permissionCheck.error) {
       return json(req, 503, { ok: false, error: "Проверка прав CRM временно недоступна." });
     }
-    if (staffCheck.data !== true || !memberCheck.data || !profileCheck.data ||
+    if (staffCheck.data !== true || !permissionCheck.data?.chat_enabled ||
+        !permissionCheck.data?.video_enabled || !memberCheck.data || !profileCheck.data ||
         String(profileCheck.data.email || "").toLowerCase() !==
         String(authData.user.email || "").toLowerCase()) {
-      return json(req, 403, { ok: false, error: "Видеозвонок доступен только участникам чата." });
+      return json(req, 403, { ok: false, error: "У вас нет разрешения на видеозвонки в этом чате." });
     }
 
     const livekitUrl = (Deno.env.get("LIVEKIT_URL") || "").trim();

@@ -1,46 +1,47 @@
-name: CONNECT 128 unread and notifications
+name: CONNECT 128 unread notification security
 on:
   pull_request:
     paths:
       - "index.html"
       - "assets/151-resanta-connect-v1.js"
-      - "assets/151-resanta-connect-v1.css"
       - "assets/153-resanta-connect-notify-v1.js"
-      - "supabase/migrations/20261030080000_connect_128_unread.sql"
-      - "tests/connect-128.test.js"
-      - ".github/workflows/connect-128-check.yml"
-      - ".github/workflows/connect-126-check.yml"
-      - ".github/workflows/connect-127-check.yml"
+      - "assets/154-resanta-connect-video-v1.js"
+      - "assets/155-resanta-connect-permissions-v1.js"
+      - "supabase/functions/connect-livekit-token/index.ts"
+      - "supabase/migrations/20261030105000_connect_136_permissions.sql"
+      - "tests/connect-*.test.js"
+      - ".github/workflows/connect-*-check.yml"
   push:
-    branches:
-      - "feature/connect-128-unread-notifications"
+    branches: ["feature/connect-136-server-permissions"]
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Syntax checks
+      - name: Check syntax
         run: |
           node --check assets/151-resanta-connect-v1.js
           node --check assets/153-resanta-connect-notify-v1.js
           node --check tests/connect-128.test.js
-      - name: Unread contract checks
-        run: node tests/connect-128.test.js
-      - name: No legacy CRM files modified
+          node --check tests/connect-136.test.js
+      - name: CONNECT regression suites
+        run: |
+          node tests/connect-127.test.js
+          node tests/connect-128.test.js
+          node tests/connect-131.test.js
+          node tests/connect-133.test.js
+          node tests/connect-136.test.js
+      - name: Limit changes to CONNECT
         shell: bash
         run: |
-          git diff --name-only origin/main...HEAD > /tmp/connect-128-files
-          cat /tmp/connect-128-files
-          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.(js|css)|assets/153-resanta-connect-notify-v1\.js|supabase/migrations/20261030080000_connect_128_unread\.sql|tests/connect-128\.test\.js|assets/154-resanta-connect-video-v1\.(js|css)|supabase/functions/connect-livekit-token/index\.ts|tests/connect-131\.test\.js|tests/connect-133\.test\.js|\.github/workflows/connect-(126|127|128|131|133)-check\.yml) /tmp/connect-128-files; then
-            echo 'Unexpected legacy CRM change' >&2
-            exit 1
-          fi
- /tmp/connect-128-files; then
-            echo 'Unexpected legacy CRM change' >&2
+          git diff --name-only origin/main...HEAD > /tmp/connect-changes
+          cat /tmp/connect-changes
+          if grep -Ev '^(index\.html|assets/(151-resanta-connect-v1\.js|153-resanta-connect-notify-v1\.js|154-resanta-connect-video-v1\.js|155-resanta-connect-permissions-v1\.(js|css))|supabase/(migrations/20261030105000_connect_136_permissions\.sql|functions/connect-livekit-token/index\.ts)|tests/connect-(131|133|136)\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136)-check\.yml)$' /tmp/connect-changes; then
+            echo "Unexpected modification outside CONNECT" >&2
             exit 1
           fi

@@ -24,7 +24,9 @@ const checks=[
   assert.match(server,/connect_active_staff_v1/);
   assert.match(server,/connect_room_members_v1/);
   assert.match(server,/\.eq\("room_id", roomId\)\.eq\("user_id", userId\)/);
-  assert.match(server,/if \(staffCheck\.data !== true \|\| !memberCheck\.data \|\| !profileCheck\.data/);
+  assert.match(server,/if \(staffCheck\.data !== true \|\| !permissionCheck\.data\?\.chat_enabled/);
+  assert.match(server,/!permissionCheck\.data\?\.video_enabled/);
+  assert.match(server,/!memberCheck\.data \|\| !profileCheck\.data/);
   assert.doesNotMatch(server,/SUPABASE_SERVICE_ROLE_KEY/);
  }],
  ['Room and token scope are always derived on server',()=>{

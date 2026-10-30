@@ -296,5 +296,5 @@ function chatChanged(_id){
  if(call){updateMini();return;}
  if(connecting&&ctx.isOpen?.()===false)leave(true);
 }
-window.crmConnectVideo131={init,chatChanged};
+window.crmConnectVideo131={init,chatChanged,join};
 })();
