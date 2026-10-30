@@ -58,7 +58,7 @@ const checks=[
  ['Names and error messages are not inserted into HTML',()=>{
   assert.match(client,/n\.textContent=String/);
   assert.doesNotMatch(client,/innerHTML\s*\+=/);
-  assert.match(css,/#page-connect \.c131-overlay/);
+  assert.match(css,/#app \.c131-overlay/);
  }],
  ['Video module parses and exposes only hooks',()=>{
   new Function(client);
