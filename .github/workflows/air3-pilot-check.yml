@@ -61,6 +61,8 @@ jobs:
           check 403 -X POST "$URL" -H 'Origin: https://example.com' -H 'Content-Type: application/json' --data '{"action":"create"}'
           check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"create"}'
           check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"ask","token":"invalid"}'
+          # Simple POST is used by INMO AIR3 to avoid its unreliable preflight.
+          check 400 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: text/plain;charset=UTF-8' --data '{"action":"pair","code":"000000","secret":"short"}'
           check 204 -X OPTIONS "$URL" -H 'Origin: https://resanta-crm.by' -H 'Access-Control-Request-Method: POST'
   database-security:
     runs-on: ubuntu-latest

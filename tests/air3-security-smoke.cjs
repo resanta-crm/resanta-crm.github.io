@@ -8,7 +8,7 @@ const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 assert.ok(script,'AIR3 JavaScript missing');
 assert.ok(!/localStorage\.|sessionStorage\.|document\.cookie/.test(script),'AIR3 must not persist credentials');
 
-const dom = new Map(), timers=new Map(), events={}, requests=[];
+const dom = new Map(), timers=new Map(), events={}, requests=[],requestHeaders=[];
 let nextTimer=0,pendingAsk,askStarted,ownerApproved=false;
 const startedAsk=new Promise(resolve=>{askStarted=resolve});
 const el=id=>{
@@ -24,7 +24,7 @@ let speechCalls=0;
 const speechSynthesis={cancel(){},speak(){speechCalls++}};
 const window={speechSynthesis,addEventListener(type,fn){events[type]=fn}};
 const fetch=async(url,opts)=>{
- const body=JSON.parse(opts.body);requests.push(body.action);
+ const body=JSON.parse(opts.body);requests.push(body.action);requestHeaders.push({action:body.action,type:opts.headers?.['content-type']});
  const value=await (async()=>{
   if(body.action==='pair')return {ok:true,id:'123'};
   if(body.action==='status')return {ok:true,status:ownerApproved?'approved':'pending_approval'};
@@ -38,7 +38,7 @@ const fetch=async(url,opts)=>{
 const setInterval=(fn,ms)=>{const id=++nextTimer;timers.set(id,{fn,ms});return id};
 const clearInterval=id=>timers.delete(id);
 const context={document:{getElementById:el,hidden:false,addEventListener(type,fn){events['document:'+type]=fn}},window,fetch,crypto:webcrypto,btoa,
- setInterval,clearInterval,Date,Intl,Number,JSON,RegExp,String,Math,Error,Promise,SpeechSynthesisUtterance:function(s){this.text=s;},
+ setInterval,clearInterval,setTimeout,clearTimeout,AbortController,Date,Intl,Number,JSON,RegExp,String,Math,Error,TypeError,Promise,SpeechSynthesisUtterance:function(s){this.text=s;},
  speechSynthesis};
 vm.runInNewContext(script,context,{timeout:5000});
 (async()=>{
@@ -68,5 +68,6 @@ vm.runInNewContext(script,context,{timeout:5000});
  assert.equal(el('answer').textContent,'','Response must not reappear after logout');
  assert.equal(speechCalls,0,'Private analytics must not be spoken after logout');
  assert.ok(requests.includes('close'),'Logout should revoke server token');
+ for(const item of requestHeaders.filter(x=>['pair','status','redeem','ask'].includes(x.action)))assert.equal(item.type,'text/plain;charset=UTF-8','Glasses must avoid unreliable CORS preflight on '+item.action);
  console.log('AIR3 security smoke passed: no persistent token, approved pairing, exit, delayed response isolation, voice isolation');
 })().catch(e=>{console.error(e);process.exitCode=1});
