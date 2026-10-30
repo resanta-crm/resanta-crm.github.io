@@ -76,8 +76,8 @@ Deno.serve(async (req:Request):Promise<Response>=>{
    const p=await pair(str(b.id));
    if(p.owner_id!==id)fail('Доступ запрещён',403);
    if(a==='approve'){
-    if(p.status!=='pending_approval'||Date.parse(p.expires_at)<=stamp())fail('Заявка неактивна',409);
-    const {data}=await admin.from(table).update({status:'approved',approved_at:iso(stamp())}).eq('id',p.id).eq('status','pending_approval').gt('expires_at',iso(stamp())).select('id').maybeSingle();
+    if(p.status!=='pending_approval'||!p.paired_at||Date.parse(p.paired_at)<=stamp()-600000)fail('Заявка неактивна',409);
+    const {data}=await admin.from(table).update({status:'approved',approved_at:iso(stamp())}).eq('id',p.id).eq('status','pending_approval').gt('paired_at',iso(stamp()-600000)).select('id').maybeSingle();
     if(!data)fail('Заявка неактивна',409);
     return respond({ok:true,status:'approved'});
    }
@@ -103,7 +103,8 @@ Deno.serve(async (req:Request):Promise<Response>=>{
   if(a==='status'||a==='redeem'){
    await limit('poll-global',90,60);
    const p=await devicePair(str(b.id),str(b.secret));
-   if(Date.parse(p.expires_at)<=stamp()&&p.status!=='redeemed')fail('Код истёк',410);
+   // The 6-digit code is valid for 2 min only at pair(); after pairing the high-entropy device secret and owner approval allow a 10-min completion window.
+   if(p.status!=='redeemed'&&(!p.paired_at||Date.parse(p.paired_at)<=stamp()-600000))fail('Срок подтверждения истёк',410);
    if(a==='status')return respond({ok:true,status:p.status});
    if(p.status!=='approved')fail('Нет подтверждения владельца',403);
    const {data:lock}=await admin.from(table).update({status:'redeemed',redeemed_at:iso(stamp())}).eq('id',p.id).eq('status','approved').select('id').maybeSingle();
