@@ -4,6 +4,9 @@ on:
     paths:
       - "index.html"
       - "assets/151-resanta-connect-v1.js"
+      - "assets/153-resanta-connect-notify-v1.js"
+      - "assets/154-resanta-connect-video-v1.js"
+      - "tests/connect-133.test.js"
       - "assets/155-resanta-connect-permissions-v1.*"
       - "supabase/migrations/20261030105000_connect_136_permissions.sql"
       - "supabase/functions/connect-livekit-token/index.ts"
