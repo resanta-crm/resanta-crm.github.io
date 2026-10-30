@@ -1964,7 +1964,7 @@ function canonicalSalesClientName(s){
     .replace(/[^a-zа-я0-9]/gi,'');
 }
 
-function showResetForm() { document.getElementById('login-form').style.display='none'; document.getElementById('reset-form').style.display='block'; }
+function showResetForm() { document.getElementById('login-form').style.display='none'; document.getElementById('reset-form').style.display='block'; const source=document.getElementById('login-email')?.value?.trim();if(source)document.getElementById('reset-email').value=source; }
 function showLoginForm() { document.getElementById('reset-form').style.display='none'; document.getElementById('login-form').style.display='block'; }
 
 // Оборачивает промис таймаутом — чтобы зависший запрос к серверу не вешал
@@ -2057,8 +2057,66 @@ async function doReset() {
 }
 
 async function doLogout() {
+  document.body.classList.remove('crm-auditor-mode');
   await crmLocalSignOutV236258();
   crmShowSignedOutUiV236258();
+}
+
+
+// Dedicated warehouse role enters through existing CRM login and Supabase session.
+// Do not start the broad CRM bootstrap (clients, purchases, routes, GPS).
+let crmAuditorWarehouseFlightV1=null;
+async function crmStartAuditorWarehouseV1(){
+  if(String(currentProfile?.role||'').toLowerCase()==='auditor_pending'){
+    document.getElementById('login-wrap').style.display='flex';
+    document.getElementById('app').style.display='none';
+    const e=document.getElementById('login-error');
+    if(e){e.textContent='Доступ ревизора ещё не активирован руководителем.';e.style.display='block';}
+    return;
+  }
+  if(crmAuditorWarehouseFlightV1)return crmAuditorWarehouseFlightV1;
+  crmAuditorWarehouseFlightV1=(async()=>{
+    document.body.classList.add('crm-auditor-mode');
+    const app=document.getElementById('app');
+    document.getElementById('login-wrap').style.display='none';
+    if(app)app.style.display='flex';
+    const name=document.getElementById('user-name');
+    if(name)name.textContent=currentProfile.name||currentUser.email;
+    const title=document.getElementById('topbar-title');
+    if(title)title.textContent='Склад · Витебск';
+    if(!document.getElementById('crm-auditor-style-v1')){
+      const style=document.createElement('style');style.id='crm-auditor-style-v1';
+      style.textContent='body.crm-auditor-mode .nav-item:not(#nav-warehouse-control),body.crm-auditor-mode .bn-item,body.crm-auditor-mode #nav-section-boss{display:none!important}';
+      document.head.appendChild(style);
+    }
+    const load=async(path,globalName)=>{
+      if(window[globalName])return;
+      await new Promise((resolve,reject)=>{
+        const node=document.createElement('script');
+        node.src='./'+path+'?v=auditor-20261030-1';
+        node.onload=()=>window[globalName]?resolve():reject(new Error('Модуль склада не запустился: '+path));
+        node.onerror=()=>reject(new Error('Не загружен складской модуль: '+path));
+        document.head.appendChild(node);
+      });
+    };
+    try{
+      // Original modules, not copies: the same warehouse UI and operations as the director.
+      await Promise.all([
+        load('assets/36-warehouse-control-v23620.js','RESANTA_WAREHOUSE_CONTROL_V23620'),
+        load('assets/94-warehouse-receiving-v236154.js','RESANTA_WAREHOUSE_RECEIVING_V236154')
+      ]);
+      goPage('warehouse-control','Склад · перелимит');
+      await window.crmWarehouseControlV1.open(true);
+    }catch(err){
+      const host=document.getElementById('main-content')||document.querySelector('.main')||app;
+      if(host){
+        let warning=document.getElementById('crm-auditor-error-v1');
+        if(!warning){warning=document.createElement('div');warning.id='crm-auditor-error-v1';host.prepend(warning)}
+        warning.textContent='Ошибка загрузки склада: '+String(err?.message||err)+' — обновите CRM.';
+      }
+    }
+  })().finally(()=>{crmAuditorWarehouseFlightV1=null});
+  return crmAuditorWarehouseFlightV1;
 }
 
 async function loadProfileAndStart() {
@@ -2084,10 +2142,10 @@ async function loadProfileAndStart() {
       return;
     }
     currentProfile=profile;
-    // Warehouse auditors must not initialize CRM sales, GPS, route or client data.
-    // Dedicated portal verifies an exact, server-bound auditor permission.
+    // Auditors use the NORMAL CRM login, never an independent website.
+    // The warehouse shell skips sales, clients, GPS and other CRM bootstrap.
     if(['auditor','auditor_pending'].includes(String(profile.role||'').toLowerCase())){
-      window.location.replace('./auditor.html');
+      await crmStartAuditorWarehouseV1();
       return;
     }
     startApp();
@@ -2127,6 +2185,7 @@ function clearRestoredMainSearches(){
 }
 
 async function startApp() {
+  document.body.classList.remove('crm-auditor-mode');
   clearRestoredMainSearches();
   document.getElementById('login-wrap').style.display='none';
   document.getElementById('app').style.display='flex';
@@ -2686,6 +2745,7 @@ function crmRenderPage(p){
   else if(p==='my-routes')return renderMyRoutes();
 }
 function goPage(p,title) {
+  if(String(currentProfile?.role||'').toLowerCase()==='auditor'&&p!=='warehouse-control')return;
   const appRoot=document.getElementById('app');
   const previousPage=appRoot?.dataset?.activePage||'';
   const epoch=++crmNavEpoch;window.__crmNavEpoch=epoch;
@@ -10236,7 +10296,67 @@ document.querySelectorAll(".modal-bg").forEach(m=>m.addEventListener("click",e=>
 })();
 
 // Auth handling
+
+function crmIsRecoveryUrlV1(){
+ try{
+   const h=new URLSearchParams(location.hash.replace(/^#/,''));
+   const q=new URLSearchParams(location.search);
+   return h.get('type')==='recovery'||q.get('type')==='recovery';
+ }catch(_){return false}
+}
+function crmShowPasswordRecoveryV1(){
+ let screen=document.getElementById('crm-password-recovery-v1');
+ if(screen){screen.style.display='flex';return}
+ screen=document.createElement('div');
+ screen.id='crm-password-recovery-v1';
+ screen.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#f3f6fb;display:flex;align-items:center;justify-content:center;padding:18px;font-family:Arial,sans-serif';
+ screen.innerHTML='<form id="crm-recovery-form-v1" style="background:#fff;border:1px solid #dce5f0;border-radius:14px;padding:26px;width:min(440px,100%);box-shadow:0 10px 35px #152a4a18">'
+  +'<h2 style="margin:0 0 8px;color:#143e65">РЕСАНТА CRM · Новый пароль</h2>'
+  +'<p style="font-size:13px;color:#526176">Ссылка подтверждена. Установите новый пароль для своей учётной записи.</p>'
+  +'<label style="display:block;font-size:12px;margin:12px 0 5px">Новый пароль</label>'
+  +'<input id="crm-recovery-pass-v1" type="password" autocomplete="new-password" required minlength="10" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #cbd5e1;border-radius:8px">'
+  +'<label style="display:block;font-size:12px;margin:12px 0 5px">Повторите новый пароль</label>'
+  +'<input id="crm-recovery-confirm-v1" type="password" autocomplete="new-password" required minlength="10" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #cbd5e1;border-radius:8px">'
+  +'<p style="font-size:12px;color:#6d7c89">Минимум 10 символов: заглавная и строчная латинские буквы и цифра.</p>'
+  +'<div id="crm-recovery-error-v1" role="alert" style="font-size:13px;color:#a11b1b;margin:9px 0"></div>'
+  +'<button type="submit" style="background:#1761a2;color:white;border:0;border-radius:8px;padding:12px 16px;cursor:pointer">Сохранить пароль</button></form>';
+ document.body.appendChild(screen);
+ const form=screen.querySelector('form');
+ form.onsubmit=async(e)=>{
+   e.preventDefault();
+   const value=screen.querySelector('#crm-recovery-pass-v1').value;
+   const confirm=screen.querySelector('#crm-recovery-confirm-v1').value;
+   const error=screen.querySelector('#crm-recovery-error-v1');
+   error.textContent='';
+   if(!(value.length>=10&&/[a-z]/.test(value)&&/[A-Z]/.test(value)&&/[0-9]/.test(value))){error.textContent='Пароль не соответствует требованиям безопасности.';return}
+   if(value!==confirm){error.textContent='Пароли не совпадают.';return}
+   const btn=form.querySelector('button[type=submit]');btn.disabled=true;
+   try{
+     const result=await db.auth.updateUser({password:value});
+     if(result.error)throw result.error;
+     await db.auth.signOut({scope:'local'});
+     try{history.replaceState({},'',location.pathname)}catch(_){}
+     screen.remove();
+     currentUser=null;currentProfile=null;
+     document.body.classList.remove('crm-auditor-mode');
+     document.getElementById('app').style.display='none';
+     document.getElementById('login-wrap').style.display='flex';
+     showLoginForm();
+     const info=document.getElementById('login-info');
+     if(info){info.style.display='block';info.textContent='✅ Пароль сохранён. Теперь войдите по email с новым паролем.'}
+   }catch(err){error.textContent='Не удалось сохранить пароль: '+String(err?.message||err)}
+   finally{btn.disabled=false}
+ };
+}
 async function initAuth(){
+  // Recovery URLs must never bootstrap sales, GPS or warehouse before the
+  // PASSWORD_RECOVERY event has verified the one-time link.
+  if(crmIsRecoveryUrlV1()){
+    document.getElementById('login-wrap').style.display='flex';
+    const info=document.getElementById('login-info');
+    if(info){info.textContent='Проверяем ссылку для смены пароля…';info.style.display='block'}
+    return;
+  }
   const {data:{session}} = await db.auth.getSession();
   if(session && session.user){
     currentUser=session.user;
@@ -10253,8 +10373,9 @@ window.addEventListener('focus',()=>crmEnsureFreshSessionV236166(false).catch(e=
 
 db.auth.onAuthStateChange(async(event,session)=>{
   if(event==='PASSWORD_RECOVERY'){
-    const newPass=prompt('Введите новый пароль (минимум 6 символов):');
-    if(newPass){const {error}=await db.auth.updateUser({password:newPass});if(!error){alert('✅ Пароль изменён! Войдите с новым паролем.');}}
+    // Defer user interaction until the auth callback returns: no auth calls
+    // inside the onAuthStateChange handler (prevents session deadlock).
+    setTimeout(crmShowPasswordRecoveryV1,0);
     return;
   }
   if(event==='SIGNED_OUT'){

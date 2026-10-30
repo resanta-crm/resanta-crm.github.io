@@ -28,7 +28,7 @@ async function load(){
  try{
   summary=await rpc('warehouse_inventory_summary_v1',{p_session_id:null,p_mode:mode,p_search:search,p_limit:limit,p_offset:offset});
   if(!summary?.has_session){try{refreshState=await rpc('warehouse_inventory_refresh_status_v1',{})}catch(_){refreshState=null}}
-  render()
+  render();renderAuditorFactPanelV1();
  }
  catch(e){if(root)root.innerHTML='<div class="iv-alert iv-red"><b>Не удалось открыть инвентаризацию.</b><br>'+esc(e?.message||e)+'</div>'}
  finally{busy=false}
@@ -203,6 +203,40 @@ function userOptions(){
  let arr=[];try{arr=typeof allUsers!=='undefined'&&Array.isArray(allUsers)?allUsers:[]}catch(_){}
  return arr.filter(u=>u&&u.email).map(u=>'<option value="'+esc(u.email)+'">'+esc((u.name||u.email)+' · '+u.email)+'</option>').join('');
 }
+
+function renderAuditorFactPanelV1(){
+ // The original inventory manager screen; no parallel data store.
+ const auditor=typeof currentProfile!=='undefined'
+   &&String(currentProfile?.role||'').toLowerCase()==='auditor'
+   &&String(currentProfile?.email||'').trim().toLowerCase()==='sazonov_ks@resanta.ru';
+ if(!auditor||!root||!summary?.has_session||summary?.session?.status!=='active')return;
+ if(root.querySelector('#iv-auditor-fact-v1'))return;
+ const div=document.createElement('div');div.className='iv-card';div.id='iv-auditor-fact-v1';div.style.marginBottom='12px';
+ div.innerHTML='<h3 style="margin:0 0 8px">📝 Внести фактический остаток</h3>'
+ +'<p class="iv-muted" style="margin:0 0 10px">Впишите артикул и фактическое количество на складе. CRM сохранит значение в текущей инвентаризации, пересчитает расхождение и запишет автора изменения.</p>'
+ +'<div class="iv-tools"><input id="iv-auditor-sku-v1" aria-label="Артикул" placeholder="Артикул (SKU)" autocapitalize="characters">'
+ +'<input id="iv-auditor-qty-v1" aria-label="Фактическое количество" type="number" min="0" max="1000000" step="any" placeholder="Факт, шт." style="max-width:150px">'
+ +'<button class="iv-btn primary" type="button" id="iv-auditor-save-v1">Сохранить факт</button></div>'
+ +'<div id="iv-auditor-result-v1" class="iv-muted" role="status"></div>';
+ const button=div.querySelector('#iv-auditor-save-v1');
+ button.onclick=async()=>{
+  const sku=String(div.querySelector('#iv-auditor-sku-v1')?.value||'').trim();
+  const val=div.querySelector('#iv-auditor-qty-v1')?.value;
+  const qtyValue=Number(val);
+  const result=div.querySelector('#iv-auditor-result-v1');
+  if(!sku||val===''||!Number.isFinite(qtyValue)||qtyValue<0||qtyValue>1000000){
+   result.textContent='Введите артикул и фактическое количество от 0 до 1 000 000.';return;
+  }
+  button.disabled=true;button.textContent='Сохраняю…';
+  try{
+   const saved=await rpc('warehouse_inventory_set_fact_v1',{p_session_id:summary.session.id,p_sku:sku,p_fact_qty:qtyValue});
+   if(saved?.ok===false)throw new Error(saved?.reason||'Артикул не сохранён');
+   await load();
+  }catch(e){result.textContent='Ошибка записи: '+String(e?.message||e);}
+  finally{button.disabled=false;button.textContent='Сохранить факт';}
+ };
+ root.prepend(div);
+}
 function render(){
  if(!root)return;
  const has=!!summary?.has_session;
@@ -233,7 +267,15 @@ function render(){
 function scannerCard(){
  return '<div class="iv-card"><div style="font-weight:800;margin-bottom:6px">📱 ТСД · Resanta Склад</div><div class="iv-muted">Оба ТСД работают с одной инвентаризацией. После каждого скана они видят остаток 1С и общий уже насчитанный факт; если факт выше учёта, ТСД покажет предупреждение.</div><img class="iv-qr" src="./inventory-qr.svg" alt="QR для ТСД"><div style="display:grid;gap:7px"><a class="iv-btn primary" style="text-align:center;text-decoration:none" href="./inventory.html" target="_blank" rel="noopener">Открыть приложение ТСД</a><div style="font-size:10px;color:var(--sub);word-break:break-all;text-align:center">https://resanta-crm.by/inventory.html</div></div><hr style="border:0;border-top:1px solid var(--border);margin:13px 0"><div class="iv-alert iv-green" style="margin:10px 0"><b>Разделение ТСД:</b><br><b>ТСД-1 · Начальник склада</b> — vitebsk@resanta.ru<br><b>ТСД-2 · Кладовщик</b> — sidarovich_kn@resanta.ru<br>CRM сохраняет, кто сделал каждый скан и с какого ТСД.</div><div style="font-weight:700;font-size:12px;margin-bottom:6px">Кому разрешён пересчёт</div><div style="display:flex;gap:6px"><select id="iv-access-user" style="min-width:0;flex:1;padding:8px;border:1px solid var(--border);border-radius:8px"><option value="">Выберите сотрудника…</option>'+userOptions()+'</select><button class="iv-btn" id="iv-grant">Разрешить</button></div><div id="iv-access-list" style="margin-top:8px"></div></div>'
 }
-function renderAccessSoon(){setTimeout(()=>{const b=$('iv-grant');if(b)b.onclick=grant;renderAccess()},20)}
+function renderAccessSoon(){
+ const auditor=typeof currentProfile!=='undefined'&&String(currentProfile?.role||'').toLowerCase()==='auditor';
+ if(auditor){
+   const user=$('iv-access-user'),grant=$('iv-grant'),box=$('iv-access-list');
+   [user,grant,box].forEach(el=>el?.remove());
+   return;
+ }
+ setTimeout(()=>{const b=$('iv-grant');if(b)b.onclick=grant;renderAccess()},20)
+}
 async function open(target){
  css();root=typeof target==='string'?document.querySelector(target):target;if(!root)return;
  root.innerHTML='<div id="wc-inventory-v236139"><div class="card">Загружаю инвентаризацию…</div></div>';

@@ -14,10 +14,17 @@ const money=(v,cur='BYN')=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,
 const qty=v=>n(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
 function dbx(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
 function isBoss(){try{return String(currentProfile?.role||'').toLowerCase()==='boss'}catch(_){return false}}
+function isAuditor(){try{return String(currentProfile?.role||'').toLowerCase()==='auditor'&&String(currentProfile?.email||'').trim().toLowerCase()==='sazonov_ks@resanta.ru'&&String(currentUser?.email||'').trim().toLowerCase()==='sazonov_ks@resanta.ru'}catch(_){return false}}
+function canSeeWarehouseDashboard(){return isBoss()||isAuditor()}
 function currentEmail(){try{return String(currentProfile?.email||currentUser?.email||'').trim().toLowerCase()}catch(_){return''}}
-function canReceiving(){return ['payushin_ar@resanta.ru','vitebsk@resanta.ru','sidarovich_kn@resanta.ru'].includes(currentEmail())}
+function canReceiving(){return isAuditor()||['payushin_ar@resanta.ru','vitebsk@resanta.ru','sidarovich_kn@resanta.ru'].includes(currentEmail())}
 function canPicking(){const x=window.RESANTA_WAREHOUSE_PICKER_SESSION_V1;return x?.role==='warehouse'&&x?.email===currentEmail()}
-async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('Соединение с базой ещё не готово');const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data;}
+async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('Соединение с базой ещё не готово');if(isAuditor()){
+const allowed={'warehouse_control_get_dashboard_v2':'warehouse_auditor_get_dashboard_v1','warehouse_control_get_items_v2':'warehouse_auditor_get_items_v1','warehouse_control_months_v1':'warehouse_auditor_months_v1'};
+if(name==='warehouse_control_set_fx_v1')throw new Error('Изменение финансового курса доступно только руководителю');
+if(allowed[name])name=allowed[name];
+}
+const call=()=>d.rpc(name,args);const out=typeof window.crmAuthRetryV236166==='function'?await window.crmAuthRetryV236166(call):await call();const {data,error}=out||{};if(error)throw error;return data;}
 function ensureCss(){if($('warehouse-v23620-css'))return;const s=document.createElement('style');s.id='warehouse-v23620-css';s.textContent=`
 #wc-v23620 .wc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}#wc-v23620 .wc-head-actions{display:flex;gap:8px;align-items:end;flex-wrap:wrap}#wc-v23620 .wc-month-box{display:flex;flex-direction:column;gap:3px}#wc-v23620 .wc-month-box label{font-size:9px;color:var(--sub);font-weight:800;text-transform:uppercase}#wc-v23620 .wc-month-box select{min-width:145px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px}
 #wc-v23620 .wc-tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin:0 0 14px}#wc-v23620 .wc-tab{border:1px solid var(--border);background:#fff;border-radius:9px;padding:9px 13px;white-space:nowrap;cursor:pointer;font-weight:700;font-size:12px}#wc-v23620 .wc-tab.active{background:var(--ab);border-color:#60A5FA;color:var(--at)}
@@ -34,7 +41,7 @@ function ensureDom(){
   if(!nav){nav=document.createElement('button');nav.className='nav-item';nav.id='nav-warehouse-control';nav.style.display='none';nav.innerHTML='<span class="icon">🏭</span> Склад · перелимит';nav.onclick=()=>{try{goPage('warehouse-control','Склад · перелимит и автозаказ')}catch(_){}setTimeout(open,0)};const anchor=$('nav-gps-control')||$('nav-control');anchor?.insertAdjacentElement('afterend',nav)}
   let page=$('page-warehouse-control');
   if(!page){page=document.createElement('div');page.className='page';page.id='page-warehouse-control';page.innerHTML='<div id="wc-v23620"><div class="page-title">🏭 Склад · перелимит и автозаказ</div><div class="card">Загрузка…</div></div>';($('main-content')||document.querySelector('.main'))?.appendChild(page)}
-  if(nav){nav.style.display=(isBoss()||canReceiving()||canPicking())?'flex':'none';nav.innerHTML=isBoss()?'<span class="icon">🏭</span> Склад · перелимит':canPicking()&&!canReceiving()?'<span class="icon">📦</span> Склад · заказы':'<span class="icon">📥</span> Склад · приёмка'}
+  if(nav){nav.style.display=(canSeeWarehouseDashboard()||canReceiving()||canPicking())?'flex':'none';nav.innerHTML=canSeeWarehouseDashboard()?'<span class="icon">🏭</span> Склад · перелимит':canPicking()&&!canReceiving()?'<span class="icon">📦</span> Склад · заказы':'<span class="icon">📥</span> Склад · приёмка'}
   installed=true;
 }
 function setBusy(text='Загрузка…'){
@@ -66,7 +73,11 @@ function renderShell(){
   <div class="wc-kpis">${kpi('Остаток по себестоимости',money(d.closing_cost_byn),money(d.closing_cost_rub,'RUB'))}${kpi('Расход месяца по себестоимости',money(d.expense_cost_byn),`Прогноз: ${money(d.forecast_expense_byn)}`)}${kpi('Сверхнорматив сейчас',money(d.current_overlimit_byn),`1%: ${money(d.current_penalty_byn)}`,over>0?'wc-bad':'wc-good')}${kpi('Прогноз сверхнорматива',money(d.forecast_overlimit_byn),`1%: ${money(d.forecast_penalty_byn)}`,forecast>0?'wc-bad':'wc-good')}${kpi('Нет / заканчивается',String(d.stockout_sku||0)+' SKU',`Нужно заказать: ${d.need_order_sku||0} SKU`,'wc-warn')}${kpi('Излишки',String(d.excess_sku||0)+' SKU','Группа 900 в возврат не предлагается')}${kpi('Свободно до прогнозной нормы',money(d.order_headroom_byn),money(d.order_headroom_rub,'RUB'))}${kpi('Формула курса',n(d.rub_per_byn).toLocaleString('ru-RU',{maximumFractionDigits:4})+' RUB/BYN',formula)}</div>
   <div class="wc-grid"><div class="wc-card"><h3>🎯 Что делать сегодня</h3><div style="font-size:12px;line-height:1.65"><b>1.</b> «Перелимит» — товары, которые держат лишние деньги на складе, сверху самые дорогие.<br><b>2.</b> «Дефицит» — SKU, которых нет или запаса меньше расчётной потребности.<br><b>3.</b> «Автозаказ Чехов» — только то, что нужно Витебску и реально есть в Чехове, с учётом упаковки.<br><b>4.</b> Заказ всегда утверждает руководитель; CRM пока формирует готовый файл, но сама в ЦО его не отправляет.</div></div><div class="wc-card"><h3>💱 Пересчёт BYN → RUB</h3><div class="wc-form"><div><label>BYN за 1 USD</label><input id="wc-byn-usd" type="number" step="0.0001" value="${n(d.byn_per_usd)}"></div><div><label>RUB за 1 USD</label><input id="wc-rub-usd" type="number" step="0.01" value="${n(d.rub_per_usd)}"></div><button id="wc-save-fx">Сохранить</button></div><div class="wc-muted" style="margin-top:7px">Формула строго по согласованному примеру: BYN / курс BYN/USD × RUB/USD. ${esc(formula)}</div></div></div>
   <div class="wc-tabs"><button class="wc-tab" data-mode="overview">Обзор</button><button class="wc-tab" data-mode="inventory">📋 Инвентаризация</button><button class="wc-tab" data-mode="receiving">📥 Приёмка товара</button><button class="wc-tab" data-mode="orders">📦 Заказы</button><button class="wc-tab" data-mode="excess">🔴 Перелимит</button><button class="wc-tab" data-mode="stockout">⚠ Нет товара</button><button class="wc-tab" data-mode="order">🚚 Автозаказ Чехов</button><button class="wc-tab" data-mode="all">Все SKU</button></div><div id="wc-body"></div>`;
-  $('wc-refresh').onclick=()=>open(true);$('wc-save-fx').onclick=saveFx;const mf=$('wc-month-filter');if(mf)mf.onchange=async()=>{const v=String(mf.value||'').slice(0,7);if(!v||v===selectedMonth)return;selectedMonth=v;offset=0;search='';dash=null;await open(true)};
+  $('wc-refresh').onclick=()=>open(true);
+  const fxSave=$('wc-save-fx');
+  if(fxSave){if(isAuditor()){fxSave.remove();['wc-byn-usd','wc-rub-usd'].forEach(id=>{const input=$(id);if(input)input.readOnly=true;});}else fxSave.onclick=saveFx;}
+  if(isAuditor())document.querySelector('#wc-v23620 .wc-tab[data-mode="orders"]')?.remove();
+  const mf=$('wc-month-filter');if(mf)mf.onchange=async()=>{const v=String(mf.value||'').slice(0,7);if(!v||v===selectedMonth)return;selectedMonth=v;offset=0;search='';dash=null;await open(true)};
   document.querySelectorAll('#wc-v23620 [data-mode]').forEach(b=>b.onclick=()=>switchMode(b.dataset.mode));
   switchMode(mode,true);
 }
@@ -110,7 +121,7 @@ function renderPickerOnlyShell(){
 }
 async function open(force=false){
   ensureDom();
-  if(!isBoss()){
+  if(!canSeeWarehouseDashboard()){
     if(canReceiving()){
       const r=$('wc-v23620');
       // Keep the selected file and preview intact during profile/nav reinitialization.
@@ -149,7 +160,7 @@ async function open(force=false){
   })();
   return flight
 }
-function install(){ensureDom();if($('page-warehouse-control')?.classList.contains('active')&&(isBoss()||canReceiving()||canPicking()))open(false)}
+function install(){ensureDom();if($('page-warehouse-control')?.classList.contains('active')&&(canSeeWarehouseDashboard()||canReceiving()||canPicking()))open(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 [300,800,1600,3000,6000].forEach(ms=>setTimeout(install,ms));
 window.addEventListener('focus',()=>{if(!$('page-warehouse-control')?.classList.contains('active'))return;try{window.crmWarehouseAfterRenderV23682?.()}catch(_){}});
