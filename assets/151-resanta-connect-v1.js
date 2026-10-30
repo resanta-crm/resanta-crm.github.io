@@ -190,7 +190,7 @@
    const res=await dbClient().from('connect_messages_v1')
     .insert({room_id:roomId,sender_id:actor,body})
     .select('id,room_id,sender_id,body,created_at').single();
-   const message=ensure(res);if(message)appendMsg(message);
+   const message=ensure(res);if(message){appendMsg(message);window.crmConnectPush138?.sendForMessage?.(message.id);}
    input.value='';notice('Сообщение отправлено.');
   }catch(e){notice(textErr(e),true);}
   finally{sending=false;$('c126-send').disabled=false;}
