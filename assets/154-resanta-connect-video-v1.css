@@ -1,0 +1,54 @@
+/* RESANTA CONNECT #131 video-only styles: isolated from CRM layout */
+#page-connect .c131-overlay[hidden]{display:none!important}
+#page-connect .c131-overlay{
+  position:fixed;z-index:99995;inset:0;background:rgba(12,22,36,.83);
+  display:flex;align-items:center;justify-content:center;padding:14px
+}
+#page-connect .c131-dialog{
+  box-sizing:border-box;background:#fff;border-radius:16px;width:min(1120px,99vw);
+  height:min(850px,92dvh);min-height:340px;display:flex;flex-direction:column;
+  overflow:hidden;box-shadow:0 24px 75px #11182765
+}
+#page-connect .c131-head{
+ display:flex;align-items:center;justify-content:space-between;gap:12px;
+ padding:13px 17px;border-bottom:1px solid #e3e9f2
+}
+#page-connect .c131-head strong{display:block;font-size:16px;color:#213952}
+#page-connect .c131-head small{font-size:11px;color:#748399}
+#page-connect .c131-status{color:#44566c;font-size:12px;min-height:36px;padding:10px 17px}
+#page-connect .c131-status.error{color:#b42318}
+#page-connect .c131-wall{
+ flex:1;min-height:0;overflow:auto;background:#101d30;padding:14px;
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px;
+ align-content:start
+}
+#page-connect .c131-tile{
+ position:relative;overflow:hidden;min-height:200px;aspect-ratio:16/10;
+ background:#21344d;border:1px solid #3e526b;border-radius:12px;
+ display:flex;flex-direction:column;justify-content:center
+}
+#page-connect .c131-tracks{height:100%;min-height:160px;display:flex;gap:4px}
+#page-connect .c131-video{height:100%;width:100%;min-width:0;object-fit:contain;background:#0d1c2e;flex:1}
+#page-connect .c131-tile small{
+ position:absolute;bottom:8px;left:8px;max-width:90%;
+ background:#051426ba;color:white;padding:5px 9px;border-radius:6px;
+ font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+#page-connect .c131-tools{
+ display:flex;justify-content:center;gap:8px;align-items:center;flex-wrap:wrap;
+ padding:12px;background:#f8fbff;border-top:1px solid #dce5f1
+}
+#page-connect .c131-tools .c126-btn{font-size:12px;min-height:38px}
+#page-connect .c131-tools .c131-danger{color:white;background:#c72b36;border-color:#c72b36}
+#page-connect .c126-head #c131-start{white-space:nowrap}
+@media(max-width:710px){
+ #page-connect .c131-overlay{padding:4px}
+ #page-connect .c131-dialog{height:96dvh;width:100vw;min-height:0;border-radius:10px}
+ #page-connect .c131-head{padding:8px}
+ #page-connect .c131-head strong{font-size:13px}
+ #page-connect .c131-wall{padding:6px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px}
+ #page-connect .c131-tile{min-height:150px}
+ #page-connect .c131-tools{padding:6px;gap:5px}
+ #page-connect .c131-tools .c126-btn{font-size:11px;padding:7px 6px}
+ #page-connect .c126-head #c131-start{font-size:11px;padding:7px 5px}
+}

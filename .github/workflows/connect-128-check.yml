@@ -36,7 +36,11 @@ jobs:
         run: |
           git diff --name-only origin/main...HEAD > /tmp/connect-128-files
           cat /tmp/connect-128-files
-          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.(js|css)|assets/153-resanta-connect-notify-v1\.js|supabase/migrations/20261030080000_connect_128_unread\.sql|tests/connect-128\.test\.js|\.github/workflows/connect-(126|127|128)-check\.yml)$' /tmp/connect-128-files; then
+          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.(js|css)|assets/153-resanta-connect-notify-v1\.js|supabase/migrations/20261030080000_connect_128_unread\.sql|tests/connect-128\.test\.js|assets/154-resanta-connect-video-v1\.(js|css)|supabase/functions/connect-livekit-token/index\.ts|tests/connect-131\.test\.js|\.github/workflows/connect-(126|127|128|131)-check\.yml) /tmp/connect-128-files; then
+            echo 'Unexpected legacy CRM change' >&2
+            exit 1
+          fi
+ /tmp/connect-128-files; then
             echo 'Unexpected legacy CRM change' >&2
             exit 1
           fi
