@@ -39,7 +39,7 @@ const fetch=async(url,options)=>{
  const payload=args.action==='create'?{ok:true,code:'123456',expires_at:new Date(Date.now()+120000).toISOString()}:{ok:true,items:[]};
  return {ok:true,json:async()=>payload}
 };
-vm.runInNewContext(scripts[0],{window,document,fetch,Date,Math,String,Error,Number,
+vm.runInNewContext(scripts[0],{window,db:client,document,fetch,Date,Math,String,Error,Number,
  setInterval(){return 1},clearInterval(){},console}, {timeout:1000});
 (async()=>{
  assert.equal(node('air3-launch').hidden,true,'Button must be hidden before authentication');
