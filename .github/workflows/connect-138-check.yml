@@ -1,0 +1,34 @@
+name: CONNECT 138 FCM staging safety
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "assets/156-resanta-connect-android-push-v1.js"
+      - "supabase/migrations/20261030113000_connect_138_push_prep.sql"
+      - "tests/connect-138.test.js"
+      - ".github/workflows/connect-138-check.yml"
+  push:
+    branches: ["feature/connect-138-fcm-push-prep"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify FCM preparation without production deployment
+        run: |
+          node --check assets/156-resanta-connect-android-push-v1.js
+          node --check tests/connect-138.test.js
+          node tests/connect-138.test.js
+          node tests/connect-136.test.js
+      - name: Do not touch legacy CRM logic
+        run: |
+          git diff --name-only origin/main...HEAD >/tmp/connect138-files
+          if grep -Ev '^(index\.html|assets/156-resanta-connect-android-push-v1\.js|supabase/migrations/20261030113000_connect_138_push_prep\.sql|tests/connect-138\.test\.js|\.github/workflows/connect-138-check\.yml)$' /tmp/connect138-files; then
+            echo 'Non-CONNECT file changed' >&2
+            exit 1
+          fi
