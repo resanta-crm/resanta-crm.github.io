@@ -71,7 +71,7 @@ check('Realtime notifications alert incoming messages and call invitations',()=>
  assert.match(chat,/crmConnectOpenRoom136=openInvitedRoom/);
  assert.match(get('assets/154-resanta-connect-video-v1.js'),/window\.crmConnectVideo131=\{init,chatChanged,join\}/);
  assert.match(html,/153-resanta-connect-notify-v1\.js\?v=3/);
- assert.match(html,/154-resanta-connect-video-v1\.js\?v=5/);
+ assert.match(html,/154-resanta-connect-video-v1\.js\?v=6/);
 });
 console.log('CONNECT #136 permissions: '+passed+' passed, '+failed+' failed');
 if(failed)process.exitCode=1;
