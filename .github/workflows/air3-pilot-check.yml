@@ -7,6 +7,7 @@ on:
       - 'supabase/functions/crm-ai360-air3-gateway-v1/**'
       - 'supabase/migrations/*air3*'
       - '.github/workflows/air3-pilot-check.yml'
+      - 'tests/air3-security-smoke.cjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,6 +21,7 @@ jobs:
           deno-version: v2.x
       - run: deno check supabase/functions/crm-ai360-air3-gateway-v1/index.ts
       - run: node --check assets/156-air3-controller-v1.js
+      - run: node tests/air3-security-smoke.cjs
       - name: Check inline JavaScript without running it
         run: |
           python3 - <<'PY'
