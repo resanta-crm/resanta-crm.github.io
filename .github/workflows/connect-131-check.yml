@@ -26,7 +26,10 @@ jobs:
           node --check assets/154-resanta-connect-video-v1.js
           node --check tests/connect-131.test.js
       - name: CRM video and token security contract
-        run: node tests/connect-131.test.js
+        run: |
+          node tests/connect-127.test.js
+          node tests/connect-128.test.js
+          node tests/connect-131.test.js
       - name: Release touches only CONNECT files
         shell: bash
         run: |
