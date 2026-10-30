@@ -102,7 +102,7 @@ test('Only branch director can use signed task commit; field managers cannot',()
  assert.match(task,/if\(!await verify\(secret,userId/);
  assert.ok(!ui.includes("crm-ai360-branch-task-approval-v1"));
  assert.match(page,/148-resanta-ai360-staff-identity-v1\.js\?v=2/);
- assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=8/);
- assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=3/);
- assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=3/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=9/);
+ assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=4/);
+ assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=4/);
 });
