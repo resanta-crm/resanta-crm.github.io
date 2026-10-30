@@ -95,7 +95,15 @@
    });
   }
  }
- window.crmConnectPush138={init};
+ async function sendForMessage(messageId){
+  if(!messageId||!dbClient())return;
+  try{
+   const result=await dbClient().functions.invoke('connect-fcm-send',{body:{message_id:messageId}});
+   // Sending push must never interrupt chat or call invitation delivery.
+   if(result.error)console.warn('CONNECT push dispatch unavailable');
+  }catch(_){console.warn('CONNECT push dispatch temporarily unavailable');}
+ }
+ window.crmConnectPush138={init,sendForMessage};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
  else init();
 })();
