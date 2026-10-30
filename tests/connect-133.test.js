@@ -23,6 +23,7 @@ class FakeNode{
  appendChild(x){this.append(x);}
  replaceChildren(...xs){this.children=xs;}
  querySelector(q){if(q==='.c131-tracks')return this.children[0]||null;return null;}
+ setAttribute(name,value){this[name]=String(value);}
  addEventListener(kind,fn){this.events[kind]=fn;}
  click(){this.events.click?.();}
 }
