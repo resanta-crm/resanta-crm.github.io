@@ -29,9 +29,8 @@ function paint(){
  for(const id of ['c128-nav-count','c128-bottom-count']){
   const item=$(id);if(item){item.hidden=!visible;item.textContent=visible;}
  }
- for(const [id,count] of counts){
-  const button=document.querySelector('#c126-rooms .c126-room[data-room-id="'+id+'"]');
-  if(!button)continue;
+ for(const button of document.querySelectorAll('#c126-rooms .c126-room[data-room-id]')){
+  const count=counts.get(button.dataset.roomId)||0;
   let b=button.querySelector('.c128-room-count');
   if(count>0&&!b){b=document.createElement('span');b.className='c128-room-count';button.append(b);}
   if(b){b.textContent=count>99?'99+':String(count);b.hidden=!count;}
