@@ -71,7 +71,7 @@ verify('Every sent chat and call invitation requests FCM without blocking conver
  assert.match(livekit,/crmConnectPush138\?\.sendForMessage\?\.\(r\.data\.id\)/);
  assert.match(js,/connect-fcm-send/);
  assert.match(js,/sendForMessage/);
- assert.match(html,/151-resanta-connect-v1\.js\?v=7/);
- assert.match(html,/154-resanta-connect-video-v1\.js\?v=6/);
+ assert.match(html,/151-resanta-connect-v1\.js\?v=8/);
+ assert.match(html,/154-resanta-connect-video-v1\.js\?v=7/);
 });
 console.log('CONNECT #138 staging '+count+' tests passed');
