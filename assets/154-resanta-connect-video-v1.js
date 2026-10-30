@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 const ctx={};
 const SDK_URL='https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js';
 let ready=false, connecting=false, call=null, callChat=null, sdkLoading=null, monitor=null, requestEpoch=0;
-let minimized=false, callIdentity=null;
+let minimized=false, callIdentity=null,screenBusy=false,micBusy=false;
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text??'');return n;};
 const status=(s,bad)=>{const e=$('c131-status');if(e){e.textContent=s;e.classList.toggle('error',!!bad);}};
 function loadSdk(){
@@ -43,9 +43,13 @@ function updateMini(){
  const info=$('c131-mini-info');
  if(info)info.textContent=participants+' участник(ов) · '+(call?.localParticipant?.isScreenShareEnabled?'🖥 Экран показывается':'Экран не показывается');
  const mic=$('c131-mini-mic');
- if(mic){mic.textContent=call?.localParticipant?.isMicrophoneEnabled?'🎤 Выключить':'🎤 Включить';mic.disabled=!call;}
+ if(mic){mic.textContent=call?.localParticipant?.isMicrophoneEnabled?'🎤 Выключить':'🎤 Включить';mic.disabled=!call||micBusy;}
  const screen=$('c131-mini-screen');
- if(screen){screen.textContent=call?.localParticipant?.isScreenShareEnabled?'⏹ Остановить экран':'🖥 Показать экран';screen.disabled=!call;}
+ if(screen){screen.textContent=call?.localParticipant?.isScreenShareEnabled?'⏹ Остановить экран':'🖥 Показать экран';screen.disabled=!call||screenBusy;}
+ const fullScreen=$('c131-screen');
+ if(fullScreen){fullScreen.textContent=screen?.textContent||'🖥 Показать экран';fullScreen.disabled=!call||screenBusy;}
+ const fullMic=$('c131-mic');
+ if(fullMic){fullMic.textContent=mic?.textContent||'🎤 Включить';fullMic.disabled=!call||micBusy;}
 }
 function minimize(){
  if(!call)return;
@@ -83,7 +87,7 @@ function hide(){
  $('c131-overlay').hidden=true;
  if($('c131-mini'))$('c131-mini').hidden=true;
  $('c131-wall')?.replaceChildren();$('c131-audio')?.replaceChildren();
- callChat=null;callIdentity=null;minimized=false;connecting=false;
+ callChat=null;callIdentity=null;minimized=false;connecting=false;screenBusy=false;micBusy=false;
  $('c131-start').disabled=false;
  $('c131-start').textContent='📹 Видеозвонок';
 }
@@ -124,8 +128,19 @@ async function join(){
   });
   candidate.on(livekit.RoomEvent.TrackSubscribed,(t,_pub,p)=>attach(t,p,false));
   candidate.on(livekit.RoomEvent.TrackUnsubscribed,t=>detach(t));
-  candidate.on(livekit.RoomEvent.LocalTrackPublished,pub=>{if(pub.track)attach(pub.track,candidate.localParticipant,true);});
-  candidate.on(livekit.RoomEvent.LocalTrackUnpublished,pub=>detach(pub.track));
+  candidate.on(livekit.RoomEvent.LocalTrackPublished,pub=>{
+   if(pub.track)attach(pub.track,candidate.localParticipant,true);
+   if(call===candidate)updateMini();
+  });
+  candidate.on(livekit.RoomEvent.LocalTrackUnpublished,pub=>{
+   detach(pub.track);
+   // Native browser "Stop sharing" also fires this event. Sync both controls.
+   if(call===candidate){
+    updateMini();
+    if(pub.source==='screen_share'||pub.track?.source==='screen_share')
+     status('Демонстрация экрана остановлена.');
+   }
+  });
   candidate.on(livekit.RoomEvent.Disconnected,()=>{if(call===candidate)leave(true);});
   await candidate.connect(response.data.url,response.data.token);
   if(epoch!==requestEpoch||!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат закрыт.');
@@ -136,8 +151,9 @@ async function join(){
   count();
   status('Видеозвонок подключён. Камеру и микрофон можно включить отдельно.');
   monitor=setInterval(()=>{
+   // Do not automatically minimize an explicitly restored call.
+   // Navigation transitions are handled once by MutationObserver below.
    if(!ctx.isSignedIn?.(callIdentity))leave(true);
-   else if(!ctx.isOpen?.()&&!minimized)minimize();
   },1200);
   try{await call.localParticipant.setMicrophoneEnabled(true);$('c131-mic').textContent='🎤 Выключить микрофон';}
   catch(_){status('Разрешите микрофон в настройках браузера.');}
@@ -152,6 +168,9 @@ async function join(){
 }
 async function toggle(kind){
  if(!call)return;
+ if((kind==='screen'&&screenBusy)||(kind==='mic'&&micBusy))return;
+ if(kind==='screen')screenBusy=true;
+ if(kind==='mic')micBusy=true;
  const p=call.localParticipant;
  const b=kind==='mic'?$('c131-mic'):kind==='cam'?$('c131-cam'):$('c131-screen');
  const miniButton=kind==='mic'?$('c131-mini-mic'):kind==='screen'?$('c131-mini-screen'):null;
@@ -170,8 +189,10 @@ async function toggle(kind){
    await p.setScreenShareEnabled(enabled,{audio:true});
    b.textContent=enabled?'⏹ Остановить экран':'🖥 Показать экран';
    // A successful selection must replace an earlier browser permission error.
-   status(enabled?'Демонстрация экрана включена.':'Демонстрация экрана остановлена.');
-   if(enabled)minimize();
+   // Treat the SDK's actual publication state as the source of truth.
+   const active=!!p.isScreenShareEnabled;
+   status(active?'Демонстрация экрана включена.':'Демонстрация экрана остановлена.');
+   if(active&&enabled)minimize();
   }
  }catch(e){
   const details=String(e?.message||e);
@@ -183,7 +204,11 @@ async function toggle(kind){
   }else{
    status('Не удалось управлять устройством: '+details,true);
   }
- }finally{b.disabled=false;updateMini();}
+ }finally{
+  if(kind==='screen')screenBusy=false;
+  if(kind==='mic')micBusy=false;
+  b.disabled=false;updateMini();
+ }
 }
 async function invite(){
  if(!call||!callChat)return;
@@ -252,10 +277,16 @@ function init(hooks){
  $('c131-join').addEventListener('click',join);
  // React immediately to CRM navigation/logout, not just the periodic fallback.
  if(typeof MutationObserver!=='undefined'){
+  let previousPage=$('app')?.dataset?.activePage||'';
   const watch=new MutationObserver(()=>{
    if(!call)return;
-   if(!ctx.isSignedIn?.(callIdentity))leave(true);
-   else if(!ctx.isOpen?.()&&!minimized)minimize();
+   if(!ctx.isSignedIn?.(callIdentity)){leave(true);return;}
+   const currentPage=$('app')?.dataset?.activePage||'';
+   // Minimize once when navigating away, NOT repeatedly after user restores.
+   if(currentPage!==previousPage){
+    previousPage=currentPage;
+    if(currentPage!=='connect'&&!minimized)minimize();
+   }
   });
   watch.observe($('app'),{attributes:true,attributeFilter:['data-active-page','style']});
  }
