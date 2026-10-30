@@ -17,3 +17,9 @@
  #app .c136-row .c126-btn{padding:6px 4px;font-size:10px}
  #app .c136-row strong{font-size:11px}
 }
+
+/* In-app real-time notification while CRM stays open */
+#app .c136-notification-toast[hidden]{display:none!important}
+#app .c136-notification-toast{position:fixed;z-index:99992;right:14px;top:65px;max-width:min(430px,calc(100vw - 28px));display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px;background:#f9fcff;color:#133554;border:1px solid #a2c2e8;border-radius:11px;box-shadow:0 8px 28px #10294355}
+#app .c136-notification-toast strong{flex:1 1 180px;font-size:12px}
+#app .c136-notification-toast button{background:#1763ab;color:white;border:none;border-radius:8px;padding:7px 9px;cursor:pointer;font-size:11px}
