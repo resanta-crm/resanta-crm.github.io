@@ -16,10 +16,11 @@ async function user(req:Request){
  const token=(req.headers.get('authorization')||'').match(/^Bearer ([\w.-]+)$/)?.[1];
  if(!token)fail('Войдите в CRM с телефона или MacBook',401);
  const {data,error}=await admin.auth.getUser(token);
- if(error||!data.user)fail('Сессия истекла',401);
- const {data:profile}=await admin.from('users').select('role,name').eq('id',data.user.id).maybeSingle();
+ const verifiedUser=data?.user;
+ if(error||!verifiedUser)fail('Сессия истекла',401);
+ const {data:profile}=await admin.from('users').select('role,name').eq('id',verifiedUser.id).maybeSingle();
  if(profile?.role!=='boss'||String(profile?.name||'').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g,' ')!=='александр паюшин')fail('Доступ запрещён',403);
- return data.user.id;
+ return verifiedUser.id;
 }
 async function pair(id:string){
  if(!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(id))fail('Некорректная заявка');
@@ -48,9 +49,9 @@ async function session(token:string){
  if(!renew)fail('Сеанс закрыт',401);
  return s;
 }
-Deno.serve(async req=>{
+Deno.serve(async (req:Request):Promise<Response>=>{
  const origin=req.headers.get('origin')||'';
- const cors=hosts.has(origin)?{'access-control-allow-origin':origin,'access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'content-type, authorization, apikey','vary':'Origin'}:{};
+ const cors:Record<string,string>=hosts.has(origin)?{'access-control-allow-origin':origin,'access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'content-type, authorization, apikey','vary':'Origin'}:{};
  const respond=(obj:unknown,status=200)=>new Response(JSON.stringify(obj),{status,headers:{...cors,'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  try{
@@ -93,7 +94,7 @@ Deno.serve(async req=>{
    if(!match)fail('Код не найден или истёк',403);
    const {data}=await admin.from(table).update({status:'pending_approval',device_secret_hash:await sha(secret),paired_at:iso(stamp())}).eq('id',match.id).eq('status','created').gt('expires_at',iso(stamp())).select('id').maybeSingle();
    if(!data)fail('Код уже использован',409);
-   return respond({ok:true,id:data.id,status:'pending_approval'});
+   return respond({ok:true,id:(data as {id:string}).id,status:'pending_approval'});
   }
   if(a==='status'||a==='redeem'){
    await limit('poll-global',300,60);
@@ -123,7 +124,7 @@ Deno.serve(async req=>{
    await limit('ask-'+s.owner_id,20,60);
    const domain=str(b.domain,20),rpc=domain==='sales'?'crm_ai360_sales_kpi_snapshot_v1':domain==='debt'?'crm_ai360_debt_snapshot_v1':null;
    if(!rpc)fail('Доступны только проверенные отчёты о продажах и ПДЗ');
-   const {data,error}=await admin.rpc(rpc,domain==='sales'?{p_month:null}:{p_manager:null});
+   const {data,error}=await admin.rpc(rpc as string,domain==='sales'?{p_month:null}:{p_manager:null});
    if(error)fail('Данные сейчас недоступны',503);
    const {data:stillValid}=await admin.from(sessions).select('id').eq('id',s.id).is('revoked_at',null).gt('expires_at',iso(stamp())).maybeSingle();
    if(!stillValid)fail('Сеанс уже отозван',401);
