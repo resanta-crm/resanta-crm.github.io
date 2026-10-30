@@ -76,6 +76,7 @@
   renderRooms();
  }
  function appendMsg(message){
+  window.crmConnectVideo131?.rememberIncoming?.(message);
   const host=$('c126-messages');
   if(!host||message.room_id!==roomId)return;
   if(host.querySelector('[data-message="'+message.id+'"]'))return;
@@ -83,6 +84,17 @@
   const bubble=node('article','c126-bubble'+(message.sender_id===actor?' mine':''));
   bubble.dataset.message=message.id;
   bubble.append(node('b','',staffName(message.sender_id)),node('div','',message.body),node('time','',dateTime(message.created_at)));
+  const incomingCall=String(message.body||'').startsWith('📹 Начался видеозвонок')&&
+    message.sender_id!==actor&&myPermissions?.video_enabled===true&&
+    Date.now()-Date.parse(message.created_at||'')<4*60*1000&&
+    Date.now()-Date.parse(message.created_at||'')>=0;
+  if(incomingCall){
+    const enter=button('📹 Присоединиться к видеозвонку','c126-btn',()=>{
+      if(roomId===message.room_id)window.crmConnectVideo131?.join?.({incoming:true});
+    });
+    enter.title='Подключиться к звонку этого чата';
+    bubble.append(enter);
+  }
   host.append(bubble);
   host.scrollTop=host.scrollHeight;
  }
@@ -273,7 +285,7 @@
   await open();
   if(!id||!ownMember(id))return;
   await selectRoom(id);
-  if(joinVideo&&myPermissions?.video_enabled)await window.crmConnectVideo131?.join?.();
+  if(joinVideo&&myPermissions?.video_enabled)await window.crmConnectVideo131?.join?.({incoming:true});
  }
  window.crmConnectOpenRoom136=openInvitedRoom;
  window.crmConnectOpen126=open;
