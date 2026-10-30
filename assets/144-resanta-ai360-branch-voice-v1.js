@@ -5,7 +5,8 @@
 */
 (function(root){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'')||root.crmAI360BranchVoicePilotV1)return;
+// Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
+if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchVoicePilotV1)return;
 const role=()=>root.crmAI360StaffIdentityV1?.()||null;
 const ENDPOINT='crm-ai360-staff-read-v1';
 const STEMS=[['рудн','Руднев'],['ачинов','Ачинович'],['шкур','Шкуран']];
