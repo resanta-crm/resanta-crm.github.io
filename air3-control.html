@@ -1,0 +1,26 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>РЕСАНТА AI · Управление очками</title>
+<style>body{font:16px system-ui,Arial;margin:0;background:#f2f6fb;color:#173153}#app{max-width:640px;margin:24px auto;background:#fff;border-radius:14px;box-shadow:0 6px 25px #2342;padding:25px}.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}a{color:#195d9c}#state{padding:16px;background:#eef4fb;border-radius:10px;margin-top:22px}</style>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.66.2/dist/umd/supabase.min.js"></script>
+<script defer src="./assets/156-air3-controller-v1.js?v=1"></script></head><body><main id="app">
+<div class="topbar"><h2>🥽 РЕСАНТА AI · Управление очками</h2></div>
+<p>Открывайте эту страницу только на своём MacBook или телефоне, где вы уже вошли в РЕСАНТА CRM.</p>
+<div id="state">Проверяем сессию…</div>
+<p><a href="/">Вернуться в CRM</a></p></main>
+<script>
+window.currentProfile=null;window.db=null;
+window.addEventListener('DOMContentLoaded',async()=>{
+ try{
+   const s=window.supabase;if(!s?.createClient)throw Error('Библиотека Supabase не загрузилась');
+   window.db=s.createClient('https://baqchjtvtmcfzwjjluhs.supabase.co','sb_publishable_BzH2PH0XD4jXrWYcbcs5FA_28uIMFbd',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+   const {data,error}=await db.auth.getSession();
+   if(error||!data.session)throw Error('Нет авторизации в этом браузере. Сначала войдите в основную CRM.');
+   const {data:authUser,error:authError}=await db.auth.getUser();
+   if(authError||!authUser.user)throw Error('Авторизация устарела. Повторите вход в CRM.');
+   const {data:p,error:pError}=await db.from('users').select('name,role').eq('id',authUser.user.id).maybeSingle();
+   if(pError||!p)throw Error('Профиль не найден');
+   window.currentProfile=p;
+   if(p.role!=='boss'||String(p.name||'').trim().toLowerCase()!=='александр паюшин')throw Error('Режим подключения AIR3 разрешён только директору');
+   document.getElementById('state').textContent='Вы авторизованы. Появится кнопка «Подключить очки» в верхней части страницы. После подключения не забудьте отключить сеанс.';
+ }catch(e){document.getElementById('state').textContent=String(e.message||e)}
+});
+</script></body></html>
