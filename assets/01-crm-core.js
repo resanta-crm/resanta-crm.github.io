@@ -2084,6 +2084,12 @@ async function loadProfileAndStart() {
       return;
     }
     currentProfile=profile;
+    // Warehouse auditors must not initialize CRM sales, GPS, route or client data.
+    // Dedicated portal verifies an exact, server-bound auditor permission.
+    if(String(profile.role||'').toLowerCase()==='auditor'){
+      window.location.replace('./auditor.html');
+      return;
+    }
     startApp();
   } catch(e) {
     // v23.6.257: временный обрыв сети/проверки профиля больше не уничтожает
