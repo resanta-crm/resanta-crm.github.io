@@ -59,6 +59,8 @@ jobs:
           check 403 -X POST "$URL" -H 'Origin: https://example.com' -H 'Content-Type: application/json' --data '{"action":"create"}'
           check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"create"}'
           check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"ask","token":"invalid"}'
+          # Unauthenticated status request must reach request validation (400), not get blocked by a mismatched SQL rate limit (429).
+          check 400 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"status","id":"invalid","secret":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
           check 204 -X OPTIONS "$URL" -H 'Origin: https://resanta-crm.by' -H 'Access-Control-Request-Method: POST'
   database-security:
     runs-on: ubuntu-latest
