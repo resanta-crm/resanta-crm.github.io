@@ -57,4 +57,22 @@ test('scoped badges and no global CSS',()=>{
  assert.match(css,/#nav-connect \.c128-badge/);
  assert.match(css,/#page-connect \.c128-room-count/);
 });
+
+test('deferred scripts wait for DOMContentLoaded before CONNECT media binding',()=>{
+ const vm=require('node:vm');
+ const handlers={};
+ const mockDocument={
+   readyState:'interactive',
+   addEventListener:(name,callback)=>{handlers[name]=callback;},
+   getElementById:()=>null
+ };
+ const mockWindow={};
+ vm.runInNewContext(chat,{window:mockWindow,document:mockDocument});
+ assert.equal(typeof handlers.DOMContentLoaded,'function',
+   'init must wait for later defer scripts, including the media module');
+ assert.equal(typeof mockWindow.crmConnectOpen126,'function');
+ assert.match(chat,/document\.readyState==='complete'\)init\(\)/);
+ assert.match(chat,/document\.addEventListener\('DOMContentLoaded',init,\{once:true\}\)/);
+});
+
 if(!process.exitCode)console.log('CONNECT #128 total checks:',passed);
