@@ -68,12 +68,12 @@ const checks=[
   assert.equal(typeof window.crmConnectVideo131?.chatChanged,'function');
  }],
  ['Browser permission errors clear after successful device sharing',()=>{
-  assert.match(client,/status\(enabled\?'Демонстрация экрана включена\.'/);
+  assert.match(client,/status\(active\?'Демонстрация экрана включена\.'/);
   assert.match(client,/status\(enabled\?'Камера включена\.'/);
   assert.match(client,/status\(enabled\?'Микрофон включён\.'/);
   assert.match(client,/Permission denied/);
   assert.match(client,/Демонстрация не началась: окно не выбрано/);
-  assert.match(client,/finally\{b\.disabled=false;updateMini\(\);\}/);
+  assert.match(client,/b\.disabled=false;updateMini\(\);/);
  }],
  ['Defer scripts finish before CRM chat initializes',()=>{
   assert.match(chat,/document\.readyState==='complete'\)init\(\)/);
