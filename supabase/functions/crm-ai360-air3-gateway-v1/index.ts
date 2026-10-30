@@ -101,7 +101,7 @@ Deno.serve(async (req:Request):Promise<Response>=>{
    return respond({ok:true,id:(data as {id:string}).id,status:'pending_approval'});
   }
   if(a==='status'||a==='redeem'){
-   await limit('poll-global',300,60);
+   await limit('poll-global',90,60);
    const p=await devicePair(str(b.id),str(b.secret));
    if(Date.parse(p.expires_at)<=stamp()&&p.status!=='redeemed')fail('Код истёк',410);
    if(a==='status')return respond({ok:true,status:p.status});
