@@ -85,3 +85,35 @@ create policy connect_media_owner_delete_v1 on storage.objects
  );
 
 -- No update/upsert policy. Files are immutable once uploaded.
+
+-- Atomic publish: upload object first, then create the chat message and the
+-- attachment row together in one transaction. If it fails, client deletes upload.
+create or replace function public.connect_send_media_v1(
+ p_room_id uuid,p_path text,p_name text,p_mime text,p_size bigint,p_kind text
+) returns public.connect_messages_v1
+language plpgsql security invoker
+set search_path=pg_catalog,public,auth,storage,pg_temp
+as $$
+declare result public.connect_messages_v1; v_body text;
+begin
+ if (select auth.uid()) is null or not public.connect_is_member_v1(p_room_id) then
+   raise exception 'CONNECT: chat access denied' using errcode='42501';
+ end if;
+ if p_kind not in ('image','file','voice')
+    or p_size not between 1 and 10485760
+    or char_length(p_name) not between 1 and 180
+    or char_length(p_mime) not between 3 and 150
+    or p_path not like p_room_id::text || '/' || (select auth.uid())::text || '/%' then
+   raise exception 'CONNECT: invalid attachment' using errcode='22023';
+ end if;
+ v_body:=case when p_kind='voice' then '🎙 Голосовое сообщение' else '📎 '||left(p_name,170) end;
+ insert into public.connect_messages_v1(room_id,sender_id,body)
+ values(p_room_id,(select auth.uid()),v_body)
+ returning * into result;
+ insert into public.connect_attachments_v1(message_id,room_id,sender_id,file_path,file_name,mime_type,size_bytes,kind)
+ values(result.id,p_room_id,(select auth.uid()),p_path,p_name,p_mime,p_size,p_kind);
+ return result;
+end;
+$$;
+revoke all on function public.connect_send_media_v1(uuid,text,text,text,bigint,text) from public,anon;
+grant execute on function public.connect_send_media_v1(uuid,text,text,text,bigint,text) to authenticated;
