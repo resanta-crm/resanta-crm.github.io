@@ -9,7 +9,7 @@
  const $=id=>document.getElementById(id);
  const node=(tag,css,text)=>{const n=document.createElement(tag);if(css)n.className=css;if(text!==undefined)n.textContent=String(text??'');return n;};
  let staff=[],rooms=[],members=[],actor=null,roomId=null,channel=null;
- let active=false,loading=false,sending=false,ticker=null,dialogMode='create';
+ let active=false,loading=false,sending=false,ticker=null,dialogMode='create',myPermissions=null;
  let filterText='';
  const dbClient=()=>typeof db!=='undefined'?db:null;
  const profile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
@@ -61,7 +61,7 @@
   window.crmConnectNotify128?.paint();
  }
  async function getDirectory(){
-  const res=await dbClient().from('users').select('id,name,email,role').order('name');
+  const res=await dbClient().rpc('connect_directory_v1');
   staff=ensure(res)||[];
   if(!staff.some(u=>u.id===actor))throw Error('Нет доступа к реестру сотрудников CRM.');
  }
@@ -123,7 +123,7 @@
   $('c126-info').textContent=members.filter(x=>x.room_id===id).length+' участников';
   $('c126-invite').hidden=room.kind==='direct'||ownMember(id)?.role!=='owner';
   $('c126-compose').hidden=false;
-  if($('c131-start'))$('c131-start').hidden=false;
+  if($('c131-start'))$('c131-start').hidden=!myPermissions?.video_enabled;
   renderRooms();
   await getMessages();
   if(roomId===id&&isOpen()){
@@ -202,7 +202,6 @@
  }
  async function open(){
   if(typeof goPage!=='function'||!$('page-connect'))return;
-  goPage('connect','Чаты');
   if(loading)return;
   loading=true;
   try{
@@ -210,6 +209,12 @@
    const response=await dbClient().auth.getUser();
    if(response.error||!response.data?.user)throw Error('Войдите в CRM.');
    if(!profile()||response.data.user.id!==profile().id)throw Error('Не удалось подтвердить учётную запись CRM.');
+   const rights=await dbClient().from('connect_permissions_v1').select('chat_enabled,video_enabled')
+    .eq('user_id',response.data.user.id).maybeSingle();
+   if(rights.error)throw rights.error;
+   if(!rights.data?.chat_enabled)throw Error('Доступ к корпоративным чатам для вашей учётной записи не предоставлен.');
+   myPermissions=rights.data;
+   goPage('connect','Чаты');
    if(actor!==response.data.user.id){
     stopSub();actor=response.data.user.id;rooms=[];members=[];staff=[];resetRoom();
    }
@@ -222,7 +227,11 @@
     else if(!isOpen())stopSub();
    },25000);
    active=true;notice('РЕСАНТА CONNECT · корпоративные чаты доступны.');
-  }catch(e){notice('Чаты пока недоступны: '+textErr(e),true);active=false;}
+   window.crmConnectAccess136?.refreshForUser?.();
+  }catch(e){
+   notice('Чаты пока недоступны: '+textErr(e),true);active=false;
+   window.crmConnectAccess136?.refreshForUser?.();
+  }
   finally{loading=false;}
  }
  function init(){
@@ -245,6 +254,7 @@
    client:dbClient,roomId:()=>roomId,actor:()=>actor,isOpen,
    notify:notice,onMessage:appendMsg
   });
+  window.crmConnectAccess136?.init({client:dbClient,profile,notify:notice});
   window.crmConnectVideo131?.init({
    client:dbClient,roomId:()=>roomId,actor:()=>actor,
    actorName:()=>staffName(actor),isOpen,
