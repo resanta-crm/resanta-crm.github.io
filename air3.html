@@ -92,7 +92,14 @@ recognition.onresult=e=>{if(cycle!==lifecycle||!token)return;const q=String(e.re
 recognition.onerror=e=>{if(cycle===lifecycle&&token)$('answer').textContent='Микрофон: '+(e.error||'ошибка')};try{recognition.start();lastActivity=Date.now()}catch(e){if(cycle===lifecycle)$('answer').textContent=String(e.message||e)}
 }
 $('connect').addEventListener('click',begin);$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',()=>{stop();setStatus('Локальный выход выполнен. Для гарантированного отключения проверьте сеанс с телефона или MacBook.');});
-setInterval(()=>{if(token&&(Date.now()>sessionEnd||Date.now()-lastActivity>600000)){stop();setStatus('Временный доступ завершён')}},15000);
+setInterval(async()=>{
+ if(!token)return;
+ if(Date.now()>sessionEnd||Date.now()-lastActivity>600000){stop();setStatus('Временный доступ завершён');return}
+ const cycle=lifecycle,access=token;
+ try{await post('ping',{token:access})}
+ catch(e){if(cycle===lifecycle&&access===token){stop();setStatus('Сеанс отключён с телефона или MacBook')}}
+},15000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&token)stop()});
 window.addEventListener('pagehide',stop);
 })();
 </script></body></html>
