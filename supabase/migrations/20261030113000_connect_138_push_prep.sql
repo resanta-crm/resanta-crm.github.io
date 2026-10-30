@@ -46,22 +46,20 @@ $$;
 revoke all on function public.connect_push_unregister_v1(text) from public,anon;
 grant execute on function public.connect_push_unregister_v1(text) to authenticated;
 
--- Outbox is a durable queue. The future FCM sender must use a server-only service
--- credential and re-check rights before each send. No public API access.
-create table if not exists public.connect_push_outbox_v1(
- id bigint generated always as identity primary key,
+-- Per-device delivery deduplication and audit. Readable only by service role.
+create table if not exists public.connect_push_delivery_v1(
+ delivery_id text primary key,
  message_id uuid not null references public.connect_messages_v1(id) on delete cascade,
  recipient_id uuid not null references auth.users(id) on delete cascade,
- room_id uuid not null references public.connect_rooms_v1(id) on delete cascade,
- kind text not null check(kind in ('message','video_call')),
  created_at timestamptz not null default now(),
  sent_at timestamptz,
- attempts smallint not null default 0,
- unique(message_id,recipient_id)
+ constraint connect_push_delivery_sha256_v1 check (length(delivery_id)=64)
 );
-create index if not exists connect_push_outbox_pending_v1 on public.connect_push_outbox_v1(created_at) where sent_at is null;
-alter table public.connect_push_outbox_v1 enable row level security;
-revoke all on public.connect_push_outbox_v1 from public,anon,authenticated;
+create index if not exists connect_push_delivery_cleanup_v1
+ on public.connect_push_delivery_v1(created_at);
+alter table public.connect_push_delivery_v1 enable row level security;
+revoke all on public.connect_push_delivery_v1 from public,anon,authenticated;
 
--- No trigger is enabled until FCM credentials and authenticated dispatch are installed.
--- This avoids accumulating undeliverable notifications or affecting message writes.
+-- Chat writes are left unchanged. No DB trigger is used:
+-- the sender explicitly requests delivery *after* an authorized message INSERT.
+-- Failure to send notification never rolls back a chat message.
