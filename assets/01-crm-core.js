@@ -2057,8 +2057,66 @@ async function doReset() {
 }
 
 async function doLogout() {
+  document.body.classList.remove('crm-auditor-mode');
   await crmLocalSignOutV236258();
   crmShowSignedOutUiV236258();
+}
+
+
+// Dedicated warehouse role enters through existing CRM login and Supabase session.
+// Do not start the broad CRM bootstrap (clients, purchases, routes, GPS).
+let crmAuditorWarehouseFlightV1=null;
+async function crmStartAuditorWarehouseV1(){
+  if(String(currentProfile?.role||'').toLowerCase()==='auditor_pending'){
+    document.getElementById('login-wrap').style.display='flex';
+    document.getElementById('app').style.display='none';
+    const e=document.getElementById('login-error');
+    if(e){e.textContent='Доступ ревизора ещё не активирован руководителем.';e.style.display='block';}
+    return;
+  }
+  if(crmAuditorWarehouseFlightV1)return crmAuditorWarehouseFlightV1;
+  crmAuditorWarehouseFlightV1=(async()=>{
+    document.body.classList.add('crm-auditor-mode');
+    const app=document.getElementById('app');
+    document.getElementById('login-wrap').style.display='none';
+    if(app)app.style.display='flex';
+    const name=document.getElementById('user-name');
+    if(name)name.textContent=currentProfile.name||currentUser.email;
+    const title=document.getElementById('topbar-title');
+    if(title)title.textContent='Склад · Витебск';
+    if(!document.getElementById('crm-auditor-style-v1')){
+      const style=document.createElement('style');style.id='crm-auditor-style-v1';
+      style.textContent='body.crm-auditor-mode .nav-item:not(#nav-warehouse-control),body.crm-auditor-mode .bn-item,body.crm-auditor-mode #nav-section-boss{display:none!important}';
+      document.head.appendChild(style);
+    }
+    const load=async(path,globalName)=>{
+      if(window[globalName])return;
+      await new Promise((resolve,reject)=>{
+        const node=document.createElement('script');
+        node.src='./'+path+'?v=auditor-20261030-1';
+        node.onload=()=>window[globalName]?resolve():reject(new Error('Модуль склада не запустился: '+path));
+        node.onerror=()=>reject(new Error('Не загружен складской модуль: '+path));
+        document.head.appendChild(node);
+      });
+    };
+    try{
+      // Original modules, not copies: the same warehouse UI and operations as the director.
+      await Promise.all([
+        load('assets/36-warehouse-control-v23620.js','RESANTA_WAREHOUSE_CONTROL_V23620'),
+        load('assets/94-warehouse-receiving-v236154.js','RESANTA_WAREHOUSE_RECEIVING_V236154')
+      ]);
+      goPage('warehouse-control','Склад · перелимит');
+      await window.crmWarehouseControlV1.open(true);
+    }catch(err){
+      const host=document.getElementById('main-content')||document.querySelector('.main')||app;
+      if(host){
+        let warning=document.getElementById('crm-auditor-error-v1');
+        if(!warning){warning=document.createElement('div');warning.id='crm-auditor-error-v1';host.prepend(warning)}
+        warning.textContent='Ошибка загрузки склада: '+String(err?.message||err)+' — обновите CRM.';
+      }
+    }
+  })().finally(()=>{crmAuditorWarehouseFlightV1=null});
+  return crmAuditorWarehouseFlightV1;
 }
 
 async function loadProfileAndStart() {
@@ -2084,10 +2142,10 @@ async function loadProfileAndStart() {
       return;
     }
     currentProfile=profile;
-    // Warehouse auditors must not initialize CRM sales, GPS, route or client data.
-    // Dedicated portal verifies an exact, server-bound auditor permission.
+    // Auditors use the NORMAL CRM login, never an independent website.
+    // The warehouse shell skips sales, clients, GPS and other CRM bootstrap.
     if(['auditor','auditor_pending'].includes(String(profile.role||'').toLowerCase())){
-      window.location.replace('./auditor.html');
+      await crmStartAuditorWarehouseV1();
       return;
     }
     startApp();
@@ -2127,6 +2185,7 @@ function clearRestoredMainSearches(){
 }
 
 async function startApp() {
+  document.body.classList.remove('crm-auditor-mode');
   clearRestoredMainSearches();
   document.getElementById('login-wrap').style.display='none';
   document.getElementById('app').style.display='flex';
@@ -2686,6 +2745,7 @@ function crmRenderPage(p){
   else if(p==='my-routes')return renderMyRoutes();
 }
 function goPage(p,title) {
+  if(String(currentProfile?.role||'').toLowerCase()==='auditor'&&p!=='warehouse-control')return;
   const appRoot=document.getElementById('app');
   const previousPage=appRoot?.dataset?.activePage||'';
   const epoch=++crmNavEpoch;window.__crmNavEpoch=epoch;
