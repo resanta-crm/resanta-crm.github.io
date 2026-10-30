@@ -2310,6 +2310,7 @@ async function saveInvite() {
   if (!email||!name){errEl.textContent='Заполните имя и email';errEl.style.display='block';return;}
   if(!email.endsWith('@resanta.ru')){errEl.textContent='Разрешены только корпоративные адреса @resanta.ru';errEl.style.display='block';return;}
   if(password.length<10){errEl.textContent='Временный пароль должен содержать минимум 10 символов';errEl.style.display='block';return;}
+  if(access_scope==='auditor'&&email!=='sazonov_ks@resanta.ru'){errEl.textContent='Данный тип доступа пока разрешён только Сазонову Кириллу Сергеевичу.';errEl.style.display='block';return;}
   btn.disabled=true; btn.textContent='Создаём...';
   try{
     await callCrmUserAdmin({action:'create_user',email,name,region,access_scope,password});
@@ -2410,7 +2411,7 @@ async function saveManagerPassword(){
 
 function renderUsers() {
   if (!allUsers.length){document.getElementById('users-list').innerHTML='<div style="color:var(--sub);font-size:14px;padding:20px;text-align:center">Пользователей пока нет</div>';return;}
-  document.getElementById('users-list').innerHTML = allUsers.map(u=>'<div class="user-row"><div class="user-info"><div class="user-email-text">'+esc(u.name||'—')+'<span class="user-role-badge '+(u.role==='boss'?'role-boss':'role-manager')+'">'+(u.role==='boss'?'👑 Руководитель':'👤 Менеджер')+'</span></div><div class="user-meta">'+esc(u.email)+' · '+esc(u.region||'—')+(u.access_scope==='triovist'?' · Триовист':'')+'</div></div><div style="display:flex;gap:4px;align-items:center"><button onclick="openSetPassword(&quot;'+escAttr(u.email)+'&quot;,&quot;'+escAttr(u.name||'')+'&quot;)" style="border:1px solid var(--border);background:#fff;color:var(--a);cursor:pointer;font-size:12px;padding:7px 10px;border-radius:7px" title="Установить новый пароль без email">🔑 Пароль</button><button onclick="deleteUserAccess(&quot;'+escAttr(u.email)+'&quot;)" style="border:none;background:none;color:var(--r);cursor:pointer;font-size:12px;padding:6px 10px" title="Полностью отключить доступ: Auth + профиль CRM">🗑</button></div></div>').join('');
+  document.getElementById('users-list').innerHTML = allUsers.map(u=>'<div class="user-row"><div class="user-info"><div class="user-email-text">'+esc(u.name||'—')+'<span class="user-role-badge '+(u.role==='boss'?'role-boss':'role-manager')+'">'+(u.role==='boss'?'👑 Руководитель':u.role==='auditor'?'🔎 Ревизор':u.role==='auditor_pending'?'🔎 Ревизор (ожидает активации)':'👤 Менеджер')+'</span></div><div class="user-meta">'+esc(u.email)+' · '+esc(u.region||'—')+(u.access_scope==='triovist'?' · Триовист':'')+'</div></div><div style="display:flex;gap:4px;align-items:center"><button onclick="openSetPassword(&quot;'+escAttr(u.email)+'&quot;,&quot;'+escAttr(u.name||'')+'&quot;)" style="border:1px solid var(--border);background:#fff;color:var(--a);cursor:pointer;font-size:12px;padding:7px 10px;border-radius:7px" title="Установить новый пароль без email">🔑 Пароль</button><button onclick="deleteUserAccess(&quot;'+escAttr(u.email)+'&quot;)" style="border:none;background:none;color:var(--r);cursor:pointer;font-size:12px;padding:6px 10px" title="Полностью отключить доступ: Auth + профиль CRM">🗑</button></div></div>').join('');
 }
 
 // Полное отключение доступа выполняется только сервером:

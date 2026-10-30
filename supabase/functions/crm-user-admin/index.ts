@@ -161,6 +161,52 @@ Deno.serve(async (req: Request) => {
 
       if (!name) return json(req, 400, { ok: false, error: "Укажите имя сотрудника" });
 
+      // Dedicated read-only warehouse reviewer. Never create him as a regular
+      // field manager: the Auth trigger provisions auditor_pending first.
+      if (payload.access_scope === "auditor") {
+        if (email !== "sazonov_ks@resanta.ru") {
+          return json(req, 403, { ok: false, error: "Роль ревизора разрешена только Сазонову Кириллу Сергеевичу" });
+        }
+        if (existingAuthUser || existingProfile) {
+          return json(req, 409, { ok: false, error: "Учётная запись ревизора уже существует. Не изменяйте её через создание менеджера." });
+        }
+        const reviewerName = "Сазонов Кирилл Сергеевич";
+        const { data: created, error: createError } = await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { name: reviewerName },
+        });
+        if (createError) throw createError;
+        const newId = created.user?.id;
+        if (!newId) return json(req, 500, { ok: false, error: "Не удалось подтвердить создание ревизора" });
+
+        // Update only the exact new Auth-linked profile. Never use an
+        // email upsert that could generate another unrelated profile ID.
+        const { data: reviewerProfile, error: reviewerError } = await admin
+          .from("users")
+          .update({
+            name: reviewerName,
+            role: "auditor",
+            region: "Витебск",
+            access_scope: "standard",
+            access_key: null,
+          })
+          .eq("id", newId)
+          .eq("email", email)
+          .select("id,email,role")
+          .single();
+        if (reviewerError || reviewerProfile?.role !== "auditor") {
+          // Do not leave a partially provisioned account after failure.
+          await admin.auth.admin.deleteUser(newId);
+          return json(req, 500, { ok: false, error: "Роль ревизора не подтверждена; создание отменено" });
+        }
+        return json(req, 200, {
+          ok: true, created: true, user_id: newId, role: "auditor",
+          access_scope: "auditor",
+        });
+      }
+
       let authUser = existingAuthUser;
       if (!authUser) {
         const { data, error } = await admin.auth.admin.createUser({
