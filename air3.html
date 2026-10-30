@@ -68,7 +68,7 @@ recognition=new Speech();recognition.lang='ru-RU';recognition.interimResults=fal
 recognition.onresult=e=>{const q=String(e.results?.[0]?.[0]?.transcript||'').toLocaleLowerCase('ru-RU');$('answer').textContent='Вы: '+q;if(/пдз|долг|дебитор|задолж/.test(q))ask('debt');else if(/продаж|план|оборот|отгруз/.test(q))ask('sales');else $('answer').textContent='Пока поддерживаются вопросы о продажах и ПДЗ.'};
 recognition.onerror=e=>{$('answer').textContent='Микрофон: '+(e.error||'ошибка')};try{recognition.start();lastActivity=Date.now()}catch(e){$('answer').textContent=String(e.message||e)}
 }
-$('connect').addEventListener('click',begin);$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',()=>{stop()});
+$('connect').addEventListener('click',begin);$('sales').addEventListener('click',()=>ask('sales'));$('debt').addEventListener('click',()=>ask('debt'));$('voice').addEventListener('click',startVoice);$('exit').addEventListener('click',async()=>{const t=token;let failed=false;if(t){try{await post('close',{token:t})}catch{failed=true}}stop();if(failed)setStatus('Локальный выход выполнен. Дополнительно отключите сеанс с телефона или MacBook.');});
 setInterval(()=>{if(token&&(Date.now()>sessionEnd||Date.now()-lastActivity>600000)){stop();setStatus('Временный доступ завершён')}},15000);
 window.addEventListener('pagehide',stop);
 })();
