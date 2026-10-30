@@ -7,11 +7,14 @@
 if(window.crmConnectNotify128)return;
 let client=null,account=null,counts=new Map(),total=0;
 let pollTimer=null,observer=null,fetchBusy=false,initialized=false,seenFirst=false,ackTimer=null;
+let realtimeChannel=null,seenMessageIds=new Set(),notificationAccount=null;
 const $=id=>document.getElementById(id);
 const activeProfile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
 const database=()=>typeof db!=='undefined'?db:null;
 const isSignedIn=()=>!!activeProfile()?.id&&$('app')?.style?.display!=='none';
 function clearState(){
+ if(realtimeChannel&&database())database().removeChannel(realtimeChannel).catch?.(()=>{});
+ realtimeChannel=null;notificationAccount=null;seenMessageIds.clear();
  account=null;counts.clear();total=0;seenFirst=false;
  for(const id of ['c128-nav-count','c128-bottom-count']){
   const span=$(id);if(span){span.textContent='';span.hidden=true;}
@@ -66,7 +69,7 @@ async function checkAccount(){
  const info=await database().auth.getUser();
  if(info.error||info.data?.user?.id!==id){clearState();return null;}
  account=id;counts.clear();total=0;seenFirst=false;
- startUi();return id;
+ startUi();startRealtime(id);return id;
 }
 async function refresh(){
  if(fetchBusy)return;
@@ -84,7 +87,7 @@ async function refresh(){
   const increment=seenFirst&&newTotal>total;
   counts=next;total=newTotal;seenFirst=true;
   paint();
-  if(increment&&document.hidden&&typeof Notification!=='undefined'&&Notification.permission==='granted'){
+  if(increment&&document.hidden&&typeof Notification!=='undefined'&&Notification.permission==='granted'&&!realtimeChannel){
    try{
     const n=new Notification('РЕСАНТА CONNECT',{body:'Новые сообщения в корпоративных чатах',tag:'resanta-connect-unread'});
     n.onclick=()=>{window.focus();n.close();window.crmConnectOpen126?.();};
@@ -95,6 +98,58 @@ async function refresh(){
   console.warn('CONNECT unread refresh:',String(e?.message||e));
  }finally{fetchBusy=false;}
 }
+function notificationToast(roomId,isVideo){
+  if(!isSignedIn())return;
+  let host=$('c136-notification-toast');
+  if(!host){
+   host=document.createElement('div');host.id='c136-notification-toast';host.className='c136-notification-toast';
+   host.setAttribute('role','alert');$('app')?.append(host);
+  }
+  host.replaceChildren();
+  const message=document.createElement('strong');
+  message.textContent=isVideo?'📹 Входящий видеозвонок · РЕСАНТА CONNECT':'💬 Новое сообщение · РЕСАНТА CONNECT';
+  const open=document.createElement('button');open.type='button';open.textContent=isVideo?'Присоединиться':'Открыть чат';
+  open.addEventListener('click',async()=>{
+   host.hidden=true;
+   try{await window.crmConnectOpenRoom136?.(roomId,isVideo);}catch(e){console.warn('CONNECT incoming action:',String(e?.message||e));}
+  });
+  const close=document.createElement('button');close.type='button';close.textContent='✕';
+  close.setAttribute('aria-label','Скрыть уведомление');close.addEventListener('click',()=>{host.hidden=true;});
+  host.append(message,open,close);host.hidden=false;
+}
+function onRealtimeMessage(message){
+ if(!message?.id||!account||message.sender_id===account||!message.room_id)return;
+ if(seenMessageIds.has(message.id))return;
+ seenMessageIds.add(message.id);
+ if(seenMessageIds.size>150)seenMessageIds.clear();
+ const isVideo=String(message.body||'').startsWith('📹 Начался видеозвонок');
+ // Do not display alert for a chat that the user is actively reading, except for calls.
+ const alreadyReading=$('app')?.dataset?.activePage==='connect' &&
+  !!document.querySelector('#c126-rooms .c126-room.active[data-room-id="'+message.room_id+'"]');
+ if(!alreadyReading||isVideo)notificationToast(message.room_id,isVideo);
+ if(typeof Notification!=='undefined'&&Notification.permission==='granted'&&document.hidden){
+  try{
+   const n=new Notification(isVideo?'📹 Видеозвонок РЕСАНТА CONNECT':'💬 Сообщение РЕСАНТА CONNECT',{
+    body:isVideo?'Приглашение от коллеги. Откройте чат для подключения.':'Новое сообщение от коллеги.',
+    tag:'connect-incoming-'+message.id
+   });
+   n.onclick=()=>{window.focus();n.close();window.crmConnectOpenRoom136?.(message.room_id,isVideo);};
+  }catch(_){}
+ }
+ refresh();
+}
+function startRealtime(id){
+ if(!database()||realtimeChannel||notificationAccount===id)return;
+ notificationAccount=id;
+ realtimeChannel=database().channel('connect-incoming-'+id)
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'connect_messages_v1'},event=>{
+   if(account===id&&isSignedIn())onRealtimeMessage(event.new);
+  })
+  .subscribe(state=>{
+   if(state==='CHANNEL_ERROR')console.warn('CONNECT realtime notifications unavailable, falling back to polling');
+  });
+}
+
 function acknowledge(roomId){
  if(!roomId||!isSignedIn())return;
  if(ackTimer)clearTimeout(ackTimer);
