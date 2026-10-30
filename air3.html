@@ -21,6 +21,7 @@ if(poll){clearInterval(poll);poll=null;}
 token='';secret='';pairId='';lastActivity=0;sessionEnd=0;
 if(recognition){try{recognition.stop()}catch{}recognition=null;}
 try{speechSynthesis.cancel()}catch{}
+$('answer').textContent='';
 $('assistant').classList.add('hidden');$('setup').classList.remove('hidden');$('code').value='';setStatus('Подключение закрыто');
 }
 async function begin(){
