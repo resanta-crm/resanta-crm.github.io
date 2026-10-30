@@ -7,7 +7,7 @@
 if(window.crmConnectNotify128)return;
 let client=null,account=null,counts=new Map(),total=0;
 let pollTimer=null,observer=null,fetchBusy=false,initialized=false,seenFirst=false,ackTimer=null;
-let realtimeChannel=null,seenMessageIds=new Set(),notificationAccount=null;
+let realtimeChannel=null,seenMessageIds=new Set(),notificationAccount=null,videoAllowed=false;
 const $=id=>document.getElementById(id);
 const activeProfile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
 const database=()=>typeof db!=='undefined'?db:null;
@@ -15,7 +15,7 @@ const isSignedIn=()=>!!activeProfile()?.id&&$('app')?.style?.display!=='none';
 function clearState(){
  if(realtimeChannel&&database())database().removeChannel(realtimeChannel).catch?.(()=>{});
  realtimeChannel=null;notificationAccount=null;seenMessageIds.clear();
- account=null;counts.clear();total=0;seenFirst=false;
+ account=null;counts.clear();total=0;seenFirst=false;videoAllowed=false;
  for(const id of ['c128-nav-count','c128-bottom-count']){
   const span=$(id);if(span){span.textContent='';span.hidden=true;}
  }
@@ -68,7 +68,10 @@ async function checkAccount(){
  if(account===id)return id;
  const info=await database().auth.getUser();
  if(info.error||info.data?.user?.id!==id){clearState();return null;}
- account=id;counts.clear();total=0;seenFirst=false;
+ const rights=await database().from('connect_permissions_v1').select('chat_enabled,video_enabled')
+  .eq('user_id',id).maybeSingle();
+ if(rights.error||!rights.data?.chat_enabled){clearState();return null;}
+ account=id;counts.clear();total=0;seenFirst=false;videoAllowed=rights.data.video_enabled===true;
  startUi();startRealtime(id);return id;
 }
 async function refresh(){
@@ -122,7 +125,8 @@ function onRealtimeMessage(message){
  if(seenMessageIds.has(message.id))return;
  seenMessageIds.add(message.id);
  if(seenMessageIds.size>150)seenMessageIds.clear();
- const isVideo=String(message.body||'').startsWith('📹 Начался видеозвонок');
+ // Chat-only staff must never see a button offering to join a forbidden video call.
+ const isVideo=videoAllowed&&String(message.body||'').startsWith('📹 Начался видеозвонок');
  // Do not display alert for a chat that the user is actively reading, except for calls.
  const alreadyReading=$('app')?.dataset?.activePage==='connect' &&
   !!document.querySelector('#c126-rooms .c126-room.active[data-room-id="'+message.room_id+'"]');
