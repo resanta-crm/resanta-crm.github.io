@@ -8,6 +8,7 @@ on:
       - 'supabase/migrations/*air3*'
       - '.github/workflows/air3-pilot-check.yml'
       - 'tests/air3-security-smoke.cjs'
+      - 'tests/air3-rate-limit-compat.cjs'
       - 'tests/air3-control-visible-smoke.cjs'
       - 'tests/air3-schema-checks.sql'
   workflow_dispatch:
@@ -25,6 +26,7 @@ jobs:
       - run: node --check assets/156-air3-controller-v1.js
       - run: node tests/air3-security-smoke.cjs
       - run: node tests/air3-control-visible-smoke.cjs
+      - run: node tests/air3-rate-limit-compat.cjs
       - name: Check inline JavaScript without running it
         run: |
           python3 - <<'PY'
