@@ -1,0 +1,51 @@
+name: CONNECT 139 video incoming and Android staff Lera safety
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "assets/151-resanta-connect-v1.js"
+      - "assets/154-resanta-connect-video-v1.js"
+      - "assets/156-resanta-connect-android-push-v1.js"
+      - "assets/144-resanta-ai360-branch-voice-v1.js"
+      - "assets/146-resanta-ai360-branch-premium-voice-v1.js"
+      - "assets/147-resanta-ai360-staff-unified-dialog-v1.js"
+      - "assets/157-resanta-ai360-android-staff-launch-v1.js"
+      - "tests/connect-139.test.js"
+      - ".github/workflows/connect-139-check.yml"
+  push:
+    branches: ["fix/connect-139-auto-call-and-android-staff-voice"]
+permissions:
+  contents: read
+jobs:
+  safe-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: JavaScript syntax and UI regression
+        run: |
+          node --check assets/151-resanta-connect-v1.js
+          node --check assets/154-resanta-connect-video-v1.js
+          node --check assets/156-resanta-connect-android-push-v1.js
+          node --check assets/144-resanta-ai360-branch-voice-v1.js
+          node --check assets/146-resanta-ai360-branch-premium-voice-v1.js
+          node --check assets/147-resanta-ai360-staff-unified-dialog-v1.js
+          node --check assets/157-resanta-ai360-android-staff-launch-v1.js
+          node --check tests/connect-139.test.js
+          node tests/connect-127.test.js
+          node tests/connect-128.test.js
+          node tests/connect-131.test.js
+          node tests/connect-133.test.js
+          node tests/connect-136.test.js
+          node tests/connect-138.test.js
+          node tests/connect-139.test.js
+      - name: No unrelated CRM modules modified
+        run: |
+          git diff --name-only origin/main...HEAD >/tmp/connect139-files
+          cat /tmp/connect139-files
+          if grep -Ev '^(index\.html|assets/(151-resanta-connect-v1|154-resanta-connect-video-v1|156-resanta-connect-android-push-v1|144-resanta-ai360-branch-voice-v1|146-resanta-ai360-branch-premium-voice-v1|147-resanta-ai360-staff-unified-dialog-v1|157-resanta-ai360-android-staff-launch-v1)\.js|tests/connect-(133|136|138|139)\.test\.js|\.github/workflows/connect-(126|127|128|131|133|136|138|139)-check\.yml)$' /tmp/connect139-files; then
+            echo "Unapproved CRM scope change" >&2
+            exit 1
+          fi
