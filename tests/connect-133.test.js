@@ -70,7 +70,7 @@ function fakeCrm(){
 }
 (async()=>{
  await test('Native CRM entrypoint reuses one chat and cache-busts video',()=>{
-  assert.match(html,/assets\/154-resanta-connect-video-v1\.js\?v=5/);
+  assert.match(html,/assets\/154-resanta-connect-video-v1\.js\?v=6/);
   assert.match(html,/assets\/154-resanta-connect-video-v1\.css\?v=2/);
   assert.match(chat,/isSignedIn:expectedId/);
   assert.doesNotMatch(video,/signInWithPassword|createClient\(/);
