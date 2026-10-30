@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.66.2';
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
 const hosts=new Set(['https://resanta-crm.by','https://resanta-crm.github.io']);
 const rnd=(n=32)=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
@@ -106,10 +106,19 @@ Deno.serve(async req=>{
    const token=rnd(40);
    const {error}=await admin.from(sessions).insert({pairing_id:p.id,owner_id:p.owner_id,token_hash:await sha(token),expires_at:iso(stamp()+1800000)});
    if(error)fail('Не удалось открыть сеанс',500);
+   const {data:check}=await admin.from(table).select('status').eq('id',p.id).single();
+   if(check?.status!=='redeemed'){
+    await admin.from(sessions).update({revoked_at:iso(stamp())}).eq('pairing_id',p.id).is('revoked_at',null);
+    fail('Подключение отозвано',403);
+   }
    return respond({ok:true,token,expires_in:1800,id:p.id});
   }
-  if(a==='ping'||a==='ask'){
+  if(a==='ping'||a==='ask'||a==='close'){
    const s=await session(str(b.token));
+   if(a==='close'){
+    await admin.from(sessions).update({revoked_at:iso(stamp())}).eq('id',s.id).is('revoked_at',null);
+    return respond({ok:true,status:'revoked'});
+   }
    if(a==='ping')return respond({ok:true,id:s.pairing_id,expires_at:s.expires_at});
    await limit('ask-'+s.owner_id,20,60);
    const domain=str(b.domain,20),rpc=domain==='sales'?'crm_ai360_sales_kpi_snapshot_v1':domain==='debt'?'crm_ai360_debt_snapshot_v1':null;
