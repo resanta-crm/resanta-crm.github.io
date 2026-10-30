@@ -42,4 +42,36 @@ verify('No Firebase service secrets in browser or migration',()=>{
  assert.doesNotMatch(js,/service_account|private_key|FCM_SERVER_KEY|SUPABASE_SERVICE_ROLE_KEY|google-services\.json/);
  assert.match(html,/assets\/156-resanta-connect-android-push-v1\.js\?v=1/);
 });
+verify('FCM server requires sender CRM JWT and exact message ownership',()=>{
+ const worker=read('supabase/functions/connect-fcm-send/index.ts');
+ assert.match(worker,/auth\.getUser\(jwt\)/);
+ assert.match(worker,/msg\.data\.sender_id!==userId/);
+ assert.match(worker,/connect_active_staff_v1/);
+ assert.match(worker,/connect_room_members_v1/);
+ assert.match(worker,/if\(self\.error\|\|!self\.data\)/);
+ assert.match(worker,/connect_permissions_v1/);
+ assert.match(worker,/!isVideo\|\|x\.video_enabled/);
+ assert.match(worker,/connect_push_devices_v1/);
+});
+verify('FCM worker uses server credentials, no customer message in notification payload',()=>{
+ const worker=read('supabase/functions/connect-fcm-send/index.ts');
+ assert.match(worker,/FIREBASE_SERVICE_ACCOUNT_JSON/);
+ assert.match(worker,/SUPABASE_SERVICE_ROLE_KEY/);
+ assert.match(worker,/https:\/\/fcm\.googleapis\.com\/v1\/projects\//);
+ assert.match(worker,/notification:\{title:/);
+ assert.doesNotMatch(worker,/notification:\{[^}]*msg\.data\.body/);
+ assert.match(worker,/connect_push_delivery_v1/);
+ assert.match(sql,/create table if not exists public\.connect_push_delivery_v1/);
+ assert.match(sql,/revoke all on public\.connect_push_delivery_v1 from public,anon,authenticated/);
+});
+verify('Every sent chat and call invitation requests FCM without blocking conversation',()=>{
+ const chat=read('assets/151-resanta-connect-v1.js');
+ const livekit=read('assets/154-resanta-connect-video-v1.js');
+ assert.match(chat,/crmConnectPush138\?\.sendForMessage\?\.\(message\.id\)/);
+ assert.match(livekit,/crmConnectPush138\?\.sendForMessage\?\.\(r\.data\.id\)/);
+ assert.match(js,/connect-fcm-send/);
+ assert.match(js,/sendForMessage/);
+ assert.match(html,/151-resanta-connect-v1\.js\?v=7/);
+ assert.match(html,/154-resanta-connect-video-v1\.js\?v=6/);
+});
 console.log('CONNECT #138 staging '+count+' tests passed');
