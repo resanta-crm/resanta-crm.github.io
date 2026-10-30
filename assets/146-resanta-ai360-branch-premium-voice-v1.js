@@ -4,7 +4,8 @@
  */
 (function(root){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'')||root.crmAI360BranchPremiumVoiceV1)return;
+// Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
+if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchPremiumVoiceV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const WAKE=/^(?:(?:привет[\s,!.—-]+(?:ресанта|резанта))|лера)[\s,!.—-]*/i;
 let clipEpoch=0,playEpoch=0,stream=null,recorder=null,player=null,mediaUrl='',wakeOn=false,loops=0,oneShot=false;
