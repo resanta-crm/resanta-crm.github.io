@@ -4,7 +4,8 @@
  */
 (function(root){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'')||root.crmAI360BranchUnifiedHandleV1)return;
+// Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
+if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchUnifiedHandleV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-staff-dialog-v1';
 let history=[],memory={},pending=false,epoch=0;

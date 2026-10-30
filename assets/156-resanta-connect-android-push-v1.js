@@ -107,12 +107,19 @@
   }
  }
  async function sendForMessage(messageId){
-  if(!messageId||!dbClient())return;
+  if(!messageId||!dbClient())return {ok:false,dispatched:0};
   try{
    const result=await dbClient().functions.invoke('connect-fcm-send',{body:{message_id:messageId}});
    // Sending push must never interrupt chat or call invitation delivery.
-   if(result.error)console.warn('CONNECT push dispatch unavailable');
-  }catch(_){console.warn('CONNECT push dispatch temporarily unavailable');}
+   if(result.error||result.data?.ok!==true){
+    console.warn('CONNECT push dispatch unavailable');
+    return {ok:false,dispatched:0};
+   }
+   return {ok:true,dispatched:Number(result.data.dispatched)||0};
+  }catch(_){
+   console.warn('CONNECT push dispatch temporarily unavailable');
+   return {ok:false,dispatched:0};
+  }
  }
  window.crmConnectPush138={init,sendForMessage,beforeSignOut};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
