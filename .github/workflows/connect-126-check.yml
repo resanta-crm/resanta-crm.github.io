@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - "tests/connect-126.test.js"
+      - "tests/connect-127.test.js"
+      - "assets/152-resanta-connect-media-v1.js"
+      - "supabase/migrations/20261030070000_connect_127_media.sql"
+      - ".github/workflows/connect-127-check.yml"
       - "assets/151-resanta-connect-v1.*"
       - "index.html"
       - "supabase/migrations/20261029190000_connect_v1.sql"
@@ -13,6 +17,10 @@ on:
       - "feature/connect-126-vitebsk-pilot"
     paths:
       - "tests/connect-126.test.js"
+      - "tests/connect-127.test.js"
+      - "assets/152-resanta-connect-media-v1.js"
+      - "supabase/migrations/20261030070000_connect_127_media.sql"
+      - ".github/workflows/connect-127-check.yml"
       - "assets/151-resanta-connect-v1.*"
       - "index.html"
       - "supabase/migrations/20261029190000_connect_v1.sql"
@@ -31,6 +39,8 @@ jobs:
         run: |
           node --check assets/151-resanta-connect-v1.js
           node --check tests/connect-126.test.js
+          node --check tests/connect-127.test.js
+          node --check assets/152-resanta-connect-media-v1.js
       - name: Verify security boundary and feature isolation
         run: node tests/connect-126.test.js
       - name: Verify only approved CRM entrypoint and new CONNECT assets changed
@@ -39,7 +49,7 @@ jobs:
           git fetch --no-tags origin main
           git diff --name-only origin/main...HEAD > /tmp/connect-files
           cat /tmp/connect-files
-          if grep -Ev '^(tests/connect-126\.test\.js$|assets/151-resanta-connect-v1\.(js|css)$|index\.html$|supabase/migrations/20261029190000_connect_v1\.sql$|supabase/migrations/20261029191000_connect_v1_perf\.sql$|\.github/workflows/connect-126-check\.yml$)' /tmp/connect-files; then
+          if grep -Ev '^(tests/connect-126\.test\.js$|tests/connect-127\.test\.js$|assets/152-resanta-connect-media-v1\.js$|supabase/migrations/20261030070000_connect_127_media\.sql$|\.github/workflows/connect-127-check\.yml$|assets/151-resanta-connect-v1\.(js|css)$|index\.html$|supabase/migrations/20261029190000_connect_v1\.sql$|supabase/migrations/20261029191000_connect_v1_perf\.sql$|\.github/workflows/connect-126-check\.yml$)' /tmp/connect-files; then
             echo 'Unexpected production file modification!' >&2
             exit 1
           fi

@@ -1,0 +1,41 @@
+name: CONNECT 127 media and voice security
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "assets/151-resanta-connect-v1.js"
+      - "assets/151-resanta-connect-v1.css"
+      - "assets/152-resanta-connect-media-v1.js"
+      - "supabase/migrations/20261030070000_connect_127_media.sql"
+      - "tests/connect-127.test.js"
+      - ".github/workflows/connect-127-check.yml"
+      - ".github/workflows/connect-126-check.yml"
+  push:
+    branches:
+      - "feature/connect-127-media-voice"
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate JavaScript syntax
+        run: |
+          node --check assets/151-resanta-connect-v1.js
+          node --check assets/152-resanta-connect-media-v1.js
+          node --check tests/connect-127.test.js
+      - name: Validate CRM integration and security boundaries
+        run: node tests/connect-127.test.js
+      - name: Check files touched by this release
+        shell: bash
+        run: |
+          git diff --name-only origin/main...HEAD > /tmp/connect127-changes
+          cat /tmp/connect127-changes
+          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.(js|css)|assets/152-resanta-connect-media-v1\.js|supabase/migrations/20261030070000_connect_127_media\.sql|tests/connect-127\.test\.js|\.github/workflows/connect-127-check\.yml|\.github/workflows/connect-126-check\.yml)$' /tmp/connect127-changes; then
+            echo 'Unexpected legacy CRM file change' >&2
+            exit 1
+          fi

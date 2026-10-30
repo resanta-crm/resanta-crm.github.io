@@ -342,7 +342,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 .v2273214-technical{font-size:10px;color:var(--sub)}
 </style>
 
-<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=1">
+<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=2">
 </head>
 <body>
 <!-- CRM release: v22.2.6-ui-payments-fix -->
@@ -517,6 +517,9 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
               </div>
               <div id="c126-messages" class="c126-messages"><div class="c126-empty">Создайте первый чат с коллегой.</div></div>
               <form id="c126-compose" class="c126-compose" hidden>
+                <input type="file" id="c127-file-input" hidden accept="image/jpeg,image/png,image/webp,.pdf,.txt,.doc,.docx,.xls,.xlsx" aria-label="Выбрать фото или документ">
+                <button type="button" id="c127-attach" class="c126-btn" title="Отправить фото или документ" aria-label="Прикрепить файл">📎</button>
+                <button type="button" id="c127-mic" class="c126-btn" title="Записать голосовое сообщение" aria-label="Записать голосовое сообщение">🎙</button>
                 <textarea id="c126-text" maxlength="4000" rows="2" aria-label="Сообщение" placeholder="Напишите сообщение…" required></textarea>
                 <button type="submit" id="c126-send" class="c126-btn primary">Отправить</button>
               </form>
@@ -1779,6 +1782,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Director-grade OpenAI/Yandex providers and shared model tool core; only upon authenticated open. -->
 <script defer src="./assets/146-resanta-ai360-branch-premium-voice-v1.js?v=3"></script>
 <script defer src="./assets/147-resanta-ai360-staff-unified-dialog-v1.js?v=3"></script>
-<script defer src="./assets/151-resanta-connect-v1.js?v=1"></script>
+<script defer src="./assets/151-resanta-connect-v1.js?v=2"></script>
+<script defer src="./assets/152-resanta-connect-media-v1.js?v=1"></script>
 </body>
 </html>
