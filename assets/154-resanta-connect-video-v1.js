@@ -125,16 +125,29 @@ async function toggle(kind){
   if(kind==='mic'){
    const enabled=!p.isMicrophoneEnabled;await p.setMicrophoneEnabled(enabled);
    b.textContent=enabled?'🎤 Выключить микрофон':'🎤 Включить микрофон';
+   status(enabled?'Микрофон включён.':'Микрофон выключен.');
   }else if(kind==='cam'){
    const enabled=!p.isCameraEnabled;await p.setCameraEnabled(enabled);
    b.textContent=enabled?'📷 Выключить камеру':'📷 Включить камеру';
+   status(enabled?'Камера включена.':'Камера выключена.');
   }else{
    const enabled=!p.isScreenShareEnabled;
    await p.setScreenShareEnabled(enabled,{audio:true});
    b.textContent=enabled?'⏹ Остановить экран':'🖥 Показать экран';
+   // A successful selection must replace an earlier browser permission error.
+   status(enabled?'Демонстрация экрана включена.':'Демонстрация экрана остановлена.');
   }
- }catch(e){status('Не удалось включить устройство: '+String(e?.message||e),true);}
- finally{b.disabled=false;}
+ }catch(e){
+  const details=String(e?.message||e);
+  const denied=/NotAllowedError|Permission denied|not allowed|not permitted|access denied/i.test(String(e?.name||'')+' '+details);
+  if(denied&&kind==='screen'){
+   status('Демонстрация не началась: окно не выбрано или браузер/macOS не разрешил захват экрана. Попробуйте снова.',true);
+  }else if(denied){
+   status('Нет разрешения на '+(kind==='mic'?'микрофон':'камеру')+'. Проверьте доступ браузера и настройки macOS.',true);
+  }else{
+   status('Не удалось управлять устройством: '+details,true);
+  }
+ }finally{b.disabled=false;}
 }
 async function invite(){
  if(!call||!callChat)return;
