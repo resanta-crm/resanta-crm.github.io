@@ -36,6 +36,26 @@ jobs:
                       f.flush()
                       subprocess.run(['node','--check',f.name],check=True)
           PY
+  gateway-negative-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure the public gateway rejects unauthenticated access
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1"
+          check() {
+            expected="$1"; shift
+            status=$(curl --fail-with-body --silent --show-error --max-time 15 -o /tmp/air3-response.json -w '%{http_code}' "$@" || true)
+            if [ "$status" != "$expected" ]; then
+              echo "::error::Expected $expected but got $status; body $(cat /tmp/air3-response.json)"
+              exit 1
+            fi
+          }
+          check 403 -X POST "$URL" -H 'Origin: https://example.com' -H 'Content-Type: application/json' --data '{"action":"create"}'
+          check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"create"}'
+          check 401 -X POST "$URL" -H 'Origin: https://resanta-crm.by' -H 'Content-Type: application/json' --data '{"action":"ask","token":"invalid"}'
+          check 204 -X OPTIONS "$URL" -H 'Origin: https://resanta-crm.by' -H 'Access-Control-Request-Method: POST'
   database-security:
     runs-on: ubuntu-latest
     services:
