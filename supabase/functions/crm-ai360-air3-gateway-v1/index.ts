@@ -125,6 +125,8 @@ Deno.serve(async req=>{
    if(!rpc)fail('Доступны только проверенные отчёты о продажах и ПДЗ');
    const {data,error}=await admin.rpc(rpc,domain==='sales'?{p_month:null}:{p_manager:null});
    if(error)fail('Данные сейчас недоступны',503);
+   const {data:stillValid}=await admin.from(sessions).select('id').eq('id',s.id).is('revoked_at',null).gt('expires_at',iso(stamp())).maybeSingle();
+   if(!stillValid)fail('Сеанс уже отозван',401);
    return respond({ok:true,domain,data});
   }
   fail('Неизвестная операция');
