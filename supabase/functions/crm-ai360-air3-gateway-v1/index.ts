@@ -17,7 +17,7 @@ async function user(req:Request){
  if(!token)fail('Войдите в CRM с телефона или MacBook',401);
  const {data,error}=await admin.auth.getUser(token);
  const verifiedUser=data?.user;
- if(error||!verifiedUser)fail('Сессия истекла',401);
+ if(error||!verifiedUser)throw Object.assign(new Error('Сессия истекла'),{status:401});
  const {data:profile}=await admin.from('users').select('role,name').eq('id',verifiedUser.id).maybeSingle();
  if(profile?.role!=='boss'||String(profile?.name||'').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g,' ')!=='александр паюшин')fail('Доступ запрещён',403);
  return verifiedUser.id;
@@ -130,6 +130,6 @@ Deno.serve(async (req:Request):Promise<Response>=>{
    if(!stillValid)fail('Сеанс уже отозван',401);
    return respond({ok:true,domain,data});
   }
-  fail('Неизвестная операция');
+  return respond({ok:false,error:'Неизвестная операция'},400);
  }catch(e){const x=e as {message?:string,status?:number};return respond({ok:false,error:x?.message||'Ошибка сервера'},x?.status||500);}
 });
