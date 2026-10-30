@@ -207,6 +207,70 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // Single approved Gomel director pilot, same CRM boss role as Sidarovich.
+      // Only the network director may create this boss account; no other staff
+      // can promote themselves by sending access_scope from the browser.
+      if (payload.access_scope === "gomel_director") {
+        if (callerEmail !== "payushin_ar@resanta.ru") {
+          return json(req, 403, { ok: false, error: "Назначить директора Гомеля может только ДФС" });
+        }
+        if (email !== "samoilov_ds@resanta.ru") {
+          return json(req, 403, { ok: false, error: "Этот тип доступа предназначен только Самойлову Д. С." });
+        }
+        if (existingAuthUser || existingProfile) {
+          return json(req, 409, { ok: false, error: "Учётная запись Самойлова уже существует. Повторное создание запрещено." });
+        }
+        const directorName = "Самойлов Д. С.";
+        const { data: created, error: createError } = await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { name: directorName },
+        });
+        if (createError) throw createError;
+        const newId = created.user?.id;
+        if (!newId) return json(req, 500, { ok: false, error: "Сервер не подтвердил создание учётной записи" });
+
+        // An existing Auth trigger creates a default CRM profile. Promote only
+        // this exact, Auth-linked email and never touch any other employee.
+        const { data: bossProfile, error: bossError } = await admin
+          .from("users")
+          .update({
+            name: directorName,
+            role: "boss",
+            region: "Гомель",
+            access_scope: "standard",
+            access_key: null,
+          })
+          .eq("id", newId)
+          .eq("email", email)
+          .select("id,email,role,region")
+          .single();
+        if (bossError || bossProfile?.role !== "boss" || bossProfile.region !== "Гомель") {
+          await admin.auth.admin.deleteUser(newId);
+          return json(req, 500, { ok: false, error: "Не удалось подтвердить роль руководителя. Создание отменено." });
+        }
+
+        // CONNECT is independent of CRM boss role. Register it explicitly.
+        const { error: connectError } = await admin.from("connect_permissions_v1").upsert({
+          user_id: newId,
+          chat_enabled: true,
+          video_enabled: true,
+          updated_by: caller.id,
+        }, { onConflict: "user_id" });
+        if (connectError) {
+          await admin.auth.admin.deleteUser(newId);
+          await admin.from("users").delete().eq("id", newId).eq("email", email);
+          return json(req, 500, { ok: false, error: "Не удалось подключить CONNECT. Создание отменено." });
+        }
+
+        return json(req, 200, {
+          ok: true, created: true, user_id: newId,
+          role: "boss", region: "Гомель",
+          chat_enabled: true, video_enabled: true,
+        });
+      }
+
       let authUser = existingAuthUser;
       if (!authUser) {
         const { data, error } = await admin.auth.admin.createUser({

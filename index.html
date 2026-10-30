@@ -38,10 +38,10 @@ const APP_VERSION = '2026-10-21-resanta-crm-v23.7.11-safe-route-recovery';
 })();
 </script>
 <title>Ресанта CRM</title>
-<link rel="preload" href="./assets/01-crm-core.js?v=23.6.339-auditor-1" as="script">
+<link rel="preload" href="./assets/01-crm-core.js?v=23.6.339-gomel-director1" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=23.7.11-connect-navfix2" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="./assets/01-crm-core.js?v=23.6.339-auditor-1"></script>
+<script defer src="./assets/01-crm-core.js?v=23.6.339-gomel-director1"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
 <script defer src="./assets/124-gps-director-report-v236427.js?v=23.7.9"></script>
@@ -1499,7 +1499,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     <div class="form-field"><label class="form-label">Имя сотрудника</label><input class="form-input" type="text" id="invite-name" autocomplete="name" placeholder="Алексей Руднев"></div>
     <div class="form-field"><label class="form-label">Email сотрудника</label><input class="form-input" type="email" id="invite-email" autocomplete="username" placeholder="manager@resanta.ru"></div>
     <div class="form-field"><label class="form-label">Регион</label><select class="form-input" id="invite-region"><option>Витебск</option><option>Могилёв</option><option>Гомель</option><option>Триовист / 21vek.by</option></select></div>
-    <div class="form-field"><label class="form-label">Тип доступа</label><select class="form-input" id="invite-scope"><option value="standard">Обычный менеджер CRM</option><option value="triovist">Только Триовист / 21vek.by</option><option value="auditor">🔎 Ревизор · склад Витебск (К. С. Сазонов)</option></select></div>
+    <div class="form-field"><label class="form-label">Тип доступа</label><select class="form-input" id="invite-scope"><option value="standard">Обычный менеджер CRM</option><option value="triovist">Только Триовист / 21vek.by</option><option value="auditor">🔎 Ревизор · склад Витебск (К. С. Сазонов)</option><option value="gomel_director">👑 Директор филиала · Гомель (Самойлов Д. С.)</option></select></div>
     <div class="form-field"><label class="form-label">Временный пароль</label><input class="form-input" type="password" id="invite-password" autocomplete="new-password" placeholder="Минимум 10 символов"></div>
     <div style="font-size:11px;color:var(--sub);margin-top:-8px;margin-bottom:12px">Используйте буквы разного регистра и цифры. Пароль передайте сотруднику лично.</div>
     <div id="invite-error" style="background:var(--rb);color:var(--r);padding:10px;border-radius:8px;font-size:13px;display:none;margin-bottom:12px"></div>
