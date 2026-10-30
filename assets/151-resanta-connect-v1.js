@@ -268,6 +268,14 @@
    else if(isOpen()&&roomId&&active)subscribe(roomId);
   });
  }
+ // Notification "Open / Join" routes to the exact invited room, not the first recent chat.
+ async function openInvitedRoom(id,joinVideo=false){
+  await open();
+  if(!id||!ownMember(id))return;
+  await selectRoom(id);
+  if(joinVideo&&myPermissions?.video_enabled)await window.crmConnectVideo131?.join?.();
+ }
+ window.crmConnectOpenRoom136=openInvitedRoom;
  window.crmConnectOpen126=open;
  // defer scripts execute while readyState is 'interactive'; later CONNECT modules
  // (media/notifications) are not defined yet. Wait for DOMContentLoaded so the
