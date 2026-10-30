@@ -2328,13 +2328,24 @@ async function retryLoad(){
   setTimeout(()=>{try{checkPromoReminders();updateRoutesAlertDot();updateTasksAlertDot();updateSignalsAlertDot();updatePromotionsAlertDot();}catch(_){}},0);
 }
 
+function crmInviteScopeChangedGomelV1(){
+  const scope=document.getElementById('invite-scope')?.value;
+  if(scope!=='gomel_director')return;
+  document.getElementById('invite-name').value='Самойлов Д. С.';
+  document.getElementById('invite-email').value='samoilov_ds@resanta.ru';
+  document.getElementById('invite-region').value='Гомель';
+}
 function openInviteUser() {
   document.getElementById('invite-error').style.display='none';
   document.getElementById('invite-success').style.display='none';
   document.getElementById('invite-email').value='';
   document.getElementById('invite-name').value='';
   document.getElementById('invite-password').value='';
-  document.getElementById('invite-scope').value='standard';
+  const scope=document.getElementById('invite-scope');
+  scope.value='standard';
+  const director=scope.querySelector('option[value="gomel_director"]');
+  if(director)director.hidden=String(currentUser?.email||'').trim().toLowerCase()!=='payushin_ar@resanta.ru';
+  scope.onchange=crmInviteScopeChangedGomelV1;
   document.getElementById('modal-invite').classList.add('open');
 }
 
@@ -2370,6 +2381,7 @@ async function saveInvite() {
   if(!email.endsWith('@resanta.ru')){errEl.textContent='Разрешены только корпоративные адреса @resanta.ru';errEl.style.display='block';return;}
   if(password.length<10){errEl.textContent='Временный пароль должен содержать минимум 10 символов';errEl.style.display='block';return;}
   if(access_scope==='auditor'&&email!=='sazonov_ks@resanta.ru'){errEl.textContent='Данный тип доступа пока разрешён только Сазонову Кириллу Сергеевичу.';errEl.style.display='block';return;}
+  if(access_scope==='gomel_director'&&(email!=='samoilov_ds@resanta.ru'||region!=='Гомель')){errEl.textContent='Для директора Гомеля укажите почту Самойлова и регион Гомель.';errEl.style.display='block';return;}
   btn.disabled=true; btn.textContent='Создаём...';
   try{
     await callCrmUserAdmin({action:'create_user',email,name,region,access_scope,password});
