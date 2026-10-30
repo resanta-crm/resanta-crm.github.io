@@ -19,8 +19,8 @@ verify('Only the logged in CRM employee can bind and revoke their own FCM token'
  assert.match(sql,/revoke all on function public\.connect_push_register_v1\(text\) from public,anon/);
 });
 verify('No push is dispatched until Firebase configuration is complete',()=>{
- assert.match(sql,/No trigger is enabled until FCM credentials/);
- assert.match(sql,/connect_push_outbox_v1/);
+ assert.match(sql,/No DB trigger is used/);
+ assert.match(sql,/connect_push_delivery_v1/);
  assert.doesNotMatch(sql,/create trigger\s+.*connect_push/i);
 });
 verify('CRM script requests opt-in only in native Android, on click',()=>{
