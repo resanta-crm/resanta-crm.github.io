@@ -37,7 +37,7 @@ const fetch=async(url,opts)=>{
 };
 const setInterval=(fn,ms)=>{const id=++nextTimer;timers.set(id,{fn,ms});return id};
 const clearInterval=id=>timers.delete(id);
-const context={document:{getElementById:el},window,fetch,crypto:webcrypto,btoa,
+const context={document:{getElementById:el,hidden:false,addEventListener(type,fn){events['document:'+type]=fn}},window,fetch,crypto:webcrypto,btoa,
  setInterval,clearInterval,Date,Intl,Number,JSON,RegExp,String,Math,Error,Promise,SpeechSynthesisUtterance:function(s){this.text=s;},
  speechSynthesis};
 vm.runInNewContext(script,context,{timeout:5000});
