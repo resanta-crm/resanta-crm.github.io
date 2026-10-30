@@ -38,6 +38,8 @@ async function session(token:string){
  if(token.length<40||token.length>150)fail('Сеанс отсутствует',401);
  const {data:s}=await admin.from(sessions).select('*').eq('token_hash',await sha(token)).maybeSingle();
  if(!s||s.revoked_at)fail('Сеанс завершён',401);
+ const {data:paired,error:pairedError}=await admin.from(table).select('status').eq('id',s.pairing_id).maybeSingle();
+ if(pairedError||paired?.status!=='redeemed')fail('Подключение отключено',401);
  const n=stamp();
  if(Date.parse(s.expires_at)<=n||Date.parse(s.last_seen_at)<=n-600000){
   await admin.from(sessions).update({revoked_at:iso(n)}).eq('id',s.id).is('revoked_at',null);
@@ -79,8 +81,10 @@ Deno.serve(async (req:Request):Promise<Response>=>{
     if(!data)fail('Заявка неактивна',409);
     return respond({ok:true,status:'approved'});
    }
-   await admin.from(table).update({status:'revoked'}).eq('id',p.id);
-   await admin.from(sessions).update({revoked_at:iso(stamp())}).eq('pairing_id',p.id).is('revoked_at',null);
+   const {error:revokeError}=await admin.from(table).update({status:'revoked'}).eq('id',p.id);
+   if(revokeError)fail('Не удалось отключить доступ',503);
+   const {error:sessionRevokeError}=await admin.from(sessions).update({revoked_at:iso(stamp())}).eq('pairing_id',p.id).is('revoked_at',null);
+   if(sessionRevokeError)fail('Доступ отозван, повторите проверку отключения',503);
    return respond({ok:true,status:'revoked'});
   }
   if(a==='pair'){
@@ -117,7 +121,8 @@ Deno.serve(async (req:Request):Promise<Response>=>{
   if(a==='ping'||a==='ask'||a==='close'){
    const s=await session(str(b.token));
    if(a==='close'){
-    await admin.from(sessions).update({revoked_at:iso(stamp())}).eq('id',s.id).is('revoked_at',null);
+    const {error:closeError}=await admin.from(sessions).update({revoked_at:iso(stamp())}).eq('id',s.id).is('revoked_at',null);
+    if(closeError)fail('Не удалось завершить сеанс',503);
     return respond({ok:true,status:'revoked'});
    }
    if(a==='ping')return respond({ok:true,id:s.pairing_id,expires_at:s.expires_at});
@@ -126,8 +131,8 @@ Deno.serve(async (req:Request):Promise<Response>=>{
    if(!rpc)fail('Доступны только проверенные отчёты о продажах и ПДЗ');
    const {data,error}=await admin.rpc(rpc as string,domain==='sales'?{p_month:null}:{p_manager:null});
    if(error)fail('Данные сейчас недоступны',503);
-   const {data:stillValid}=await admin.from(sessions).select('id').eq('id',s.id).is('revoked_at',null).gt('expires_at',iso(stamp())).maybeSingle();
-   if(!stillValid)fail('Сеанс уже отозван',401);
+   const [{data:stillValid},{data:stillPaired}]=await Promise.all([admin.from(sessions).select('id').eq('id',s.id).is('revoked_at',null).gt('expires_at',iso(stamp())).maybeSingle(),admin.from(table).select('id').eq('id',s.pairing_id).eq('status','redeemed').maybeSingle()]);
+   if(!stillValid||!stillPaired)fail('Сеанс уже отозван',401);
    return respond({ok:true,domain,data});
   }
   return respond({ok:false,error:'Неизвестная операция'},400);
