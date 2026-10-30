@@ -52,9 +52,11 @@
   if(!visible.length){host.append(node('div','c126-empty','Пока нет чатов'));return;}
   visible.forEach(r=>{
    const b=button('','c126-room'+(r.id===roomId?' active':''),()=>selectRoom(r.id).catch(e=>notice(textErr(e),true)));
+   b.dataset.roomId=r.id;
    b.append(node('b','',roomLabel(r)),node('small','',(r.kind==='direct'?'Личный':r.kind==='channel'?'Канал':'Группа')+' · '+members.filter(x=>x.room_id===r.id).length+' уч.'));
    host.append(b);
   });
+  window.crmConnectNotify128?.paint();
  }
  async function getDirectory(){
   const res=await dbClient().from('users').select('id,name,email,role').order('name');
@@ -100,7 +102,10 @@
    .on('postgres_changes',{event:'INSERT',schema:'public',table:'connect_messages_v1',filter:'room_id=eq.'+id},e=>{
     if(isOpen()&&roomId===id&&e.new){
      appendMsg(e.new);
-     if(e.new.sender_id!==actor)window.setTimeout(()=>window.crmConnectMedia127?.syncOne(e.new.id,e.new.room_id),800);
+     if(e.new.sender_id!==actor){
+      window.setTimeout(()=>window.crmConnectMedia127?.syncOne(e.new.id,e.new.room_id),800);
+      window.crmConnectNotify128?.markRead(id);
+     }
     }
    }).subscribe(status=>{
     if(status==='CHANNEL_ERROR'&&isOpen()&&roomId===id)notice('Проблема с онлайн-связью. Нажмите «Обновить».',true);
@@ -117,7 +122,10 @@
   $('c126-compose').hidden=false;
   renderRooms();
   await getMessages();
-  if(roomId===id&&isOpen())subscribe(id);
+  if(roomId===id&&isOpen()){
+   subscribe(id);
+   window.crmConnectNotify128?.markRead(id);
+  }
  }
  function syncKind(){
   const direct=$('c126-kind').value==='direct';
@@ -186,6 +194,7 @@
  async function refresh(){
   if(!isOpen()||!actor)return;
   await getRooms();if(roomId)await getMessages();
+  window.crmConnectNotify128?.refresh();
  }
  async function open(){
   if(typeof goPage!=='function'||!$('page-connect'))return;
