@@ -267,7 +267,15 @@ function render(){
 function scannerCard(){
  return '<div class="iv-card"><div style="font-weight:800;margin-bottom:6px">📱 ТСД · Resanta Склад</div><div class="iv-muted">Оба ТСД работают с одной инвентаризацией. После каждого скана они видят остаток 1С и общий уже насчитанный факт; если факт выше учёта, ТСД покажет предупреждение.</div><img class="iv-qr" src="./inventory-qr.svg" alt="QR для ТСД"><div style="display:grid;gap:7px"><a class="iv-btn primary" style="text-align:center;text-decoration:none" href="./inventory.html" target="_blank" rel="noopener">Открыть приложение ТСД</a><div style="font-size:10px;color:var(--sub);word-break:break-all;text-align:center">https://resanta-crm.by/inventory.html</div></div><hr style="border:0;border-top:1px solid var(--border);margin:13px 0"><div class="iv-alert iv-green" style="margin:10px 0"><b>Разделение ТСД:</b><br><b>ТСД-1 · Начальник склада</b> — vitebsk@resanta.ru<br><b>ТСД-2 · Кладовщик</b> — sidarovich_kn@resanta.ru<br>CRM сохраняет, кто сделал каждый скан и с какого ТСД.</div><div style="font-weight:700;font-size:12px;margin-bottom:6px">Кому разрешён пересчёт</div><div style="display:flex;gap:6px"><select id="iv-access-user" style="min-width:0;flex:1;padding:8px;border:1px solid var(--border);border-radius:8px"><option value="">Выберите сотрудника…</option>'+userOptions()+'</select><button class="iv-btn" id="iv-grant">Разрешить</button></div><div id="iv-access-list" style="margin-top:8px"></div></div>'
 }
-function renderAccessSoon(){setTimeout(()=>{const b=$('iv-grant');if(b)b.onclick=grant;renderAccess()},20)}
+function renderAccessSoon(){
+ const auditor=typeof currentProfile!=='undefined'&&String(currentProfile?.role||'').toLowerCase()==='auditor';
+ if(auditor){
+   const user=$('iv-access-user'),grant=$('iv-grant'),box=$('iv-access-list');
+   [user,grant,box].forEach(el=>el?.remove());
+   return;
+ }
+ setTimeout(()=>{const b=$('iv-grant');if(b)b.onclick=grant;renderAccess()},20)
+}
 async function open(target){
  css();root=typeof target==='string'?document.querySelector(target):target;if(!root)return;
  root.innerHTML='<div id="wc-inventory-v236139"><div class="card">Загружаю инвентаризацию…</div></div>';
