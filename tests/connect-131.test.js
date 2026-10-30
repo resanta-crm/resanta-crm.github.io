@@ -58,7 +58,7 @@ const checks=[
  ['Names and error messages are not inserted into HTML',()=>{
   assert.match(client,/n\.textContent=String/);
   assert.doesNotMatch(client,/innerHTML\s*\+=/);
-  assert.match(css,/#page-connect \.c131-overlay/);
+  assert.match(css,/#app \.c131-overlay/);
  }],
  ['Video module parses and exposes only hooks',()=>{
   new Function(client);
@@ -73,7 +73,7 @@ const checks=[
   assert.match(client,/status\(enabled\?'Микрофон включён\.'/);
   assert.match(client,/Permission denied/);
   assert.match(client,/Демонстрация не началась: окно не выбрано/);
-  assert.match(client,/finally\{b\.disabled=false;\}/);
+  assert.match(client,/finally\{b\.disabled=false;updateMini\(\);\}/);
  }],
  ['Defer scripts finish before CRM chat initializes',()=>{
   assert.match(chat,/document\.readyState==='complete'\)init\(\)/);

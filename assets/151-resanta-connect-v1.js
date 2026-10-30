@@ -247,7 +247,11 @@
   });
   window.crmConnectVideo131?.init({
    client:dbClient,roomId:()=>roomId,actor:()=>actor,
-   actorName:()=>staffName(actor),isOpen,notify:notice,onMessage:appendMsg
+   actorName:()=>staffName(actor),isOpen,
+   // Keep an active meeting when switching pages; end it immediately on sign-out/account change.
+   isSignedIn:expectedId=>!!expectedId && $('app')?.style?.display!=='none' &&
+    profile()?.id===expectedId && typeof currentUser!=='undefined' && currentUser?.id===expectedId,
+   notify:notice,onMessage:appendMsg
   });
   document.addEventListener('visibilitychange',()=>{
    if(document.hidden)stopSub();
