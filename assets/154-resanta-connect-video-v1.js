@@ -6,7 +6,7 @@ if(window.crmConnectVideo131)return;
 const $=id=>document.getElementById(id);
 const ctx={};
 const SDK_URL='https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js';
-let ready=false, connecting=false, call=null, callChat=null, sdkLoading=null, monitor=null;
+let ready=false, connecting=false, call=null, callChat=null, sdkLoading=null, monitor=null, requestEpoch=0;
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text??'');return n;};
 const status=(s,bad)=>{const e=$('c131-status');if(e){e.textContent=s;e.classList.toggle('error',!!bad);}};
 function loadSdk(){
@@ -59,6 +59,7 @@ function hide(){
  callChat=null;connecting=false;$('c131-start').disabled=false;
 }
 async function leave(quiet=false){
+ requestEpoch++;
  const old=call;call=null;
  if(monitor){clearInterval(monitor);monitor=null;}
  if(old)try{await old.disconnect();}catch(_){}
@@ -69,7 +70,7 @@ async function join(){
  if(connecting||call)return;
  if(!ctx.isOpen?.()||!ctx.roomId?.()||!ctx.actor?.())return;
  if(!window.isSecureContext){ctx.notify?.('Видеосвязь требует HTTPS.',true);return;}
- const selected=ctx.roomId();connecting=true;$('c131-start').disabled=true;
+ const selected=ctx.roomId(),epoch=++requestEpoch;connecting=true;$('c131-start').disabled=true;
  $('c131-overlay').hidden=false;status('Проверяем доступ к комнате…');
  let candidate=null;
  try{
@@ -81,10 +82,10 @@ async function join(){
    throw Error(detail||response.error.message||'Сервер видеозвонков недоступен');
   }
   if(!response.data?.ok||!response.data?.token||!response.data?.url)throw Error(response.data?.error||'Не удалось получить доступ');
-  if(!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Вы перешли в другой чат.');
+  if(epoch!==requestEpoch||!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Вы перешли в другой чат.');
   status('Подключаем видеосвязь…');
   const livekit=await loadSdk();
-  if(!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат изменился.');
+  if(epoch!==requestEpoch||!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат изменился.');
   candidate=new livekit.Room({adaptiveStream:true,dynacast:true,
    videoCaptureDefaults:{resolution:{width:1280,height:720}}});
   candidate.on(livekit.RoomEvent.ParticipantConnected,p=>{tile(p.identity,p.name);count();});
@@ -97,7 +98,7 @@ async function join(){
   candidate.on(livekit.RoomEvent.LocalTrackUnpublished,pub=>detach(pub.track));
   candidate.on(livekit.RoomEvent.Disconnected,()=>{if(call===candidate)leave(true);});
   await candidate.connect(response.data.url,response.data.token);
-  if(!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат закрыт.');
+  if(epoch!==requestEpoch||!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат закрыт.');
   call=candidate;callChat=selected;connecting=false;$('c131-start').disabled=false;
   tile('local',(ctx.actorName?.()||'Вы')+' (вы)');
   for(const p of call.remoteParticipants.values())tile(p.identity,p.name);
@@ -112,7 +113,7 @@ async function join(){
  }catch(e){
   if(candidate&&!call)try{await candidate.disconnect();}catch(_){}
   connecting=false;$('c131-start').disabled=false;
-  status('Ошибка подключения: '+String(e?.message||e),true);
+  if(epoch===requestEpoch)status('Ошибка подключения: '+String(e?.message||e),true);
  }
 }
 async function toggle(kind){
@@ -156,7 +157,7 @@ function init(hooks){
  if(!head)return;
  ready=true;
  const b=el('button','c126-btn','📹 Видеозвонок');b.id='c131-start';b.type='button';b.title='Видеозвонок текущего чата';
- b.addEventListener('click',join);head.append(b);
+ b.hidden=true;b.addEventListener('click',join);head.append(b);
  const overlay=el('div','c131-overlay');overlay.id='c131-overlay';overlay.hidden=true;
  overlay.innerHTML=[
   '<section class="c131-dialog" role="dialog" aria-modal="true" aria-label="Видеозвонок РЕСАНТА">',
@@ -182,6 +183,6 @@ function init(hooks){
  $('c131-invite').addEventListener('click',invite);
  $('c131-join').addEventListener('click',join);
 }
-function chatChanged(id){if(callChat&&callChat!==id)leave(true);}
+function chatChanged(id){if((callChat&&callChat!==id)||(connecting&&ctx.roomId?.()!==id))leave(true); }
 window.crmConnectVideo131={init,chatChanged};
 })();
