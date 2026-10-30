@@ -42,6 +42,8 @@ test('unread refresh is lazy and login-safe',()=>{
  assert.match(notify,/account!==id/);
  assert.match(notify,/db\.auth\.getUser|database\(\)\.auth\.getUser/);
  assert.match(notify,/setInterval\(refresh,35000\)/);
+ assert.match(notify,/for\(const button of document\.querySelectorAll/);
+ assert.match(notify,/b\.hidden=!count/);
 });
 test('existing chat marks only viewed room as read',()=>{
  assert.match(chat,/crmConnectNotify128\?\.markRead\(id\)/);
