@@ -70,7 +70,7 @@ function fakeCrm(){
 }
 (async()=>{
  await test('Native CRM entrypoint reuses one chat and cache-busts video',()=>{
-  assert.match(html,/assets\/154-resanta-connect-video-v1\.js\?v=3/);
+  assert.match(html,/assets\/154-resanta-connect-video-v1\.js\?v=4/);
   assert.match(html,/assets\/154-resanta-connect-video-v1\.css\?v=2/);
   assert.match(chat,/isSignedIn:expectedId/);
   assert.doesNotMatch(video,/signInWithPassword|createClient\(/);
@@ -99,11 +99,37 @@ function fakeCrm(){
   assert.equal(t.state().disconnected,0,'screen-sharing must not hang up');
   get('c131-mini-restore').click();
   assert.equal(get('c131-overlay').hidden,false,'call can be restored');
+  // Current page remains outside CONNECT. The old interval used to close it again.
+  t.setNav('sales');
+  await t.flush();
+  assert.equal(get('c131-overlay').hidden,false,'manual restore must stay open in other CRM section');
+  get('c131-screen').click();await t.flush();
+  assert.equal(t.state().shared,false,'screen share must stop while call remains open');
+  assert.equal(get('c131-mini-screen').textContent,'🖥 Показать экран','button reflects stopped share');
+  assert.equal(t.state().disconnected,0);
   get('c131-minimize').click();
   t.signOut();
   await t.flush();
   assert.equal(t.state().disconnected,1,'logout must disconnect media');
   assert.equal(get('c131-mini').hidden,true,'logout must hide floating controls');
+ });
+ await test('Manual restore survives automatic navigation watchdog while screen stops safely',async()=>{
+  const t=fakeCrm(),get=id=>t.store.get(id);
+  get('c131-start').click();await t.flush();
+  get('c131-screen').click();await t.flush();
+  assert.equal(t.state().shared,true);
+  get('c131-mini-screen').click();await t.flush();
+  assert.equal(t.state().shared,false);
+  assert.equal(get('c131-mini-screen').disabled,false);
+  get('c131-mini-restore').click();
+  assert.equal(get('c131-overlay').hidden,false);
+  t.setNav('clients');await t.flush();
+  assert.equal(get('c131-overlay').hidden,true,'navigation to new section may minimize once');
+  get('c131-mini-restore').click();
+  t.setNav('clients');await t.flush();
+  assert.equal(get('c131-overlay').hidden,false,'manual restore persists on same page');
+  get('c131-leave').click();await t.flush();
+  assert.equal(t.state().disconnected,1);
  });
  await test('Presenting successfully automatically minimizes call while media stays connected',async()=>{
   const t=fakeCrm(),get=id=>t.store.get(id);
