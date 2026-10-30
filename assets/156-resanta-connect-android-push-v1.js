@@ -74,15 +74,26 @@
    }
   });
  }
- async function onSignedOut(){
-  if(!registered)return;
+ async function beforeSignOut(){
+  const token=currentToken;
+  if(token&&dbClient()){
+   // Best-effort remove CRM server delivery target BEFORE Supabase revokes the JWT.
+   try{await dbClient().rpc('connect_push_unregister_v1',{p_token:token});}catch(_){}
+  }
   registered=false;registeredUser=null;currentToken=null;
   try{await push()?.unregister?.();}catch(_){}
   status('Push отключены после выхода из CRM.');
  }
+ async function onSignedOut(){
+  // When account sessions disappear unexpectedly, at least remove native Firebase token.
+  if(registered)await beforeSignOut();
+ }
  function init(){
   if(!native()||!push())return;
   buildButton();
+  // Register click handlers on every APK startup, not only after requesting permission.
+  // This permits notification taps to open the chat when Android resumes a closed WebView.
+  listeners().catch(()=>{});
   const app=$('app');
   if(app&&typeof MutationObserver!=='undefined'){
    const observer=new MutationObserver(()=>{if(app.style.display==='none')onSignedOut();else buildButton();});
@@ -103,7 +114,7 @@
    if(result.error)console.warn('CONNECT push dispatch unavailable');
   }catch(_){console.warn('CONNECT push dispatch temporarily unavailable');}
  }
- window.crmConnectPush138={init,sendForMessage};
+ window.crmConnectPush138={init,sendForMessage,beforeSignOut};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
  else init();
 })();
