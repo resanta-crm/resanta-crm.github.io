@@ -250,6 +250,15 @@ function init(hooks){
  $('c131-screen').addEventListener('click',()=>toggle('screen'));
  $('c131-invite').addEventListener('click',invite);
  $('c131-join').addEventListener('click',join);
+ // React immediately to CRM navigation/logout, not just the periodic fallback.
+ if(typeof MutationObserver!=='undefined'){
+  const watch=new MutationObserver(()=>{
+   if(!call)return;
+   if(!ctx.isSignedIn?.(callIdentity))leave(true);
+   else if(!ctx.isOpen?.()&&!minimized)minimize();
+  });
+  watch.observe($('app'),{attributes:true,attributeFilter:['data-active-page','style']});
+ }
 }
 // Changing CRM sections or selecting a different chat must NOT hang up an ongoing call.
 function chatChanged(_id){
