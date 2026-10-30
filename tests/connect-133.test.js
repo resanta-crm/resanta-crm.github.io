@@ -29,7 +29,7 @@ class FakeNode{
 }
 function fakeCrm(){
  const store=new Map(),app=new FakeNode('main',store),page=new FakeNode('section',store),head=new FakeNode('header',store);
- app.id='app';page.id='page-connect';page.querySelector=q=>q==='.c126-head'?head:null;
+ app.id='app';app.dataset.activePage='connect';page.id='page-connect';page.querySelector=q=>q==='.c126-head'?head:null;
  const document={
   getElementById:id=>store.get(id)||null,
   createElement:tag=>new FakeNode(tag,store),
@@ -65,7 +65,7 @@ function fakeCrm(){
   isSignedIn:id=>signed&&id==='employee-123',
   notify:()=>{},
  });
- return {store,window,setNav:v=>{nav=v;observer?.();},signOut:()=>{signed=false;observer?.();},
+ return {store,window,setNav:v=>{nav=v;app.dataset.activePage=v;observer?.();},signOut:()=>{signed=false;observer?.();},
   state:()=>({connected,disconnected,shared}),flush:()=>new Promise(r=>setTimeout(r,15))};
 }
 (async()=>{
