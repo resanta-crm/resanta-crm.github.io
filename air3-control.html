@@ -1,12 +1,90 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>РЕСАНТА AI · Управление очками</title>
-<style>body{font:16px system-ui,Arial;margin:0;background:#f2f6fb;color:#173153}#app{max-width:640px;margin:24px auto;background:#fff;border-radius:14px;box-shadow:0 6px 25px #2342;padding:25px}.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}a{color:#195d9c}#state{padding:16px;background:#eef4fb;border-radius:10px;margin-top:22px}</style>
+<style>body{font:16px system-ui,Arial;margin:0;background:#f2f6fb;color:#173153}#app{max-width:640px;margin:24px auto;background:#fff;border-radius:14px;box-shadow:0 6px 25px #2342;padding:25px}.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}a{color:#195d9c}#state{padding:16px;background:#eef4fb;border-radius:10px;margin-top:22px}button{padding:12px 16px;border:1px solid #a8bed7;background:#e8f1ff;border-radius:10px;color:#15375e;cursor:pointer;font:inherit;margin:6px 6px 6px 0}button:disabled{opacity:.5}[hidden]{display:none!important}#air3-panel{margin-top:18px;padding:18px;border:1px solid #b9cce1;border-radius:14px}#air3-code{font-size:36px;font-weight:800;letter-spacing:8px;padding:12px 0;font-variant-numeric:tabular-nums}#air3-notice{color:#a83232}#air3-pending>div{padding:10px;margin:10px 0;background:#eef4fb;border-radius:9px}</style>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
-<script defer src="./assets/156-air3-controller-v1.js?v=1"></script></head><body><main id="app">
-<div class="topbar"><h2>🥽 РЕСАНТА AI · Управление очками</h2></div>
+</head><body><main id="app">
+<div class="topbar"><h2>🥽 РЕСАНТА AI · Управление очками</h2><button id="air3-launch" type="button" hidden>🥽 Подключить очки</button></div>
 <p>Открывайте эту страницу только на своём MacBook или телефоне, где вы уже вошли в РЕСАНТА CRM.</p>
 <div id="state">Проверяем сессию…</div>
+<section id="air3-panel" hidden aria-label="Временное подключение очков">
+<h3>Временный вход в INMO AIR3</h3>
+<p>На очках откройте <strong>resanta-crm.by/air3.html</strong>. Код действует 2 минуты. После ввода кода обязательно подтвердите вход здесь.</p>
+<button id="air3-create" type="button">Создать шестизначный код</button>
+<button id="air3-refresh" type="button">Обновить подключения</button>
+<button id="air3-hide" type="button">Закрыть окно</button>
+<div id="air3-code" aria-live="polite">—</div>
+<p id="air3-code-time"></p>
+<p id="air3-notice" role="status"></p>
+<h3>Заявки и активные сеансы</h3>
+<div id="air3-pending">Нет заявок</div>
+</section>
 <p><a href="/">Вернуться в CRM</a></p></main>
 <script>
+
+function initAir3Control(){
+ const $=id=>document.getElementById(id);
+ const launch=$('air3-launch'),panel=$('air3-panel'),code=$('air3-code'),notice=$('air3-notice');
+ const END='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1';
+ let codeExpiresAt=0,refreshing=false,clock=null;
+ launch.hidden=false;
+ async function api(action,params={}){
+   const {data,error}=await window.db.auth.getSession();
+   if(error||!data?.session?.access_token)throw Error('Авторизация CRM закончилась. Войдите заново на MacBook.');
+   const response=await fetch(END,{method:'POST',cache:'no-store',referrerPolicy:'no-referrer',headers:{'content-type':'application/json','authorization':'Bearer '+data.session.access_token},body:JSON.stringify({action,...params})});
+   const body=await response.json();
+   if(!response.ok||!body.ok)throw Error(body.error||'Ошибка подключения');
+   return body;
+ }
+ function error(e){notice.textContent=String(e?.message||e)}
+ function clearCode(){code.textContent='—';codeExpiresAt=0;$('air3-code-time').textContent=''}
+ function countdown(){
+   if(!codeExpiresAt)return;
+   const seconds=Math.ceil((codeExpiresAt-Date.now())/1000);
+   if(seconds<=0){clearCode();notice.textContent='Код истёк. Нажмите «Создать шестизначный код».'}
+   else $('air3-code-time').textContent='Осталось: '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
+ }
+ async function refresh(){
+   if(panel.hidden||refreshing)return;
+   refreshing=true;
+   try{
+     const result=await api('pending'),container=$('air3-pending');
+     const fragment=document.createDocumentFragment();
+     for(const p of result.items||[]){
+       if(['revoked','rejected'].includes(p.status))continue;
+       const line=document.createElement('div'),label=document.createElement('span');
+       const states={created:'Ожидает ввода кода',pending_approval:'Ждёт вашего подтверждения',approved:'Подтверждено',redeemed:'Очки подключены'};
+       label.textContent=new Date(p.created_at).toLocaleTimeString('ru-RU')+' · '+(states[p.status]||p.status)+' ';
+       line.appendChild(label);
+       const button=(caption,action)=>{
+         const b=document.createElement('button');b.type='button';b.textContent=caption;
+         b.onclick=async()=>{b.disabled=true;try{await api(action,{id:p.id});notice.textContent=action==='approve'?'Вход разрешён':'Доступ отключён';await refreshAfterAction()}catch(e){error(e)}finally{b.disabled=false}};
+         line.appendChild(b);
+       };
+       if(p.status==='pending_approval'&&Date.parse(p.expires_at)>Date.now())button('Разрешить вход','approve');
+       if(['created','pending_approval','approved','redeemed'].includes(p.status))button('Отключить','revoke');
+       fragment.appendChild(line);
+     }
+     container.replaceChildren(fragment);
+     if(!container.childNodes.length)container.textContent='Активных заявок нет.';
+   }catch(e){error(e)}
+   finally{refreshing=false}
+ }
+ async function refreshAfterAction(){refreshing=false;await refresh()}
+ $('air3-create').onclick=async()=>{
+   const b=$('air3-create');b.disabled=true;notice.textContent='';
+   try{const result=await api('create');code.textContent=result.code;codeExpiresAt=Date.parse(result.expires_at);countdown();await refresh()}
+   catch(e){error(e)}finally{b.disabled=false}
+ };
+ $('air3-refresh').onclick=refresh;
+ launch.onclick=()=>{
+   panel.hidden=false;launch.hidden=true;notice.textContent='';refresh();
+   if(!clock)clock=setInterval(()=>{countdown();if(!panel.hidden)refresh()},4000);
+ };
+ $('air3-hide').onclick=()=>{
+   panel.hidden=true;launch.hidden=false;clearCode();notice.textContent='';
+ };
+ window.addEventListener('pagehide',()=>{clearCode();if(clock){clearInterval(clock);clock=null}});
+}
+
 window.currentProfile=null;window.db=null;
 window.addEventListener('DOMContentLoaded',async()=>{
  try{
@@ -20,7 +98,8 @@ window.addEventListener('DOMContentLoaded',async()=>{
    if(pError||!p)throw Error('Профиль не найден');
    window.currentProfile=p;
    if(p.role!=='boss'||String(p.name||'').trim().toLowerCase()!=='александр паюшин')throw Error('Режим подключения AIR3 разрешён только директору');
-   document.getElementById('state').textContent='Вы авторизованы. Появится кнопка «Подключить очки» в верхней части страницы. После подключения не забудьте отключить сеанс.';
+   document.getElementById('state').textContent='Вы авторизованы. Нажмите кнопку «Подключить очки», затем «Создать шестизначный код». После использования обязательно отключите сеанс.';
+   initAir3Control();
  }catch(e){document.getElementById('state').textContent=String(e.message||e)}
 });
 </script></body></html>
