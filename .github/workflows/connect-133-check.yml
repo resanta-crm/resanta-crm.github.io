@@ -29,12 +29,17 @@ jobs:
           node --check tests/connect-133.test.js
           node tests/connect-131.test.js
           node tests/connect-133.test.js
+          node tests/connect-136.test.js
       - name: Prevent modifying non-CONNECT modules
         shell: bash
         run: |
           git diff --name-only origin/main...HEAD > /tmp/connect133-files
           cat /tmp/connect133-files
-          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.js|assets/154-resanta-connect-video-v1\.(js|css)|tests/connect-(131|133)\.test\.js|\.github/workflows/connect-(126|127|128|131|133)-check\.yml)$' /tmp/connect133-files; then
+          if grep -Ev '^(index\.html|assets/151-resanta-connect-v1\.js|assets/154-resanta-connect-video-v1\.(js|css)|tests/connect-(131|133)\.test\.js|\.github/workflows/connect-(126|127|128|131|133)-check\.yml|assets/155-resanta-connect-permissions-v1\.(js|css)|supabase/migrations/20261030105000_connect_136_permissions\.sql|tests/connect-136\.test\.js|\.github/workflows/connect-136-check\.yml)
+            echo 'Non-CONNECT production change detected' >&2
+            exit 1
+          fi
+ /tmp/connect133-files; then
             echo 'Non-CONNECT production change detected' >&2
             exit 1
           fi
