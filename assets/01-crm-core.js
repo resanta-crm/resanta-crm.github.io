@@ -2086,7 +2086,7 @@ async function loadProfileAndStart() {
     currentProfile=profile;
     // Warehouse auditors must not initialize CRM sales, GPS, route or client data.
     // Dedicated portal verifies an exact, server-bound auditor permission.
-    if(String(profile.role||'').toLowerCase()==='auditor'){
+    if(['auditor','auditor_pending'].includes(String(profile.role||'').toLowerCase())){
       window.location.replace('./auditor.html');
       return;
     }
