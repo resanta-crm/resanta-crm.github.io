@@ -31,7 +31,7 @@ vm.runInNewContext(script,context,{timeout:1500});
  await element('connect').events.click();
  const stateCheck=[...intervals.values()].find(x=>x.ms===2500);
  assert.ok(stateCheck);
- await stateCheck.fn();
+ await new Promise(resolve=>setImmediate(resolve));
  assert.equal(element('assistant').classList.contains('hidden'),false);
  const heartbeat=[...intervals.values()].find(x=>x.ms===15000);
  assert.ok(heartbeat);
