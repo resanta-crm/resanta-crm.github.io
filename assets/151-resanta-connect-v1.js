@@ -247,6 +247,9 @@
   });
  }
  window.crmConnectOpen126=open;
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
- else init();
+ // defer scripts execute while readyState is 'interactive'; later CONNECT modules
+ // (media/notifications) are not defined yet. Wait for DOMContentLoaded so the
+ // attachment and microphone handlers are registered exactly once.
+ if(document.readyState==='complete')init();
+ else document.addEventListener('DOMContentLoaded',init,{once:true});
 })();
