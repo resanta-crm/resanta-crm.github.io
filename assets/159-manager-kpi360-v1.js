@@ -83,8 +83,8 @@ function display(v){
  else{
  html+='<div class="k-small">Импорт продаж 1С: '+esc(v.baseline?.last_sales_import||'дата не указана')+
  ' · закрытие месяца не подтверждено</div>';
- if(v.error)html+='<div class="k-alert">'+esc(v.error)+'</div>';
- html+='<div class="k-cards">'+metric('Продажи, бел. руб.',all.shipment,all.shipment_plan,all.sales_2025,ok)+
+ if(v.error)html+='<div class="k-alert">Неполный отчёт: '+esc(v.error)+'</div>';
+ if(!rows.length){box.innerHTML=html+'<div class="k-alert">Показатели KPI не получены. Нажми «Обновить».</div>';box.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));return;}html+='<div class="k-cards">'+metric('Продажи, бел. руб.',all.shipment,all.shipment_plan,all.sales_2025,ok)+
  metric('АКБ',all.akb,all.akb_plan,all.akb_2025,ok)+metric('Новые / вернувшиеся',all.new_clients,all.new_clients_plan,all.new_2025,ok)+'</div>'+
  '<div class="k-list"><div class="k-small">Менеджер · Продажи · АКБ · Новые клиенты (факт / план / 2025)</div>'+
  rows.map(r=>line(r,map.get(k(r.manager_name))||{},ok,false)).join('')+line(all,all,ok,true)+'</div>'+
@@ -104,8 +104,8 @@ async function load(force=false){
  if(idRequest!==sequence||!active()||month()!==at)return;
  const baseline=results[1].status==='fulfilled'?results[1].value:null;
  const actual=results[0].status==='fulfilled'?results[0].value:[];
- const last=baseline?.latest_sales_month;
- if(!auto&&!touched&&last&&at>last){auto=true;document.getElementById('manager-kpi-month').value=last;void load(true);return}
+ const latestDataMonth=baseline?.latest_sales_month;
+ if(!auto&&!touched&&latestDataMonth&&at>latestDataMonth){auto=true;document.getElementById('manager-kpi-month').value=latestDataMonth;void load(true);return}
  auto=true;
  const error=results.filter(x=>x.status==='rejected').map(x=>String(x.reason?.message||x.reason)).join('; ');
  const value={month:at,primary:actual,baseline,error};if(!error)cache.set(key,{data:value,when:Date.now()});
