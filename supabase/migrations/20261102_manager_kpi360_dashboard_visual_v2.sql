@@ -26,7 +26,7 @@ begin
   if actor.id is null then raise exception 'login_required'; end if;
   if not (
     (actor.role='boss' and actor.region='Витебск' and
-      public.crm_v2263_norm(actor.name) in ('александр паюшин','сидарович к.н.'))
+      public.crm_v2263_norm(actor.name) in ('александр паюшин','сидарович к н'))
     or
     (actor.role='manager' and actor.region='Витебск' and
       public.crm_v2263_norm(actor.name) in ('руднев','ачинович','шкуран'))
