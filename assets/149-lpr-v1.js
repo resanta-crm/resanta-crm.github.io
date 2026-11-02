@@ -93,7 +93,8 @@ function render(){
  clients.filter(c=>c.is_vip).map(c=>'<div style="padding:6px;border-top:1px solid var(--border);font-size:12px">'+
  esc(c.name)+' · '+(c.has_lpr?'✅ ЛПР заполнен':'⚠️ ЛПР не заполнен')+
  (canWrite?'<button class="btn-secondary" style="margin-left:8px" data-lpr-pick="'+esc(c.id)+'">Заполнить</button>':'')+
- '</div>').join('')+'</div></div>';
+ '</div>').join('')+'</div>'+
+ ((info.unmatched_vip||[]).length?'<p style="font-size:12px;color:#b45309">⚠️ В реестре ВИП есть записи без привязки к карточке клиента: '+(info.unmatched_vip||[]).map(esc).join(', ')+'. Проверьте соответствие вручную.</p>':'')+'</div>';
  v.querySelector('#lpr-client-find')?.addEventListener('input',e=>{
    const term=String(e.target.value||'').trim().toLowerCase();
    v.querySelectorAll('#lpr-client option').forEach(o=>{if(o.value)o.hidden=!!term&&!o.textContent.toLowerCase().includes(term);});
