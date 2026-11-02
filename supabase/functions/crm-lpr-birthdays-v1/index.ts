@@ -60,16 +60,30 @@ async function allowedClients(u){
  }
  return clients.map(c=>({...c,is_vip:c.is_vip===true||vipIds.has(c.id)}));
 }
+// Keep scoped LPR reads below PostgREST URL limits when directors have hundreds of clients.
+// Do not broaden permissions: only request contacts for the authorized client IDs.
+async function fetchScopedLprContacts(ids,svc=SVC){
+ const allowed=new Set(ids),contacts=[],batchSize=75,parallel=3;
+ for(let offset=0;offset<ids.length;offset+=batchSize*parallel){
+  const requests=[];
+  for(let i=offset;i<Math.min(offset+batchSize*parallel,ids.length);i+=batchSize){
+   const part=ids.slice(i,i+batchSize);
+   requests.push(svc.from('crm_lpr_contacts_v1')
+    .select('id,client_id,full_name,position_title,birth_day,birth_month,note,updated_at,created_by')
+    .in('client_id',part).eq('active',true).order('full_name').limit(2500));
+  }
+  const responses=await Promise.all(requests);
+  for(const {data,error} of responses){
+   if(error)throw Error('lpr_read_unavailable');
+   for(const contact of data||[])if(allowed.has(contact.client_id))contacts.push(contact);
+  }
+ }
+ contacts.sort((a,b)=>String(a.full_name||'').localeCompare(String(b.full_name||''),'ru'));
+ return contacts.slice(0,2500);
+}
 async function list(u,req){
  const clients=await allowedClients(u),ids=clients.map(c=>c.id);
- let contacts=[];
- if(ids.length){
-  const {data,error}=await SVC.from('crm_lpr_contacts_v1')
-    .select('id,client_id,full_name,position_title,birth_day,birth_month,note,updated_at,created_by')
-    .in('client_id',ids).eq('active',true).order('full_name').limit(2500);
-  if(error)throw Error('lpr_read_unavailable');
-  contacts=data||[];
- }
+ const contacts=await fetchScopedLprContacts(ids);
  const map=new Map(clients.map(c=>[c.id,c]));
  const today=fmt(new Date()),mid=asDate(today);
  const upcoming=contacts.map(x=>{
