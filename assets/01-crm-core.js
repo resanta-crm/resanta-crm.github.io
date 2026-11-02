@@ -986,22 +986,54 @@ function filterRouteStopAdd(){
   const res=document.getElementById('ars-results');
   if(!q){res.style.display='none';return;}
   const myName=currentProfile?.name;
-  const already=allRoutePlans.filter(r=>r.manager_name===myName&&r.visit_date===routeStopAddDate).map(r=>r.client_name);
-  const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)&&!already.some(an=>nameLooseMatch(an,c.name))).slice(0,10);
+  // Search by legal name or store address: server prevents a duplicate STORE, not a duplicate legal entity.
+  const filtered=allClients.filter(c=>c.manager_name===myName&&(c.name.toLowerCase().includes(q)||String(c.address||'').toLowerCase().includes(q))).slice(0,14);
   res.style.display=filtered.length?'block':'none';
   res.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmousedown="addRouteStop(\''+c.id+'\')">'+esc(c.name)+'<div style="font-size:11px;color:var(--sub)">📍 '+esc(c.address||'адрес не указан')+'</div></div>').join('');
 }
 
 async function addRouteStop(clientId){
-  const c=allClients.find(x=>x.id===clientId);
+  const c=allClients.find(x=>String(x.id)===String(clientId));
   if(!c)return;
-  const myName=currentProfile?.name;
-  const {data:row}=await db.from('route_plans').insert({manager_name:myName,visit_date:routeStopAddDate,client_name:c.name,city:c.city||c.region||'',address:c.address||'',category:c.role_type||'',approved:false,review_status:'pending',source:'manager'}).select().single();
-  if(row)allRoutePlans.push(row);
-  await db.from('route_plans').update({review_status:'pending'}).eq('manager_name',myName).eq('visit_date',routeStopAddDate);
-  allRoutePlans=allRoutePlans.map(r=>r.manager_name===myName&&r.visit_date===routeStopAddDate?{...r,review_status:'pending'}:r);
-  closeModal('modal-add-route-stop');
-  renderMyRoutes();
+  const res=document.getElementById('ars-results');
+  res.style.display='block';
+  res.textContent='Загружаю торговые точки…';
+  try{
+    const {data,error}=await db.rpc('client360_points_for_client_v1',{p_client_id:clientId});
+    if(error||!data?.ok)throw error||new Error('Справочник торговых точек недоступен');
+    const pts=Array.isArray(data.points)?data.points:[];
+    res.replaceChildren();
+    const title=document.createElement('div');title.style.cssText='padding:9px;font-weight:700';
+    title.textContent='Укажите, куда именно едем: '+c.name;
+    res.appendChild(title);
+    const make=(label,pointId,warning)=>{
+      const btn=document.createElement('button');
+      btn.type='button';btn.className='btn-secondary';
+      btn.style.cssText='display:block;text-align:left;width:100%;padding:12px;margin:5px 0;white-space:normal';
+      btn.textContent=label+(warning?' · '+warning:'');
+      btn.onclick=()=>saveRouteStopExactV1(clientId,pointId,btn);
+      res.appendChild(btn);
+    };
+    for(const p of pts)make('📍 '+[p.city,p.address].filter(Boolean).join(', ')+' · '+p.client_name,p.id,!Number.isFinite(Number(p.lat))||p.lat==null?'координаты не выверены':'');
+    if(!pts.length)make('⚠️ Добавить ТТ по адресу карточки, на выверение',null,'GPS пока не подтверждён');
+    const footer=document.createElement('p');footer.style.cssText='font-size:11px;color:var(--sub)';
+    footer.textContent='При нескольких адресах выбирайте магазин, а не юрлицо. Неизвестную ТТ передайте руководителю для добавления.';
+    res.appendChild(footer);
+  }catch(e){res.textContent='Не удалось загрузить торговые точки: '+(e?.message||e);}
+}
+async function saveRouteStopExactV1(clientId,pointId,btn){
+ if(btn?.disabled)return;btn.disabled=true;
+ const original=btn.textContent;btn.textContent='Сохраняю адрес…';
+ try{
+   const {data,error}=await db.rpc('client360_create_route_v1',{p_client_id:clientId,p_point_id:pointId,p_visit_date:routeStopAddDate});
+   if(error||!data?.ok)throw error||new Error('Маршрут не сохранён');
+   const {data:row,error:readErr}=await db.from('route_plans').select('*').eq('id',data.route_id).single();
+   if(readErr)throw readErr;
+   if(row)allRoutePlans.push(row);
+   closeModal('modal-add-route-stop');
+   renderMyRoutes();
+ }catch(e){alert('Не удалось добавить торговую точку: '+(e?.message||e));}
+ finally{btn.disabled=false;btn.textContent=original;}
 }
 
 async function removeRouteStop(rowId,date){
@@ -1020,10 +1052,10 @@ async function loadTodayToRoute(date){
   routeClients=[];
   todayPlans.forEach(r=>{
     if(!r.address||r.address.trim()==='')return; // пропускаем без адреса
-    const c=allClients.find(x=>nameLooseMatch(x.name,r.client_name));
+    const c=allClients.find(x=>String(x.id)===String(r.client_id))||allClients.find(x=>nameLooseMatch(x.name,r.client_name));
     if(c&&c.address){
-      // Клиент найден в базе — добавляем с city из плана
-      routeClients.push({...c, city:c.city||r.city||'', route_plan_id:r.id});
+      // One legal entity can have many stores: always use this ROUTE's selected address.
+      routeClients.push({...c, city:r.city||c.city||'',address:r.address||c.address||'',route_plan_id:r.id});
     } else {
       // Клиент только в плане — передаём city из плана
       routeClients.push({
@@ -1643,8 +1675,18 @@ function getGeoNow(timeout){
 
 // Сверка замера с геозоной клиента.
 // unverified — это НЕ обвинение. Это честное «мы пока не знаем, где точка».
-function gpsCheckAgainstClient(c, geo){
+function gpsCheckAgainstClient(c, geo, matchedPoint){
   if(!geo) return {status:'no_gps', distance:null, note:'GPS недоступен'};
+  // The route's chosen PHYSICAL shop takes precedence over the parent legal entity.
+  // Non-verified route coordinates never turn into a false violation or a false proof.
+  if(matchedPoint?.physical_point_id){
+    if(matchedPoint.route_lat==null||matchedPoint.route_lng==null)
+      return {status:'unverified',distance:null,note:'координаты выбранной торговой точки не выверены'};
+    const pointDistance=gpsDistance(geo.lat,geo.lng,Number(matchedPoint.route_lat),Number(matchedPoint.route_lng));
+    return {status:'unverified',distance:pointDistance,note:pointDistance<=250+Math.min(geo.accuracy||0,200)
+      ?'GPS рядом с выбранной ТТ; координаты требуют выверения'
+      :'GPS вне предварительной геозоны выбранной ТТ; проверить адрес'};
+  }
   const gf=clientGeofence(c);
   if(!gf) return {status:'unverified', distance:null, note:'у клиента нет координат ТТ'};
 
@@ -4569,7 +4611,7 @@ async function saveQuickVisit(){
   // Раньше быстрый визит сохранялся без GPS, поэтому руководитель видел запись
   // в карточке, но не мог подтвердить её на карте.
   const qvGeo=await getGeoNow(8000);
-  const qvGpsCheck=gpsCheckAgainstClient(c,qvGeo);
+  const qvGpsCheck=gpsCheckAgainstClient(c,qvGeo,qvMatchedPlan);
   var visitData={
     date:qvVisitDate,text,result,manager_id:currentUser.id,
     manager_name:currentProfile?.name||(c&&c.manager_name)||null,
@@ -5438,7 +5480,7 @@ async function saveVisit(){
   // получить отказы и пустые данные. Если GPS не дали или он не поймался —
   // визит всё равно сохраняется, просто без подтверждения.
   const geo=await getGeoNow(8000);
-  const gchk=gpsCheckAgainstClient(c, geo);
+  // First resolve the exact route store; its geofence cannot be taken from the legal entity.
 
   // Один фактический визит может закрыть только одну точку маршрута.
   let matchedVisitPlan=null;
@@ -5451,6 +5493,7 @@ async function saveVisit(){
     // Автосвязь разрешена только при одном точном совпадении на сегодня.
     matchedVisitPlan=exact.length===1?exact[0]:null;
   }
+  const gchk=gpsCheckAgainstClient(c,geo,matchedVisitPlan);
   const visitRow={
     client_id:liveCid, date:TODAY, text, result, manager_id:currentUser.id,
     manager_name:currentProfile?.name||(c&&c.manager_name)||null,
