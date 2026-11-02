@@ -49,7 +49,7 @@ function pointKey(row){
 function snapshot(){
  if(!boss())return null;
  const {plans,clients,tasks}=getData(),r=range(),allowed=new Set(scopeManagers());
- const scoped=plans.filter(p=>!p.removed&&include(String(p.visit_date||''),r)&& (S.manager==='all'||p.manager_name===S.manager));
+ const scoped=plans.filter(p=>!p.removed&&allowed.has(p.manager_name)&&include(String(p.visit_date||''),r)&& (S.manager==='all'||p.manager_name===S.manager));
  const active=clients.filter(c=>activeClient(c)&&allowed.has(c.manager_name)&&(S.manager==='all'||c.manager_name===S.manager));
  const byName=new Map();active.forEach(c=>{const k=normalized(c.manager_name)+'|'+normalized(c.name);if(!byName.has(k))byName.set(k,[]);byName.get(k).push(c)});
  const covered=new Set(),routeCovered=new Set(),callsCovered=new Set();
@@ -59,16 +59,23 @@ function snapshot(){
  const missing=active.filter(c=>!covered.has(String(c.id)));
  const buckets=new Map();scoped.forEach(p=>{if(!buckets.has(p.visit_date))buckets.set(p.visit_date,[]);buckets.get(p.visit_date).push(p)});
  const days={};let dateStr=r.from,working=0,filled=0,empty=0,over=0,atLimit=0;
+ const dayManagers=S.manager==='all'?[...allowed]:[S.manager];
  while(dateStr<=r.to){
   const dow=date(dateStr).getUTCDay(),rows=buckets.get(dateStr)||[],office=rows.some(p=>p.is_office_day);
-  const keys=new Set(rows.filter(p=>!p.is_office_day).map(pointKey));
-  const count=keys.size,visits=rows.filter(p=>!p.is_network_point&&!p.is_office_day).length;
+  // Load limits apply to each individual field manager, never to the sum of all managers.
+  const managerCounts=dayManagers.map(manager=>{
+   const subset=rows.filter(p=>p.manager_name===manager);
+   const points=new Set(subset.filter(p=>!p.is_office_day).map(pointKey));
+   return {manager,count:points.size,office:subset.some(p=>p.is_office_day)};
+  });
+  const count=managerCounts.reduce((a,x)=>a+x.count,0),maxLoad=Math.max(0,...managerCounts.map(x=>x.count));
+  const visits=rows.filter(p=>!p.is_network_point&&!p.is_office_day).length;
   const pending=rows.filter(p=>p.review_status!=='approved'&&p.approved!==true).length;
   const isWorkday=dow!==0&&dow!==6;
-  days[dateStr]={rows,office,count,visits,pending,isWorkday};
-  if(isWorkday){working++;if(count||office)filled++;else empty++}
-  if(count>15)over++;
-  if(count===15)atLimit++;
+  days[dateStr]={rows,office,count,visits,pending,isWorkday,maxLoad,managerCounts};
+  if(isWorkday){working+=dayManagers.length;managerCounts.forEach(x=>{if(x.count||x.office)filled++;else empty++})}
+  over+=managerCounts.filter(x=>x.count>15).length;
+  atLimit+=managerCounts.filter(x=>x.count===15).length;
   dateStr=add(dateStr,1);
  }
  const pending=scoped.filter(p=>p.review_status!=='approved'&&p.approved!==true).length;
@@ -139,8 +146,9 @@ function calendar(s){
   const day=z-startIdx+1;if(day<1||day>daysInMonth){html+='<div class="rd-day rd-outside" aria-hidden="true"></div>';continue}
   const d=m+'-'+pad(day),data=s.days[d]||{},rows=data.rows||[];
   const count=num(data.count),office=!!data.office,active=include(d,s.r),isWeekend=[0,6].includes(date(d).getUTCDay());
-  const level=count>15?'rd-red':count>=10?'rd-yellow':count?'rd-green':'';
-  const txt=office?'🏢 Офис':count?count+' точек':isWeekend?'Выходной':'Нет плана';
+  const load=num(data.maxLoad);
+  const level=load>15?'rd-red':load>=10?'rd-yellow':count?'rd-green':'';
+  const txt=count?count+' точек'+(S.manager==='all'?' · '+(data.managerCounts||[]).filter(x=>x.count>0).length+' МПП':''):office?'🏢 Офис':isWeekend?'Выходной':'Нет плана';
   const pending=data.pending?'<small style="color:#b42318">● Требует проверки</small>':'';
   html+='<button type="button" class="rd-day '+level+(!active?' rd-outside':'')+(S.day===d?' rd-focus':'')+'" data-action="day" data-date="'+d+'" aria-label="'+h(humanDay(d)+': '+txt)+'"><b>'+day+'</b><small>'+h(txt)+'</small>'+pending+'</button>';
  }
@@ -151,7 +159,7 @@ function brief(s){
  if(!s.active.length)out.push(['ℹ️','Нет доступных активных клиентов для выбранного менеджера. Проверьте загрузку и фильтры.']);
  else if(s.missing.length)out.push(['🔴',s.missing.length+' клиентов не покрыты визитом или месячной задачей на прозвон в выбранном периоде.']);
  else out.push(['✅','Все закреплённые клиенты имеют плановый визит или прозвон в периоде.']);
- if(s.over)out.push(['⚠️','Превышен лимит 15 точек в '+s.over+' дн. Откройте даты и проверьте состав.']);
+ if(s.over)out.push(['⚠️','Превышен лимит 15 точек в '+s.over+' днях менеджеров. Откройте даты и проверьте состав.']);
  else if(s.atLimit)out.push(['🟡',s.atLimit+' дн. запланированы ровно на лимит 15 точек.']);
  if(s.empty)out.push(['📅',s.empty+' будних дней без визитов и без офисного дня.']);
  if(s.pending)out.push(['🕒',s.pending+' строк маршрута имеют статус, отличный от утверждённого.']);
@@ -184,10 +192,10 @@ function render(){
  '<div class="rd-filters"><label>Менеджер <select class="rd-select" data-change="manager">'+options+'</select></label><label>Месяц <input class="rd-select" type="month" data-change="month" value="'+h(S.month)+'"></label></div></div>'+
  '<div class="rd-grid">'+
  metric('👥','Покрытие клиентов',s.percent===null?'—':s.percent+'%',(activeCount-s.missing.length)+' из '+activeCount+' · визит / прозвон',false,'missing')+
- metric('📅','Дней заполнено',s.filled+'/'+s.working,'Рабочие дни выбранного периода',false,'empty')+
+ metric('📅','Дней заполнено',s.filled+'/'+s.working,S.manager==='all'?'Дни × менеджеры (все МПП)':'Рабочие дни выбранного периода',false,'empty')+
  metric('🚫','Без покрытия',String(s.missing.length),'Не назначен визит или прозвон',s.missing.length>0,'missing')+
- metric('⚠️','Перегружено дней',String(s.over),'Свыше 15 уникальных точек',s.over>0,'over')+
- metric('🗓','Пустые дни',String(s.empty),'Будни без плана и офисного дня',false,'empty')+
+ metric('⚠️','Перегрузов',String(s.over),'Дни МПП свыше 15 уникальных точек',s.over>0,'over')+
+ metric('🗓','Пустые дни',String(s.empty),S.manager==='all'?'Будни МПП без плана':'Будни без плана и офисного дня',false,'empty')+
  metric('🏁','Статус маршрута',status,s.pending?'Неутверждённых строк: '+s.pending:'Плановых записей: '+s.scoped.length,s.pending>0,'approval')+
  '</div>'+
  '<div class="rd-main"><section class="rd-panel"><div class="rd-panel-head"><h3>🗓 '+h(now)+'</h3>'+
@@ -205,8 +213,8 @@ function render(){
  (s.missing.length>150?'<p class="rd-sub">Показаны первые 150 — детальный реестр доступен в существующем блоке покрытия.</p>':'')+
  (!s.missing.length?'<p class="rd-sub">Непокрытых клиентов нет.</p>':'')+
  '</div></details><details class="rd-panel" id="rd360-over"><summary>⚠️ Перегруженные и заполненные до лимита дни</summary><div class="rd-list">'+
- Object.entries(s.days).filter(([d,x])=>x.count>=15).map(([d,x])=>'<div class="rd-list-row"><span>'+h(humanDay(d))+'</span><span>'+x.count+' точек · '+(x.count>15?'превышение':'лимит')+'</span></div>').join('')+
- (!Object.values(s.days).some(x=>x.count>=15)?'<p class="rd-sub">Дней с 15 и более точками нет.</p>':'')+
+ Object.entries(s.days).flatMap(([d,x])=>(x.managerCounts||[]).filter(v=>v.count>=15).map(v=>'<div class="rd-list-row"><span>'+h(humanDay(d))+' · '+h(v.manager)+'</span><span>'+v.count+' точек · '+(v.count>15?'превышение':'лимит')+'</span></div>')).join('')+
+ (!Object.values(s.days).some(x=>(x.managerCounts||[]).some(y=>y.count>=15))?'<p class="rd-sub">У менеджеров нет дней с 15 и более точками.</p>':'')+
  '</div></details></div>'+
  '<div class="rd-actions"><button data-action="ai-details">Раскрыть полный ИИ-аудит и решения ДФ</button><button data-action="details">Показать действующий отчёт покрытия</button><button data-action="absences">Отсутствия / замещения</button></div>';
  p.classList.add('rd360');p.classList.toggle('rd360-editor',S.editor);p.classList.toggle('rd360-audit',S.audit);p.classList.toggle('rd360-details',S.details);
