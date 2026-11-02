@@ -16,13 +16,16 @@ test('LPR dates and sending logs are private, no change to client or GPS tables'
  assert.match(sql,/birth_day smallint/);assert.match(sql,/birth_month smallint/);
  assert.doesNotMatch(sql,/birth_year/);
 });
-test('Exact manager UUID, client ownership, and VIP director scope enforced on server',()=>{
- for(const s of ['SVC.auth.getUser(token)','allowedManagerIds[user.name]===user.id',
-  "q=q.eq('manager_name',u.name)","if(u.tier!=='manager')",
+test('Exact field-manager UUID and protected director write, with per-client ownership enforced',()=>{
+ for(const str of ['SVC.auth.getUser(token)','allowedManagerIds[user.name]===user.id',
+  "q=q.eq('manager_name',u.name)",
+  "if(u.tier!=='manager'&&u.tier!=='director')",
   "clients.some(c=>c.id===client_id)","original.client_id!==client_id",
-  "validMonthDay(birth_month,birth_day)"])
-   assert.ok(service.includes(s),s);
- assert.match(service,/u\.tier==='manager'\|\|c\.is_vip===true\|\|vipIds\.has\(c\.id\)/);
+  "validMonthDay(birth_month,birth_day)",
+  "const boss=SIDS.has(user.id)&&user.role==='boss'"])
+   assert.ok(service.includes(str),str);
+ assert.match(service,/return clients\.map\(c=>\(\{\.\.\.c,is_vip:/);
+ assert.match(service,/unmatched_vip:unmatchedVip/);
 });
 test('VIP Telegram reminders at three days and birthday with dedupe',()=>{
  for(const s of ["event_kind:'3_days'","event_kind:'birthday'","x-crm-dispatch-secret",

@@ -59,10 +59,10 @@ function field(label,id,value='',type='text'){
 }
 function render(){
  const v=page?.querySelector('#lpr-view-v1');if(!v||!info)return;
- const clients=info.clients||[],contacts=info.contacts||[],upcoming=info.upcoming||[],canWrite=role()==='manager';
+ const clients=info.clients||[],contacts=info.contacts||[],upcoming=info.upcoming||[],canWrite=['manager','director'].includes(role());
  const fmt=d=>d.days_until===0?'Сегодня':d.days_until===1?'Завтра':'Через '+d.days_until+' дн.';
  v.innerHTML='<div class="card"><b>📅 Брифинг: ближайшие 14 дней</b>'+
- '<p>ЛПР: '+contacts.length+' · Скоро дни рождения: '+upcoming.length+
+ '<p>ЛПР: '+contacts.length+' · ВИП: '+(info.total_vip??'—')+' · ВИП без ЛПР: '+(info.missing_vip??'—')+' · Скоро дни рождения: '+upcoming.length+
  ' · Клиентов без ЛПР: '+info.missing_clients+'</p>'+
  (upcoming.length?upcoming.slice(0,40).map(c=>'<div style="padding:5px 0">'+esc(fmt(c))+
  ' — <b>'+esc(c.full_name)+'</b>, '+esc(c.client_name)+
@@ -72,21 +72,41 @@ function render(){
  '<button class="btn-secondary" id="lpr-link-telegram">Подключить Telegram</button></div>'+
  (canWrite?'<div class="card" style="margin-top:10px"><b>Добавить / изменить ЛПР</b>'+
  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin:10px 0">'+
- '<label>Клиент<select id="lpr-client" class="form-input"><option value="">Выбрать…</option>'+
- clients.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+(c.is_vip?' 💎':'')+'</option>').join('')+'</select></label>'+
+ '<label>Клиент<input id="lpr-client-find" class="form-input" placeholder="Поиск клиента"><select id="lpr-client" class="form-input"><option value="">Выбрать точку…</option>'+
+ clients.slice().sort((a,b)=>Number(b.is_vip)-Number(a.is_vip)||a.name.localeCompare(b.name,'ru')).map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+(c.is_vip?' 💎':'')+'</option>').join('')+'</select></label>'+
  field('ФИО','name')+field('Должность','position')+
  field('День','day','','number')+field('Месяц','month','','number')+
  '</div><button class="btn-primary" id="lpr-save">Сохранить</button> '+
  '<button class="btn-secondary" id="lpr-new">Новый ЛПР</button>'+
  '<p style="font-size:11px;color:var(--sub)">Можно добавить нескольких ЛПР одного клиента. Год рождения не требуется.</p></div>':'')+
- '<div class="card" style="margin-top:10px"><b>'+(canWrite?'ЛПР моих клиентов':'ЛПР ВИП-клиентов')+'</b>'+
+ '<div class="card" style="margin-top:10px"><b>ЛПР клиентов</b>'+
  '<div style="max-height:380px;overflow:auto"><table class="tbl"><thead><tr><th>Клиент</th><th>ФИО</th><th>Должность</th><th>ДР</th><th></th></tr></thead><tbody>'+
  (contacts.length?contacts.map(c=>'<tr><td>'+esc(clients.find(x=>x.id===c.client_id)?.name||'')+
  '</td><td>'+esc(c.full_name)+'</td><td>'+esc(c.position_title)+'</td><td>'+
  String(c.birth_day).padStart(2,'0')+'.'+String(c.birth_month).padStart(2,'0')+'</td><td>'+
  (canWrite?'<button class="btn-secondary" data-lpr-edit="'+esc(c.id)+'">Изменить</button>':'')+
  '</td></tr>').join(''):'<tr><td colspan="5">ЛПР пока не заполнены</td></tr>')+
- '</tbody></table></div></div>';
+ '</tbody></table></div></div>'+
+ '<div class="card" style="margin-top:10px"><b>💎 Полный реестр ВИП</b>'+
+ '<p style="font-size:12px;color:var(--sub)">ВИП-клиенты отображаются даже без записанного ЛПР.</p>'+
+ '<div style="max-height:340px;overflow:auto">'+
+ clients.filter(c=>c.is_vip).map(c=>'<div style="padding:6px;border-top:1px solid var(--border);font-size:12px">'+
+ esc(c.name)+' · '+(c.has_lpr?'✅ ЛПР заполнен':'⚠️ ЛПР не заполнен')+
+ (canWrite?'<button class="btn-secondary" style="margin-left:8px" data-lpr-pick="'+esc(c.id)+'">Заполнить</button>':'')+
+ '</div>').join('')+'</div>'+
+ ((info.unmatched_vip||[]).length?'<p style="font-size:12px;color:#b45309">⚠️ В реестре ВИП есть записи без привязки к карточке клиента: '+(info.unmatched_vip||[]).map(esc).join(', ')+'. Проверьте соответствие вручную.</p>':'')+'</div>';
+ v.querySelector('#lpr-client-find')?.addEventListener('input',e=>{
+   const term=String(e.target.value||'').trim().toLowerCase();
+   v.querySelectorAll('#lpr-client option').forEach(o=>{if(o.value)o.hidden=!!term&&!o.textContent.toLowerCase().includes(term);});
+ });
+ v.querySelectorAll('[data-lpr-pick]').forEach(b=>b.onclick=()=>{
+   const target=v.querySelector('#lpr-client');if(!target)return;
+   target.value=b.dataset.lprPick;
+   v.querySelector('#lpr-client-find').value='';
+   target.querySelectorAll('option').forEach(o=>o.hidden=false);
+   target.scrollIntoView({behavior:'smooth',block:'center'});
+   v.querySelector('#lpr-name')?.focus();
+ });
  v.querySelector('#lpr-save')?.addEventListener('click',save);
  v.querySelector('#lpr-new')?.addEventListener('click',()=>{editId=null;render();});
  v.querySelector('#lpr-link-telegram')?.addEventListener('click',linkTelegram);
@@ -97,7 +117,7 @@ function render(){
  }));
 }
 async function save(){
- if(role()!=='manager')return;
+ if(!['manager','director'].includes(role()))return;
  const body={action:'save',id:editId||undefined,client_id:read('client'),
   full_name:read('name'),position_title:read('position'),birth_day:Number(read('day')),
   birth_month:Number(read('month'))};

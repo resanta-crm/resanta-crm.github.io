@@ -36,6 +36,7 @@ function render(d){
  if(fact)notices.push('Найдено фактическое GPS-пребывание '+minutes(f.actual_minutes)+'. Это подтверждает нахождение в геозоне, но не содержание встречи.');
  else notices.push('Достаточное GPS-пребывание не установлено. Это не доказательство отсутствия менеджера.');
  if(diff)notices.push('Дистанция старого отчёта расходится с расстоянием до текущего эталона. Возможна смена геозоны или правил.');
+ if(!d.trusted_anchor?.verified_at)notices.push('Координаты ТТ ещё не выверены. Можно закрыть РАЗБОР с комментарием руководителя, не присваивая визиту статус «GPS подтверждён». Выверение адреса остаётся отдельной задачей.');
  if(conflicts.length)notices.push('Есть несколько записей с одинаковым адресом, но разными координатами. Автоматически объединять их нельзя.');
  const prev=d.last_director_decision;
  b.innerHTML=notices.map(n=>'<div class="gp-notice">'+esc(n)+'</div>').join('')+
@@ -55,6 +56,7 @@ function render(d){
  '<div class="gp-note">Не менять эталон автоматически. Требуется подтверждение физической ТТ директором.</div></div>':'')+
  '<div class="gp-box"><b>Действие руководителя</b><div class="gp-note">Здесь решение только фиксируется. Не изменяются GPS, визиты, координаты или существующие задачи.</div>'+
  (prev?'<div class="gp-notice" style="margin-top:9px">Последнее решение: '+esc(prev.action)+' · '+time(prev.created_at)+' · '+esc(prev.comment||'')+'</div>':'')+
+ (!d.trusted_anchor?.verified_at?'<div class="gp-note"><b>Закрытие без GPS:</b> выберите «Закрыть технический вопрос» и укажите результат проверки. Исходный GPS и задача выверения не изменятся.</div>':'')+
  '<div class="gp-form" style="margin-top:10px">'+
  '<label>Тип решения<select id="gp-case-action"><option value="to_meeting">В повестку совещания</option><option value="review_coordinates">На проверку координат</option><option value="review_visit">На разбор визита</option><option value="defer">Отложить</option><option value="resolved_technical">Закрыть технический вопрос</option><option value="resolved_verified">Проверено, завершить</option></select></label>'+
  '<label>Срок<input type="date" id="gp-case-due"></label>'+
