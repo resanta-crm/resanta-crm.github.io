@@ -39,6 +39,8 @@ function totals(v){
 function growth(x,y){if(y===null||y===undefined||!Number.isFinite(Number(y)))return 'нет данных';if(n(y)===0)return n(x)===0?'0%':'нет базы';const p=(n(x)-n(y))/Math.abs(n(y))*100;return (p>=0?'+':'')+p.toLocaleString('ru-RU',{maximumFractionDigits:1})+'%'}
 function root(){
  const page=document.getElementById('page-managers');if(!page)return null;
+ const olderCard=document.getElementById('managers-table')?.closest('.card');if(olderCard)olderCard.style.display='none';
+ const olderDashboard=document.getElementById('manager-kpi360-v1');if(olderDashboard)olderDashboard.style.display='none';
  let el=document.getElementById(ID);
  if(!el){el=document.createElement('section');el.id=ID;const legacy=document.getElementById('manager-kpi360-v1');if(legacy)legacy.insertAdjacentElement('beforebegin',el);else page.appendChild(el);}
  page.querySelector('.page-title')?.replaceChildren(document.createTextNode(isBoss()?'Менеджеры · KPI 360°':'Мои показатели · KPI 360°'));
