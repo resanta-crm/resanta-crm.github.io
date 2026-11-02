@@ -3,7 +3,7 @@
 'use strict';
 if(root.crmClient360V1)return;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let nav=null,page=null,items=[],groups=[],checked=new Set(),busy=false;
+let nav=null,page=null,items=[],groups=[],requests=[],checked=new Set(),busy=false;
 const role=()=>{try{return typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'}catch(_){return false}};
 const canLink=()=>{try{return role()&&['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru'].includes(String(currentUser?.email||'').trim().toLowerCase())}catch(_){return false}};
 function mount(){
@@ -23,7 +23,7 @@ function mount(){
   '<div style="display:flex;gap:9px;flex-wrap:wrap"><input id="c360-search" class="form-input" placeholder="Поиск по названию или адресу" style="max-width:360px"><button class="btn-secondary" id="c360-find">Найти</button></div>'+
   '<div id="c360-selected" style="margin-top:12px;font-size:12px"></div>'+
   (canLink()?'<label style="display:block;margin:9px 0;font-size:12px">Название единого юрлица <input id="c360-legal" class="form-input" placeholder="Например, ИТ технологии"></label><button id="c360-group" class="btn-primary">Связать выбранные карточки (без удаления)</button>':'<p>Создание связей доступно ДФС и директору Витебска.</p>')+
-  '</div><div id="c360-output" class="card">Введите название клиента и нажмите «Найти».</div>'+
+  '</div><div id="c360-requests" class="card" style="margin-bottom:10px">Заявки на новые торговые точки…</div><div id="c360-output" class="card">Введите название клиента и нажмите «Найти».</div>'+
   '<div id="c360-groups" class="card" style="margin-top:10px"></div>';
   main.appendChild(page);
   page.querySelector('#c360-find').onclick=load;
@@ -40,6 +40,9 @@ async function load(){
   const {data,error}=await db.rpc('client360_catalog_v1',{p_query:q});
   if(error||!data?.ok)throw error||new Error('Сервер не вернул список');
   items=data.clients||[];groups=data.entities||[];
+  const rq=await db.rpc('client360_review_requests_v1');
+  if(rq.error)throw rq.error;
+  requests=rq.data?.requests||[];
   render();
  }catch(e){out.textContent='Не удалось загрузить: '+(e?.message||e)}
  finally{busy=false}
@@ -60,6 +63,16 @@ function render(){
  out.querySelectorAll('[data-c360-id]').forEach(x=>x.onchange=()=>{
   if(x.checked)checked.add(x.dataset.c360Id);else checked.delete(x.dataset.c360Id);renderSelected();
  });
+ const requestBox=page.querySelector('#c360-requests');
+ requestBox.innerHTML='<b>📍 Заявки на новые торговые точки: '+requests.length+'</b>'+
+ (requests.length?requests.map(r=>
+   '<div style="padding:9px;margin-top:6px;border-top:1px solid var(--border)"><b>'+esc(r.client_name)+'</b> · '+
+   esc(r.city)+', '+esc(r.address)+' · МПП: '+esc(r.manager_name)+
+   (canLink()?'<div style="display:flex;gap:7px;margin-top:7px"><button class="btn-primary" data-c360-approve="'+esc(r.id)+'">✅ Подтвердить адрес</button>'+
+   '<button class="btn-secondary" data-c360-reject="'+esc(r.id)+'">Отклонить</button></div>':'')+
+   '</div>').join(''):'<p style="font-size:12px">Нет заявок на проверку.</p>');
+ requestBox.querySelectorAll('[data-c360-approve]').forEach(b=>b.onclick=()=>reviewPoint(b.dataset.c360Approve,true));
+ requestBox.querySelectorAll('[data-c360-reject]').forEach(b=>b.onclick=()=>reviewPoint(b.dataset.c360Reject,false));
  const gs=page.querySelector('#c360-groups');
  gs.innerHTML='<b>Зарегистрированные группы юрлиц</b><div style="font-size:12px;color:var(--sub);margin-top:7px">'+
  (groups.length?groups.map(g=>'<div style="padding:4px">🏢 '+esc(g.name)+'</div>').join(''):'Пока нет подтверждённых групп')+'</div>';
@@ -83,6 +96,14 @@ async function group(){
   await load();
  }catch(e){alert('Не удалось связать карточки: '+(e?.message||e))}
  finally{button.disabled=false}
+}
+async function reviewPoint(requestId,approve){
+ if(!canLink())return;
+ try{
+   const {data,error}=await db.rpc('client360_approve_store_v1',{p_request_id:requestId,p_approve:approve,p_comment:approve?'Подтверждён адрес; GPS требует выверения':'Адрес не подтверждён'});
+   if(error||!data?.ok)throw error||new Error('Нет подтверждения');
+   await load();
+ }catch(e){alert('Ошибка проверки ТТ: '+(e?.message||e))}
 }
 function open(){if(!role())return;mount();if(typeof goPage==='function')goPage('client360','Клиент 360°');load()}
 function reconcile(){if(role())mount();else if(nav)nav.style.display='none'}
