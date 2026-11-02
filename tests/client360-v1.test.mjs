@@ -49,3 +49,6 @@ import './manager-kpi360-v1.test.mjs';
 
 // Regression of new KPI360 visual dashboard and manager data boundaries.
 import './manager-kpi360-visual-v2.test.mjs';
+
+// Final approved KPI360 drill-down: six-month positions and scoped client graphs.
+import './manager-kpi360-history-v3.test.mjs';
