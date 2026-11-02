@@ -286,6 +286,8 @@ function render(){
  html+=cards||'<div style="padding:15px;color:#64748b;background:#f8fafc;border-radius:8px">По выбранным фильтрам рекомендаций нет. Измените тип или статус.</div>';
  if(matching.length>state.shown)html+='<button type="button" data-route-ai-more="1" class="chip" style="margin-top:12px">Показать ещё 8 · осталось '+(matching.length-state.shown)+'</button>';
  out.innerHTML=html;
+ // Director 360 receives only calculated signals; source audit rules stay unchanged.
+ try{window.dispatchEvent(new CustomEvent('resanta-route-audit-brief',{detail:{month:state.month,total:all.length,uniqueClients,reviewed,counts,highlights:all.slice(0,4).map(f=>({manager:f.manager,clientName:f.clientName,reason:f.reason,advice:f.advice,kind:f.kind})),warnings:state.warnings.slice(0,3)}}));}catch(e){console.warn('Route brief event:',e)}
 }
 async function decide(f,decision,action){
  if(!boss()||state.busy||!['approve','reject','discuss'].includes(decision))return;
