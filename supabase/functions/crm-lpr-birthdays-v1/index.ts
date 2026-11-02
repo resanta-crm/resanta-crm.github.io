@@ -40,7 +40,7 @@ async function identity(req){
 async function allowedClients(u){
  let q=SVC.from('clients').select('id,name,manager_name,is_vip').or('is_archived.eq.false,is_archived.is.null').or('to_delete.eq.false,to_delete.is.null');
  if(u.tier==='manager')q=q.eq('manager_name',u.name);
- else if(u.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a')q=q.in('manager_name',['Руднев','Ачинович','Шкуран']);
+ // Directors can see all VIP clients across the existing CRM; manager remains scoped.
  // Owner boss can see VIP from whole client base, but not ordinary LPR contacts.
  const {data,error}=await q.order('name').limit(3000);
  if(error)throw Error('client_directory_unavailable');
@@ -83,12 +83,19 @@ async function list(u,req){
     client_name:c.name,client_id:c.id,manager_name:c.manager_name,is_vip:c.is_vip,
     days_until:days,birth_day:x.birth_day,birth_month:x.birth_month};
  }).filter(Boolean).sort((a,b)=>a.days_until-b.days_until||Number(b.is_vip)-Number(a.is_vip)).slice(0,120);
+ let unmatchedVip=[];
+ if(u.tier==='director'){
+  const {data:master,error:masterErr}=await SVC.from('vip_membership_v236429')
+   .select('client_name').eq('active',true).is('client_id',null).limit(100);
+  if(masterErr)throw Error('vip_master_unavailable');
+  unmatchedVip=(master||[]).map(v=>v.client_name).filter(Boolean);
+ }
  const covered=new Set(contacts.map(c=>c.client_id));
  return respond(req,{mode:'lpr_v1',scope:u.tier,read_only:false,as_of:today,
   clients:clients.map(c=>({id:c.id,name:c.name,manager_name:c.manager_name,is_vip:c.is_vip,
    has_lpr:covered.has(c.id)})),
   contacts:contacts.map(({created_by,...item})=>item),
-  upcoming,missing_clients:clients.filter(c=>!covered.has(c.id)).length,total_vip:clients.filter(c=>c.is_vip).length,missing_vip:clients.filter(c=>c.is_vip&&!covered.has(c.id)).length});
+  upcoming,missing_clients:clients.filter(c=>!covered.has(c.id)).length,total_vip:clients.filter(c=>c.is_vip).length,missing_vip:clients.filter(c=>c.is_vip&&!covered.has(c.id)).length,unmatched_vip:unmatchedVip});
 }
 async function save(u,b,req){
  if(u.tier!=='manager'&&u.tier!=='director')return respond(req,{error:'forbidden'},403);
