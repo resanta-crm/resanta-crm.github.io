@@ -25,7 +25,7 @@ root.crmAI360StaffIdentityV1=()=>{
 // Both optional CRM features have separate server RBAC and never run network requests on boot.
 for(const file of ['149-lpr-v1.js','150-my-mileage-v1.js']){
  const tag=document.createElement('script');
- tag.src='./assets/'+file+'?v=1';
+ tag.src='./assets/'+file+(file==='149-lpr-v1.js'?'?v=client360-20261102':'?v=1');
  tag.defer=true;
  document.body.appendChild(tag);
 }
