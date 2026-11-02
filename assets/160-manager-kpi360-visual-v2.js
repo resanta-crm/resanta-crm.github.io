@@ -129,18 +129,100 @@ function clientChart(x,rows){
  '<span><i class="kv-dot" style="background:#ac76ee"></i>Вернувшиеся: '+n(x.returned)+'</span></div>'+
  '<div class="kv-note">Обе категории входят в премию. Нажми на менеджера для просмотра клиентов.</div></div>';
 }
+const dimension={
+ sales:{key:'sales',rank:'rank_sales',label:'Продажи',unit:'бел. руб.'},
+ akb:{key:'akb',rank:'rank_akb',label:'АКБ',unit:'клиентов'},
+ bonus:{key:'bonus',rank:'rank_bonus',label:'Клиенты KPI',unit:'клиентов'}
+};
+function histRows(data){return Array.isArray(data.history?.rows)?data.history.rows:[]}
+function lineSvg(monthly,series,unit){
+ if(!monthly.length)return '<div class="kv-note">Нет истории для построения графика.</div>';
+ const max=Math.max(1,...series.flatMap(s=>monthly.map(m=>n(s.at(m)?.value))))*1.12;
+ const x=i=>54+i*100, y=v=>185-140*n(v)/max;
+ const grids=[0,0.25,0.5,0.75,1].map(fr=>{
+  const yy=y(max*fr);
+  return '<line x1="52" y1="'+yy+'" x2="570" y2="'+yy+'" stroke="#e7edf6"/>'+
+   '<text x="43" y="'+(yy+4)+'" fill="#718096" font-size="10" text-anchor="end">'+
+    esc(money(max*fr))+'</text>';
+ }).join('');
+ return '<svg viewBox="0 0 620 224" role="img" aria-label="'+esc('Динамика '+unit+' за шесть месяцев')+'" style="width:100%;height:auto;max-height:250px">'+
+ grids+
+ series.map(s=>{
+  const points=monthly.map((m,i)=>x(i)+','+y(s.at(m)?.value)).join(' ');
+  return '<polyline points="'+points+'" stroke="'+s.color+'" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/>'+
+   monthly.map((m,i)=>'<circle cx="'+x(i)+'" cy="'+y(s.at(m)?.value)+'" r="4.2" fill="'+s.color+'" stroke="white" stroke-width="1.5">'+
+   '<title>'+esc(s.name+' · '+nameMonth(m)+' · '+money(s.at(m)?.value)+' '+unit)+'</title></circle>').join('');
+ }).join('')+
+ monthly.map((m,i)=>'<text x="'+x(i)+'" y="211" font-size="12" text-anchor="middle" fill="#65768c">'+esc(months[Number(m.slice(5,7))])+'</text>').join('')+
+ '</svg>';
+}
 function trendChart(data){
- const items=(data.trend||[]).slice(-6);if(!items.length)return '';
- const vals=items.flatMap(x=>[n(x.current),n(x.previous)]),max=Math.max(...vals,1)*1.1;
- const pos=(key)=>items.map((r,i)=>(24+i*91)+','+(140-125*n(r[key])/max).toFixed(1)).join(' ');
- return '<div class="kv-card" style="margin-top:12px"><h3>Динамика продаж · последние 6 месяцев</h3>'+
- '<div class="kv-legend"><span><i class="kv-dot"></i>Выбранный год</span><span><i class="kv-dot" style="background:#a3a1ef"></i>Предыдущий год</span></div>'+
- '<svg viewBox="0 0 525 175" role="img" aria-label="Продажи: выбранный год и предыдущий год" style="width:100%;max-height:210px">'+
- '<line x1="20" y1="145" x2="505" y2="145" stroke="#dce4ee"/>'+
- '<polyline points="'+pos('previous')+'" fill="none" stroke="#aca6eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+
- '<polyline points="'+pos('current')+'" fill="none" stroke="#1769d8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>'+
- items.map((r,i)=>'<text x="'+(24+i*91)+'" y="168" font-size="12" text-anchor="middle" fill="#68788d">'+esc(months[Number(r.month.slice(5,7))])+'</text>').join('')+
- '</svg><div class="kv-note">Динамика по закреплённым клиентам из истории 1С. Для KPI используются утверждённые месячные факты.</div></div>';
+ const history=histRows(data);
+ if(!history.length)return '<div class="kv-card" style="margin-top:12px"><h3>Динамика за шесть месяцев</h3><div class="kv-note">История мест и графиков пока недоступна. Основные KPI и клиенты остаются доступными.</div></div>';
+ const metric=dimension[historyMetric],monthly=[...new Set(history.map(r=>r.month))].sort();
+ const names=[...new Set(history.map(r=>r.manager_name))];
+ const palette=['#1969e8','#8a5cf6','#119467'];
+ const series=names.map((name,i)=>({
+  name,color:palette[i%palette.length],
+  at:m=>({value:n(history.find(r=>r.month===m&&norm(r.manager_name)===norm(name))?.[metric.key])})
+ }));
+ const tabs=Object.entries(dimension).map(([key,d])=>'<button type="button" data-metric="'+key+'" class="'+(key===historyMetric?'kv-active':'')+'">'+esc(d.label)+'</button>').join('');
+ return '<div class="kv-card" style="margin-top:12px"><div class="kv-top"><div><h3 style="margin:0">Динамика менеджеров · 6 месяцев</h3>'+
+ '<div class="kv-note">Нажми на менеджера в графике выше, чтобы увидеть его историю мест</div></div>'+
+ '<div class="kv-tabs" style="margin:0">'+tabs+'</div></div>'+
+ '<div class="kv-legend">'+series.map(s=>'<span><i class="kv-dot" style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join('')+'</div>'+
+ lineSvg(monthly,series,metric.unit)+
+ '<div class="kv-note">Данные по менеджерам показаны только в пределах разрешённого доступа. Рейтинг по факту «'+metric.label+'» можно посмотреть в детализации.</div></div>';
+}
+function managerPanel(data,rows){
+ const host=document.getElementById(ID+'-manager-panel');if(!host)return;
+ const manager=selectedManager||(!isBoss()?rows[0]?.manager_name:'');
+ if(!manager){host.innerHTML='';return}
+ const own=histRows(data).filter(r=>norm(r.manager_name)===norm(manager)).sort((a,b)=>a.month.localeCompare(b.month));
+ const current=rows.find(r=>norm(r.manager_name)===norm(manager));
+ if(!current){host.innerHTML='<div class="kv-note">Показатели выбранного менеджера недоступны.</div>';return}
+ const rankBlock=own.length?own.map((r,i)=>{
+   const rank=r.rank_overall==null?'—':r.rank_overall+' место';
+   return '<div class="kv-rank'+(i===own.length-1?' kv-current':'')+'"><div>'+esc(nameMonth(r.month))+'</div>'+
+    '<b>'+esc(rank)+'</b><div class="kv-note">'+(r.overall_score==null?'нет плана':money(r.overall_score)+'% по KPI')+'</div></div>'
+ }).join(''):'<div class="kv-note">Пока нет истории мест.</div>';
+ const salesSeries=[
+  {name:'Факт',color:'#1969e8',at:m=>({value:n(own.find(r=>r.month===m)?.sales)})},
+  {name:'План',color:'#8a5cf6',at:m=>({value:n(own.find(r=>r.month===m)?.sales_plan)})}
+ ];
+ const ly=(data.prior_sales||[]).find(r=>norm(r.manager_name)===norm(manager));
+ const prev=ly?.sales_2025;
+ const summary=(current.shipment_plan?pc(current.shipment,current.shipment_plan):'план не задан')+
+   ' от плана · АКБ '+n(current.akb)+' · клиентов для KPI '+n(current.bonus)+
+   ' ('+n(current.first)+' впервые, '+n(current.returned)+' вернувшихся)';
+ host.innerHTML='<div class="kv-card kv-panel"><div class="kv-top"><div><h3 style="font-size:17px;margin:0">'+esc(manager)+' · подробный анализ</h3>'+
+  '<div class="kv-note">'+esc(summary)+'</div></div>'+
+  (isBoss()?'<button data-close-manager>Закрыть</button>':'')+'</div>'+
+  '<h3>Места в команде · предыдущие 6 месяцев</h3>'+
+  '<div class="kv-rank-strip">'+rankBlock+'</div>'+
+  '<div class="kv-rank-desc">Место рассчитано по среднему выполнению трёх планов (продажи, АКБ, премиальные клиенты). Если план на месяц отсутствовал — показываем «—», а не выдуманный рейтинг.</div>'+
+  '<div style="margin-top:15px"><h3>Продажи · план и факт по месяцам</h3>'+
+   '<div class="kv-legend"><span><i class="kv-dot"></i>Факт</span>'+
+   '<span><i class="kv-dot" style="background:#8a5cf6"></i>План</span></div>'+
+   lineSvg(own.map(r=>r.month),salesSeries,'бел. руб.')+'</div>'+
+  '<div class="kv-note">Выбранный месяц: факт '+money(current.shipment)+' бел. руб. · план '+money(current.shipment_plan)+
+   ' бел. руб. · факт '+esc(data.previous_month||'прошлого года')+': '+(prev==null?'нет данных':money(prev)+' бел. руб.')+'</div>'+
+  '<h3 style="margin-top:15px">Места по конкретным показателям</h3>'+
+  '<div style="overflow-x:auto"><table class="kv-table"><thead><tr><th>Месяц</th><th>Продажи</th><th>АКБ</th><th>Клиенты KPI</th></tr></thead><tbody>'+
+  own.map(r=>'<tr><td>'+esc(nameMonth(r.month))+'</td><td>'+n(r.rank_sales)+' из '+n(r.team_size)+'</td>'+
+    '<td>'+n(r.rank_akb)+' из '+n(r.team_size)+'</td><td>'+n(r.rank_bonus)+' из '+n(r.team_size)+'</td></tr>').join('')+
+  '</tbody></table></div>'+
+  '<div class="kv-actions"><button data-view-clients class="kv-primary">Клиенты '+esc(manager)+'</button>'+
+  (isBoss()?'<button data-choose-another>Другой менеджер</button>':'')+'</div></div>';
+ host.querySelector('[data-close-manager]')?.addEventListener('click',()=>{selectedManager='';host.innerHTML='';renderDetails(data,rows)});
+ host.querySelector('[data-choose-another]')?.addEventListener('click',()=>{selectedManager='';host.innerHTML='';renderDetails(data,rows)});
+ host.querySelector('[data-view-clients]')?.addEventListener('click',()=>document.getElementById(ID+'-detail')?.scrollIntoView({behavior:'smooth',block:'start'}));
+}
+function openManager(data,rows,name){
+ if(!isBoss()&&!rows.some(r=>norm(r.manager_name)===norm(name)))return;
+ selectedManager=name;clientFilter='bonus';
+ managerPanel(data,rows);renderDetails(data,rows);
+ document.getElementById(ID+'-manager-panel')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function summaryText(data,rows,t){
  const worst=[...rows].filter(x=>n(x.shipment_plan)>0).sort((a,b)=>n(a.shipment)/n(a.shipment_plan)-n(b.shipment)/n(b.shipment_plan))[0];
