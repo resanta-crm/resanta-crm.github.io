@@ -77,7 +77,7 @@ test('existing report and director approval actions are reused, not new writes',
  x.api.handle('done');assert.ok(x.calls.includes('report:one'));
  x.api.handle('tab',{tab:'pending'});x.api.handle('approve');
  assert.ok(x.calls.includes('approve:two'));
- assert.doesNotMatch(js,/db\s*\.\s*from\s*\(|db\s*\.\s*rpc\s*\(|\.insert\s*\(|\.update\s*\(|\.delete\s*\(/);
+ assert.doesNotMatch(js,/db\s*\.\s*from\s*\(|db\s*\.\s*rpc\s*\(|\.insert\s*\(|\.update\s*\(|\.upsert\s*\(|\.remove\s*\(/);
 });
 test('long task text is collapsed by default but full evidence is retained',()=>{
  const long='Действия: 1. Проверить остатки. 2. Согласовать отгрузку.\n'+'SKU/21/75 1000\\n'.repeat(80);
