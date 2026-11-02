@@ -31,7 +31,7 @@ public final class VoiceNavigation {
         if (q.isEmpty()) return unknown();
 
         // These are only intent previews. No task or sharing starts automatically.
-        if (q.matches(".*(создай|сделай|отправь|согласуй|утверди|измени).*(поручени|задач|платеж|цен).*")) {
+        if (q.matches(".*(создай|сделай|отправь|согласуй|утверди|измени).*(поручени|задач|платеж|цен|скидк).*")) {
             return new Result("action_preview", "Действие требует отдельного подтверждения в CRM", true);
         }
         if (q.matches(".*(трансляци|демонстраци|покажи на большой экран).*")) {
