@@ -42,7 +42,7 @@ async function allowedClients(u){
  if(u.tier==='manager')q=q.eq('manager_name',u.name);
  else if(u.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a')q=q.in('manager_name',['Руднев','Ачинович','Шкуран']);
  // Owner boss can see VIP from whole client base, but not ordinary LPR contacts.
- const {data,error}=await q.order('name').limit(1500);
+ const {data,error}=await q.order('name').limit(3000);
  if(error)throw Error('client_directory_unavailable');
  const clients=data||[];
  // VIP is true if either CRM flag OR the active master VIP membership.
@@ -50,12 +50,15 @@ async function allowedClients(u){
  let vipIds=new Set();
  if(ids.length){
    const {data:membership,error:e}=await SVC.from('vip_membership_v236429')
-    .select('client_id').eq('active',true).limit(4000);
+    .select('client_id,client_name').eq('active',true).limit(4000);
    if(e)throw Error('vip_membership_unavailable');
-   vipIds=new Set((membership||[]).map(x=>x.client_id));
+   vipIds=new Set((membership||[]).map(x=>x.client_id).filter(Boolean));
+   for(const m of (membership||[]).filter(x=>!x.client_id&&x.client_name)){
+     const matches=clients.filter(c=>normalize(c.name)===normalize(m.client_name));
+     if(matches.length===1)vipIds.add(matches[0].id);
+   }
  }
- return clients.filter(c=>u.tier==='manager'||c.is_vip===true||vipIds.has(c.id))
-  .map(c=>({...c,is_vip:c.is_vip===true||vipIds.has(c.id)}));
+ return clients.map(c=>({...c,is_vip:c.is_vip===true||vipIds.has(c.id)}));
 }
 async function list(u,req){
  const clients=await allowedClients(u),ids=clients.map(c=>c.id);
@@ -81,14 +84,14 @@ async function list(u,req){
     days_until:days,birth_day:x.birth_day,birth_month:x.birth_month};
  }).filter(Boolean).sort((a,b)=>a.days_until-b.days_until||Number(b.is_vip)-Number(a.is_vip)).slice(0,120);
  const covered=new Set(contacts.map(c=>c.client_id));
- return respond(req,{mode:'lpr_v1',scope:u.tier,read_only:u.tier==='director',as_of:today,
+ return respond(req,{mode:'lpr_v1',scope:u.tier,read_only:false,as_of:today,
   clients:clients.map(c=>({id:c.id,name:c.name,manager_name:c.manager_name,is_vip:c.is_vip,
    has_lpr:covered.has(c.id)})),
   contacts:contacts.map(({created_by,...item})=>item),
-  upcoming,missing_clients:clients.filter(c=>!covered.has(c.id)).length});
+  upcoming,missing_clients:clients.filter(c=>!covered.has(c.id)).length,total_vip:clients.filter(c=>c.is_vip).length,missing_vip:clients.filter(c=>c.is_vip&&!covered.has(c.id)).length});
 }
 async function save(u,b,req){
- if(u.tier!=='manager')return respond(req,{error:'director_read_only'},403);
+ if(u.tier!=='manager'&&u.tier!=='director')return respond(req,{error:'forbidden'},403);
  const id=typeof b.id==='string'&&/^[0-9a-f-]{36}$/i.test(b.id)?b.id:null;
  const client_id=typeof b.client_id==='string'&&/^[0-9a-f-]{36}$/i.test(b.client_id)?b.client_id:'';
  const full_name=clamp(b.full_name,120),position_title=clamp(b.position_title??'',120),note=clamp(b.note??'',200);
@@ -112,7 +115,7 @@ async function save(u,b,req){
  return respond(req,{ok:true,contact:data});
 }
 async function remove(u,b,req){
- if(u.tier!=='manager')return respond(req,{error:'director_read_only'},403);
+ if(u.tier!=='manager'&&u.tier!=='director')return respond(req,{error:'forbidden'},403);
  const id=String(b.id||'');if(!/^[0-9a-f-]{36}$/i.test(id))return respond(req,{error:'invalid_id'},400);
  const {data:existing,error:e}=await SVC.from('crm_lpr_contacts_v1')
   .select('client_id').eq('id',id).eq('active',true).maybeSingle();
