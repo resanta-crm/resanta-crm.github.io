@@ -52,7 +52,10 @@ jobs:
       - name: Verify runner Android SDK
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          sdkmanager --version
+          SDK_MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDK_MANAGER"
+          "$SDK_MANAGER" --version
+          echo "$(dirname "$SDK_MANAGER")" >> "$GITHUB_PATH"
           ls "$ANDROID_HOME/platforms" | head
       - uses: gradle/actions/setup-gradle@v4
         with:
