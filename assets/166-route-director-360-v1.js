@@ -188,7 +188,7 @@ function render(){
  const status=!s.scoped.length?'Нет проекта':s.pending?'Требует проверки':'Утверждено';
  const activeCount=s.active.length;
  el.innerHTML=
- '<div class="rd-top"><div><div class="rd-tabs" role="group" aria-label="Период">'+tabs+'</div><div class="rd-sub">Директорский обзор · '+h(r.from)+' — '+h(r.to)+'</div>'+(S.editor?'<button style="margin-top:7px" data-action="close-editor">← Вернуться к обзору</button>':'')+'</div>+'
+ '<div class="rd-top"><div><div class="rd-tabs" role="group" aria-label="Период">'+tabs+'</div><div class="rd-sub">Директорский обзор · '+h(r.from)+' — '+h(r.to)+'</div>'+(S.editor?'<button style="margin-top:7px" data-action="close-editor">← Вернуться к обзору</button>':'')+'</div>'+ 
  '<div class="rd-filters"><label>Менеджер <select class="rd-select" data-change="manager">'+options+'</select></label><label>Месяц <input class="rd-select" type="month" data-change="month" value="'+h(S.month)+'"></label></div></div>'+
  '<div class="rd-grid">'+
  metric('👥','Покрытие клиентов',s.percent===null?'—':s.percent+'%',(activeCount-s.missing.length)+' из '+activeCount+' · визит / прозвон',false,'missing')+

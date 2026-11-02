@@ -26,6 +26,15 @@ test('only director receives dashboard or snapshot',()=>{
  const b=app('boss',[route('r1','c1')],[client('c1')]);
  assert.ok(b.dashboard);assert.equal(b.api.snapshot().percent,100);
 });
+test('renders the COMPLETE director screen, not just tabs (blank-screen regression)',()=>{
+ const d=app('boss',[route('a','c1')],[client('c1')]);
+ const html=d.dashboard.innerHTML;
+ for(const section of ['class="rd-grid"','Покрытие клиентов','Краткий брифинг','class="rd-cal"','data-action="edit"','data-action="audit"','data-change="manager"','data-change="month"']){
+  assert.ok(html.includes(section),'Missing on rendered screen: '+section);
+ }
+ assert.ok(html.length>5000,'The dashboard markup was truncated to the toolbar');
+ assert.ok(!html.includes('</div>+'),'Accidental concatenation operator displayed as text');
+});
 test('counts monthly physical visits and scheduled calls, never invents coverage',()=>{
  const p=[route('r1','c1'),route('r2','c1','2026-11-02','r1')];
  const c=[client('c1'),client('c2'),client('c3')];
