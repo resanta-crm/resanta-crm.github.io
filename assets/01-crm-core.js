@@ -1016,6 +1016,23 @@ async function addRouteStop(clientId){
     };
     for(const p of pts)make('📍 '+[p.city,p.address].filter(Boolean).join(', ')+' · '+p.client_name,p.id,!Number.isFinite(Number(p.lat))||p.lat==null?'координаты не выверены':'');
     if(!pts.length)make('⚠️ Добавить ТТ по адресу карточки, на выверение',null,'GPS пока не подтверждён');
+    const request=document.createElement('div');request.style.cssText='border:1px solid var(--border);padding:10px;border-radius:8px;margin-top:8px';
+    request.innerHTML='<b>Нет нужного магазина?</b><div style="font-size:11px;color:var(--sub)">Предложите новый адрес руководителю. Заявка не создаёт маршрут автоматически.</div>'+
+       '<input class="form-input" id="c360-new-city" placeholder="Город" style="margin:5px 0">'+
+       '<input class="form-input" id="c360-new-address" placeholder="Улица, дом" style="margin:5px 0">'+
+       '<button type="button" class="btn-secondary" id="c360-propose">Отправить ТТ на согласование</button>';
+    request.querySelector('#c360-new-city').value=c.city||'';
+    request.querySelector('#c360-propose').onclick=async()=>{
+       const btn=request.querySelector('#c360-propose');btn.disabled=true;
+       try{
+         const city=request.querySelector('#c360-new-city').value.trim(),address=request.querySelector('#c360-new-address').value.trim();
+         const {data,error}=await db.rpc('client360_request_store_v1',{p_client_id:clientId,p_city:city,p_address:address});
+         if(error||!data?.ok)throw error||new Error('Нет подтверждения');
+         alert('✅ Заявка на новую торговую точку отправлена. Руководитель проверит адрес.');
+       }catch(e){alert('Ошибка заявки: '+(e?.message||e))}
+       finally{btn.disabled=false}
+    };
+    res.appendChild(request);
     const footer=document.createElement('p');footer.style.cssText='font-size:11px;color:var(--sub)';
     footer.textContent='При нескольких адресах выбирайте магазин, а не юрлицо. Неизвестную ТТ передайте руководителю для добавления.';
     res.appendChild(footer);
