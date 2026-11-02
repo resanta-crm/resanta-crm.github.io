@@ -51,3 +51,8 @@ test('Selected design has three KPIs, graphical views, Lera, client detail, expo
  assert.match(js,/serial!==generation|serial===generation/);
  assert.match(js,/clientFilter='bonus'/);
 });
+
+test('Supabase client resolves from the top-level lexical const db',()=>{
+ assert.match(js,/const dbc=\(\)=>\{try\{return typeof db!==\x27undefined\x27\?db:w\.db/);
+ assert.match(js,/const client=dbc\(\)/);
+});
