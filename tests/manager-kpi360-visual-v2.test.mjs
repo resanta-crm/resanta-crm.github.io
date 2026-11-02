@@ -10,7 +10,7 @@ test('Visual KPI360 parses; all numeric values from RPC',()=>{
  const window={currentProfile:{role:'boss',name:'Александр Паюшин'}};
  const document={readyState:'loading',addEventListener(){}};
  vm.runInNewContext(js,{window,document});
- assert.equal(window.RESANTA_KPI360_VISUAL_V2.version,'2.0');
+ assert.equal(window.RESANTA_KPI360_VISUAL_V2.version,'2.1');
  const snapshot={sales:[{manager_name:'Руднев',shipment:170185,shipment_plan:159000,new_clients_plan:3},
  {manager_name:'Ачинович',shipment:101566,shipment_plan:145000,new_clients_plan:3},
  {manager_name:'Шкуран',shipment:72614,shipment_plan:153000,new_clients_plan:3}],
