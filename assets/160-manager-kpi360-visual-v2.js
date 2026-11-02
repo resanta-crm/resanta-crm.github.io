@@ -331,7 +331,7 @@ function renderAwaitingImport(data,el){
  '<div class="kv-note">Руководитель может изменить планы через кнопку «Внести планы» вверху.</div></div></div>'+
  historyBlock+
  '<div class="kv-hint"><h3>◉ Коротко о месяце</h3>'+
- '<div>Ноябрьские планы показаны без подмены фактов октября. Динамика выше относится к последним месяцам с данными 1С. '+
+ '<div>Планы показаны без подмены фактов предыдущего периода. Динамика выше относится к последним месяцам с данными 1С. '+
  'Когда появится первая выгрузка за '+esc(nameMonth(data.month))+', карточки, проценты, рейтинг и клиенты обновятся автоматически.</div></div>'+
  '<div class="kv-note" style="margin-top:12px">Права сохранены: менеджер видит только свои планы и историю, руководитель — доступную ему команду.</div>';
  el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
@@ -429,6 +429,6 @@ function boot(){
  w.renderManagers=()=>load();try{renderManagers=w.renderManagers}catch(_){}
  if(active())load();
 }
-w.RESANTA_KPI360_VISUAL_V2={load:()=>load(true),mapped,totals,version:'2.0'};
+w.RESANTA_KPI360_VISUAL_V2={load:()=>load(true),mapped,totals,planSnapshot,version:'2.1'};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })(window);
