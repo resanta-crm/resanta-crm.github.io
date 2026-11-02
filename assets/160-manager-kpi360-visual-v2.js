@@ -262,10 +262,25 @@ function exportCsv(data,rows,t){
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='KPI360_'+data.month+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 function launchLera(){
- const b=document.querySelector('.rva-launch')||document.querySelector('.rva-ai360-safe-launch');
- if(b&&!b.hidden){b.click();return}
- const target=document.querySelector('.rva-ai360-safe-launch');if(target){target.click();return}
- alert('Лера запускается в CRM по кнопке «РЕСАНТА AI 360°» в верхней панели. Брифинг KPI уже показан на экране.');
+ // Opens EXISTING AI360; pre-fills a question about the exact selected KPI month.
+ // Never sends a prompt on the user's behalf or creates tasks automatically.
+ const period=month(),target=selectedManager?(' по менеджеру '+selectedManager):' по команде МПП';
+ const question='Лера, разъясни KPI за '+period+target+
+  ': выполнение плана продаж, АКБ, первые и вернувшиеся клиенты, изменение мест в рейтинге за 6 месяцев и главные рекомендации.';
+ const starter=document.querySelector('.rva-launch')||
+  document.querySelector('.rva-ai360-safe-launch');
+ if(!starter||starter.hidden){
+  alert('Лера запускается отдельно через «РЕСАНТА AI 360°». Данные KPI и рейтинг доступны в этом разделе.');
+  return;
+ }
+ starter.click();
+ let attempts=0;
+ function prefill(){
+  const input=document.querySelector('.rva-input');
+  if(input){input.value=question;input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();return}
+  if(++attempts<=28)window.setTimeout(prefill,250);
+ }
+ prefill();
 }
 function render(data){
  if(!active()||month()!==data.month)return;const el=root();if(!el)return;
