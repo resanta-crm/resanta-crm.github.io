@@ -156,18 +156,18 @@ begin
     ),'[]'::jsonb),
     coalesce((
       select jsonb_agg(jsonb_build_object(
-        'month',to_char(m.month,'YYYY-MM'),
+        'month',to_char(m.sale_month,'YYYY-MM'),
         'current',coalesce((
           select sum(x.positive_sales) from monthly x
-          join allowed_managers a on a.mk=x.mk where x.period=m.month and x.positive
+          join allowed_managers a on a.mk=x.mk where x.period=m.sale_month and x.positive
         ),0),
         'previous',coalesce((
           select sum(x.positive_sales) from monthly x
           join allowed_managers a on a.mk=x.mk
-          where x.period=(m.month-interval '1 year')::date and x.positive
+          where x.period=(m.sale_month-interval '1 year')::date and x.positive
         ),0)
-      ) order by m.month)
-      from (select (chosen-(gs.idx||' months')::interval)::date month
+      ) order by m.sale_month)
+      from (select (chosen-(gs.idx||' months')::interval)::date as sale_month
         from generate_series(5,0,-1) as gs(idx)) m
     ),'[]'::jsonb)
   into rows_out,summary,clients_out,trend_out;
