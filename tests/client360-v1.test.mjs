@@ -55,3 +55,6 @@ import './manager-kpi360-history-v3.test.mjs';
 
 // Regression: November KPI planning must remain visible without 1C facts.
 import './manager-kpi360-november-v1.test.mjs';
+
+// Personal KPI league and ownership-safe public ranking.
+import './manager-kpi360-competition-v1.test.mjs';

@@ -35,7 +35,7 @@ test('pre-import November shows complete plan dashboard rather than a blank noti
  assert.match(src,/Синие полосы показывают только утверждённые планы, а не факт/);
  assert.match(src,/Открыть /);
  assert.match(src,/Последняя выгрузка 1С/);
- assert.match(html,/160-manager-kpi360-visual-v2\.js\?v=20261102-4/);
+ assert.match(html,/160-manager-kpi360-visual-v2\.js\?v=20261102-5/);
 });
 test('November stays selected and graphs use last uploaded October, not fake Nov zero values',()=>{
  assert.doesNotMatch(src,/if\(!manuallySelected&&m>data\.latest_sales_month/);
