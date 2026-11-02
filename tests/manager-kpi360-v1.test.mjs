@@ -24,3 +24,11 @@ test('Historical ownership is explicit and SQL reads are scoped',()=>{
  assert.match(sql,/having count\(distinct id\)=1/);
  assert.match(sql,/grant execute on function/);
 });
+
+test('Manager KPI360 does not display unrelated current tasks in historical monthly report',()=>{
+ assert.doesNotMatch(js,/Задачи на сегодня/);
+ assert.doesNotMatch(js,/tasks_open/);
+ assert.doesNotMatch(js,/overdue/);
+ assert.match(js,/ИТОГО/);
+ assert.match(js,/function exportReport/);
+});

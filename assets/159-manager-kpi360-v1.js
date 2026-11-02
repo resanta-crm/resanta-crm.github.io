@@ -103,8 +103,7 @@ function display(v){
  '<div class="k-list"><div class="k-small">Менеджер · Продажи · АКБ · Новые клиенты (факт / план / 2025)</div>'+
  rows.map(r=>line(r,map.get(k(r.manager_name))||{},ok,false)).join('')+line(all,all,ok,true)+'</div>'+
  '<div class="k-small">Итог — сумма МПП. Строки 2025 без однозначной связи с текущим клиентом исключены из сравнения. Методика факта KPI сохранена.</div>'+
- '<div id="'+id+'-detail"></div><div class="k-card" style="margin-top:12px"><b>Задачи на сегодня</b> · открыто '+
- f(rows.reduce((s,r)=>s+n(r.tasks_open),0))+' · просрочено '+f(rows.reduce((s,r)=>s+n(r.overdue),0))+'</div>';
+ '<div id="'+id+'-detail"></div>';
  }
  box.innerHTML=html;box.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
  box.querySelector('[data-export]')?.addEventListener('click',exportReport);
