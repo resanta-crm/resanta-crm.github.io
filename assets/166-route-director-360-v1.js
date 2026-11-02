@@ -47,6 +47,7 @@ function pointKey(row){
  return String(row.physical_point_key||row.physical_point_id||row.network_point_id||row.client_id||row.id||'');
 }
 function snapshot(){
+ if(!boss())return null;
  const {plans,clients,tasks}=getData(),r=range(),allowed=new Set(scopeManagers());
  const scoped=plans.filter(p=>!p.removed&&include(String(p.visit_date||''),r)&& (S.manager==='all'||p.manager_name===S.manager));
  const active=clients.filter(c=>activeClient(c)&&allowed.has(c.manager_name)&&(S.manager==='all'||c.manager_name===S.manager));
@@ -179,7 +180,7 @@ function render(){
  const status=!s.scoped.length?'Нет проекта':s.pending?'Требует проверки':'Утверждено';
  const activeCount=s.active.length;
  el.innerHTML=
- '<div class="rd-top"><div><div class="rd-tabs" role="group" aria-label="Период">'+tabs+'</div><div class="rd-sub">Директорский обзор · '+h(r.from)+' — '+h(r.to)+'</div></div>'+
+ '<div class="rd-top"><div><div class="rd-tabs" role="group" aria-label="Период">'+tabs+'</div><div class="rd-sub">Директорский обзор · '+h(r.from)+' — '+h(r.to)+'</div>'+(S.editor?'<button style="margin-top:7px" data-action="close-editor">← Вернуться к обзору</button>':'')+'</div>+'
  '<div class="rd-filters"><label>Менеджер <select class="rd-select" data-change="manager">'+options+'</select></label><label>Месяц <input class="rd-select" type="month" data-change="month" value="'+h(S.month)+'"></label></div></div>'+
  '<div class="rd-grid">'+
  metric('👥','Покрытие клиентов',s.percent===null?'—':s.percent+'%',(activeCount-s.missing.length)+' из '+activeCount+' · визит / прозвон',false,'missing')+
@@ -251,6 +252,7 @@ function attach(){
   }
   else if(action==='ai-details'){S.audit=!S.audit;render();if(S.audit)document.getElementById('route-month-ai-audit-v1')?.scrollIntoView({behavior:'smooth',block:'start'})}
   else if(action==='details'){S.details=!S.details;render();if(S.details)document.getElementById('rb-coverage-card')?.scrollIntoView({behavior:'smooth',block:'start'})}
+  else if(action==='close-editor'){S.editor=false;render();root()?.scrollIntoView({behavior:'smooth',block:'start'})}
   else if(action==='absences')w.openManagerAbsences?.();
  });
 }
