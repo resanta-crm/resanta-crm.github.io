@@ -74,8 +74,7 @@ public final class MainActivity extends Activity {
 
         TextView tip = text(
             "Примеры команд: «Открой продажи», «Перейди в ПДЗ», " +
-            "«Покажи Триовист», «Включи трансляцию».
-" +
+            "«Покажи Триовист», «Включи трансляцию».\n" +
             "На этом этапе они только распознаются: никаких переходов или записей в CRM.", 15, false);
         tip.setPadding(0, 8, 0, 0);
         content.addView(tip);
@@ -111,12 +110,12 @@ public final class MainActivity extends Activity {
             (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         String version = webView == null ? "отсутствует" : webView.versionName;
         status.setText("Android: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")" +
-            "\\nWebView: " + version +
-            "\\nСлужба распознавания: " +
+            "\nWebView: " + version +
+            "\nСлужба распознавания: " +
               (SpeechRecognizer.isRecognitionAvailable(this) ? "доступна" : "не найдена") +
-            "\\nMediaProjection API: " +
+            "\nMediaProjection API: " +
               (projection != null ? "есть" : "нет") +
-            "\\nДоступ к CRM: не запрашивался");
+            "\nДоступ к CRM: не запрашивался");
     }
 
     private void checkProjection() {
@@ -170,8 +169,8 @@ public final class MainActivity extends Activity {
                     results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 String said = values == null || values.isEmpty() ? "" : values.get(0);
                 VoiceNavigation.Result resolved = VoiceNavigation.resolve(said);
-                status.setText("Слышал: «" + said + "»\\n" +
-                    "Намерение: " + resolved.title + "\\n" +
+                status.setText("Слышал: «" + said + "»\n" +
+                    "Намерение: " + resolved.title + "\n" +
                     (resolved.requiresConfirmation ?
                         "Потребуется подтверждение. Сейчас ничего не выполнено." :
                         "Только проверка распознавания; CRM не открывалась."));
