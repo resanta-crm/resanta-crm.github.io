@@ -17,7 +17,7 @@ const month=()=>String(document.getElementById('manager-kpi-month')?.value||'').
 const active=()=>document.getElementById('page-managers')?.classList.contains('active');
 const role=()=>w.currentProfile?.role, isBoss=()=>role()==='boss';
 const nameMonth=v=>months[Number(String(v).slice(5,7))]+' '+String(v).slice(0,4);
-const db=()=>{try{return typeof window.db!=='undefined'?window.db:globalThis.db}catch(_){return null}};
+const dbc=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db||null}};
 const icon=(x)=>({sales:'↗',bonus:'◎',akb:'▣'}[x]||'•');
 function latestData(v){return !!v?.latest_sales_month&&v.month<=v.latest_sales_month}
 function mapped(v){
@@ -203,7 +203,7 @@ async function load(force=false){
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m))return;
  el.innerHTML='<div class="kv-card kv-note">Загружаю KPI за '+esc(nameMonth(m))+'…</div>';
  try{
-  const client=db();if(!client)throw Error('Нет подключения к Supabase');
+  const client=dbc();if(!client)throw Error('Нет подключения к Supabase');
   let response;for(let i=0;i<2;i++){try{response=await client.rpc('crm_manager_kpi360_dashboard_v2',{p_month:m});if(response.error)throw response.error;break}catch(e){if(i===1||!/fetch|network|timeout/i.test(String(e?.message||e)))throw e;await new Promise(done=>setTimeout(done,450));}}
   if(serial!==generation||!active()||month()!==m)return;
   const data=response.data;
