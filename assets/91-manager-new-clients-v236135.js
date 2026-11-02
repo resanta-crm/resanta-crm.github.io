@@ -44,6 +44,7 @@ function render(data){
     }).join('')+'</div>').join(''):'<div class="mnc-empty">В выбранном месяце клиентов, подходящих под правило 6 месяцев, нет.</div>');
 }
 async function load(force=false){
+  if(window.crmKpi360)return;
   if(!active())return;const m=selectedMonth(),sig=m+'|'+String(currentProfile?.id||currentProfile?.name||'');
   if(!force&&lastSig===sig&&lastData&&Date.now()-lastAt<60000){render(lastData);return}
   if(flight)return flight;style();const r=root();if(r)r.innerHTML='<div class="mnc-load">Загружаю новых и возвращённых клиентов…</div>';
