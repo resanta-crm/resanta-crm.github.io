@@ -12,6 +12,7 @@ on:
       - "supabase/migrations/20261102_client360_legal_stores_v1.sql"
       - "tests/client360-v1.test.mjs"
       - "tests/lpr-mileage-v1.test.mjs"
+      - "tests/ai360-field-manager-shared-voice.test.mjs"
       - ".github/workflows/client360-regression.yml"
   workflow_dispatch:
 jobs:
