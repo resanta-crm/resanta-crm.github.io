@@ -257,7 +257,9 @@ function exportCsv(data,rows,t){
  const head=['Месяц','Менеджер','Продажи','План','2025 продажи','АКБ','АКБ год назад','Премиальные','Новые','Вернувшиеся','План премиальных'];
  const arr=[head,...rows.map(r=>[data.month,r.manager_name,r.shipment,r.shipment_plan,r.sales_2025,r.akb,r.akb_previous,r.bonus,r.first,r.returned,r.new_clients_plan]),
  [data.month,'ИТОГО',t.sales,t.sales_plan,t.prev_sales,t.akb,t.akb_previous,t.bonus,t.first,t.returned,t.bonus_plan],
- [],['Клиент','Менеджер','Категория','Отгрузка','Последняя прежняя отгрузка'],...(data.clients||[]).map(r=>[r.client_name,r.manager_name,r.type,r.shipment,r.last_sale])];
+ [],['Клиент','Менеджер','Категория','Отгрузка','Последняя прежняя отгрузка'],...(data.clients||[]).map(r=>[r.client_name,r.manager_name,r.type,r.shipment,r.last_sale]),
+ [],['ИСТОРИЯ KPI ЗА 6 МЕСЯЦЕВ'],['Месяц','Менеджер','Продажи','План продаж','АКБ','План АКБ','Клиенты для премии','План KPI','Первые','Вернувшиеся','Место по 3 планам','Место по продажам','Место по АКБ','Место по клиентам KPI'],
+ ...histRows(data).map(r=>[r.month,r.manager_name,r.sales,r.sales_plan,r.akb,r.akb_plan,r.bonus,r.bonus_plan,r.first,r.returned,r.rank_overall??'',r.rank_sales,r.rank_akb,r.rank_bonus])];
  const csv='\uFEFF'+arr.map(row=>row.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='KPI360_'+data.month+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
