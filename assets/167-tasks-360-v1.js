@@ -7,7 +7,7 @@
 'use strict';
 if(root.RESANTA_TASKS_360_V1)return;
 const ID='tasks360-view',CSS='tasks360-style',P='page-tasks';
-const S={tab:'all',q:'',selected:'',show:40,legacy:false,closedManagers:new Set()};
+const S={tab:'all',q:'',selected:'',show:40,legacy:false,closedManagers:new Set(),identity:''};
 const text=v=>String(v==null?'':v);
 const h=v=>text(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=v=>text(v).toLocaleLowerCase('ru-RU').replace(/\s+/g,' ').trim();
@@ -257,7 +257,9 @@ function handle(action,extra={}){
  if(action==='client'&&t.client_id&&typeof openClient==='function')openClient(t.client_id);
 }
 function install(){
- if(!allowed()){const p=page();p?.classList.remove('t360-active','t360-legacy');const el=box();if(el)el.innerHTML='';return false;}
+ if(!allowed()){const p=page();p?.classList.remove('t360-active','t360-legacy');const el=box();if(el)el.innerHTML='';S.identity='';return false;}
+ const identity=role()+'|'+me();
+ if(S.identity!==identity){S.identity=identity;S.tab=boss()?'all':'today';S.selected='';S.q='';S.show=40;S.legacy=false;S.closedManagers.clear();}
  const p=page();if(!p)return false;
  style();
  let el=box();
