@@ -74,7 +74,7 @@
 **Gate 0 — hardware test (this PR only).**
 - Isolated Android package `by.resanta.air3probe`, no internet permission, no login, no access to CRM.
 - Shows OS version, WebView version, Android speech service availability, MediaProjection API presence.
-- On explicit tap asks for mic permission, recognizes one Russian sentence and previews navigation intents **without executing them**.
+- On explicit tap asks for mic permission, uses on-device speech recognition when available and previews navigation intents **without executing them**.
 - Does not intercept «Привет, IMO», run background recording, contact servers, or transmit projected image.
 - Must compile in CI, install on the INMO AIR3, open and accept input on its actual controls. Supply hardware verdict.
 
