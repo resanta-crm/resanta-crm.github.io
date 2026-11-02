@@ -5,6 +5,8 @@ on:
       - "assets/01-crm-core.js"
       - "assets/127-gps-director-case-review-v236440.js"
       - "assets/149-lpr-v1.js"
+      - "assets/148-resanta-ai360-staff-identity-v1.js"
+      - "index.html"
       - "assets/158-client360-legal-stores-v1.js"
       - "supabase/functions/crm-lpr-birthdays-v1/index.ts"
       - "supabase/migrations/20261102_client360_legal_stores_v1.sql"
