@@ -52,3 +52,6 @@ import './manager-kpi360-visual-v2.test.mjs';
 
 // Final approved KPI360 drill-down: six-month positions and scoped client graphs.
 import './manager-kpi360-history-v3.test.mjs';
+
+// Regression: November KPI planning must remain visible without 1C facts.
+import './manager-kpi360-november-v1.test.mjs';
