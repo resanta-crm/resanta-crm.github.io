@@ -267,6 +267,7 @@ function render(data){
  if(!active()||month()!==data.month)return;const el=root();if(!el)return;
  if(!latestData(data)){el.innerHTML='<div class="kv-card">За '+esc(nameMonth(data.month))+' данные 1С ещё не поступили. Последний месяц: '+esc(nameMonth(data.latest_sales_month||''))+'.</div>';return}
  const rows=mapped(data),t=totals(data);
+ const worst=[...rows].filter(r=>n(r.shipment_plan)>0).sort((a,b)=>n(a.shipment)/n(a.shipment_plan)-n(b.shipment)/n(b.shipment_plan))[0];
  const header='<div class="kv-top"><div><strong style="font-size:17px">KPI 360° · '+esc(nameMonth(data.month))+'</strong>'+
  '<div class="kv-note">Проверенный расчёт · 2025 по текущему закреплению · месяц предварительный до закрытия</div></div>'+
  '<div class="kv-actions" style="margin:0"><button data-refresh>↻ Обновить</button><button data-export>Excel</button></div></div>';
@@ -275,8 +276,11 @@ function render(data){
  card('Клиенты для KPI',t.bonus+' / '+money(t.bonus_plan),t.first+' первых · '+t.returned+' вернувшихся',
  'Выполнение '+pc(t.bonus,t.bonus_plan),'bonus',percent(t.bonus,t.bonus_plan))+
  card('Уникальная АКБ',money(t.akb),isBoss()?'Год назад: '+money(t.akb_previous):'Моя активная база',
- 'К прошлому году '+growth(t.akb,t.akb_previous),'akb',percent(t.akb,t.akb_plan))+'</div>';
- const chart='<div class="kv-charts">'+chartBars(rows)+clientChart(t)+'</div>';
+ 'К прошлому году '+growth(t.akb,t.akb_previous),'akb',percent(t.akb,t.akb_plan))+
+ '<article class="kv-card kv-risk"><div class="kv-label">⚠ Зона внимания</div><div class="kv-metric" style="font-size:18px">'+esc(worst?worst.manager_name:'Нет риска')+'</div>'+
+ '<div class="kv-note">'+esc(worst?'Выполнение продаж '+pc(worst.shipment,worst.shipment_plan):'Нет планов для сравнения')+'</div>'+
+ '<div class="kv-note" style="margin-top:12px">'+esc(worst?'До плана '+money(Math.max(0,n(worst.shipment_plan)-n(worst.shipment)))+' бел. руб.':'')+'</div></article></div>';
+ const chart='<div class="kv-charts">'+chartBars(rows)+clientChart(t,rows)+'</div>';
  const narr='<div class="kv-hint"><h3>◉ Коротко за месяц</h3><div>'+esc(summaryText(data,rows,t))+'</div>'+
  '<div class="kv-actions">'+(isBoss()?'<button class="kv-primary" data-lera>✦ Спросить Леру</button>':'')+
  '<button data-scroll>Клиенты и детализация ↓</button></div></div>';
@@ -284,17 +288,25 @@ function render(data){
  '<tr><th>Менеджер</th><th>Продажи / план</th><th>АКБ</th><th>Для KPI</th><th></th></tr></thead><tbody>'+
  rows.map(r=>'<tr><td><b>'+esc(r.manager_name)+'</b></td><td>'+money(r.shipment)+' / '+money(r.shipment_plan)+' · '+pc(r.shipment,r.shipment_plan)+
  '</td><td>'+n(r.akb)+'</td><td>'+n(r.bonus)+' ('+n(r.first)+' + '+n(r.returned)+')</td>'+
- '<td><button data-manager="'+esc(r.manager_name)+'">Клиенты</button></td></tr>').join('')+
+ '<td><button data-manager="'+esc(r.manager_name)+'">Подробнее →</button></td></tr>').join('')+
  '<tr style="background:#edf4ff;font-weight:800"><td>ИТОГО</td><td>'+money(t.sales)+' / '+money(t.sales_plan)+
  '</td><td>'+n(t.akb)+'</td><td>'+n(t.bonus)+'</td><td>—</td></tr></tbody></table></div></div>':'';
- el.innerHTML=header+cards+chart+trendChart(data)+narr+mgr+'<section id="'+ID+'-detail"></section>'+
+ el.innerHTML=header+cards+chart+trendChart(data)+'<section id="'+ID+'-manager-panel"></section>'+narr+mgr+'<section id="'+ID+'-detail"></section>'+
  '<div class="kv-note" style="margin:12px 0">Правило премии: первая отгрузка либо 6 полных месяцев без положительных отгрузок. АКБ филиала — уникальные клиенты, не сумма АКБ менеджеров. Клиенты с неоднозначными связями не объединяются автоматически.</div>';
  el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
  el.querySelector('[data-export]')?.addEventListener('click',()=>exportCsv(data,rows,t));
  el.querySelector('[data-lera]')?.addEventListener('click',launchLera);
  el.querySelector('[data-scroll]')?.addEventListener('click',()=>el.querySelector('#'+ID+'-detail')?.scrollIntoView({behavior:'smooth',block:'start'}));
- el.querySelectorAll('[data-manager]').forEach(b=>b.onclick=()=>{selectedManager=b.dataset.manager;clientFilter='bonus';renderDetails(data,rows);el.querySelector('#'+ID+'-detail')?.scrollIntoView({behavior:'smooth',block:'start'})});
- renderDetails(data,rows);
+ el.querySelectorAll('[data-manager]').forEach(b=>{
+   b.addEventListener('click',()=>openManager(data,rows,b.dataset.manager));
+   if(b.getAttribute('role')==='button')b.addEventListener('keydown',event=>{
+     if(event.key==='Enter'||event.key===' '){event.preventDefault();openManager(data,rows,b.dataset.manager)}
+   });
+ });
+ el.querySelectorAll('[data-metric]').forEach(b=>b.addEventListener('click',()=>{
+  historyMetric=b.dataset.metric;render(data);
+ }));
+ managerPanel(data,rows);renderDetails(data,rows);
 }
 async function load(force=false){
  if(!active()||!['boss','manager'].includes(role()))return;
@@ -309,7 +321,19 @@ async function load(force=false){
   const data=response.data;
   if(!data||data.version!=='kpi360-visual-v2'||!Array.isArray(data.sales))throw Error('Неверный ответ сервиса KPI');
   if(!manuallySelected&&m>data.latest_sales_month&&data.latest_sales_month){manuallySelected=true;document.getElementById('manager-kpi-month').value=data.latest_sales_month;void load();return;}
-  shown=data;selectedManager='';clientFilter='bonus';render(data);
+  // History RPC has its own permission checks. Do not let its failure erase valid KPIs.
+  try{
+    const historyResponse=await client.rpc('crm_manager_kpi360_history_v3',{p_month:m});
+    if(historyResponse.error)throw historyResponse.error;
+    if(historyResponse.data?.version!=='kpi360-history-v3'||!Array.isArray(historyResponse.data.rows))
+      throw Error('Некорректный ответ истории KPI');
+    data.history=historyResponse.data;
+  }catch(historyError){
+    console.warn('KPI360 manager rank history unavailable',historyError);
+    data.history={rows:[],unavailable:true};
+  }
+  if(serial!==generation||!active()||month()!==m)return;
+  shown=data;selectedManager='';clientFilter='bonus';historyMetric='sales';render(data);
  }catch(e){if(serial===generation&&active())el.innerHTML='<div class="kv-card" style="color:#b42318">Не удалось загрузить KPI: '+esc(e?.message||e)+'. <button data-retry>Повторить</button></div>';
  el.querySelector('[data-retry]')?.addEventListener('click',()=>load(true));}
 }
