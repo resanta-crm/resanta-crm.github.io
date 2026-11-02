@@ -1,0 +1,28 @@
+name: Tasks 360 UI regression
+on:
+  pull_request:
+    paths:
+      - "assets/167-tasks-360-v1.js"
+      - "tests/tasks-360-v1.test.cjs"
+      - "index.html"
+      - ".github/workflows/tasks-360-regression.yml"
+  push:
+    branches:
+      - feature/tasks-360-uiux-20261102
+permissions:
+  contents: read
+jobs:
+  tasks-dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check assets/167-tasks-360-v1.js
+          node --check tests/tasks-360-v1.test.cjs
+      - name: Tasks 360 rendered UI and role tests
+        run: node --test tests/tasks-360-v1.test.cjs
