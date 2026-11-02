@@ -3355,21 +3355,18 @@ async function confirmMergeClient(){
   if(btn){btn.disabled=true;btn.textContent='⏳ Объединяю…';}
 
   try{
-    await mergeClientInto(sourceId,targetId);
-    closeModal('modal-merge-client');
-    if(document.getElementById('modal-client').classList.contains('open'))openClient(targetId);
-    renderClients();
-
-    // Полный пересчёт оборота тяжелее самого объединения и не должен держать
-    // окно заблокированным. Запускаем его после успешного объединения.
-    refreshClientRevenueFromServer(targetId).then(v=>{
-      const t=allClients.find(x=>x.id===targetId);
-      if(t)t.revenue_total=v;
-      if(typeof renderClients==='function')renderClients();
-    }).catch(e=>{
-      console.error(e);
-      alert('Клиенты объединены, но оборот пока не пересчитан: '+(e?.message||e));
+    // CRM Client360: atomic, non-destructive legal-entity link. The former
+    // cross-table DELETE/UPDATE merge could fail on visits_no_exact_duplicates_idx
+    // midway and orphan visits and sales.
+    const {data:linked,error:linkErr}=await db.rpc('client360_group_clients_v1',{
+      p_name:target.name,p_client_ids:[sourceId,targetId]
     });
+    if(linkErr||!linked?.ok)throw linkErr||new Error('Сервер не подтвердил связь');
+    closeModal('modal-merge-client');
+    alert('✅ Карточки связаны как одно юрлицо. Все торговые точки, визиты, обороты и GPS сохранены отдельно. Откройте «Клиент 360°» для просмотра группы.');
+    if(typeof window.crmClient360V1?.open==='function')window.crmClient360V1.open();
+
+
   }catch(e){
     console.error('Merge client v23.6.265',e);
     alert('Не удалось объединить клиентов: '+(e?.message||e));
