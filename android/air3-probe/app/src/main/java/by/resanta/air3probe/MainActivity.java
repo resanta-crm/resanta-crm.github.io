@@ -14,6 +14,11 @@ import android.speech.SpeechRecognizer;
 import android.webkit.WebView;
 import android.content.pm.PackageInfo;
 import android.media.projection.MediaProjectionManager;
+import android.media.MediaRecorder;
+import android.media.MediaPlayer;
+import android.os.Handler;
+import android.os.Looper;
+import java.io.File;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -25,11 +30,19 @@ import java.util.ArrayList;
 /**
  * INMO AIR3 standalone capability probe. Not a CRM client.
  *
- * It NEVER authenticates, stores CRM secrets, records audio to files, calls a
- * server, changes CRM data or starts a display projection.
+ * It NEVER authenticates, stores CRM secrets, calls a server, changes CRM data
+ * or starts a display projection. An explicit hardware test may record up to
+ * 4.5 seconds of audio to a temporary cache file, play it locally and delete it.
  */
 public final class MainActivity extends Activity {
     private static final int REQUEST_MIC = 1001;
+    private static final int REQUEST_RECORD_TEST = 1002;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private MediaRecorder audioRecorder;
+    private MediaPlayer audioPlayer;
+    private File audioTemp;
+    private int audioEpoch = 0;
+    private boolean audioBusy = false;
     private SpeechRecognizer recognizer;
     private TextView status;
     private boolean busy;
@@ -49,8 +62,8 @@ public final class MainActivity extends Activity {
         content.addView(title);
 
         TextView caution = text(
-            "Эта первая сборка проверяет совместимость очков. Она НЕ входит в CRM, " +
-            "не хранит пароли, не передаёт звук в интернет и не запускает трансляцию.", 16, false);
+            "Проверка очков: НЕ входит в CRM и не передаёт звук в интернет. " +
+            "Звуковой тест запускается только по нажатию, временный файл удаляется.", 16, false);
         caution.setPadding(0, 12, 0, 10);
         content.addView(caution);
 
@@ -69,6 +82,10 @@ public final class MainActivity extends Activity {
         Button screen = button("3. Проверить возможность трансляции");
         screen.setOnClickListener(v -> checkProjection());
         content.addView(screen);
+
+        Button record = button("4. Проверить настоящий микрофон (4 секунды)");
+        record.setOnClickListener(v -> requestAudioTest());
+        content.addView(record);
 
         content.addView(status);
 
@@ -132,6 +149,88 @@ public final class MainActivity extends Activity {
         // Never invoke an unknown system cloud STT provider without explicit user consent.
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
+    }
+
+    private void requestAudioTest() {
+        if (audioBusy || busy) return;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_RECORD_TEST);
+            return;
+        }
+        startAudioTest();
+    }
+
+    private void startAudioTest() {
+        if (audioBusy || busy) return;
+        // User initiated; no background mic, no network or credential access.
+        audioBusy = true;
+        int epoch = ++audioEpoch;
+        status.setText("Записываю голос только на очках 4 секунды. " +
+            "После записи звук будет воспроизведён на очках и удалён.");
+        try {
+            audioTemp = File.createTempFile("air3-mic-", ".m4a", getCacheDir());
+            audioRecorder = new MediaRecorder();
+            audioRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            audioRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            audioRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            audioRecorder.setOutputFile(audioTemp.getAbsolutePath());
+            audioRecorder.prepare();
+            audioRecorder.start();
+            handler.postDelayed(() -> finishAudioTest(epoch), 4000);
+        } catch (Exception e) {
+            stopAudioTest();
+            status.setText("Микрофон не удалось включить: " +
+                e.getClass().getSimpleName() + ". CRM не затронута.");
+        }
+    }
+
+    private void finishAudioTest(int epoch) {
+        if (!audioBusy || epoch != audioEpoch || audioRecorder == null) return;
+        try {
+            audioRecorder.stop();
+            audioRecorder.release();
+            audioRecorder = null;
+            if (audioTemp == null || !audioTemp.exists() || audioTemp.length() < 1000)
+                throw new IllegalStateException("Пустая запись");
+            audioPlayer = new MediaPlayer();
+            audioPlayer.setDataSource(audioTemp.getAbsolutePath());
+            audioPlayer.setOnCompletionListener(p -> {
+                stopAudioTest();
+                status.setText("Голосовой тест завершён. Временная запись удалена. " +
+                    "Если ты слышал свой голос, микрофон и вывод звука работают.");
+            });
+            audioPlayer.setOnErrorListener((p, what, extra) -> {
+                stopAudioTest();
+                status.setText("Запись получена, но воспроизведение не удалось (" +
+                    what + "). Временный файл удалён.");
+                return true;
+            });
+            audioPlayer.prepare();
+            status.setText("Запись получена. Воспроизвожу локально на очках…");
+            audioPlayer.start();
+        } catch (Exception e) {
+            stopAudioTest();
+            status.setText("Проверка микрофона не завершена: " +
+                e.getClass().getSimpleName() + ". Файл удалён.");
+        }
+    }
+
+    private void stopAudioTest() {
+        ++audioEpoch;
+        if (audioRecorder != null) {
+            try { audioRecorder.stop(); } catch (Exception ignored) {}
+            try { audioRecorder.release(); } catch (Exception ignored) {}
+            audioRecorder = null;
+        }
+        if (audioPlayer != null) {
+            try { audioPlayer.release(); } catch (Exception ignored) {}
+            audioPlayer = null;
+        }
+        if (audioTemp != null) {
+            try { audioTemp.delete(); } catch (Exception ignored) {}
+            audioTemp = null;
+        }
+        audioBusy = false;
     }
 
     private void requestVoice() {
@@ -208,15 +307,19 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(
             int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_MIC) {
+        if (requestCode == REQUEST_MIC || requestCode == REQUEST_RECORD_TEST) {
             if (grantResults.length > 0 &&
-                    grantResults[0] == PackageManager.PERMISSION_GRANTED) startVoice();
-            else status.setText("Разрешение микрофона отклонено. Никакая запись не ведётся.");
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (requestCode == REQUEST_RECORD_TEST) startAudioTest();
+                else startVoice();
+            } else status.setText("Разрешение микрофона отклонено. Никакая запись не ведётся.");
         }
     }
 
     @Override protected void onPause() {
         super.onPause();
+        // Shared device: stop audio immediately on background/lock.
+        stopAudioTest();
         // No listening in background, no hidden recording.
         if (recognizer != null) {
             recognizer.cancel();
@@ -226,6 +329,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        stopAudioTest();
         disposeRecognizer();
         super.onDestroy();
     }
