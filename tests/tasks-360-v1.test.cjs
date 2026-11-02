@@ -51,6 +51,22 @@ test('manager cannot see director-only approval or edit buttons',()=>{
  assert.ok(!x.root.innerHTML.includes('data-action="edit"'));
  assert.ok(x.api.snapshot().counts.pending===1);
 });
+test('director list groups tasks by manager and allows collapsing without mutating them',()=>{
+ const x=harness('boss',[task('a1'),task('b1',{manager_name:'Шкуран',client_id:'b'})],[client('a'),client('b','Точка Б','Шкуран')]);
+ assert.ok(x.root.innerHTML.includes('data-action="group"'));
+ assert.ok(x.root.innerHTML.includes('Шкуран'));
+ assert.ok(x.root.innerHTML.includes('Руднев'));
+ const before=x.api.snapshot().visible.length;
+ x.api.handle('group',{group:'Шкуран'});
+ assert.ok(x.root.innerHTML.includes('Шкуран'));
+ assert.ok(!x.root.innerHTML.includes('Точка Б'));
+ assert.equal(x.api.snapshot().visible.length,before);
+});
+test('unprivileged roles see neither Tasks 360 dashboard nor snapshot data',()=>{
+ const x=harness('service',[task('one')],[client('a')]);
+ assert.equal(x.api.snapshot().visible.length,0);
+ assert.equal(x.root,undefined);
+});
 test('pending and stale archives are separate from active workload',()=>{
  const x=harness('boss',[task('one'),task('two',{review_status:'pending'}),task('three',{review_status:'stale_review'}),task('four',{done:true})],[client('a')]);
  const c=x.api.snapshot().counts;
