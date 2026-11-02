@@ -58,6 +58,7 @@ function status(t){
 }
 function critical(t){return /высок|критич/.test(norm(t.priority))||(/сроч/.test(norm(t.text))&&!t.auto_generated)}
 function scope(){
+ if(!allowed())return {clients:new Map(),visible:[],active:[],counts:{all:0,today:0,critical:0,route:0,overdue:0,pending:0,done:0,archive:0},rows:[],selected:null};
  const clients=new Map(arr('clients').map(c=>[text(c.id),c]));
  const all=arr('tasks');
  const visible=boss()?all:all.filter(t=>manager(t,clients)===me());
@@ -244,7 +245,7 @@ function handle(action,extra={}){
  if(action==='client'&&t.client_id&&typeof openClient==='function')openClient(t.client_id);
 }
 function install(){
- if(!allowed())return false;
+ if(!allowed()){const p=page();p?.classList.remove('t360-active','t360-legacy');const el=box();if(el)el.innerHTML='';return false;}
  const p=page();if(!p)return false;
  style();
  let el=box();
