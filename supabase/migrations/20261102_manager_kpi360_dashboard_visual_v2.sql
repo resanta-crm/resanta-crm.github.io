@@ -8,7 +8,7 @@ declare
   actor public.users%rowtype;
   chosen date;
   previous date;
-  last_period text;
+  last_available_month text;
   sales_rows jsonb;
   older_rows jsonb;
   summary jsonb;
@@ -32,7 +32,7 @@ begin
       public.crm_v2263_norm(actor.name) in ('руднев','ачинович','шкуран'))
   ) then raise exception 'not_authorized'; end if;
 
-  select to_char(max(month),'YYYY-MM') into last_period from public.purchase_history;
+  select to_char(max(month),'YYYY-MM') into last_available_month from public.purchase_history;
   -- Reuse the existing sales KPI calculation and plans: no change of selling methodology.
   select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) into sales_rows
   from public.crm_manager_kpi_leaderboard(p_month) x
@@ -175,7 +175,7 @@ begin
   return jsonb_build_object(
     'version','kpi360-visual-v2','month',p_month,
     'previous_month',to_char(previous,'YYYY-MM'),
-    'latest_sales_month',last_period,
+    'latest_sales_month',last_available_month,
     'last_import',prior_snapshot->'last_sales_import',
     'scope',case when actor.role='boss' then 'director' else 'manager' end,
     'sales',sales_rows,'prior_sales',older_rows,
