@@ -167,7 +167,7 @@ function trendChart(data){
   at:m=>({value:n(history.find(r=>r.month===m&&norm(r.manager_name)===norm(name))?.[metric.key])})
  }));
  const tabs=Object.entries(dimension).map(([key,d])=>'<button type="button" data-metric="'+key+'" class="'+(key===historyMetric?'kv-active':'')+'">'+esc(d.label)+'</button>').join('');
- return '<div class="kv-card" style="margin-top:12px"><div class="kv-top"><div><h3 style="margin:0">Динамика менеджеров · 6 месяцев</h3>'+
+ return '<div class="kv-card" style="margin-top:12px"><div class="kv-top"><div><h3 style="margin:0">Динамика продаж, АКБ и клиентов KPI · 6 месяцев</h3>'+
  '<div class="kv-note">Нажми на менеджера в графике выше, чтобы увидеть его историю мест</div></div>'+
  '<div class="kv-tabs" style="margin:0">'+tabs+'</div></div>'+
  '<div class="kv-legend">'+series.map(s=>'<span><i class="kv-dot" style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join('')+'</div>'+
@@ -234,6 +234,10 @@ function summaryText(data,rows,t){
 }
 function renderDetails(data,rows){
  const host=document.getElementById(ID+'-detail');if(!host)return;
+ if(isBoss()&&!selectedManager){
+  host.innerHTML='<div class="kv-card kv-details"><h3>Клиенты менеджеров</h3><div class="kv-note">Списки скрыты, чтобы не перегружать экран. Нажми на Руднева, Ачиновича или Шкурана в графике или таблице выше.</div></div>';
+  return;
+ }
  const target=selectedManager||(!isBoss()?rows[0]?.manager_name:'');
  const list=(data.clients||[]).filter(x=>!target||norm(x.manager_name)===norm(target))
   .filter(x=>clientFilter==='all'||clientFilter==='bonus'&&x.type!=='active'||clientFilter===x.type);
@@ -283,7 +287,7 @@ function render(data){
  const chart='<div class="kv-charts">'+chartBars(rows)+clientChart(t,rows)+'</div>';
  const narr='<div class="kv-hint"><h3>◉ Коротко за месяц</h3><div>'+esc(summaryText(data,rows,t))+'</div>'+
  '<div class="kv-actions">'+(isBoss()?'<button class="kv-primary" data-lera>✦ Спросить Леру</button>':'')+
- '<button data-scroll>Клиенты и детализация ↓</button></div></div>';
+ '<button data-scroll>Менеджеры и клиенты ↓</button></div></div>';
  const mgr=isBoss()?'<div class="kv-card kv-details"><h3>Менеджеры · детализация по нажатию</h3><div style="overflow-x:auto"><table class="kv-table"><thead>'+
  '<tr><th>Менеджер</th><th>Продажи / план</th><th>АКБ</th><th>Для KPI</th><th></th></tr></thead><tbody>'+
  rows.map(r=>'<tr><td><b>'+esc(r.manager_name)+'</b></td><td>'+money(r.shipment)+' / '+money(r.shipment_plan)+' · '+pc(r.shipment,r.shipment_plan)+
@@ -296,7 +300,7 @@ function render(data){
  el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
  el.querySelector('[data-export]')?.addEventListener('click',()=>exportCsv(data,rows,t));
  el.querySelector('[data-lera]')?.addEventListener('click',launchLera);
- el.querySelector('[data-scroll]')?.addEventListener('click',()=>el.querySelector('#'+ID+'-detail')?.scrollIntoView({behavior:'smooth',block:'start'}));
+ el.querySelector('[data-scroll]')?.addEventListener('click',()=>el.querySelector('.kv-details')?.scrollIntoView({behavior:'smooth',block:'start'}));
  el.querySelectorAll('[data-manager]').forEach(b=>{
    b.addEventListener('click',()=>openManager(data,rows,b.dataset.manager));
    if(b.getAttribute('role')==='button')b.addEventListener('keydown',event=>{
