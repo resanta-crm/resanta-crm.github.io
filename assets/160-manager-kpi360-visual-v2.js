@@ -5,7 +5,7 @@
 'use strict';
 if(w.RESANTA_KPI360_VISUAL_V2)return;
 const ID='kpi360-visual-v2', months=['','Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
-let generation=0,shown=null,selectedManager='',clientFilter='bonus',manuallySelected=false;
+let generation=0,shown=null,selectedManager='',clientFilter='bonus',manuallySelected=false,historyMetric='sales';
 const n=x=>Number.isFinite(Number(x))?Number(x):0;
 const money=x=>n(x).toLocaleString('ru-RU',{maximumFractionDigits:0});
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -57,7 +57,7 @@ function styles(){
  '#kpi360-visual-v2{font-size:13px;color:var(--text,#172033);max-width:1560px}',
  '#kpi360-visual-v2 .kv-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:3px 0 12px}',
  '#kpi360-visual-v2 .kv-note{font-size:11px;color:var(--sub,#667085);line-height:1.5}',
- '#kpi360-visual-v2 .kv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
+ '#kpi360-visual-v2 .kv-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}',
  '#kpi360-visual-v2 .kv-card{border:1px solid var(--border,#e1e6ee);background:#fff;border-radius:13px;padding:15px;box-shadow:0 2px 8px rgba(15,35,60,.035);min-width:0}',
  '#kpi360-visual-v2 .kv-metric{font-size:25px;font-weight:830;letter-spacing:-.5px;margin:7px 0 4px}',
  '#kpi360-visual-v2 .kv-label{font-size:12px;font-weight:750}',
@@ -66,7 +66,16 @@ function styles(){
  '#kpi360-visual-v2 .kv-track>i{height:100%;display:block;background:#2073dd;border-radius:99px}',
  '#kpi360-visual-v2 .kv-charts{display:grid;grid-template-columns:1.25fr 1fr;gap:12px;margin-top:12px}',
  '#kpi360-visual-v2 h3{font-size:14px;font-weight:800;margin:0 0 12px}',
- '#kpi360-visual-v2 .kv-bar{display:grid;grid-template-columns:75px minmax(0,1fr) 78px;gap:8px;align-items:center;padding:9px 0}',
+ '#kpi360-visual-v2 .kv-bar{display:grid;grid-template-columns:85px minmax(0,1fr) 78px;gap:8px;align-items:center;padding:9px 0;border-radius:7px;cursor:pointer}',
+ '#kpi360-visual-v2 .kv-bar:hover,#kpi360-visual-v2 .kv-bar:focus{background:#edf4ff;outline:2px solid #bedbff;outline-offset:1px}',
+ '#kpi360-visual-v2 .kv-rank-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin:10px 0}',
+ '#kpi360-visual-v2 .kv-rank{border:1px solid #e5eaf2;border-radius:8px;padding:9px 5px;text-align:center;font-size:11px;background:#f9fbfe}',
+ '#kpi360-visual-v2 .kv-rank b{display:block;font-size:15px;margin-top:5px;color:#1357b2}',
+ '#kpi360-visual-v2 .kv-rank.kv-current{background:#e4f0ff;border-color:#8ebaff}',
+ '#kpi360-visual-v2 .kv-tabs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}',
+ '#kpi360-visual-v2 .kv-tabs button{min-width:86px}',
+ '#kpi360-visual-v2 .kv-panel{background:#f9fbff;border-color:#c5ddfa;margin-top:12px}',
+ '#kpi360-visual-v2 .kv-rank-desc{color:#667085;font-size:11px;line-height:1.5}',
  '#kpi360-visual-v2 .kv-bg{height:16px;border-radius:5px;background:#e8edf4;position:relative;overflow:hidden}',
  '#kpi360-visual-v2 .kv-bg>i{position:absolute;height:100%;left:0;top:0;background:#2479e6;border-radius:5px}',
  '#kpi360-visual-v2 .kv-bg>.kv-warn{background:#f28a44}',
@@ -85,7 +94,8 @@ function styles(){
  '#kpi360-visual-v2 .kv-details{margin-top:12px}#kpi360-visual-v2 .kv-row{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #edf0f6;padding:9px 0}',
  '#kpi360-visual-v2 .kv-legend{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:11px;color:#667085;margin-bottom:9px}',
  '#kpi360-visual-v2 .kv-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:#1669dd}',
- '@media(max-width:850px){#kpi360-visual-v2 .kv-charts{grid-template-columns:1fr}#kpi360-visual-v2 .kv-grid{grid-template-columns:1fr}}',
+ '@media(max-width:850px){#kpi360-visual-v2 .kv-charts{grid-template-columns:1fr}#kpi360-visual-v2 .kv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#kpi360-visual-v2 .kv-rank-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}',
+ '@media(max-width:540px){#kpi360-visual-v2 .kv-grid{grid-template-columns:1fr}#kpi360-visual-v2 .kv-bar{grid-template-columns:70px minmax(0,1fr) 64px}}',
  '@media(max-width:600px){#kpi360-visual-v2 .kv-table{font-size:10px}#kpi360-visual-v2 .kv-card{padding:11px}#kpi360-visual-v2 .kv-bar{grid-template-columns:66px minmax(0,1fr) 58px}}'
  ].join('\n');document.head.appendChild(el);
 }
@@ -97,19 +107,27 @@ function card(title,value,sub,foot,kind,completion){
 function chartBars(rows){
  const scale=Math.max(...rows.map(x=>Math.max(n(x.shipment),n(x.shipment_plan))),1);
  return '<div class="kv-card"><h3>Продажи по менеджерам</h3>'+
- rows.map(r=>'<div class="kv-bar"><span>'+esc(r.manager_name)+'</span><div class="kv-bg" title="План: '+esc(money(r.shipment_plan))+'">'+
+ rows.map(r=>'<div class="kv-bar" role="button" tabindex="0" data-manager="'+esc(r.manager_name)+'" title="История KPI и мест: '+esc(r.manager_name)+'"><span>'+esc(r.manager_name)+'</span><div class="kv-bg" title="План: '+esc(money(r.shipment_plan))+'">'+
  '<i class="'+(percent(r.shipment,r.shipment_plan)<60?'kv-warn':'')+'" style="width:'+Math.min(100,100*n(r.shipment)/scale)+'%"></i></div>'+
  '<span style="text-align:right;font-weight:800">'+esc(pc(r.shipment,r.shipment_plan))+'</span></div>').join('')+
  '<div class="kv-note">Синие полосы — факт, серая шкала — единая шкала продаж. Планы и факты указаны в деталях.</div></div>';
 }
-function clientChart(x){
- const total=n(x.first)+n(x.returned),firstWidth=total?100*n(x.first)/total:0;
- return '<div class="kv-card"><h3>Клиенты для KPI · премия</h3>'+
- '<div style="font-size:30px;font-weight:850">'+total+'</div>'+
- '<div class="kv-stack"><span class="kv-first" style="width:'+firstWidth+'%"></span><span class="kv-return" style="width:'+(100-firstWidth)+'%"></span></div>'+
- '<div class="kv-legend"><span><i class="kv-dot"></i>Впервые в истории: <b>'+n(x.first)+'</b></span>'+
- '<span><i class="kv-dot" style="background:#ac76ee"></i>Вернулись после 6 мес.: <b>'+n(x.returned)+'</b></span></div>'+
- '<div class="kv-note">Обе категории учитываются в премиальном KPI. Проверено по доступной истории с февраля 2023 года.</div></div>';
+function clientChart(x,rows){
+ const max=Math.max(1,...rows.map(r=>n(r.bonus)));
+ return '<div class="kv-card"><h3>Клиенты для KPI по менеджерам</h3>'+
+ '<div class="kv-note">Первые отгрузки и возвращения после шести полных месяцев</div>'+
+ rows.map(r=>{
+  const first=n(r.first),returned=n(r.returned),total=first+returned;
+  return '<div class="kv-bar" role="button" tabindex="0" data-manager="'+esc(r.manager_name)+'" title="Посмотреть премиальных клиентов '+esc(r.manager_name)+'">'+
+    '<span>'+esc(r.manager_name)+'</span>'+
+    '<div class="kv-stack" style="margin:5px 0;width:'+(total?100*total/max:0)+'%;min-width:'+(total?18:0)+'px">'+
+      '<span class="kv-first" style="width:'+(total?100*first/total:0)+'%"></span>'+
+      '<span class="kv-return" style="width:'+(total?100*returned/total:0)+'%"></span>'+
+    '</div><b style="text-align:right">'+total+'</b></div>'
+ }).join('')+
+ '<div class="kv-legend"><span><i class="kv-dot"></i>Впервые: '+n(x.first)+'</span>'+
+ '<span><i class="kv-dot" style="background:#ac76ee"></i>Вернувшиеся: '+n(x.returned)+'</span></div>'+
+ '<div class="kv-note">Обе категории входят в премию. Нажми на менеджера для просмотра клиентов.</div></div>';
 }
 function trendChart(data){
  const items=(data.trend||[]).slice(-6);if(!items.length)return '';
