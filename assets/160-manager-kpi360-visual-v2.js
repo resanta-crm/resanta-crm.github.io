@@ -320,7 +320,7 @@ function renderAwaitingImport(data,el){
  '<div class="kv-hint" style="margin:0 0 12px"><b>Планы на '+esc(nameMonth(data.month))+' доступны.</b> '+
  'Последняя выгрузка 1С — '+esc(recent?nameMonth(recent):'ещё не определена')+
  '. Факта продаж за выбранный месяц пока нет. Нули и выполнение плана не рассчитываем.</div>'+
- '<div class="kv-grid">'+cards+'</div>'+
+ '<div class="kv-grid">'+cards+'</div>'+(w.RESANTA_KPI360_LEAGUE_V1?.markup(data,w.currentProfile)||'')+
  '<div class="kv-charts"><div class="kv-card"><h3>План продаж по менеджерам · '+esc(nameMonth(data.month))+'</h3>'+
  (rows.length?names:'<div class="kv-note">Планы по сотрудникам не установлены.</div>')+
  '<div class="kv-note">Синие полосы показывают только утверждённые планы, а не факт.</div></div>'+
@@ -373,7 +373,7 @@ function render(data){
  '<td><button data-manager="'+esc(r.manager_name)+'">Подробнее →</button></td></tr>').join('')+
  '<tr style="background:#edf4ff;font-weight:800"><td>ИТОГО</td><td>'+money(t.sales)+' / '+money(t.sales_plan)+
  '</td><td>'+n(t.akb)+'</td><td>'+n(t.bonus)+'</td><td>—</td></tr></tbody></table></div></div>':'';
- el.innerHTML=header+cards+chart+trendChart(data)+'<section id="'+ID+'-manager-panel"></section>'+narr+mgr+'<section id="'+ID+'-detail"></section>'+
+ el.innerHTML=header+cards+(w.RESANTA_KPI360_LEAGUE_V1?.markup(data,w.currentProfile)||'')+chart+trendChart(data)+'<section id="'+ID+'-manager-panel"></section>'+narr+mgr+'<section id="'+ID+'-detail"></section>'+
  '<div class="kv-note" style="margin:12px 0">Правило премии: первая отгрузка либо 6 полных месяцев без положительных отгрузок. АКБ филиала — уникальные клиенты, не сумма АКБ менеджеров. Клиенты с неоднозначными связями не объединяются автоматически.</div>';
  el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
  el.querySelector('[data-export]')?.addEventListener('click',()=>exportCsv(data,rows,t));
@@ -406,11 +406,12 @@ async function load(force=false){
   // History RPC has its own permission checks. Do not let its failure erase valid KPIs.
   try{
     const historyPeriod=data.latest_sales_month&&m>data.latest_sales_month?data.latest_sales_month:m;
-    const historyResponse=await client.rpc('crm_manager_kpi360_history_v3',{p_month:historyPeriod});
-    if(historyResponse.error)throw historyResponse.error;
-    if(historyResponse.data?.version!=='kpi360-history-v3'||!Array.isArray(historyResponse.data.rows))
-      throw Error('Некорректный ответ истории KPI');
-    data.history=historyResponse.data;
+    let historyResponse=await client.rpc('crm_manager_kpi360_history_v4',{p_month:historyPeriod});
+     if(historyResponse.error)historyResponse=await client.rpc('crm_manager_kpi360_history_v3',{p_month:historyPeriod});
+     if(historyResponse.error)throw historyResponse.error;
+     if(!['kpi360-history-v4','kpi360-history-v3'].includes(historyResponse.data?.version)||!Array.isArray(historyResponse.data.rows))
+       throw Error('Некорректный ответ истории KPI');
+     data.history=historyResponse.data;
   }catch(historyError){
     console.warn('KPI360 manager rank history unavailable',historyError);
     data.history={rows:[],unavailable:true};
