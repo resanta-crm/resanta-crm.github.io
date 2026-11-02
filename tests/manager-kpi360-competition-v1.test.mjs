@@ -40,7 +40,7 @@ test('competition remains hidden to bosses and when team scores unavailable',()=
  assert.equal(ui.model(base,{role:'boss',name:'Директор'}),null);
  assert.match(ui.markup({...base,history:{rows:[]}}, {role:'manager',name:'Ачинович'}),/Рейтинг появится/);
 });
-test('league does not render a different user's confidential sales or clients',()=>{
+test('league never renders confidential customer sales or clients',()=>{
  const html=start().markup(base,{role:'manager',name:'Ачинович'});
  assert.match(html,/Руднев/);
  assert.match(html,/Ачинович/);
