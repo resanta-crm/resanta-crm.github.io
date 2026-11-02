@@ -1,0 +1,28 @@
+name: Client360 regression
+on:
+  pull_request:
+    paths:
+      - "assets/01-crm-core.js"
+      - "assets/127-gps-director-case-review-v236440.js"
+      - "assets/149-lpr-v1.js"
+      - "assets/158-client360-legal-stores-v1.js"
+      - "supabase/functions/crm-lpr-birthdays-v1/index.ts"
+      - "supabase/migrations/20261102_client360_legal_stores_v1.sql"
+      - "tests/client360-v1.test.mjs"
+      - "tests/lpr-mileage-v1.test.mjs"
+      - ".github/workflows/client360-regression.yml"
+  workflow_dispatch:
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check assets/01-crm-core.js
+      - run: node --check assets/127-gps-director-case-review-v236440.js
+      - run: node --check assets/149-lpr-v1.js
+      - run: node --check assets/158-client360-legal-stores-v1.js
+      - run: node --check --input-type=module < supabase/functions/crm-lpr-birthdays-v1/index.ts
+      - run: node --test tests/client360-v1.test.mjs tests/lpr-mileage-v1.test.mjs
