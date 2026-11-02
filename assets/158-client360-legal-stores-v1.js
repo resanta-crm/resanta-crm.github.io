@@ -24,7 +24,7 @@ function mount(){
   '<div id="c360-selected" style="margin-top:12px;font-size:12px"></div>'+
   (canLink()?'<label style="display:block;margin:9px 0;font-size:12px">Название единого юрлица <input id="c360-legal" class="form-input" placeholder="Например, ИТ технологии"></label><button id="c360-group" class="btn-primary">Связать выбранные карточки (без удаления)</button>':'<p>Создание связей доступно ДФС и директору Витебска.</p>')+
   '</div><div id="c360-requests" class="card" style="margin-bottom:10px">Заявки на новые торговые точки…</div><div id="c360-output" class="card">Введите название клиента и нажмите «Найти».</div>'+
-  '<div id="c360-groups" class="card" style="margin-top:10px"></div>';
+  '<div id="c360-groups" class="card" style="margin-top:10px"></div><div id="c360-detail" class="card" style="margin-top:10px;display:none"></div>';
   main.appendChild(page);
   page.querySelector('#c360-find').onclick=load;
   page.querySelector('#c360-search').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
@@ -75,7 +75,8 @@ function render(){
  requestBox.querySelectorAll('[data-c360-reject]').forEach(b=>b.onclick=()=>reviewPoint(b.dataset.c360Reject,false));
  const gs=page.querySelector('#c360-groups');
  gs.innerHTML='<b>Зарегистрированные группы юрлиц</b><div style="font-size:12px;color:var(--sub);margin-top:7px">'+
- (groups.length?groups.map(g=>'<div style="padding:4px">🏢 '+esc(g.name)+'</div>').join(''):'Пока нет подтверждённых групп')+'</div>';
+ (groups.length?groups.map(g=>'<div style="padding:4px"><button class="btn-secondary" data-c360-group="'+esc(g.id)+'">🏢 '+esc(g.name)+' · показать ТТ и визиты</button></div>').join(''):'Пока нет подтверждённых групп')+'</div>';
+ gs.querySelectorAll('[data-c360-group]').forEach(b=>b.onclick=()=>openGroup(b.dataset.c360Group));
  renderSelected();
 }
 function renderSelected(){
@@ -104,6 +105,23 @@ async function reviewPoint(requestId,approve){
    if(error||!data?.ok)throw error||new Error('Нет подтверждения');
    await load();
  }catch(e){alert('Ошибка проверки ТТ: '+(e?.message||e))}
+}
+async function openGroup(entityId){
+ const el=page?.querySelector('#c360-detail');if(!el)return;
+ el.style.display='block';el.textContent='Загружаю торговые точки…';
+ try{
+  const {data,error}=await db.rpc('client360_entity_overview_v1',{p_entity_id:entityId});
+  if(error||!data?.ok)throw error||new Error('Обзор недоступен');
+  el.innerHTML='<b>🏢 '+esc(data.name)+'</b> · '+(data.clients||[]).length+' карточек'+
+  '<p style="font-size:12px;color:var(--sub)">Группа объединяет карточки для анализа, а продажи, визиты и GPS остаются на исходных ID.</p>'+
+  (data.clients||[]).map(c=>'<div style="padding:10px;border-top:1px solid var(--border)"><b>'+esc(c.name)+'</b>'+
+  '<div style="font-size:12px">МПП: '+esc(c.manager_name||'—')+' · Визиты: '+esc(c.visits)+
+  ' · Последний: '+esc(c.last_visit||'нет')+'</div>'+
+  (c.stores||[]).map(p=>'<div style="font-size:12px;padding:4px 0">📍 '+
+  esc(p.city||'')+', '+esc(p.address||'')+' · '+(p.lat==null||p.lng==null?'⚠️ нет координат':'📡 предварительные координаты')+'</div>').join('')+
+  '</div>').join('');
+  el.scrollIntoView({behavior:'smooth',block:'start'});
+ }catch(e){el.textContent='Ошибка: '+(e?.message||e)}
 }
 function open(){if(!role())return;mount();if(typeof goPage==='function')goPage('client360','Клиент 360°');load()}
 function reconcile(){if(role())mount();else if(nav)nav.style.display='none'}
