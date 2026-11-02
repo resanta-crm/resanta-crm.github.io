@@ -112,7 +112,7 @@ public final class MainActivity extends Activity {
         status.setText("Android: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")" +
             "\nWebView: " + version +
             "\nСлужба распознавания: " +
-              (SpeechRecognizer.isRecognitionAvailable(this) ? "доступна" : "не найдена") +
+              (localRecognitionAvailable() ? "доступна" : "не найдена") +
             "\nMediaProjection API: " +
               (projection != null ? "есть" : "нет") +
             "\nДоступ к CRM: не запрашивался");
@@ -128,10 +128,16 @@ public final class MainActivity extends Activity {
             "и проверка на принимающем MacBook.");
     }
 
+    private boolean localRecognitionAvailable() {
+        // Never invoke an unknown system cloud STT provider without explicit user consent.
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
+    }
+
     private void requestVoice() {
         if (busy) return;
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status.setText("Системное распознавание речи недоступно. " +
+        if (!localRecognitionAvailable()) {
+            status.setText("Безопасное локальное распознавание речи недоступно. " +
                 "Для полноценной Леры понадобится существующее защищённое OpenAI STT.");
             return;
         }
@@ -146,7 +152,7 @@ public final class MainActivity extends Activity {
         if (busy) return;
         busy = true;
         status.setText("Слушаю одну команду…");
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
         recognizer.setRecognitionListener(new RecognitionListener() {
             @Override public void onReadyForSpeech(Bundle params) {
                 status.setText("Микрофон активен. Произнесите команду.");
