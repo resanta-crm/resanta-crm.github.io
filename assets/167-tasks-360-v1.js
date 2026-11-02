@@ -7,7 +7,7 @@
 'use strict';
 if(root.RESANTA_TASKS_360_V1)return;
 const ID='tasks360-view',CSS='tasks360-style',P='page-tasks';
-const S={tab:'all',q:'',selected:'',show:40,legacy:false,active:false};
+const S={tab:'all',q:'',selected:'',show:40,legacy:false,closedManagers:new Set()};
 const text=v=>String(v==null?'':v);
 const h=v=>text(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=v=>text(v).toLocaleLowerCase('ru-RU').replace(/\s+/g,' ').trim();
@@ -140,6 +140,7 @@ function style(){
  '#tasks360-view .t360-panel{min-width:0;background:#fff;border:1px solid #e1e7f2;border-radius:14px;box-shadow:0 2px 12px rgba(22,46,82,.04);padding:14px}',
  '#tasks360-view .t360-search{display:flex;gap:8px;margin-bottom:12px}#tasks360-view .t360-search input{min-width:0;flex:1;padding:11px;border-radius:10px;border:1px solid #dce5f2;background:#fafcff}',
  '#tasks360-view .t360-scroll{max-height:660px;overflow-y:auto;overscroll-behavior:contain}',
+ '#tasks360-view .t360-mgr{width:100%;display:flex;align-items:center;justify-content:space-between;margin:9px 0 6px;background:#f1f5fa!important;color:#263e61!important;font-weight:800;text-align:left}',
  '#tasks360-view .t360-item{width:100%;display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px;text-align:left;margin-bottom:7px;border:1px solid #e5eaf2!important;padding:11px!important;border-radius:11px!important;color:#152a45!important}',
  '#tasks360-view .t360-item.t360-selected{background:#eaf3ff!important;border-color:#84b5ff!important}',
  '#tasks360-view .t360-item-title{font-weight:750;font-size:13px;display:block;line-height:1.35}#tasks360-view .t360-muted{color:#6c7b90;font-size:11px;line-height:1.5}',
@@ -170,6 +171,16 @@ function taskRow(t,s){
  const c=s.clients.get(text(t.client_id)),name=c?.name||t.client_name||'Без привязки к клиенту';
  const selected=text(t.id)===S.selected;
  return '<button class="t360-item'+(selected?' t360-selected':'')+'" data-action="select" data-id="'+h(t.id)+'"><span><span class="t360-item-title">'+h(icons[status(t)])+' '+h(name)+'</span><span class="t360-muted">'+h(title(t))+'</span><span class="t360-muted" style="display:block;margin-top:5px">'+h(boss()?manager(t,s.clients)+' · ':'')+h(dateRu(t.due_date))+' · '+h(badge(t))+'</span></span><span class="t360-tag">'+h(t.auto_generated?'ИИ':lane(t)==='contact'?'Звонок':'Задача')+'</span></button>';
+}
+function groupedRows(rows,s){
+ if(!boss())return rows.map(t=>taskRow(t,s)).join('');
+ const groups=new Map();
+ rows.forEach(t=>{const name=manager(t,s.clients)||'Не закреплено';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(t)});
+ return [...groups].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0],'ru')).map(([name,items])=>{
+  const collapsed=S.closedManagers.has(name);
+  return '<button type="button" class="t360-mgr" data-action="group" data-group="'+h(name)+'"><span>👤 '+h(name)+' · '+items.length+'</span><span>'+(collapsed?'▾':'▴')+'</span></button>'+
+  (collapsed?'':items.map(t=>taskRow(t,s)).join(''));
+ }).join('');
 }
 function taskDetail(t,s){
  if(!t)return '<div class="t360-empty">Выберите задачу в списке слева.</div>';
@@ -208,7 +219,7 @@ function render(){
  '<div class="t360-dashboard">'+kpis+'<div class="t360-filterbar">'+filters+'</div>'+
  '<div class="t360-grid"><section class="t360-panel"><div class="t360-search"><input data-input="search" placeholder="Поиск клиента, задачи, товара…" value="'+h(S.q)+'" aria-label="Поиск задач"></div>'+
  '<div class="t360-section-title">'+(boss()?'Задачи менеджеров':'Мои задачи')+' · '+s.rows.length+'</div><div class="t360-scroll">'+
- (rows.length?rows.map(t=>taskRow(t,s)).join(''):'<div class="t360-empty">По этому фильтру задач нет.</div>')+
+ (rows.length?groupedRows(rows,s):'<div class="t360-empty">По этому фильтру задач нет.</div>')+
  '</div>'+(s.rows.length>S.show?'<button style="margin-top:9px;width:100%" data-action="more">Показать ещё · '+(s.rows.length-S.show)+'</button>':'')+'</section>'+
  '<section class="t360-panel">'+taskDetail(s.selected,s)+'</section></div>'+
  '<div class="t360-muted" style="margin-top:10px">Архив и несогласованные рекомендации не входят в рабочую очередь. Действующие отчёты, согласования и история сохранены.</div></div>';
@@ -233,6 +244,7 @@ function handle(action,extra={}){
  if(action==='legacy'){S.legacy=!S.legacy;render();return}
  if(action==='tab'){S.tab=extra.tab;S.show=40;S.selected='';render();return}
  if(action==='select'){S.selected=extra.id;render();return}
+ if(action==='group'){const n=extra.group;if(S.closedManagers.has(n))S.closedManagers.delete(n);else S.closedManagers.add(n);render();return}
  if(action==='more'){S.show+=40;render();return}
  const t=safeSelected();if(!t)return;
  if(action==='voice'){void voice(t);return}
@@ -263,7 +275,7 @@ function install(){
    S.q=event.target.value;
    // Do not recreate a focused input while typing: refresh only its sibling panels.
    const s=scope(),list=el.querySelector('.t360-scroll');
-   if(list)list.innerHTML=s.rows.slice(0,S.show).map(t=>taskRow(t,s)).join('')||'<div class="t360-empty">Ничего не найдено</div>';
+   if(list)list.innerHTML=groupedRows(s.rows.slice(0,S.show),s)||'<div class="t360-empty">Ничего не найдено</div>';
    const detail=el.querySelector('.t360-grid>.t360-panel:last-child');
    if(detail)detail.innerHTML=taskDetail(s.selected,s);
   }});
