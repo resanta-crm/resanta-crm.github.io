@@ -59,6 +59,20 @@ function line(r,prev,ok,isTotal){
  cell(r.shipment,r.shipment_plan,prev.sales_2025)+cell(r.akb,r.akb_plan,prev.akb_2025)+
  cell(r.new_clients,r.new_clients_plan,prev.new_2025)+'</div>';
 }
+
+function exportReport(){
+ if(!last||role()!=='boss')return;
+ const rows=list(last.primary),old=list(last.baseline?.rows),by=new Map(old.map(x=>[k(x.manager_name),x]));
+ const all=sum(rows,old);
+ const lines=[['Период','Менеджер','Продажи план','Продажи факт','Продажи 2025','АКБ план','АКБ факт','АКБ 2025','Новые план','Новые факт','Новые 2025']];
+ function append(name,r,p){lines.push([last.month,name,r.shipment_plan,r.shipment,p.sales_2025,r.akb_plan,r.akb,p.akb_2025,r.new_clients_plan,r.new_clients,p.new_2025]);}
+ rows.forEach(r=>append(r.manager_name,r,by.get(k(r.manager_name))||{}));append('ИТОГО',all,all);
+ const content='\uFEFF'+lines.map(a=>a.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+ const uri=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');link.href=uri;link.download='KPI360_'+last.month+'.csv';link.click();
+ setTimeout(()=>URL.revokeObjectURL(uri),1500);
+}
+
 async function showClients(name,at){
  const target=document.getElementById(id+'-detail');if(!target)return;
  selected=name;target.innerHTML='<div class="k-card">Загружаю клиентов '+esc(name)+'…</div>';
@@ -78,7 +92,7 @@ function display(v){
  const latest=v.baseline?.latest_sales_month||'';
  let html='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
  '<div><b style="font-size:18px">KPI 360° · '+esc(fmtMonth(v.month))+'</b><div class="k-small">Факт 2025 — по текущему закреплению клиентов</div></div>'+
- '<button class="btn-secondary" data-refresh>↻ Обновить</button></div>';
+ '<button class="btn-secondary" data-refresh>↻ Обновить</button> '+(role()==='boss'?'<button class="btn-secondary" data-export>Excel (CSV)</button>':'')+'</div>';
  if(v.month>latest&&latest)html+='<div class="k-card">Данных 1С за этот месяц пока нет. Последний месяц: '+esc(fmtMonth(latest))+'. Нули в показатели не подставляются.</div>';
  else{
  html+='<div class="k-small">Импорт продаж 1С: '+esc(v.baseline?.last_sales_import||'дата не указана')+
@@ -88,11 +102,12 @@ function display(v){
  metric('АКБ',all.akb,all.akb_plan,all.akb_2025,ok)+metric('Новые / вернувшиеся',all.new_clients,all.new_clients_plan,all.new_2025,ok)+'</div>'+
  '<div class="k-list"><div class="k-small">Менеджер · Продажи · АКБ · Новые клиенты (факт / план / 2025)</div>'+
  rows.map(r=>line(r,map.get(k(r.manager_name))||{},ok,false)).join('')+line(all,all,ok,true)+'</div>'+
- '<div class="k-small">Итог — сумма МПП. Строки 2025 без однозначной связи с текущим клиентом исключены из сравнения. Методика факта KPI сохранена, отдельные возвраты не показываются.</div>'+
+ '<div class="k-small">Итог — сумма МПП. Строки 2025 без однозначной связи с текущим клиентом исключены из сравнения. Методика факта KPI сохранена.</div>'+
  '<div id="'+id+'-detail"></div><div class="k-card" style="margin-top:12px"><b>Задачи на сегодня</b> · открыто '+
  f(rows.reduce((s,r)=>s+n(r.tasks_open),0))+' · просрочено '+f(rows.reduce((s,r)=>s+n(r.overdue),0))+'</div>';
  }
  box.innerHTML=html;box.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
+ box.querySelector('[data-export]')?.addEventListener('click',exportReport);
  box.querySelectorAll('[data-detail]').forEach(b=>b.addEventListener('click',()=>showClients(b.dataset.detail,v.month)));
 }
 async function load(force=false){
