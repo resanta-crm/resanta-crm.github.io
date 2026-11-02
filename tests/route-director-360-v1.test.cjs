@@ -54,6 +54,28 @@ test('week period is an actual date filter, while month remains the planning mon
  assert.equal(s.r.from,'2026-11-02');assert.equal(s.r.to,'2026-11-08');
  assert.equal(s.percent,50);
 });
+
+test('all-managers dashboard keeps independent daily capacity and office-day counts',()=>{
+ const p=[
+  ...Array.from({length:10},(_,i)=>route('r'+i,'c'+i,'2026-11-02','point'+i)),
+  ...Array.from({length:10},(_,i)=>({id:'s'+i,client_id:'z'+i,manager_name:'Шкуран',visit_date:'2026-11-02',physical_point_key:'other'+i,approved:true})),
+  {id:'office',manager_name:'Шкуран',visit_date:'2026-11-03',is_office_day:true,approved:true}
+ ];
+ const c=[...Array.from({length:10},(_,i)=>client('c'+i)),...Array.from({length:10},(_,i)=>client('z'+i,'Шкуран'))];
+ const s=app('boss',p,c).api.snapshot();
+ assert.equal(s.days['2026-11-02'].count,20);
+ assert.equal(s.days['2026-11-02'].maxLoad,10);
+ assert.equal(s.over,0); // 20 total across two managers is not over the individual 15-point limit.
+ assert.equal(s.filled,3); // Mon: two managers, Tue: office day for one manager.
+ assert.equal(s.working,42); // Two managers × 21 weekdays in Nov 2026.
+ assert.equal(s.percent,100);
+});
+test('all-managers view rejects historical rows for managers outside configured field scope',()=>{
+ const p=[route('a','c1'),{...route('b','c2'),manager_name:'Чужой'}];
+ const s=app('boss',p,[client('c1'),client('c2','Чужой')]).api.snapshot();
+ assert.equal(s.scoped.length,1);
+ assert.equal(s.percent,100);
+});
 test('module has no direct Supabase database mutations or GPS writes',()=>{
  assert.doesNotMatch(src,/db\s*\.\s*from\s*\(|db\s*\.\s*rpc\s*\(|\.insert\s*\(|\.update\s*\(/);
 });
