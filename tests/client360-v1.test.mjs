@@ -46,3 +46,6 @@ test('Versioned Client360 entrypoint does not replace CRM login',()=>{
 
 // Verify the additional KPI360 interface whenever the existing CRM regression runs.
 import './manager-kpi360-v1.test.mjs';
+
+// Regression of new KPI360 visual dashboard and manager data boundaries.
+import './manager-kpi360-visual-v2.test.mjs';
