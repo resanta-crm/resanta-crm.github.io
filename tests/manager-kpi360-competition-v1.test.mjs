@@ -28,7 +28,7 @@ const base={
  }};
 test('MPP league computes October ranks, upward trend, and gap from real sanitized scores',()=>{
  const m=start().model(base,{role:'manager',name:'Ачинович'});
- assert.equal(m.mine.rank_overall,2);
+ assert.equal(m.self.rank_overall,2);
  assert.equal(m.movement,1);
  assert.equal(m.gap,24);
  assert.equal(m.board.length,3);
