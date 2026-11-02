@@ -284,9 +284,70 @@ function launchLera(){
  }
  prefill();
 }
+// Pre-import months are still a useful PLANNING workspace. Do not turn missing 1C facts into zero KPIs.
+function planSnapshot(data){
+ const rows=mapped(data),sum=key=>rows.reduce((total,r)=>total+n(r[key]),0);
+ return {rows,sales:sum('shipment_plan'),akb:sum('akb_plan'),
+   bonus:sum('new_clients_plan'),
+   hasPlans:rows.some(r=>n(r.shipment_plan)>0||n(r.akb_plan)>0||n(r.new_clients_plan)>0)};
+}
+function renderAwaitingImport(data,el){
+ const plans=planSnapshot(data),recent=data.latest_sales_month||'',scope=isBoss()?'Планы команды МПП':'Мои планы';
+ const rows=plans.rows, max=Math.max(1,...rows.map(r=>n(r.shipment_plan)));
+ const cells=[
+  ['План продаж',money(plans.sales)+' бел. руб.','Факт: ожидаем импорт 1С'],
+  ['План АКБ',money(plans.akb)+' клиентов','Сумма планов менеджеров, не уникальная АКБ'],
+  ['План клиентов KPI',money(plans.bonus)+' клиентов','Первые + вернувшиеся после 6 полных месяцев'],
+  ['Статус периода','Ожидаем 1С','Последние данные: '+(recent?nameMonth(recent):'нет отметки')]
+ ];
+ const cards=cells.map(([title,value,detail])=>
+  '<article class="kv-card"><div class="kv-label">'+esc(title)+'</div>'+
+  '<div class="kv-metric" style="font-size:21px">'+esc(value)+'</div>'+
+  '<div class="kv-note">'+esc(detail)+'</div></article>').join('');
+ const names=rows.map(r=>'<div class="kv-bar"><span>'+esc(r.manager_name)+'</span>'+
+   '<div class="kv-bg"><i style="width:'+Math.min(100,100*n(r.shipment_plan)/max)+'%;background:#1769d8"></i></div>'+
+   '<span style="text-align:right"><b>'+money(r.shipment_plan)+'</b></span></div>').join('');
+ const header='<div class="kv-top"><div><strong style="font-size:17px">KPI 360° · '+esc(nameMonth(data.month))+'</strong>'+
+  '<div class="kv-note">'+esc(scope)+' · фактические показатели будут доступны после загрузки продаж 1С</div></div>'+
+  '<div class="kv-actions" style="margin:0"><button data-refresh>↻ Обновить</button>'+
+  (recent?'<button data-lastmonth>Открыть '+esc(nameMonth(recent))+'</button>':'')+
+  '</div></div>';
+ const history=histRows(data);
+ const historyBlock=history.length?trendChart(data):
+  '<div class="kv-card" style="margin-top:12px"><h3>История продаж</h3>'+
+  '<div class="kv-note">История за последний загруженный месяц временно недоступна.</div></div>';
+ el.innerHTML=header+
+ '<div class="kv-hint" style="margin:0 0 12px"><b>Планы на '+esc(nameMonth(data.month))+' доступны.</b> '+
+ 'Последняя выгрузка 1С — '+esc(recent?nameMonth(recent):'ещё не определена')+
+ '. Факта продаж за выбранный месяц пока нет. Нули и выполнение плана не рассчитываем.</div>'+
+ '<div class="kv-grid">'+cards+'</div>'+
+ '<div class="kv-charts"><div class="kv-card"><h3>План продаж по менеджерам · '+esc(nameMonth(data.month))+'</h3>'+
+ (rows.length?names:'<div class="kv-note">Планы по сотрудникам не установлены.</div>')+
+ '<div class="kv-note">Синие полосы показывают только утверждённые планы, а не факт.</div></div>'+
+ '<div class="kv-card"><h3>Планы по клиентам</h3>'+
+ (rows.length?rows.map(r=>'<div class="kv-row"><b>'+esc(r.manager_name)+'</b><div>'+
+ 'АКБ: '+money(r.akb_plan)+' · KPI: '+money(r.new_clients_plan)+'</div></div>').join(''):
+ '<div class="kv-note">Планы отсутствуют.</div>')+
+ '<div class="kv-note">Руководитель может изменить планы через кнопку «Внести планы» вверху.</div></div></div>'+
+ historyBlock+
+ '<div class="kv-hint"><h3>◉ Коротко о месяце</h3>'+
+ '<div>Ноябрьские планы показаны без подмены фактов октября. Динамика выше относится к последним месяцам с данными 1С. '+
+ 'Когда появится первая выгрузка за '+esc(nameMonth(data.month))+', карточки, проценты, рейтинг и клиенты обновятся автоматически.</div></div>'+
+ '<div class="kv-note" style="margin-top:12px">Права сохранены: менеджер видит только свои планы и историю, руководитель — доступную ему команду.</div>';
+ el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
+ el.querySelector('[data-lastmonth]')?.addEventListener('click',()=>{
+   const picker=document.getElementById('manager-kpi-month');
+   if(!picker||!recent)return;
+   manuallySelected=true;picker.value=recent;selectedManager='';void load(true);
+ });
+ el.querySelectorAll('[data-metric]').forEach(b=>b.addEventListener('click',()=>{
+   historyMetric=b.dataset.metric;render(data);
+ }));
+}
+
 function render(data){
  if(!active()||month()!==data.month)return;const el=root();if(!el)return;
- if(!latestData(data)){el.innerHTML='<div class="kv-card">За '+esc(nameMonth(data.month))+' данные 1С ещё не поступили. Последний месяц: '+esc(nameMonth(data.latest_sales_month||''))+'.</div>';return}
+ if(!latestData(data)){renderAwaitingImport(data,el);return}
  const rows=mapped(data),t=totals(data);
  const worst=[...rows].filter(r=>n(r.shipment_plan)>0).sort((a,b)=>n(a.shipment)/n(a.shipment_plan)-n(b.shipment)/n(b.shipment_plan))[0];
  const header='<div class="kv-top"><div><strong style="font-size:17px">KPI 360° · '+esc(nameMonth(data.month))+'</strong>'+
@@ -341,10 +402,11 @@ async function load(force=false){
   if(serial!==generation||!active()||month()!==m)return;
   const data=response.data;
   if(!data||data.version!=='kpi360-visual-v2'||!Array.isArray(data.sales))throw Error('Неверный ответ сервиса KPI');
-  if(!manuallySelected&&m>data.latest_sales_month&&data.latest_sales_month){manuallySelected=true;document.getElementById('manager-kpi-month').value=data.latest_sales_month;void load();return;}
+  // Preserve the explicitly selected month (including November before any 1C import).
   // History RPC has its own permission checks. Do not let its failure erase valid KPIs.
   try{
-    const historyResponse=await client.rpc('crm_manager_kpi360_history_v3',{p_month:m});
+    const historyPeriod=data.latest_sales_month&&m>data.latest_sales_month?data.latest_sales_month:m;
+    const historyResponse=await client.rpc('crm_manager_kpi360_history_v3',{p_month:historyPeriod});
     if(historyResponse.error)throw historyResponse.error;
     if(historyResponse.data?.version!=='kpi360-history-v3'||!Array.isArray(historyResponse.data.rows))
       throw Error('Некорректный ответ истории KPI');
