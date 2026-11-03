@@ -50,6 +50,28 @@ jobs:
           PY
       - name: Physical-demo wake phrase / finite-mic regression
         run: bash android/air3-ai360/demo-phrase-test.sh
+      - name: Authentic CRM in glasses contract (not a fake dashboard)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('android/air3-ai360/app/src/main/java/by/resanta/air3/RealCRMView.java').read_text()
+          a=Path('android/air3-ai360/app/src/main/java/by/resanta/air3/MainActivity.java').read_text()
+          assert 'https://resanta-crm.by/index.html' in r, 'must display the ORIGINAL production CRM'
+          assert 'new WebView(activity)' in r
+          assert 'setJavaScriptEnabled(true)' in r and 'setDomStorageEnabled(true)' in r
+          assert "getElementById('nav-sales')" in r and 'b.click()' in r, 'real navigation only'
+          assert 'shouldOverrideUrlLoading' in r and 'CRM_HOST.equalsIgnoreCase(url.getHost())' in r
+          assert 'addJavascriptInterface' not in r and 'loadDataWithBaseURL' not in r
+          assert 'WebStorage.getInstance().deleteAllData()' in r
+          assert 'CookieManager.getInstance().removeAllCookies(null)' in r
+          assert 'setAcceptThirdPartyCookies(web,false)' in r
+          assert 'closeOriginalCrm()' in a and 'onPause()' in a
+          assert 'main.postDelayed(this::showOriginalCrm,250)' in a
+          assert 'navigateOriginalCrm(domain)' in a
+          assert 'actualCrm.showStatus("Распознано: "+spoken)' in a
+          assert 'putString("token"' not in a and 'SUPABASE_SERVICE_ROLE_KEY' not in r+a
+          print('Real CRM website on AIR3, native voice navigation, cleanup PASS')
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: resanta-ai360-air3-native-debug
