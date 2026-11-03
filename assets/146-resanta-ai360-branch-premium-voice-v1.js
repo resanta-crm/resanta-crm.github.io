@@ -121,7 +121,7 @@ async function capture(run){
      for(const v of buffer){const x=(v-128)/128;rms+=x*x;}
      rms=Math.sqrt(rms/buffer.length);
      if(rms>.003){heard=true;lastLoud=Date.now();}
-     if(heard&&Date.now()-started>1200&&Date.now()-lastLoud>1250)finish();
+     if(heard&&Date.now()-started>1750&&Date.now()-lastLoud>1550)finish();
     },120);
    }
   }catch{release();poll=0;}
