@@ -470,7 +470,7 @@ public final class MainActivity extends Activity {
             }
             String domain=memory.optString("domain","");
             if(domain.isEmpty()){
-                String normalized=q.toLocaleLowerCase(java.util.Locale.forLanguageTag("ru-RU"));
+                String normalized=q.toLowerCase(java.util.Locale.forLanguageTag("ru-RU"));
                 if(normalized.contains("продаж")||normalized.contains("план"))domain="sales";
                 else if(normalized.contains("задолж")||normalized.contains("долг")
                         ||normalized.contains("пдз"))domain="debt";
