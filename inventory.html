@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const INVENTORY_APP_VERSION='2026-10-19-v23.6.378-exact-fact-correction';
+const INVENTORY_APP_VERSION='2026-11-03-v23.6.380-auth-recovery';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -18,7 +18,7 @@ const INVENTORY_APP_VERSION='2026-10-19-v23.6.378-exact-fact-correction';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?legacy-module=1&v=378&ts='+Date.now());
+        location.replace('/inventory.html?legacy-module=1&v=380&ts='+Date.now());
       }
     }
   }catch(_){}
@@ -198,6 +198,31 @@ function recentlySubmitted(code){
  if(!same){lastSubmittedCode=code;lastSubmittedAt=now}
  return same
 }
+function readableError(v,fallback='Ошибка соединения с CRM'){
+ if(typeof v==='string')return v.slice(0,240);
+ if(v&&typeof v==='object'){
+  for(const k of ['error_description','message','detail','hint','error','code']){
+   if(typeof v[k]==='string'&&v[k].trim())return v[k].slice(0,240);
+   if(v[k]&&typeof v[k]==='object'){
+    const nested=readableError(v[k],'');if(nested)return nested;
+   }
+  }
+ }
+ return fallback;
+}
+function sessionExpiredError(){
+ const e=new Error('Сессия ТСД истекла. Войдите заново под своей учётной записью.');
+ e.authExpired=true;return e;
+}
+function showFreshLogin(message){
+ // Never delete offline scans when login needs renewal.
+ saveSession(null);session=null;active=null;access=null;
+ show('scanner',false);show('no-session',false);
+ show('app-view',false);show('login-view',true);
+ $('login-pass').value='';
+ text('login-error',message||'Войдите заново.');
+ show('login-error',true);
+}
 async function gatewayCall(payload,timeoutMs=5500){
  let last=null;
  for(const url of TSD_GATEWAYS){
@@ -206,7 +231,7 @@ async function gatewayCall(payload,timeoutMs=5500){
   try{
    const r=await fetch(url,{method:'POST',headers:{apikey:APIKEY,Authorization:'Bearer '+APIKEY,'content-type':'application/json','cache-control':'no-store'},body:JSON.stringify(payload),cache:'no-store',mode:'cors',credentials:'omit',...(ctrl?{signal:ctrl.signal}:{})});
    const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
-   if(!r.ok){const e=new Error(j?.message||j?.error||String(j||('HTTP '+r.status)));e.httpStatus=r.status;throw e}
+   if(!r.ok){const e=new Error(readableError(j,'Ошибка шлюза ТСД (HTTP '+r.status+')'));e.httpStatus=r.status;throw e}
    return j
   }catch(e){last=e}
   finally{if(timer)clearTimeout(timer)}
@@ -223,15 +248,23 @@ async function authToken(email,password){
  }
 }
 async function refresh(){
- if(!session?.refresh_token)throw new Error('Сессия истекла');
+ if(!session?.refresh_token)throw sessionExpiredError();
  let j=null;
  try{
   const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:APIKEY,'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
-  j=await r.json().catch(()=>({}));if(!r.ok)throw new Error('Нужно войти заново')
+  j=await r.json().catch(()=>({}));
+  if(r.status===400||r.status===401)throw sessionExpiredError();
+  if(!r.ok)throw new Error(readableError(j,'Ошибка обновления сессии'));
  }catch(e){
-  j=await gatewayCall({op:'auth_refresh',refresh_token:session.refresh_token},6000)
+  if(e?.authExpired)throw e;
+  try{j=await gatewayCall({op:'auth_refresh',refresh_token:session.refresh_token},6000)}
+  catch(gw){
+   if(gw?.httpStatus===400||gw?.httpStatus===401)throw sessionExpiredError();
+   throw gw;
+  }
  }
- saveSession(j);return j
+ if(!j?.access_token||!j?.refresh_token)throw sessionExpiredError();
+ saveSession(j);return j;
 }
 async function rpc(name,args={},retry=true){
  if(!session?.access_token)throw new Error('AUTH_REQUIRED');
@@ -241,7 +274,7 @@ async function rpc(name,args={},retry=true){
   if(r.status===401&&retry){await refresh();return rpc(name,args,false)}
   const raw=await r.text();let j=null;try{j=raw?JSON.parse(raw):null}catch(_){j=raw}
   if(r.ok)return j;
-  const e=new Error(j?.message||j?.hint||String(j||('HTTP '+r.status)));e.httpStatus=r.status;
+  const e=new Error(readableError(j,'Ошибка запроса (HTTP '+r.status+')'));e.httpStatus=r.status;
   if(r.status<500&&r.status!==429)throw e;
   directErr=e
  }catch(e){directErr=e}
@@ -257,7 +290,7 @@ async function login(){
  try{
   const email=String($('login-email').value||'').toLowerCase();if(!ALLOWED_EMAILS.includes(email))throw new Error('Эта почта не разрешена для ТСД');localStorage.setItem(LOGIN_EMAIL_KEY,email);const s=await authToken(email,$('login-pass').value);
   saveSession(s);$('login-pass').value='';await bootAuthed()
- }catch(e){text('login-error',e?.message||e);show('login-error',true)}
+ }catch(e){text('login-error',readableError(e,'Ошибка входа'));show('login-error',true)}
  finally{$('login-btn').disabled=false}
 }
 async function logout(){
@@ -270,10 +303,14 @@ async function bootAuthed(){
   access=await rpc('warehouse_inventory_get_access_v1',{});
   text('user-line',tsdLabel(access?.email)+' · '+(access?.name||access?.email||''));
   if(!access?.can_count){show('access-error',true);text('access-error','Для этой учётной записи доступ к инвентаризации не выдан.');show('scanner',false);show('no-session',false);return}
-  await reloadActive();await flushQueue()
+  await reloadActive();await flushQueue();
  }catch(e){
-  if(/JWT|AUTH|войти заново|expired/i.test(String(e?.message||e))){saveSession(null);show('app-view',false);show('login-view',true);return}
-  show('access-error',true);text('access-error','Не удалось проверить доступ: '+(e?.message||e))
+  if(e?.authExpired||/JWT|AUTH_REQUIRED|ист[её]к|refresh token|invalid refresh|expired/i.test(String(e?.message||''))){
+   showFreshLogin('Сессия истекла. Войдите заново. Несинхронизированные сканы на ТСД сохранены.');
+   return;
+  }
+  show('access-error',true);
+  text('access-error','Не удалось проверить доступ: '+readableError(e,'Нет связи с CRM')+'. Обновите экран или войдите повторно.');
  }
 }
 async function reloadActive(withHistory=true){
