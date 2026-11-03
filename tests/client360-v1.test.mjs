@@ -38,7 +38,7 @@ test('LPR boss may create birthdays, field manager cannot edit other clients',()
 
 test('Versioned Client360 entrypoint does not replace CRM login',()=>{
  assert.match(ui,/01-crm-core\.js\?v=23\.6\.339-client360-1/);
- assert.match(ui,/158-client360-legal-stores-v1\.js\?v=1/);
+ assert.match(ui,/158-client360-legal-stores-v1\.js\?v=roman-v2/);
  assert.match(ui,/149-lpr-v1\.js\?v=client360-20261102/);
  assert.match(core,/async function initAuth\(\)/);
  assert.doesNotMatch(directory,/db\.from\(['\"]clients['\"]\)\.delete\(/);
