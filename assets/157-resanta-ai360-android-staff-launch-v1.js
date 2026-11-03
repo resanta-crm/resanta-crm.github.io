@@ -51,7 +51,7 @@
    // Premium audio and shared conversation are optional. Text-only questions
    // remain available if a particular WebView cannot use audio capture.
    for(const file of [
-    '146-resanta-ai360-branch-premium-voice-v1.js?v=5',
+    '146-resanta-ai360-branch-premium-voice-v1.js?v=4',
     '147-resanta-ai360-staff-unified-dialog-v1.js?v=4'
    ]){
     if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
