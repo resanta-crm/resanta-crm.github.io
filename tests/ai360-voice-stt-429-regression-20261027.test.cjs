@@ -18,7 +18,7 @@ assert.match(source,/if\(phrase===null\)\{await stopAll\(transcriptFailure\|\|/)
 assert.match(source,/if\(question===null\)\{await stopAll\(transcriptFailure\|\|/);
 assert.match(source,/if\(newMode==='manual' && activeRecorder\?\.state==='recording'\)/);
 assert.match(source,/activeRecorder\.stop\(\);info\('Завершаю запись/);
-assert.match(source,/Date\.now\(\)-lastLoud>\(mode==='wake'\?2200:2700\)/);
+assert.match(source,/Date\.now\(\)-lastLoud>\(mode==='wake'\?1450:1250\)/);
 assert.match(source,/const clip=await capture\(12,epoch\)/);
 assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=16/);
 assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=35/);
