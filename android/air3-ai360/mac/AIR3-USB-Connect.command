@@ -39,7 +39,16 @@ fi
 echo 'Открываю настоящий сайт CRM в очках...'
 "$ADB" -s "$SERIAL" shell am start --activity-single-top -n by.resanta.air3/.MainActivity >/dev/null
 echo 'В браузере MacBook откроется пульт подключения.'
-echo 'Нажмите кнопку «🔌 Подключить очки по USB · без ввода кода».'
+# Discard ONLY a stale AIR3 token from a prior attempt. Never send a
+# pre-existing clipboard value to the glasses. Other user clipboard data stays.
+OLD_CLIPBOARD="$(pbpaste 2>/dev/null | tr -d '\r\n' || true)"
+if [[ "$OLD_CLIPBOARD" =~ ^AIR3USB:[0-9]{6}$ ]]; then
+  printf '' | pbcopy
+  echo 'Старое USB-подтверждение удалено из буфера MacBook.'
+fi
+OLD_CLIPBOARD=''
+echo 'СЕЙЧАС нажмите в пульте кнопку «🔌 Подключить очки по USB».'
+echo 'Важно: нажатие должно быть ПОСЛЕ запуска этого помощника.'
 open 'https://resanta-crm.by/air3-control.html'
 # Only consume an exact short-lived marker copied by the authenticated owner page.
 # Never print, store or log its six digits.
@@ -66,7 +75,11 @@ if ! "$ADB" -s "$SERIAL" shell am start --activity-single-top -n by.resanta.air3
 fi
 PAIR=''
 echo
-echo 'USB-подключение отправлено. Теперь на MacBook нажмите «Разрешить вход».'
-echo 'Очки сами проверят разрешение. После подключения кабель можно снять.'
+echo 'Временное USB-подтверждение передано в Android.'
+echo 'ЭТО ЕЩЁ НЕ УСПЕШНОЕ ПОДКЛЮЧЕНИЕ.'
+echo 'Теперь в пульте нажмите «Обновить» и проверьте:'
+echo '«Нужно разрешение» — нажмите «Разрешить вход».'
+echo '«Ожидаем очки по USB» — Android не принял подтверждение, обратитесь к диагностике.'
+echo 'После статуса «Ранее выданный доступ» кабель можно отсоединить.'
 echo 'Чтобы завершить работу, позже используйте AIR3-USB-Disconnect.command.'
 read -r -p 'Enter для закрытия этого окна... ' _
