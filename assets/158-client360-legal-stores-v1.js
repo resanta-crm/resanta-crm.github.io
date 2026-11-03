@@ -49,8 +49,8 @@ async function load(){
 }
 function render(){
  const out=page.querySelector('#c360-output'),legal=page.querySelector('#c360-legal');
- const first=items[0];
- if(legal&&!legal.value&&first)legal.value=first.legal_name||first.name.replace(/\s*\([^()]*\)\s*$/,'').trim();
+ // Do not silently prefill the first search hit: it caused an unrelated legal entity to be reused.
+ if(legal)legal.placeholder='Введите проверенное название юрлица вручную';
  out.innerHTML='<div style="font-size:12px;color:var(--sub);margin-bottom:7px">Карточек в выборке: '+items.length+' · Отмечайте только тех, у кого подтверждено общее юрлицо</div>'+
  (items.length?'<div style="max-height:460px;overflow:auto">'+items.map(c=>
   '<label style="display:flex;align-items:start;gap:9px;padding:8px;border-bottom:1px solid var(--border)">'+
@@ -75,7 +75,7 @@ function render(){
  requestBox.querySelectorAll('[data-c360-reject]').forEach(b=>b.onclick=()=>reviewPoint(b.dataset.c360Reject,false));
  const gs=page.querySelector('#c360-groups');
  gs.innerHTML='<b>Зарегистрированные группы юрлиц</b><div style="font-size:12px;color:var(--sub);margin-top:7px">'+
- (groups.length?groups.map(g=>'<div style="padding:4px"><button class="btn-secondary" data-c360-group="'+esc(g.id)+'">🏢 '+esc(g.name)+' · показать ТТ и визиты</button></div>').join(''):'Пока нет подтверждённых групп')+'</div>';
+ (groups.length?groups.map(g=>'<div style="padding:4px"><button class="btn-secondary" data-c360-group="'+esc(g.id)+'">🏢 '+esc(g.name)+' · показать ТТ и визиты / редактировать</button></div>').join(''):'Пока нет подтверждённых групп')+'</div>';
  gs.querySelectorAll('[data-c360-group]').forEach(b=>b.onclick=()=>openGroup(b.dataset.c360Group));
  renderSelected();
 }
@@ -93,7 +93,7 @@ async function group(){
  try{
   const {data,error}=await db.rpc('client360_group_clients_v1',{p_name:name,p_client_ids:[...checked]});
   if(error||!data?.ok)throw error||new Error('Связь не сохранена');
-  checked.clear();alert('✅ Связано '+data.linked_cards+' карточек под юрлицом «'+name+'». История и адреса сохранены.');
+  checked.clear();page.querySelector('#c360-legal').value='';alert('✅ Связано '+data.linked_cards+' карточек под юрлицом «'+name+'». История и адреса сохранены.');
   await load();
  }catch(e){alert('Не удалось связать карточки: '+(e?.message||e))}
  finally{button.disabled=false}
@@ -113,15 +113,53 @@ async function openGroup(entityId){
   const {data,error}=await db.rpc('client360_entity_overview_v1',{p_entity_id:entityId});
   if(error||!data?.ok)throw error||new Error('Обзор недоступен');
   el.innerHTML='<b>🏢 '+esc(data.name)+'</b> · '+(data.clients||[]).length+' карточек'+
+  (canLink()?'<div style="margin:8px 0"><button class="btn-secondary" data-c360-rename="'+esc(entityId)+'">✏️ Изменить название юрлица</button></div>':'')+
   '<p style="font-size:12px;color:var(--sub)">Группа объединяет карточки для анализа, а продажи, визиты и GPS остаются на исходных ID.</p>'+
   (data.clients||[]).map(c=>'<div style="padding:10px;border-top:1px solid var(--border)"><b>'+esc(c.name)+'</b>'+
   '<div style="font-size:12px">МПП: '+esc(c.manager_name||'—')+' · Визиты: '+esc(c.visits)+
-  ' · Последний: '+esc(c.last_visit||'нет')+'</div>'+
+  ' · Последний: '+esc(c.last_visit||'нет')+'</div>'+ 
+  (canLink()?'<button class="btn-secondary" style="margin:5px 0" data-c360-unlink="'+esc(c.id)+'" data-c360-entity="'+esc(entityId)+'">Разорвать неверную связь юрлица</button>':'')+
   (c.stores||[]).map(p=>'<div style="font-size:12px;padding:4px 0">📍 '+
-  esc(p.city||'')+', '+esc(p.address||'')+' · '+(p.lat==null||p.lng==null?'⚠️ нет координат':'📡 предварительные координаты')+'</div>').join('')+
+  esc(p.city||'')+', '+esc(p.address||'')+' · '+(p.lat==null||p.lng==null?'⚠️ нет координат':'📡 предварительные координаты')+
+  (canLink()?'<button class="btn-secondary" data-c360-edit-point="'+esc(p.id)+'" data-city="'+esc(p.city||'')+'" data-address="'+esc(p.address||'')+'" style="margin-left:7px">✏️ Изменить ТТ</button>':'')+'</div>').join('')+
   '</div>').join('');
+  el.querySelectorAll('[data-c360-rename]').forEach(b=>b.onclick=()=>editEntity(entityId,data.name));
+  el.querySelectorAll('[data-c360-unlink]').forEach(b=>b.onclick=()=>unlinkClient(entityId,b.dataset.c360Unlink,data.name));
+  el.querySelectorAll('[data-c360-edit-point]').forEach(b=>b.onclick=()=>editStore(b.dataset.c360EditPoint,b.dataset.city,b.dataset.address,entityId));
   el.scrollIntoView({behavior:'smooth',block:'start'});
  }catch(e){el.textContent='Ошибка: '+(e?.message||e)}
+}
+async function editEntity(id,currentName){
+ if(!canLink())return;
+ const name=prompt('Название юрлица в Клиент 360° (не изменяет 1С):',currentName);
+ if(name===null||name.trim()===currentName)return;
+ if(!confirm('Изменить название группы на «'+name.trim()+'»? Исходные карточки 1С останутся без изменений.'))return;
+ try{
+  const {data,error}=await db.rpc('client360_manage_entity_v2',{p_entity_id:id,p_name:name.trim(),p_unlink_client_ids:[]});
+  if(error||!data?.ok)throw error||new Error('Изменение не сохранено');
+  await load();await openGroup(id);root.dispatchEvent(new Event('resanta-client360-updated'));
+ }catch(e){alert('Не удалось изменить юрлицо: '+(e.message||e))}
+}
+async function unlinkClient(entityId,clientId,entityName){
+ if(!canLink())return;
+ if(!confirm('Разорвать связь этой карточки с юрлицом «'+entityName+'»? Визиты, продажи и GPS останутся прежними.'))return;
+ try{
+  const {data,error}=await db.rpc('client360_manage_entity_v2',{p_entity_id:entityId,p_name:entityName,p_unlink_client_ids:[clientId]});
+  if(error||!data?.ok||data.unlinked!==1)throw error||new Error('Связь не изменена');
+  await load();await openGroup(entityId);root.dispatchEvent(new Event('resanta-client360-updated'));
+ }catch(e){alert('Не удалось разорвать связь: '+(e.message||e))}
+}
+async function editStore(pointId,oldCity,oldAddress,entityId){
+ if(!canLink())return;
+ const city=prompt('Город торговой точки:',oldCity);if(city===null)return;
+ const address=prompt('Адрес торговой точки:',oldAddress);if(address===null)return;
+ if(city.trim()===oldCity&&address.trim()===oldAddress)return;
+ if(!confirm('Изменить адрес торговой точки? GPS-координаты и исторические маршруты не меняются. Новый адрес потребует проверки геокодирования.'))return;
+ try{
+  const {data,error}=await db.rpc('client360_update_store_v2',{p_point_id:pointId,p_city:city.trim(),p_address:address.trim()});
+  if(error||!data?.ok)throw error||new Error('Не сохранено');
+  await openGroup(entityId);root.dispatchEvent(new Event('resanta-client360-updated'));
+ }catch(e){alert('Не удалось изменить адрес: '+(e.message||e))}
 }
 function open(){if(!role())return;mount();if(typeof goPage==='function')goPage('client360','Клиент 360°');load()}
 function reconcile(){if(role())mount();else if(nav)nav.style.display='none'}
