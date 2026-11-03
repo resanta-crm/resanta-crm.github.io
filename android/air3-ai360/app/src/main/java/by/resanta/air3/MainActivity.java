@@ -19,6 +19,7 @@ import java.security.Signature;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
@@ -88,21 +89,41 @@ public final class MainActivity extends Activity {
     private TextView state, answer;
     private EditText code, question;
     private Spinner section;
-    private Button connect, confirm, listen, open, send, exit;
+    private Button connect, confirm, listen, wake, open, send, exit;
     private String pairId = "", pairSecret = "", token = "";
     private long expiresAt;
     private MediaRecorder recorder;
     private MediaPlayer player;
     private File clip, playback;
-    private boolean busy, recording;
+    private boolean busy, recording, wakeWanted, wakePermissionPending, heardSpeech;
+    private long recordingStartedAt, lastSpeechAt;
+    private WakePhraseListener wakeListener;
     private int generation = 0;
-    private final Runnable endRecording = this::finishRecording;
+    private final Runnable recordingTick = new Runnable(){
+        @Override public void run(){
+            if(!recording || recorder==null)return;
+            long now=SystemClock.elapsedRealtime();
+            int amplitude=0;
+            try{amplitude=recorder.getMaxAmplitude();}catch(Exception ignored){}
+            if(amplitude>600){heardSpeech=true;lastSpeechAt=now;}
+            // End the question on a natural pause; no fixed 7-second wait.
+            if(heardSpeech && now-recordingStartedAt>=1200 && now-lastSpeechAt>=1200){
+                finishRecording();return;
+            }
+            // On devices without usable amplitude reporting, keep a bounded
+            // fallback recording, so the question still reaches the real STT.
+            if(now-recordingStartedAt>=9000){finishRecording();return;}
+            main.postDelayed(this,140);
+        }
+    };
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.rgb(6,25,49));
         getWindow().setNavigationBarColor(Color.rgb(6,25,49));
         devicePrefs = getSharedPreferences("air3_device_identity", MODE_PRIVATE);
+        wakeWanted=devicePrefs.getBoolean("handsfree_foreground_optin",false);
+        wakeListener=new WakePhraseListener(this,this::onWakePhrase);
         root = new LinearLayout(this);
         root.setPadding(23,18,23,26);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -153,6 +174,9 @@ public final class MainActivity extends Activity {
         listen = button("🎙 Говорить с Лерой (7 секунд)");
         listen.setOnClickListener(v -> requestVoice());
         root.addView(listen);
+        wake=button("«Привет, Ресанта» — голосовая активация");
+        wake.setOnClickListener(v->toggleWake());
+        root.addView(wake);
 
         answer = text("Здесь появятся реальные данные CRM и ответы Леры.",18,false);
         answer.setTextIsSelectable(true);
@@ -196,6 +220,8 @@ public final class MainActivity extends Activity {
         connect.setEnabled(!busy&&!connected());
         confirm.setEnabled(!busy&&!pairId.isEmpty()&&!connected());
         open.setEnabled(active);send.setEnabled(active);listen.setEnabled(active);
+        wake.setEnabled(connected());
+        wake.setText(wakeWanted?"■ Выключить «Привет, Ресанта»":"◉ Включить «Привет, Ресанта»");
         section.setEnabled(active);exit.setEnabled(connected()&&!busy);
         code.setVisibility(connected()?View.GONE:View.VISIBLE);
         connect.setVisibility(connected()?View.GONE:View.VISIBLE);
@@ -221,6 +247,7 @@ public final class MainActivity extends Activity {
                         why.contains("owner_scope_revoked"))resetSession();
                 } else if(out!=null)done.done(out);
                 updateControls();
+                main.postDelayed(this::resumeWakeIfIdle,100);
             });
         });
     }
@@ -286,6 +313,7 @@ public final class MainActivity extends Activity {
             quickWaiting=false;
             main.removeCallbacks(quickPoll);
             message("Лера подключена на 60 минут. 10 минут без действий — завершение.");
+            main.postDelayed(this::resumeWakeIfIdle,250);
             answer.setText("Скажи «Лера, покажи продажи» или выбери раздел CRM.");
             // Register only the non-exportable device identity after the owner
             // explicitly approved this first pairing. Never retain a CRM token.
@@ -423,6 +451,40 @@ public final class MainActivity extends Activity {
         answer.setText(messageText.length()>3800?messageText.substring(0,3800)+"\n(часть данных)":messageText);
         message("Подключено к РЕСАНТА AI 360°. Ответ получен.");
     }
+    private void toggleWake(){
+        if(wakeWanted){
+            wakeWanted=false;
+            devicePrefs.edit().putBoolean("handsfree_foreground_optin",false).apply();
+            wakeListener.stop();
+            message("Активация фразой выключена.");
+            updateControls();return;
+        }
+        if(!connected()){message("Сначала подключи очки к CRM.");return;}
+        if(!wakeListener.available()){
+            message("В прошивке INMO пока нет доступного локального распознавания. Кнопка микрофона работает.");
+            return;
+        }
+        wakeWanted=true;
+        devicePrefs.edit().putBoolean("handsfree_foreground_optin",true).apply();
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            wakePermissionPending=true;
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_PERMISSION);
+        }else resumeWakeIfIdle();
+        updateControls();
+    }
+    private void onWakePhrase(String questionAfterWake){
+        if(!wakeWanted||!connected()||busy)return;
+        message("Лера слушает.");
+        if(questionAfterWake==null||questionAfterWake.isEmpty())requestVoice();
+        else ask(questionAfterWake);
+    }
+    private void resumeWakeIfIdle(){
+        if(!wakeWanted||!connected()||busy||recording||player!=null
+            ||isFinishing()||isDestroyed()||!hasWindowFocus())return;
+        if(!wakeListener.start()){
+            message("Голосовая активация недоступна на этой прошивке. Нажми микрофон.");
+        }
+    }
     private void requestVoice() {
         if(!connected()){message("Сеанс завершён.");return;}
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
@@ -433,6 +495,7 @@ public final class MainActivity extends Activity {
     }
     private void startVoice() {
         if(busy||recording||!connected())return;
+        wakeListener.stop();
         stopPlayback();
         try{
             clip=File.createTempFile("air3-question-",".m4a",getCacheDir());
@@ -446,9 +509,12 @@ public final class MainActivity extends Activity {
             recorder.prepare();
             recorder.start();
             recording=true;
+            heardSpeech=false;
+            recordingStartedAt=SystemClock.elapsedRealtime();
+            lastSpeechAt=recordingStartedAt;
             listen.setEnabled(false);
-            message("Слушаю тебя в очках. Говори: «Лера, покажи продажи».");
-            main.postDelayed(endRecording,7000);
+            message("Слушаю тебя в очках. Закончу запись, когда ты перестанешь говорить.");
+            main.postDelayed(recordingTick,140);
         }catch(Exception e){
             cleanupRecorder();
             message("Микрофон: "+e.getClass().getSimpleName());
@@ -456,8 +522,11 @@ public final class MainActivity extends Activity {
     }
     private void finishRecording() {
         if(!recording)return;
+        main.removeCallbacks(recordingTick);
+        final double seconds=Math.max(0.5,Math.min(10.5,
+            (SystemClock.elapsedRealtime()-recordingStartedAt)/1000.0));
         try{recorder.stop();recorder.release();recorder=null;}
-        catch(Exception e){cleanupRecorder();message("Запись не удалась.");return;}
+        catch(Exception e){cleanupRecorder();message("Запись не удалась.");resumeWakeIfIdle();return;}
         recording=false;
         if(clip==null||clip.length()<900||clip.length()>512000){
             cleanupRecorder();message("Запись слишком короткая или длинная.");return;
@@ -473,7 +542,7 @@ public final class MainActivity extends Activity {
             input.delete();clip=null;
             final String encoded=Base64.encodeToString(bytes,Base64.NO_WRAP);
             perform("Распознаю голос через OpenAI…",()->remote("stt",new JSONObject()
-                .put("audio_base64",encoded).put("duration",7)),r->{
+                .put("audio_base64",encoded).put("duration",seconds)),r->{
                 String words=r.optString("text","").trim();
                 if(words.isEmpty()){message("Речь не распознана. Повтори вопрос.");return;}
                 answer.setText("Ты сказал: "+words);
@@ -482,7 +551,7 @@ public final class MainActivity extends Activity {
         }catch(Exception e){cleanupRecorder();message("Ошибка чтения звука: "+e.getMessage());}
     }
     private void cleanupRecorder() {
-        main.removeCallbacks(endRecording);recording=false;
+        main.removeCallbacks(recordingTick);recording=false;
         if(recorder!=null){
             try{recorder.stop();}catch(Exception ignored){}
             try{recorder.release();}catch(Exception ignored){}
@@ -507,8 +576,8 @@ public final class MainActivity extends Activity {
                 try(FileOutputStream output=new FileOutputStream(playback)){output.write(wav);}
                 player=new MediaPlayer();
                 player.setDataSource(playback.getAbsolutePath());
-                player.setOnCompletionListener(m->{stopPlayback();message("Лера готова к следующему вопросу.");});
-                player.setOnErrorListener((m,w,e)->{stopPlayback();message("Не удалось воспроизвести звук.");return true;});
+                player.setOnCompletionListener(m->{stopPlayback();message("Лера готова к следующему вопросу.");resumeWakeIfIdle();});
+                player.setOnErrorListener((m,w,e)->{stopPlayback();message("Не удалось воспроизвести звук.");resumeWakeIfIdle();return true;});
                 player.prepare();
                 player.start();
                 message("Лера говорит в очках…");
@@ -537,18 +606,31 @@ public final class MainActivity extends Activity {
         token="";pairSecret="";pairId="";expiresAt=0;
         memory=new JSONObject();
         while(history.length()>0)history.remove(0);
-        cleanupRecorder();stopPlayback();updateControls();
+        wakeListener.stop();cleanupRecorder();stopPlayback();updateControls();
     }
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
         if(requestCode==MIC_PERMISSION){
-            if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startVoice();
-            else message("Разрешение микрофона не предоставлено.");
+            boolean forWake=wakePermissionPending;
+            wakePermissionPending=false;
+            if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){
+                if(forWake)resumeWakeIfIdle();
+                else startVoice();
+            }else{
+                if(forWake){wakeWanted=false;devicePrefs.edit().putBoolean("handsfree_foreground_optin",false).apply();}
+                message("Разрешение микрофона не предоставлено.");
+                updateControls();
+            }
         }
     }
     @Override protected void onPause(){
-        super.onPause();
+        wakeListener.stop();
         cleanupRecorder();stopPlayback();
+        super.onPause();
+    }
+    @Override protected void onResume(){
+        super.onResume();
+        main.postDelayed(this::resumeWakeIfIdle,300);
     }
     @Override protected void onDestroy(){
         resetSession();work.shutdownNow();
