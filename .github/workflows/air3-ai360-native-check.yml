@@ -67,6 +67,12 @@ jobs:
           assert 'setAcceptThirdPartyCookies(web,false)' in r
           assert 'closeOriginalCrm()' in a and 'onPause()' in a
           assert 'main.postDelayed(this::showOriginalCrm,250)' in a
+          assert 'showOriginalCrm();' in a.split('onCreate(Bundle b)')[1].split('private TextView text(')[0], 'first screen must be real CRM'
+          assert 'if(!connected()){message("Сначала подтверди очки на MacBook.")' not in a
+          assert 'new RealCRMView(this,this::openVoiceOrDemo,this::close)' in a
+          assert 'setVoiceConnected(connected())' in a
+          assert 'setVoiceConnected(boolean connected)' in r
+          assert 'closeOriginalCrm();' in a.split('onStop()')[1].split('onResume()')[0], 'privacy cleanup on actual background'
           assert 'navigateOriginalCrm(domain)' in a
           assert 'actualCrm.showStatus("Распознано: "+spoken)' in a
           assert 'putString("token"' not in a and 'SUPABASE_SERVICE_ROLE_KEY' not in r+a
