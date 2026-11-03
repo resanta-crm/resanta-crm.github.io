@@ -9,6 +9,11 @@ import { ADMIN, OWNER, deny, quota, stillAllowed } from './auth.ts';
 import { publishNavigation } from './stage.ts';
 
 const domains=CRM_AI360_ALL_DOMAINS.filter(x=>x!=='client_detail'&&x!=='client_schedule');
+// UI-only sections exist in original full CRM. They navigate the Mac projector,
+// but never cause an unreviewed service_role database read from the glasses.
+const stageOnly=Object.freeze(['alerts','visits','abc','budgets','my-routes',
+ 'route','workday','control']);
+const visualDomains=[...new Set([...domains,...stageOnly])];
 const normal=x=>String(x||'').trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
 const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'})
  .format(new Date()).replaceAll('/','-');
@@ -17,18 +22,21 @@ const small=x=>String(x||'').replace(/[\r\n<>]/g,' ').slice(0,450);
 const sectionNames=Object.freeze({
  'сводк':'operations','дашборд':'operations','главн':'operations','продаж':'sales',
  'долг':'debt','задолж':'debt','пдз':'debt','триовист':'triovist','21vek':'triovist',
- 'вип':'vip','vip':'vip','акци':'promotions','маршрут':'routes','gps':'gps',
+ 'вип':'vip','vip':'vip','акци':'promotions',
+ 'маршрут дня':'route','мой маршрут':'my-routes','маршрут':'routes','gps':'gps',
  'задач':'tasks','остатк':'stock','склад':'stock','клиент':'clients',
  'платеж':'payments','конкурент':'competitors','карточк':'cards_21vek',
  'инфограф':'infographics','мотивац':'motivation','уценк':'markdown',
- 'стенд':'stands','поступлен':'cash','парсер':'parser'
+ 'стенд':'stands','поступлен':'cash','парсер':'parser',
+ 'истори визит':'visits','визит':'visits','сигнал':'alerts','abc':'abc',
+ 'бюджет':'budgets','рабочий день':'workday','контроль':'control'
 });
 export function navigationIntent(phrase){
  const q=normal(phrase).replace(/[,.!?;:]+/g,' ').replace(/\s+/g,' ').trim();
  if(!/^(?:(?:привет\s+(?:ресанта|лера)|лера|эй\s+лера)\s+)?(?:открой|перейди|покажи(?:\s+раздел)?|выведи(?:\s+раздел)?|отобрази(?:\s+раздел)?|вернись\s+в)/.test(q))
   return null;
  for(const [word,section] of Object.entries(sectionNames)){
-  if(q.includes(word)&&domains.includes(section))return section;
+  if(q.includes(word)&&visualDomains.includes(section))return section;
  }
  return null;
 }
@@ -131,7 +139,14 @@ async function finishClaim(id,rub,input,output,rounds,status){
 }
 export async function section(s,domain){
  await quota('air3-v2-read-'+OWNER,30,60);
- if(!domains.includes(domain))deny('section_not_permitted',403);
+ if(!visualDomains.includes(domain))deny('section_not_permitted',403);
+ if(stageOnly.includes(domain)){
+  const delivered=await publishNavigation(s,domain);
+  await stillAllowed(s);
+  return {kind:'navigation',section:domain,answer:delivered?
+   'Открываю настоящий раздел РЕСАНТА CRM на экране конференции.':
+   'На MacBook открой режим конференции, чтобы показать этот раздел.'};
+ }
  // Navigate the original CRM on the projector independently of the read-only
  // summary returned to the glasses. No CRM write/action is ever delegated.
  try{await publishNavigation(s,domain);}catch(_){}
@@ -201,4 +216,4 @@ export async function ask(s,message,historyRaw,memoryRaw){
   followup_question:small(pair.offer),sources:output.used||[],memory:{...memory,
    month:state.month,manager:state.manager,domain:state.domain||memory.domain,subject:ctx.subject.subject}};
 }
-export const sections=domains;
+export const sections=visualDomains;
