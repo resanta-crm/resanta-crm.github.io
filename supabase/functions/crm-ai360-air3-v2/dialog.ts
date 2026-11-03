@@ -163,6 +163,11 @@ export async function ask(s,message,historyRaw,memoryRaw){
  const ctx=await createRead(question,memory,day());
  const preferred=inferVoiceDomain(question)||(
   /^(а\s|и\s|еще|ещё|покажи|расскажи|дальше)/i.test(question)&&domains.includes(memory.domain)?memory.domain:null);
+ // During a real question, open the matching ORIGINAL visual CRM page on
+ // the projector as well as returning the answer to Lera in the glasses.
+ if(preferred&&domains.includes(preferred)){
+  try{await publishNavigation(s,preferred);}catch(_){}
+ }
  try{
   const request=async payload=>{
    const key=Deno.env.get('OPENAI_API_KEY')||'';
