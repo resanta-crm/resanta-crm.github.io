@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>РЕСАНТА · Режим конференции INMO AIR3</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;font-family:system-ui,Arial,sans-serif}
+body{background:#071a35;color:#fff;display:flex;flex-direction:column}
+header{height:62px;min-height:62px;background:#0c294b;display:flex;align-items:center;gap:12px;padding:7px 18px;border-bottom:1px solid #24466a}
+h1{font-size:18px;letter-spacing:.02em;margin:0;flex:1}
+button{border:1px solid #52759c;border-radius:9px;background:#eef5ff;color:#0e3156;padding:11px 15px;font-size:14px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+#hide,#stop{background:#102e51;color:#fff}
+#stage-info{font-size:13px;color:#a4c7e8;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;max-width:320px}
+main{position:relative;flex:1;min-height:0}
+iframe{display:none;border:0;width:100%;height:100%;pointer-events:none;background:#fff}
+#blank{position:absolute;inset:0;background:linear-gradient(135deg,#071a35,#0e477e);z-index:2;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center}
+#blank h2{font-size:clamp(26px,3.5vw,50px);margin:0 0 15px}
+#blank p{color:#cce4f9;font-size:17px;max-width:720px;line-height:1.5}
+#stage-error{font-size:13px;color:#ffcfb5}
+#stage-indicator{position:absolute;bottom:12px;right:14px;z-index:3;background:#0b2b4edb;border:1px solid #42668c;padding:9px 12px;border-radius:8px;font-size:12px;display:none}
+body.running #blank{display:none}
+body.running iframe{display:block}
+body.running #stage-indicator{display:block}
+@media(max-width:800px){header{flex-wrap:wrap;height:auto;padding:10px}h1{width:100%;flex:auto}#stage-info{display:none}}
+</style>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="./assets/air3-stage-director-v1.js?v=1"></script>
+</head><body>
+<header>
+ <h1>РЕСАНТА CRM · Конференция</h1>
+ <span id="stage-info" role="status">Доступ закрыт</span>
+ <button id="start">Показать настоящую CRM</button>
+ <button id="hide" disabled>Скрыть экран</button>
+ <button id="stop" disabled>Завершить показ</button>
+</header>
+<main>
+ <iframe id="crm" title="Оригинальный интерфейс РЕСАНТА CRM"></iframe>
+ <div id="blank"><div><h2>РЕСАНТА AI 360°</h2>
+  <p>Режим конференции. Пока показ не разрешён владельцем, здесь нет клиентских данных.</p>
+  <p id="stage-error"></p>
+ </div></div>
+ <div id="stage-indicator">Показ оригинальной CRM · управление с INMO AIR3</div>
+</main>
+</body></html>
