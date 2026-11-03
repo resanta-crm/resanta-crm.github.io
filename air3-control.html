@@ -6,7 +6,9 @@
 <p>Открывайте эту страницу только на своём MacBook или телефоне, где вы уже вошли в РЕСАНТА CRM.</p>
 <div id="state">Проверяем сессию…</div>
 <section id="air3-panel" hidden aria-label="Временное подключение очков">
-<h3>INMO AIR3 · быстрый безопасный вход</h3>
+<h3>INMO AIR3 · безопасное подключение</h3>
+<p><strong>Без ввода кода:</strong> подключи AIR3 кабелем к MacBook, запусти подготовленный USB-помощник, затем нажми кнопку ниже. После появления заявки подтверди её на MacBook. Затем кабель можно убрать.</p>
+<button id="air3-usb-prepare" type="button">🔌 Подключить очки по USB · без ввода кода</button>
 <p><strong>Повторный вход:</strong> откройте приложение «РЕСАНТА AI 360°» на ранее привязанных очках. Здесь появится запрос — нажмите <strong>«Разрешить вход»</strong>. Код больше не требуется. Сеанс действует до 60 минут.</p>
 <p><strong>Первая привязка или сброс очков:</strong> тогда один раз потребуется шестизначный код.</p>
 <button id="air3-create" type="button">Первичная привязка: создать код</button>
@@ -99,6 +101,24 @@ function initAir3Control(){
      el.replaceChildren(fragment);if(!el.childNodes.length)el.textContent='Привязанных устройств нет.';
    }catch(e){error(e)}
  }
+ $('air3-usb-prepare').onclick=async()=>{
+   const button=$('air3-usb-prepare');
+   button.disabled=true;notice.textContent='';
+   try{
+     if(!window.isSecureContext||!navigator.clipboard?.writeText)
+       throw Error('Браузер не разрешает безопасный буфер обмена. Откройте пульт в современном браузере HTTPS.');
+     // The existing OWNER-authenticated code mechanism stays fully intact.
+     // Only USB ADB helper consumes it; neither the Mac UI nor AIR3 needs
+     // anyone to read or enter the digits. Server approval is STILL mandatory.
+     const result=await api('create');
+     if(!/^\\d{6}$/.test(String(result.code||'')))throw Error('Сервис не выдал временное подтверждение.');
+     await navigator.clipboard.writeText('AIR3USB:'+result.code);
+     clearCode();
+     notice.textContent='USB-подключение подготовлено. MacBook передаёт подтверждение через USB-помощник. Когда ниже появится заявка, нажмите «Разрешить вход». Цифры вводить не нужно.';
+     await refresh();
+   }catch(e){error(e)}
+   finally{button.disabled=false}
+ };
  $('air3-create').onclick=async()=>{
    const b=$('air3-create');b.disabled=true;notice.textContent='';
    try{const result=await api('create');code.textContent=result.code;codeExpiresAt=Date.parse(result.expires_at);countdown();await refresh()}
