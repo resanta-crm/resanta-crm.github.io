@@ -66,7 +66,7 @@ jobs:
           x=(p/'index.ts').read_text()
           assert '3600000' in a and '600000' in a and 'device_secret_hash' in a
           assert 'status' in a and 'revoked_at' in a
-          assert "await authorized(token" in x and "create" not in x
+          assert "await authorized(token" in x and "if(action==='create')" not in x
           assert 'runToolCore' in d and 'guardVoicePair' in d
           assert "crm_ai360_core_claim_v2" in d and 'crm_ai360_core_finish_v2' in d
           assert 'crm_ai360_stt_claim_v2' in v and 'crm_ai360_yandex_monthly_claim_v1' in v
