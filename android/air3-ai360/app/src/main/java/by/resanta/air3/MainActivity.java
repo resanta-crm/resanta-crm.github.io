@@ -271,8 +271,12 @@ public final class MainActivity extends Activity {
         perform("Лера анализирует CRM…",()->remote("ask",new JSONObject()
             .put("message",q).put("history",history).put("memory",memory)),r->{
             if("answer".equals(r.optString("kind"))) {
-                history.put(new JSONObject().put("role","user").put("content",q));
-                history.put(new JSONObject().put("role","assistant").put("content",r.optString("answer","")));
+                try {
+                    history.put(new JSONObject().put("role","user").put("content",q));
+                    history.put(new JSONObject().put("role","assistant").put("content",r.optString("answer","")));
+                } catch (org.json.JSONException ignored) {
+                    // An invalid history item must never abort a valid user response.
+                }
                 while(history.length()>6)history.remove(0);
                 memory=r.optJSONObject("memory")!=null?r.optJSONObject("memory"):new JSONObject();
             }
@@ -284,7 +288,7 @@ public final class MainActivity extends Activity {
         String messageText=response.optString("answer","");
         if("section".equals(response.optString("kind"))) {
             JSONObject data=response.optJSONObject("data");
-            if(data!=null)messageText+="\n\n"+data.toString(2);
+            if(data!=null)messageText+="\n\n"+data.toString();
         }else if(!response.optString("detail","").isEmpty()){
             messageText+="\n\n"+response.optString("detail","");
         }
