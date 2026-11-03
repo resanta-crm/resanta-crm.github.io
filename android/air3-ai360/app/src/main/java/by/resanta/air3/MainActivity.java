@@ -209,6 +209,9 @@ public final class MainActivity extends Activity {
         setupScreen.addView(root);
         setContentView(setupScreen);
         updateControls();
+        // CRM-FIRST: website viewing is distinct from the delegated AI360 voice
+        // token. Never gate the real CRM login behind the six-digit glasses pair.
+        showOriginalCrm();
         if(!devicePrefs.getString(PREF_DEVICE,"").isEmpty())
             main.postDelayed(this::beginFastSignIn,350);
     }
@@ -241,7 +244,7 @@ public final class MainActivity extends Activity {
         wake.setText(wakeWanted?"■ Выключить «Привет, Ресанта»":"◉ Включить «Привет, Ресанта»");
         demo.setEnabled(connected()&&!busy);
         demo.setText(demoActive?"■ Завершить голосовой показ":"🎙 Демонстрация: «Привет, Лера»");
-        openRealCrm.setEnabled(connected()&&!busy);
+        openRealCrm.setEnabled(true);
         section.setEnabled(active);exit.setEnabled(connected()&&!busy);
         // Director prepares the session; the boss sees a clean voice-only
         // experience rather than technical CRM setup controls.
@@ -261,9 +264,23 @@ public final class MainActivity extends Activity {
     // retains its own authenticated session and original Uni I/Uni X views.
     // A delegated AIR3 voice token NEVER authenticates the browser page.
     private void showOriginalCrm() {
-        if(!connected()){message("Сначала подтверди очки на MacBook.");return;}
-        if(actualCrm==null)actualCrm=new RealCRMView(this,this::toggleDemo,this::close);
+        // Opening the ORIGINAL website needs only its own normal CRM login.
+        // AI360 voice still requires independent temporary Mac approval.
+        if(isFinishing()||isDestroyed())return;
+        if(actualCrm==null)
+            actualCrm=new RealCRMView(this,this::openVoiceOrDemo,this::close);
+        actualCrm.setVoiceConnected(connected());
         setContentView(actualCrm);
+    }
+    private void openVoiceOrDemo() {
+        if(!connected()){
+            // Only the owner ever sees the one-time AI pairing controls;
+            // existing CRM is not destroyed, and the boss gets no bypass.
+            setContentView(setupScreen);
+            message("Настоящая CRM открыта. Для голосовой Леры подключи очки через пульт MacBook.");
+            return;
+        }
+        toggleDemo();
     }
     private void navigateOriginalCrm(String domain) {
         if(actualCrm!=null&&domain!=null)actualCrm.navigate(domain);
@@ -781,16 +798,23 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){
-        endDemo(""); // Shared boss demo cannot keep a microphone on in background.
+        endDemo(""); // Mic stops instantly on focus loss.
         wakeListener.stop();
         cleanupRecorder();stopPlayback();
-        // The original CRM site must not remain signed in on shared glasses
-        // after the app is sent to the background.
-        closeOriginalCrm();
+        // Permission dialogs can temporarily pause Activity; do not clear
+        // CRM login while the page is still visible beneath such a dialog.
         super.onPause();
+    }
+    @Override protected void onStop(){
+        // The full login is private to the glasses and may not remain visible
+        // after app leaves the foreground. Reopen with a fresh site login.
+        closeOriginalCrm();
+        super.onStop();
     }
     @Override protected void onResume(){
         super.onResume();
+        if(actualCrm==null && setupScreen!=null)
+            main.post(this::showOriginalCrm); // Never resume to old pairing UI.
         main.postDelayed(this::resumeWakeIfIdle,300);
     }
     @Override public void onBackPressed(){
