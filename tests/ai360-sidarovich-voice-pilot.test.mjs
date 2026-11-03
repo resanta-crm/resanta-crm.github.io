@@ -125,7 +125,7 @@ test('Real user click obtains server capabilities before a scoped read',async()=
 });
 test('Server read-only endpoint and no cross-user state in browser',()=>{
  assert.ok(html.includes('144-resanta-ai360-branch-voice-v1.js?v=9'));
- assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
+ assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=36'));
  assert.ok(source.includes("const ENDPOINT='crm-ai360-staff-read-v1'"));
  assert.ok(staffIdentity.includes("'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'"));
  assert.ok(source.includes("data?.real_task_creation_enabled!==role()?.can_create_tasks"));
