@@ -48,6 +48,8 @@ jobs:
           assert 'audio_base64' in s and 'crm-ai360-air3-v2' in s
           print('isolated AIR3 AI360 native security baseline PASS')
           PY
+      - name: Physical-demo wake phrase / finite-mic regression
+        run: bash android/air3-ai360/demo-phrase-test.sh
       - uses: actions/upload-artifact@v4
         with:
           name: resanta-ai360-air3-native-debug
