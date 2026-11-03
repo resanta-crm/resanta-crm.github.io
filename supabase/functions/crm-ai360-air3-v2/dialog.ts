@@ -6,6 +6,7 @@ import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoic
 import { runToolCore } from '../crm-ai360-dialog-v4/core.mjs';
 import { requestContext, effectiveManager, guardVoicePair } from '../crm-ai360-dialog-v4/context.mjs';
 import { ADMIN, OWNER, deny, quota, stillAllowed } from './auth.ts';
+import { publishNavigation } from './stage.ts';
 
 const domains=CRM_AI360_ALL_DOMAINS.filter(x=>x!=='client_detail'&&x!=='client_schedule');
 const normal=x=>String(x||'').trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
@@ -131,6 +132,9 @@ async function finishClaim(id,rub,input,output,rounds,status){
 export async function section(s,domain){
  await quota('air3-v2-read-'+OWNER,30,60);
  if(!domains.includes(domain))deny('section_not_permitted',403);
+ // Navigate the original CRM on the projector independently of the read-only
+ // summary returned to the glasses. No CRM write/action is ever delegated.
+ try{await publishNavigation(s,domain);}catch(_){}
  const date=day();
  const ctx=await createRead('Открой '+domain,{},date);
  const data=await ctx.read({domain,month:null,offset:0});
