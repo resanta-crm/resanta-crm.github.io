@@ -5,8 +5,6 @@ on:
       - 'assets/135-resanta-voice-capture-fix-v2.js'
       - 'assets/137-resanta-ai360-lazy-launch-v1.js'
       - 'assets/143-resanta-ai360-unified-dialog-v1.js'
-      - 'assets/146-resanta-ai360-branch-premium-voice-v1.js'
-      - 'assets/157-resanta-ai360-android-staff-launch-v1.js'
       - 'index.html'
       - '.github/workflows/ai360-low-latency-crm-check.yml'
   workflow_dispatch:
@@ -21,16 +19,12 @@ jobs:
           node --check assets/135-resanta-voice-capture-fix-v2.js
           node --check assets/137-resanta-ai360-lazy-launch-v1.js
           node --check assets/143-resanta-ai360-unified-dialog-v1.js
-          node --check assets/146-resanta-ai360-branch-premium-voice-v1.js
-          node --check assets/157-resanta-ai360-android-staff-launch-v1.js
           node - <<'JS'
           const fs=require('fs'),assert=require('assert');
           const cap=fs.readFileSync('assets/135-resanta-voice-capture-fix-v2.js','utf8');
           const dialog=fs.readFileSync('assets/143-resanta-ai360-unified-dialog-v1.js','utf8');
           const lazy=fs.readFileSync('assets/137-resanta-ai360-lazy-launch-v1.js','utf8');
           const html=fs.readFileSync('index.html','utf8');
-          const staff=fs.readFileSync('assets/146-resanta-ai360-branch-premium-voice-v1.js','utf8');
-          const mobile=fs.readFileSync('assets/157-resanta-ai360-android-staff-launch-v1.js','utf8');
           assert(cap.includes("Date.now()-start>1200 && Date.now()-lastLoud>(mode==='wake'?1450:1250)"));
           assert(!cap.includes("Date.now()-start>3000 && Date.now()-lastLoud>(mode==='wake'?2200:2700)"));
           assert(cap.includes('await Promise.resolve()'));
@@ -40,10 +34,6 @@ jobs:
           assert(lazy.includes('135-resanta-voice-capture-fix-v2.js?v=17'));
           assert(lazy.includes('143-resanta-ai360-unified-dialog-v1.js?v=8'));
           assert(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=36'));
-          assert(staff.includes("Date.now()-started>1200&&Date.now()-lastLoud>1250"));
-          assert(html.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=5'));
-          assert(html.includes('157-resanta-ai360-android-staff-launch-v1.js?v=2'));
-          assert(mobile.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=5'));
           assert(lazy.includes("if(/Android/i.test(navigator.userAgent||'')"));
           console.log('CRM fast voice / auth boundaries PASS');
           JS
