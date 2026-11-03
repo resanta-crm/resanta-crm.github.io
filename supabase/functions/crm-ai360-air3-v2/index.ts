@@ -6,7 +6,7 @@ import { transcribe,speak } from './voice.ts';
 // Must be deployed with verify_jwt=false; every protected action requires
 // a high-entropy, owner-approved, revocable device token checked in Postgres.
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
-const json=(data,status=200,origin='')=>new Response(JSON.stringify(data),{
+const json=(data:unknown,status:number=200,origin:string='')=>new Response(JSON.stringify(data),{
  status,headers:{'content-type':'application/json; charset=utf-8',
   'cache-control':'no-store','x-content-type-options':'nosniff',
   ...(ORIGINS.has(origin)?{'access-control-allow-origin':origin,'vary':'Origin'}:{})}
@@ -47,6 +47,6 @@ Deno.serve(async req=>{
   return json({ok:true,...response},200,origin);
  }catch(err){
   const e=err instanceof AccessError?err:new AccessError('service_unavailable',503);
-  return json({error:e.message},e.status,origin);
+  return json({error:e.message},(e as any).status||503,origin);
  }
 });
