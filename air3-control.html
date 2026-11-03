@@ -6,9 +6,10 @@
 <p>Открывайте эту страницу только на своём MacBook или телефоне, где вы уже вошли в РЕСАНТА CRM.</p>
 <div id="state">Проверяем сессию…</div>
 <section id="air3-panel" hidden aria-label="Временное подключение очков">
-<h3>Временный вход в INMO AIR3</h3>
-<p>На очках откройте <strong>resanta-crm.by/air3.html</strong>. Код действует 2 минуты. После ввода кода нажмите здесь «Разрешить вход». Затем на очках нажмите «Проверить подтверждение», если экран не изменился. Кнопка «Отключить» завершает доступ — не нажимайте её до конца демонстрации.</p>
-<button id="air3-create" type="button">Создать шестизначный код</button>
+<h3>INMO AIR3 · быстрый безопасный вход</h3>
+<p><strong>Повторный вход:</strong> откройте приложение «РЕСАНТА AI 360°» на ранее привязанных очках. Здесь появится запрос — нажмите <strong>«Разрешить вход»</strong>. Код больше не требуется. Сеанс действует до 60 минут.</p>
+<p><strong>Первая привязка или сброс очков:</strong> тогда один раз потребуется шестизначный код.</p>
+<button id="air3-create" type="button">Первичная привязка: создать код</button>
 <button id="air3-refresh" type="button">Обновить подключения</button>
 <button id="air3-hide" type="button">Закрыть окно</button>
 <div id="air3-code" aria-live="polite">—</div>
@@ -16,6 +17,10 @@
 <p id="air3-notice" role="status"></p>
 <h3>Заявки и активные сеансы</h3>
 <div id="air3-pending">Нет заявок</div>
+<h3>Доверенные очки</h3>
+<p>Если очки потеряны или переданы, отключите активные сеансы и снимите доверие к устройству.</p>
+<div id="air3-devices">Данных пока нет</div>
+<p><a href="./air3-stage.html" target="_blank" rel="noopener">Открыть отдельный экран конференции с настоящей CRM</a></p>
 </section>
 <p><a href="/">Вернуться в CRM</a></p></main>
 <script>
@@ -24,12 +29,13 @@ function initAir3Control(){
  const $=id=>document.getElementById(id);
  const launch=$('air3-launch'),panel=$('air3-panel'),code=$('air3-code'),notice=$('air3-notice');
  const END='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1';
+ const V2='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-v2';
  let codeExpiresAt=0,refreshing=false,clock=null;
  launch.hidden=false;
  async function api(action,params={}){
    const {data,error}=await window.db.auth.getSession();
    if(error||!data?.session?.access_token)throw Error('Авторизация CRM закончилась. Войдите заново на MacBook.');
-   const response=await fetch(END,{method:'POST',cache:'no-store',referrerPolicy:'no-referrer',headers:{'content-type':'application/json','authorization':'Bearer '+data.session.access_token},body:JSON.stringify({action,...params})});
+   const response=await fetch(['devices','device_revoke'].includes(action)?V2:END,{method:'POST',cache:'no-store',referrerPolicy:'no-referrer',headers:{'content-type':'application/json','authorization':'Bearer '+data.session.access_token},body:JSON.stringify({action,...params})});
    const body=await response.json();
    if(!response.ok||!body.ok)throw Error(body.error||'Ошибка подключения');
    return body;
@@ -69,6 +75,30 @@ function initAir3Control(){
    finally{refreshing=false}
  }
  async function refreshAfterAction(){refreshing=false;await refresh()}
+ async function loadDevices(){
+   try{
+     const r=await api('devices'),el=$('air3-devices');
+     const fragment=document.createDocumentFragment();
+     for(const device of r.items||[]){
+       const row=document.createElement('div');row.style.cssText='background:#eef4fb;padding:10px;border-radius:9px;margin:7px 0';
+       const txt=document.createElement('span');
+       txt.textContent=(device.label||'INMO AIR3')+' · '+(device.revoked_at?'доверие отозвано':'привязаны')+' ';
+       row.appendChild(txt);
+       if(!device.revoked_at){
+         const b=document.createElement('button');b.type='button';b.textContent='Отозвать доверие';
+         b.onclick=async()=>{
+           if(!confirm('Отключить будущий быстрый вход для этих очков?'))return;
+           b.disabled=true;
+           try{await api('device_revoke',{device_id:device.id});await loadDevices()}
+           catch(e){error(e)}finally{b.disabled=false}
+         };
+         row.appendChild(b);
+       }
+       fragment.appendChild(row);
+     }
+     el.replaceChildren(fragment);if(!el.childNodes.length)el.textContent='Привязанных устройств нет.';
+   }catch(e){error(e)}
+ }
  $('air3-create').onclick=async()=>{
    const b=$('air3-create');b.disabled=true;notice.textContent='';
    try{const result=await api('create');code.textContent=result.code;codeExpiresAt=Date.parse(result.expires_at);countdown();await refresh()}
@@ -77,12 +107,15 @@ function initAir3Control(){
  $('air3-refresh').onclick=refresh;
  launch.onclick=()=>{
    panel.hidden=false;launch.hidden=true;notice.textContent='';refresh();
-   if(!clock)clock=setInterval(()=>{countdown();if(!panel.hidden)refresh()},4000);
+   void loadDevices();
+   if(!clock)clock=setInterval(()=>{countdown();if(!panel.hidden){refresh();loadDevices()}},4000);
  };
  $('air3-hide').onclick=()=>{
    panel.hidden=true;launch.hidden=false;clearCode();notice.textContent='';
  };
  window.addEventListener('pagehide',()=>{clearCode();if(clock){clearInterval(clock);clock=null}});
+ // Automatically show pending approvals: returning users only approve once.
+ launch.click();
 }
 
 window.currentProfile=null;window.db=null;
@@ -98,7 +131,7 @@ window.addEventListener('DOMContentLoaded',async()=>{
    if(pError||!p)throw Error('Профиль не найден');
    window.currentProfile=p;
    if(p.role!=='boss'||String(p.name||'').trim().toLowerCase()!=='александр паюшин')throw Error('Режим подключения AIR3 разрешён только директору');
-   document.getElementById('state').textContent='Вы авторизованы. Нажмите кнопку «Подключить очки», затем «Создать шестизначный код». После использования обязательно отключите сеанс.';
+   document.getElementById('state').textContent='Вы авторизованы. Если очки ранее привязаны, откройте Леру: запрос появится ниже автоматически. Подтвердите одним нажатием.';
    initAir3Control();
  }catch(e){document.getElementById('state').textContent=String(e.message||e)}
 });
