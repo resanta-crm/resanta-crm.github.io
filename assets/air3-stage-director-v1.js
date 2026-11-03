@@ -142,11 +142,11 @@
     setTimeout(()=>{
      ready=frameReady();
      if(!ready)showMessage('В окне CRM требуется вход или загрузка',true);
-     else{showMessage('Настоящая CRM готова для демонстрации');show();}
+     else{showMessage('Настоящая CRM готова для демонстрации');if(autoShow)show();}
     },1000);
    });
   }else{
-   ready=frameReady();if(ready)show();
+   ready=frameReady();if(ready&&autoShow)show();
   }
  }
  async function open(){
