@@ -1,3 +1,5 @@
+// @ts-nocheck
+// Import interoperability with the established JS-only AI360 v4 core.
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 
 // Companion-only delegated access. The owner signs in on a trusted computer.
