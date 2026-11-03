@@ -142,8 +142,8 @@
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
        if(rms>.0020){loud=true;lastLoud=Date.now();}
-       // Allow a natural thinking pause in a multi-part director command; keep bounded clips.
-       if(loud && Date.now()-start>3000 && Date.now()-lastLoud>(mode==='wake'?2200:2700))end();
+       // Faster pause detection, still allowing natural compound director questions.
+       if(loud && Date.now()-start>1200 && Date.now()-lastLoud>(mode==='wake'?1450:1250))end();
        if(epoch!==listenEpoch || !mode)end();
      },110);
      timer=window.setTimeout(end,sec*1000);
@@ -193,14 +193,14 @@
  }
  async function waitForAssistant(epoch,expectedMode){
    // UI dispatch queues the neural voice on the next microtask.
-   await new Promise(r=>setTimeout(r,260));
+   await Promise.resolve();
    // Long, explicitly requested full playback may exceed 32 seconds.
    // Keep the microphone inactive until speech actually ends or is stopped.
    const until=Date.now()+120000;
    while(epoch===listenEpoch && mode===expectedMode && isOwner() && panel && !panel.hidden && !document.hidden &&
          Date.now()<until && (window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1 ||
                               window.speechSynthesis?.speaking)){
-     await new Promise(r=>setTimeout(r,230));
+     await new Promise(r=>setTimeout(r,120));
    }
  }
  async function manualLoop(epoch){

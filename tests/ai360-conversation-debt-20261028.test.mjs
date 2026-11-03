@@ -50,8 +50,8 @@ assert.ok(!/\.update\(|\.insert\(|\.upsert\(|\.delete\(/.test(server),'no CRM wr
 assert.ok(core.includes("crmAI360UnifiedDialogFollowupV3(query"));
 assert.ok(core.includes("options?.noVoice===true"));
 assert.ok(core.includes("options?.fullVoice===true"));
-assert.ok(loader.includes('143-resanta-ai360-unified-dialog-v1.js?v=7'));
-assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=35'));
+assert.ok(loader.includes('143-resanta-ai360-unified-dialog-v1.js?v=8'));
+assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=36'));
 const events=[],requests=[];
 let response={brief:'Отчёт: 111 тысяч. Хочешь подробности?',detail:'Проверенный полный разбор по отчёту от 27 октября.',followup_question:'Хочешь подробнее?',memory:{domain:'debt',month:'2026-10',manager:''}};
 const ctx={
@@ -71,7 +71,7 @@ await delay();
 assert.equal(requests.length,1);
 assert.equal(requests[0].name,'crm-ai360-dialog-v4');
 assert.equal(events[0].text,response.brief);
-assert.equal(events[0].options.fullVoice,true);
+assert.equal(events[0].options.speechSummary,response.brief,'short verified reply should be one fast voice segment');
 assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('да',ui),true);
 assert.equal(requests.length,1,'yes should NOT call CRM or LLM again');
 assert.equal(events[1].text,response.detail);
