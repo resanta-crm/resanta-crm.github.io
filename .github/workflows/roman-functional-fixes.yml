@@ -1,0 +1,38 @@
+name: Roman four CRM fixes
+on:
+  pull_request:
+    paths:
+      - "assets/158-client360-legal-stores-v1.js"
+      - "assets/03-triovist-routes.js"
+      - "assets/166-route-director-360-v1.js"
+      - "supabase/functions/crm-ai360-staff-dialog-v1/**"
+      - "supabase/migrations/20261103_client360_roman_fixes_v2.sql"
+      - "index.html"
+      - "tests/roman-functional-fixes-v1.test.mjs"
+      - ".github/workflows/roman-functional-fixes.yml"
+  push:
+    branches:
+      - fix/roman-four-functional-issues-20261103
+permissions:
+  contents: read
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax of modified browser files
+        run: |
+          node --check assets/03-triovist-routes.js
+          node --check assets/158-client360-legal-stores-v1.js
+          node --check assets/166-route-director-360-v1.js
+          node --check supabase/functions/crm-ai360-staff-dialog-v1/short-plan.mjs
+      - name: Functional regression
+        run: node --test tests/roman-functional-fixes-v1.test.mjs
+      - name: Previous Client360 and Routes 360 regressions
+        run: |
+          node --test tests/client360-v1.test.mjs
+          node --test tests/route-director-360-v1.test.cjs
