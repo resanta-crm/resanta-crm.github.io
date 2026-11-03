@@ -1,6 +1,7 @@
 import { pairCode,statusOrRedeem,authorized,stillAllowed,revoke,deny,AccessError } from './auth.ts';
 import { ask,section,sections } from './dialog.ts';
 import { transcribe,speak } from './voice.ts';
+import { stageOwnerRequest } from './stage.ts';
 
 // Separate v2 endpoint. Does not alter the production CRM or field APK.
 // Must be deployed with verify_jwt=false; every protected action requires
@@ -24,6 +25,9 @@ Deno.serve(async req=>{
   let body;
   try{body=await req.json();}catch{deny('invalid_json',400);}
   const action=typeof body?.action==='string'?body.action:'';
+  // Projector window uses the trusted browser Supabase JWT; glasses NEVER see it.
+  if(['stage_open','stage_poll','stage_close'].includes(action))
+    return json({ok:true,...await stageOwnerRequest(req,action,body)},200,origin);
   // The same existing MacBook controller is used: create/approve/revoke
   // belong to the original owner-authenticated endpoint, never to the glasses.
   if(action==='pair')return json(await pairCode(String(body?.code||''),String(body?.secret||'')),200,origin);
