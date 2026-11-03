@@ -180,7 +180,7 @@ public final class MainActivity extends Activity {
         send.setOnClickListener(v -> ask(question.getText().toString()));
         root.addView(send);
 
-        listen = button("🎙 Говорить с Лерой (7 секунд)");
+        listen = button("🎙 Говорить с Лерой");
         listen.setOnClickListener(v -> requestVoice());
         root.addView(listen);
         wake=button("«Привет, Ресанта» — голосовая активация");
@@ -237,6 +237,12 @@ public final class MainActivity extends Activity {
         demo.setEnabled(connected()&&!busy);
         demo.setText(demoActive?"■ Завершить голосовой показ":"🎙 Демонстрация: «Привет, Лера»");
         section.setEnabled(active);exit.setEnabled(connected()&&!busy);
+        // Director prepares the session; the boss sees a clean voice-only
+        // experience rather than technical CRM setup controls.
+        int setupVisibility=demoActive?View.GONE:View.VISIBLE;
+        section.setVisibility(setupVisibility);open.setVisibility(setupVisibility);
+        question.setVisibility(setupVisibility);send.setVisibility(setupVisibility);
+        listen.setVisibility(setupVisibility);wake.setVisibility(setupVisibility);
         code.setVisibility(connected()?View.GONE:View.VISIBLE);
         connect.setVisibility(connected()?View.GONE:View.VISIBLE);
         confirm.setVisibility(connected()?View.GONE:View.VISIBLE);
@@ -457,7 +463,7 @@ public final class MainActivity extends Activity {
                     fmt.format(data.optDouble("revenue"))+" белорусских рублей.";
             }else{
                 messageText+="\n\nДанные раздела доступны для голосового разбора. "+
-                    "На экране конференции показывается штатная CRM.";
+                    "Задай голосовой вопрос, чтобы получить разбор.";
             }
         }else if(!response.optString("detail","").isEmpty()){
             messageText+="\n\n"+response.optString("detail","");
@@ -543,6 +549,8 @@ public final class MainActivity extends Activity {
         }
         String question=DemoWakePhrase.questionAfterWake(spoken);
         if(question==null){message("Ожидаю обращение «Привет, Лера»…");return;}
+        // Visible proof of real STT in the glasses; not a scripted response.
+        answer.setText("Распознано: "+spoken);
         if(question.isEmpty()){
             demoAwaitingQuestion=true;
             speakBrief("Слушаю вас.");
