@@ -188,7 +188,7 @@ export async function ask(s,message,historyRaw,memoryRaw){
    error:'analysis_unavailable',memory};
  }
  const state=ctx.getState();
- return {kind:'answer',answer:small(pair.brief),detail:small(pair.detail).slice(0,3000),
+ return {kind:'answer',answer:small(pair.brief),detail:String(pair.detail||'').replace(/<[^>]*>/g,'').trim().slice(0,3000),
   followup_question:small(pair.offer),sources:output.used||[],memory:{...memory,
    month:state.month,manager:state.manager,domain:state.domain||memory.domain,subject:ctx.subject.subject}};
 }
