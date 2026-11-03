@@ -548,6 +548,10 @@ public final class MainActivity extends Activity {
     private void toggleDemo(){
         if(demoActive){endDemo("Показ завершён. Микрофон выключен.");return;}
         if(!connected()){message("Сначала разреши подключение очков на MacBook.");return;}
+        if(actualCrm==null||!actualCrm.isSiteReady()){
+            message("Сначала войди в настоящую РЕСАНТА CRM на очках.");
+            return;
+        }
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
             demoPermissionPending=true;
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_PERMISSION);
