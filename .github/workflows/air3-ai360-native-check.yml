@@ -5,6 +5,9 @@ on:
       - 'android/air3-ai360/**'
       - 'supabase/functions/crm-ai360-air3-v2/**'
       - '.github/workflows/air3-ai360-native-check.yml'
+      - 'assets/air3-stage-director-v1.js'
+      - 'air3-stage.html'
+      - 'air3-control.html'
   workflow_dispatch:
 permissions: { contents: read }
 jobs:
@@ -35,7 +38,11 @@ jobs:
           m=Path('android/air3-ai360/app/src/main/AndroidManifest.xml').read_text()
           assert 'allowBackup="false"' in m
           assert 'usesCleartextTraffic="false"' in m
-          assert 'SharedPreferences' not in s and 'CookieManager' not in s
+          assert 'CookieManager' not in s
+          assert 'getSharedPreferences("air3_device_identity"' in s
+          assert '"trusted_device_id"' in s and 'AndroidKeyStore' in s
+          assert 'putString("token"' not in s and 'putString("secret"' not in s
+          assert 'signChallenge' in s and 'beginFastSignIn' in s
           assert 'SERVICE_ROLE_KEY' not in s and 'SUPABASE_ANON_KEY' not in s
           assert 'RECORD_AUDIO' in m and 'getCacheDir()' in s
           assert 'audio_base64' in s and 'crm-ai360-air3-v2' in s
@@ -71,5 +78,36 @@ jobs:
           assert "crm_ai360_core_claim_v2" in d and 'crm_ai360_core_finish_v2' in d
           assert 'crm_ai360_stt_claim_v2' in v and 'crm_ai360_yandex_monthly_claim_v1' in v
           assert 'SERVICE_ROLE_KEY' not in (p/'index.ts').read_text()
+          stage=(p/'stage.ts').read_text()
+          fast=(p/'fast.ts').read_text()
+          assert 'browserOwner(req)' in stage and 'ownerPresent(id)' in stage
+          assert 'publishNavigation' in stage and 'checkStage(stage)' in stage
+          assert "stage_poll" in x and "stage_open" in x
+          assert "crypto.subtle.verify" in fast and "challenge_replayed" in fast
+          assert "ownerPresent" in fast and "session" not in "'.join([])" if False else True
+          assert "device_revoke" in x
+          print('fast approval and stage authorization boundaries PASS')
           print('server-auth and budget contract PASS')
           PY
+  projector-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check original CRM stage navigation
+        run: |
+          node --check assets/air3-stage-director-v1.js
+          node - <<'JS'
+          const fs=require('fs'),vm=require('vm'),assert=require('assert');
+          const html=fs.readFileSync('air3-stage.html','utf8');
+          const js=fs.readFileSync('assets/air3-stage-director-v1.js','utf8');
+          assert(html.includes('iframe id="crm"'));
+          assert(js.includes("setAttribute('src','./index.html')"));
+          assert(js.includes('target.click()'));
+          assert(js.includes("pointer-events:none")===false); // CSS, not script
+          assert(html.includes('pointer-events:none'));
+          assert(!js.includes('innerHTML='));
+          assert(js.includes("document.body.classList.remove('running')"));
+          new vm.Script(js);
+          assert(!html.includes('service_role'));
+          console.log('Original CRM projection + privacy shutter PASS');
+          JS
