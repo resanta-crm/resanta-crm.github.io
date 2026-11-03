@@ -71,7 +71,7 @@ await delay();
 assert.equal(requests.length,1);
 assert.equal(requests[0].name,'crm-ai360-dialog-v4');
 assert.equal(events[0].text,response.brief);
-assert.equal(events[0].options.fullVoice,true);
+assert.equal(events[0].options.speechSummary,response.brief,'short verified reply should be one fast voice segment');
 assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('да',ui),true);
 assert.equal(requests.length,1,'yes should NOT call CRM or LLM again');
 assert.equal(events[1].text,response.detail);
