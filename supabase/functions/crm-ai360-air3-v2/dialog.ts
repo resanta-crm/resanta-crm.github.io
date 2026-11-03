@@ -1,3 +1,5 @@
+// @ts-nocheck
+// Import interoperability with the established JS-only AI360 v4 core.
 // AIR3 reuses the SAME AI360 tool catalogue, model orchestration and guard
 // as crm-ai360-dialog-v4. Different transport; not a second assistant brain.
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoiceDomain } from '../crm-ai360-dialog-v4/catalog.mjs';
