@@ -2,6 +2,7 @@ import { pairCode,statusOrRedeem,authorized,stillAllowed,revoke,deny,AccessError
 import { ask,section,sections } from './dialog.ts';
 import { transcribe,speak } from './voice.ts';
 import { stageOwnerRequest } from './stage.ts';
+import { enroll,beginFast,requestFast,deviceOwnerAction } from './fast.ts';
 
 // Separate v2 endpoint. Does not alter the production CRM or field APK.
 // Must be deployed with verify_jwt=false; every protected action requires
@@ -28,6 +29,12 @@ Deno.serve(async req=>{
   // Projector window uses the trusted browser Supabase JWT; glasses NEVER see it.
   if(['stage_open','stage_poll','stage_close'].includes(action))
     return json({ok:true,...await stageOwnerRequest(req,action,body)},200,origin);
+  if(['devices','device_revoke'].includes(action))
+    return json({ok:true,...await deviceOwnerAction(req,action,body)},200,origin);
+  if(action==='fast_challenge')
+    return json({ok:true,...await beginFast(String(body?.device_id||''))},200,origin);
+  if(action==='fast_request')
+    return json({ok:true,...await requestFast(body)},200,origin);
   // The same existing MacBook controller is used: create/approve/revoke
   // belong to the original owner-authenticated endpoint, never to the glasses.
   if(action==='pair')return json(await pairCode(String(body?.code||''),String(body?.secret||'')),200,origin);
@@ -35,6 +42,7 @@ Deno.serve(async req=>{
    return json(await statusOrRedeem(action,String(body?.id||''),String(body?.secret||'')),200,origin);
   const token=typeof body?.token==='string'?body.token:'';
   const session=await authorized(token,!['ping','close'].includes(action));
+  if(action==='enroll')return json({ok:true,...await enroll(token,body)},200,origin);
   if(action==='ping')return json({ok:true,expires_at:session.expires_at,expires_in:Math.max(0,Math.floor((Date.parse(session.expires_at)-Date.now())/1000))},200,origin);
   if(action==='close')return json(await revoke(token),200,origin);
   if(action==='capabilities')return json({ok:true,voice:'lera',stt:'gpt-transcribe',
