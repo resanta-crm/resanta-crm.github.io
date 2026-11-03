@@ -6,8 +6,8 @@ android {
   applicationId 'by.resanta.air3'
   minSdk 28
   targetSdk 34
-  versionCode 4
-  versionName '1.3-air3-real-crm'
+  versionCode 5
+  versionName '1.4-air3-crm-first'
  }
  buildTypes { release { minifyEnabled false } }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
