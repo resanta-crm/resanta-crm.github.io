@@ -101,7 +101,10 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(data.memory&&typeof data.memory==='object')memory=data.memory;
    history.push({role:'user',content:question},{role:'assistant',content:withOffer});
    history=history.slice(-10);
-   ui.answer(withOffer,{fullVoice:true});
+   // Prefer one short verified voice segment for the common quick questions.
+   // Full answer and offer remain readable in the CRM dialogue panel.
+   const shortVoice=withOffer.length<=205?withOffer:(brief.length<=205?brief:'');
+   ui.answer(withOffer,shortVoice?{speechSummary:shortVoice}:{fullVoice:true});
   }catch(e){if(allowed())ui.answer(pretty(String(e?.message||e)));}
   finally{pending=false;window.__resantaAI360PendingV1=false;}
  })();
