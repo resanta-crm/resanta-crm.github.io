@@ -86,5 +86,6 @@ test('all-managers view rejects historical rows for managers outside configured 
  assert.equal(s.percent,100);
 });
 test('module has no direct Supabase database mutations or GPS writes',()=>{
- assert.doesNotMatch(src,/db\s*\.\s*from\s*\(|db\s*\.\s*rpc\s*\(|\.insert\s*\(|\.update\s*\(/);
+ assert.doesNotMatch(src,/db\s*\.\s*from\s*\(|\.insert\s*\(|\.update\s*\(|\.upsert\s*\(/);
+ assert.match(src,/db\.rpc\('client360_route_labels_v2'\)/); // Read-only scoped lookup is allowed.
 });
