@@ -18,7 +18,9 @@
   payments:['payments','payment-registry'],competitors:['competitors','triovist-competitors'],
   cards_21vek:['cards-21vek','triovist-cards'],motivation:['managers','motivation'],
   markdown:['markdown'],stands:['stands'],cash:['cash','receipts'],
-  infographics:['infographics'],parser:['parser','competitor-parser']
+  infographics:['infographics'],parser:['parser','competitor-parser'],
+  alerts:['alerts'],visits:['visits'],abc:['abc'],budgets:['budgets'],
+  'my-routes':['my-routes'],route:['route'],workday:['workday'],control:['control']
  });
  const LABEL=Object.freeze({
   operations:'Дашборд',sales:'Продажи',debt:'Задолженность',
@@ -26,7 +28,9 @@
   routes:'Маршруты',gps:'GPS',stock:'Остатки',payments:'Оплаты',
   competitors:'Конкуренты',cards_21vek:'Карточки',motivation:'Менеджеры',
   markdown:'Уценка',stands:'Стенды',cash:'Поступления',infographics:'Инфографика',
-  parser:'Парсер'
+  parser:'Парсер',alerts:'Сигналы',visits:'История визитов',abc:'ABC-анализ',
+  budgets:'Бюджеты', 'my-routes':'Мой маршрут',route:'Маршрут дня',
+  workday:'Рабочий день',control:'Контроль'
  });
  let sb=null,stageId='',lastCommand='',timer=null,ready=false,opening=false,autoShow=false;
  const showMessage=(message,error=false)=>{
