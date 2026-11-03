@@ -103,6 +103,8 @@ final class RealCRMView extends FrameLayout {
         status.setPadding(12,8,12,8);
         status.setBackgroundColor(Color.rgb(8,34,60));
         FrameLayout.LayoutParams bottom=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
+        // Keep original CRM bottom navigation visible and clickable on AIR3.
+        bottom.bottomMargin=(int)(72*getResources().getDisplayMetrics().density);
         addView(status,bottom);
         web.loadUrl(CRM_URL);
         handler.postDelayed(this::inspectCrmLoaded,2200);
