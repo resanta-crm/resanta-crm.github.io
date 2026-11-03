@@ -1,0 +1,14 @@
+plugins { id 'com.android.application' }
+android {
+ namespace 'by.resanta.air3'
+ compileSdk 35
+ defaultConfig {
+  applicationId 'by.resanta.air3'
+  minSdk 28
+  targetSdk 34
+  versionCode 1
+  versionName '1.0-air3-voice'
+ }
+ buildTypes { release { minifyEnabled false } }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}

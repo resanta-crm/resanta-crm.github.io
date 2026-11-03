@@ -1,0 +1,113 @@
+name: AIR3 AI360 real voice app and server checks (isolated)
+on:
+  pull_request:
+    paths:
+      - 'android/air3-ai360/**'
+      - 'supabase/functions/crm-ai360-air3-v2/**'
+      - '.github/workflows/air3-ai360-native-check.yml'
+      - 'assets/air3-stage-director-v1.js'
+      - 'air3-stage.html'
+      - 'air3-control.html'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  native-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Enable Android SDK tools
+        run: |
+          test -d "$ANDROID_HOME"
+          SDK_MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDK_MANAGER"
+          echo "$(dirname "$SDK_MANAGER")" >> "$GITHUB_PATH"
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.11.1' }
+      - name: Android platform
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Compile native voice APK
+        working-directory: android/air3-ai360
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Verify shared-device security boundaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('android/air3-ai360/app/src/main/java/by/resanta/air3/MainActivity.java').read_text()
+          m=Path('android/air3-ai360/app/src/main/AndroidManifest.xml').read_text()
+          assert 'allowBackup="false"' in m
+          assert 'usesCleartextTraffic="false"' in m
+          assert 'CookieManager' not in s
+          assert 'getSharedPreferences("air3_device_identity"' in s
+          assert '"trusted_device_id"' in s and 'AndroidKeyStore' in s
+          assert 'putString("token"' not in s and 'putString("secret"' not in s
+          assert 'signChallenge' in s and 'beginFastSignIn' in s
+          assert 'SERVICE_ROLE_KEY' not in s and 'SUPABASE_ANON_KEY' not in s
+          assert 'RECORD_AUDIO' in m and 'getCacheDir()' in s
+          assert 'audio_base64' in s and 'crm-ai360-air3-v2' in s
+          print('isolated AIR3 AI360 native security baseline PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resanta-ai360-air3-native-debug
+          path: android/air3-ai360/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+  server-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.x }
+      - name: Typecheck voice bridge and imports
+        run: deno check --allow-import supabase/functions/crm-ai360-air3-v2/index.ts
+      - name: Server boundaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('supabase/functions/crm-ai360-air3-v2')
+          a=(p/'auth.ts').read_text()
+          d=(p/'dialog.ts').read_text()
+          v=(p/'voice.ts').read_text()
+          x=(p/'index.ts').read_text()
+          assert '3600000' in a and '600000' in a and 'device_secret_hash' in a
+          assert 'status' in a and 'revoked_at' in a
+          assert "await authorized(token" in x and "if(action==='create')" not in x
+          assert 'runToolCore' in d and 'guardVoicePair' in d
+          assert "crm_ai360_core_claim_v2" in d and 'crm_ai360_core_finish_v2' in d
+          assert 'crm_ai360_stt_claim_v2' in v and 'crm_ai360_yandex_monthly_claim_v1' in v
+          assert 'SERVICE_ROLE_KEY' not in (p/'index.ts').read_text()
+          stage=(p/'stage.ts').read_text()
+          fast=(p/'fast.ts').read_text()
+          assert 'browserOwner(req)' in stage and 'ownerPresent(id)' in stage
+          assert 'publishNavigation' in stage and 'checkStage(stage)' in stage
+          assert "stage_poll" in x and "stage_open" in x
+          assert "crypto.subtle.verify" in fast and "challenge_replayed" in fast
+          assert 'ownerPresent' in fast and 'enroll' in fast
+          assert "device_revoke" in x
+          print('fast approval and stage authorization boundaries PASS')
+          print('server-auth and budget contract PASS')
+          PY
+  projector-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check original CRM stage navigation
+        run: |
+          node --check assets/air3-stage-director-v1.js
+          node - <<'JS'
+          const fs=require('fs'),vm=require('vm'),assert=require('assert');
+          const html=fs.readFileSync('air3-stage.html','utf8');
+          const js=fs.readFileSync('assets/air3-stage-director-v1.js','utf8');
+          assert(html.includes('iframe id="crm"'));
+          assert(js.includes("setAttribute('src','./index.html')"));
+          assert(js.includes('target.click()'));
+          assert(js.includes("pointer-events:none")===false); // CSS, not script
+          assert(html.includes('pointer-events:none'));
+          assert(!js.includes('innerHTML='));
+          assert(js.includes("document.body.classList.remove('running')"));
+          new vm.Script(js);
+          assert(!html.includes('service_role'));
+          console.log('Original CRM projection + privacy shutter PASS');
+          JS
