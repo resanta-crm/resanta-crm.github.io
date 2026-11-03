@@ -7,6 +7,17 @@
 if(w.RESANTA_ROUTE_DIRECTOR_360_V1)return;
 const ID='route-director-360',PAGE='page-routes-boss',CSS=ID+'-styles';
 const S={period:'month',month:'',start:'',manager:'all',day:'',ai:null,editor:false,audit:false,details:false};
+let legalLabels=new Map(),labelsLoaded=false,labelsBusy=false;
+async function refreshLegalLabels(){
+ if(!boss()||labelsBusy)return;
+ labelsBusy=true;
+ try{const {data,error}=await db.rpc('client360_route_labels_v2');
+  if(error||!data?.ok)throw error||new Error('route_labels_unavailable');
+  legalLabels=new Map((data.labels||[]).map(x=>[String(x.client_id),String(x.entity_name)]));labelsLoaded=true;
+  if(page()?.classList.contains('active'))render();
+ }catch(e){console.warn('Client 360 route labels unavailable:',e?.message||e)}
+ finally{labelsBusy=false}
+}
 const h=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\u0027':'&#39;'}[c]));
 const num=v=>Number.isFinite(Number(v))?Number(v):0;
 const pad=n=>String(n).padStart(2,'0');
@@ -174,8 +185,21 @@ function brief(s){
 function visibleDay(s){
  const d=S.day,data=s.days[d];
  if(!d||!data)return '';
- return '<div class="rd-detail"><div class="rd-panel-head"><b>📍 '+h(humanDay(d))+' · '+data.count+' точек</b><button data-action="edit-day" data-date="'+h(d)+'">Изменить день</button></div>'+
-  (data.rows.length?'<div class="rd-list">'+data.rows.slice(0,20).map(p=>'<div class="rd-list-row"><span>'+h(p.is_office_day?'Офис':(p.client_name||p.city||'Точка'))+'</span><span>'+h(p.city||'')+'</span></div>').join('')+'</div>':'<div class="rd-sub">На этот день пока нет точек. Можно добавить визиты в редакторе.</div>')+'</div>';
+ const groups=new Map();
+ (data.rows||[]).forEach(p=>{
+  const key=String(p.manager_name||'')+'|'+(p.is_office_day?'office':pointKey(p));
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(p);
+ });
+ const cards=[...groups.values()];
+ return '<div class="rd-detail"><div class="rd-panel-head"><b>📍 '+h(humanDay(d))+' · '+data.count+' физических ТТ</b><button data-action="edit-day" data-date="'+h(d)+'">Изменить день</button></div>'+
+ (cards.length?'<div class="rd-list">'+cards.slice(0,30).map(rows=>{
+  const p=rows[0],legalNames=new Set(rows.map(x=>legalLabels.get(String(x.client_id||''))).filter(Boolean));
+  const label=p.is_office_day?'Офис':legalNames.size===1?[...legalNames][0]:(p.client_name||p.city||'Точка');
+  const detail=rows.length>1?' · '+rows.length+' карточки по одному адресу':'';
+  const warning=legalNames.size>1?' · проверьте разные юрлица':'';
+  return '<div class="rd-list-row"><span><b>'+h(label)+'</b><small style="display:block;color:#64748b">'+h(p.address||'')+h(detail+warning)+'</small></span><span>'+h(p.city||'')+' · '+h(p.manager_name||'')+'</span></div>';
+ }).join('')+'</div>':'<div class="rd-sub">На этот день пока нет точек. Можно добавить визиты в редакторе.</div>')+'</div>';
 }
 function render(){
  if(!boss())return;const p=page();if(!p)return;
@@ -269,7 +293,7 @@ function install(){
  styles();
  if(!S.month)S.month=selectedMonth();
  if(!root()){const el=document.createElement('section');el.id=ID;const title=page().querySelector('.page-title');(title||page()).insertAdjacentElement(title?'afterend':'afterbegin',el)}
- attach();render();
+ attach();render();if(!labelsLoaded)void refreshLegalLabels();
 }
 let pending=false;function schedule(){if(pending)return;pending=true;setTimeout(()=>{pending=false;if(page()?.classList.contains('active'))install()},30)}
 const oldRender=w.renderRoutesBoss;
@@ -280,6 +304,7 @@ const oldLoad=w.loadData;
 if(typeof oldLoad==='function')w.loadData=async function(){const result=await oldLoad.apply(this,arguments);schedule();return result};
 w.addEventListener('resanta-route-audit-brief',e=>{if(!boss()||!e.detail)return;S.ai=e.detail;render()});
 w.addEventListener('pageshow',schedule);
+w.addEventListener('resanta-client360-updated',()=>{labelsLoaded=false;void refreshLegalLabels()});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
 w.RESANTA_ROUTE_DIRECTOR_360_V1=Object.freeze({version:'1.0.0',readOnly:true,install,refresh:render,snapshot});
 })(window);
