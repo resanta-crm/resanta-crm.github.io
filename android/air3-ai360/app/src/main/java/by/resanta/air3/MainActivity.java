@@ -1,6 +1,7 @@
 package by.resanta.air3;
 
 import android.Manifest;
+import android.content.Intent;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.view.WindowManager;
@@ -64,7 +65,7 @@ public final class MainActivity extends Activity {
             if(!quickWaiting || isFinishing() || isDestroyed() || connected())return;
             if(System.currentTimeMillis()-quickStartedAt>570000){
                 quickWaiting=false;
-                message("Быстрый вход не подтверждён. Можно подключиться по коду.");
+                message("Вход не подтверждён на MacBook. Повтори USB-подключение.");
                 return;
             }
             if(!busy)confirmPair();
@@ -212,8 +213,58 @@ public final class MainActivity extends Activity {
         // CRM-FIRST: website viewing is distinct from the delegated AI360 voice
         // token. Never gate the real CRM login behind the six-digit glasses pair.
         showOriginalCrm();
-        if(!devicePrefs.getString(PREF_DEVICE,"").isEmpty())
-            main.postDelayed(this::beginFastSignIn,350);
+        // USB opt-in only: no automatic remote authorization on plain app start.
+        // The original CRM opens even when AI pairing has not been approved.
+        handleUsbIntent(getIntent());
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleUsbIntent(intent);
+    }
+    private void handleUsbIntent(Intent intent){
+        if(intent==null)return;
+        final String provision=intent.getStringExtra("resanta_usb_pair");
+        final boolean disconnect=intent.getBooleanExtra("resanta_usb_disconnect",false);
+        final String disconnectNonce=intent.getStringExtra("resanta_usb_disconnect_nonce");
+        // Never keep the temporary code in Activity intent state/back stack.
+        intent.removeExtra("resanta_usb_pair");
+        intent.removeExtra("resanta_usb_disconnect");
+        intent.removeExtra("resanta_usb_disconnect_nonce");
+        if(disconnect){disconnectUsb(disconnectNonce);return;}
+        if(provision!=null){
+            if(!provision.matches("\\d{6}")){
+                message("USB-подключение: неверный временный код.");return;
+            }
+            pairWithCode(provision,true);
+        }
+    }
+    private void disconnectUsb(String suppliedNonce){
+        // Non-secret acknowledgment so the Mac USB helper can verify
+        // server revocation for THIS cable disconnect, not a prior one.
+        final String nonce=suppliedNonce!=null&&suppliedNonce.matches("[0-9a-f]{24}")
+            ?suppliedNonce:"unknown";
+        final String t=token;
+        // Invalidate all local session material, mic and WebView immediately.
+        resetSession();
+        message("Очки отключены через USB. Удаляю сеанс на сервере…");
+        if(t.isEmpty()){
+            android.util.Log.i("RESANTA_AIR3_USB","usb_revoke_no_active_session:"+nonce);
+            finish();return;
+        }
+        work.execute(()->{
+            boolean revoked=false;
+            try{
+                JSONObject r=remote("close",new JSONObject().put("token",t));
+                revoked="revoked".equals(r.optString("status"));
+            }catch(Exception ignored){}
+            final boolean confirmed=revoked;
+            main.post(()->{
+                if(confirmed)android.util.Log.i("RESANTA_AIR3_USB","usb_revoke_confirmed:"+nonce);
+                else android.util.Log.w("RESANTA_AIR3_USB","usb_revoke_unconfirmed:"+nonce);
+                finish();
+            });
+        });
     }
     private TextView text(String content,int size,boolean heavy) {
         TextView t = new TextView(this);
@@ -344,17 +395,30 @@ public final class MainActivity extends Activity {
         }finally{conn.disconnect();}
     }
     private void pair() {
-        String input=code.getText().toString().trim();
+        pairWithCode(code.getText().toString().trim(),false);
+    }
+    private void pairWithCode(String input,boolean fromUsb) {
         if(!input.matches("\\d{6}")){
-            message("Введи 6 цифр кода, созданного на MacBook.");return;
+            message("Временное подтверждение очков недействительно.");return;
         }
+        if(connected()){message("Очки уже подключены. Сначала заверши текущий сеанс.");return;}
+        if(busy){message("Уже выполняется подключение.");return;}
         byte[] secret=new byte[40];random.nextBytes(secret);
         pairSecret=Base64.encodeToString(secret,Base64.URL_SAFE|Base64.NO_PADDING|Base64.NO_WRAP);
         JSONObject args=new JSONObject();
         try{args.put("code",input).put("secret",pairSecret);}catch(Exception ignored){}
         perform("Подключаю очки…",()->remote("pair",args),r->{
             pairId=r.optString("id","");
-            message("Запрос отправлен. Теперь на MacBook нажми «Разрешить вход», затем здесь проверь подтверждение.");
+            code.setText("");
+            if(fromUsb){
+                // No user-entered 6-digit code and no second tap on AIR3.
+                quickWaiting=true;
+                quickStartedAt=System.currentTimeMillis();
+                main.postDelayed(quickPoll,2500);
+                message("USB: ожидаю на MacBook кнопку «Разрешить вход».");
+            }else{
+                message("На MacBook нажми «Разрешить вход» и подтверди приложение.");
+            }
         });
     }
     private void confirmPair() {
@@ -772,6 +836,7 @@ public final class MainActivity extends Activity {
     }
     private void resetSession() {
         generation++;
+        quickWaiting=false;main.removeCallbacks(quickPoll);
         token="";pairSecret="";pairId="";expiresAt=0;
         memory=new JSONObject();
         while(history.length()>0)history.remove(0);

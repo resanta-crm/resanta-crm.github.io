@@ -67,6 +67,22 @@ jobs:
           assert 'setAcceptThirdPartyCookies(web,false)' in r
           assert 'closeOriginalCrm()' in a and 'onPause()' in a
           assert 'main.postDelayed(this::showOriginalCrm,250)' in a
+          assert 'handleUsbIntent(getIntent());' in a
+          assert 'onNewIntent(Intent intent)' in a
+          assert 'resanta_usb_pair' in a and 'pairWithCode(provision,true)' in a
+          assert 'resanta_usb_disconnect' in a and 'disconnectUsb' in a
+          assert 'main.postDelayed(quickPoll,2500)' in a
+          assert 'android:launchMode="singleTop"' in Path('android/air3-ai360/app/src/main/AndroidManifest.xml').read_text()
+          pult=Path('air3-control.html').read_text()
+          assert 'air3-usb-prepare' in pult
+          assert "await navigator.clipboard.writeText('AIR3USB:'+result.code)" in pult
+          assert 'button(\'Разрешить вход\',\'approve\')' in pult
+          assert 'code.textContent=result.code' in pult  # Original fallback retained
+          connect=Path('android/air3-ai360/mac/AIR3-USB-Connect.command').read_text()
+          disconnect=Path('android/air3-ai360/mac/AIR3-USB-Disconnect.command').read_text()
+          assert 'pbpaste' in connect and 'AIR3USB:' in connect and 'resanta_usb_pair' in connect
+          assert 'resanta_usb_disconnect' in disconnect and 'pm clear by.resanta.air3' in disconnect
+          assert 'grep -Fq "usb_revoke_confirmed:$NONCE"' in disconnect
           assert 'showOriginalCrm();' in a.split('onCreate(Bundle b)')[1].split('private TextView text(')[0], 'first screen must be real CRM'
           assert 'if(!connected()){message("Сначала подтверди очки на MacBook.")' not in a
           assert 'new RealCRMView(this,this::openVoiceOrDemo,this::close)' in a
@@ -78,6 +94,27 @@ jobs:
           assert 'putString("token"' not in a and 'SUPABASE_SERVICE_ROLE_KEY' not in r+a
           print('Real CRM website on AIR3, native voice navigation, cleanup PASS')
           PY
+      - name: Validate macOS USB helpers shell syntax
+        run: |
+          bash -n android/air3-ai360/mac/AIR3-USB-Connect.command
+          bash -n android/air3-ai360/mac/AIR3-USB-Disconnect.command
+      - name: Pack one ready-to-run Mac USB bundle with executable scripts
+        run: |
+          mkdir -p /tmp/resanta-air3-usb-kit
+          cp android/air3-ai360/app/build/outputs/apk/debug/app-debug.apk /tmp/resanta-air3-usb-kit/Resanta_Lera_AIR3_Real_CRM_USB_v1.5.apk
+          cp android/air3-ai360/mac/AIR3-USB-Connect.command /tmp/resanta-air3-usb-kit/
+          cp android/air3-ai360/mac/AIR3-USB-Disconnect.command /tmp/resanta-air3-usb-kit/
+          cp android/air3-ai360/mac/README-RU.md /tmp/resanta-air3-usb-kit/
+          chmod 755 /tmp/resanta-air3-usb-kit/*.command
+          (cd /tmp/resanta-air3-usb-kit && zip -q -9 -X "$GITHUB_WORKSPACE/android/air3-ai360/Resanta_AIR3_USB_Kit_v1.5.zip" ./*)
+          unzip -t android/air3-ai360/Resanta_AIR3_USB_Kit_v1.5.zip
+          unzip -Z -l android/air3-ai360/Resanta_AIR3_USB_Kit_v1.5.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resanta-ai360-air3-usb-mac-kit
+          path: android/air3-ai360/Resanta_AIR3_USB_Kit_v1.5.zip
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: resanta-ai360-air3-native-debug
