@@ -79,7 +79,7 @@ final class RealCRMView extends FrameLayout {
         bar.setPadding(8,4,8,4);
         bar.setBackgroundColor(Color.rgb(8,34,60));
         voice = new Button(activity);
-        voice.setText("🎙 Привет, Лера");
+        voice.setText("🎙 Подключить Леру");
         voice.setAllCaps(false);
         voice.setTextSize(13);
         voice.setMinHeight(46);
@@ -96,7 +96,7 @@ final class RealCRMView extends FrameLayout {
         addView(bar,top);
 
         status = new TextView(activity);
-        status.setText("Загружаю настоящую РЕСАНТА CRM. Войди в сайт до передачи очков.");
+        status.setText("Это настоящая CRM. Войди на сайте; голос Леры подключается отдельно.");
         status.setTextSize(13);
         status.setTextColor(Color.WHITE);
         status.setMaxLines(3);
@@ -115,6 +115,11 @@ final class RealCRMView extends FrameLayout {
         voice.setText(enabled?"■ Остановить показ":"🎙 Привет, Лера");
     }
 
+    void setVoiceConnected(boolean connected){
+        if(closed)return;
+        voice.setText(connected?"🎙 Привет, Лера":"🎙 Подключить Леру");
+    }
+
     void showStatus(String message){
         if(closed)return;
         String value=message==null?"":message.replaceAll("\\s+"," ").trim();
@@ -130,7 +135,7 @@ final class RealCRMView extends FrameLayout {
           "return 'ready';})()", raw->{
             if(closed)return;
             siteReady="\"ready\"".equals(raw);
-            if(siteReady)showStatus("Открыта настоящая CRM. Скажи «Привет, Лера».");
+            if(siteReady)showStatus("Настоящая CRM открыта. Для голоса используй кнопку сверху.");
             else if(!siteReady)handler.postDelayed(this::inspectCrmLoaded,3200);
           });
     }
