@@ -4,6 +4,7 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {runToolCore,CORE_MODEL} from './core.mjs';
 import {staffPermission} from './permissions.mjs';
+import {isPersonalPlanQuestion,concisePlan} from './short-plan.mjs';
 const NAMES=['Руднев','Ачинович','Шкуран'];
 const TRI_NAMES=['Александренко','Кришталь'];
 const DOMAINS=['sales','debt','clients','tasks','routes','visits','gps','stock','client_detail',
@@ -78,6 +79,30 @@ Deno.serve(async req=>{
   role:x?.role==='assistant'?'assistant':'user',
   content:String(x?.content||'').slice(0,250)
  })):[];
+ // A precise question about one's personal sales plan needs one verified CRM number,
+ // not an OpenAI essay. Authorization is checked above and again by the staff read gateway.
+ if(permission.tier==='field_manager'&&isPersonalPlanQuestion(question)){
+  let verified=null;
+  try{
+   const res=await fetch(url+'/functions/v1/crm-ai360-staff-read-v1',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+token,'apikey':anon,'Content-Type':'application/json'},
+    body:JSON.stringify({kind:'read',domain:'sales',manager:permission.name,month}),
+    signal:AbortSignal.timeout(6000)
+   });
+   if(res.ok)verified=await res.json();
+  }catch(_){}
+  if(!verified||verified.scope?.role!=='field_manager'||
+     verified.scope?.managers?.length!==1||verified.scope.managers[0]!==permission.name)
+   return reply(req,{error:'sales_source_unavailable',answer_verified:false},503);
+  const answer=concisePlan(verified,permission.name,month);
+  if(!answer)return reply(req,{error:'sales_source_invalid',answer_verified:false},503);
+  return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:true,read_only:true,
+   model:'verified_staff_sales_read',scope:'Витебск',role:permission.tier,
+   subject_manager:permission.name,month,answer,speech_summary:answer,offer:'',
+   domains_used:['sales'],as_of:day,
+   memory:{manager:permission.name,month,domain:'sales',client:'',group:'',subgroup:'',level:'',offset:0}});
+ }
  // Claim before ALL LLM requests: same per-user budget as director and paid voice.
  const claim=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:userId,p_reserve_rub:8});
  if(claim.error)return reply(req,{error:'budget_unavailable'},503);
