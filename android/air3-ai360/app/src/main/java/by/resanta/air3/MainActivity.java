@@ -8,6 +8,16 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.content.SharedPreferences;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PSSParameterSpec;
 import android.os.Looper;
 import android.util.Base64;
 import android.view.Gravity;
@@ -39,6 +49,25 @@ public final class MainActivity extends Activity {
     private static final String ENDPOINT =
         "https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-v2";
     private static final int MIC_PERMISSION = 344;
+    private static final String KEY_ALIAS = "resanta_air3_device_sign_v1";
+    private static final String PREF_DEVICE = "trusted_device_id";
+    // Only an unprivileged random device ID is stored. The signing private key
+    // is non-exportable Android Keystore hardware/OS material. No CRM tokens.
+    private SharedPreferences devicePrefs;
+    private boolean quickWaiting = false;
+    private long quickStartedAt = 0;
+    private final Runnable quickPoll = new Runnable() {
+        @Override public void run() {
+            if(!quickWaiting || isFinishing() || isDestroyed() || connected())return;
+            if(System.currentTimeMillis()-quickStartedAt>570000){
+                quickWaiting=false;
+                message("Быстрый вход не подтверждён. Можно подключиться по коду.");
+                return;
+            }
+            if(!busy)confirmPair();
+            main.postDelayed(this,3500);
+        }
+    };
     private static final String[] SECTION_IDS = {
         "operations","sales","debt","triovist","vip","promotions",
         "clients","tasks","routes","gps","stock","payments","competitors",
@@ -73,6 +102,7 @@ public final class MainActivity extends Activity {
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.rgb(6,25,49));
         getWindow().setNavigationBarColor(Color.rgb(6,25,49));
+        devicePrefs = getSharedPreferences("air3_device_identity", MODE_PRIVATE);
         root = new LinearLayout(this);
         root.setPadding(23,18,23,26);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -138,6 +168,8 @@ public final class MainActivity extends Activity {
         scroll.addView(root);
         setContentView(scroll);
         updateControls();
+        if(!devicePrefs.getString(PREF_DEVICE,"").isEmpty())
+            main.postDelayed(this::beginFastSignIn,350);
     }
     private TextView text(String content,int size,boolean heavy) {
         TextView t = new TextView(this);
@@ -251,8 +283,14 @@ public final class MainActivity extends Activity {
             if(token.length()<40){resetSession();message("Не удалось получить безопасную сессию.");return;}
             expiresAt=System.currentTimeMillis()+r.optInt("expires_in",0)*1000L;
             pairSecret="";pairId="";code.setText("");
-            message("Лера подключена на 60 минут (при работе). 10 минут без действий — завершение.");
+            quickWaiting=false;
+            main.removeCallbacks(quickPoll);
+            message("Лера подключена на 60 минут. 10 минут без действий — завершение.");
             answer.setText("Скажи «Лера, покажи продажи» или выбери раздел CRM.");
+            // Register only the non-exportable device identity after the owner
+            // explicitly approved this first pairing. Never retain a CRM token.
+            if(devicePrefs.getString(PREF_DEVICE,"").isEmpty())
+                enrollAfterOwnerApproval();
         });
     }
     private void openSection() {
