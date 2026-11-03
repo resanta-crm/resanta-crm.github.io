@@ -28,7 +28,7 @@
   markdown:'Уценка',stands:'Стенды',cash:'Поступления',infographics:'Инфографика',
   parser:'Парсер'
  });
- let sb=null,stageId='',lastCommand='',timer=null,ready=false,opening=false;
+ let sb=null,stageId='',lastCommand='',timer=null,ready=false,opening=false,autoShow=false;
  const showMessage=(message,error=false)=>{
   $('stage-info').textContent=message;
   if(error)$('stage-error').textContent=message;
@@ -45,6 +45,7 @@
   $('stage-error').textContent='';
   document.body.classList.add('running');
   $('hide').disabled=false;
+  autoShow=false;
  }
  function stopPoll(){if(timer){clearInterval(timer);timer=null;}}
  function startPoll(){stopPoll();timer=setInterval(poll,DELAY);}
@@ -123,6 +124,7 @@
    if(r.status!=='active')throw Error('Показ завершён');
    if(!frameReady()){ready=false;shutter('В CRM закончилась авторизация');return;}
    ready=true;
+   if(autoShow)show();
    if(r.command_id&&r.command_id!==lastCommand){
     lastCommand=r.command_id;
     if(r.page_id)navigate(r.page_id);
@@ -154,7 +156,7 @@
    const r=await call('stage_open');
    if(!r.stage_id)throw Error('Канал конференции не создан');
    stageId=r.stage_id;
-   lastCommand='';
+   lastCommand='';autoShow=true;
    showMessage('Очки подключены. Показываю оригинальную CRM…');
    $('stop').disabled=false;
    loadFrame();
@@ -174,7 +176,7 @@
    $('start').disabled=true;return;
   }
   $('start').addEventListener('click',open);
-  $('hide').addEventListener('click',()=>shutter('Показ временно скрыт'));
+  $('hide').addEventListener('click',()=>{autoShow=false;shutter('Показ временно скрыт')});
   $('stop').addEventListener('click',close);
   window.addEventListener('pagehide',stopPoll);
   showMessage('Выведите это окно на расширенный экран проектора, затем включите показ');
