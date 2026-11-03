@@ -84,7 +84,7 @@ jobs:
           assert 'publishNavigation' in stage and 'checkStage(stage)' in stage
           assert "stage_poll" in x and "stage_open" in x
           assert "crypto.subtle.verify" in fast and "challenge_replayed" in fast
-          assert "ownerPresent" in fast and "session" not in "'.join([])" if False else True
+          assert 'ownerPresent' in fast and 'enroll' in fast
           assert "device_revoke" in x
           print('fast approval and stage authorization boundaries PASS')
           print('server-auth and budget contract PASS')
