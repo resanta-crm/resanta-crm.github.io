@@ -65,7 +65,7 @@ public final class MainActivity extends Activity {
             if(!quickWaiting || isFinishing() || isDestroyed() || connected())return;
             if(System.currentTimeMillis()-quickStartedAt>570000){
                 quickWaiting=false;
-                message("Быстрый вход не подтверждён. Можно подключиться по коду.");
+                message("Вход не подтверждён на MacBook. Повтори USB-подключение.");
                 return;
             }
             if(!busy)confirmPair();
@@ -226,10 +226,12 @@ public final class MainActivity extends Activity {
         if(intent==null)return;
         final String provision=intent.getStringExtra("resanta_usb_pair");
         final boolean disconnect=intent.getBooleanExtra("resanta_usb_disconnect",false);
+        final String disconnectNonce=intent.getStringExtra("resanta_usb_disconnect_nonce");
         // Never keep the temporary code in Activity intent state/back stack.
         intent.removeExtra("resanta_usb_pair");
         intent.removeExtra("resanta_usb_disconnect");
-        if(disconnect){disconnectUsb();return;}
+        intent.removeExtra("resanta_usb_disconnect_nonce");
+        if(disconnect){disconnectUsb(disconnectNonce);return;}
         if(provision!=null){
             if(!provision.matches("\\d{6}")){
                 message("USB-подключение: неверный временный код.");return;
@@ -237,12 +239,19 @@ public final class MainActivity extends Activity {
             pairWithCode(provision,true);
         }
     }
-    private void disconnectUsb(){
+    private void disconnectUsb(String suppliedNonce){
+        // Non-secret acknowledgment so the Mac USB helper can verify
+        // server revocation for THIS cable disconnect, not a prior one.
+        final String nonce=suppliedNonce!=null&&suppliedNonce.matches("[0-9a-f]{24}")
+            ?suppliedNonce:"unknown";
         final String t=token;
         // Invalidate all local session material, mic and WebView immediately.
         resetSession();
         message("Очки отключены через USB. Удаляю сеанс на сервере…");
-        if(t.isEmpty()){finish();return;}
+        if(t.isEmpty()){
+            android.util.Log.i("RESANTA_AIR3_USB","usb_revoke_no_active_session:"+nonce);
+            finish();return;
+        }
         work.execute(()->{
             boolean revoked=false;
             try{
@@ -251,8 +260,8 @@ public final class MainActivity extends Activity {
             }catch(Exception ignored){}
             final boolean confirmed=revoked;
             main.post(()->{
-                if(confirmed)android.util.Log.i("RESANTA_AIR3_USB","server_session_revoked");
-                else android.util.Log.w("RESANTA_AIR3_USB","revoke_unconfirmed_check_mac_controller");
+                if(confirmed)android.util.Log.i("RESANTA_AIR3_USB","usb_revoke_confirmed:"+nonce);
+                else android.util.Log.w("RESANTA_AIR3_USB","usb_revoke_unconfirmed:"+nonce);
                 finish();
             });
         });
