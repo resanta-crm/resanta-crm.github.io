@@ -32,7 +32,7 @@
   budgets:'Бюджеты', 'my-routes':'Мой маршрут',route:'Маршрут дня',
   workday:'Рабочий день',control:'Контроль'
  });
- let sb=null,stageId='',lastCommand='',timer=null,ready=false,opening=false,autoShow=false;
+ let sb=null,stageId='',lastCommand='',timer=null,ready=false,opening=false,autoShow=false,frameStartedAt=0;
  const showMessage=(message,error=false)=>{
   $('stage-info').textContent=message;
   if(error)$('stage-error').textContent=message;
@@ -86,7 +86,7 @@
  function frameReady(){
   const doc=$('crm').contentDocument;
   const app=doc?.getElementById('app');
-  return Boolean(app&&app.style.display!=='none'&&doc.getElementById('nav-dashboard'));
+  return Boolean(app&&doc.defaultView?.getComputedStyle(app).display!=='none'&&doc.getElementById('nav-dashboard'));
  }
  function visible(button,doc){
   if(!button||button.disabled||button.getAttribute('aria-disabled')==='true')return false;
@@ -100,7 +100,7 @@
  }
  function navigate(domain){
   if(!Object.prototype.hasOwnProperty.call(MAP,domain))return;
-  if(!frameReady()){ready=false;shutter('CRM больше не авторизована — показ скрыт');return;}
+  if(!frameReady()){ready=false;autoShow=false;shutter('CRM больше не авторизована — показ скрыт');return;}
   const doc=$('crm').contentDocument;
   let target=null;
   for(const id of MAP[domain]){
@@ -126,7 +126,14 @@
   try{
    const r=await call('stage_poll',{stage_id:stageId});
    if(r.status!=='active')throw Error('Показ завершён');
-   if(!frameReady()){ready=false;shutter('В CRM закончилась авторизация');return;}
+   if(!frameReady()){
+    const wasReady=ready;
+    ready=false;
+    if(wasReady || (frameStartedAt&&Date.now()-frameStartedAt>25000)){
+      autoShow=false;shutter('Оригинальная CRM требует повторной авторизации. Показ скрыт.');
+    }else showMessage('Загрузка оригинальной CRM…');
+    return;
+   }
    ready=true;
    if(autoShow)show();
    if(r.command_id&&r.command_id!==lastCommand){
@@ -141,6 +148,7 @@
  function loadFrame(){
   const iframe=$('crm');
   if(!iframe.getAttribute('src')){
+   frameStartedAt=Date.now();
    iframe.setAttribute('src','./index.html');
    iframe.addEventListener('load',()=>{
     setTimeout(()=>{
