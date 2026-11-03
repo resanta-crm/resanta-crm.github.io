@@ -9,6 +9,7 @@
 <h3>INMO AIR3 · безопасное подключение</h3>
 <p><strong>Без ввода кода:</strong> подключи AIR3 кабелем к MacBook, запусти подготовленный USB-помощник, затем нажми кнопку ниже. После появления заявки подтверди её на MacBook. Затем кабель можно убрать.</p>
 <button id="air3-usb-prepare" type="button">🔌 Подключить очки по USB · без ввода кода</button>
+<button id="air3-usb-retry-copy" type="button" hidden>Повторить передачу по USB</button>
 <p><strong>Повторный вход:</strong> откройте приложение «РЕСАНТА AI 360°» на ранее привязанных очках. Здесь появится запрос — нажмите <strong>«Разрешить вход»</strong>. Код больше не требуется. Сеанс действует до 60 минут.</p>
 <p><strong>Первая привязка или сброс очков:</strong> тогда один раз потребуется шестизначный код.</p>
 <button id="air3-create" type="button">Первичная привязка: создать код</button>
@@ -33,6 +34,9 @@ function initAir3Control(){
  const END='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-gateway-v1';
  const V2='https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-air3-v2';
  let codeExpiresAt=0,refreshing=false,clock=null;
+ // Short-lived owner-verified code exists only in the Mac browser's memory
+ // if macOS blocks the first clipboard attempt; never render it in the UI.
+ let usbCode='',usbCodeExpiresAt=0;
  launch.hidden=false;
  async function api(action,params={}){
    const {data,error}=await window.db.auth.getSession();
@@ -111,13 +115,42 @@ function initAir3Control(){
      // Only USB ADB helper consumes it; neither the Mac UI nor AIR3 needs
      // anyone to read or enter the digits. Server approval is STILL mandatory.
      const result=await api('create');
-     if(!/^\\d{6}$/.test(String(result.code||'')))throw Error('Сервис не выдал временное подтверждение.');
-     await navigator.clipboard.writeText('AIR3USB:'+result.code);
+     // The server returns a six-digit STRING; one slash in JS regex is essential.
+     // Do not create another code when retrying a macOS clipboard permission.
+     const digits=String(result.code??'');
+     if(!/^\d{6}$/.test(digits))throw Error('Сервис вернул некорректное временное подтверждение.');
+     usbCode=digits;
+     usbCodeExpiresAt=Date.parse(result.expires_at)||Date.now()+120000;
+     try{
+       await navigator.clipboard.writeText('AIR3USB:'+usbCode);
+       usbCode='';usbCodeExpiresAt=0;
+       $('air3-usb-retry-copy').hidden=true;
+       notice.textContent='USB-подключение передано MacBook. После появления новой заявки нажмите «Разрешить вход».';
+     }catch(_){
+       $('air3-usb-retry-copy').hidden=false;
+       notice.textContent='macOS не разрешила копирование. Нажмите «Повторить передачу по USB» — новый код создавать не нужно.';
+     }
      clearCode();
-     notice.textContent='USB-подключение подготовлено. MacBook передаёт подтверждение через USB-помощник. Когда ниже появится заявка, нажмите «Разрешить вход». Цифры вводить не нужно.';
      await refresh();
    }catch(e){error(e)}
    finally{button.disabled=false}
+ };
+ $('air3-usb-retry-copy').onclick=async()=>{
+   if(!usbCode||Date.now()>=usbCodeExpiresAt){
+     usbCode='';usbCodeExpiresAt=0;
+     $('air3-usb-retry-copy').hidden=true;
+     notice.textContent='Временное подтверждение истекло. Нажмите USB-подключение заново.';
+     return;
+   }
+   try{
+     // Direct user click: the clipboard API sees a fresh user gesture.
+     await navigator.clipboard.writeText('AIR3USB:'+usbCode);
+     usbCode='';usbCodeExpiresAt=0;
+     $('air3-usb-retry-copy').hidden=true;
+     notice.textContent='Подтверждение передано USB-помощнику. На MacBook подтвердите новую заявку.';
+   }catch(_){
+     notice.textContent='Не удалось записать буфер обмена. Разрешите доступ к буферу для этого сайта.';
+   }
  };
  $('air3-create').onclick=async()=>{
    const b=$('air3-create');b.disabled=true;notice.textContent='';
@@ -133,7 +166,7 @@ function initAir3Control(){
  $('air3-hide').onclick=()=>{
    panel.hidden=true;launch.hidden=false;clearCode();notice.textContent='';
  };
- window.addEventListener('pagehide',()=>{clearCode();if(clock){clearInterval(clock);clock=null}});
+ window.addEventListener('pagehide',()=>{clearCode();usbCode='';usbCodeExpiresAt=0;if(clock){clearInterval(clock);clock=null}});
  // Automatically show pending approvals: returning users only approve once.
  launch.click();
 }
