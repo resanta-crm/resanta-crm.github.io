@@ -18,7 +18,7 @@ Deno.serve(async req=>{
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{
   ...(ORIGINS.has(origin)?{'access-control-allow-origin':origin}:{}),
   'access-control-allow-methods':'POST,OPTIONS',
-  'access-control-allow-headers':'content-type,apikey'
+  'access-control-allow-headers':'content-type,apikey,authorization'
  }});
  if(req.method!=='POST'||(origin&&!ORIGINS.has(origin)))return json({error:'origin_denied'},403,origin);
  if(Number(req.headers.get('content-length')||0)>750000)return json({error:'body_too_large'},413,origin);
