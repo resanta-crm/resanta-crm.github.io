@@ -123,9 +123,8 @@ final class RealCRMView extends FrameLayout {
         if(closed)return;
         web.evaluateJavascript(
           "(function(){var b=document.getElementById('nav-sales');" +
-          "if(!b)return 'loading';for(var p=b;p;p=p.parentElement){" +
-          "if(p.nodeType===1&&(getComputedStyle(p).display==='none'||" +
-          "getComputedStyle(p).visibility==='hidden'))return 'login';}" +
+          "var app=document.getElementById('app');if(!b||!app)return 'loading';" +
+          "if(getComputedStyle(app).display==='none')return 'login';" +
           "return 'ready';})()", raw->{
             if(closed)return;
             siteReady="\"ready\"".equals(raw);
@@ -151,13 +150,35 @@ final class RealCRMView extends FrameLayout {
             case "routes":id="nav-routes-boss";break;
             case "stock":id="nav-warehouse-control";break;
             case "tasks":id="nav-tasks";break;
+            case "gps":id="nav-gps-control";break;
+            case "payments":id="nav-payments";break;
+            case "competitors":id="nav-competitors";break;
+            case "cards_21vek":id="nav-cards-21vek";break;
+            case "motivation":id="nav-managers";break;
+            case "markdown":id="nav-markdown";break;
+            case "stands":id="nav-stands";break;
+            case "cash":id="nav-cash";break;
+            case "infographics":id="nav-infographics";break;
+            case "parser":id="nav-parser";break;
+            case "alerts":id="nav-alerts";break;
+            case "visits":id="nav-visits";break;
+            case "abc":id="nav-abc";break;
+            case "budgets":id="nav-budgets";break;
+            case "my-routes":id="nav-my-routes";break;
+            case "workday":id="nav-workday";break;
+            case "control":id="nav-control";break;
             default:return;
         }
-        final String script="(function(){var b=document.getElementById('"+id+"');"+
-            "if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')return 'unavailable';"+
-            "for(var p=b;p;p=p.parentElement){if(p.nodeType===1&&(getComputedStyle(p).display==='none'"+
-            "||getComputedStyle(p).visibility==='hidden'))return 'hidden';}"+
-            "b.click();return 'clicked';})()";
+        final String suffix=id.substring(4);
+        // In actual CRM mobile layout the sidebar is hidden, whereas the same
+        // role-scoped navigation is visible through bottom-nav (bn-*).
+        final String script="(function(){var ids=['bn-"+suffix+"','nav-"+suffix+"'];"+
+            "for(var i=0;i<ids.length;i++){var b=document.getElementById(ids[i]);"+
+            "if(!b||b.disabled||b.getAttribute('aria-disabled')==='true')continue;"+
+            "var visible=true;for(var p=b;p;p=p.parentElement){"+
+            "if(p.nodeType===1&&(getComputedStyle(p).display==='none'"+
+            "||getComputedStyle(p).visibility==='hidden')){visible=false;break;}}"+
+            "if(visible){b.click();return 'clicked';}}return 'unavailable';})()";
         web.evaluateJavascript(script, ignored->{});
     }
 
