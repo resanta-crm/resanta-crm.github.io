@@ -88,10 +88,12 @@ public final class MainActivity extends Activity {
     private final JSONArray history = new JSONArray();
     private JSONObject memory = new JSONObject();
     private LinearLayout root;
+    private ScrollView setupScreen;
+    private RealCRMView actualCrm;
     private TextView state, answer;
     private EditText code, question;
     private Spinner section;
-    private Button connect, confirm, listen, wake, demo, open, send, exit;
+    private Button connect, confirm, listen, wake, demo, open, send, exit, openRealCrm;
     private String pairId = "", pairSecret = "", token = "";
     private long expiresAt;
     private MediaRecorder recorder;
@@ -189,6 +191,9 @@ public final class MainActivity extends Activity {
         demo=button("🎙 Демонстрация: «Привет, Лера»");
         demo.setOnClickListener(v->toggleDemo());
         root.addView(demo);
+        openRealCrm=button("🌐 Открыть НАСТОЯЩУЮ РЕСАНТА CRM");
+        openRealCrm.setOnClickListener(v->showOriginalCrm());
+        root.addView(openRealCrm);
 
         answer = text("Здесь появятся реальные данные CRM и ответы Леры.",18,false);
         answer.setTextIsSelectable(true);
@@ -199,10 +204,10 @@ public final class MainActivity extends Activity {
         exit.setOnClickListener(v -> close());
         root.addView(exit);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(root);
-        setContentView(scroll);
+        setupScreen = new ScrollView(this);
+        setupScreen.setFillViewport(true);
+        setupScreen.addView(root);
+        setContentView(setupScreen);
         updateControls();
         if(!devicePrefs.getString(PREF_DEVICE,"").isEmpty())
             main.postDelayed(this::beginFastSignIn,350);
@@ -236,6 +241,7 @@ public final class MainActivity extends Activity {
         wake.setText(wakeWanted?"■ Выключить «Привет, Ресанта»":"◉ Включить «Привет, Ресанта»");
         demo.setEnabled(connected()&&!busy);
         demo.setText(demoActive?"■ Завершить голосовой показ":"🎙 Демонстрация: «Привет, Лера»");
+        openRealCrm.setEnabled(connected()&&!busy);
         section.setEnabled(active);exit.setEnabled(connected()&&!busy);
         // Director prepares the session; the boss sees a clean voice-only
         // experience rather than technical CRM setup controls.
@@ -249,6 +255,24 @@ public final class MainActivity extends Activity {
     }
     private void message(String text) {
         state.setText(text);
+        if(actualCrm!=null)actualCrm.showStatus(text);
+    }
+    // Native voice runs over the unmodified production CRM website, which
+    // retains its own authenticated session and original Uni I/Uni X views.
+    // A delegated AIR3 voice token NEVER authenticates the browser page.
+    private void showOriginalCrm() {
+        if(!connected()){message("Сначала подтверди очки на MacBook.");return;}
+        if(actualCrm==null)actualCrm=new RealCRMView(this,this::toggleDemo,this::close);
+        setContentView(actualCrm);
+    }
+    private void navigateOriginalCrm(String domain) {
+        if(actualCrm!=null&&domain!=null)actualCrm.navigate(domain);
+    }
+    private void closeOriginalCrm() {
+        if(actualCrm==null)return;
+        actualCrm.closePrivateWebsite();
+        actualCrm=null;
+        if(!isFinishing()&&!isDestroyed())setContentView(setupScreen);
     }
     private void perform(String label, RemoteTask task, RemoteDone done) {
         if(busy)return;
@@ -333,7 +357,10 @@ public final class MainActivity extends Activity {
             quickWaiting=false;
             main.removeCallbacks(quickPoll);
             message("Лера подключена на 60 минут. 10 минут без действий — завершение.");
-            main.postDelayed(this::resumeWakeIfIdle,250);
+            // Show the real CRM immediately. Owner signs into that website
+            // separately before handing over the glasses, never using AI token.
+            main.postDelayed(this::showOriginalCrm,250);
+            main.postDelayed(this::resumeWakeIfIdle,300);
             answer.setText("Скажи «Лера, покажи продажи» или выбери раздел CRM.");
             // Register only the non-exportable device identity after the owner
             // explicitly approved this first pairing. Never retain a CRM token.
@@ -419,6 +446,7 @@ public final class MainActivity extends Activity {
         if(!connected()){message("Подключись заново с MacBook.");return;}
         final String domain=SECTION_IDS[section.getSelectedItemPosition()];
         perform("Открываю данные CRM…",()->remote("read",new JSONObject().put("domain",domain)),r->{
+            navigateOriginalCrm(domain);
             show(r);
             speakBrief(r.optString("answer","Раздел открыт."));
         });
@@ -440,6 +468,14 @@ public final class MainActivity extends Activity {
                 while(history.length()>6)history.remove(0);
                 memory=r.optJSONObject("memory")!=null?r.optJSONObject("memory"):new JSONObject();
             }
+            String domain=memory.optString("domain","");
+            if(domain.isEmpty()){
+                String normalized=q.toLocaleLowerCase(java.util.Locale.forLanguageTag("ru-RU"));
+                if(normalized.contains("продаж")||normalized.contains("план"))domain="sales";
+                else if(normalized.contains("задолж")||normalized.contains("долг")
+                        ||normalized.contains("пдз"))domain="debt";
+            }
+            navigateOriginalCrm(domain);
             show(r);
             speakBrief(r.optString("answer",""));
         });
@@ -470,6 +506,7 @@ public final class MainActivity extends Activity {
         }
         answer.setText(messageText.length()>3800?messageText.substring(0,3800)+"\n(часть данных)":messageText);
         message("Подключено к РЕСАНТА AI 360°. Ответ получен.");
+        if(actualCrm!=null)actualCrm.showStatus(messageText);
     }
     private void toggleWake(){
         if(wakeWanted){
@@ -505,6 +542,7 @@ public final class MainActivity extends Activity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if(recording)cleanupRecorder();
         if(status!=null&&!status.isEmpty())message(status);
+        if(actualCrm!=null)actualCrm.setVoiceActive(false);
         updateControls();
     }
     private void toggleDemo(){
@@ -533,6 +571,7 @@ public final class MainActivity extends Activity {
               demoStartedAt=SystemClock.elapsedRealtime();
               getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
               message("Режим показа включён. Надень очки и скажи: «Привет, Лера, какие продажи по Витебску?»");
+              if(actualCrm!=null)actualCrm.setVoiceActive(true);
               updateControls();
               main.postDelayed(this::resumeWakeIfIdle,200);
           }).show();
@@ -551,6 +590,7 @@ public final class MainActivity extends Activity {
         if(question==null){message("Ожидаю обращение «Привет, Лера»…");return;}
         // Visible proof of real STT in the glasses; not a scripted response.
         answer.setText("Распознано: "+spoken);
+        if(actualCrm!=null)actualCrm.showStatus("Распознано: "+spoken);
         if(question.isEmpty()){
             demoAwaitingQuestion=true;
             speakBrief("Слушаю вас.");
@@ -716,7 +756,8 @@ public final class MainActivity extends Activity {
         while(history.length()>0)history.remove(0);
         demoActive=false;demoAwaitingQuestion=false;
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        wakeListener.stop();cleanupRecorder();stopPlayback();updateControls();
+        wakeListener.stop();cleanupRecorder();stopPlayback();
+        closeOriginalCrm();updateControls();
     }
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
@@ -739,11 +780,18 @@ public final class MainActivity extends Activity {
         endDemo(""); // Shared boss demo cannot keep a microphone on in background.
         wakeListener.stop();
         cleanupRecorder();stopPlayback();
+        // The original CRM site must not remain signed in on shared glasses
+        // after the app is sent to the background.
+        closeOriginalCrm();
         super.onPause();
     }
     @Override protected void onResume(){
         super.onResume();
         main.postDelayed(this::resumeWakeIfIdle,300);
+    }
+    @Override public void onBackPressed(){
+        if(actualCrm!=null){close();return;}
+        super.onBackPressed();
     }
     @Override protected void onDestroy(){
         resetSession();work.shutdownNow();
