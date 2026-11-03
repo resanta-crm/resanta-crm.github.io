@@ -23,8 +23,8 @@ const sectionNames=Object.freeze({
  'стенд':'stands','поступлен':'cash','парсер':'parser'
 });
 export function navigationIntent(phrase){
- const q=normal(phrase);
- if(!/^(?:привет\s+ресанта[, ]*|лера[, ]*)?(?:открой|перейди|покажи раздел|выведи раздел|отобрази раздел|вернись в)/.test(q))
+ const q=normal(phrase).replace(/[,.!?;:]+/g,' ').replace(/\s+/g,' ').trim();
+ if(!/^(?:(?:привет\s+(?:ресанта|лера)|лера|эй\s+лера)\s+)?(?:открой|перейди|покажи(?:\s+раздел)?|выведи(?:\s+раздел)?|отобрази(?:\s+раздел)?|вернись\s+в)/.test(q))
   return null;
  for(const [word,section] of Object.entries(sectionNames)){
   if(q.includes(word)&&domains.includes(section))return section;
