@@ -1,0 +1,24 @@
+name: Inventory TSD auth recovery
+on:
+  pull_request:
+    paths:
+      - "inventory.html"
+      - "tsd.html"
+      - "tests/inventory-tsd-auth-recovery.test.mjs"
+      - ".github/workflows/inventory-tsd-auth-recovery.yml"
+  push:
+    branches:
+      - fix/inventory-tsd-expired-session-20261103
+permissions:
+  contents: read
+jobs:
+  inventory-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ensure offline queue is kept and login recovery works
+        run: node --test tests/inventory-tsd-auth-recovery.test.mjs
