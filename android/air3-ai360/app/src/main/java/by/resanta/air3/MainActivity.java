@@ -2,6 +2,8 @@ package by.resanta.air3;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.view.WindowManager;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.media.MediaPlayer;
@@ -89,13 +91,20 @@ public final class MainActivity extends Activity {
     private TextView state, answer;
     private EditText code, question;
     private Spinner section;
-    private Button connect, confirm, listen, wake, open, send, exit;
+    private Button connect, confirm, listen, wake, demo, open, send, exit;
     private String pairId = "", pairSecret = "", token = "";
     private long expiresAt;
     private MediaRecorder recorder;
     private MediaPlayer player;
     private File clip, playback;
     private boolean busy, recording, wakeWanted, wakePermissionPending, heardSpeech;
+    // The cloud-wake demonstration is foreground only, explicitly consented,
+    // time-limited, scoped to the already approved read-only AIR3 session.
+    private boolean demoActive, demoAwaitingQuestion, recordingForDemo, demoPermissionPending;
+    private int demoSpeechChecks;
+    private long demoStartedAt;
+    private static final int MAX_DEMO_SPEECH_CHECKS = 20;
+    private static final long MAX_DEMO_DURATION_MS = 15*60*1000L;
     private long recordingStartedAt, lastSpeechAt;
     private WakePhraseListener wakeListener;
     private int generation = 0;
@@ -177,6 +186,9 @@ public final class MainActivity extends Activity {
         wake=button("«Привет, Ресанта» — голосовая активация");
         wake.setOnClickListener(v->toggleWake());
         root.addView(wake);
+        demo=button("🎙 Демонстрация: «Привет, Лера»");
+        demo.setOnClickListener(v->toggleDemo());
+        root.addView(demo);
 
         answer = text("Здесь появятся реальные данные CRM и ответы Леры.",18,false);
         answer.setTextIsSelectable(true);
@@ -220,8 +232,10 @@ public final class MainActivity extends Activity {
         connect.setEnabled(!busy&&!connected());
         confirm.setEnabled(!busy&&!pairId.isEmpty()&&!connected());
         open.setEnabled(active);send.setEnabled(active);listen.setEnabled(active);
-        wake.setEnabled(connected());
+        wake.setEnabled(connected()&&!demoActive);
         wake.setText(wakeWanted?"■ Выключить «Привет, Ресанта»":"◉ Включить «Привет, Ресанта»");
+        demo.setEnabled(connected()&&!busy);
+        demo.setText(demoActive?"■ Завершить голосовой показ":"🎙 Демонстрация: «Привет, Лера»");
         section.setEnabled(active);exit.setEnabled(connected()&&!busy);
         code.setVisibility(connected()?View.GONE:View.VISIBLE);
         connect.setVisibility(connected()?View.GONE:View.VISIBLE);
@@ -478,9 +492,77 @@ public final class MainActivity extends Activity {
         if(questionAfterWake==null||questionAfterWake.isEmpty())requestVoice();
         else ask(questionAfterWake);
     }
+    private void endDemo(String status){
+        demoActive=false;
+        demoAwaitingQuestion=false;
+        recordingForDemo=false;
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if(recording)cleanupRecorder();
+        if(status!=null&&!status.isEmpty())message(status);
+        updateControls();
+    }
+    private void toggleDemo(){
+        if(demoActive){endDemo("Показ завершён. Микрофон выключен.");return;}
+        if(!connected()){message("Сначала разреши подключение очков на MacBook.");return;}
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            demoPermissionPending=true;
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_PERMISSION);
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Голосовая демонстрация для руководителя")
+          .setMessage("После включения в открытом приложении микрофон будет ждать обращение «Привет, Лера». " +
+           "Фрагменты услышанной речи отправляются на защищённый сервер OpenAI для распознавания; " +
+           "фрагменты без обращения игнорируются. Максимум 15 минут и 20 фрагментов речи. " +
+           "Ответы CRM только для чтения, доступ разрешён с вашего MacBook. " +
+           "При сворачивании приложения запись прекращается. Включить?")
+          .setNegativeButton("Отмена",null)
+          .setPositiveButton("Включить", (d,which)->{
+              if(!connected()||busy)return;
+              wakeListener.stop();
+              wakeWanted=false;
+              devicePrefs.edit().putBoolean("handsfree_foreground_optin",false).apply();
+              demoActive=true;
+              demoAwaitingQuestion=false;
+              demoSpeechChecks=0;
+              demoStartedAt=SystemClock.elapsedRealtime();
+              getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+              message("Режим показа включён. Надень очки и скажи: «Привет, Лера, какие продажи по Витебску?»");
+              updateControls();
+              main.postDelayed(this::resumeWakeIfIdle,200);
+          }).show();
+    }
+    private void acceptDemoSpeech(String words){
+        if(!demoActive||!connected())return;
+        String spoken=words==null?"":words.trim();
+        if(spoken.isEmpty()){message("Не расслышала. Жду «Привет, Лера».");return;}
+        if(demoAwaitingQuestion){
+            demoAwaitingQuestion=false;
+            String rest=DemoWakePhrase.questionAfterWake(spoken);
+            ask(rest==null?spoken:rest);
+            return;
+        }
+        String question=DemoWakePhrase.questionAfterWake(spoken);
+        if(question==null){message("Ожидаю обращение «Привет, Лера»…");return;}
+        if(question.isEmpty()){
+            demoAwaitingQuestion=true;
+            speakBrief("Слушаю вас.");
+        }else{
+            ask(question);
+        }
+    }
     private void resumeWakeIfIdle(){
-        if(!wakeWanted||!connected()||busy||recording||player!=null
+        if(!connected()||busy||recording||player!=null
             ||isFinishing()||isDestroyed()||!hasWindowFocus())return;
+        if(demoActive){
+            if(SystemClock.elapsedRealtime()-demoStartedAt>MAX_DEMO_DURATION_MS ||
+               demoSpeechChecks>=MAX_DEMO_SPEECH_CHECKS){
+                endDemo("Демонстрация завершена по лимиту. Микрофон выключен.");
+                return;
+            }
+            startVoice(true);
+            return;
+        }
+        if(!wakeWanted)return;
         if(!wakeListener.start()){
             message("Голосовая активация недоступна на этой прошивке. Нажми микрофон.");
         }
@@ -493,9 +575,11 @@ public final class MainActivity extends Activity {
         }
         startVoice();
     }
-    private void startVoice() {
+    private void startVoice() {startVoice(false);}
+    private void startVoice(boolean forDemo) {
         if(busy||recording||!connected())return;
         wakeListener.stop();
+        recordingForDemo=forDemo;
         stopPlayback();
         try{
             clip=File.createTempFile("air3-question-",".m4a",getCacheDir());
@@ -513,7 +597,8 @@ public final class MainActivity extends Activity {
             recordingStartedAt=SystemClock.elapsedRealtime();
             lastSpeechAt=recordingStartedAt;
             listen.setEnabled(false);
-            message("Слушаю тебя в очках. Закончу запись, когда ты перестанешь говорить.");
+            message(forDemo?(demoAwaitingQuestion?"Лера слушает вопрос…":"Ожидаю «Привет, Лера»…"):
+                "Слушаю тебя в очках. Закончу запись, когда ты перестанешь говорить.");
             main.postDelayed(recordingTick,140);
         }catch(Exception e){
             cleanupRecorder();
@@ -523,13 +608,22 @@ public final class MainActivity extends Activity {
     private void finishRecording() {
         if(!recording)return;
         main.removeCallbacks(recordingTick);
+        final boolean wasDemo=recordingForDemo;
+        recordingForDemo=false;
+        final boolean speechDetected=heardSpeech;
         final double seconds=Math.max(0.5,Math.min(10.5,
             (SystemClock.elapsedRealtime()-recordingStartedAt)/1000.0));
         try{recorder.stop();recorder.release();recorder=null;}
         catch(Exception e){cleanupRecorder();message("Запись не удалась.");resumeWakeIfIdle();return;}
         recording=false;
+        if(wasDemo&&!speechDetected){
+            cleanupRecorder();
+            main.postDelayed(this::resumeWakeIfIdle,180);
+            return; // Never send silence to STT or spend the AI360 speech budget.
+        }
         if(clip==null||clip.length()<900||clip.length()>512000){
-            cleanupRecorder();message("Запись слишком короткая или длинная.");return;
+            cleanupRecorder();message("Запись слишком короткая или длинная.");
+            main.postDelayed(this::resumeWakeIfIdle,200);return;
         }
         final File input=clip;
         try{
@@ -541,9 +635,15 @@ public final class MainActivity extends Activity {
             }
             input.delete();clip=null;
             final String encoded=Base64.encodeToString(bytes,Base64.NO_WRAP);
+            if(wasDemo)demoSpeechChecks++;
             perform("Распознаю голос через OpenAI…",()->remote("stt",new JSONObject()
                 .put("audio_base64",encoded).put("duration",seconds)),r->{
                 String words=r.optString("text","").trim();
+                if(wasDemo){
+                    if(!demoActive)return;
+                    acceptDemoSpeech(words);
+                    return;
+                }
                 if(words.isEmpty()){message("Речь не распознана. Повтори вопрос.");return;}
                 answer.setText("Ты сказал: "+words);
                 ask(words);
@@ -551,7 +651,7 @@ public final class MainActivity extends Activity {
         }catch(Exception e){cleanupRecorder();message("Ошибка чтения звука: "+e.getMessage());}
     }
     private void cleanupRecorder() {
-        main.removeCallbacks(recordingTick);recording=false;
+        main.removeCallbacks(recordingTick);recording=false;recordingForDemo=false;
         if(recorder!=null){
             try{recorder.stop();}catch(Exception ignored){}
             try{recorder.release();}catch(Exception ignored){}
@@ -606,15 +706,19 @@ public final class MainActivity extends Activity {
         token="";pairSecret="";pairId="";expiresAt=0;
         memory=new JSONObject();
         while(history.length()>0)history.remove(0);
+        demoActive=false;demoAwaitingQuestion=false;
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         wakeListener.stop();cleanupRecorder();stopPlayback();updateControls();
     }
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
         if(requestCode==MIC_PERMISSION){
             boolean forWake=wakePermissionPending;
-            wakePermissionPending=false;
+            boolean forDemo=demoPermissionPending;
+            wakePermissionPending=false;demoPermissionPending=false;
             if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){
-                if(forWake)resumeWakeIfIdle();
+                if(forDemo)toggleDemo();
+                else if(forWake)resumeWakeIfIdle();
                 else startVoice();
             }else{
                 if(forWake){wakeWanted=false;devicePrefs.edit().putBoolean("handsfree_foreground_optin",false).apply();}
@@ -624,6 +728,7 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onPause(){
+        endDemo(""); // Shared boss demo cannot keep a microphone on in background.
         wakeListener.stop();
         cleanupRecorder();stopPlayback();
         super.onPause();
