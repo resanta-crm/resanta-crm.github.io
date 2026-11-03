@@ -4919,12 +4919,71 @@ function ensureReasonUi2270(){
   modal.insertBefore(box,search);
 }
 
+// Manager store proposals are independent of adding an existing client to a route.
+// This button must exist in the CURRENT v22.7.0 modal; the older addRouteStop handler
+// is overridden below and was the reason the former request UI was unreachable.
+function ensureStoreRequestUi2270(){
+ if(!isFieldManager2270())return;
+ const modal=document.querySelector('#modal-add-route-stop .modal');
+ if(!modal)return;
+ let block=document.getElementById('v2270-store-request');
+ if(!block){
+  block=document.createElement('details');block.id='v2270-store-request';
+  block.style.cssText='border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:12px;background:#f3f8ff';
+  block.innerHTML='<summary style="cursor:pointer;font-weight:800">➕ Предложить новую торговую точку на согласование ДФ</summary>'+
+   '<p style="font-size:11px;color:var(--sub)">Не добавляет адрес в маршрут автоматически. После сохранения заявка появится у руководителя в «Клиент 360°».</p>'+
+   '<label style="display:block;font-size:12px">К какому существующему клиенту относится новая ТТ?</label>'+
+   '<select class="form-input" id="v2270-store-client" style="width:100%;margin:5px 0"></select>'+
+   '<input class="form-input" id="v2270-store-city" placeholder="Город" style="width:100%;margin:5px 0">'+
+   '<input class="form-input" id="v2270-store-address" placeholder="Улица, дом, магазин" style="width:100%;margin:5px 0">'+
+   '<button type="button" class="btn-primary" id="v2270-store-submit">Отправить ТТ на согласование</button>'+
+   '<div id="v2270-store-result" role="status" style="font-size:12px;margin-top:7px"></div>'+
+   '<div id="v2270-store-history" style="font-size:11px;color:var(--sub);margin-top:7px"></div>';
+  const search=modal.querySelector('.search-wrap');modal.insertBefore(block,search);
+  block.querySelector('#v2270-store-submit').onclick=async()=>{
+   const select=block.querySelector('#v2270-store-client'),b=block.querySelector('#v2270-store-submit');
+   const city=block.querySelector('#v2270-store-city').value.trim(),address=block.querySelector('#v2270-store-address').value.trim();
+   const output=block.querySelector('#v2270-store-result');
+   if(!select.value){output.textContent='Сначала выберите своего клиента.';return}
+   b.disabled=true;output.textContent='Сохраняю заявку на сервере…';
+   try{
+    const {data,error}=await db.rpc('client360_request_store_v1',{p_client_id:select.value,p_city:city,p_address:address});
+    if(error||!data?.ok||!data.request_id)throw error||new Error('Сервер не вернул номер сохранённой заявки');
+    output.textContent='✅ Заявка №'+String(data.request_id).slice(0,8)+' зарегистрирована. Статус: на согласовании у ДФ/ДФС.';
+    block.querySelector('#v2270-store-address').value='';
+    await refreshOwnStoreRequests2270(block);
+   }catch(e){output.textContent='⚠️ Заявка НЕ отправлена: '+String(e?.message||e||'Ошибка сервера');}
+   finally{b.disabled=false}
+  };
+ }
+ const list=block.querySelector('#v2270-store-client'),previous=list.value;
+ const options=(allClients||[]).filter(isOwnRouteClient2270).sort((a,b)=>String(a.name).localeCompare(String(b.name),'ru'));
+ list.replaceChildren();
+ const first=document.createElement('option');first.value='';first.textContent='Выберите клиента (юрлицо)';list.appendChild(first);
+ options.forEach(c=>{const o=document.createElement('option');o.value=String(c.id);o.textContent=String(c.name)+' · '+String(c.address||'');list.appendChild(o)});
+ if(options.some(c=>String(c.id)===previous))list.value=previous;
+ void refreshOwnStoreRequests2270(block);
+}
+async function refreshOwnStoreRequests2270(block){
+ const el=block?.querySelector('#v2270-store-history');if(!el)return;
+ try{
+  const {data,error}=await db.rpc('client360_my_store_requests_v2');
+  if(error||!data?.ok)throw error||new Error('Нет данных');
+  const items=(data.requests||[]).slice(0,8);el.replaceChildren();
+  const heading=document.createElement('b');heading.textContent='Мои заявки на ТТ: '+(data.requests||[]).length;el.appendChild(heading);
+  for(const r of items){const line=document.createElement('div');line.style.cssText='padding:5px 0;border-bottom:1px solid var(--border)';
+   line.textContent=String(r.status==='pending'?'🕒 На согласовании':r.status==='approved'?'✅ Одобрено':'❌ Отклонено')+' · '+r.city+', '+r.address+' · '+r.client_name;
+   el.appendChild(line);
+  }
+ }catch(e){el.textContent='Статусы заявок временно недоступны: '+String(e?.message||e);}
+}
 window.openAddRouteStop=function(date){
   if(!isFieldManager2270()){alert('Добавлять клиентов в маршрут могут только полевые менеджеры.');return;}
   const d=date2270(date);
   if(!d||d<String(TODAY)){alert('Добавлять клиента можно только на сегодня или будущую дату.');return;}
   routeStopAddDate=d;
   ensureReasonUi2270();
+  ensureStoreRequestUi2270();
   const label=document.getElementById('ars-date');
   if(label)label.innerHTML='<b>Добавление клиента в свой маршрут:</b> '+new Date(d+'T12:00:00').toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const search=document.getElementById('ars-search');if(search){search.value='';search.placeholder='Поиск среди моих рабочих и потенциальных клиентов...';}
