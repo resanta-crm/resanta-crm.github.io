@@ -399,8 +399,24 @@ public final class MainActivity extends Activity {
     private void show(JSONObject response) {
         String messageText=response.optString("answer","");
         if("section".equals(response.optString("kind"))) {
+            // The full original Uni I / Uni X CRM is on the projector.
+            // NEVER dump raw server JSON on the glasses or conference display.
             JSONObject data=response.optJSONObject("data");
-            if(data!=null)messageText+="\n\n"+data.toString();
+            String domain=response.optString("section","");
+            java.text.NumberFormat fmt=java.text.NumberFormat
+                .getNumberInstance(java.util.Locale.forLanguageTag("ru-RU"));
+            if(data!=null&&"sales".equals(domain)&&data.has("network_revenue")&&
+                    !data.isNull("network_revenue")){
+                messageText+="\n\nПродажи сети: "+
+                    fmt.format(data.optDouble("network_revenue"))+" белорусских рублей.";
+            }else if(data!=null&&"triovist".equals(domain)&&data.has("revenue")&&
+                    !data.isNull("revenue")){
+                messageText+="\n\nТриовист: "+
+                    fmt.format(data.optDouble("revenue"))+" белорусских рублей.";
+            }else{
+                messageText+="\n\nДанные раздела доступны для голосового разбора. "+
+                    "На экране конференции показывается штатная CRM.";
+            }
         }else if(!response.optString("detail","").isEmpty()){
             messageText+="\n\n"+response.optString("detail","");
         }
