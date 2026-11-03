@@ -293,6 +293,80 @@ public final class MainActivity extends Activity {
                 enrollAfterOwnerApproval();
         });
     }
+    // Register a one-time proof of device identity in the Android OS Keystore.
+    // This is NOT a user identity; Mac approval is still required every session.
+    private KeyStore.PrivateKeyEntry signingEntry() throws Exception {
+        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+        store.load(null);
+        if(!store.containsAlias(KEY_ALIAS)){
+            KeyPairGenerator gen=KeyPairGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_RSA,"AndroidKeyStore");
+            KeyGenParameterSpec spec=new KeyGenParameterSpec.Builder(KEY_ALIAS,
+                KeyProperties.PURPOSE_SIGN|KeyProperties.PURPOSE_VERIFY)
+                .setKeySize(2048)
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PSS)
+                .build();
+            gen.initialize(spec);
+            gen.generateKeyPair();
+        }
+        KeyStore.Entry entry=store.getEntry(KEY_ALIAS,null);
+        if(!(entry instanceof KeyStore.PrivateKeyEntry))
+            throw new Exception("Ключ очков недоступен");
+        return (KeyStore.PrivateKeyEntry)entry;
+    }
+    private byte[] signChallenge(String payload) throws Exception {
+        Signature signer=Signature.getInstance("SHA256withRSA/PSS");
+        signer.initSign(signingEntry().getPrivateKey());
+        signer.setParameter(new PSSParameterSpec(
+            "SHA-256","MGF1",MGF1ParameterSpec.SHA256,32,1));
+        signer.update(payload.getBytes(StandardCharsets.UTF_8));
+        return signer.sign();
+    }
+    private void enrollAfterOwnerApproval() {
+        if(!connected()||busy)return;
+        perform("Сохраняю доверие к очкам для быстрого следующего входа…",()->{
+            String spki=Base64.encodeToString(
+                signingEntry().getCertificate().getPublicKey().getEncoded(),
+                Base64.NO_WRAP);
+            return remote("enroll",new JSONObject().put("public_key_spki",spki));
+        },r->{
+            String id=r.optString("device_id","");
+            if(!id.isEmpty()){
+                devicePrefs.edit().putString(PREF_DEVICE,id).apply();
+                message("Очки привязаны! В следующий раз достаточно одного разрешения на MacBook.");
+            }else{
+                message("Лера подключена. Быстрый повторный вход пока недоступен.");
+            }
+        });
+    }
+    private void beginFastSignIn() {
+        String deviceId=devicePrefs.getString(PREF_DEVICE,"");
+        if(deviceId.isEmpty()||connected()||busy||quickWaiting)return;
+        byte[] entropy=new byte[40];random.nextBytes(entropy);
+        final String newSecret=Base64.encodeToString(entropy,
+            Base64.URL_SAFE|Base64.NO_PADDING|Base64.NO_WRAP);
+        perform("Быстрый вход: проверяю зарегистрированные очки…",()->{
+            JSONObject c=remote("fast_challenge",new JSONObject()
+                .put("device_id",deviceId));
+            String challengeId=c.getString("challenge_id");
+            byte[] signature=signChallenge(challengeId+":"+c.getString("nonce"));
+            return remote("fast_request",new JSONObject()
+                .put("device_id",deviceId)
+                .put("challenge_id",challengeId)
+                .put("signature_base64",Base64.encodeToString(signature,Base64.NO_WRAP))
+                .put("secret",newSecret));
+        },r->{
+            pairId=r.optString("id","");
+            pairSecret=newSecret;
+            if(pairId.isEmpty()){
+                message("Не удалось создать запрос. Подключись по коду.");return;
+            }
+            quickWaiting=true;quickStartedAt=System.currentTimeMillis();
+            message("Это твои очки. На MacBook нажми «Разрешить вход» — код вводить не нужно.");
+            main.postDelayed(quickPoll,3000);
+        });
+    }
     private void openSection() {
         if(!connected()){message("Подключись заново с MacBook.");return;}
         final String domain=SECTION_IDS[section.getSelectedItemPosition()];
