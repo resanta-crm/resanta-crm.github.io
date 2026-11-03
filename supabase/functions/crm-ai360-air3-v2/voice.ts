@@ -1,3 +1,5 @@
+// @ts-nocheck
+// Import interoperability with the established JS-only AI360 v4 core.
 import { ADMIN, OWNER, deny, quota, stillAllowed } from './auth.ts';
 
 function unpack(s){
