@@ -36,7 +36,9 @@ function run(options={}){
   currentProfile:{email:userEmail,role,access_scope:role==='manager'?'triovist':null},
   renderTriovist(){},
   TRIOVIST_RUNTIME_STATE_V227324:{snapshot:()=>({loaded:true,dashboard,salesItems:items})},
-  db:{rpc:async()=>({data:null,error:null})}
+  db:{rpc:async(name,args)=>name==='triovist_get_dashboard'&&options.lastClosed?
+   ({data:{end_month:args.p_end_month,items:options.lastClosed},error:null}):
+   ({data:null,error:{message:'not mocked'}})}
  };
  const ctx={window:w,document,TODAY:'2026-11-04',currentProfile:w.currentProfile,Date,Promise,console};
  vm.runInNewContext(mod,ctx,{filename:'triovist-summary.js'});
@@ -47,14 +49,14 @@ test('overview renders complete dashboard with existing sales and actionable sec
  const env=run();
  assert.equal(await env.window.RESANTA_TRIOVIST_SUMMARY360_V1.open(),true);
  const content=env.root.innerHTML;
- for(const title of ['Сводка 360°','Продажи','План','Динамика','Короткий ИИ-брифинг','Свежесть источников','Менеджеры','Триовист','задачам ИИ'])assert.ok(content.includes(title),title);
+ for(const title of ['Сводка 360°','Продажи','План','Год к году','Короткий ИИ-брифинг','Свежесть источников','Менеджеры','Триовист','задачам ИИ'])assert.ok(content.includes(title),title);
  assert.ok(content.replace(/\u00a0/g,' ').includes('13 672,07'),'localized amount was not displayed');
  assert.ok(env.page.classList.contains('tri360-ready'));
 });
 test('partial November does not misrepresent 2025 full November as comparable YoY -96%',async()=>{
  const env=run();await env.window.RESANTA_TRIOVIST_SUMMARY360_V1.open();
- assert.match(env.root.innerHTML,/Месяц ещё не завершён/);
- assert.match(env.root.innerHTML,/Не рассчитываем/);
+ assert.match(env.root.innerHTML,/Месяц продолжается/);
+ assert.match(env.root.innerHTML,/Закрытый|Загружаем/);
  assert.doesNotMatch(env.root.innerHTML,/-96[,.]3%/);
 });
 test('closed month can show exact YoY and a verified plan, never synthetic values',async()=>{
@@ -86,10 +88,39 @@ test('existing Work and all four Commerce actions stay in original router',()=>{
  assert.match(base,/home:\['triovist-warning','tri-period-mode','tri-kpis','tri-manager-cards','tri-overview-360'\]/);
  assert.match(base,/await window\.RESANTA_TRIOVIST_SUMMARY360_V1\?\.open/);
  assert.match(old,/dashboard:triDashboard\?/);
- assert.match(html,/168-triovist-summary-360-v1\.js\?v=20261104-1/);
+ assert.match(html,/168-triovist-summary-360-v1\.js\?v=20261104-3/);
 });
 test('read-only summary never submits tasks, changes plans or budgets',()=>{
  assert.doesNotMatch(mod,/\.insert\(|\.upsert\(|\.update\(|\.delete\(|\.from\(/);
  assert.doesNotMatch(mod,/triovist_set_plan|triovist_commercial_set_budget|triovist_tasks_action/);
  assert.match(mod,/data-tri360="section" data-value="tasks"/);
+});
+
+test('real last closed month is compared to same month one year earlier; November is not',async()=>{
+ const e=run({lastClosed:[
+  {manager_name:'Александренко',manager_email:'aleksandrenko_av@resanta.ru',assigned_group:'Инструмент',current_revenue:500000,previous_revenue:300000},
+  {manager_name:'Кришталь',manager_email:'krishtal_na@resanta.ru',assigned_group:'Климат',current_revenue:298475.54,previous_revenue:222519.67}
+ ]});
+ await e.window.RESANTA_TRIOVIST_SUMMARY360_V1.open();
+ await new Promise(done=>setTimeout(done,0));
+ const result=e.root.innerHTML.replace(/\u00a0/g,' ');
+ assert.match(result,/798 475,54 BYN/);
+ assert.match(result,/522 519,67 BYN/);
+ assert.match(result,/\+52,8%/);
+ assert.match(result,/Факт ноябрь 2026 г\./);
+ assert.doesNotMatch(result,/Не рассчитываем|370 520,04 BYN|Прошлый период/);
+ const graph=result.slice(result.indexOf('Продажи по группам'),result.indexOf('Короткий ИИ-брифинг'));
+ assert.doesNotMatch(graph,/t360-track prior/);
+});
+test('last closed month follows manager scope and does not reveal another manager numbers',async()=>{
+ const e=run({role:'manager',lastClosed:[
+  {manager_name:'Александренко',manager_email:'aleksandrenko_av@resanta.ru',current_revenue:500000,previous_revenue:300000},
+  {manager_name:'Кришталь',manager_email:'krishtal_na@resanta.ru',current_revenue:298475.54,previous_revenue:222519.67}
+ ]});
+ await e.window.RESANTA_TRIOVIST_SUMMARY360_V1.open();
+ await new Promise(done=>setTimeout(done,0));
+ const result=e.root.innerHTML.replace(/\u00a0/g,' ');
+ assert.match(result,/500 000,00 BYN/);
+ assert.match(result,/300 000,00 BYN/);
+ assert.doesNotMatch(result,/298 475,54 BYN|522 519,67 BYN/);
 });

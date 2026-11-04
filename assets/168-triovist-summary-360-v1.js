@@ -6,7 +6,7 @@
 'use strict';
 if(w.RESANTA_TRIOVIST_SUMMARY360_V1)return;
 const ID='tri-overview-360',STYLE='tri-overview-360-css';
-const state={mode:'groups',sources:null,loadedAt:0,busy:false,lastIdentity:''};
+const state={mode:'groups',sources:null,loadedAt:0,busy:false,lastIdentity:'',closed:null,closedKey:'',closedAt:0,closedBusy:false,closedEpoch:0};
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=x=>Number.isFinite(Number(x))?Number(x):0;
 const fmt=x=>n(x).toLocaleString('ru-RU',{maximumFractionDigits:2,minimumFractionDigits:2})+' BYN';
@@ -21,6 +21,38 @@ const currentYm=()=>{try{return String(TODAY||new Date().toISOString().slice(0,1
 const home=()=>page()?.classList.contains('active')&&page()?.dataset.triovistView==='home';
 const snap=()=>{try{return w.TRIOVIST_RUNTIME_STATE_V227324?.snapshot?.()}catch(_){return null}};
 function age(x){const d=Date.parse(String(x||''));return Number.isFinite(d)?Math.max(0,Math.floor((Date.now()-d)/86400000)):null}
+function priorMonth(ym){const y=Number(ym.slice(0,4)),m=Number(ym.slice(5,7));return y&&m>=1&&m<=12?new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7):''}
+function monthLabel(ym){const y=Number(ym.slice(0,4)),m=Number(ym.slice(5,7));return m>=1&&m<=12?new Date(Date.UTC(y,m-1,1)).toLocaleDateString('ru-RU',{timeZone:'UTC',month:'long',year:'numeric'}):ym}
+function closedData(d){
+ if(!d?.incomplete||d.mode!=='month')return null;
+ const month=priorMonth(d.end),key=email()+'|'+month;
+ if(!state.closed||state.closedKey!==key)return null;
+ const mgr=isManager()?email():norm(document.getElementById('tri-manager-filter')?.value||'all'),q=norm(document.getElementById('tri-search')?.value);
+ let a=0,b=0;
+ for(const r of state.closed.items){
+  if(mgr&&mgr!=='all'&&norm(r.manager_email)!==mgr)continue;
+  if(q&&!norm([r.assigned_group,r.category,r.subgroup,r.sku,r.product].join(' ')).includes(q))continue;
+  a+=Math.round(n(r.current_revenue)*100);b+=Math.round(n(r.previous_revenue)*100);
+ }
+ return {month,current:a/100,previous:b/100,pct:b>0?(a/b-1)*100:null};
+}
+async function loadClosed(force=false){
+ const d=verified();if(!d?.incomplete||d.mode!=='month')return;
+ const m=priorMonth(d.end),key=email()+'|'+m;
+ if(!m||state.closedBusy)return;
+ if(!force&&state.closed&&state.closedKey===key&&Date.now()-state.closedAt<300000)return;
+ let client;try{client=typeof db!=='undefined'?db:w.db}catch(_){client=w.db}
+ if(!client?.rpc)return;
+ state.closedBusy=true;const epoch=++state.closedEpoch;
+ try{
+  const r=await client.rpc('triovist_get_dashboard',{p_end_month:m,p_mode:'month'});
+  if(r.error)throw r.error;
+  if(epoch!==state.closedEpoch||key!==email()+'|'+m)return;
+  if(!r.data||r.data.end_month!==m||!Array.isArray(r.data.items))throw Error('Нет подтверждённых данных закрытого месяца');
+  state.closed=r.data;state.closedKey=key;state.closedAt=Date.now();
+ }catch(e){console.warn('Triovist Summary 360 last closed month:',e);state.closed=null;state.closedKey=key;state.closedAt=0}
+ finally{state.closedBusy=false}
+}
 function verified(){
  const src=snap();if(!src?.loaded||!src.dashboard||!Array.isArray(src.salesItems))return null;
  const d=src.dashboard,end=String(d.end_month||document.getElementById('tri-period-month')?.value||'').slice(0,7);
@@ -106,19 +138,19 @@ function mount(){
 function kpi(label,value,note,cl=''){return '<div class="t360-kpi '+cl+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></div>'}
 function graph(d){
  const data=(state.mode==='managers'?d.managers.map(x=>({name:x.name,cur:x.cur,prev:x.prev})):d.groups.map(x=>({name:x.name+' · '+x.manager,cur:x.cur,prev:x.prev}))).sort((a,b)=>b.cur-a.cur||b.prev-a.prev).slice(0,10);
- const max=Math.max(1,...data.map(x=>Math.max(x.cur,x.prev)));
+ const max=Math.max(1,...data.map(x=>d.incomplete?x.cur:Math.max(x.cur,x.prev)));
  const bars=data.map(x=>'<div class="t360-bar"><b>'+esc(x.name)+'</b><div class="t360-tracks">'+
  '<div class="t360-track" title="Продажи '+esc(fmt(x.cur))+'"><i style="width:'+Math.max(0,Math.min(100,x.cur/max*100)).toFixed(1)+'%"></i></div>'+
- '<div class="t360-track prior" title="Прошлый период '+esc(fmt(x.prev))+'"><i style="width:'+Math.max(0,Math.min(100,x.prev/max*100)).toFixed(1)+'%"></i></div></div>'+
+ (d.incomplete?'':'<div class="t360-track prior" title="Прошлый год '+esc(fmt(x.prev))+'"><i style="width:'+Math.max(0,Math.min(100,x.prev/max*100)).toFixed(1)+'%"></i></div>')+'</div>'+
  '<em>'+esc(short(x.cur))+'</em></div>').join('');
  return '<div class="t360-card"><div class="t360-head"><h3>📊 Продажи '+(state.mode==='managers'?'по менеджерам':'по группам')+'</h3>'+
  '<div class="t360-actions"><button data-tri360="mode" data-value="groups" class="'+(state.mode==='groups'?'on':'')+'">Группы</button><button data-tri360="mode" data-value="managers" class="'+(state.mode==='managers'?'on':'')+'">Менеджеры</button></div></div>'+
- '<div class="t360-note" style="margin-bottom:12px">🔵 Текущий период · ⚪ Предыдущий период. '+(d.incomplete?'Месяц не завершён.':'Данные 1С.')+'</div>'+
+ '<div class="t360-note" style="margin-bottom:12px">'+(d.incomplete?'🔵 Только фактические продажи этого месяца. Полный прошлогодний месяц не сравниваем.':'🔵 Текущий период · ⚪ Тот же период прошлого года. Данные 1С.')+'</div>'+
  '<div class="t360-bars">'+(bars||'<div class="t360-note">По фильтру продаж нет.</div>')+'</div></div>';
 }
 function briefing(d){
  const tips=[];
- if(d.incomplete)tips.push('Текущий месяц не завершён: сравнение с полным месяцем прошлого года не используем для оценки выполнения.');
+ if(d.incomplete){tips.push('Текущий месяц не закрыт. Динамику смотрим за последний завершённый месяц.');const c=closedData(d);if(c?.pct!=null)tips.push(monthLabel(c.month)+' к прошлому году: '+(c.pct>=0?'+':'')+percent(c.pct)+'.')}
  else if(d.pct!=null)tips.push('Динамика к прошлому периоду: '+(d.pct>0?'+':'')+percent(d.pct)+'.');
  if(d.allPlan==null)tips.push('План задан не всем менеджерам либо отсутствует. Не подменяем его прогнозом.');
  else if(d.allPlan>0)tips.push('Общее выполнение плана: '+percent(d.current/d.allPlan*100)+'.');
@@ -155,17 +187,25 @@ function render(){
  const d=verified();
  if(!d){p.classList.remove('tri360-ready');root.innerHTML='';return false}
  const identity=email()+'|'+(isManager()?'manager':'boss');
- if(identity!==state.lastIdentity){state.lastIdentity=identity;state.sources=null;state.loadedAt=0;state.mode='groups'}
+ if(identity!==state.lastIdentity){state.lastIdentity=identity;state.sources=null;state.loadedAt=0;state.mode='groups';state.closed=null;state.closedKey='';state.closedAt=0;state.closedEpoch++}
  const isPartial=d.incomplete;
  const pct=d.pct==null?'Не рассчитываем':(d.pct>0?'+':'')+percent(d.pct);
- const monthLabel=d.mode==='month'?'Выбранный месяц':d.mode==='ytd'?'С начала года':'Выбранный период';
- root.innerHTML='<div class="t360-head"><div><h3 style="font-size:20px">Триовист · Сводка 360°</h3><div class="t360-note">Сохранили меню «Работа» и «Коммерция». Все действия — в прежних разделах.</div></div><b>'+esc(d.end)+' · '+monthLabel+'</b></div>'+
- (isPartial?'<div class="t360-warning">⚠️ Месяц ещё не завершён. Нельзя считать разницу с полным ноябрём прошлого года показателем падения продаж. Сравнение ниже — справочное.</div>':'')+
- '<div class="t360-kpis">'+kpi('💰 Продажи',fmt(d.current),'Источник: 1С','good')+
- kpi('📉 Прошлый период',fmt(d.previous),isPartial?'Полный прошлый месяц — справочно':'Аналогичный период')+
- kpi('📈 Динамика',pct,isPartial?'Нужны сопоставимые даты':'Факт к прошлому периоду','warn')+
+ const periodLabel=d.mode==='month'?'Выбранный месяц':d.mode==='ytd'?'С начала года':'Выбранный период';
+ const last=closedData(d);
+ root.innerHTML='<div class="t360-head"><div><h3 style="font-size:20px">Триовист · Сводка 360°</h3><div class="t360-note">Сохранили меню «Работа» и «Коммерция». Все действия — в прежних разделах.</div></div><b>'+esc(d.end)+' · '+periodLabel+'</b></div>'+
+ (isPartial?'<div class="t360-warning">ℹ️ Месяц продолжается. Факт за ноябрь показываем отдельно; сравнение год к году — за последний завершённый месяц.</div>':'')+
+ '<div class="t360-kpis">'+(isPartial&&d.mode==='month'?
+ kpi('💰 Факт '+monthLabel(d.end),fmt(d.current),'Источник: продажи 1С','good')+
+ kpi('📅 Закрытый '+monthLabel(priorMonth(d.end)),last?fmt(last.current):'Загружаем…','Последний полный месяц')+
+ kpi('📅 Год назад · '+monthLabel(String(Number(d.end.slice(0,4))-1)+'-'+priorMonth(d.end).slice(5,7)),last?fmt(last.previous):'Загружаем…','Тот же полный месяц предыдущего года')+
+ kpi('📈 Год к году · '+monthLabel(priorMonth(d.end)),last&&last.pct!=null?(last.pct>=0?'+':'')+percent(last.pct):'Нет данных','Сравнение полных месяцев','good')+
+ kpi('🎯 План '+monthLabel(d.end),d.allPlan==null?'Не задан':fmt(d.allPlan),d.allPlan==null?'План не заполнен для всех менеджеров':'Выполнение '+(d.allPlan>0?percent(d.current/d.allPlan*100):'нет расчёта'))
+ :
+ kpi('💰 Продажи',fmt(d.current),'Источник: 1С','good')+
+ kpi('📉 Прошлый год',fmt(d.previous),'Тот же период предыдущего года')+
+ kpi('📈 Динамика',pct,'Сопоставимые полные периоды','good')+
  kpi('🎯 План',d.allPlan==null?'Не задан':fmt(d.allPlan),d.allPlan==null?'Недостаточно планов':d.allPlan>0?'Выполнение '+percent(d.current/d.allPlan*100):'План равен нулю')+
- kpi('📦 Группы',d.groups.length,'В выбранном отчёте')+'</div>'+
+ kpi('📦 Группы',d.groups.length,'В выбранном отчёте'))+'</div>'+
  '<div class="t360-grid">'+graph(d)+briefing(d)+'</div>'+
  '<div class="t360-grid">'+managers(d)+sourcePanel(d)+'</div>'+
  '<div class="t360-note">Данные берутся из действующего отчёта продаж; расчёты премии, планы и источники 1С не изменены. Подгруппы и SKU раскрываются в существующих разделах.</div>';
@@ -184,6 +224,7 @@ async function loadSources(force=false){
 async function open(){
  mount();const ok=render();
  if(ok&&!state.busy)void loadSources(false).then(()=>{if(home())render()}).catch(()=>{});
+ if(ok)void loadClosed().then(()=>{if(home())render()}).catch(()=>{});
  return ok;
 }
 const oldRender=w.renderTriovist;
