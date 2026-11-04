@@ -400,6 +400,7 @@ install();
   window.TRIOVIST_RUNTIME_STATE_V227324=Object.freeze({
     snapshot:()=>({
       salesItems:Array.isArray(triItems)?triItems:[],
+      dashboard:triDashboard?{end_month:triDashboard.end_month,period_plans:triDashboard.period_plans||[],last_import:triDashboard.last_import||{},history:triDashboard.history||{}}:null,
       stockItems:Array.isArray(triStockItems)?triStockItems:[],
       stockMeta:triStockMeta&&typeof triStockMeta==='object'?triStockMeta:{},
       loaded:!!triLoaded,

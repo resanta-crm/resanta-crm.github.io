@@ -1,0 +1,31 @@
+name: Triovist Summary 360 regression
+on:
+  pull_request:
+    paths:
+      - "assets/168-triovist-summary-360-v1.js"
+      - "assets/34-triovist-root-v23614.js"
+      - "assets/03-triovist-routes.js"
+      - "tests/triovist-summary-360-v1.test.mjs"
+      - "index.html"
+      - ".github/workflows/triovist-summary-360.yml"
+  push:
+    branches:
+      - feature/triovist-summary-360-unia-x-20261104
+permissions:
+  contents: read
+jobs:
+  triovist-overview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check JS syntax
+        run: |
+          node --check assets/03-triovist-routes.js
+          node --check assets/34-triovist-root-v23614.js
+          node --check assets/168-triovist-summary-360-v1.js
+      - name: Run Triovist Summary 360 UI tests
+        run: node --test tests/triovist-summary-360-v1.test.mjs
