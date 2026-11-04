@@ -6,7 +6,7 @@
 if(w.RESANTA_TRIOVIST_ACTION_CENTER_V1)return;
 const V='2026.11.04.1',ID='tr14-action-center',CSS='tr14-action-center-css';
 const SECTIONS={home:'Утренние приоритеты',groups:'Группы и категории',stock:'Остатки и заказ',tasks:'Задачи ИИ',cards:'Карточки 21vek',parser:'Наш листинг 21vek',competitors:'Конкуренты 21vek',sales:'Детализация продаж'};
-const s={ctx:null,tab:'home',seq:0,own:null,ownKey:'',cards:null,cardsKey:'',competitors:null,competitorsKey:'',showAll:false,flightOwn:null,flightCards:null,flightCompetitors:null};
+const s={ctx:null,tab:'home',seq:0,own:null,ownKey:'',cards:null,cardsKey:'',competitors:null,competitorsKey:'',today:null,todayKey:'',showAll:false,flightOwn:null,flightCards:null,flightCompetitors:null,flightToday:null};
 const E=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const N=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x):null;
 const norm=x=>String(x||'').trim().toLowerCase();
@@ -63,7 +63,7 @@ function root(){
    if(!b||!el.contains(b))return;
    if(b.dataset.taGo){document.querySelector('#tr14-shell [data-tr14="'+b.dataset.taGo+'"]')?.click();return}
    if(b.dataset.taMore!==undefined){s.showAll=!s.showAll;void update();return}
-   if(b.dataset.taRefresh!==undefined){s.ownKey='';s.cardsKey='';s.competitorsKey='';void update(true);return}
+   if(b.dataset.taRefresh!==undefined){s.ownKey='';s.cardsKey='';s.competitorsKey='';s.todayKey='';void update(true);return}
    if(b.dataset.taDetail!==undefined){
     const target=s.tab==='cards'?'tri21-card':s.tab==='tasks'?'tri-task-card':s.tab==='stock'?'tri-stock-card':s.tab==='parser'?'tri21-control-v236107':'tr14-panel';
     document.getElementById(target)?.scrollIntoView?.({block:'start',behavior:'smooth'});
@@ -101,6 +101,18 @@ async function own(force){
   if(key!==ownKey())return null;s.own=x;s.ownKey=key;return x;
  }).catch(e=>{console.warn('Triovist listing briefing unavailable',e?.message||e);return null}).finally(()=>{s.flightOwn=null});
  return s.flightOwn;
+}
+async function todayTasks(force){
+ if(!authorized(s.ctx))return null;
+ const key=myEmail()+'|'+day()+'|'+curMonth();
+ if(s.today&&s.todayKey===key&&!force)return s.today;
+ if(s.flightToday)return s.flightToday;
+ s.flightToday=rpc('triovist_tasks_get_dashboard_month_v23648',{p_month:curMonth()+'-01',p_manager_email:manager()?myEmail():null}).then(x=>{
+  if(key!==myEmail()+'|'+day()+'|'+curMonth())return null;
+  s.today=x;s.todayKey=key;return x;
+ }).catch(e=>{console.warn('Triovist daily task briefing unavailable',e?.message||e);return null})
+ .finally(()=>{s.flightToday=null});
+ return s.flightToday;
 }
 async function contentIssues(force){
  const hub=w.TRIOVIST_DATA_HUB_V227315;
@@ -145,7 +157,7 @@ function groupRows(snap){
 function taskRows(snap){
  const active=s.tab==='tasks'?taskSnapshot():null;
  const pack=active?.pack?.dash;
- const tasks=authorizedRows(pack?.tasks||((snap.month===active?.month||s.tab!=='tasks')?snap.tasks?.tasks:[]));
+ const tasks=authorizedRows(s.tab==='home'?(s.today?.tasks||[]):(pack?.tasks||((snap.month===active?.month)?snap.tasks?.tasks:[])));
  const pending=new Set(['pending_approval','overdue','awaiting_check','new','accepted','in_progress','waiting_21vek']);
  return tasks.filter(t=>pending.has(String(t.status||'')))
   .sort((a,b)=>(a.status==='overdue'?-2:0)-(b.status==='overdue'?-2:0)||
@@ -224,7 +236,7 @@ function paint(extra={}){
   kpis=[
    tile('Снимок продаж',snap.month||'—','Последний выбранный период 1С'),
    tile('Факт 1С',money(m?.current),'По подтверждённым данным'),
-   tile('Задачи в источнике',Array.isArray(snap.tasks?.tasks)?String(authorizedRows(snap.tasks.tasks).length):'—','Месяц '+(snap.month||'—')),
+   tile('Задачи месяца',Array.isArray(s.today?.tasks)?String(authorizedRows(s.today.tasks).length):'—','Текущий месяц '+curMonth()),
    tile('Позиции листинга',s.own?.summary?.total??'—','Свежесть проверяется отдельно')
   ];
   note='Сигналы формируются при открытии из подтверждённых данных. Сравнения продаж относятся к выбранному периоду, а листинг — к последним доступным снимкам.';
@@ -277,6 +289,7 @@ async function update(force=false){
  if(!authorized(s.ctx)||!isTri())return;
  const jobs=[];
  if(k==='home'||k==='parser')jobs.push(own(force));
+ if(k==='home')jobs.push(todayTasks(force));
  if(k==='cards')jobs.push(contentIssues(force));
  if(k==='competitors')jobs.push(competitorSummary(force));
  if(!jobs.length)return;
@@ -286,7 +299,7 @@ async function update(force=false){
 }
 function show(k,ctx){
  if(ctx&&authorized(ctx)){
-  if(myEmail()&&myEmail()!==norm(ctx.email)){s.own=s.cards=s.competitors=null;s.ownKey=s.cardsKey=s.competitorsKey='';s.flightCards=s.flightOwn=s.flightCompetitors=null}
+  if(myEmail()&&myEmail()!==norm(ctx.email)){s.own=s.cards=s.competitors=s.today=null;s.ownKey=s.cardsKey=s.competitorsKey=s.todayKey='';s.flightCards=s.flightOwn=s.flightCompetitors=s.flightToday=null}
   s.ctx=ctx;
  }
  s.tab=k||'home';s.showAll=false;
