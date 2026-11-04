@@ -13,9 +13,9 @@ const SECTIONS=Object.freeze({
  stock:{name:'Остатки и заказ',detail:'Таблица SKU и расчёт заказа',root:'#tri-stock-card',hidden:'#tri-stock-table'},
  tasks:{name:'Задачи ИИ',detail:'Рабочие задачи и история исполнения',root:'#tri-task-card',hidden:'.tm51-task'},
  motivation:{name:'Бонусы и план',detail:'Расшифровка премий',root:'#tri-mot-compare-v236200',hidden:null},
- cards:{name:'Карточки 21vek',detail:'Подробности проблем карточек',root:'#tri21-card',hidden:null},
+ cards:{name:'Карточки 21vek',detail:'Подробности проблем карточек',root:'#tri21-card',hidden:'#tri21-list'},
  parser:{name:'Парсер 21vek',detail:'Техническое состояние и история сбора',root:'#tri21-control-v236107',hidden:null},
- competitors:{name:'Конкуренты 21vek',detail:'Сравнение по позициям и SKU',root:'#tr14-panel',hidden:null}
+ competitors:{name:'Конкуренты 21vek',detail:'Сравнение по позициям и SKU',root:'#tr14-panel',hidden:'[data-tm224-rows]'}
 });
 const escapes={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>escapes[c]);
@@ -55,7 +55,7 @@ function style(){
  '.tx7 button{border:1px solid #9dc5f4;background:#fff;color:#14589b;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer}'+
  '.tx7 button:focus-visible{outline:2px solid #1e65aa;outline-offset:2px}'+
  '.tx7-foot{font-size:10px;color:#72819a;margin-top:9px;line-height:1.45}'+
- '.tx7-hide-groups [data-trgd-list],.tx7-hide-stock #tri-stock-table,.tx7-hide-tasks .tm51-task{display:none!important}'+
+ '.tx7-hide-groups [data-trgd-list],.tx7-hide-stock #tri-stock-table,.tx7-hide-tasks .tm51-task,.tx7-hide-cards #tri21-list,.tx7-hide-competitors [data-tm224-rows]{display:none!important}'+
  '@media(max-width:780px){.tx7-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tx7-brief{grid-template-columns:1fr}}';
  document.head.appendChild(s);
 }
@@ -167,7 +167,7 @@ function format(model,section){
  const items=model.items.map(t=>'<div class="tx7-item '+(t.tone==='danger'?'danger':t.tone==='success'?'success':'')+'"><b>'+esc(t.title)+'</b><p>'+esc(t.context)+'</p><em>Что сделать: '+esc(t.step)+'</em></div>').join('');
  return '<div class="tx7-top"><div><h3>✨ Краткий брифинг</h3><p class="tx7-sub">'+esc(SECTIONS[section].name)+' · приоритеты на основе доступных данных</p></div></div>'+
  '<div class="tx7-grid">'+stats+'</div><div class="tx7-brief">'+items+'</div>'+
- '<div class="tx7-buttons"><button type="button" data-tx7-toggle aria-expanded="false">Показать подробности</button></div>'+
+ (SECTIONS[section].hidden?'<div class="tx7-buttons"><button type="button" data-tx7-toggle aria-expanded="false">Показать подробности</button></div>':'')+
  '<div class="tx7-foot">'+esc(model.foot)+'</div>';
 }
 function nativeRoot(k){
