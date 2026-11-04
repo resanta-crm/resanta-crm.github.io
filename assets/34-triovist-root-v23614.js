@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.405',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
+const V='v23.6.406',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
