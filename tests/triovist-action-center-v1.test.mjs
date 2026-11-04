@@ -103,3 +103,14 @@ test('only action-center-specific scripts updated; parsers and database stay unc
  assert.match(index,/171-triovist-unix-director-v1\.js\?v=20261104-action-center-5/);
  assert.doesNotMatch(script,/setInterval|MutationObserver|service_role/);
 });
+
+test('legacy bulk tables are initially collapsed but accessible by explicit click',async()=>{
+ const f=fixture();f.api.show('cards',f.ctx);await flush();
+ assert.equal(f.root().dataset.tab,'cards');
+ assert.equal(f.root().dataset.details,'false');
+ assert.match(script,/data-tab="cards"/);
+ assert.match(script,/data-tab="stock"/);
+ assert.match(script,/data-tab="groups"/);
+ assert.match(script,/data-tab="tasks"/);
+ assert.match(script,/data-tab="competitors"/);
+});
