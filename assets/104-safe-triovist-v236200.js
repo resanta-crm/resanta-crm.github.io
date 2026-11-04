@@ -56,7 +56,10 @@ async function motivation(force=false){
 }
 function choose(m){if(!/^\d{4}-\d{2}$/.test(m))return;try{localStorage.setItem(KEY,m)}catch(_){};lastMonth='';lastData=null;motivation(true)}
 function sync(){
- if(!triActive())return;
+ if(!triActive()){
+  document.getElementById('tri-mot-compare-v236200')?.style.setProperty('display','none','important');
+  return;
+ }
  syncParser();host();
  if(tab()==='motivation')motivation();
 }
