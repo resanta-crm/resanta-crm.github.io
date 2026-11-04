@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1)return;
-const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.2';
+const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.3';
 const EXCLUDED=new Set(['cancelled','not_relevant']);
 const S={ctx:null,month:'',sales:null,tasks:null,stock:null,parser:null,errors:{},busy:false,seq:0,shown:false,mode:'groups',loadedAt:0};
 const get=id=>document.getElementById(id);
@@ -232,18 +232,34 @@ function render(){
 }
 async function load(){
  const root=mount();if(!root)return false;
- const seq=++S.seq,month=S.month,actor=manager()?email():null;S.busy=true;S.errors={};
- root.innerHTML='<div class="ux-loading">Загружаю данные 1С, задачи и статусы источников…</div>';
+ const seq=++S.seq,month=S.month,actor=manager()?email():null;
+ S.busy=true;S.errors={};S.tasks=null;S.stock=null;S.parser=null;
+ root.innerHTML='<div class="ux-loading">Загружаю продажи 1С…</div>';
+ // Auxiliary sources must never hold the authoritative sales dashboard hostage.
+ // Keep all requests concurrent, but render sales as soon as their RPC completes.
+ void Promise.allSettled([
+  rpc('triovist_tasks_get_dashboard_month_v23648',{p_month:month+'-01',p_manager_email:actor}),
+  rpc('triovist_partner_stock_state_v236207',{}),
+  w.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.status?.()||rpc('triovist_21vek_status_v236107',{})
+ ]).then(rs=>{
+  if(seq!==S.seq)return;
+  ['tasks','stock','parser'].forEach((k,i)=>{
+   const r=rs[i];if(r.status==='fulfilled')S[k]=r.value;
+   else{S[k]=null;S.errors[k]=String(r.reason?.message||'Данные недоступны').slice(0,180)}
+  });
+  // Do not repaint a hidden workspace or overwrite a newer month/identity.
+  if(S.sales&&S.shown)render();
+ }).catch(e=>console.warn('Triovist auxiliary sources unavailable',e));
  try{
-  const rs=await Promise.allSettled([
-   rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month'}),
-   rpc('triovist_tasks_get_dashboard_month_v23648',{p_month:month+'-01',p_manager_email:actor}),
-   rpc('triovist_partner_stock_state_v236207',{}),
-   w.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.status?.()||rpc('triovist_21vek_status_v236107',{})
-  ]);
+  S.sales=await rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month'});
   if(seq!==S.seq)return false;
-  ['sales','tasks','stock','parser'].forEach((k,i)=>{const r=rs[i];if(r.status==='fulfilled')S[k]=r.value;else{S[k]=null;S.errors[k]=String(r.reason?.message||'Данные недоступны').slice(0,180)}});
-  S.loadedAt=Date.now();return render();
+  S.loadedAt=Date.now();
+  return render();
+ }catch(e){
+  if(seq!==S.seq)return false;
+  S.sales=null;S.loadedAt=0;
+  S.errors.sales=String(e?.message||'Данные недоступны').slice(0,180);
+  return render();
  }finally{if(seq===S.seq)S.busy=false}
 }
 async function open(ctx){
