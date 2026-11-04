@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.406',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
+const V='v23.6.405',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
@@ -104,7 +104,7 @@ async function prepareDirectWork(k){
  }
 }
 function hideOld(){const p=page();if(!p||!p.classList.contains('active')||(active==='home'&&unixHealthy))return;const legacyHead=p.firstElementChild;if(legacyHead&&/Триовист\s*\/\s*21vek\.by/i.test(text(legacyHead)))legacyHead.style.setProperty('display','none','important');const bars=[];for(const b of p.querySelectorAll('button')){const t=text(b);if(/Отгрузки\s*1С|Новинки/i.test(t))b.style.setProperty('display','none','important');if(!/Сводка/i.test(t))continue;const x=b.parentElement,all=x?[...x.querySelectorAll(':scope > button')].map(text).join('|'):'';if(/Продажи/i.test(all)&&/Остатки/i.test(all))bars.push(x)}bars.forEach(x=>x.style.setProperty('display','none','important'))}
-function choose(k){active=k;const pg=page();if(pg)pg.dataset.triovistView=k;window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(k==='home'&&unixHealthy&&!!pg?.classList.contains('active'));shell?.querySelectorAll('[data-tr14]').forEach(b=>b.classList.toggle('on',b.dataset.tr14===k));try{localStorage.setItem(STORE+'|'+(ctx?.email||''),k)}catch(_){}window.RESANTA_TRIOVIST_ACTION_CENTER_V1?.show?.(k,ctx)}
+function choose(k){active=k;const pg=page();if(pg)pg.dataset.triovistView=k;window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(k==='home'&&unixHealthy&&!!pg?.classList.contains('active'));shell?.querySelectorAll('[data-tr14]').forEach(b=>b.classList.toggle('on',b.dataset.tr14===k));try{localStorage.setItem(STORE+'|'+(ctx?.email||''),k)}catch(_){}}
 function canSeeInfographics(){return String(ctx?.email||'').trim().toLowerCase()===INFOGRAPHIC_OWNER}
 function visibleWorkKeys(){return WORK.filter(k=>k!=='infographics')}
 function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''));if(k==='infographics'&&!canSeeInfographics())return'home';return[...visibleWorkKeys(),...COMM].includes(k)?k:'home'}catch(_){return'home'}}
@@ -302,7 +302,6 @@ async function activate(k,save=false){
  }
  if(token!==navEpoch||active!==k)return;
  if(save)choose(k)
- window.RESANTA_TRIOVIST_ACTION_CENTER_V1?.sourceUpdated?.(k)
 }
 async function getMonth(m){return rpc('triovist_commercial_get_month',{p_month:first(m)})}
 const monthInput=(k,m)=>`<div><label class="form-label">Месяц</label><input class="form-input" type="month" data-tr14-month="${k}" value="${esc(String(m||month()).slice(0,7))}"></div>`;
