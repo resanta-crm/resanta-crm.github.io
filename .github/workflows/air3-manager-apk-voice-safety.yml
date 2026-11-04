@@ -1,0 +1,44 @@
+name: AIR3 existing APK — director voice and loader safety
+on:
+  pull_request:
+    paths:
+      - 'assets/66-performance-root-v23657.js'
+      - 'assets/95-warehouse-orders-v1.js'
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/138-resanta-ai360-sales-bridge-v1.js'
+      - 'assets/142-resanta-ai360-director-proactive-brief-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'index.html'
+      - 'tests/air3-manager-apk-voice-safety-20261104.test.mjs'
+      - '.github/workflows/air3-manager-apk-voice-safety.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract-and-syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax without executing live CRM
+        run: |
+          set -euo pipefail
+          for file in \
+            assets/66-performance-root-v23657.js \
+            assets/134-resanta-voice-ai360-pilot-v1.js \
+            assets/135-resanta-voice-capture-fix-v2.js \
+            assets/136-resanta-voice-quality-v3.js \
+            assets/137-resanta-ai360-lazy-launch-v1.js \
+            assets/138-resanta-ai360-sales-bridge-v1.js \
+            assets/142-resanta-ai360-director-proactive-brief-v1.js \
+            assets/143-resanta-ai360-unified-dialog-v1.js; do
+            node --check "$file"
+          done
+      - name: Verify no login-time voice; owner navigation; matching loader versions
+        run: node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
