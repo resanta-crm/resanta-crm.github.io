@@ -126,3 +126,19 @@ test('Sales duplicate is hidden visually but retained as a working detail route'
  assert.ok(router.includes("['sales','💰 Продажи']"));
  assert.match(router,/const WORK=\[\'home\',\'sales\'/);
 });
+
+test('motivation must be hidden when leaving Triovist for any other CRM page',()=>{
+ assert.match(router,/const mot=document\.getElementById\('tri-mot-compare-v236200'\)/);
+ assert.match(router,/if\(mot\)mot\.style\.setProperty\('display',on&&active==='motivation'\?'block':'none','important'\)/);
+ assert.match(motivation,/if\(!triActive\(\)\)\{\s*document\.getElementById\('tri-mot-compare-v236200'\)\?\.style\.setProperty\('display','none','important'\)/);
+});
+test('entering Triovist after loading another CRM page mounts saved active tab',()=>{
+ assert.match(router,/if\(on\)window\.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.mount\?\.\(active,ctx\)/);
+ assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
+});
+test('new modules reject a cached account when currentProfile switched',()=>{
+ const f=fixture('groups');
+ f.window.currentProfile.email='krishtal_na@resanta.ru';
+ assert.equal(f.api.mount('groups',f.ctx),false);
+ assert.equal(f.creations.length,0);
+});
