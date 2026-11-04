@@ -197,7 +197,7 @@ function render(){
  '<div class="t360-kpis">'+(isPartial&&d.mode==='month'?
  kpi('💰 Факт '+monthLabel(d.end),fmt(d.current),'Источник: продажи 1С','good')+
  kpi('📅 Закрытый '+monthLabel(priorMonth(d.end)),last?fmt(last.current):'Загружаем…','Последний полный месяц')+
- kpi('📅 Год назад · '+monthLabel(priorMonth(d.end)),last?fmt(last.previous):'Загружаем…','Тот же полный месяц предыдущего года')+
+ kpi('📅 Год назад · '+monthLabel(String(Number(d.end.slice(0,4))-1)+'-'+priorMonth(d.end).slice(5,7)),last?fmt(last.previous):'Загружаем…','Тот же полный месяц предыдущего года')+
  kpi('📈 Год к году · '+monthLabel(priorMonth(d.end)),last&&last.pct!=null?(last.pct>=0?'+':'')+percent(last.pct):'Нет данных','Сравнение полных месяцев','good')+
  kpi('🎯 План '+monthLabel(d.end),d.allPlan==null?'Не задан':fmt(d.allPlan),d.allPlan==null?'План не заполнен для всех менеджеров':'Выполнение '+(d.allPlan>0?percent(d.current/d.allPlan*100):'нет расчёта'))
  :
