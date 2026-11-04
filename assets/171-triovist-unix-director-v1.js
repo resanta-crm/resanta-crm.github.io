@@ -138,7 +138,7 @@ function mount(){
   r.addEventListener('change',e=>{if(e.target?.dataset?.uxMonth===undefined)return;const ym=e.target.value;if(!isYm(ym)||ym>thisMonth()){e.target.value=S.month;return}S.month=ym;void refresh()});
  }
  let back=get('tr14-unix-back');
- if(!back){back=document.createElement('button');back.type='button';back.id='tr14-unix-back';back.textContent='← Назад в Сводку 360°';back.dataset.visible='false';back.addEventListener('click',()=>shell.querySelector('[data-tr14="home"]')?.click());shell.insertAdjacentElement('afterend',back)}
+ if(!back){back=document.createElement('button');back.type='button';back.id='tr14-unix-back';back.textContent='← Назад в Сводку 360°';back.dataset.visible='false';back.addEventListener('click',()=>shell.querySelector('[data-tr14="home"]')?.click());shell.insertBefore(back,r)}
  return r;
 }
 function show(v){S.shown=!!v;const r=mount();if(r)r.dataset.visible=v?'true':'false';const b=get('tr14-unix-back');if(b)b.dataset.visible=triActive()&&!v?'true':'false'}
