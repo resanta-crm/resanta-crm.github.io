@@ -6,14 +6,14 @@
 if(w.RESANTA_TRIOVIST_ACTION_CENTER_V1)return;
 const V='2026.11.04.1',ID='tr14-action-center',CSS='tr14-action-center-css';
 const SECTIONS={home:'Утренние приоритеты',groups:'Группы и категории',stock:'Остатки и заказ',tasks:'Задачи ИИ',cards:'Карточки 21vek',parser:'Наш листинг 21vek',competitors:'Конкуренты 21vek',sales:'Детализация продаж'};
-const s={ctx:null,tab:'home',seq:0,own:null,ownKey:'',cards:null,cardsKey:'',showAll:false,flightOwn:null,flightCards:null};
+const s={ctx:null,tab:'home',seq:0,own:null,ownKey:'',cards:null,cardsKey:'',competitors:null,competitorsKey:'',showAll:false,flightOwn:null,flightCards:null,flightCompetitors:null};
 const E=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const N=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x):null;
 const norm=x=>String(x||'').trim().toLowerCase();
 const fmt=x=>N(x)===null?'—':N(x).toLocaleString('ru-RU',{maximumFractionDigits:1});
 const money=x=>N(x)===null?'—':N(x).toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN';
 const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const curMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit'}).format(new Date());
+const curMonth=()=>{const p=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit'}).formatToParts(new Date());return p.find(x=>x.type==='year').value+'-'+p.find(x=>x.type==='month').value};
 const age=x=>{const t=Date.parse(String(x||''));return Number.isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/86400000)):null};
 const isTri=()=>!!document.getElementById('page-triovist')?.classList.contains('active');
 const authorized=c=>!!(c&&(c.is_leader===true||c.is_manager===true)&&c.email);
@@ -63,7 +63,7 @@ function root(){
    if(!b||!el.contains(b))return;
    if(b.dataset.taGo){document.querySelector('#tr14-shell [data-tr14="'+b.dataset.taGo+'"]')?.click();return}
    if(b.dataset.taMore!==undefined){s.showAll=!s.showAll;void update();return}
-   if(b.dataset.taRefresh!==undefined){s.ownKey='';s.cardsKey='';void update(true);return}
+   if(b.dataset.taRefresh!==undefined){s.ownKey='';s.cardsKey='';s.competitorsKey='';void update(true);return}
    if(b.dataset.taDetail!==undefined){
     const target=s.tab==='cards'?'tri21-card':s.tab==='tasks'?'tri-task-card':s.tab==='stock'?'tri-stock-card':s.tab==='parser'?'tri21-control-v236107':'tr14-panel';
     document.getElementById(target)?.scrollIntoView?.({block:'start',behavior:'smooth'});
@@ -78,7 +78,19 @@ function root(){
 function snapshot(){return w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.readOnlySnapshot?.()||{}}
 function groupSnapshot(){return w.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120?.readOnlySnapshot?.()||null}
 function taskSnapshot(){return w.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651?.readOnlySnapshot?.()||null}
-function competitorSnapshot(){return w.RESANTA_TRIOVIST_COMPETITORS_V236218?.readOnlySummary?.()||null}
+function competitorSnapshot(){return s.competitors||null}
+async function competitorSummary(force){
+ if(manager())return null; // existing full-market module remains unchanged; no cross-category brief to managers
+ const key=myEmail()+'|'+day();
+ if(s.competitors&&s.competitorsKey===key&&!force)return s.competitors;
+ if(s.flightCompetitors)return s.flightCompetitors;
+ s.flightCompetitors=rpc('triovist_market_dashboard_meta_v236357',{}).then(x=>{
+  if(key!==myEmail()+'|'+day())return null;
+  s.competitors=x;s.competitorsKey=key;return x;
+ }).catch(e=>{console.warn('Triovist competitor briefing unavailable',e?.message||e);return null})
+ .finally(()=>{s.flightCompetitors=null});
+ return s.flightCompetitors;
+}
 const authorizedRows=rows=>(Array.isArray(rows)?rows:[]).filter(x=>!manager()||norm(x.manager_email)===myEmail());
 function ownKey(){return myEmail()+'|'+day()}
 async function own(force){
@@ -266,6 +278,7 @@ async function update(force=false){
  const jobs=[];
  if(k==='home'||k==='parser')jobs.push(own(force));
  if(k==='cards')jobs.push(contentIssues(force));
+ if(k==='competitors')jobs.push(competitorSummary(force));
  if(!jobs.length)return;
  await Promise.allSettled(jobs);
  if(seq!==s.seq||k!==s.tab||me!==myEmail())return;
@@ -273,7 +286,7 @@ async function update(force=false){
 }
 function show(k,ctx){
  if(ctx&&authorized(ctx)){
-  if(myEmail()&&myEmail()!==norm(ctx.email)){s.own=s.cards=null;s.ownKey=s.cardsKey='';s.flightCards=s.flightOwn=null}
+  if(myEmail()&&myEmail()!==norm(ctx.email)){s.own=s.cards=s.competitors=null;s.ownKey=s.cardsKey=s.competitorsKey='';s.flightCards=s.flightOwn=s.flightCompetitors=null}
   s.ctx=ctx;
  }
  s.tab=k||'home';s.showAll=false;
