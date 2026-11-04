@@ -48,7 +48,7 @@ test('overview renders complete dashboard with existing sales and actionable sec
  assert.equal(await env.window.RESANTA_TRIOVIST_SUMMARY360_V1.open(),true);
  const content=env.root.innerHTML;
  for(const title of ['Сводка 360°','Продажи','План','Динамика','Короткий ИИ-брифинг','Свежесть источников','Менеджеры','Триовист','задачам ИИ'])assert.ok(content.includes(title),title);
- assert.ok(content.includes('13 672,07'),content);
+ assert.ok(content.replace(/\u00a0/g,' ').includes('13 672,07'),'localized amount was not displayed');
  assert.ok(env.page.classList.contains('tri360-ready'));
 });
 test('partial November does not misrepresent 2025 full November as comparable YoY -96%',async()=>{
