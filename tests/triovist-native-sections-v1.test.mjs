@@ -15,7 +15,7 @@ function fixture(tab='groups',on=true,rogue=false){
  const elements=new Map(),creations=[],log=[];
  function cls(){const flags=new Set();return {add:v=>flags.add(v),remove:v=>flags.delete(v),contains:v=>flags.has(v),toggle(v,force){if(force===undefined?flags.has(v):!force){flags.delete(v);return false}flags.add(v);return true}}}
  const page={isConnected:true,classList:{contains:k=>k==='active'&&on},contains:node=>node?.scope==='page'};
- const pane={isConnected:true,contains:node=>node===pane||node?.scope==='panel'};
+ const pane={isConnected:true,classList:cls(),contains:node=>node===pane||node?.scope==='panel'};
  const shell={isConnected:true,parentElement:{contains:node=>node?.scope==='motivation'}};
  function item(scope){
   const native={scope,isConnected:true,classList:cls(),firstChild:null,box:null,children:[],textContent:'',
