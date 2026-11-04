@@ -88,8 +88,9 @@ function groupBrief(ctx){
 function stockBrief(root){
  const raw=root.textContent||'',rows=root.querySelectorAll('#tri-stock-table tbody tr').length;
  const untrusted=/рекомендации временно не считать окончательными|старым парсером|truth-v23\.5\.5/i.test(raw);
+ const selectedDays=root.querySelector('#tri-stock-days')?.value||'—';
  return {stats:[
-  stat('Период запаса','45 дней','Уточните выбор выше в настройках'),
+  stat('Период запаса',selectedDays==='—'?'—':selectedDays+' дней','Как выбрано в расчёте заказа'),
   stat('Строк в таблице',rows?fmt(rows):'—','Только текущая отрисовка'),
   stat('Достоверность',untrusted?'Требует проверки':'По снимку',untrusted?'Старый формат файла':'Проверять дату загрузки',untrusted?'danger':''),
   stat('Источники','21vek / 1С / Чехов','Дата и статус каждого отдельно')
@@ -99,13 +100,13 @@ function stockBrief(root){
  ],foot:'Никаких автоматических заказов: расчёт и выгрузка Excel остаются в действующем разделе.'};
 }
 function taskBrief(root){
- const cards=[...root.querySelectorAll('.tm51-task')];
+ const cards=[...root.querySelectorAll('.tm51-task')],loaded=!!root.querySelector('#tri-month-safe-v23651');
  const overdue=cards.filter(x=>/Просрочен|overdue/i.test(x.textContent||'')).length;
  const checking=cards.filter(x=>/На проверке|Ожидает проверки|awaiting_check/i.test(x.textContent||'')).length;
  return {stats:[
-  stat('Карточек задач',cards.length?fmt(cards.length):'—','На текущем экране'),
-  stat('Просрочено',cards.length?fmt(overdue):'—','По видимым карточкам',overdue?'danger':''),
-  stat('На проверке',cards.length?fmt(checking):'—','Требуют подтверждения'),
+  stat('Карточек задач',loaded?fmt(cards.length):'—','На текущем экране'),
+  stat('Просрочено',loaded?fmt(overdue):'—','По видимым карточкам',overdue?'danger':''),
+  stat('На проверке',loaded?fmt(checking):'—','Требуют подтверждения'),
   stat('Месяц',root.querySelector('.tm51-month')?.textContent?.trim()||'По фильтру','Без смешивания месяцев')
  ],items:[
   note('Проверка исполнения','Статус «Выполнено» сам по себе не подтверждает коммерческий результат.','Открыть задачи на проверке и сопоставить результат с данными 1С.'),
