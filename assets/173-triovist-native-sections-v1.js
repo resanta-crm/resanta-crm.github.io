@@ -176,6 +176,8 @@ function nativeRoot(k){
 }
 function mount(k,ctx){
  if(!SECTIONS[k]||!active(k)||!allowed(ctx))return false;
+ const live=w.currentProfile||w.currentUser;
+ if(live?.email&&norm(live.email)!==norm(ctx.email))return false;
  lastContext=ctx;
  const root=nativeRoot(k);
  if(!root||!root.isConnected)return false;
