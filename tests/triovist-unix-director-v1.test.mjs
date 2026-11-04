@@ -16,7 +16,7 @@ const liveSales={
 };
 function fixture(role='boss',failedSales=false){
  const calls=[],clicked=[],elements=new Map();
- const shell={classList:{add(){}},children:[],appendChild(x){this.children.push(x);elements.set(x.id,x);x.parentElement=this},
+ const shell={classList:{keys:new Set(),add(k){this.keys.add(k)},contains(k){return this.keys.has(k)}},children:[],appendChild(x){this.children.push(x);elements.set(x.id,x);x.parentElement=this},
   insertBefore(x,ref){this.children.splice(Math.max(0,this.children.indexOf(ref)),0,x);elements.set(x.id,x);x.parentElement=this},
   querySelector(s){return {click(){clicked.push(s)}}}};
  const page={classList:{contains(x){return x==='active'}}};
@@ -94,7 +94,7 @@ test('failed authoritative sales query keeps empty state; no made-up KPI',async(
 });
 test('root selects new Home and hides legacy page, while detail paths and Commerce remain',()=>{
  assert.match(router,/if\(k==='home'&&window\.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.open/);
- assert.match(router,/p\.style\.setProperty\('display','none','important'\);panel\.style\.setProperty\('display','none','important'\);window\.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\.show\(true\)/);
+ assert.match(router,/unixHealthy&&window\.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.open/);
  for(const section of ["'anp','🧾 АНП'","'si','🛠 Компенсация СИ'","'budget','💼 Бюджет'","'price','🧮 Расчёт цены'","'parser','🌐 Парсер 21vek'","'competitors','⚔️ Конкуренты 21vek'"]){
   assert.ok(router.includes(section),section);
  }
@@ -102,8 +102,21 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
  assert.match(router,/RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.show/);
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
- assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix1'));
- assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix1'));
+ assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix2-failsafe'));
+ assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix2-failsafe-403'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
+});
+ 
+test('new overview has an explicit fallback instead of hiding a broken workspace',async()=>{
+ const f=fixture('manager',true);
+ assert.equal(await f.api.open(f.ctx),false);
+ assert.ok(router.includes("unixHealthy=ok===true"));
+ assert.ok(router.includes("await work('home',token)"));
+ assert.ok(router.includes("timeoutId=setTimeout"));
+});
+test('ordinary CRM employees are not subjected to Triovist authorization retry storms',()=>{
+ assert.ok(router.includes('if(!local)return null;'));
+ assert.ok(router.includes('nonTriovistProfileReady()'));
+ assert.ok(router.includes('clearInterval(t);return'));
 });
