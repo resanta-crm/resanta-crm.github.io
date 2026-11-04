@@ -2,7 +2,7 @@
    Verified read-only CRM brief, no hidden polling, no CRM writes or automatic tasks. */
 (function(){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'')||window.crmAI360DirectorBriefHandleV1)return;
+if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360DirectorBriefHandleV1)return;
 const ENDPOINT='crm-ai360-director-briefing-v1';
 const INTENT=/(?:брифинг(?:\s+директора)?|приоритет[а-яё]*\s+(?:дня|на\s+сегодня)|(?:главн[а-яё]*|важн[а-яё]*)\s+(?:проблем[а-яё]*|риск[а-яё]*)\s+(?:на\s+сегодня|дня)|что\s+сегодня\s+(?:важн[а-яё]*|главн[а-яё]*))/i;
 let pending=false,lastAsOf='',button=null,feedback=null,proactiveToggle=null;
