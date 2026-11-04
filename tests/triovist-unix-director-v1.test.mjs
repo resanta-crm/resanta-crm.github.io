@@ -102,8 +102,8 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
  assert.match(router,/RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.show/);
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
- assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix4-fast-ui'));
- assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix4-scoped-405'));
+ assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-action-center-5'));
+ assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-action-center-406'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
 });
@@ -163,4 +163,11 @@ test('auxiliary sources update independently and preserve source-scoped UI',asyn
  assert.doesNotMatch(f.root().innerHTML,/Заказать садовую технику|235[\s\u00a0]863/);
  assert.match(unix,/function renderAux\(/);
  assert.doesNotMatch(unix,/Promise\.allSettled\(/);
+});
+
+test('action center is loaded independently and sales drilldown remains available',()=>{
+ assert.ok(index.includes('172-triovist-action-center-v1.js?v=20261104-action-center-1'));
+ assert.ok(router.includes('RESANTA_TRIOVIST_ACTION_CENTER_V1?.show'));
+ assert.ok(unix.includes('readOnlySnapshot:()=>'));
+ assert.ok(router.includes("['sales','💰 Продажи']"),'existing drill-down router is retained');
 });

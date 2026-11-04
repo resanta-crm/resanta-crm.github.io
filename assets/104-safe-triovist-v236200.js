@@ -23,7 +23,9 @@ function months(){const a=[];let m='2026-08',end=currentMonth();while(m<=end){a.
 function host(){
  const shell=document.getElementById('tr14-shell');if(!shell)return null;
  let h=document.getElementById('tri-mot-compare-v236200');
- if(!h){h=document.createElement('div');h.id='tri-mot-compare-v236200';h.className='card';h.style.cssText='margin:16px 0 12px;padding:14px;border:1px solid #bfdbfe;background:#f8fbff;position:relative;z-index:1;clear:both';shell.insertAdjacentElement('afterend',h)}
+ if(!h){h=document.createElement('div');h.id='tri-mot-compare-v236200';h.className='card';h.style.cssText='margin:16px 0 12px;padding:14px;border:1px solid #bfdbfe;background:#f8fbff;position:relative;z-index:1;clear:both'}
+ // Root menu can be replaced by the failsafe router. Keep motivation after the CURRENT menu.
+ if(h.previousElementSibling!==shell)shell.insertAdjacentElement('afterend',h);
  h.style.setProperty('display',tab()==='motivation'?'block':'none','important');return h;
 }
 function managerCard(cur,prev){

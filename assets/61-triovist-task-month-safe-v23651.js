@@ -145,5 +145,5 @@ const oldTaskRender=window.triovistTasksRender;if(typeof oldTaskRender==='functi
 const legacyTaskReload=window.triovistTasksReload;
 window.triovistTasksReload=async function(force=true){lastKey='';lastPack=null;if(isTaskTab())return await render(!!force);return true};
 window.triovistTasksEnsureLoaded=async function(){if(isTaskTab())return await render(false);return true};
-bind();if(isTaskTab())setTimeout(mount,0);window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651=Object.freeze({version:V,getMonth,setMonth,render,mount,refreshMonth,isolated:true,lazyByActiveTab:true,legacyHeavyReloadDisabled:true,singleFlight:true,nonBlockingSummaryPolicy:true,summaryPolicyFallback:true,noHubWrap:true,noPolling:true,noObserver:true,mountPoint:'#tri-task-card'});
+bind();if(isTaskTab())setTimeout(mount,0);window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651=Object.freeze({version:V,getMonth,setMonth,render,mount,refreshMonth,readOnlySnapshot:()=>({month:getMonth(),pack:lastPack}),isolated:true,lazyByActiveTab:true,legacyHeavyReloadDisabled:true,singleFlight:true,nonBlockingSummaryPolicy:true,summaryPolicyFallback:true,noHubWrap:true,noPolling:true,noObserver:true,mountPoint:'#tri-task-card'});
 })();
