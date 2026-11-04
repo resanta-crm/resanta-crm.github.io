@@ -45,6 +45,7 @@ function fixture(role='manager'){
    {manager_email:'krishtal_na@resanta.ru',sku:'K-SECRET',severity:'critical',status:'open',issue_title:'Секрет'}
   ],managers:[]})}};
  const db={rpc:async(name,args)=>{calls.push({name,args});
+  if(name==='triovist_tasks_get_dashboard_month_v23648')return {data:{tasks:[{manager_email:'aleksandrenko_av@resanta.ru',status:'new',title:'Проверить инструмент сегодня'},{manager_email:'krishtal_na@resanta.ru',status:'new',title:'Секретная задача текущего месяца'}]}};
   if(name==='triovist_own_listing_positions_v236351')return {data:{summary:{total:12},rows:[
    {manager_email:'aleksandrenko_av@resanta.ru',sku:'A-01',movement:'down',current_label:'#50',previous_label:'#30'},
    {manager_email:'krishtal_na@resanta.ru',sku:'K-SECRET',movement:'down',current_label:'#100',previous_label:'#10'}
@@ -67,7 +68,8 @@ test('manager home prioritizes own problems and cannot see another manager',asyn
  assert.match(html,/Листинг A-01/);
  assert.doesNotMatch(html,/Секретная задача|K-SECRET|Садовая техника/);
  assert.equal(f.calls.filter(x=>x.name==='triovist_own_listing_positions_v236351').length,1);
- assert.equal(f.calls[0].args.p_manager_email,'aleksandrenko_av@resanta.ru');
+ assert.equal(f.calls.find(x=>x.name==='triovist_own_listing_positions_v236351').args.p_manager_email,'aleksandrenko_av@resanta.ru');
+ assert.equal(f.calls.find(x=>x.name==='triovist_tasks_get_dashboard_month_v23648').args.p_month,'2026-11-01');
 });
 test('authorized manager sees only own issues grouped by SKU, without writes',async()=>{
  const f=fixture();f.api.show('cards',f.ctx);await flush();
