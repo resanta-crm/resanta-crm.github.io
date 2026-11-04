@@ -233,7 +233,7 @@ function render(){
 async function load(){
  const root=mount();if(!root)return false;
  const seq=++S.seq,month=S.month,actor=manager()?email():null;
- S.busy=true;S.errors={};S.tasks=null;S.stock=null;S.parser=null;
+ S.busy=true;S.errors={};S.sales=null;S.tasks=null;S.stock=null;S.parser=null;
  root.innerHTML='<div class="ux-loading">Загружаю продажи 1С…</div>';
  // Auxiliary sources must never hold the authoritative sales dashboard hostage.
  // Keep all requests concurrent, but render sales as soon as their RPC completes.
