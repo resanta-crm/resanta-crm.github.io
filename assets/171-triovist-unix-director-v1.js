@@ -145,11 +145,17 @@ function show(v){S.shown=!!v;const r=mount();if(r)r.dataset.visible=v?'true':'fa
 function tile(label,value,note,color=''){return '<div class="ux-tile '+color+'"><span>'+E(label)+'</span><strong>'+E(value)+'</strong><small>'+E(note)+'</small></div>'}
 function button(label,section){return '<button data-ux-go="'+E(section)+'">'+E(label)+' →</button>'}
 function chart(m){
+ const partial=S.month===thisMonth();
  const rows=(S.mode==='managers'?m.managers.map(x=>({name:x.name,cur:x.cur,prev:x.prev})):m.groups.map(x=>({name:x.name+(manager()?'':' · '+x.manager),cur:x.cur,prev:x.prev}))).sort((a,b)=>b.cur-a.cur).slice(0,9);
- const max=Math.max(1,...rows.map(x=>Math.max(x.cur,x.prev)));
- const bars=rows.map(x=>'<div class="ux-trend"><b>'+E(x.name)+'</b><div><div class="ux-track"><i style="width:'+Math.max(0,Math.min(100,x.cur/max*100)).toFixed(1)+'%"></i></div><div class="ux-track prev"><i style="width:'+Math.max(0,Math.min(100,x.prev/max*100)).toFixed(1)+'%"></i></div></div><span style="text-align:right;font-size:11px">'+E(short(x.cur))+'</span></div>').join('');
+ const max=Math.max(1,...rows.map(x=>partial?x.cur:Math.max(x.cur,x.prev)));
+ const bars=rows.map(x=>{
+  const current='<div class="ux-track"><i style="width:'+Math.max(0,Math.min(100,x.cur/max*100)).toFixed(1)+'%"></i></div>';
+  const prev=partial?'':'<div class="ux-track prev"><i style="width:'+Math.max(0,Math.min(100,x.prev/max*100)).toFixed(1)+'%"></i></div>';
+  return '<div class="ux-trend"><b>'+E(x.name)+'</b><div>'+current+prev+'</div><span style="text-align:right;font-size:11px">'+E(short(x.cur))+'</span></div>';
+ }).join('');
+ const legend=partial?'🔵 Факт текущего месяца · без несопоставимых прошлогодних столбцов':'🔵 '+E(S.month.slice(0,4))+' · ⚪ '+E(String(Number(S.month.slice(0,4))-1))+' · по данным 1С';
  return '<div class="ux-card"><div class="ux-head"><h3>📊 Продажи по '+(S.mode==='managers'?'менеджерам':'товарным группам')+'</h3><div class="ux-tabs"><button data-ux-mode="groups" class="'+(S.mode==='groups'?'on':'')+'">Группы</button><button data-ux-mode="managers" class="'+(S.mode==='managers'?'on':'')+'">Менеджеры</button></div></div>'+
- '<div class="ux-legend">🔵 '+E(S.month.slice(0,4))+' · ⚪ '+E(String(Number(S.month.slice(0,4))-1))+' · данные 1С</div><div class="ux-trends">'+(bars||'<div class="ux-empty">Нет продаж в выбранном периоде</div>')+'</div><div class="ux-actions">'+button('Подгруппы и SKU','groups')+'</div></div>';
+ '<div class="ux-legend">'+legend+'</div><div class="ux-trends">'+(bars||'<div class="ux-empty">Нет продаж в выбранном периоде</div>')+'</div><div class="ux-actions">'+button('Подгруппы и SKU','groups')+'</div></div>';
 }
 function categories(m){
  const top=[...m.groups].sort((a,b)=>b.cur-a.cur).slice(0,5),max=Math.max(1,...top.map(x=>x.cur));
@@ -225,7 +231,7 @@ function render(){
  return true;
 }
 async function load(){
- if(S.busy)return false;const root=mount();if(!root)return false;
+ const root=mount();if(!root)return false;
  const seq=++S.seq,month=S.month,actor=manager()?email():null;S.busy=true;S.errors={};
  root.innerHTML='<div class="ux-loading">Загружаю данные 1С, задачи и статусы источников…</div>';
  try{
@@ -238,7 +244,7 @@ async function load(){
   if(seq!==S.seq)return false;
   ['sales','tasks','stock','parser'].forEach((k,i)=>{const r=rs[i];if(r.status==='fulfilled')S[k]=r.value;else{S[k]=null;S.errors[k]=String(r.reason?.message||'Данные недоступны').slice(0,180)}});
   S.loadedAt=Date.now();return render();
- }finally{S.busy=false}
+ }finally{if(seq===S.seq)S.busy=false}
 }
 async function open(ctx){
  if(!ctx||(!ctx.is_manager&&!ctx.is_leader))return false;
