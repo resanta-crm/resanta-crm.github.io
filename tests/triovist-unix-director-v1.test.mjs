@@ -103,7 +103,7 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
  assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix2-failsafe'));
- assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix1'));
+ assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix2-failsafe-403'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
 });
