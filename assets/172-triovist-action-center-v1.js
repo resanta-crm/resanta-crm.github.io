@@ -6,7 +6,7 @@
 if(w.RESANTA_TRIOVIST_ACTION_CENTER_V1)return;
 const V='2026.11.04.1',ID='tr14-action-center',CSS='tr14-action-center-css';
 const SECTIONS={home:'Утренние приоритеты',groups:'Группы и категории',stock:'Остатки и заказ',tasks:'Задачи ИИ',cards:'Карточки 21vek',parser:'Наш листинг 21vek',competitors:'Конкуренты 21vek',sales:'Детализация продаж'};
-const s={ctx:null,tab:'home',seq:0,own:null,ownKey:'',cards:null,cardsKey:'',competitors:null,competitorsKey:'',today:null,todayKey:'',showAll:false,flightOwn:null,flightCards:null,flightCompetitors:null,flightToday:null};
+const s={ctx:null,tab:'home',seq:0,own:null,ownKey:'',cards:null,cardsKey:'',competitors:null,competitorsKey:'',today:null,todayKey:'',showAll:false,details:false,flightOwn:null,flightCards:null,flightCompetitors:null,flightToday:null};
 const E=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const N=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x):null;
 const norm=x=>String(x||'').trim().toLowerCase();
@@ -48,6 +48,12 @@ function style(){
  '#'+ID+' .ta-bar{background:#edf2fa;height:7px;border-radius:6px;margin-top:8px;overflow:hidden}'+
  '#'+ID+' .ta-bar i{background:#c57c39;display:block;height:100%;border-radius:6px}'+
  '#tr14-shell [data-tr14="sales"]{display:none!important}'+
+ // Hide only bulky data lists by default; native controls, filters and actions remain functional.
+ '#'+ID+'[data-tab="groups"][data-details="false"] ~ #tr14-panel .trgd-manager{display:none!important}'+
+ '#'+ID+'[data-tab="cards"][data-details="false"] ~ #page-triovist #tri21-list{display:none!important}'+
+ '#'+ID+'[data-tab="stock"][data-details="false"] ~ #page-triovist #tri-stock-table{display:none!important}'+
+ '#'+ID+'[data-tab="tasks"][data-details="false"] ~ #page-triovist .tm51-task{display:none!important}'+
+ '#'+ID+'[data-tab="competitors"][data-details="false"] ~ #tr14-panel [data-tm224-rows]{display:none!important}'+
  '@media(max-width:1000px){#'+ID+' .ta-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}'+
  '@media(max-width:700px){#'+ID+' .ta-cards{grid-template-columns:1fr}#'+ID+' .ta-title{font-size:17px}}';
  document.head.appendChild(el);
@@ -65,6 +71,9 @@ function root(){
    if(b.dataset.taMore!==undefined){s.showAll=!s.showAll;void update();return}
    if(b.dataset.taRefresh!==undefined){s.ownKey='';s.cardsKey='';s.competitorsKey='';s.todayKey='';void update(true);return}
    if(b.dataset.taDetail!==undefined){
+    s.details=!s.details;el.dataset.details=s.details?'true':'false';
+    b.textContent=s.details?'Свернуть подробности':'Показать таблицы и детали';
+    if(!s.details)return;
     const target=s.tab==='cards'?'tri21-card':s.tab==='tasks'?'tri-task-card':s.tab==='stock'?'tri-stock-card':s.tab==='parser'?'tri21-control-v236107':'tr14-panel';
     document.getElementById(target)?.scrollIntoView?.({block:'start',behavior:'smooth'});
    }
@@ -227,7 +236,7 @@ function paint(extra={}){
  const el=root();if(!el||!authorized(s.ctx)||!isTri()){if(el)el.dataset.open='false';return}
  const k=s.tab;
  if(k==='motivation'||!SECTIONS[k]){el.dataset.open='false';return}
- el.dataset.open='true';
+ el.dataset.open='true';el.dataset.tab=k;el.dataset.details=s.details?'true':'false';
  const snap=snapshot(),group=groupSnapshot(),ts=taskSnapshot(),comp=competitorSnapshot();
  let rows=[],kpis=[],note='';
  if(k==='home'||k==='sales'){
@@ -277,7 +286,7 @@ function paint(extra={}){
  }
  const stamp=day();
  el.innerHTML='<div class="ta-head"><div><div class="ta-title">✨ '+E(SECTIONS[k])+' · Uni X</div><div class="ta-note">'+E(k==='home'?'План на сегодня · '+stamp:note)+'</div></div>'+
- '<div class="ta-actions"><button data-ta-refresh>↻ Пересчитать приоритеты</button><button data-ta-detail>Показать исходные данные</button></div></div>'+
+ '<div class="ta-actions"><button data-ta-refresh>↻ Пересчитать приоритеты</button><button data-ta-detail>'+(s.details?'Свернуть подробности':'Показать таблицы и детали')+'</button></div></div>'+
  '<div class="ta-kpis">'+kpis.join('')+'</div>'+
  (k==='home'?'<div class="ta-note" style="margin-bottom:9px">До 5 главных сигналов из CRM. Причины не выдаются за доказанные, пока не сопоставлены источники.</div>':'')+
  cardsHtml(rows)+(rows.length>5?'<div class="ta-actions" style="margin-top:9px"><button data-ta-more>'+(s.showAll?'Свернуть':'Показать остальные ('+(rows.length-5)+')')+'</button></div>':'')+
@@ -302,7 +311,7 @@ function show(k,ctx){
   if(myEmail()&&myEmail()!==norm(ctx.email)){s.own=s.cards=s.competitors=s.today=null;s.ownKey=s.cardsKey=s.competitorsKey=s.todayKey='';s.flightCards=s.flightOwn=s.flightCompetitors=s.flightToday=null}
   s.ctx=ctx;
  }
- s.tab=k||'home';s.showAll=false;
+ s.tab=k||'home';s.showAll=false;s.details=false;
  const el=root();
  if(el)el.dataset.open=authorized(s.ctx)&&isTri()&&s.tab!=='motivation'?'true':'false';
  void update();
