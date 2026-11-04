@@ -1,22 +1,26 @@
-/* AI360 optional desktop launch. On-demand only; no voice script runs at CRM login.
-   Android/WebView stay excluded after the 22 Oct authentication incident. */
+/* AI360 optional owner-only launch. No voice code runs at login.
+   INMO Android Capacitor may load the existing director Lera ONLY after owner tap.
+   Other Android browsers and staff remain excluded. */
 (function(){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'') || window.__resantaAI360LazyLaunchV1)return;
+const android=/Android/i.test(navigator.userAgent||'');
+const nativeAndroid=android&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android';
+if((android&&!nativeAndroid)||window.__resantaAI360LazyLaunchV1)return;
 window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=18',
- './assets/135-resanta-voice-capture-fix-v2.js?v=17',
- './assets/136-resanta-voice-quality-v3.js?v=17',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=19',
+ './assets/135-resanta-voice-capture-fix-v2.js?v=18',
+ './assets/136-resanta-voice-quality-v3.js?v=18',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
  './assets/140-resanta-ai360-task-drafts-preview-v1.js?v=7',
- './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=3',
- './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
- './assets/143-resanta-ai360-unified-dialog-v1.js?v=8'
+ './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=4',
+ './assets/138-resanta-ai360-sales-bridge-v1.js?v=9',
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=9'
 ];
 function owner(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
+  (!nativeAndroid||String(currentUser.id)==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc') &&
   typeof currentProfile!=='undefined'&&currentProfile?.role==='boss' &&
   String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='александр паюшин' &&
   document.getElementById('app')?.style.display!=='none';}
@@ -33,6 +37,8 @@ async function activate(){
  if(!owner()||loading)return;
  if(ready){document.querySelector('.rva-launch')?.click();return;}
  loading=true;button.disabled=true;button.textContent='Подключение AI…';
+ // Android director voice stays behind this deliberate user action.
+ if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=true;
  try{
    for(const src of scripts){
      if(!owner())throw new Error('Сессия директора закрыта');
@@ -51,6 +57,7 @@ async function activate(){
    ready=true;button.hidden=true;
    document.querySelector('.rva-launch')?.click();
  }catch(e){
+   if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=false;
    console.warn('Optional AI360 loading:',e);
    button.title=String(e?.message||e).slice(0,170);
    button.textContent='AI 360° · повторить';
