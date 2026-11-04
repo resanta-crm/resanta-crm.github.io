@@ -6,7 +6,7 @@
 (function () {
   'use strict';
  // v23.7.14: 21 Oct Android incident; avoid optional voice APIs on all Android browsers and WebViews.
- if (/Android/i.test(navigator.userAgent || '')) return;
+ if (/Android/i.test(navigator.userAgent || '') && !(window.__resantaAI360AndroidDirectorOptIn === true && window.Capacitor?.isNativePlatform?.() === true && window.Capacitor?.getPlatform?.() === 'android')) return;
 
   if (window.__resantaVoicePilotV1) return;
   window.__resantaVoicePilotV1 = true;
@@ -178,6 +178,40 @@
     goPage(id, title);
     return true;
   }
+  // Explicit navigation uses existing CRM goPage and the visible authorized nav,
+  // never a synthetic page or data write. Run before the AI dialogue handler.
+  function navigateByVoice(query) {
+    const phrase=String(query||'').replace(/^(?:лера|ресанта)\s+/i,'').trim();
+    const match=phrase.match(/^(?:открой|открывай|перейди|переходи|вернись|покажи)\s+(?:мне\s+)?(?:(?:в|на)\s+)?(?:(?:раздел|вкладку|страницу)\s+)?(.+)$/i);
+    if(!match)return false;
+    const target=match[1];
+    const destinations=[
+      [/триовист|21\s*век|21vek/i,'triovist','Триовист'],
+      [/маршрут.*(?:дня|сегодня)/i,'route','Маршрут дня'],
+      [/маршрут/i,'routes-boss','Маршруты'],
+      [/менеджер|\bkpi\b|кпи/i,'managers','Менеджеры · KPI'],
+      [/\bgps\b|джипиэс/i,'gps-control','GPS-контроль'],
+      [/сводк|дашборд|главн/i,'dashboard','Сводка'],
+      [/продаж|выручк/i,'sales','Продажи'],
+      [/клиент/i,'clients','Клиенты'],
+      [/задач|поручен/i,'tasks','Задачи'],
+      [/визит/i,'visits','Визиты'],
+      [/пдз|дебитор|задолж/i,'debt','Задолженность'],
+      [/акци/i,'promotions','Акции'],
+      [/вип|vip/i,'vip','ВИП клиенты'],
+      [/уценк/i,'markdown','Уценка'],
+      [/\babc\b|абс|а\s*б\s*с/i,'abc','ABC-анализ'],
+      [/остатк|склад/i,'warehouse-control','Склад и остатки'],
+      [/сигнал|уведомлен/i,'alerts','Сигналы']
+    ];
+    const found=destinations.find(([pattern])=>pattern.test(target));
+    if(!found)return false;
+    const [,id,title]=found;
+    answer(openPage(id,title)
+      ?'Открываю раздел «'+title+'».'
+      :'Раздел «'+title+'» недоступен для этой учётной записи или ещё не загрузился.');
+    return true;
+  }
   function handleCommand(raw) {
     if (!allowed()) return;
     const input = String(raw || '').trim().slice(0, 300);
@@ -237,6 +271,7 @@
       answer('Не удалось открыть защищённый брифинг директора. Перезагрузи окно Леры. Данные CRM не менялись.');
       return;
     }
+    if (window.__resantaAI360AndroidDirectorOptIn===true && navigateByVoice(query)) return;
     if (typeof window.crmAI360UnifiedDialogHandleV1 === 'function') {
       try { if (window.crmAI360UnifiedDialogHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('AI360 unified conversation unavailable',e); }

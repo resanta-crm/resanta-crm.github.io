@@ -5,7 +5,7 @@
  */
 (function(){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'')||window.crmAI360SalesHandleV1)return;
+if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360SalesHandleV1)return;
 const ENDPOINT='crm-ai360-director-v1';
 const MONTHS={январ:1,феврал:2,март:3,апрел:4,ма:5,июн:6,июл:7,август:8,сентябр:9,октябр:10,ноябр:11,декабр:12};
 let history=[],pending=false,lastMonth=null,lastManager=null,pendingMatch=null,staffCache=null;

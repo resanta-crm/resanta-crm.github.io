@@ -1,7 +1,7 @@
 /* Director-only AI360 unified natural-language bridge. No CRM writes. */
 (function(){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'')||window.crmAI360UnifiedDialogHandleV1)return;
+if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-dialog-v4';
 let history=[],memory={},pending=false,awaitingDetail=null;
 function allowed(){

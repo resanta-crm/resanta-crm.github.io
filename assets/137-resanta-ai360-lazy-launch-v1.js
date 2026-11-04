@@ -1,8 +1,11 @@
-/* AI360 optional desktop launch. On-demand only; no voice script runs at CRM login.
-   Android/WebView stay excluded after the 22 Oct authentication incident. */
+/* AI360 optional owner-only launch. No voice code runs at login.
+   INMO Android Capacitor may load the existing director Lera ONLY after owner tap.
+   Other Android browsers and staff remain excluded. */
 (function(){
 'use strict';
-if(/Android/i.test(navigator.userAgent||'') || window.__resantaAI360LazyLaunchV1)return;
+const android=/Android/i.test(navigator.userAgent||'');
+const nativeAndroid=android&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android';
+if((android&&!nativeAndroid)||window.__resantaAI360LazyLaunchV1)return;
 window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
@@ -17,6 +20,7 @@ const scripts=[
 ];
 function owner(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
+  (!nativeAndroid||String(currentUser.id)==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc') &&
   typeof currentProfile!=='undefined'&&currentProfile?.role==='boss' &&
   String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='александр паюшин' &&
   document.getElementById('app')?.style.display!=='none';}
@@ -33,6 +37,8 @@ async function activate(){
  if(!owner()||loading)return;
  if(ready){document.querySelector('.rva-launch')?.click();return;}
  loading=true;button.disabled=true;button.textContent='Подключение AI…';
+ // Android director voice stays behind this deliberate user action.
+ if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=true;
  try{
    for(const src of scripts){
      if(!owner())throw new Error('Сессия директора закрыта');
@@ -51,6 +57,7 @@ async function activate(){
    ready=true;button.hidden=true;
    document.querySelector('.rva-launch')?.click();
  }catch(e){
+   if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=false;
    console.warn('Optional AI360 loading:',e);
    button.title=String(e?.message||e).slice(0,170);
    button.textContent='AI 360° · повторить';
