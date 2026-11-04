@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1)return;
-const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.5';
+const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.4';
 const EXCLUDED=new Set(['cancelled','not_relevant']);
 const S={ctx:null,month:'',sales:null,tasks:null,stock:null,parser:null,errors:{},busy:false,seq:0,shown:false,mode:'groups',loadedAt:0};
 const get=id=>document.getElementById(id);
@@ -228,7 +228,6 @@ function render(){
  '<div class="ux-grid">'+people(m)+cards()+competitors()+'</div>'+
  '<div class="ux-bottom">'+tasks()+finance(m)+stock()+'</div>'+
  '<div class="ux-note" style="margin-top:10px">Детали открываются вместо сводки. Старые рабочие функции доступны только в деталях. Инфографика скрыта из меню; парсеры и их настройки не изменены.</div>';
- w.RESANTA_TRIOVIST_ACTION_CENTER_V1?.sourceUpdated?.('home');
  return true;
 }
 // Repaint only live source tiles: keep charts, month input, navigation and scroll intact.
@@ -249,7 +248,6 @@ function renderAux(){
  grids[1].children[1].outerHTML=cards();
  bottom.children[0].outerHTML=tasks();
  bottom.children[2].outerHTML=stock();
- w.RESANTA_TRIOVIST_ACTION_CENTER_V1?.sourceUpdated?.('home');
  return true;
 }
 // A single-flight key includes the user identity and report month: never share data across scopes.
@@ -306,5 +304,5 @@ async function open(ctx){
  return load();
 }
 async function refresh(){if(!S.ctx)return false;S.sales=null;return load()}
-w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1=Object.freeze({version:VERSION,open,refresh,show,render,compute,scopedRows,readOnlySnapshot:()=>({ctx:S.ctx,month:S.month,sales:S.sales,tasks:S.tasks,stock:S.stock,parser:S.parser,loadedAt:S.loadedAt}),readOnly:true,unified:true,commercePersistent:true,parsersUntouched:true});
+w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1=Object.freeze({version:VERSION,open,refresh,show,render,compute,scopedRows,readOnly:true,unified:true,commercePersistent:true,parsersUntouched:true});
 })(window);
