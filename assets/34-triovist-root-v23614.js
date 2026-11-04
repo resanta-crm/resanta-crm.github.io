@@ -77,6 +77,7 @@ async function prepareDirectWork(k){
    const mod=window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651;
    if(!mod?.render)throw Error('Модуль задач месяца ещё не готов');
    await mod.render(false);
+   window.RESANTA_TRIOVIST_TASKS360_V1?.enhance?.();
  }
  if(k==='cards'){
    try{window.triovistContentRender?.()}catch(_){}
