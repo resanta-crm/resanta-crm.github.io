@@ -102,8 +102,8 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
  assert.match(router,/RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.show/);
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
- assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix3-fast-first'));
- assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix2-failsafe-403'));
+ assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix4-fast-ui'));
+ assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix4-scoped-405'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
 });
@@ -133,4 +133,34 @@ test('fast-first home shows sales before slow parser and fills source freshness 
  }finally{f.releaseParser()}
  await new Promise(resolve=>setTimeout(resolve,0));
  assert.match(f.root().innerHTML,/TOP: 2026-11-03/);
+});
+
+test('Triovist navigation observer is scoped, initialization never overlaps and title stays clean',()=>{
+ assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
+ assert.doesNotMatch(router,/mo\.observe\(document\.documentElement/);
+ assert.match(router,/if\(bootPending\)return;/);
+ assert.match(router,/finally\{bootPending=false\}/);
+ assert.match(router,/РЕСАНТА CRM · Триовист \(21vek\.by\)<\/b>/);
+ assert.doesNotMatch(router,/Триовист \(21vek\.by\) · Uni X Director<\/b>/);
+});
+test('same identity and month reuse in-flight sales RPC instead of racing',async()=>{
+ const f=fixture('boss',false,true);
+ const [a,b]=await Promise.all([f.api.open(f.ctx),f.api.open(f.ctx)]);
+ assert.equal(a,true);assert.equal(b,true);
+ assert.equal(f.calls.filter(c=>c.name==='triovist_get_dashboard').length,1);
+ assert.equal(f.calls.filter(c=>c.name==='triovist_partner_stock_state_v236207').length,1);
+ f.releaseParser();
+});
+test('auxiliary sources update independently and preserve source-scoped UI',async()=>{
+ const f=fixture('manager',false,true);
+ assert.equal(await f.api.open(f.ctx),true);
+ await new Promise(resolve=>setTimeout(resolve,0));
+ assert.match(f.root().innerHTML,/Рабочие: 1/);
+ assert.match(f.root().innerHTML,/Нет даты/);
+ f.releaseParser();
+ await new Promise(resolve=>setTimeout(resolve,0));
+ assert.match(f.root().innerHTML,/TOP: 2026-11-03/);
+ assert.doesNotMatch(f.root().innerHTML,/Заказать садовую технику|235[\s\u00a0]863/);
+ assert.match(unix,/function renderAux\(/);
+ assert.doesNotMatch(unix,/Promise\.allSettled\(/);
 });
