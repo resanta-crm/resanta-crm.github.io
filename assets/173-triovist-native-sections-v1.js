@@ -6,7 +6,8 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1)return;
-const VERSION='2026.11.04.1',ID='tx7-style';
+const VERSION='2026.11.04.2',ID='tx7-style';
+let lastContext=null;
 const SECTIONS=Object.freeze({
  groups:{name:'Группы и категории',detail:'Группы, подгруппы и SKU',root:'#tr14-panel .trgd',hidden:'[data-trgd-list]'},
  stock:{name:'Остатки и заказ',detail:'Таблица SKU и расчёт заказа',root:'#tri-stock-card',hidden:'#tri-stock-table'},
@@ -174,6 +175,7 @@ function nativeRoot(k){
 }
 function mount(k,ctx){
  if(!SECTIONS[k]||!active(k)||!allowed(ctx))return false;
+ lastContext=ctx;
  const root=nativeRoot(k);
  if(!root||!root.isConnected)return false;
  // One native root only. No sibling of Triovist and no global app overlays.
@@ -210,5 +212,11 @@ function mount(k,ctx){
  }
  return true;
 }
-w.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1=Object.freeze({version:VERSION,mount,sections:Object.keys(SECTIONS),readOnly:true,noDatabaseWrites:true,noParserRuns:true,noPolling:true});
+function refresh(k){
+ if(!lastContext||!allowed(lastContext)||!active(k))return false;
+ const profile=w.currentProfile||w.currentUser;
+ if(profile?.email&&norm(profile.email)!==norm(lastContext.email))return false;
+ return mount(k,lastContext);
+}
+w.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1=Object.freeze({version:VERSION,mount,refresh,sections:Object.keys(SECTIONS),readOnly:true,noDatabaseWrites:true,noParserRuns:true,noPolling:true});
 })(window);
