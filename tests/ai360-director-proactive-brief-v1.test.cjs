@@ -17,7 +17,7 @@ function harness({guest=false,triUnavailable=false,missingOps=false}={}){
  const snapshots={
   sales:{managers:[{manager_name:'Руднев',plan:159000,actual:147329.12,to_plan:11670.88,plan_pct:92.7},
     {manager_name:'Шкуран',plan:153000,actual:49246.28,to_plan:103753.72,plan_pct:32.2}],
-    freshness:{report_date:'2026-10-31',last_success_at:'2026-10-26T17:38:53Z'},warnings:[]},
+    freshness:{report_date:new Date(Date.now()+2*86400000).toISOString().slice(0,10),last_success_at:'2026-10-26T17:38:53Z'},warnings:[]},
   operations:{period:{as_of:today()},task_summary:{open_tasks:653,overdue_tasks:452},
    debt_summary:{report_date:'2026-10-26'},
    overdue_debtors:[{client_name:'Клиент 1',debt_overdue:25538.23,
