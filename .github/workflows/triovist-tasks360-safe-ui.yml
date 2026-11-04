@@ -1,0 +1,37 @@
+name: Triovist Tasks360 safe UI regression
+on:
+  push:
+    branches:
+      - fix/triovist-360-tasks-roles-parser-isolation-20261104
+  pull_request:
+    paths:
+      - "assets/169-triovist-tasks360-ux-v1.js"
+      - "assets/61-triovist-task-month-safe-v23651.js"
+      - "assets/34-triovist-root-v23614.js"
+      - "index.html"
+      - "tests/triovist-tasks360-ux-v1.test.mjs"
+      - ".github/workflows/triovist-tasks360-safe-ui.yml"
+permissions:
+  contents: read
+jobs:
+  ui-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax checks
+        run: |
+          node --check assets/169-triovist-tasks360-ux-v1.js
+          node --check assets/61-triovist-task-month-safe-v23651.js
+          node --check assets/34-triovist-root-v23614.js
+      - name: Tasks 360 and Summary 360 regression
+        run: node --test tests/triovist-tasks360-ux-v1.test.mjs tests/triovist-summary-360-v1.test.mjs
+      - name: Parser files untouched
+        run: |
+          test -s assets/80-triovist-21vek-control-v236107.js
+          test -s assets/106-triovist-competitors-v236218.js
+          git diff --name-only origin/main...HEAD | tee /tmp/ui-only-files
+          ! grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)\.js$|^supabase/|^\.github/workflows/triovist-21vek)' /tmp/ui-only-files
