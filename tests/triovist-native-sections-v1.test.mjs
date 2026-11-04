@@ -123,6 +123,6 @@ test('UI does not expose developer jargon and existing parser/business handlers 
 
 test('Sales duplicate is hidden visually but retained as a working detail route',()=>{
  assert.match(router,/#tr14-shell \[data-tr14=\\?"sales\\?"\]\{display:none!important\}/);
- assert.match(router,/"'sales','💰 Продажи'"/);
+ assert.ok(router.includes("['sales','💰 Продажи']"));
  assert.match(router,/const WORK=\[\'home\',\'sales\'/);
 });
