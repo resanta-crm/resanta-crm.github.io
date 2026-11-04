@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1)return;
-const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.3';
+const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.4';
 const EXCLUDED=new Set(['cancelled','not_relevant']);
 const S={ctx:null,month:'',sales:null,tasks:null,stock:null,parser:null,errors:{},busy:false,seq:0,shown:false,mode:'groups',loadedAt:0};
 const get=id=>document.getElementById(id);
@@ -212,11 +212,11 @@ function stock(){
 function render(){
  const root=mount();if(!root)return false;const m=compute(S.sales);
  if(!m){
- root.innerHTML='<div class="ux-toolbar"><div class="ux-brand">Триовист · 360° · Uni X</div><div class="ux-meta"><input aria-label="Выбранный месяц" data-ux-month type="month" value="'+E(S.month)+'"><button data-ux-reload>↻ Обновить</button></div></div><div class="ux-empty">Продажи 1С пока не подтверждены. '+E(S.errors.sales||'')+'</div>';return false}
+ root.innerHTML='<div class="ux-toolbar"><div class="ux-brand">Триовист · Сводка 360°</div><div class="ux-meta"><input aria-label="Выбранный месяц" data-ux-month type="month" value="'+E(S.month)+'"><button data-ux-reload>↻ Обновить</button></div></div><div class="ux-empty">Продажи 1С пока не подтверждены. '+E(S.errors.sales||'')+'</div>';return false}
  const current=S.month===thisMonth(),sd=S.stock?.snapshot_date||S.stock?.partner?.snapshot_date||null;
  const pdate=S.parser?.working?.completed_at||S.parser?.last_good?.completed_at||null;
  const activeTasks=S.tasks?.tasks?.filter(x=>!EXCLUDED.has(x.status)&&(!manager()||norm(x.manager_email)===email())).length;
- root.innerHTML='<div class="ux-toolbar"><div><div class="ux-brand">Триовист (21vek.by) · Сводка 360°</div><div class="ux-note">Uni X Director · единый рабочий экран · проверенные данные</div></div>'+
+ root.innerHTML='<div class="ux-toolbar"><div><div class="ux-brand">Триовист (21vek.by) · Сводка 360°</div><div class="ux-note">Единый рабочий экран · проверенные данные</div></div>'+
  '<div class="ux-meta"><span class="ux-note">👑 VIP</span><input aria-label="Месяц отчёта" type="month" data-ux-month max="'+E(thisMonth())+'" value="'+E(S.month)+'"><span class="ux-note">Сравнение '+E(String(Number(S.month.slice(0,4))-1))+'</span><button data-ux-reload>↻ Обновить</button></div></div>'+
  (current?'<div class="ux-warning">Текущий месяц не завершён. С полным прошлогодним месяцем его можно сравнить только справочно.</div>':'')+
  '<div class="ux-kpis">'+tile('💰 Продажи · '+label(S.month),money(m.current),'Факт 1С · импорт: '+date(m.imported),'green')+
@@ -230,26 +230,58 @@ function render(){
  '<div class="ux-note" style="margin-top:10px">Детали открываются вместо сводки. Старые рабочие функции доступны только в деталях. Инфографика скрыта из меню; парсеры и их настройки не изменены.</div>';
  return true;
 }
+// Repaint only live source tiles: keep charts, month input, navigation and scroll intact.
+function renderAux(){
+ const root=get(ID),m=compute(S.sales);
+ if(!root||!m||!S.shown)return false;
+ const kpis=root.querySelector?.('.ux-kpis');
+ const grids=root.querySelectorAll?.('.ux-grid');
+ const bottom=root.querySelector?.('.ux-bottom');
+ // Headless fixtures and older browsers retain the verified full-render fallback.
+ if(!kpis||kpis.children.length<5||!grids||grids.length<2||!bottom||bottom.children.length<3)return render();
+ const sd=S.stock?.snapshot_date||S.stock?.partner?.snapshot_date||null;
+ const pdate=S.parser?.working?.completed_at||S.parser?.last_good?.completed_at||null;
+ const activeTasks=S.tasks?.tasks?.filter(x=>!EXCLUDED.has(x.status)&&(!manager()||norm(x.manager_email)===email())).length;
+ kpis.children[3].outerHTML=tile('📋 Задачи ИИ',activeTasks===undefined?'Нет данных':String(activeTasks),'Подробности по нажатию');
+ kpis.children[4].outerHTML=tile('🛡 Свежесть',date(sd),'TOP: '+date(pdate)+(sd&&age(sd)>10?' · Остатки устарели':''),'amber');
+ grids[0].children[2].outerHTML=briefing(m);
+ grids[1].children[1].outerHTML=cards();
+ bottom.children[0].outerHTML=tasks();
+ bottom.children[2].outerHTML=stock();
+ return true;
+}
+// A single-flight key includes the user identity and report month: never share data across scopes.
+let pendingLoad=null,pendingLoadKey='';
 async function load(){
+ const key=email()+'|'+S.month;
+ if(pendingLoad&&pendingLoadKey===key)return pendingLoad;
+ const job=loadOnce();
+ pendingLoad=job;pendingLoadKey=key;
+ try{return await job}
+ finally{if(pendingLoad===job){pendingLoad=null;pendingLoadKey=''}}
+}
+async function loadOnce(){
  const root=mount();if(!root)return false;
  const seq=++S.seq,month=S.month,actor=manager()?email():null;
  S.busy=true;S.errors={};S.sales=null;S.tasks=null;S.stock=null;S.parser=null;
  root.innerHTML='<div class="ux-loading">Загружаю продажи 1С…</div>';
- // Auxiliary sources must never hold the authoritative sales dashboard hostage.
- // Keep all requests concurrent, but render sales as soon as their RPC completes.
- void Promise.allSettled([
-  rpc('triovist_tasks_get_dashboard_month_v23648',{p_month:month+'-01',p_manager_email:actor}),
-  rpc('triovist_partner_stock_state_v236207',{}),
-  w.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.status?.()||rpc('triovist_21vek_status_v236107',{})
- ]).then(rs=>{
-  if(seq!==S.seq)return;
-  ['tasks','stock','parser'].forEach((k,i)=>{
-   const r=rs[i];if(r.status==='fulfilled')S[k]=r.value;
-   else{S[k]=null;S.errors[k]=String(r.reason?.message||'Данные недоступны').slice(0,180)}
+ const sources=[
+  ['tasks',()=>rpc('triovist_tasks_get_dashboard_month_v23648',{p_month:month+'-01',p_manager_email:actor})],
+  ['stock',()=>rpc('triovist_partner_stock_state_v236207',{})],
+  ['parser',()=>w.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.status?.()||rpc('triovist_21vek_status_v236107',{})]
+ ];
+ // Each secondary source resolves independently: even a hanging parser cannot hold up tasks.
+ for(const [key,getSource] of sources){
+  void Promise.resolve().then(getSource).then(value=>{
+   if(seq!==S.seq)return;
+   S[key]=value;
+   if(S.sales&&S.shown)renderAux();
+  }).catch(e=>{
+   if(seq!==S.seq)return;
+   S[key]=null;S.errors[key]=String(e?.message||'Данные недоступны').slice(0,180);
+   if(S.sales&&S.shown)renderAux();
   });
-  // Do not repaint a hidden workspace or overwrite a newer month/identity.
-  if(S.sales&&S.shown)render();
- }).catch(e=>console.warn('Triovist auxiliary sources unavailable',e));
+ }
  try{
   const sales=await rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month'});
   if(seq!==S.seq)return false;
