@@ -1,0 +1,37 @@
+name: Triovist Uni X Director single workspace
+on:
+  pull_request:
+    paths:
+      - "assets/171-triovist-unix-director-v1.js"
+      - "assets/34-triovist-root-v23614.js"
+      - "index.html"
+      - "tests/triovist-unix-director-v1.test.mjs"
+      - ".github/workflows/triovist-unix-director.yml"
+  push:
+    branches:
+      - feat/triovist-unix-director-single-workspace-20261104
+permissions:
+  contents: read
+jobs:
+  verify-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate new and existing browser modules
+        run: |
+          node --check assets/171-triovist-unix-director-v1.js
+          node --check assets/34-triovist-root-v23614.js
+          node --check assets/168-triovist-summary-360-v1.js
+          node --check assets/169-triovist-tasks360-ux-v1.js
+      - name: Test Uni X, old Summary and Tasks regressions
+        run: node --test tests/triovist-unix-director-v1.test.mjs tests/triovist-summary-360-v1.test.mjs tests/triovist-tasks360-ux-v1.test.mjs
+      - name: Ensure parser and database unchanged by this PR
+        run: |
+          git fetch origin main --depth=1
+          git diff --name-only origin/main...HEAD > /tmp/changed-files
+          cat /tmp/changed-files
+          ! grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)\.js$|^supabase/|^\.github/workflows/.*parser)' /tmp/changed-files
