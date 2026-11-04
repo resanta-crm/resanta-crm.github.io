@@ -42,7 +42,7 @@ function boot(androidNative,uid){
  const document={
   querySelector(s){return s==='#app .topbar'?top:null;},
   getElementById(id){return id==='app'?{style:{display:'block'}}:null;},
-  createElement(){return {hidden:true,disabled:false,addEventListener(k,cb){if(k==='click')this.click=cb;}};},
+  createElement(){return {hidden:true,disabled:false,style:{},addEventListener(k,cb){if(k==='click')this.click=cb;}};},
   body:{appendChild(s){if(s.src)queueMicrotask(()=>s.onload?.());}}
  };
  const context={window:root,document,navigator:{userAgent:'Mozilla/5.0 Android'},currentUser:{id:uid},
