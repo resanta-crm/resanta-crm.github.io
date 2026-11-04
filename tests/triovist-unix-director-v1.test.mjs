@@ -14,8 +14,8 @@ const liveSales={
  ],
  period_plans:[{manager_email:'aleksandrenko_av@resanta.ru',plan_amount:543000},{manager_email:'krishtal_na@resanta.ru',plan_amount:138000}]
 };
-function fixture(role='boss',failedSales=false){
- const calls=[],clicked=[],elements=new Map();
+function fixture(role='boss',failedSales=false,slowParser=false){
+ const calls=[],clicked=[],elements=new Map();let releaseParser=null;
  const shell={classList:{keys:new Set(),add(k){this.keys.add(k)},contains(k){return this.keys.has(k)}},children:[],appendChild(x){this.children.push(x);elements.set(x.id,x);x.parentElement=this},
   insertBefore(x,ref){this.children.splice(Math.max(0,this.children.indexOf(ref)),0,x);elements.set(x.id,x);x.parentElement=this},
   querySelector(s){return {click(){clicked.push(s)}}}};
@@ -33,12 +33,12 @@ function fixture(role='boss',failedSales=false){
    {title:'Заказать садовую технику',manager_email:'krishtal_na@resanta.ru',status:'pending_approval',due_date:'2026-11-08'}
   ]},error:null};
   if(name==='triovist_partner_stock_state_v236207')return {data:{snapshot_date:'2026-10-13'},error:null};
-  if(name==='triovist_21vek_status_v236107')return {data:{working:{completed_at:'2026-11-03T14:05:00+03:00'}},error:null};
+  if(name==='triovist_21vek_status_v236107')return slowParser?new Promise(resolve=>{releaseParser=resolve}):{data:{working:{completed_at:'2026-11-03T14:05:00+03:00'}},error:null};
   throw new Error('unexpected request '+name);
  }};
  const ctx={is_leader:role==='boss',is_manager:role==='manager',email:role==='boss'?'payushin_ar@resanta.ru':'aleksandrenko_av@resanta.ru'};
  vm.runInNewContext(unix,{window:w,document,db:d,console,Date,Intl,Promise,setTimeout});
- return {api:w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1,ctx,calls,clicked,elements,root:()=>elements.get('tr14-unix-home')};
+ return {api:w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1,ctx,calls,clicked,elements,root:()=>elements.get('tr14-unix-home'),releaseParser:()=>releaseParser?.({data:{working:{completed_at:'2026-11-03T14:05:00+03:00'}},error:null})};
 }
 test('Uni X script and original router are JavaScript syntax-valid',()=>{
  assert.doesNotThrow(()=>new vm.Script(unix));
@@ -102,7 +102,7 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
  assert.match(router,/RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.show/);
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
- assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix2-failsafe'));
+ assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix3-fast-first'));
  assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-unix2-failsafe-403'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
@@ -119,4 +119,18 @@ test('ordinary CRM employees are not subjected to Triovist authorization retry s
  assert.ok(router.includes('if(!local)return null;'));
  assert.ok(router.includes('nonTriovistProfileReady()'));
  assert.ok(router.includes('clearInterval(t);return'));
+});
+
+test('fast-first home shows sales before slow parser and fills source freshness later',async()=>{
+ const f=fixture('boss',false,true);
+ const open=f.api.open(f.ctx);
+ let result;
+ try{
+  result=await Promise.race([open,new Promise(resolve=>setTimeout(()=>resolve('slow-parser-blocked'),100))]);
+  assert.equal(result,true,'sales dashboard must not wait for the parser');
+  assert.match(f.root().innerHTML,/798[\s\u00a0]475,54/);
+  assert.match(f.root().innerHTML,/TOP: Нет даты/);
+ }finally{f.releaseParser()}
+ await new Promise(resolve=>setTimeout(resolve,0));
+ assert.match(f.root().innerHTML,/TOP: 2026-11-03/);
 });
