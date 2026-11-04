@@ -251,9 +251,9 @@ async function load(){
   if(S.sales&&S.shown)render();
  }).catch(e=>console.warn('Triovist auxiliary sources unavailable',e));
  try{
-  S.sales=await rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month'});
+  const sales=await rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month'});
   if(seq!==S.seq)return false;
-  S.loadedAt=Date.now();
+  S.sales=sales;S.loadedAt=Date.now();
   return render();
  }catch(e){
   if(seq!==S.seq)return false;
