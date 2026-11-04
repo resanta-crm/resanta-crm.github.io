@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1)return;
-const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.1';
+const ID='tr14-unix-home',CSS='tr14-unix-css',VERSION='2026.11.04.2';
 const EXCLUDED=new Set(['cancelled','not_relevant']);
 const S={ctx:null,month:'',sales:null,tasks:null,stock:null,parser:null,errors:{},busy:false,seq:0,shown:false,mode:'groups',loadedAt:0};
 const get=id=>document.getElementById(id);
@@ -124,7 +124,7 @@ function css(){
  ].join('\n');document.head.appendChild(style);
 }
 function mount(){
- const shell=get('tr14-shell');if(!shell)return null;css();shell.classList.add('ux-director-shell');
+ const shell=get('tr14-shell');if(!shell)return null;css();if(!shell.classList.contains('ux-director-shell'))shell.classList.add('ux-director-shell');
  let r=get(ID);
  if(!r){
   r=document.createElement('section');r.id=ID;r.setAttribute('aria-label','Триовист · Сводка 360° · Uni X');r.dataset.visible='false';r.innerHTML='<div class="ux-loading">Загружаю аналитику…</div>';
@@ -141,7 +141,7 @@ function mount(){
  if(!back){back=document.createElement('button');back.type='button';back.id='tr14-unix-back';back.textContent='← Назад в Сводку 360°';back.dataset.visible='false';back.addEventListener('click',()=>shell.querySelector('[data-tr14="home"]')?.click());shell.insertBefore(back,r)}
  return r;
 }
-function show(v){S.shown=!!v;const r=mount();if(r)r.dataset.visible=v?'true':'false';const b=get('tr14-unix-back');if(b)b.dataset.visible=triActive()&&!v?'true':'false'}
+function show(v){S.shown=!!v;const r=!v&&!get(ID)?null:mount();if(r&&r.dataset.visible!==(v?'true':'false'))r.dataset.visible=v?'true':'false';const b=get('tr14-unix-back');if(b)b.dataset.visible=triActive()&&!v?'true':'false'}
 function tile(label,value,note,color=''){return '<div class="ux-tile '+color+'"><span>'+E(label)+'</span><strong>'+E(value)+'</strong><small>'+E(note)+'</small></div>'}
 function button(label,section){return '<button data-ux-go="'+E(section)+'">'+E(label)+' →</button>'}
 function chart(m){
@@ -252,7 +252,7 @@ async function open(ctx){
  if(a&&a!==b){S.sales=S.tasks=S.stock=S.parser=null;S.month='';S.seq++}
  S.ctx=ctx;show(true);
  if(!S.month)S.month=shift(thisMonth(),-1);
- if(S.sales&&Date.now()-S.loadedAt<120000){render();return true}
+ if(S.sales&&Date.now()-S.loadedAt<120000)return render()
  return load();
 }
 async function refresh(){if(!S.ctx)return false;S.sales=null;return load()}
