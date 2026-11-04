@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -31,7 +33,6 @@ jobs:
         run: node --test tests/triovist-unix-director-v1.test.mjs tests/triovist-summary-360-v1.test.mjs tests/triovist-tasks360-ux-v1.test.mjs
       - name: Ensure parser and database unchanged by this PR
         run: |
-          git fetch origin main --depth=1
           git diff --name-only origin/main...HEAD > /tmp/changed-files
           cat /tmp/changed-files
           ! grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)\.js$|^supabase/|^\.github/workflows/.*parser)' /tmp/changed-files
