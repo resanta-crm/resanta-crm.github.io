@@ -36,6 +36,7 @@ function paintMotivation(h,m,data){
  const body=h.querySelector('[data-mbody]');
  if(body)body.innerHTML='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'+cur.map(x=>managerCard(x,pr.find(y=>y.manager_email===x.manager_email))).join('')+'</div><div style="font-size:10px;color:#64748b;margin-top:8px">База 1,50% не уменьшается. Финальная мотивация фиксируется после закрытия месяца.</div>';
  const base=document.getElementById('tri-period-month');if(base&&ym(base.value)!==m)base.value=m;
+ window.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1?.refresh?.('motivation');
 }
 async function motivation(force=false){
  if(!triActive()||tab()!=='motivation')return;
@@ -55,7 +56,10 @@ async function motivation(force=false){
 }
 function choose(m){if(!/^\d{4}-\d{2}$/.test(m))return;try{localStorage.setItem(KEY,m)}catch(_){};lastMonth='';lastData=null;motivation(true)}
 function sync(){
- if(!triActive())return;
+ if(!triActive()){
+  document.getElementById('tri-mot-compare-v236200')?.style.setProperty('display','none','important');
+  return;
+ }
  syncParser();host();
  if(tab()==='motivation')motivation();
 }

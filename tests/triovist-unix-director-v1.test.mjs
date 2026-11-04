@@ -102,8 +102,8 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
  assert.match(router,/RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.show/);
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
- assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-action-center-5'));
- assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-action-center-406'));
+ assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix4-fast-ui'));
+ assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-seven-native-406'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
 });
@@ -165,9 +165,16 @@ test('auxiliary sources update independently and preserve source-scoped UI',asyn
  assert.doesNotMatch(unix,/Promise\.allSettled\(/);
 });
 
-test('action center is loaded independently and sales drilldown remains available',()=>{
- assert.ok(index.includes('172-triovist-action-center-v1.js?v=20261104-action-center-1'));
- assert.ok(router.includes('RESANTA_TRIOVIST_ACTION_CENTER_V1?.show'));
- assert.ok(unix.includes('readOnlySnapshot:()=>'));
- assert.ok(router.includes("['sales','💰 Продажи']"),'existing drill-down router is retained');
+test('rolled-back action center never loads outside the Triovist page',()=>{
+ assert.doesNotMatch(index,/<script[^>]+172-triovist-action-center-v1\.js/);
+ assert.doesNotMatch(router,/RESANTA_TRIOVIST_ACTION_CENTER_V1/);
+ assert.doesNotMatch(unix,/RESANTA_TRIOVIST_ACTION_CENTER_V1/);
+ assert.match(router,/shell\.style\.setProperty\('display',on\?'block':'none','important'\)/);
+ assert.match(router,/if\(!on\)\{panel\.style\.setProperty\('display','none','important'\)/);
+});
+test('new seven-section module mounts only after native tab activation and is not a global overlay',()=>{
+ assert.match(router,/window\.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.mount\?\.\(k,ctx\)/);
+ assert.ok(index.includes('173-triovist-native-sections-v1.js?v=20261104-seven-tabs-1'));
+ assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
+ assert.doesNotMatch(router,/mo\.observe\(document\.documentElement/);
 });
