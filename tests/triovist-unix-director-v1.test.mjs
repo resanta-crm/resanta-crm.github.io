@@ -16,7 +16,7 @@ const liveSales={
 };
 function fixture(role='boss',failedSales=false){
  const calls=[],clicked=[],elements=new Map();
- const shell={classList:{add(){}},children:[],appendChild(x){this.children.push(x);elements.set(x.id,x);x.parentElement=this},
+ const shell={classList:{add(){},contains(){return false}},children:[],appendChild(x){this.children.push(x);elements.set(x.id,x);x.parentElement=this},
   insertBefore(x,ref){this.children.splice(Math.max(0,this.children.indexOf(ref)),0,x);elements.set(x.id,x);x.parentElement=this},
   querySelector(s){return {click(){clicked.push(s)}}}};
  const page={classList:{contains(x){return x==='active'}}};
