@@ -3207,7 +3207,7 @@ async function open(panel,ctx,force=false){
   render(panel,dash,emptyListing('',7));
  }catch(e){panel.innerHTML='<div class="tr14-warn"><b>Конкурентный анализ пока недоступен.</b><br>'+E(e?.message||e)+'</div>'}
 }
-window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,refresh:()=>{
+window.RESANTA_TRIOVIST_COMPETITORS_V236218=Object.freeze({version:V,open,readOnlySummary:()=>last,refresh:()=>{
  last=null;lastAt=0;scopeCache.clear();scopeFlights.clear();listingCache.clear();listingFlights.clear();
  historyCache.clear();historyFlights.clear();detailCache.clear();positionCache.clear();positionFlights.clear();positionHistoryCache.clear();stateCountsCache=null;stateCountsFlight=null;
  return load(true).then(async d=>{let s=null;try{s=await loadStateCounts(true)}catch(err){console.warn('Счётчик состояний конкурентов временно недоступен; основной анализ сохранён',err)}return mergeStateCounts(d,s)});
