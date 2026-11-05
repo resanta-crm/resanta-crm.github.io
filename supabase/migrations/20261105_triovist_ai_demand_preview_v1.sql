@@ -118,7 +118,7 @@ BEGIN
    (SELECT max(report_date) FROM public.stock_balances WHERE warehouse='Витебск') vitebsk_date,
    (SELECT max(updated_at) FROM public.triovist_seasonality_profiles) season_updated,
    (SELECT EXISTS(SELECT 1 FROM public.triovist_sales_imports i CROSS JOIN dates d WHERE i.month=d.ly)) has_ly_import,
-   (SELECT EXISTS(SELECT 1 FROM public.triovist_sales_imports i CROSS JOIN dates d WHERE i.month=d.pm)) has_pm_import,
+   (SELECT EXISTS(SELECT 1 FROM public.triovist_sales_imports i CROSS JOIN dates d WHERE i.month=d.pm AND d.pm<date_trunc('month',current_date)::date)) has_pm_import,
    (SELECT coalesce(max(source_file),'') FROM public.triovist_stock_import_log WHERE source='partner' AND snapshot_date=(SELECT max(snapshot_date) FROM public.triovist_partner_stock)) partner_source
  )
  SELECT jsonb_build_object(
