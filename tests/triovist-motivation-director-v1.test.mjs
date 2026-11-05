@@ -86,6 +86,7 @@ test('UI compiles, keeps original server payroll RPC and never runs heavy parser
  assert.match(ui,/triovist_set_plan/);
  assert.match(safe,/triovist_motivation_compare_v236199/);
  assert.match(safe,/RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1\?\.paint/);
+ assert.match(safe,/Triovist motivation native screen fallback/);
  assert.doesNotMatch(ui,/\.insert\(|\.update\(|\.upsert\(|setInterval\(|MutationObserver|fetch\(/);
  assert.match(original,/window\.triovistSavePlans=async function/);
  assert.match(original,/triovist_set_plan/);
