@@ -61,17 +61,17 @@ test('seven native sections exist, script is valid and has no polling, fetch or 
  assert.doesNotMatch(script,/(?:setInterval|MutationObserver|\.rpc\(|\.insert\(|\.upsert\(|\.update\(|\.delete\(|fetch\()/);
  assert.match(script,/noDatabaseWrites:true,noParserRuns:true,noPolling:true/);
 });
-test('groups show only manager-owned data and label forecast separately from fact',()=>{
+test('native group module owns the complete dashboard; generic overlay never duplicates its KPIs',()=>{
  const f=fixture('groups');
- assert.equal(f.api.mount('groups',f.ctx),true);
- const html=f.roots.groups.box.innerHTML;
- assert.match(html,/Александренко/);
- assert.match(html,/Климат/);
- assert.match(html,/500,00 BYN/);
- assert.match(html,/Прогноз, не факт/);
- assert.doesNotMatch(html,/Кришталь|Секретная группа|90 000,00|89 999/);
- assert.equal(f.where(),'panel');
- assert.equal(f.roots.groups.classList.contains('tx7-hide-groups'),true);
+ assert.equal(f.api.mount('groups',f.ctx),false);
+ assert.equal(f.creations.length,0);
+ assert.equal(f.roots.groups.box,null);
+ assert.match(groups,/function renderPriorities\(\)/);
+ assert.match(groups,/function renderKpis\(\)/);
+ assert.match(groups,/function renderManagers\(\)/);
+ assert.match(groups,/function renderChart\(\)/);
+ assert.match(groups,/data-trgd-details/);
+ assert.doesNotMatch(groups,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh\?\.\('groups'\)/);
 });
 test('other six briefings mount ONLY inside their active native containers',()=>{
  for(const tab of ['stock','tasks','motivation','cards','parser','competitors']){
@@ -101,9 +101,9 @@ test('cross-section calls never mount: selected tab must match exact requested k
  assert.equal(f.creations.length,0);
 });
 test('stale identity cannot refresh native surface after profile switch',()=>{
- const f=fixture('groups');assert.equal(f.api.mount('groups',f.ctx),true);
+ const f=fixture('stock');assert.equal(f.api.mount('stock',f.ctx),true);
  f.window.currentProfile.email='krishtal_na@resanta.ru';
- assert.equal(f.api.refresh('groups'),false);
+ assert.equal(f.api.refresh('stock'),false);
 });
 test('router contains only active native-section mount after successful navigation',()=>{
  assert.match(router,/if\(page\(\)\?\.classList\.contains\('active'\)\)window\.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.mount\?\.\(k,ctx\)/);
@@ -115,8 +115,8 @@ test('router contains only active native-section mount after successful navigati
 test('UI does not expose developer jargon and existing parser/business handlers are preserved',()=>{
  assert.doesNotMatch(script,/\bUI\/UX\b|Uni X Director/);
  for(const x of ['anp','si','budget','price'])assert.match(router,new RegExp("'"+x+"'"));
- assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261104-seven-tabs-1/);
- assert.match(lazy,/20261104-native7-1/);
+ assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-groups-single-1/);
+ assert.match(lazy,/20261105-groups-single-1/);
  assert.match(groups,/readOnlySnapshot/);
  assert.match(motivation,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh/);
 });
@@ -137,8 +137,16 @@ test('entering Triovist after loading another CRM page mounts saved active tab',
  assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
 });
 test('new modules reject a cached account when currentProfile switched',()=>{
- const f=fixture('groups');
+ const f=fixture('stock');
  f.window.currentProfile.email='krishtal_na@resanta.ru';
- assert.equal(f.api.mount('groups',f.ctx),false);
+ assert.equal(f.api.mount('stock',f.ctx),false);
  assert.equal(f.creations.length,0);
+});
+
+test('old group overlay remains disabled without affecting other six tabs',()=>{
+ const f=fixture('groups');
+ assert.equal(f.api.mount('groups',f.ctx),false);
+ assert.doesNotMatch(f.roots.groups.box?.innerHTML||'','Краткий брифинг');
+ for(const k of ['stock','tasks','motivation','cards','parser','competitors'])assert.match(script,new RegExp(k+":\\{name:"));
+ assert.match(script,/if\(k==='groups'\)return false/);
 });
