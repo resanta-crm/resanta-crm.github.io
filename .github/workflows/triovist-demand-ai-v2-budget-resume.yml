@@ -37,6 +37,16 @@ jobs:
       - name: Verify seasonality, +15%, manual task approval, old plan approvals and Budget resume
         run: |
           node --test tests/triovist-demand-ai-v2.test.mjs tests/triovist-motivation-director-v1.test.mjs tests/crm-view-resume-v1.test.mjs tests/triovist-tasks360-ux-v1.test.mjs
+      - name: Full prior Uni X, Cards 21vek and competitor listing regression
+        run: |
+          node --test tests/triovist-unix-director-v1.test.mjs tests/triovist-summary-360-v1.test.mjs tests/triovist-competitors-uni-listing.test.mjs tests/triovist-competitors-uni-cache.test.mjs tests/triovist-native-sections-v1.test.mjs tests/triovist-stock-director-v1.test.mjs
+      - name: Validate only additive RPC files exist
+        run: |
+          test -f supabase/migrations/20261105_triovist_ai_demand_preview_v1.sql
+          test -f supabase/migrations/20261105_triovist_ai_task_draft_v1.sql
+          grep -q 'REVOKE ALL ON FUNCTION' supabase/migrations/20261105_triovist_ai_demand_preview_v1.sql
+          grep -q 'REVOKE ALL ON FUNCTION' supabase/migrations/20261105_triovist_ai_task_draft_v1.sql
+          ! grep -E 'TRUNCATE|DROP TABLE|DELETE FROM public.triovist_ai_tasks|ALTER TABLE' supabase/migrations/20261105_triovist_ai_*.sql
       - name: Ensure parser, cards, old task data and roles remain untouched
         run: |
           git fetch origin main
