@@ -6,7 +6,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1)return;
-const VERSION='2026.11.04.2',ID='tx7-style';
+const VERSION='2026.11.05.1',ID='tx7-style';
 let lastContext=null;
 const SECTIONS=Object.freeze({
  groups:{name:'Группы и категории',detail:'Группы, подгруппы и SKU',root:'#tr14-panel .trgd',hidden:'[data-trgd-list]'},
@@ -175,6 +175,8 @@ function nativeRoot(k){
  return document.querySelector(SECTIONS[k].root);
 }
 function mount(k,ctx){
+ // Groups now own their native director screen; avoid duplicate KPI and hidden filters.
+ if(k==='groups')return false;
  if(!SECTIONS[k]||!active(k)||!allowed(ctx))return false;
  const live=w.currentProfile||w.currentUser;
  if(live?.email&&norm(live.email)!==norm(ctx.email))return false;
