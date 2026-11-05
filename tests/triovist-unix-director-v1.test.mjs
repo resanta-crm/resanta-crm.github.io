@@ -174,7 +174,7 @@ test('rolled-back action center never loads outside the Triovist page',()=>{
 });
 test('new seven-section module mounts only after native tab activation and is not a global overlay',()=>{
  assert.match(router,/window\.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.mount\?\.\(k,ctx\)/);
- assert.ok(index.includes('173-triovist-native-sections-v1.js?v=20261105-stock-director-1'));
+ assert.ok(index.includes('173-triovist-native-sections-v1.js?v=20261105-tasks-director-1'));
  assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
  assert.doesNotMatch(router,/mo\.observe\(document\.documentElement/);
 });
