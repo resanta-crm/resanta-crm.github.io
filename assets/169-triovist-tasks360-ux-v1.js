@@ -133,7 +133,11 @@ function enhance(){
   r.appendChild(details);
  }
  const body=details.querySelector('div');
- for(const t of [...r.querySelectorAll('.tm51-task')])body.appendChild(t);
+ for(const t of [...r.querySelectorAll('.tm51-task')]){
+  // Defense in depth: do not display a different manager's task if a provider over-returns.
+  if(own&&String(t.dataset.manager||'').toLowerCase()!==own)t.remove();
+  else body.appendChild(t);
+ }
  const card=document.getElementById('tri-task-card');
  if(card)generatorDetails();
  if(r.dataset.tm360Bound!=='1'){
