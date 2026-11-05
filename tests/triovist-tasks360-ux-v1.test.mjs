@@ -129,7 +129,7 @@ test('old monthly AI generator is paused, while refresh and existing task button
  assert.ok(btn);
  assert.equal(btn.disabled,true);
  assert.match(ui,/#tri-task-generate-btn/);
- assert.match(x.card.querySelector('.tm360-generator-pause').textContent,/Прежняя методика/);
+ assert.match(x.card.querySelector('.tm360-generator-pause').textContent,/Прежний генератор отключён/);
  assert.match(tasks,/triovist_tasks_get_dashboard_month_v23648/);
  assert.match(routes,/triovistTasksGenerateFresh\(true\)/);
 });
