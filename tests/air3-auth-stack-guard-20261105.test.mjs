@@ -57,5 +57,6 @@ test('No async Supabase API calls are awaited in direct auth callbacks',()=>{
 });
 test('No changes to shared core URL or Supabase library; no APK',()=>{
  assert.match(index,/<script defer src="https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2"><\/script>/);
- assert.ok(index.includes('./assets/01-crm-core.js?v=23.6.339-client360-1'));
+ assert.ok(index.includes('./assets/01-crm-core.js?v=23.6.339-client360-2-air3-auth'));
+ assert.ok(!index.includes('./assets/01-crm-core.js?v=23.6.339-client360-1'));
 });
