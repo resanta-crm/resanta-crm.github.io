@@ -146,7 +146,7 @@ test('new modules reject a cached account when currentProfile switched',()=>{
 test('old group overlay remains disabled without affecting other six tabs',()=>{
  const f=fixture('groups');
  assert.equal(f.api.mount('groups',f.ctx),false);
- assert.doesNotMatch(f.roots.groups.box?.innerHTML||'','Краткий брифинг');
+ assert.doesNotMatch(f.roots.groups.box?.innerHTML||'',/Краткий брифинг/);
  for(const k of ['stock','tasks','motivation','cards','parser','competitors'])assert.match(script,new RegExp(k+":\\{name:"));
  assert.match(script,/if\(k==='groups'\)return false/);
 });
