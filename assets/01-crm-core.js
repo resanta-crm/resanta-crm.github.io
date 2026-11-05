@@ -10440,7 +10440,7 @@ document.addEventListener('visibilitychange',()=>{
 });
 window.addEventListener('focus',()=>crmEnsureFreshSessionV236166(false).catch(e=>console.warn('CRM auth focus',e)));
 
-db.auth.onAuthStateChange(async(event,session)=>{
+function crmHandleAuthEventV20261105(event,session){
   if(event==='PASSWORD_RECOVERY'){
     // Defer user interaction until the auth callback returns: no auth calls
     // inside the onAuthStateChange handler (prevents session deadlock).
@@ -10464,9 +10464,36 @@ db.auth.onAuthStateChange(async(event,session)=>{
     }
     crmShowSignedOutUiV236258();
   }
-});
-
-initAuth();
+}
+// Android WebView: await the *initial* session recovery before subscribing to
+// auth events. Some supabase-js v2 versions may deadlock when onAuthStateChange
+// registers during the initial token-refresh/lock acquisition.
+// Desktop retains the verified legacy init order and all business logic.
+const crmNativeAndroidAuthInitV20261105=/Android/i.test(navigator.userAgent||'') &&
+  window.Capacitor?.isNativePlatform?.()===true &&
+  window.Capacitor?.getPlatform?.()==='android';
+function crmListenToAuthV20261105(){
+  db.auth.onAuthStateChange(crmHandleAuthEventV20261105);
+}
+if(crmNativeAndroidAuthInitV20261105){
+  void (async()=>{
+    console.info('AIR3 auth diagnostic: initial session recovery started');
+    try{
+      await withTimeout(initAuth(),25000,'initial Android WebView session');
+      console.info('AIR3 auth diagnostic: initial session recovery settled');
+    }catch(e){
+      // Auth init failures should not prevent password login or leave the
+      // listener unregistered. Keep the pre-existing signed-out UI.
+      console.warn('AIR3 initial auth recovery incomplete:',String(e?.message||e).slice(0,120));
+    }finally{
+      crmListenToAuthV20261105();
+      console.info('AIR3 auth diagnostic: listener ready');
+    }
+  })();
+}else{
+  crmListenToAuthV20261105();
+  initAuth();
+}
 
 
 // ===== ABC-АНАЛИЗ ПО 14 ТОВАРНЫМ ГРУППАМ =====
