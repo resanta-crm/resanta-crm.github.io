@@ -1,0 +1,49 @@
+name: Triovist own 21vek hourly rank 1-120 (isolated)
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/triovist_21vek_own_hourly_watch.py'
+      - 'tools/test_triovist_21vek_own_hourly.py'
+      - 'tests/triovist-parser-hybrid-v1.test.mjs'
+      - 'assets/176-triovist-parser-uniai-unix-v1.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
+      - 'supabase/migrations/20261105093000_triovist_parser_hourly_uniai_unix_v1.sql'
+      - '.github/workflows/triovist-own-hourly-uniai-unix.yml'
+concurrency:
+  group: triovist-own-hourly-watch
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  safe-hourly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing parser dependencies
+        run: pip install requests beautifulsoup4
+      - name: Syntax check isolated modules
+        run: |
+          python -m py_compile tools/triovist_21vek_top_shadow.py tools/triovist_21vek_own_hourly_watch.py
+          node --check assets/176-triovist-parser-uniai-unix-v1.js
+          node --check assets/100-safe-upgrades-loader-v236272.js
+      - name: Regression and safety tests (offline)
+        run: |
+          python -m unittest discover -s tools -p 'test_triovist_21vek_own_hourly.py' -v
+          node --test tests/triovist-parser-hybrid-v1.test.mjs
+      - name: Bounded production hourly watch (NEVER on pull requests)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TOP_DELAY_SECONDS: '0.65'
+          TOP_HTTP_TIMEOUT: '30'
+          OWN_HOURLY_KEYWORDS: '60'
+          OWN_HOURLY_PAUSE: '0.60'
+        run: python tools/triovist_21vek_own_hourly_watch.py
