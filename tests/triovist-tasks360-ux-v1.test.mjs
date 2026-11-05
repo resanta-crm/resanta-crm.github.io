@@ -97,7 +97,8 @@ test('existing task approval, actions, payroll and close-month controls retain t
  const contained=details.querySelectorAll('.tm51-task');
  assert.equal(contained.length,x.taskNodes.length);
  for(let i=0;i<contained.length;i++)assert.equal(contained[i].children[0],actions[i]);
- assert.equal(x.card.querySelectorAll('.tm360-generator-rules').length,1);
+ assert.equal(x.card.querySelectorAll('.tm360-generator-rules').length,0);
+ assert.equal(x.card.querySelectorAll('.tm360-generator-pause').length,1);
 });
 test('manager UI and detail contain only manager tasks, even if DOM contains other manager rows',()=>{
  const x=fixture('manager');
@@ -119,15 +120,18 @@ test('the five statuses are mutually exclusive; partial and finalized statuses a
  assert.match(ui,/const EXCLUDED=new Set\(\['cancelled','not_relevant'\]\)/);
  assert.doesNotMatch(ui,/const WORK=new Set\([^\n]*partial/);
 });
-test('the only AI-plan generator remains the original 8/10/12/15 server-backed flow',()=>{
+test('old monthly AI generator is paused, while refresh and existing task buttons are retained',()=>{
  const x=fixture();x.api.enhance();
- assert.match(x.r.querySelector('.tm360-view').innerHTML,/Сформировать план ИИ/);
- assert.ok(x.head.children.some(c=>c.id==='tri-task-generate-btn'));
- assert.match(ui,/document\.getElementById\('tri-task-generate-btn'\)\?\.scrollIntoView/);
+ const html=x.r.querySelector('.tm360-view').innerHTML;
+ assert.doesNotMatch(html,/Сформировать план ИИ|8 \/ 10 \/ 12 \/ 15/);
+ assert.match(html,/Новая методика ИИ-плана проходит согласование/);
+ const btn=x.head.children.find(c=>c.id==='tri-task-generate-btn');
+ assert.ok(btn);
+ assert.equal(btn.disabled,true);
+ assert.match(ui,/#tri-task-generate-btn/);
+ assert.match(x.card.querySelector('.tm360-generator-pause').textContent,/Прежняя методика/);
  assert.match(tasks,/triovist_tasks_get_dashboard_month_v23648/);
  assert.match(routes,/triovistTasksGenerateFresh\(true\)/);
- assert.match(routes,/tri-task-plan-size/);
- assert.match(routes,/8 задач/);assert.match(routes,/15 задач/);
 });
 test('no new API calls, DB writes or parser reads are added to tasks presentation',()=>{
  assert.doesNotMatch(ui,/\.rpc\(|fetch\(|\.from\(|\.insert\(|\.delete\(|\.update\(|MutationObserver|setInterval/);
@@ -141,7 +145,7 @@ test('preserves work, commercial routes, original parser and competitor modules'
  assert.match(router,/RESANTA_TRIOVIST_21VEK_CONTROL_V236107/);
  assert.match(router,/RESANTA_TRIOVIST_COMPETITORS_V236218/);
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
- assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-director1/);
+ assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-retire-old-plan1/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
  assert.ok(parser.length>3000);assert.ok(competitors.length>3000);
 });
