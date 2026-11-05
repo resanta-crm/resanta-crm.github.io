@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_TASKS360_V1)return;
-const ID='tri-tasks360-style-v2',VERSION='2026.11.05.2-plan-paused';
+const ID='tri-tasks360-style-v2',VERSION='2026.11.05.3-brainstorm';
 const root=()=>document.getElementById('tri-month-safe-v23651');
 const active=()=>document.getElementById('page-triovist')?.classList.contains('active')&&
  document.querySelector('#tr14-shell [data-tr14="tasks"]')?.classList.contains('on');
@@ -97,7 +97,7 @@ function generatorDetails(){
  const note=[...card.children].find(x=>x.classList?.contains('tri-task-note'));
  const anchor=note||card.querySelector('.tri-task-head');if(!anchor)return;
  const message=document.createElement('div');message.className='tm360-generator-pause';
- message.textContent='Прежняя методика задач по подгруппам отменена. Новые ИИ-планы временно не создаются. Для следующей модели: продажи 21vek, свободный остаток и подтверждённые поступления, Витебск, сезонность, целевой рост 15%; Чехов — справочно, группа 900 исключается. Новая формула — после согласования.';
+ message.textContent='Прежний генератор отключён. Новые задачи по проблемным подгруппам создаются только после твоего запуска «Мозгового штурма ИИ», редактирования и личного утверждения. До 30 задач на каждого менеджера, две части: объём продаж и проверка листинга.';
  anchor.insertAdjacentElement('afterend',message);
 }
 function enhance(){
@@ -114,9 +114,9 @@ function enhance(){
  stat('На согласовании',approval,'Требуют решения')+stat('На проверке',checking,'Подтвердить результат')+stat('Просрочено',late,'Нужна реакция',late>0)+'</div>';
  const managerView=(isManager()?EMAILS.filter(v=>v===own):EMAILS).map(mail=>managerSummary(tasks,mail,NAMES[EMAILS.indexOf(mail)])).join('');
  const actions='<div class="tm360-actions">'+
- (!isManager()?'<span class="tm360-optional">Новая методика ИИ-плана проходит согласование.</span>':'')+
+ (!isManager()?'<span class="tm360-optional">Мозговой штурм ИИ — ручной запуск руководителем; не более 30 обоснованных задач на менеджера.</span>':'')+
  '<button type="button" data-tm360-expand>▤ Открыть рабочие задачи</button>'+
- '<span class="tm360-optional">Прежний генератор отключён. Проверка результатов уже существовавших задач сохранена.</span></div>';
+ '<span class="tm360-optional">Согласование доступно только Паюшину. Архивные задачи и проверка старых KPI сохранены.</span></div>';
  head.innerHTML=kpis+briefing(tasks,working,approval,checking,late,done)+actions+
  '<div class="tm360-grid">'+managerView+'</div>'+
  '<div class="tm360-legend"><span><i style="background:#178858"></i>Подтверждено</span><span><i style="background:#3d86c7"></i>В работе</span><span><i style="background:#d89e47"></i>Согласование / проверка</span><span><i style="background:#cc4854"></i>Просрочено</span></div>';
