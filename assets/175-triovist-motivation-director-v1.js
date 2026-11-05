@@ -28,7 +28,7 @@ const isManager=()=>profile().access_scope==='triovist'&&profile().role==='manag
 const active=()=>document.getElementById('page-triovist')?.classList.contains('active')&&document.querySelector('#tr14-shell [data-tr14].on')?.dataset?.tr14==='motivation';
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const sourceCache=new Map(),drafts=new Map(),recommendations=new Map();
-let reportMonth='',planMonth='',last=null,nonce=0,saving=false,loading=false,status='',error='';
+let reportMonth='',planMonth='',last=null,nonce=0,saving=false,loading=false,status='',error='',actor='';
 const key=(month,manager)=>month+'|'+manager;
 function css(){
  if(document.getElementById(ID))return;
@@ -93,7 +93,7 @@ async function fetchSnapshot(month,force=false){
   const hub=w.TRIOVIST_DATA_HUB_V227315;
   const args={p_end_month:month,p_mode:'month',p_start_month:null};
   let data;
-  if(hub?.sales)data=await hub.sales(args);
+  if(!force&&hub?.sales)data=await hub.sales(args);
   else{
    const client=dbx();if(!client?.rpc)throw Error('Соединение с CRM пока недоступно');
    const out=await client.rpc('triovist_get_dashboard',args);
@@ -166,6 +166,7 @@ function editor(month){
  (locked?'<div class="trmot-warn">Прошлый месяц — только просмотр: архивные планы не переписываются из этого экрана.</div>':'')+
  '<div class="trmot-grid">'+form+'</div>'+
  '<div class="trmot-actions">'+
+ (sourceCache.get(month)?.error?'<button type="button" class="trmot-btn" data-trmot-retry>↻ Повторить проверку планов</button>':'')+
  '<button type="button" class="trmot-btn" data-trmot-calc '+(locked||saving||!allow?'disabled':'')+'>✨ ИИ · Рассчитать планы</button>'+
  '<button type="button" class="trmot-btn" data-trmot-use '+(!recommendations.get(month)?.data||locked||saving?'disabled':'')+'>Подставить предложение ИИ</button>'+
  '<button type="button" class="trmot-btn primary" data-trmot-save '+(locked||saving||!s||!allow?'disabled':'')+'>'+(saving?'Сохраняю…':'Утвердить и сохранить')+'</button></div>'+
@@ -174,9 +175,9 @@ function editor(month){
 }
 function managerCard(row,previous,planSnapshot){
  const amount=planSnapshot? snapshotAmount(planSnapshot,String(row.manager_email||'').toLowerCase()):null;
- const known=!!planSnapshot;
- const planStatus=!known?'Проверяю план…':amount===null?'План не задан':money(amount);
- const planPercent=!known?'Проверяется':amount===null?'Не задан':amount>0?pct(num(row.fact)/amount*100):'План 0 BYN';
+ const known=!!planSnapshot,failed=!known&&!!sourceCache.get(ym(row.month))?.error;
+ const planStatus=failed?'Не удалось проверить план':!known?'Проверяю план…':amount===null?'План не задан':money(amount);
+ const planPercent=failed?'Проверка недоступна':!known?'Проверяется':amount===null?'Не задан':amount>0?pct(num(row.fact)/amount*100):'План 0 BYN';
  const ratePart=(label,val,sub)=>'<div class="trmot-part"><small>'+label+'</small><b>'+rate(val)+'</b><div class="trmot-note">'+esc(sub)+'</div></div>';
  const delta=pp(row.total_rate,previous?.total_rate);
  return '<article class="trmot-manager"><div class="trmot-manager-head"><div><h4>'+esc(row.manager_name||'Менеджер')+'</h4><p class="trmot-note">Продажи: '+money(row.fact)+' · план: '+planStatus+'</p></div><div style="text-align:right"><div class="trmot-rate">'+rate(row.total_rate)+'</div><div class="trmot-note">К прошлому месяцу: '+delta+'</div></div></div>'+
@@ -198,6 +199,9 @@ function render(host,month,data){
  if(!active()||!(isBoss()||isManager()))return false;
  const area=host?.querySelector('[data-mbody]');if(!area)return false;
  css();host.classList.add('trmot175');
+ if(actor!==email()){
+  actor=email();sourceCache.clear();drafts.clear();recommendations.clear();planMonth=month;reportMonth='';error='';status='';nonce++;
+ }
  if(reportMonth!==month){reportMonth=month;planMonth=month;error='';status='';nonce++; }
  last={host,month,data};
  const all=Array.isArray(data?.rows)?data.rows:[];
@@ -227,8 +231,8 @@ function render(host,month,data){
  '<details class="trmot-details"><summary>▤ Методика начисления премии и источник данных</summary><div>1,50% базовая ставка + четыре KPI в пределах действующего лимита 0,50%. Подтверждённые задачи, продажи и командные показатели рассчитывает штатная серверная функция. Изменение ставки — в п.п. План создаёт руководитель после проверки рекомендации. Никаких автоматических корректировок закрытых месяцев.</div></details>';
  bind(host);
  const c=sourceCache.get(month);
- if(!c?.data&&!c?.flight)loadSource(month);
- if(isBoss()&&owner!==month&&!sourceCache.get(owner)?.data&&!sourceCache.get(owner)?.flight)loadSource(owner);
+ if(!c?.data&&!c?.flight&&!c?.error)loadSource(month);
+ if(isBoss()&&owner!==month&&!sourceCache.get(owner)?.data&&!sourceCache.get(owner)?.flight&&!sourceCache.get(owner)?.error)loadSource(owner);
  return true;
 }
 function refresh(){if(last&&active())render(last.host,last.month,last.data)}
@@ -250,6 +254,7 @@ function bind(host){
   planMonth=t.value;error='';status='';nonce++;refresh();
  });
  host.addEventListener('click',ev=>{
+  if(ev.target.closest?.('[data-trmot-retry]')){sourceCache.delete(planMonth);error='';loadSource(planMonth);refresh();return}
   if(ev.target.closest?.('[data-trmot-calc]')){generate();return}
   if(ev.target.closest?.('[data-trmot-use]')){apply();return}
   if(ev.target.closest?.('[data-trmot-save]')){save();return}
