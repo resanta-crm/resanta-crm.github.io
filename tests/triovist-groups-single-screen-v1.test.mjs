@@ -116,7 +116,14 @@ test('catalog warning appears once and is independent of date status',async()=>{
  const x=fixture();await x.api.open(x.host,x.ctx);
  assert.equal((x.get('[data-trgd-catalog]').innerHTML.match(/data-trgd-catalog-toggle/g)||[]).length,1);
  assert.match(x.get('[data-trgd-catalog]').innerHTML,/28 SKU/);
+ assert.match(x.get('[data-trgd-catalog]').innerHTML,/Сопоставлено:/);
+ assert.match(x.get('[data-trgd-catalog]').innerHTML,/2[\s\u00a0\u202f]136/);
  assert.doesNotMatch(x.get('[data-trgd-status]').innerHTML||x.get('[data-trgd-status]').textContent,/28 SKU/);
+});
+test('late asynchronous group filter responses cannot replace newer data',()=>{
+ assert.match(code,/const request=\+\+loadEpoch/);
+ assert.match(code,/if\(request!==loadEpoch\)return/);
+ assert.match(code,/if\(request===loadEpoch\)showError\(e\)/);
 });
 test('all detailed subgroups/SKU still use previous safe lazy RPC route',()=>{
  assert.match(code,/getLevel\('subgroup',manager\|\|null,group,null\)/);
