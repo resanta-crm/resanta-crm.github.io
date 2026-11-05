@@ -4,7 +4,7 @@
 (function(w,d){
 'use strict';
 if(w.RESANTA_TRIOVIST_DEMAND_AI_V1)return;
-const VERSION='2026.11.05.brainstorm-v2',ID='tri-ai179',STYLE='tri-ai179-style';
+const VERSION='2026.11.05.brainstorm-v3-manual-target-and-listing',ID='tri-ai179',STYLE='tri-ai179-style';
 const A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru';
 let selected=A,snapshot=null,loadedMonth='',busy=false,message='',expanded=new Set(),rejected=new Set(),drafts=new Map();
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -77,7 +77,20 @@ function stat(name,value,detail){
 }
 function proposalHtml(x){
  const id=key(x),edit=expanded.has(id),draft=draftOf(x);
- const sku=(x.listing_skus||[]).slice(0,8).map(t=>'<span>'+esc(t.sku)+' · '+(t.position==null?'позиция неизвестна':'№'+esc(t.position))+'</span>').join('');
+ const samples=Array.isArray(x.listing_skus)?x.listing_skus:[],
+       known=samples.filter(t=>t.position!=null),
+       unknown=samples.filter(t=>t.position==null);
+ const skuReason=t=>t.listing_state==='out_of_stock'?'21vek: нет в наличии':
+  t.listing_state==='not_in_fresh_registry'?'Нет в свежем реестре 21vek':
+  'Позиция не подтверждена текущей проверкой';
+ const dated=t=>t.position_last_seen?String(t.position_last_seen).slice(0,10).split('-').reverse().join('.'):'';
+ const knownHtml=known.map(t=>'<span>'+esc(t.sku)+' · №'+esc(t.position)+'</span>').join('');
+ const unknownHtml=unknown.map(t=>'<span>'+esc(t.sku)+' · '+esc(skuReason(t))+
+   (t.position_last_exact!=null?' · ранее №'+esc(t.position_last_exact)+' ('+esc(dated(t))+')':' · точной истории нет')+'</span>').join('');
+ const sku='<div class="ab-note"><b>Подтверждённые позиции ('+known.length+')</b></div>'+
+    '<div class="ab-skus">'+knownHtml+'</div>'+
+    '<div class="ab-note" style="margin-top:9px"><b>Требуют проверки ('+unknown.length+')</b> — историческая позиция не является текущей</div>'+
+    '<div class="ab-skus">'+unknownHtml+'</div>';
  let editor='';
  if(edit){
   editor='<div class="ab-edit" data-ab-card="'+esc(id)+'">'+
@@ -85,7 +98,7 @@ function proposalHtml(x){
   '<label>Цель по объёму, BYN<input type="number" min="1" max="100000000" step="0.01" data-ab-field="target" value="'+esc(draft.target)+'"></label>'+
   '<label>Срок<input type="date" data-ab-field="due" value="'+esc(draft.due)+'"></label>'+
   '<label class="ab-wide">Обязательная часть «Листинг»<textarea rows="3" maxlength="1800" data-ab-field="listing">'+esc(draft.listing)+'</textarea></label>'+
-  '<label class="ab-wide">Обоснование твоей корректировки денежной цели<textarea rows="2" maxlength="2000" data-ab-field="note" placeholder="Особенно важно при повышенной или ручной цели">'+esc(draft.note)+'</textarea></label></div>';
+  '<label class="ab-wide">Комментарий руководителя (необязательно)<textarea rows="2" maxlength="2000" data-ab-field="note" placeholder="Можно оставить пустым: личное утверждение и отличие от рекомендации будут сохранены автоматически">'+esc(draft.note)+'</textarea></label></div>';
  }
  return '<article class="ab-panel" data-ab-proposal="'+esc(id)+'"><h4>'+esc(x.subgroup)+' · '+esc(x.group)+'</h4>'+
  '<div class="ab-row"><span class="ab-tag">'+esc(x.manager_name)+'</span><span class="ab-tag bad">Падение '+esc(x.change_pct)+'%</span>'+
@@ -103,7 +116,7 @@ function proposalHtml(x){
  ', ниже TOP-60 '+qty(x.outside_top60)+', без подтверждения '+qty(x.rank_unknown)+
  ', замечания карточек '+qty(x.card_issues)+'.</p>'+
  '<div class="ab-skus">'+sku+'</div>'+
- '<p>Менеджер документирует проверку, руководитель подтверждает. Непроверенная позиция — не доказанное выпадение.</p></section></div>'+
+ '<p>Менеджер документирует проверку. Нет товара, отсутствие в свежем реестре и неподтверждённая позиция — разные причины; историческую позицию нельзя считать текущей.</p></section></div>'+
  editor+
  '<div class="ab-row"><button type="button" data-ab-edit="'+esc(id)+'">'+(edit?'Свернуть':'✎ Изменить')+'</button>'+
  '<button type="button" class="approve" data-ab-approve="'+esc(id)+'" '+(busy?'disabled':'')+'>✓ Согласовать и назначить</button>'+
@@ -166,11 +179,14 @@ async function approve(id){
  const f=draftOf(x),target=Number(String(f.target).replace(',','.'));
  if(!Number.isFinite(target)||target<=0||target>100000000){message='Для '+x.subgroup+' нужна положительная денежная цель.';expanded.add(id);render();return false}
  if(String(f.listing).trim().length<15){message='Заполни действия по листингу, минимум 15 символов.';expanded.add(id);render();return false}
- if((x.suggested_target==null||n(x.suggested_target)<=0||target>n(x.suggested_target)*1.5)&&String(f.note).trim().length<15){
-  message='Повышенная или ручная цель требует твоего объяснения минимум из 15 символов.';expanded.add(id);render();return false;
- }
+ // An explicit leader confirmation is the decision; a second typed note is optional.
+ // Server records AI baseline, actual approved amount and automatic audit explanation.
+ if(String(f.note).length>2000){message='Комментарий слишком длинный (максимум 2000 символов).';expanded.add(id);render();return false;}
+ const baseline=x.suggested_target==null?null:Number(x.suggested_target),
+  raised=baseline>0&&target>baseline*1.5;
+ const warning=raised?'\n⚠ Цель выше предложения ИИ в '+(target/baseline).toFixed(1)+' раза ('+money(baseline)+' → '+money(target)+'). Решение будет сохранено в истории.':'';
  if(!w.confirm?.('СОГЛАСОВАТЬ И НАЗНАЧИТЬ одну задачу?\n'+x.manager_name+' · '+x.group+' / '+x.subgroup+
- '\nОбъём '+money(target)+'\nЛистинг: '+f.listing.slice(0,170)))return false;
+ '\nОбъём '+money(target)+warning+'\nЛистинг: '+f.listing.slice(0,170)))return false;
  busy=true;message='Проверяю данные и записываю только эту задачу…';render();
  try{
   const r=await dbx().rpc('triovist_ai_brainstorm_approve_v20261105',{
