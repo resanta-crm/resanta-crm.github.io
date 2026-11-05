@@ -34,7 +34,8 @@ let flight=null,lastMonth='',lastAt=0,lastData=null;
 function paintMotivation(h,m,data){
  // A single native director screen owns UI; authoritative compare RPC remains unchanged.
  const target=document.getElementById('tri-period-month');if(target&&ym(target.value)!==m)target.value=m;
- if(window.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1?.paint?.(h,m,data))return;
+ try{if(window.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1?.paint?.(h,m,data))return}
+ catch(e){console.warn('Triovist motivation native screen fallback',e)}
  const rows=Array.isArray(data?.rows)?data.rows:[],prevM=ym(data?.compare_month||shift(m,-1)),cur=rows.filter(x=>ym(x.month)===m),pr=rows.filter(x=>ym(x.month)===prevM);
  const body=h.querySelector('[data-mbody]');
  if(body)body.innerHTML='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'+cur.map(x=>managerCard(x,pr.find(y=>y.manager_email===x.manager_email))).join('')+'</div><div style="font-size:10px;color:#64748b;margin-top:8px">База 1,50% не уменьшается. Финальная мотивация фиксируется после закрытия месяца.</div>';
