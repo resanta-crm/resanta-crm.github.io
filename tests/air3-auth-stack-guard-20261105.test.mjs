@@ -9,7 +9,7 @@ const source=core.slice(
  core.indexOf('// ===== ABC-АНАЛИЗ',core.indexOf('function crmHandleAuthEventV20261105('))
 );
 function tick(){return new Promise(done=>setTimeout(done,0))}
-function boot(androidNative,initial){
+function boot(androidNative,initial,isRecovery=false){
  const trace=[],listeners=[];
  const window={Capacitor:{
   isNativePlatform:()=>androidNative,
@@ -20,6 +20,7 @@ function boot(androidNative,initial){
  const context={db,window,navigator,console:{info(){},warn(){},log(){}},
   initAuth:()=>{trace.push('init');return initial;},
   withTimeout:p=>p,
+  crmIsRecoveryUrlV1:()=>isRecovery,
   setTimeout,
   Date,crmExplicitSignOutV236258:false,
   crmFreshSessionUntilV236258:0,crmFreshSessionV236258:null,
@@ -42,6 +43,11 @@ test('Android auth listener registers even if initial session recovery throws',a
  const app=boot(true,Promise.reject(new Error('session recovery failed')));
  await tick();
  assert.deepEqual(app.trace,['init','listen']);
+ assert.equal(app.listeners.length,1);
+});
+test('Android password recovery keeps listener before init to catch recovery event',()=>{
+ const app=boot(true,Promise.resolve(),true);
+ assert.deepEqual(app.trace,['listen','init']);
  assert.equal(app.listeners.length,1);
 });
 test('Mac and non-Android clients preserve their old authentication order',()=>{
