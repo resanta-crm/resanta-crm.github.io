@@ -104,8 +104,9 @@ function bind(meta,root){
 function loading(){
  const el=document.querySelector('#tri-stock-card [data-trst-loading]');
  if(el)el.textContent='Обновляю данные и пересчитываю заказ…';
+ else{const box=document.getElementById('tri-stock-meta');if(box&&!box.textContent.trim())box.innerHTML='<div class="trst-brief"><h4>Загружаю остатки…</h4><p>Проверяю 21vek, Витебск и Чехов. Рекомендации появятся после загрузки.</p></div>'}
 }
-function render({meta,root,items,imports,days,error,isBoss,isManager,search}){
+function render({meta,root,items,imports,days,error,isBoss,isManager,actorEmail,search}){
  const card=document.getElementById('tri-stock-card');
  if(!card||!meta||!root||!card.contains(meta)||!card.contains(root))return false;
  style();bind(meta,root);card.classList.add('trst-ready');
@@ -116,7 +117,7 @@ function render({meta,root,items,imports,days,error,isBoss,isManager,search}){
   meta.innerHTML='<div class="trst-error"><b>Не удалось загрузить остатки.</b><p>'+esc(error)+'</p><p>Предыдущий расчёт нельзя считать подтверждённым.</p><button type="button" class="trst-btn" data-trst-retry>↻ Повторить загрузку</button></div>';
   root.innerHTML='';return true;
  }
- const safe=Array.isArray(items)?items:[];
+ const safe=(Array.isArray(items)?items:[]).filter(r=>isBoss||isManager&&low(r.manager_email)===low(actorEmail));
  if(!isBoss||isManager)mgr='all';
  const managers=new Map();
  for(const r of safe){const k=low(r.manager_email);if(k&&!managers.has(k))managers.set(k,r.manager_name||k)}
