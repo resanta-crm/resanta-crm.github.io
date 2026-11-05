@@ -178,3 +178,19 @@ test('new seven-section module mounts only after native tab activation and is no
  assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
  assert.doesNotMatch(router,/mo\.observe\(document\.documentElement/);
 });
+
+
+test('Triovist Work and Commerce navigation is anchored above all page content',()=>{
+ assert.match(router,/h\.insertBefore\(shell,h\.firstChild\)/);
+ assert.doesNotMatch(router,/h\.insertBefore\(shell,p\)/);
+ assert.match(router,/shell\.insertAdjacentElement\('afterend',panel\)/);
+});
+
+test('Navigation fix loads a fresh router asset and preserves all original tabs',()=>{
+ assert.match(index,/34-triovist-root-v23614\.js\?v=20261105-navigation-top-202/);
+ for(const key of ['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','anp','si','budget','price']){
+  assert.match(router,new RegExp("data-tr14|"+key));
+ }
+ assert.match(router,/shell\.onclick=e=>/);
+ assert.match(router,/activate\(b\.dataset\.tr14,true\)/);
+});
