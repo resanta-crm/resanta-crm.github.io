@@ -130,6 +130,12 @@ async function requestBrief(ui,{auto=false}={}){
 }
 // Called ONLY on a real user action opening the already loaded voice panel.
 window.crmAI360DirectorProactiveOpenV2=function(ui){
+ // AIR3: opening the panel must remain text-only and must not trigger
+ // an automatic network briefing / audio queue during WebView recovery.
+ // Manual director questions still use crmAI360DirectorBriefHandleV1 below.
+ if(window.__resantaAI360AndroidDirectorOptIn===true &&
+    window.Capacitor?.isNativePlatform?.()===true &&
+    window.Capacitor?.getPlatform?.()==='android')return false;
  if(!allowed()||!panelVisible()||!enabled()||pending||
   window.__resantaAI360PendingV1)return false;
  const day=todayMinsk();
