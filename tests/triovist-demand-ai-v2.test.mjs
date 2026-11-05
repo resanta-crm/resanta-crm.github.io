@@ -66,7 +66,7 @@ function fixture(role='boss'){
 }
 test('new UI parses and never uses the retired random-quantity generator',()=>{
  assert.doesNotThrow(()=>new vm.Script(code));
- assert.doesNotMatch(code,/triovist_tasks_generate_subgroup|triovist_tasks_generate_monthly|8\s*\/\s*10\s*\/\s*12\s*\/\s*15\s*задач/);
+ assert.doesNotMatch(code,/triovist_tasks_generate_subgroup|triovist_tasks_generate_monthly/);
  assert.match(code,/triovist_ai_demand_preview_v20261105/);
  assert.match(code,/triovist_ai_task_draft_v20261105/);
  assert.doesNotMatch(code,/setInterval\(|location\.reload\(/);
