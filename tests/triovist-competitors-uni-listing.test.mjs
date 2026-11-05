@@ -34,7 +34,7 @@ test('category and search filter all scopes, not only a sample category',()=>{
  const helpers=src.slice(start,end);
  const select={value:'',innerHTML:''},category={value:''};
  const panel={querySelector:x=>x==='[data-f-scope]'?select:x==='[data-f-category]'?category:null};
- const ctx={panel,scopes:Array.from({length:45},(_,i)=>({
+ const ctx={panel,E:x=>String(x??''),scopes:Array.from({length:45},(_,i)=>({
   category:i<14?'Инструмент':i<20?'Климатическое оборудование':'Садовая техника',
   subgroup:i===16?'Конвекторы':'Товарная подгруппа '+i,search_query:i===16?'конвектор':'набор',
   profile_key:'profile'+i,scope_key:'scope-'+i
@@ -75,12 +75,12 @@ test('briefing reads existing snapshots, never guesses causes or confirmed promo
  const ctx={panel,d:{scopes,summary:{products:4146,confirmed_gaps:148,insufficient_data:320},last_run:{finished_at:'2026-11-05'}},
   E:x=>String(x??'').replace(/&/g,'&amp;'),N:x=>(x===null||x===undefined||x==='')?null:Number(x),dt:x=>String(x||'')};
  vm.runInNewContext(code+';uniCompetitorBrief(panel,d,"",[],[],null,7);',ctx);
- assert.match(el.innerHTML,/4 146/);
+ assert.match(el.innerHTML,/4\s146/);
  assert.match(el.innerHTML,/Подгруппа/);
  assert.equal((el.innerHTML.match(/class="tm225-item/g)||[]).length,5);
 });
 test('no unrelated files or rights are touched by this feature',()=>{
  assert.match(src,/fullMarketAccess:true/);
- assert.match(src,/readonly/i);
+ assert.match(src,/read-only/i);
  assert.match(native,/cards:\{name:'Карточки 21vek'/);
 });
