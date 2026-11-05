@@ -41,4 +41,6 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/changes
-          ! grep -E '(^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1|61-triovist-task-month-safe-v23651)\.js$|^supabase/migrations/(?!20261105_triovist_ai_))' /tmp/changes
+          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1|61-triovist-task-month-safe-v23651)\.js
+ /tmp/changes
+          ! (grep '^supabase/migrations/' /tmp/changes | grep -v '^supabase/migrations/20261105_triovist_ai_')
