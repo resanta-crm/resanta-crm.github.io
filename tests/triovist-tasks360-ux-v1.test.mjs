@@ -140,9 +140,9 @@ test('preserves work, commercial routes, original parser and competitor modules'
  for(const term of ["'anp','🧾 АНП'","'si','🛠 Компенсация СИ'","'budget','💼 Бюджет'","'price','🧮 Расчёт цены'","'parser','🌐 Парсер 21vek'","'competitors','⚔️ Конкуренты 21vek'"])assert.ok(router.includes(term),term);
  assert.match(router,/RESANTA_TRIOVIST_21VEK_CONTROL_V236107/);
  assert.match(router,/RESANTA_TRIOVIST_COMPETITORS_V236218/);
- assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\)return false/);
+ assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
  assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-director1/);
- assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-tasks-director-1/);
+ assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
  assert.ok(parser.length>3000);assert.ok(competitors.length>3000);
 });
 test('all affected source JS is syntax-valid',()=>{
