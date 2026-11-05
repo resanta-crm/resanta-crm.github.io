@@ -6,7 +6,7 @@
 'use strict';
 if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120)return;
 const V='v23.6.121';
-let host=null,ctx=null,meta=null,state=null,flight=null,cache=new Map();
+let host=null,ctx=null,meta=null,state=null,flight=null,cache=new Map(),loadEpoch=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v)||0;
 const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -103,7 +103,7 @@ function renderShell(){
 }
 function catalogLine(){
  const e=host?.querySelector('[data-trgd-catalog]');if(!e)return;
- const c=state?.classification?.unmatched_skus!=null?state.classification:meta?.catalog||{};
+ const c={...(meta?.catalog||{}),...(state?.classification||{})};
  const bad=Number(c.unmatched_skus||0),matched=Number(c.matched_skus||0),all=Number(c.sales_skus||0);
  const ratio=all?matched/all*100:null;
  e.innerHTML='<div class="trgd-catalog-mini">'+
@@ -159,14 +159,16 @@ async function loadGroups(force=false){
  if(flight&&!force)return flight;
  const list=host?.querySelector('[data-trgd-list]');if(list)list.innerHTML='<div class="trgd-loading">Загружаю агрегаты групп…</div>';
  const status=host?.querySelector('[data-trgd-status]');if(status)status.textContent='Обновляю аналитику…';
+ const request=++loadEpoch;
  flight=(async()=>{
   const d=await getLevel('group',state.manager||null);
+  if(request!==loadEpoch)return;
   state.groups=Array.isArray(d.items)?d.items:[];
   state.projection=d.projection||null;
   state.classification=d.classification||null;
   state.lastImport=d.last_import||null;
   catalogLine();renderKpis();renderImpact();renderManagers();renderChart();renderPriorities();renderGroups();renderStatus();
- })().catch(showError).finally(()=>flight=null);
+ })().catch(e=>{if(request===loadEpoch)showError(e)}).finally(()=>{if(request===loadEpoch)flight=null});
  return flight;
 }
 function renderStatus(){
