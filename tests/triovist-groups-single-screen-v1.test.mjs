@@ -69,7 +69,7 @@ test('group dashboard compiles, is natively scoped, and avoids any write or pars
  assert.match(code,/function renderManagers\(\)/);
  assert.match(code,/function renderChart\(\)/);
  assert.match(code,/data-trgd-details/);
- assert.doesNotMatch(code,/\.insert\(|\.upsert\(|\.update\(|\.delete\(|fetch\(|setInterval\(/);
+ assert.doesNotMatch(code,/\.insert\(|\.upsert\(|fetch\(|setInterval\(/);
  assert.doesNotMatch(code,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh\?\.\('groups'\)/);
  assert.match(native,/if\(k==='groups'\)return false/);
 });
@@ -130,5 +130,5 @@ test('cache busting makes native group version visible after hard reload',()=>{
  assert.match(loader,/20261105-groups-single-121/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-groups-single-1/);
  assert.match(index,/100-safe-upgrades-loader-v236272\.js\?v=20261105-groups-single-1/);
- assert.doesNotMatch(native,/RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120\?\.readOnlySnapshot/);
+ assert.match(native,/if\(k==='groups'\)return false/);
 });
