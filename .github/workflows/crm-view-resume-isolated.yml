@@ -6,6 +6,7 @@ on:
       - 'assets/178-crm-view-resume-v1.js'
       - 'tests/crm-view-resume-v1.test.mjs'
       - 'index.html'
+      - 'assets/61-triovist-task-month-safe-v23651.js'
       - '.github/workflows/crm-view-resume-isolated.yml'
   workflow_dispatch:
 permissions:
@@ -29,6 +30,6 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/crm-view-resume-changes
-          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|169-triovist-tasks360-ux-v1)[.]js$' /tmp/crm-view-resume-changes
+          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)[.]js$' /tmp/crm-view-resume-changes
           ! (grep '^supabase/migrations/' /tmp/crm-view-resume-changes | grep -v '^supabase/migrations/20261105_triovist_ai_')
  

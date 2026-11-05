@@ -1,0 +1,45 @@
+name: Triovist subgroup brainstorm manual approval and old-month regressions
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/179-triovist-demand-ai-v1.js'
+      - 'assets/61-triovist-task-month-safe-v23651.js'
+      - 'assets/169-triovist-tasks360-ux-v1.js'
+      - 'index.html'
+      - 'tests/triovist-demand-ai-v2.test.mjs'
+      - 'tests/triovist-tasks360-ux-v1.test.mjs'
+      - 'supabase/migrations/20261105_triovist_ai_brainstorm_*.sql'
+      - '.github/workflows/triovist-brainstorm-subgroups-v2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse changed UI
+        run: |
+          node --check assets/179-triovist-demand-ai-v1.js
+          node --check assets/61-triovist-task-month-safe-v23651.js
+          node --check assets/169-triovist-tasks360-ux-v1.js
+      - name: Verify manual-only subgroup brainstorm and preserved old tasks
+        run: |
+          node --test tests/triovist-demand-ai-v2.test.mjs tests/triovist-tasks360-ux-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs tests/triovist-native-sections-v1.test.mjs tests/triovist-unix-director-v1.test.mjs tests/triovist-competitors-uni-listing.test.mjs tests/crm-view-resume-v1.test.mjs
+      - name: Enforce scope protection (no card, parser, CRM core or historic data writes)
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD | tee /tmp/changes
+          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1)[.]js$' /tmp/changes
+          ! (grep '^supabase/migrations/' /tmp/changes | grep -v -E '^supabase/migrations/20261105_triovist_ai_brainstorm_(subgroups_preview|approve|verify)_v2[.]sql$')
+          ! grep -E 'DELETE FROM public[.]triovist_ai_tasks|TRUNCATE TABLE|DROP TABLE' supabase/migrations/20261105_triovist_ai_brainstorm_*.sql
+          grep -q 'payushin_ar@resanta.ru' supabase/migrations/20261105_triovist_ai_brainstorm_approve_v2.sql
+          grep -q 'v_existing>=30' supabase/migrations/20261105_triovist_ai_brainstorm_approve_v2.sql
+          grep -q 'REVOKE EXECUTE ON FUNCTION public.triovist_ai_task_draft_v20261105' supabase/migrations/20261105_triovist_ai_brainstorm_approve_v2.sql
