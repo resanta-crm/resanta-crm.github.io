@@ -4,7 +4,7 @@
  */
 (function(){
 'use strict';
-const V='v23.6.399',TTL=30000;
+const V='v23.6.399-uni1',TTL=30000;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
@@ -2901,7 +2901,7 @@ function competitorPriceTrend(r,days){
 function rowHtml(r,ownMap,days,priceDays){
  const state=analysisState(r),gap=state==='confirmed_gap',incomplete=state==='insufficient_data',noOwn=!r?.our_sku,[sl,sc]=rowStatus(r),pos=livePosition(r),cp=N(r.competitor_price),priceMissing=cp==null||cp<=0,pt=competitorPriceTrend(r,priceDays),fresh=freshnessInfo(r),w=r.__positionWatch;
  const lp=(gap||noOwn)?null:ownMap.get(listingKey(r.scope_key,r.our_sku));
- return '<div class="tm224-row '+(gap?'gap':incomplete?'incomplete':'')+'"><div class="tm224-main">'
+ return '<div class="tm224-row '+(gap?'gap':incomplete?'incomplete':'')+'" data-tm224-product="'+E(r.product_key||'')+'"><div class="tm224-main">'
   +'<div><small>Позиция 21vek</small><b class="'+(pos!=null&&pos<=10?'bad':'')+'">'+E(positionLabel(r))+'</b><span>'+(w?.listing_state==='outside_top120'?'вне первых 120':'страница '+E(w?.page_no??r.page_no??'—'))+'</span><span class="'+E(w?.movement==='up'||w?.movement==='entered'?'good':w?.movement==='down'||w?.movement==='exited'?'bad':'')+'">'+E(positionHistoryText(r))+'</span><span class="tm224-fresh '+E(fresh.cls)+'">'+E(fresh.text)+'</span></div>'
   +'<div><small>Конкурент</small><b>'+E(r.brand||'—')+'</b>'+competitorBadge(r)+'<span>'+E(r.model||'')+'</span>'+(r.product_url?'<a target="_blank" rel="noopener" href="'+E(r.product_url)+'">21vek ↗</a>':'')+'</div>'
   +'<div><small>Цена конкурента</small><b>'+money(r.competitor_price)+'</b><span class="'+E(pt.className)+'">'+E(pt.text)+'</span></div>'
@@ -2926,6 +2926,29 @@ function css(){
  .good{color:#166534!important}.warn{color:#92400e!important}.bad{color:#b91c1c!important}
  @media(max-width:1250px){.tm224-kpi{grid-template-columns:repeat(4,1fr)}.tm224-filters{grid-template-columns:repeat(3,minmax(150px,1fr))}.tm224-main{grid-template-columns:repeat(3,minmax(0,1fr))}.tm224-gapbox{grid-column:auto}}
  @media(max-width:760px){.tm224-kpi,.tm224-filters,.tm224-main,.tm224-compare,.tm224-ab,.tm224-sku-competitor{grid-template-columns:1fr}.tm224-toggles{grid-column:auto}}
+
+  /* Only competitor screen; native 173 briefing no longer hides old listing. */
+  #tr14-panel > .tx7{display:none!important}
+  #tr14-panel.tx7-hide-competitors [data-tm224-rows]{display:block!important}
+  .tm225{border:1px solid #d2dff1;border-radius:14px;background:linear-gradient(135deg,#eaf4ff,#fff);padding:15px;margin-bottom:12px;color:#17395c}
+  .tm225 *{box-sizing:border-box}.tm225-title{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .tm225 h3{font-size:17px;margin:0;color:#124875}.tm225 h4{font-size:13px;margin:0 0 9px}
+  .tm225-title small,.tm225-title p,.tm225-foot{font-size:10px;color:#64748b}
+  .tm225-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+  .tm225-kpi{border:1px solid #dfe8f3;background:#fff;border-radius:10px;padding:11px;min-width:0}
+  .tm225-kpi small,.tm225-kpi span{display:block;font-size:10px;color:#64748b}
+  .tm225-kpi strong{display:block;margin:5px 0;font-size:19px;overflow-wrap:anywhere}
+  .tm225-body{display:grid;grid-template-columns:minmax(0,2fr) minmax(210px,1fr);gap:10px}
+  .tm225-item,.tm225-body aside{border:1px solid #dfe8f3;background:white;border-radius:9px;padding:10px;margin:6px 0}
+  .tm225-item.bad{border-left:3px solid #d35a5a}.tm225-item.warn{border-left:3px solid #daa044}
+  .tm225-item b{font-size:12px;color:#183c62}.tm225-item p{font-size:11px;margin:4px 0;line-height:1.4;color:#486079}
+  .tm225-item small,.tm225-body aside p{font-size:10px;color:#64748b}
+  .tm225-item button{display:inline-block;margin-left:8px;border:1px solid #bfd8f1;border-radius:8px;padding:6px 10px;background:#f3f8ff;color:#174f84;cursor:pointer}
+  .tm225-bar{margin:14px 0}.tm225-bar span{display:block;font-size:11px;margin-bottom:4px}
+  .tm225-bar i{height:11px;border-radius:5px;background:#209a79;display:block}.tm225-bar i.down{background:#d36969}
+  [data-f-scope-hint]{font-size:10px;color:#64748b}
+  @media(max-width:900px){.tm225-body{grid-template-columns:1fr}.tm225-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:650px){.tm225-kpis{grid-template-columns:1fr}}
  `;document.head.appendChild(s);
 }
 function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
@@ -2948,6 +2971,56 @@ function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
  return '<div class="tm224-sku-group '+(isGap?'gap':isIncomplete?'incomplete':'')+'"><div class="tm224-sku-head"><div><b>'+E(title)+'</b><span>'+E(subtitle)+'</span>'+listing+'</div><div><b>'+E(rows.length)+'</b><span>конкурентов</span></div></div><div class="tm224-sku-list">'+items+'</div></div>';
 }
 
+
+/* Uni AI / Uni X: read-only facts sourced from the current scope and existing RPC.
+   No extra parser requests, no task creation, no automatic cause/discount claims. */
+function uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays){
+ const node=panel.querySelector('[data-tm225]');if(!node)return;
+ const scopes=Array.isArray(d.scopes)?d.scopes:[],meta=scopes.find(x=>String(x.scope_key||'')===scope)||{},stats=scope?meta:(d.summary||{});
+ const fmt=v=>N(v)==null?'—':N(v).toLocaleString('ru-RU');
+ const cards=[];
+ const add=(title,fact,action,key,product,tone)=>{if(cards.length<5)cards.push({title,fact,action,key,product,tone})};
+ if(scope&&!d.__scopeLoading){
+  const used=new Set(),ownMap=listingRowsMap(listing);
+  const addRow=(r,title,fact,action,tone)=>{
+   const id=String(r.product_key||'');if(used.has(id))return;used.add(id);
+   add(title,fact,action,scope,id,tone);
+  };
+  for(const r of rows){
+   const l=ownMap.get(listingKey(r.scope_key,r.our_sku));
+   if(l&&(l.trend==='down'||(l.listing_state==='outside_top120'&&l.past_state==='top120')))
+    addRow(r,'Наш SKU '+r.our_sku+' · снижение в выдаче','Текущая позиция: '+listingPos(l)+'. '+listingTrendText(l,N(listing?.period_days)||7)+'.','Проверить карточку, цену, остаток и сравнить с конкурентом.','bad');
+   if(cards.length>=2)break;
+  }
+  for(const r of rows.filter(x=>['up','entered'].includes(x.__positionWatch?.movement)).sort((a,b)=>Math.abs(N(b.__positionWatch?.position_delta)||0)-Math.abs(N(a.__positionWatch?.position_delta)||0))){
+   addRow(r,'Конкурент растёт: '+(r.brand||'')+' '+(r.model||''),'Позиция '+positionLabel(r)+' · '+positionMovementText(r)+' · '+dt(r.__positionWatch?.observed_at)+'.','Проверить историю позиции и сопоставимый SKU.','warn');
+  }
+  for(const r of rows.filter(x=>competitorPriceTrend(x,priceDays).kind==='down')){
+   addRow(r,'Снижение цены: '+(r.brand||'')+' '+(r.model||''),competitorPriceTrend(r,priceDays).text+'. Само по себе не подтверждает акцию.','Проверить условия на странице 21vek.','warn');
+  }
+  for(const r of rows.filter(x=>analysisState(x)==='confirmed_gap')){
+   addRow(r,'Подтверждённый пробел: '+(r.brand||'')+' '+(r.model||''),'Статус из действующего алгоритма сопоставимости.','Проверить ассортимент и характеристики.','bad');
+  }
+  for(const r of rows.filter(x=>analysisState(x)==='insufficient_data')){
+   addRow(r,'Недостаточно данных: '+(r.brand||'')+' '+(r.model||''),'Без подтверждённых характеристик аналог или пробел не определён.','Сверить характеристики и источник.','warn');
+  }
+ }else{
+  for(const x of [...scopes].sort((a,b)=>(N(b.confirmed_gaps??b.gaps)||0)-(N(a.confirmed_gaps??a.gaps)||0)||(N(b.insufficient_data)||0)-(N(a.insufficient_data)||0)).slice(0,5))
+   add(x.subgroup||'Подгруппа','Товаров: '+fmt(x.competitors)+' · пробелов: '+fmt(x.confirmed_gaps??x.gaps)+' · недостаточно данных: '+fmt(x.insufficient_data)+'.','Открыть подгруппу и проверить её листинг.',String(x.scope_key||''),'','');
+ }
+ while(cards.length<5)add('Ожидаем подтверждённые события','Недостаточно данных для следующего вывода.','Проверить свежесть снимков.','','','');
+ const known=rows.filter(r=>r.__positionWatch),up=known.filter(r=>['up','entered'].includes(r.__positionWatch.movement)).length,down=known.filter(r=>['down','exited'].includes(r.__positionWatch.movement)).length,total=up+down;
+ const kpi=(name,value,desc)=>'<div class="tm225-kpi"><small>'+E(name)+'</small><strong>'+E(value)+'</strong><span>'+E(desc)+'</span></div>';
+ node.innerHTML='<div class="tm225-title"><div><h3>✦ Uni AI + Uni X · Конкуренты 21vek</h3><p>'+E(scope?(meta.subgroup||'Подгруппа'):'Все группы товаров')+' · подтверждённые данные, 5 приоритетов</p></div><small>Полный снимок: '+E(dt(d.last_run?.finished_at||d.last_run?.started_at))+'</small></div>'
+  +'<div class="tm225-kpis">'+kpi('Товаров конкурентов',fmt(scope?(meta.competitors??base.length):stats.products),'Рыночный снимок')
+  +kpi('Подтверждённых пробелов',fmt(stats.confirmed_gaps??stats.gaps),'Не смешивать с неполными данными')
+  +kpi('Недостаточно данных',fmt(stats.insufficient_data),'Требуется проверка сопоставимости')
+  +kpi('Движение позиций',scope?(known.length?'↑ '+fmt(up)+' / ↓ '+fmt(down):'—'):'По выбранной подгруппе','Последний доступный контроль')+'</div>'
+  +'<div class="tm225-body"><section><h4>ИИ · 5 проверяемых приоритетов</h4>'+cards.map((c,i)=>'<article class="tm225-item '+E(c.tone||'')+'"><b>'+(i+1)+'. '+E(c.title)+'</b><p>'+E(c.fact)+'</p><small>Что сделать: '+E(c.action)+'</small>'+(c.key?'<button type="button" data-tm225-scope="'+E(c.key)+'" data-tm225-product="'+E(c.product||'')+'">Открыть ↗</button>':'')+'</article>').join('')+'</section>'
+  +'<aside><h4>Динамика конкурентов</h4><div class="tm225-bar"><span>Рост '+fmt(known.length?up:null)+'</span><i style="width:'+(total?Math.round(100*up/total):0)+'%"></i></div><div class="tm225-bar"><span>Падение '+fmt(known.length?down:null)+'</span><i class="down" style="width:'+(total?Math.round(100*down/total):0)+'%"></i></div><p>Последняя проверка позиций, не недельная динамика. Недельные изменения и цены — в строках листинга ниже.</p></aside></div>'
+  +'<div class="tm225-foot">Цена, наличие и позиции имеют собственные даты. Падение позиции не доказывает причину; снижение цены не доказывает акцию. Брифинг не создаёт поручения и не изменяет данные.</div>';
+}
+
 function scopeSearchNorm(v){return String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^0-9a-zа-я]+/g,' ').trim()}
 function scopeSearchAliases(q){
  const n=scopeSearchNorm(q),out=[n];
@@ -2960,12 +3033,12 @@ function scopeSearchAliases(q){
 }
 function scopeMatchesSearch(s,q){
  const terms=scopeSearchAliases(q);if(!terms.length)return true;
- const hay=scopeSearchNorm([s?.subgroup,s?.search_query,s?.profile_key].filter(Boolean).join(' '));
+ const hay=scopeSearchNorm([s?.category,s?.subgroup,s?.search_query,s?.profile_key].filter(Boolean).join(' '));
  return terms.some(t=>hay.includes(t));
 }
 function filterScopeSelect(panel,scopes,q){
  const sel=panel.querySelector('[data-f-scope]');if(!sel)return[];
- const prev=sel.value||'',filtered=(scopes||[]).filter(s=>scopeMatchesSearch(s,q));
+ const prev=sel.value||'',category=panel.querySelector('[data-f-category]')?.value||'',filtered=(scopes||[]).filter(s=>(!category||String(s.category||'')===category)&&scopeMatchesSearch(s,q));
  sel.innerHTML='<option value="">Выберите подгруппу</option>'+filtered.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('');
  if(filtered.some(x=>String(x.scope_key)===prev))sel.value=prev;
  return filtered;
@@ -3030,6 +3103,7 @@ function applyFilters(panel,d,listing){
  });
  panel.querySelectorAll('[data-scope-card]').forEach(x=>{x.style.display=!scope||x.getAttribute('data-scope-card')===scope?'':'none'});
  const holder=panel.querySelector('[data-tm224-rows]');
+ uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays);
  if(!scope){
    holder.innerHTML='<div class="tm224-empty"><b>Выберите подгруппу.</b><br>Карточки конкурентов, наш листинг и история загрузятся только для выбранной категории — без тяжёлой загрузки всего рынка.</div>';
    panel.querySelector('[data-tm224-count]').textContent='Выберите подгруппу';
@@ -3086,46 +3160,81 @@ function render(panel,d,listing){
  css();
  const s=d.summary||{},scopes=Array.isArray(d.scopes)?d.scopes:[],rows=Array.isArray(d.rows)?d.rows:[],run=d.last_run||{},summaryMap=listingSummaryMap(listing);
  const brands=[...new Set(rows.map(r=>String(r.brand||'')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
- const pd=N(listing?.period_days)||7;
- panel.innerHTML='<div class="tm224-head"><div><h3 style="margin:0">⚔️ Конкуренты 21vek · рынок TOP-2</h3><div class="tm224-note">Позиции конкурентов и наших товаров снимаются из одного и того же листинга 21vek по популярности. <b>Паюшин, Сидорович, Александренко и Кришталь видят одинаковый полный рынок без ограничения по зонам менеджеров.</b> Для бензопил основной конкурентный вывод строится только по отмеченным прямым конкурентам; остальные бренды остаются видимыми как ориентир рынка.</div></div><div class="tm224-actions"><button class="tr14-refresh" data-tm224-export>📥 Выгрузить конкурентный анализ Excel</button><button class="tr14-refresh" data-tm224-refresh>↻ Обновить</button></div></div>'
+ const pd=N(listing?.period_days)||7,categories=[...new Set(scopes.map(x=>String(x.category||'')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+ panel.innerHTML='<section class="tm225" data-tm225 aria-label="Uni AI и Uni X"></section><div class="tm224-head"><div><h3 style="margin:0">⚔️ Конкуренты 21vek · рынок TOP-2</h3><div class="tm224-note">Позиции конкурентов и наших товаров снимаются из одного и того же листинга 21vek по популярности. <b>Паюшин, Сидорович, Александренко и Кришталь видят одинаковый полный рынок без ограничения по зонам менеджеров.</b> Для бензопил основной конкурентный вывод строится только по отмеченным прямым конкурентам; остальные бренды остаются видимыми как ориентир рынка.</div></div><div class="tm224-actions"><button class="tr14-refresh" data-tm224-export>📥 Выгрузить конкурентный анализ Excel</button><button class="tr14-refresh" data-tm224-refresh>↻ Обновить</button></div></div>'
   +'<div class="tm224-kpi"><div><span>Категорий</span><b>'+E(s.scopes??0)+'</b></div><div><span>Товаров конкурентов</span><b>'+E(s.products??0)+'</b></div><div><span>Брендов</span><b>'+E(s.brands??0)+'</b></div><div><span>Аналог найден</span><b class="good">'+E(s.analog_found??0)+'</b></div><div><span>Недостаточно данных</span><b class="warn">'+E(s.insufficient_data??0)+'</b></div><div><span>Подтв. пробел</span><b class="bad">'+E(s.confirmed_gaps??s.gaps??0)+'</b></div><div><span>Мы сильнее</span><b class="good">'+E(s.ours_stronger??0)+'</b></div><div><span>Конкурент сильнее</span><b class="bad">'+E(s.competitor_stronger??0)+'</b></div><div><span>Ниже МРЦ</span><b class="'+((s.below_mrc||0)>0?'bad':'good')+'">'+E(s.below_mrc??0)+'</b></div></div>'
-  +'<div class="tm224-filters"><input type="search" data-f-scope-search placeholder="🔎 Найти подгруппу…"><select data-f-scope><option value="">Выберите подгруппу</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-view><option value="market">По позициям 21vek</option><option value="ours">По нашим SKU</option></select><select data-f-sku><option value="">Все наши SKU</option><option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option></select><select data-f-analysis-state><option value="">Все статусы данных</option><option value="analog_found">Аналог найден</option><option value="insufficient_data">Недостаточно данных</option><option value="confirmed_gap">Подтверждённый пробел</option></select><select data-f-brand><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><b data-tm224-count></b></div></div>'
+  +'<div class="tm224-filters"><select data-f-category><option value="">Все группы товаров</option>'+categories.map(x=>'<option value="'+E(x)+'">'+E(x)+'</option>').join('')+'</select><input type="search" data-f-scope-search placeholder="🔎 Найти подгруппу…"><select data-f-scope><option value="">Выберите подгруппу</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-view><option value="market">По позициям 21vek</option><option value="ours">По нашим SKU</option></select><select data-f-sku><option value="">Все наши SKU</option><option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option></select><select data-f-analysis-state><option value="">Все статусы данных</option><option value="analog_found">Аналог найден</option><option value="insufficient_data">Недостаточно данных</option><option value="confirmed_gap">Подтверждённый пробел</option></select><select data-f-brand><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><button type="button" class="tr14-refresh" data-f-reset>Сбросить фильтры</button><small data-f-scope-hint></small><b data-tm224-count></b></div></div>'
   +scopes.map(x=>scopeHtml(x,summaryMap)).join('')+'<div data-tm224-rows></div>'
   +'<div class="tm224-meta">Последний полный анализ: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · конкурентных товаров '+E(run.competitor_count??0)+' · сравнений '+E(run.comparison_count??0)+' · подтверждённых пробелов '+E(run.gap_count??0)+' · ошибок '+E(run.error_count??0)+'. <b>Позиции конкурентов обновляются отдельным лёгким монитором каждые 3 часа реальным запросом к 21vek.</b> 🟢 до 4 ч · 🟡 4–8 ч · 🔴 старше 8 ч. Глубина — первые 120 позиций.</div>';
  const daySel=panel.querySelector('[data-f-days]');if(daySel)daySel.value=String(pd);
  refreshBrandOptions(panel,{...d,rows});refreshSkuOptions(panel,{...d,rows},listing);
  applyFilters(panel,{...d,rows},listing);
+ let scopeEpoch=0,searchTimer=null;
  const scopeSearch=panel.querySelector('[data-f-scope-search]');
  if(scopeSearch){
-   scopeSearch.addEventListener('input',e=>{filterScopeSelect(panel,scopes,e.currentTarget.value||'')});
+   scopeSearch.addEventListener('input',e=>{
+     const value=e.currentTarget.value||'',found=filterScopeSelect(panel,scopes,value),hint=panel.querySelector('[data-f-scope-hint]');
+     if(hint)hint.textContent=value?(found.length===1?'Одна подходящая подгруппа':found.length?'Найдено: '+found.length+' · выберите из списка':'Не найдено'):'';
+     clearTimeout(searchTimer);
+     if(scopeSearchNorm(value).length>=3&&found.length===1){
+       searchTimer=setTimeout(()=>{if(!panel.isConnected||scopeSearch.value!==value)return;
+         const sel=panel.querySelector('[data-f-scope]');if(!sel||sel.value===String(found[0].scope_key))return;
+         sel.value=String(found[0].scope_key);sel.dispatchEvent(new Event('change',{bubbles:true}));
+       },280);
+     }
+   });
    scopeSearch.addEventListener('keydown',e=>{
      if(e.key!=='Enter')return;
-     e.preventDefault();
-     const matched=filterScopeSelect(panel,scopes,e.currentTarget.value||'');
-     const sel=panel.querySelector('[data-f-scope]');
-     if(matched.length&&sel){sel.value=String(matched[0].scope_key||'');sel.dispatchEvent(new Event('change',{bubbles:true}))}
+     e.preventDefault();clearTimeout(searchTimer);
+     const found=filterScopeSelect(panel,scopes,e.currentTarget.value||''),sel=panel.querySelector('[data-f-scope]');
+     if(found.length&&sel){sel.value=String(found[0].scope_key||'');sel.dispatchEvent(new Event('change',{bubbles:true}))}
    });
  }
+ panel.querySelector('[data-f-category]')?.addEventListener('change',()=>{
+   clearTimeout(searchTimer);if(scopeSearch)scopeSearch.value='';
+   filterScopeSelect(panel,scopes,'');
+   const sel=panel.querySelector('[data-f-scope]');if(sel){sel.value='';sel.dispatchEvent(new Event('change',{bubbles:true}))}
+ });
+ panel.querySelector('[data-f-reset]')?.addEventListener('click',()=>{
+   clearTimeout(searchTimer);
+   panel.querySelectorAll('[data-f-category],[data-f-view],[data-f-analysis-state],[data-f-brand],[data-f-status],[data-f-price-trend],[data-f-trend],[data-f-sku]').forEach(el=>{el.value=el.matches('[data-f-view]')?'market':''});
+   const comp=panel.querySelector('[data-f-competitor-kind]');if(comp)comp.value='all';
+   for(const key of ['[data-f-top10]','[data-f-gaps]','[data-f-mrc]']){const el=panel.querySelector(key);if(el)el.checked=false}
+   for(const key of ['[data-f-price-days]','[data-f-days]']){const el=panel.querySelector(key);if(el)el.value='7'}
+   if(scopeSearch)scopeSearch.value='';const hint=panel.querySelector('[data-f-scope-hint]');if(hint)hint.textContent='';
+   filterScopeSelect(panel,scopes,'');const sel=panel.querySelector('[data-f-scope]');if(sel){sel.value='';sel.dispatchEvent(new Event('change',{bubbles:true}))}
+ });
+ panel.querySelector('[data-tm225]')?.addEventListener('click',e=>{
+   const btn=e.target.closest?.('[data-tm225-scope]'),sel=panel.querySelector('[data-f-scope]');if(!btn||!sel)return;
+   const scope=btn.dataset.tm225Scope||'';
+   if(sel.value!==scope){sel.value=scope;sel.dispatchEvent(new Event('change',{bubbles:true}));return}
+   const product=btn.dataset.tm225Product||'';
+   if(product){panel.dataset.tm224Limit='10000';applyFilters(panel,d,listing);const target=[...panel.querySelectorAll('[data-tm224-product]')].find(x=>x.getAttribute('data-tm224-product')===product);target?.scrollIntoView?.({behavior:'smooth',block:'center'});}
+   else panel.querySelector('[data-tm224-rows]')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+ });
  panel.querySelector('[data-f-scope]')?.addEventListener('change',async e=>{
-   const scope=String(e.currentTarget.value||'').trim();
-   panel.dataset.tm224Limit='120';d.rows=[];listing=emptyListing(scope,7);d.__scopeLoading=scope||null;
+   const scope=String(e.currentTarget.value||'').trim(),ticket=++scopeEpoch,root=panel.querySelector('[data-tm225]');
+   const current=()=>panel.isConnected&&ticket===scopeEpoch&&panel.querySelector('[data-tm225]')===root&&panel.querySelector('[data-f-scope]')?.value===scope;
+   panel.dataset.tm224Limit='120';d.rows=[];listing=emptyListing(scope,N(panel.querySelector('[data-f-days]')?.value)||7);d.__scopeLoading=scope||null;
    refreshBrandOptions(panel,d);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing);
    if(!scope){d.__scopeLoading=null;return}
    try{
      const sd=await loadScopeRows(scope,false);
+     if(!current())return;
      d.rows=Array.isArray(sd?.rows)?sd.rows:[];d.__scopeLoading=null;
      refreshBrandOptions(panel,d);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing);
      // Stagger secondary data so one click never floods PostgREST with 4 heavy calls.
-     setTimeout(()=>loadListing(scope,N(panel.querySelector('[data-f-days]')?.value)||7,false)
-       .then(x=>{listing=x||emptyListing(scope,7);updateScopeOwnSummary(panel,scope,listing);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing)})
-       .catch(err=>console.warn('Наш листинг догружается отдельно',err)),120);
-     setTimeout(()=>loadCompetitorPositions(false,scope)
-       .then(x=>{mergeCompetitorPositions(d,x||{rows:[]});applyFilters(panel,d,listing)})
-       .catch(err=>console.warn('Живые позиции конкурентов догружаются отдельно',err)),260);
-     setTimeout(()=>loadCompetitorHistory(scope,N(panel.querySelector('[data-f-price-days]')?.value)||7,false)
-       .then(x=>{mergeCompetitorHistory(d,x);applyFilters(panel,d,listing)})
-       .catch(err=>console.warn('История цен конкурентов догружается отдельно',err)),420);
+     setTimeout(()=>{if(!current())return;loadListing(scope,N(panel.querySelector('[data-f-days]')?.value)||7,false)
+       .then(x=>{if(!current())return;listing=x||emptyListing(scope,7);updateScopeOwnSummary(panel,scope,listing);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing)})
+       .catch(err=>{if(current())console.warn('Наш листинг догружается отдельно',err)});},120);
+     setTimeout(()=>{if(!current())return;loadCompetitorPositions(false,scope)
+       .then(x=>{if(!current())return;mergeCompetitorPositions(d,x||{rows:[]});applyFilters(panel,d,listing)})
+       .catch(err=>{if(current())console.warn('Живые позиции конкурентов догружаются отдельно',err)});},260);
+     setTimeout(()=>{if(!current())return;loadCompetitorHistory(scope,N(panel.querySelector('[data-f-price-days]')?.value)||7,false)
+       .then(x=>{if(!current())return;mergeCompetitorHistory(d,x);applyFilters(panel,d,listing)})
+       .catch(err=>{if(current())console.warn('История цен конкурентов догружается отдельно',err)});},420);
    }catch(err){
+     if(!current())return;
      d.__scopeLoading=null;applyFilters(panel,d,listing);
      const holder=panel.querySelector('[data-tm224-rows]');
      if(holder)holder.innerHTML='<div class="tr14-warn"><b>Не удалось загрузить выбранную подгруппу.</b><br>'+E(err?.message||err)+'</div>';
@@ -3133,16 +3242,16 @@ function render(panel,d,listing){
  });
  panel.querySelectorAll('[data-f-view],[data-f-brand],[data-f-status],[data-f-analysis-state],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener('change',()=>{panel.dataset.tm224Limit='120';applyFilters(panel,d,listing)}));
  panel.querySelector('[data-f-price-days]')?.addEventListener('change',async e=>{
-   const scope=panel.querySelector('[data-f-scope]')?.value||'',days=N(e.currentTarget.value)||7;if(!scope)return;
+   const scope=panel.querySelector('[data-f-scope]')?.value||'',days=N(e.currentTarget.value)||7,ticket=scopeEpoch;if(!scope)return;
    e.currentTarget.disabled=true;
-   try{const h=await loadCompetitorHistory(scope,days,false);mergeCompetitorHistory(d,h);applyFilters(panel,d,listing)}
+   try{const h=await loadCompetitorHistory(scope,days,false);if(ticket!==scopeEpoch||panel.querySelector('[data-f-price-days]')?.value!==String(days))return;mergeCompetitorHistory(d,h);applyFilters(panel,d,listing)}
    catch(err){console.warn('Не удалось загрузить историю цен конкурентов',err);applyFilters(panel,d,listing)}
    finally{e.currentTarget.disabled=false}
  });
  panel.querySelector('[data-f-days]')?.addEventListener('change',async e=>{
-   const scope=panel.querySelector('[data-f-scope]')?.value||'',days=N(e.currentTarget.value)||7;if(!scope)return;
+   const scope=panel.querySelector('[data-f-scope]')?.value||'',days=N(e.currentTarget.value)||7,ticket=scopeEpoch;if(!scope)return;
    e.currentTarget.disabled=true;
-   try{listing=await loadListing(scope,days,false);updateScopeOwnSummary(panel,scope,listing);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing)}
+   try{const result=await loadListing(scope,days,false);if(ticket!==scopeEpoch||panel.querySelector('[data-f-days]')?.value!==String(days))return;listing=result;updateScopeOwnSummary(panel,scope,listing);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing)}
    catch(err){alert('Не удалось загрузить историю нашего листинга: '+(err?.message||err))}
    finally{e.currentTarget.disabled=false}
  });
