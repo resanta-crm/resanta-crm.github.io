@@ -102,6 +102,14 @@ def collect(keyword: str, targets: list[dict],
 
 def run(now: datetime|None=None) -> dict:
     now=now or datetime.now(timezone.utc)
+    # Never compete with an active production daily collection.
+    recent=(now.timestamp()-2*3600)
+    cutoff=datetime.fromtimestamp(recent,timezone.utc).isoformat()
+    active=top.rest_get('triovist_21vek_shadow_runs',{
+        'select':'id','status':'eq.running','started_at':'gte.'+cutoff,'limit':'1'})
+    if active:
+        print('Own hourly watch skipped: daily 21vek full collection is active',flush=True)
+        return {'status':'skipped','checked':0,'cards':0,'calls':0,'errors':0}
     hour=int(now.timestamp()//3600)
     registry=top.rest_get_all(CURRENT,{
         "select":"manager_email,card_key,sku,product_name,keyword,donor_article",
