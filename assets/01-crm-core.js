@@ -10475,7 +10475,7 @@ const crmNativeAndroidAuthInitV20261105=/Android/i.test(navigator.userAgent||'')
 function crmListenToAuthV20261105(){
   db.auth.onAuthStateChange(crmHandleAuthEventV20261105);
 }
-if(crmNativeAndroidAuthInitV20261105){
+if(crmNativeAndroidAuthInitV20261105 && !crmIsRecoveryUrlV1()){
   void (async()=>{
     console.info('AIR3 auth diagnostic: initial session recovery started');
     try{
