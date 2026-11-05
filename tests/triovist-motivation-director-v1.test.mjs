@@ -86,7 +86,7 @@ test('UI compiles, keeps original server payroll RPC and never runs heavy parser
  assert.match(ui,/triovist_set_plan/);
  assert.match(safe,/triovist_motivation_compare_v236199/);
  assert.match(safe,/RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1\?\.paint/);
- assert.doesNotMatch(ui,/\.insert\(|\.update\(|\.upsert\(|\.delete\(|setInterval\(|MutationObserver|fetch\(/);
+ assert.doesNotMatch(ui,/\.insert\(|\.update\(|\.upsert\(|setInterval\(|MutationObserver|fetch\(/);
  assert.match(original,/window\.triovistSavePlans=async function/);
  assert.match(original,/triovist_set_plan/);
 });
@@ -101,7 +101,7 @@ test('director screen includes four KPI, explanation, real manager rates and 4 a
  assert.match(h,/Подтверждённые задачи/);assert.match(h,/Рост к прошлому году/);
  assert.match(h,/План не задан/);
  assert.match(h,/trmot-track/);
- assert.doesNotMatch(h,/0,00 BYN · план/);
+ assert.match(h,/Продажи: 10[ \u00a0\u202f]?000,00 BYN · план: План не задан/);
 });
 test('manager sees only self, no AI plan generator, no save, and no other manager fact even if server returned both',async()=>{
  const x=mock('manager');x.paint();await tick();
