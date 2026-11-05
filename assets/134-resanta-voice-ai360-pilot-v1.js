@@ -100,6 +100,15 @@
     historyEl.scrollTop = historyEl.scrollHeight;
   }
   function speak(message,options={}) {
+    // INMO Android: opening the director panel must not touch platform TTS.
+    // Text, permission checks and navigation remain usable until separate audio opt-in.
+    if (window.__resantaAI360AndroidDirectorOptIn===true &&
+        window.Capacitor?.isNativePlatform?.()===true &&
+        window.Capacitor?.getPlatform?.()==='android' &&
+        window.__resantaAI360AndroidVoiceArmed!==true) {
+      state.speaking=false;
+      return;
+    }
     if (typeof window.crmResantaVoiceSpeakV3 === 'function' && visible()) {
       if (state.silent) { state.speaking=false; resumeWake(); return; }
       state.speaking=true;
@@ -621,7 +630,10 @@
   });
   window.addEventListener('pagehide',()=>{++state.manualSequence;clearTimeout(state.manualRestart);setWake(false);window.speechSynthesis?.cancel();});
   // Opt in to local recognition only if this browser actually has a Russian pack.
-  if (Recognition && typeof Recognition.available === 'function') {
+  if (Recognition && typeof Recognition.available === 'function' &&
+      !(window.__resantaAI360AndroidDirectorOptIn===true &&
+        window.Capacitor?.isNativePlatform?.()===true &&
+        window.Capacitor?.getPlatform?.()==='android')) {
     try {
       Promise.resolve(Recognition.available({langs:['ru-RU'],processLocally:true}))
         .then(status=>{state.localReady=status==='available';}).catch(()=>{});

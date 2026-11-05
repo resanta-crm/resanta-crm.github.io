@@ -18,6 +18,72 @@ const scripts=[
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
  './assets/143-resanta-ai360-unified-dialog-v1.js?v=8'
 ];
+// Android director: text and authenticated navigation first. Audio is optional
+// and must never start automatically just because the AI panel was opened.
+const nativeTextScripts=[
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=19',
+ './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
+ './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=4',
+ './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=8'
+];
+const nativeAudioScripts=[
+ './assets/136-resanta-voice-quality-v3.js?v=17',
+ './assets/135-resanta-voice-capture-fix-v2.js?v=17'
+];
+let androidAudioReady=false,androidAudioLoading=false;
+function installNativeAudioGate(){
+ if(!nativeAndroid||!owner())return;
+ const panel=document.querySelector('.rva-window');
+ if(!panel||panel.querySelector('.rva-android-audio-gate'))return;
+ const actions=panel.querySelector('.rva-actions');
+ if(!actions)return;
+ // Without the explicit audio opt-in, the legacy Web Speech button must
+ // not attempt to open unsupported native speech services on INMO WebView.
+ const mic=panel.querySelector('.rva-mic'),wake=panel.querySelector('.rva-wake');
+ for(const control of [mic,wake])if(control){control.disabled=true;control.title='Сначала подключите голос на очках';}
+ const box=document.createElement('div');
+ box.className='rva-android-audio-gate';
+ box.style.cssText='display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:8px;border:1px solid #bdd2e7;border-radius:10px;background:#f2f8ff';
+ const start=document.createElement('button');
+ start.type='button';start.className='rva-btn';start.textContent='🎤 Подключить голос на очках';
+ const note=document.createElement('span');
+ note.style.cssText='font-size:11px;color:#315777;flex:1 1 180px';
+ note.setAttribute('role','status');
+ note.textContent='CRM и текстовая Лера работают отдельно от микрофона.';
+ box.append(start,note);
+ actions.before(box);
+ start.addEventListener('click',async()=>{
+   if(androidAudioReady||androidAudioLoading||!owner())return;
+   // Detect missing WebView media support without touching the mic itself.
+   if(typeof navigator.mediaDevices?.getUserMedia!=='function'||typeof window.MediaRecorder!=='function'){
+     note.textContent='Встроенный WebView не поддерживает запись. CRM и текстовая Лера продолжают работать.';
+     return;
+   }
+   androidAudioLoading=true;start.disabled=true;start.textContent='🎤 Проверяю голосовые модули…';
+   try{
+     for(const src of nativeAudioScripts){
+       if(!owner())throw new Error('Сессия директора закрыта');
+       await load(src);
+     }
+     if(typeof window.crmResantaVoiceSpeakV3!=='function'||
+        typeof window.crmResantaVoiceSuspendV2!=='function')
+       throw new Error('Голосовой интерфейс не инициализировался');
+     androidAudioReady=true;
+     window.__resantaAI360AndroidVoiceArmed=true;
+     for(const control of [mic,wake])if(control){control.disabled=false;control.title='';}
+     start.textContent='✓ Голосовые модули подключены';
+     note.textContent='Теперь нажми «Спросить» или «Привет, Ресанта». Разрешение микрофона будет запрошено при первом использовании.';
+   }catch(e){
+     console.warn('AIR3 optional audio init:',e);
+     start.textContent='🎤 Повторить подключение голоса';
+     note.textContent='Не удалось подключить голос: '+String(e?.message||e).slice(0,120)+'. CRM и текстовый помощник доступны.';
+   }finally{
+     androidAudioLoading=false;
+     if(!androidAudioReady)start.disabled=false;
+   }
+ });
+}
 function owner(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
   (!nativeAndroid||String(currentUser.id)==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc') &&
@@ -38,9 +104,9 @@ async function activate(){
  if(ready){document.querySelector('.rva-launch')?.click();return;}
  loading=true;button.disabled=true;button.textContent='Подключение AI…';
  // Android director voice stays behind this deliberate user action.
- if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=true;
+ if(nativeAndroid){window.__resantaAI360AndroidDirectorOptIn=true;window.__resantaAI360AndroidVoiceArmed=false;}
  try{
-   for(const src of scripts){
+   for(const src of (nativeAndroid ? nativeTextScripts : scripts)){
      if(!owner())throw new Error('Сессия директора закрыта');
      // Task drafts are optional: a failed sidecar must never block the existing Lera.
      try { await load(src); }
@@ -55,6 +121,7 @@ async function activate(){
    }
    if(!owner())throw new Error('Сессия директора закрыта');
    ready=true;button.hidden=true;
+   if(nativeAndroid)installNativeAudioGate();
    document.querySelector('.rva-launch')?.click();
  }catch(e){
    if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=false;
