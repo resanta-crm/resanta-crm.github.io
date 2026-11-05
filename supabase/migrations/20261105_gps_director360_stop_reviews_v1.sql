@@ -48,9 +48,12 @@ BEGIN
    USING ERRCODE='22023';
  END IF;
  SELECT x INTO v_stop FROM jsonb_array_elements(
-   public.gps_classify_workday_stops_v236421(p_workday_id)
+   public.gps_director360_classify_live_stops_v20261105(p_workday_id)
  ) x WHERE coalesce(nullif(x->>'seq','')::integer,0)=p_stop_seq LIMIT 1;
- IF v_stop IS NULL OR v_stop->>'classification'<>'technical' THEN
+ IF v_workday.status='active' THEN
+  RAISE EXCEPTION 'Сначала завершите рабочий день: остановки ещё могут измениться' USING ERRCODE='22023';
+ END IF;
+ IF v_stop IS NULL OR v_stop->>'classification'<>'unidentified' THEN
   RAISE EXCEPTION 'Эта остановка сопоставлена с ТТ/домом или не существует: нельзя менять её классификацию'
    USING ERRCODE='22023';
  END IF;
