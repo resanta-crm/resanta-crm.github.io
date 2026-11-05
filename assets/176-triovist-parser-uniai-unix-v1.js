@@ -14,7 +14,7 @@ const money=v=>N(v)===null?'неизвестна':N(v).toLocaleString('ru-RU',{m
 const active=()=>!!document.getElementById('page-triovist')?.classList.contains('active')&&
  !!document.querySelector('#tr14-shell [data-tr14="parser"].on');
 const leader=()=>{let p=null;try{p=(typeof currentProfile!=='undefined'&&currentProfile)||window.currentProfile}catch(_){p=window.currentProfile}return String(p?.role||'')==='boss'};
-let state={manager:'',move:'',search:'',data:null,history:null,detail:null,busy:false,historyBusy:false,seq:0,lastRead:0};
+let state={manager:'',move:'',search:'',data:null,history:null,detail:null,busy:false,queued:false,historyBusy:false,seq:0,lastRead:0};
 let observed=null,observer=null,searchTimer=null;
 async function rpc(name,args){
  const call=()=>db.rpc(name,args);
@@ -165,14 +165,15 @@ function render(){
   '<p class="p176-note">Важно: позиции известны только по успешным проверкам. Если запрос вернул ошибку, предыдущие значения не подменяются. Места №61–№120 появляются по мере поэтапного охвата второй страницы выдачи.</p>';
 }
 async function refresh(){
- if(!active()||state.busy)return;
+ if(!active())return;
+ if(state.busy){state.queued=true;return;}
  state.busy=true;const seq=++state.seq;render();
  try{
   const data=await rpc('triovist_own_hourly_dashboard_v1',{p_manager_email:state.manager||null,p_movement:state.move||null,p_search:state.search||null,p_limit:100});
   if(seq!==state.seq)return;
   state.data=data;state.lastRead=Date.now();
  }catch(e){if(seq===state.seq)state.data={error:e?.message||String(e),rows:[],summary:{}}}
- finally{state.busy=false;if(seq===state.seq)render()}
+ finally{state.busy=false;if(seq===state.seq)render();if(state.queued){state.queued=false;refresh()}}
 }
 async function openHistory(manager,key){
  const row=A(state.data?.rows).find(r=>r.manager_email===manager&&r.card_key===key);
@@ -196,6 +197,8 @@ function mount(){
  }
  let el=document.getElementById('p176');
  if(!el){el=document.createElement('section');el.id='p176';el.setAttribute('aria-label','Парсер 21vek · Uni AI и Uni X');root.insertBefore(el,root.firstChild);render();}
+ const oldButton=document.getElementById('tri21-positions-v236351');
+ if(oldButton){oldButton.textContent='📈 Листинг 1–120';oldButton.onclick=e=>{e.preventDefault();const details=document.querySelector('#p176 [data-p176-list]');if(details){details.open=true;details.scrollIntoView?.({behavior:'smooth',block:'nearest'})}};}
  if(!state.lastRead||Date.now()-state.lastRead>5*60*1000)refresh();
 }
 document.addEventListener('click',e=>{
