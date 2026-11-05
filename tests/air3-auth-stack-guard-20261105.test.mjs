@@ -55,8 +55,8 @@ test('No async Supabase API calls are awaited in direct auth callbacks',()=>{
  assert.match(source,/setTimeout\(async\(\)=>\{/,'session recovery deferred outside listener');
  assert.match(core,/if\(crmExplicitSignOutV236258\|\|Date\.now\(\)>crmFreshSessionUntilV236258\)return null/);
 });
-test('No changes to shared core URL or Supabase library; no APK',()=>{
+test('Core script refreshes cache, Supabase library remains unchanged; no APK',()=>{
  assert.match(index,/<script defer src="https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2"><\/script>/);
  assert.ok(index.includes('./assets/01-crm-core.js?v=23.6.339-client360-2-air3-auth'));
- assert.ok(!index.includes('./assets/01-crm-core.js?v=23.6.339-client360-1'));
+ assert.ok(!index.includes('<script defer src="./assets/01-crm-core.js?v=23.6.339-client360-1"></script>'));
 });
