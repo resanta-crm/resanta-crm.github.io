@@ -294,12 +294,17 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  output=new Audio(outputUrl);output.preload='auto';
  if(nativeAndroidDirector()){output.muted=false;output.volume=1;}
  await new Promise((resolve,reject)=>{
-  let settled=false;
-  const done=()=>{if(settled)return;settled=true;if(audioDone===done)audioDone=null;resolve();};
+  let settled=false,timer=0;
+  const done=()=>{if(settled)return;settled=true;clearTimeout(timer);if(audioDone===done)audioDone=null;resolve();};
+  const fail=(code)=>{if(settled)return;settled=true;clearTimeout(timer);if(audioDone===done)audioDone=null;reject(new Error(code));};
   audioDone=done;
   output.addEventListener('ended',done,{once:true});
-  output.addEventListener('error',()=>{if(!settled){settled=true;audioDone=null;reject(new Error('audio_device_error'));}},{once:true});
-  Promise.resolve(output.play()).catch(()=>reject(new Error('autoplay_denied')));
+  output.addEventListener('error',()=>fail('audio_device_error'),{once:true});
+  if(nativeAndroidDirector()){
+    timer=setTimeout(()=>fail('android_html_audio_stalled'),30000);
+    output.addEventListener('playing',()=>console.info('AIR3 HTML fallback started'),{once:true});
+  }
+  Promise.resolve(output.play()).catch(()=>fail('autoplay_denied'));
  });
 }
 window.crmResantaVoiceSpeakV3=async function(message,options={}){
@@ -338,6 +343,12 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
          explanation='Сервер временно не смог проверить месячный бюджет озвучки. Расход не подтверждён.';
        }else if(why.includes('tts_quota_check_unavailable')||why.includes('quota_unavailable')){
          explanation='Сервер пока не смог проверить лимит озвучки. Можно повторить попытку.';
+       }else if(why.includes('android_audio_context_suspended')){
+         explanation='Android Web Audio не активирован. Нажми «Проверить звук Леры» и повтори тест.';
+       }else if(why.includes('android_wav_decode_failed')||why.includes('android_audio_start_failed')){
+         explanation='WebView очков не смог декодировать или запустить WAV-файл. Попробуй снова; CRM продолжает работать.';
+       }else if(why.includes('android_audio_timeout')||why.includes('android_html_audio_stalled')){
+         explanation='Воспроизведение на очках не завершилось. Проверка звука остановлена, CRM продолжает работать.';
        }else if(why.includes('autoplay_denied')){
          explanation='Браузер заблокировал воспроизведение звука. Разреши звук для сайта и повтори проверку.';
        }else if(why.includes('audio_device_error')){
