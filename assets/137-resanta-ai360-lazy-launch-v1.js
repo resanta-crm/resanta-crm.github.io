@@ -21,7 +21,7 @@ const scripts=[
 // Android director: text and authenticated navigation first. Audio is optional
 // and must never start automatically just because the AI panel was opened.
 const nativeTextScripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=18',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=19',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
  './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=3',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
