@@ -1,0 +1,33 @@
+name: Triovist 21vek Uni AI listing preservation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/106-triovist-competitors-v236218.js'
+      - 'tests/triovist-competitors-uni-listing.test.mjs'
+      - '.github/workflows/triovist-competitors-uni-listing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse competition UI without modifying parser
+        run: |
+          node --check assets/106-triovist-competitors-v236218.js
+          node --check assets/173-triovist-native-sections-v1.js
+      - name: Check classic listing, filters and Uni AI
+        run: |
+          node --test tests/triovist-competitors-uni-listing.test.mjs tests/triovist-native-sections-v1.test.mjs
+      - name: Guard existing 21vek cards, parser and migrations
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD > /tmp/trio-diff
+          cat /tmp/trio-diff
+          ! grep -E '(^assets/(80-triovist-21vek-control-v236107|173-triovist-native-sections-v1)\.js$|^supabase/|^tools/|^assets/.*card.*21vek)' /tmp/trio-diff
