@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_TASKS360_V1)return;
-const ID='tri-tasks360-style-v2',VERSION='2026.11.05.1';
+const ID='tri-tasks360-style-v2',VERSION='2026.11.05.2-plan-paused';
 const root=()=>document.getElementById('tri-month-safe-v23651');
 const active=()=>document.getElementById('page-triovist')?.classList.contains('active')&&
  document.querySelector('#tr14-shell [data-tr14="tasks"]')?.classList.contains('on');
@@ -55,6 +55,9 @@ function css(){
  '#page-triovist[data-triovist-view="tasks"] .tm360-policy summary,#page-triovist[data-triovist-view="tasks"] .tm360-detail summary,#page-triovist[data-triovist-view="tasks"] .tm360-generator-rules summary{cursor:pointer;padding:11px 13px;font-size:11px;font-weight:800;color:#185c96}',
  '#page-triovist[data-triovist-view="tasks"] .tm360-policy>div,#page-triovist[data-triovist-view="tasks"] .tm360-detail>div,#page-triovist[data-triovist-view="tasks"] .tm360-generator-rules>div{padding:9px 12px 13px}',
  '#page-triovist[data-triovist-view="tasks"] #tri-task-card>.tri-task-note{display:none!important}',
+ '#page-triovist[data-triovist-view="tasks"] #tri-task-generate-btn,#page-triovist[data-triovist-view="tasks"] #tri-task-plan-size-wrap,#page-triovist[data-triovist-view="tasks"] #tri-task-plan-period{display:none!important}',
+ '#page-triovist[data-triovist-view="tasks"] #tri-task-card>.tri-task-head .tri-task-note{display:none!important}',
+ '#page-triovist[data-triovist-view="tasks"] .tm360-generator-pause{border:1px solid #bfd3e9;border-radius:10px;background:#f2f7ff;padding:11px;margin:9px 0;font-size:12px;line-height:1.55;color:#24527d}',
  '#page-triovist[data-triovist-view="tasks"] #tri-task-card>.tri-task-head{background:#f5faff;border:1px solid #cbdff3;border-radius:12px;padding:12px;margin-top:12px}',
  '#page-triovist[data-triovist-view="tasks"] #tri-month-safe-v23651 .tm51-task{border:1px solid #dfe8f1;background:#fff;border-radius:10px;padding:12px;margin:8px 0}',
  '#page-triovist[data-triovist-view="tasks"] #tri-month-safe-v23651 .tm51-title{font-size:13px}',
@@ -79,7 +82,7 @@ function managerSummary(tasks,who,name){
 }
 function briefing(tasks,working,approvals,checking,late,done){
  let text='';
- if(!tasks.length)text='Задач в выбранном месяце нет. Сначала сформируйте черновик ИИ-плана и отправьте его на согласование руководителю.';
+ if(!tasks.length)text='По выбранному месяцу нет действующих задач. Прежняя методика автоматического плана отключена; новая модель расчёта проходит согласование.';
  else if(isManager())text='Ваших задач: '+q(tasks.length)+'. В работе '+q(working)+', ожидают проверки '+q(checking)+', просрочено '+q(late)+'. Выполняйте действия по SKU и отправляйте результат на проверку.';
  else text='Задач месяца: '+q(tasks.length)+'. Просрочено '+q(late)+', на согласовании '+q(approvals)+', ожидают проверки '+q(checking)+'. Сначала разберите просроченные и ожидающие утверждения, затем проверьте коммерческий результат.';
  return '<section class="tm360-brief"><b>✨ Короткий директорский брифинг</b><p>'+text+'</p>'+
@@ -87,12 +90,15 @@ function briefing(tasks,working,approvals,checking,late,done){
 }
 function generatorDetails(){
  const card=document.getElementById('tri-task-card');if(!card)return;
+ const legacy=card.querySelector('.tm360-generator-rules');if(legacy)legacy.remove();
+ const button=document.getElementById('tri-task-generate-btn');
+ if(button){button.disabled=true;button.title='Прежний генератор отключён на сервере. Новую модель согласовываем отдельно.';}
+ if(card.querySelector('.tm360-generator-pause'))return;
  const note=[...card.children].find(x=>x.classList?.contains('tri-task-note'));
- if(!note||card.querySelector('.tm360-generator-rules'))return;
- const details=document.createElement('details');details.className='tm360-generator-rules';
- const summary=document.createElement('summary');summary.textContent='⚙ Правила формирования ИИ-плана';details.appendChild(summary);
- const content=document.createElement('div');content.textContent=note.textContent||'';details.appendChild(content);
- note.insertAdjacentElement('afterend',details);
+ const anchor=note||card.querySelector('.tri-task-head');if(!anchor)return;
+ const message=document.createElement('div');message.className='tm360-generator-pause';
+ message.textContent='Прежняя методика задач по подгруппам отменена. Новые ИИ-планы временно не создаются. Для следующей модели: продажи 21vek, свободный остаток и подтверждённые поступления, Витебск, сезонность, целевой рост 15%; Чехов — справочно, группа 900 исключается. Новая формула — после согласования.';
+ anchor.insertAdjacentElement('afterend',message);
 }
 function enhance(){
  if(!active())return false;
@@ -108,9 +114,9 @@ function enhance(){
  stat('На согласовании',approval,'Требуют решения')+stat('На проверке',checking,'Подтвердить результат')+stat('Просрочено',late,'Нужна реакция',late>0)+'</div>';
  const managerView=(isManager()?EMAILS.filter(v=>v===own):EMAILS).map(mail=>managerSummary(tasks,mail,NAMES[EMAILS.indexOf(mail)])).join('');
  const actions='<div class="tm360-actions">'+
- (!isManager()?'<button type="button" class="primary" data-tm360-jump>🤖 Сформировать план ИИ</button>':'')+
+ (!isManager()?'<span class="tm360-optional">Новая методика ИИ-плана проходит согласование.</span>':'')+
  '<button type="button" data-tm360-expand>▤ Открыть рабочие задачи</button>'+
- '<span class="tm360-optional">Генератор 8 / 10 / 12 / 15 задач, согласование и проверка остаются штатными.</span></div>';
+ '<span class="tm360-optional">Прежний генератор отключён. Проверка результатов уже существовавших задач сохранена.</span></div>';
  head.innerHTML=kpis+briefing(tasks,working,approval,checking,late,done)+actions+
  '<div class="tm360-grid">'+managerView+'</div>'+
  '<div class="tm360-legend"><span><i style="background:#178858"></i>Подтверждено</span><span><i style="background:#3d86c7"></i>В работе</span><span><i style="background:#d89e47"></i>Согласование / проверка</span><span><i style="background:#cc4854"></i>Просрочено</span></div>';
@@ -144,7 +150,7 @@ function enhance(){
   r.dataset.tm360Bound='1';
   r.addEventListener('click',event=>{
    const jump=event.target.closest?.('[data-tm360-jump]');
-   if(jump){document.getElementById('tri-task-generate-btn')?.scrollIntoView?.({block:'center',behavior:'smooth'});return}
+   if(jump)return;
    const show=event.target.closest?.('[data-tm360-expand]');
    if(show){const d=r.querySelector('.tm360-detail');if(d){d.open=true;d.scrollIntoView?.({block:'nearest',behavior:'smooth'})}return}
    const person=event.target.closest?.('[data-tm360-owner]');
