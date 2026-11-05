@@ -28,12 +28,13 @@ test('Director voice on native Android requires tap; Android browsers and staff 
  }
  assert.ok(lazy.includes("544fb1e2-ef70-44de-bc62-e0e1596a4bfc"),'only exact director UUID gets Android launcher');
  assert.ok(lazy.includes('button.addEventListener(\'click\',activate)'));
- assert.ok(lazy.includes('if(nativeAndroid)window.__resantaAI360AndroidDirectorOptIn=true;'));
+ assert.ok(lazy.includes('window.__resantaAI360AndroidDirectorOptIn=true;'));
  assert.ok(!source('assets/140-resanta-ai360-task-drafts-preview-v1.js').includes('__resantaAI360AndroidDirectorOptIn'),
   'Write-capable approval drafts must remain unavailable on Android');
 });
 function boot(androidNative,uid){
  let button=null;
+ const scriptLoads=[];
  const root={
   Capacitor: androidNative===null?undefined:{isNativePlatform:()=>androidNative,getPlatform:()=>androidNative?'android':'web'},
   setInterval(){},__resantaAI360AndroidDirectorOptIn:false
@@ -43,12 +44,12 @@ function boot(androidNative,uid){
   querySelector(s){return s==='#app .topbar'?top:null;},
   getElementById(id){return id==='app'?{style:{display:'block'}}:null;},
   createElement(){return {hidden:true,disabled:false,style:{},addEventListener(k,cb){if(k==='click')this.click=cb;}};},
-  body:{appendChild(s){if(s.src)queueMicrotask(()=>s.onload?.());}}
+  body:{appendChild(s){if(s.src){scriptLoads.push(s.src);queueMicrotask(()=>s.onload?.());}}}
  };
  const context={window:root,document,navigator:{userAgent:'Mozilla/5.0 Android'},currentUser:{id:uid},
  currentProfile:{role:'boss',name:'Александр Паюшин'},console,Promise};
  vm.runInNewContext(lazy,context);
- return {root,button};
+ return {root,button,scriptLoads};
 }
 test('No mic or AI module loads at login; owner alone may activate it',()=>{
  const director=boot(true,'544fb1e2-ef70-44de-bc62-e0e1596a4bfc');
@@ -96,4 +97,27 @@ test('Spoken navigation uses existing authorized sections and never writes data'
  assert.equal(navigate('Открой произвольный скрытый экран'),false);
  assert.ok(pilot.includes('window.__resantaAI360AndroidDirectorOptIn===true && navigateByVoice(query)'),
   'desktop voice routing remains unchanged');
+});
+
+test('AIR3: first director tap loads text/navigational AI only, not mic/TTS or task-write code',async()=>{
+ const director=boot(true,'544fb1e2-ef70-44de-bc62-e0e1596a4bfc');
+ director.button.click();
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.ok(director.scriptLoads.some(x=>x.includes('134-resanta-voice-ai360-pilot-v1.js')));
+ assert.ok(director.scriptLoads.some(x=>x.includes('143-resanta-ai360-unified-dialog-v1.js')));
+ assert.ok(!director.scriptLoads.some(x=>/(135-resanta-voice-capture|136-resanta-voice-quality|140-resanta-ai360-task-drafts)/.test(x)),
+    'Android panel may not auto-load microphone, TTS or drafts');
+ assert.equal(director.root.__resantaAI360AndroidVoiceArmed,false,'voice cannot start before explicit opt-in');
+ assert.ok(lazy.includes('nativeAndroid ? nativeTextScripts : scripts'));
+ assert.ok(lazy.includes('installNativeAudioGate();'));
+ assert.ok(lazy.includes('typeof navigator.mediaDevices?.getUserMedia'));
+ assert.ok(lazy.includes('typeof window.MediaRecorder'));
+ assert.ok(lazy.includes('window.__resantaAI360AndroidVoiceArmed=true'));
+ assert.ok(lazy.includes('control.disabled=true'));
+ assert.ok(lazy.includes('control.disabled=false'));
+});
+test('AIR3: welcome message cannot auto-initialize native speech before opt-in',()=>{
+ assert.match(pilot,/function speak\(message,options=\{\}\)[\s\S]*?window\.__resantaAI360AndroidVoiceArmed!==true/);
+ assert.ok(pilot.includes("typeof Recognition.available === 'function'"));
+ assert.ok(pilot.includes("window.Capacitor?.getPlatform?.()==='android'"));
 });
