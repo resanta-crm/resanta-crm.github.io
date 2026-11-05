@@ -26,6 +26,7 @@ function css(){
  if(document.getElementById('p176-style'))return;
  const s=document.createElement('style');s.id='p176-style';s.textContent=[
  '#p176{font-family:inherit;margin:0 0 16px;color:#233d59}',
+ '#tri21-control-v236107 > .tx7{display:none!important}',
  '#p176 *{box-sizing:border-box}',
  '#p176 .p176-hero{display:flex;align-items:start;justify-content:space-between;gap:10px;flex-wrap:wrap}',
  '#p176 h2{font-size:20px;line-height:1.3;color:#154a7a;margin:0}',
@@ -115,6 +116,19 @@ function chart(history){
   '</svg><div class="p176-note">Выше = лучше. Линия №120 — граница просмотра. «&gt;120» означает, что товар не найден на первых двух страницах.</div>'+
   '<div class="p176-note">'+rows.slice(-8).reverse().map(r=>E(dt(r.observed_at))+' · '+E(pos(r.position))).join('  |  ')+'</div>';
 }
+function overviewBars(s){
+ const keys=[['↑ Выросли',Number(s.up||0),'#20885c'],['↓ Упали',Number(s.down||0),'#cb4955'],['↘ Вышли из 120',Number(s.exited||0),'#e99a3b'],['Вне TOP-120',Number(s.outside_120||0),'#8496a9']];
+ const max=Math.max(1,...keys.map(x=>x[1]));
+ const y0=16,h=110;
+ const bands=keys.map(([label,n,color],i)=>{
+  const x=24+i*152,bar=Math.max(0,(n/max)*75);
+  return '<rect x="'+x+'" y="'+(y0+75-bar)+'" width="84" height="'+bar+'" rx="5" fill="'+color+'"/>'+
+   '<text x="'+(x+42)+'" y="'+(y0+75-bar-6)+'" fill="#1c4368" text-anchor="middle" font-size="14" font-weight="700">'+E(n)+'</text>'+
+   '<text x="'+(x+42)+'" y="'+(y0+99)+'" fill="#52718d" text-anchor="middle" font-size="12">'+E(label)+'</text>';
+ }).join('');
+ return '<svg class="p176-plot" viewBox="0 0 650 130" role="img" aria-label="Число выросших, упавших, вышедших из первых 120 и оставшихся за пределами позиций SKU">'+bands+'</svg>'+
+  '<div class="p176-note">Число SKU, а не средняя позиция. Сводка по последним успешным наблюдениям.</div>';
+}
 function render(){
  const host=document.getElementById('p176');if(!host)return;
  const expanded=host.querySelector('[data-p176-list]')?.open||false;
@@ -151,6 +165,7 @@ function render(){
    '<section class="p176-panel"><h3>📈 Uni X · Динамика и причины</h3>'+
      '<p class="p176-note">Последний успешный срез: '+E(last)+'. У каждого SKU своё время наблюдения; устаревших SKU: '+E(s.stale_cards??0)+'.</p>'+
      '<p class="p176-note">↓ '+E(s.down??0)+' · ↑ '+E(s.up??0)+' · вне TOP-120 '+E(s.outside_120??0)+'</p>'+
+     overviewBars(s)+
      (state.detail?'<div class="p176-detail"><b>'+E(state.detail.sku||state.detail.card_key)+' · '+E(state.detail.keyword)+'</b>'+
        (state.historyBusy?'<div class="p176-note">Загружаю историю…</div>':chart(state.history?.rows))+
        '<button type="button" class="p176-btn" data-p176-close>Закрыть историю</button></div>':
