@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'assets/106-triovist-competitors-v236218.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
+      - 'index.html'
+      - 'tests/triovist-competitors-uni-cache.test.mjs'
       - 'tests/triovist-competitors-uni-listing.test.mjs'
       - '.github/workflows/triovist-competitors-uni-listing.yml'
   workflow_dispatch:
@@ -23,10 +26,11 @@ jobs:
       - name: Parse competition UI without modifying parser
         run: |
           node --check assets/106-triovist-competitors-v236218.js
+          node --check assets/100-safe-upgrades-loader-v236272.js
           node --check assets/173-triovist-native-sections-v1.js
       - name: Check classic listing, filters and Uni AI
         run: |
-          node --test tests/triovist-competitors-uni-listing.test.mjs tests/triovist-native-sections-v1.test.mjs
+          node --test tests/triovist-competitors-uni-listing.test.mjs tests/triovist-competitors-uni-cache.test.mjs tests/triovist-native-sections-v1.test.mjs
       - name: Guard existing 21vek cards, parser and migrations
         run: |
           git fetch origin main
