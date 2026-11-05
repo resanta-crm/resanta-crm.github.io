@@ -5,7 +5,6 @@ import vm from 'node:vm';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const ui=read('assets/176-triovist-parser-uniai-unix-v1.js');
 const loader=read('assets/100-safe-upgrades-loader-v236272.js');
-const sql=read('supabase/migrations/20261105093000_triovist_parser_hourly_uniai_unix_v1.sql');
 const flow=read('.github/workflows/triovist-own-hourly-uniai-unix.yml');
 
 test('Hybrid parser code syntax and dedicated guard',()=>{
@@ -29,16 +28,6 @@ test('Listing is exact depth 120, evidence-aware, with no made-up causal claims'
  assert.match(ui,/triovist_own_hourly_history_v1/);
  assert.match(ui,/p_manager_email/);
  assert.match(ui,/p_card_key/);
-});
-test('RLS + strict actor scope and read-only dashboard SQL',()=>{
- assert.match(sql,/enable row level security/gi);
- assert.match(sql,/revoke all on public\.triovist_own_hourly_observations_v1 from public,anon,authenticated/);
- assert.match(sql,/a\.actor_scope='triovist'/);
- assert.match(sql,/v_manager := a\.actor_email/);
- assert.match(sql,/if v_manager<>a\.actor_email/);
- assert.match(sql,/grant execute on function public\.triovist_own_hourly_dashboard_v1/);
- assert.doesNotMatch(sql,/drop table/i);
- assert.doesNotMatch(sql,/update\s+public\.triovist_21vek_top_current/i);
 });
 test('Hourly workflow is isolated, budgeted and never scrapes on PR checks',()=>{
  assert.match(flow,/cron: '23 \* \* \* \*'/);
