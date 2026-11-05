@@ -87,7 +87,8 @@ function render(){
   el.innerHTML='<h3>✦ Uni AI · обоснованный план</h3><p class="ai179-note">'+esc(state||'Проверяю продажи, сезонность и реальные остатки…')+
    '</p><button type="button" data-ai179-refresh>↻ Проверить заново</button>';return true;
  }
- const managers=Array.isArray(data.managers)?data.managers:[],groups=Array.isArray(data.groups)?data.groups:[],
+ const managers=(Array.isArray(data.managers)?data.managers:[]).filter(x=>boss()||String(x.email||'').toLowerCase()===email()),
+       groups=(Array.isArray(data.groups)?data.groups:[]).filter(x=>boss()||String(x.manager_email||'').toLowerCase()===email()),
        sources=data.sources||{},candidates=pickCandidates(stock?.items||[],groups);
  const total=managers.reduce((a,x)=>a+num(x.suggested),0),problems=groups.filter(x=>x.proposed==null||x.readiness!=='review').length;
  const kpi=(name,value,sub)=>'<div class="ai179-kpi"><small>'+esc(name)+'</small><strong>'+esc(value)+'</strong><small>'+esc(sub)+'</small></div>';
