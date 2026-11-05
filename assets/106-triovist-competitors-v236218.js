@@ -3208,7 +3208,13 @@ function render(panel,d,listing){
  panel.querySelector('[data-tm225]')?.addEventListener('click',e=>{
    const btn=e.target.closest?.('[data-tm225-scope]'),sel=panel.querySelector('[data-f-scope]');if(!btn||!sel)return;
    const scope=btn.dataset.tm225Scope||'';
-   if(sel.value!==scope){sel.value=scope;sel.dispatchEvent(new Event('change',{bubbles:true}));return}
+   if(sel.value!==scope){
+     // A priority may point outside an active category/search filter.
+     const category=panel.querySelector('[data-f-category]');if(category)category.value='';
+     if(scopeSearch)scopeSearch.value='';
+     filterScopeSelect(panel,scopes,'');
+     sel.value=scope;sel.dispatchEvent(new Event('change',{bubbles:true}));return
+   }
    const product=btn.dataset.tm225Product||'';
    if(product){panel.dataset.tm224Limit='10000';applyFilters(panel,d,listing);const target=[...panel.querySelectorAll('[data-tm224-product]')].find(x=>x.getAttribute('data-tm224-product')===product);target?.scrollIntoView?.({behavior:'smooth',block:'center'});}
    else panel.querySelector('[data-tm224-rows]')?.scrollIntoView?.({behavior:'smooth',block:'start'});
