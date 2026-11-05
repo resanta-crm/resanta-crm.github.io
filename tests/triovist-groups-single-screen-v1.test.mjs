@@ -71,7 +71,7 @@ test('group dashboard compiles, is natively scoped, and avoids any write or pars
  assert.match(code,/data-trgd-details/);
  assert.doesNotMatch(code,/\.insert\(|\.upsert\(|fetch\(|setInterval\(/);
  assert.doesNotMatch(code,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh\?\.\('groups'\)/);
- assert.match(native,/if\(k==='groups'\)return false/);
+ assert.match(native,/if\(k==='groups'\|\|k==='stock'\)return false/);
 });
 test('single-screen view renders one set of four KPI cards, a chart, and visible priorities',async()=>{
  const x=fixture();assert.equal(await x.api.open(x.host,x.ctx),true);
@@ -135,9 +135,9 @@ test('all detailed subgroups/SKU still use previous safe lazy RPC route',()=>{
 });
 test('cache busting makes native group version visible after hard reload',()=>{
  assert.match(loader,/20261105-groups-single-121/);
- assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-groups-single-1/);
+ assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-stock-director-1/);
  assert.match(index,/100-safe-upgrades-loader-v236272\.js\?v=20261105-groups-single-1/);
- assert.match(native,/if\(k==='groups'\)return false/);
+ assert.match(native,/if\(k==='groups'\|\|k==='stock'\)return false/);
 });
 
 test('director choosing a manager uses the existing scoped RPC and hides other manager cards',async()=>{
