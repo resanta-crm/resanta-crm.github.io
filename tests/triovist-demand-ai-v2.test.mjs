@@ -14,14 +14,14 @@ const proposal=(email,subgroup)=>({
  sku_count:10,partner_free:13,vitebsk_qty:30,chekhov_reference:2689,
  positions_known:6,rank_unknown:4,outside_top60:0,card_issues:1,priority_rank:11,
  target_note:'Аналогичный месяц прошлого года ×1,15',
- listing_skus:[{sku:'75/3/1',position:8},{sku:'75/3/5',position:null}]
+ listing_skus:[{sku:'75/3/1',position:8,listing_state:'current_confirmed'}, {sku:'75/3/5',position:null,listing_state:'out_of_stock',position_last_exact:11,position_last_seen:'2026-10-20T08:42:57+00:00'}]
 });
 const managers=[
  {email:A,name:'Александренко',active_tasks:0,declining_subgroups:66,offered:30},
  {email:K,name:'Кришталь',active_tasks:0,declining_subgroups:15,offered:15}
 ];
 function fixture({email='payushin_ar@resanta.ru',role='boss',confirm=false,oversized=false}={}){
- let node=null,confirmed=confirm,refreshCount=0;
+ let node=null,confirmed=confirm,refreshCount=0; const confirmations=[];
  const handlers={},rpcCalls=[];
  const parent={prepend(e){node=e}};
  const doc={
@@ -43,7 +43,7 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',confirm=false,overs
  if(oversized)preview.proposals=Array.from({length:31},(_,i)=>proposal(A,'Подгруппа '+i));
  const w={
   currentProfile:{role,email,access_scope:role==='boss'?'all':'triovist'},
-  confirm:()=>confirmed,
+  confirm:(text)=>{confirmations.push(text);return confirmed;}, 
   RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651:{getMonth:m,async render(){refreshCount++}},
   RESANTA_TRIOVIST_TASKS360_V1:{enhance(){}},
   TRIOVIST_DATA_HUB_V227315:{invalidate(){}},
@@ -72,7 +72,7 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',confirm=false,overs
   for(const fn of handlers.input||[])fn({target});
  }
  return {api,w,doc,rpcCalls,click,input,node:()=>node,setConfirm:x=>confirmed=x,
-  refreshCount:()=>refreshCount,preview};
+  refreshCount:()=>refreshCount,preview,confirmations};
 }
 const tick=async()=>{for(let i=0;i<15;i++)await Promise.resolve();await new Promise(r=>setImmediate(r))};
 
@@ -93,7 +93,7 @@ test('explicit brainstorm proposes only declining subgroups and no DB writes',as
  assert.match(f.node().innerHTML,/Перфораторы Ресанта/);
  assert.match(f.node().innerHTML,/44[\s\u00a0\u202f]?647,49 BYN/);
  assert.match(f.node().innerHTML,/27[\s\u00a0\u202f]?514,09 BYN/);
- assert.match(f.node().innerHTML,/позиция неизвестна/);
+ assert.match(f.node().innerHTML,/Подтверждённые позиции/);assert.match(f.node().innerHTML,/21vek: нет в наличии/);assert.match(f.node().innerHTML,/ранее №11/);
  assert.doesNotMatch(f.node().innerHTML,/создано задач: 30/);
 });
 test('authorisation: managers and the other boss do not see brainstorm or call RPC',async()=>{
@@ -127,7 +127,7 @@ test('approve is per subgroup only after explicit confirm; can manually edit tar
 });
 test('past month tasks, old parser and approved plans are not touched',()=>{
  const html=read('index.html');
- assert.match(html,/179-triovist-demand-ai-v1\.js\?v=20261105-subgroup-brainstorm-v2/);
+ assert.match(html,/179-triovist-demand-ai-v1\.js\?v=20261105-subgroup-listing-fix3/);
  assert.match(html,/61-triovist-task-month-safe-v23651\.js\?v=20261105-subgroup-brainstorm-v2/);
  assert.match(html,/169-triovist-tasks360-ux-v1\.js\?v=20261105-subgroup-brainstorm-v2/);
  const task=read('assets/61-triovist-task-month-safe-v23651.js');
@@ -140,4 +140,33 @@ test('past month tasks, old parser and approved plans are not touched',()=>{
  assert.match(sql,/v_month<>date_trunc\('month',current_date\)::date/);
  assert.match(sql,/triovist_tasks_action\(v_id,'approve'/);
  assert.doesNotMatch(sql,/DELETE FROM public\.triovist_ai_tasks|TRUNCATE/);
+});
+
+test('director may approve 30 000 BYN without a separately typed note; visible confirmation warns about exceeding AI proposal',async()=>{
+ const f=fixture();await f.api.brainstorm();
+ const key=[A,'Инструмент Ресанта','Перфораторы Ресанта'].map(x=>x.toLocaleLowerCase('ru')).join('|');
+ f.click('[data-ab-edit]',{abEdit:key});
+ f.input('target',key,'30000');
+ // The note is deliberately left empty, just as in the attached screenshot.
+ f.setConfirm(true);
+ f.click('[data-ab-approve]',{abApprove:key});await tick();
+ const rpc=f.rpcCalls.filter(x=>x.name==='triovist_ai_brainstorm_approve_v20261105');
+ assert.equal(rpc.length,1);
+ assert.equal(rpc[0].args.p_target_revenue,30000);
+ assert.equal(rpc[0].args.p_task_note,'');
+ assert.match(f.confirmations[0],/в 7\.0 раза/);
+ assert.match(f.confirmations[0],/30[\s\u00a0\u202f]?000,00 BYN/);
+ assert.equal(f.refreshCount(),1);
+});
+test('new server audit preserves manual target without typed comment and shows historical listing as historical only',()=>{
+ const sql=read('supabase/migrations/20261105_triovist_ai_brainstorm_manual_target_fix_v3.sql');
+ assert.match(sql,/v_note:='Ручная цель руководителя:/);
+ assert.match(sql,/a\.actor_email IS DISTINCT FROM 'payushin_ar@resanta\.ru'/);
+ assert.doesNotMatch(sql,/length\(v_note\)<15/);
+ const listing=read('supabase/migrations/20261105_triovist_ai_brainstorm_listing_provenance_v3.sql');
+ assert.match(listing,/last_exact_position/);
+ assert.match(listing,/last_exact_seen/);
+ assert.match(listing,/not_in_fresh_registry/);
+ assert.match(listing,/out_of_stock/);
+ assert.match(listing,/order_no<=24/);
 });
