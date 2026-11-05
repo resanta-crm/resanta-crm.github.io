@@ -8,6 +8,9 @@ on:
       - 'assets/178-crm-view-resume-v1.js'
       - 'assets/34-triovist-root-v23614.js'
       - 'tests/triovist-demand-ai-v2.test.mjs'
+      - 'assets/61-triovist-task-month-safe-v23651.js'
+      - 'assets/169-triovist-tasks360-ux-v1.js'
+      - 'supabase/migrations/20261105_triovist_ai_brainstorm_*'
       - 'tests/crm-view-resume-v1.test.mjs'
       - 'tests/triovist-motivation-director-v1.test.mjs'
       - 'supabase/migrations/20261105_triovist_ai_demand_preview_v1.sql'
@@ -46,10 +49,13 @@ jobs:
           test -f supabase/migrations/20261105_triovist_ai_task_draft_v1.sql
           grep -q 'REVOKE ALL ON FUNCTION' supabase/migrations/20261105_triovist_ai_demand_preview_v1.sql
           grep -q 'REVOKE ALL ON FUNCTION' supabase/migrations/20261105_triovist_ai_task_draft_v1.sql
+          test -f supabase/migrations/20261105_triovist_ai_brainstorm_subgroups_preview_v2.sql
+          test -f supabase/migrations/20261105_triovist_ai_brainstorm_approve_v2.sql
+          test -f supabase/migrations/20261105_triovist_ai_brainstorm_verify_v2.sql
           ! grep -E 'TRUNCATE|DROP TABLE|DELETE FROM public.triovist_ai_tasks|ALTER TABLE' supabase/migrations/20261105_triovist_ai_*.sql
       - name: Ensure parser, cards, old task data and roles remain untouched
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/changes
-          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1|61-triovist-task-month-safe-v23651)[.]js$' /tmp/changes
+          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1)[.]js$' /tmp/changes
           ! (grep '^supabase/migrations/' /tmp/changes | grep -v '^supabase/migrations/20261105_triovist_ai_')
