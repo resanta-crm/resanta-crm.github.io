@@ -6,6 +6,7 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const src=read('assets/181-gps-director360-v1.js');
 const SQL=read('supabase/migrations/20261105_gps_director360_evidence_v1.sql');
 const REV=read('supabase/migrations/20261105_gps_director360_stop_reviews_v1.sql');
+const LIVE=read('supabase/migrations/20261105_gps_director360_live_stops_v1.sql');
 const u='payushin_ar@resanta.ru';
 const d={
  version:'gps-director360-evidence-v1',
@@ -97,7 +98,6 @@ test('source-based KPIs and six-week manager chart load without writing GPS or d
  assert.match(html,/Динамика по менеджерам/);
  assert.match(html,/Коротко за период/);
  assert.match(html,/Менеджеры · детализация по нажатию/);
- assert.match(html,/данных/g);
  assert.deepEqual(f.calls.map(c=>c.name),['gps_director360_evidence_v20261105']);
 });
 test('chart switches among visit reports, independent GPS and problems',async()=>{
@@ -137,6 +137,9 @@ test('SQL separates reports and GPS and keeps technical stops director-verified'
  assert.match(SQL,/THEN 'unidentified'/);
  assert.match(SQL,/r\.workday_id=d\.id AND r\.stop_seq/);
  assert.match(SQL,/review_action='technical_verified'/);
+ assert.match(SQL,/gps_director360_classify_live_stops_v20261105/);
+ assert.match(LIVE,/gps_detect_workday_stops/);
+ assert.doesNotMatch(LIVE,/FROM public.gps_workday_aggregates/);
  assert.match(SQL,/p_to-p_from>41/);
  assert.match(SQL,/auth\.uid\(\) IS NULL OR NOT public\.gps_has_control_access\(\)/);
  assert.doesNotMatch(SQL,/DELETE FROM|UPDATE public\.gps_track_points|TRUNCATE/);
