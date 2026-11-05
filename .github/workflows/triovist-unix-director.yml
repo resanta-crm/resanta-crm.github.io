@@ -54,4 +54,4 @@ jobs:
           git diff --name-only origin/main...HEAD > /tmp/changed-files
           cat /tmp/changed-files
           ! grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)[.]js$|^[.]github/workflows/.*parser)' /tmp/changed-files
-          ! (grep '^supabase/' /tmp/changed-files | grep -v -Fx -e 'supabase/migrations/20261105_triovist_ai_demand_preview_v1.sql' -e 'supabase/migrations/20261105_triovist_ai_task_draft_v1.sql')
+          ! (grep '^supabase/' /tmp/changed-files | grep -v -Fx -e 'supabase/migrations/20261105_triovist_ai_demand_preview_v1.sql' -e 'supabase/migrations/20261105_triovist_ai_task_draft_v1.sql' -e 'supabase/migrations/20261105_triovist_ai_brainstorm_subgroups_preview_v2.sql' -e 'supabase/migrations/20261105_triovist_ai_brainstorm_approve_v2.sql' -e 'supabase/migrations/20261105_triovist_ai_brainstorm_verify_v2.sql')
