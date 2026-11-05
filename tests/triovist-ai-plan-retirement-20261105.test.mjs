@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const get=name=>fs.readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const ui=get('assets/169-triovist-tasks360-ux-v1.js');
 const index=get('index.html');
-const sql=get('supabase/migrations/20261105_triovist_disable_deprecated_subgroup_ai_task_v236254.sql');
+const sql=get('docs/triovist-ai-plan-retirement-20261105.md');
 test('old 8/10/12/15 AI plan buttons and rules are not displayed',()=>{
  assert.doesNotThrow(()=>new vm.Script(ui));
  assert.match(ui,/#tri-task-generate-btn/);
