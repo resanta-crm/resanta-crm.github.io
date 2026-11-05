@@ -1,0 +1,32 @@
+name: CRM tab resume isolated regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/178-crm-view-resume-v1.js'
+      - 'tests/crm-view-resume-v1.test.mjs'
+      - 'index.html'
+      - '.github/workflows/crm-view-resume-isolated.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  view-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify syntax, session isolation and keep current tab
+        run: |
+          node --check assets/178-crm-view-resume-v1.js
+          node --test tests/crm-view-resume-v1.test.mjs
+      - name: Ensure no unrelated modules, SQL or parser changes
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD | tee /tmp/crm-view-resume-changes
+          ! grep -E '(^supabase/|^assets/01-crm-core\.js$|^assets/03-triovist-routes\.js$|^assets/34-triovist-root-v23614\.js$|^assets/80-triovist-21vek-control-v236107\.js$|^assets/106-triovist-competitors-v236218\.js$|^assets/169-triovist-tasks360-ux-v1\.js$)' /tmp/crm-view-resume-changes
