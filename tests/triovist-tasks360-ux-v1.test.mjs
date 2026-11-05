@@ -7,6 +7,7 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const ui=read('assets/169-triovist-tasks360-ux-v1.js');
 const tasks=read('assets/61-triovist-task-month-safe-v23651.js');
 const router=read('assets/34-triovist-root-v23614.js');
+const routes=read('assets/03-triovist-routes.js');
 const native=read('assets/173-triovist-native-sections-v1.js');
 const index=read('index.html');
 const parser=read('assets/80-triovist-21vek-control-v236107.js');
@@ -124,9 +125,9 @@ test('the only AI-plan generator remains the original 8/10/12/15 server-backed f
  assert.ok(x.head.children.some(c=>c.id==='tri-task-generate-btn'));
  assert.match(ui,/document\.getElementById\('tri-task-generate-btn'\)\?\.scrollIntoView/);
  assert.match(tasks,/triovist_tasks_get_dashboard_month_v23648/);
- assert.match(router,/triovistTasksGenerateFresh\(true\)/);
- assert.match(router,/tri-task-plan-size/);
- assert.match(router,/8 задач/);assert.match(router,/15 задач/);
+ assert.match(routes,/triovistTasksGenerateFresh\(true\)/);
+ assert.match(routes,/tri-task-plan-size/);
+ assert.match(routes,/8 задач/);assert.match(routes,/15 задач/);
 });
 test('no new API calls, DB writes or parser reads are added to tasks presentation',()=>{
  assert.doesNotMatch(ui,/\.rpc\(|fetch\(|\.from\(|\.insert\(|\.delete\(|\.update\(|MutationObserver|setInterval/);
