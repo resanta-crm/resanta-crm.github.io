@@ -9,6 +9,7 @@ on:
       - "assets/104-safe-triovist-v236200.js"
       - "assets/100-safe-upgrades-loader-v236272.js"
       - "tests/triovist-native-sections-v1.test.mjs"
+      - "tests/triovist-groups-single-screen-v1.test.mjs"
       - "index.html"
       - "tests/triovist-unix-director-v1.test.mjs"
       - ".github/workflows/triovist-unix-director.yml"
@@ -39,7 +40,7 @@ jobs:
           node --check assets/168-triovist-summary-360-v1.js
           node --check assets/169-triovist-tasks360-ux-v1.js
       - name: Test Uni X, old Summary and Tasks regressions
-        run: node --test tests/triovist-unix-director-v1.test.mjs tests/triovist-summary-360-v1.test.mjs tests/triovist-tasks360-ux-v1.test.mjs tests/triovist-native-sections-v1.test.mjs
+        run: node --test tests/triovist-unix-director-v1.test.mjs tests/triovist-summary-360-v1.test.mjs tests/triovist-tasks360-ux-v1.test.mjs tests/triovist-native-sections-v1.test.mjs tests/triovist-groups-single-screen-v1.test.mjs
       - name: Ensure parser and database unchanged by this PR
         run: |
           git diff --name-only origin/main...HEAD > /tmp/changed-files
