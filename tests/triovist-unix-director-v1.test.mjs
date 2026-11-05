@@ -187,7 +187,7 @@ test('Triovist Work and Commerce navigation is anchored above all page content',
 });
 
 test('Navigation fix loads a fresh router asset and preserves all original tabs',()=>{
- assert.match(index,/34-triovist-root-v23614\.js\?v=20261105-navigation-top-202/);
+ assert.match(index,/34-triovist-root-v23614\.js\?v=20261105-uni-demand-nav2/);
  for(const key of ['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','anp','si','budget','price']){
   assert.ok(router.includes("["+String.fromCharCode(39)+key+String.fromCharCode(39)+","),"Missing navigation key "+key);
  }
