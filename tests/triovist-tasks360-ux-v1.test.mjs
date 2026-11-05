@@ -124,7 +124,7 @@ test('old monthly AI generator is paused, while refresh and existing task button
  const x=fixture();x.api.enhance();
  const html=x.r.querySelector('.tm360-view').innerHTML;
  assert.doesNotMatch(html,/Сформировать план ИИ|8 \/ 10 \/ 12 \/ 15/);
- assert.match(html,/Новая методика ИИ-плана проходит согласование/);
+ assert.match(html,/Мозговой штурм ИИ — ручной запуск руководителем/);
  const btn=x.head.children.find(c=>c.id==='tri-task-generate-btn');
  assert.ok(btn);
  assert.equal(btn.disabled,true);
@@ -145,7 +145,7 @@ test('preserves work, commercial routes, original parser and competitor modules'
  assert.match(router,/RESANTA_TRIOVIST_21VEK_CONTROL_V236107/);
  assert.match(router,/RESANTA_TRIOVIST_COMPETITORS_V236218/);
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
- assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-retire-old-plan1/);
+ assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-subgroup-brainstorm-v2/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
  assert.ok(parser.length>3000);assert.ok(competitors.length>3000);
 });
