@@ -1,0 +1,25 @@
+name: AIR3 auth session bootstrap guard
+on:
+  pull_request:
+    paths:
+      - 'assets/01-crm-core.js'
+      - 'tests/air3-auth-stack-guard-20261105.test.mjs'
+      - '.github/workflows/air3-auth-session-bootstrap-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and native Android session/desktop isolation tests
+        run: |
+          set -euo pipefail
+          node --check assets/01-crm-core.js
+          node --test tests/air3-auth-stack-guard-20261105.test.mjs
+          node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
