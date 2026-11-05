@@ -176,7 +176,7 @@ function nativeRoot(k){
 }
 function mount(k,ctx){
  // Groups now own their native director screen; avoid duplicate KPI and hidden filters.
- if(k==='groups'||k==='stock')return false;
+ if(k==='groups'||k==='stock'||k==='tasks')return false;
  if(!SECTIONS[k]||!active(k)||!allowed(ctx))return false;
  const live=w.currentProfile||w.currentUser;
  if(live?.email&&norm(live.email)!==norm(ctx.email))return false;
