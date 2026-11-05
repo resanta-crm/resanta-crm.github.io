@@ -121,3 +121,13 @@ test('AIR3: welcome message cannot auto-initialize native speech before opt-in',
  assert.ok(pilot.includes("typeof Recognition.available === 'function'"));
  assert.ok(pilot.includes("window.Capacitor?.getPlatform?.()==='android'"));
 });
+
+test('AIR3: opening text panel cannot auto-call director briefing on Android',()=>{
+ const brief=source('assets/142-resanta-ai360-director-proactive-brief-v1.js');
+ const guarded=brief.slice(brief.indexOf('window.crmAI360DirectorProactiveOpenV2=function(ui){'),
+                        brief.indexOf('window.crmAI360DirectorBriefHandleV1='));
+ assert.match(guarded,/__resantaAI360AndroidDirectorOptIn===true/);
+ assert.match(guarded,/getPlatform\?\.\(\)==='android'\)return false;/);
+ assert.ok(brief.includes('window.crmAI360DirectorBriefHandleV1=function(text,ui)'),
+           'manual director briefing remains available');
+});
