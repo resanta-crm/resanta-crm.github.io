@@ -2977,7 +2977,7 @@ function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
 function uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays){
  const node=panel.querySelector('[data-tm225]');if(!node)return;
  const scopes=Array.isArray(d.scopes)?d.scopes:[],meta=scopes.find(x=>String(x.scope_key||'')===scope)||{},stats=scope?meta:(d.summary||{});
- const fmt=v=>N(v)==null?'—':N(v).toLocaleString('ru-RU');
+ const fmt=v=>v==null||v===''||N(v)==null?'—':N(v).toLocaleString('ru-RU');
  const cards=[];
  const add=(title,fact,action,key,product,tone)=>{if(cards.length<5)cards.push({title,fact,action,key,product,tone})};
  if(scope&&!d.__scopeLoading){
@@ -3101,7 +3101,7 @@ function applyFilters(panel,d,listing){
   }
   return true;
  });
- panel.querySelectorAll('[data-scope-card]').forEach(x=>{x.style.display=!scope||x.getAttribute('data-scope-card')===scope?'':'none'});
+ panel.querySelectorAll('[data-scope-card]').forEach(x=>{const key=x.getAttribute('data-scope-card'),meta=(d.scopes||[]).find(z=>String(z.scope_key)===key),group=panel.querySelector('[data-f-category]')?.value||'',query=panel.querySelector('[data-f-scope-search]')?.value||'';x.style.display=(scope?key===scope:(!group||meta?.category===group)&&(!query||scopeMatchesSearch(meta,query)))?'':'none'});
  const holder=panel.querySelector('[data-tm224-rows]');
  uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays);
  if(!scope){
@@ -3174,6 +3174,7 @@ function render(panel,d,listing){
  if(scopeSearch){
    scopeSearch.addEventListener('input',e=>{
      const value=e.currentTarget.value||'',found=filterScopeSelect(panel,scopes,value),hint=panel.querySelector('[data-f-scope-hint]');
+     if(!panel.querySelector('[data-f-scope]')?.value)applyFilters(panel,d,listing);
      if(hint)hint.textContent=value?(found.length===1?'Одна подходящая подгруппа':found.length?'Найдено: '+found.length+' · выберите из списка':'Не найдено'):'';
      clearTimeout(searchTimer);
      if(scopeSearchNorm(value).length>=3&&found.length===1){
