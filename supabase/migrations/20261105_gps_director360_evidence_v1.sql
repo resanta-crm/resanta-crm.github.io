@@ -69,9 +69,17 @@ BEGIN
     s->>'classification' original_class,
     CASE WHEN s->>'classification'='technical' THEN 'unidentified'
      ELSE coalesce(s->>'classification','unclassified') END stop_class,
-    s->>'matched_client_name' matched_client
+     s->>'matched_client_name' matched_client,
+    rev.action review_action,rev.comment review_comment,rev.due_date review_due,
+    rev.created_at review_at
   FROM days d CROSS JOIN LATERAL
     jsonb_array_elements(public.gps_classify_workday_stops_v236421(d.id)) s
+  LEFT JOIN LATERAL (
+    SELECT action,comment,due_date,created_at
+    FROM public.gps_director360_stop_reviews_v1 r
+    WHERE r.workday_id=d.id AND r.stop_seq=(s->>'seq')::integer
+    ORDER BY r.created_at DESC,r.id DESC LIMIT 1
+  ) rev ON true
   WHERE d.work_date BETWEEN p_from AND p_to
  ),
  manager_visits AS (
@@ -91,9 +99,15 @@ BEGIN
  ),
  manager_stops AS (
   SELECT manager_name,
-    count(*) FILTER (WHERE stop_class='unidentified' AND minutes>=5)::integer unidentified_stops,
+    count(*) FILTER (WHERE stop_class='unidentified' AND minutes>=5
+      AND coalesce(review_action,'investigate')='investigate')::integer unidentified_stops,
     coalesce(round(sum(minutes) FILTER (
-       WHERE stop_class='unidentified' AND minutes>=5),0),0) unidentified_minutes,
+       WHERE stop_class='unidentified' AND minutes>=5
+        AND coalesce(review_action,'investigate')='investigate'),0),0) unidentified_minutes,
+    count(*) FILTER (WHERE stop_class='unidentified'
+      AND review_action='technical_verified')::integer verified_technical,
+    count(*) FILTER (WHERE stop_class='unidentified'
+      AND review_action IN ('work_related','home_related','no_issue'))::integer resolved_stops,
     count(*) FILTER (WHERE stop_class='home')::integer home_stops,
     count(*) FILTER (WHERE stop_class='start_zone')::integer start_zone_stops,
     count(*) FILTER (WHERE stop_class IN ('planned_tt','offplan'))::integer tt_stops
@@ -122,6 +136,8 @@ BEGIN
    coalesce(v.attention_visits,0) attention_visits,
    coalesce(s.unidentified_stops,0) unidentified_stops,
    coalesce(s.unidentified_minutes,0) unidentified_minutes,
+   coalesce(s.verified_technical,0) verified_technical,
+   coalesce(s.resolved_stops,0) resolved_stops,
    coalesce(s.home_stops,0) home_stops,
    coalesce(s.start_zone_stops,0) start_zone_stops,
    coalesce(s.tt_stops,0) tt_stops,
@@ -145,12 +161,8 @@ BEGIN
   GROUP BY wk.i,wk.week_from,wk.week_to,f.manager_name
  ),
  checked_tech AS (
-  SELECT count(*)::integer confirmed
-  FROM public.gps_stop_classifications_v236417 t
-  JOIN days d ON d.id=t.workday_id
-  WHERE d.work_date BETWEEN p_from AND p_to
-   AND t.classification='technical'
-   AND (t.source->>'director_verified'='true' OR t.source->>'director_confirmed'='true')
+  SELECT count(*)::integer confirmed FROM live_stops
+  WHERE stop_class='unidentified' AND review_action='technical_verified'
  ),
  problems AS (
   SELECT 'no_coordinates' key,'Нет доверенных координат ТТ' label,
@@ -194,6 +206,7 @@ BEGIN
     'gps_only',coalesce(sum(gps_only),0),
     'unidentified_stops',coalesce(sum(unidentified_stops),0),
     'unidentified_minutes',coalesce(sum(unidentified_minutes),0),
+    'resolved_stops',coalesce(sum(resolved_stops),0),
     'verified_technical',(SELECT confirmed FROM checked_tech),
     'active_days',coalesce(sum(active_days),0),
     'stale_days',coalesce(sum(stale_days),0),
@@ -236,11 +249,18 @@ BEGIN
       'workday_id',workday_id,'date',work_date,
       'manager',manager_name,'seq',stop_seq,'minutes',minutes,
       'start_at',start_at,'end_at',end_at,
-      'type','unidentified','reason','Нет достоверного соответствия ТТ или стартовой зоне; требуется разбор'
+      'type',CASE WHEN review_action='technical_verified' THEN 'verified_technical'
+       WHEN review_action IN ('work_related','home_related','no_issue') THEN 'resolved'
+       ELSE 'unidentified' END,
+      'review_action',review_action,'review_comment',review_comment,
+      'review_due',review_due,'review_at',review_at,
+      'reason',CASE WHEN review_action IS NULL OR review_action='investigate'
+       THEN 'Нет достоверного соответствия ТТ или стартовой зоне; требуется разбор'
+       ELSE 'Решение руководителя сохранено отдельно от GPS-трека' END
     ) ORDER BY minutes DESC,work_date DESC)
     FROM (SELECT * FROM live_stops
       WHERE stop_class='unidentified' AND minutes>=5
-      ORDER BY minutes DESC,work_date DESC LIMIT 35) s
+      ORDER BY minutes DESC,work_date DESC LIMIT 60) s
     ),'[]'::jsonb),
   'generated_at',now()
  ) INTO v_result;
