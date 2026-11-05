@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.406',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
+const V='v23.6.407',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
@@ -89,6 +89,7 @@ async function prepareDirectWork(k){
    if(!mod?.render)throw Error('Модуль задач месяца ещё не готов');
    await mod.render(false);
    window.RESANTA_TRIOVIST_TASKS360_V1?.enhance?.();
+   await window.RESANTA_TRIOVIST_DEMAND_AI_V1?.open?.();
  }
  if(k==='cards'){
    try{window.triovistContentRender?.()}catch(_){}
@@ -474,7 +475,12 @@ function watch(){
   observedPage=p;
  }
 }
-async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await activate('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,directWorkspaceRouter:true,instantTabSwitch:true,sectionRefreshIsolation:true,navigationEpoch:true,lazyDataByTab:true,fastMonthlyTasks:true,singleMotivationSurface:true,forcedDirectCardVisibility:true,nonStickyMenu:true,separateSalesWorkspace:true,noLegacyButtonDependency:true,salesRealtimeRefresh:true,noSalesPolling:true,infographicPayushinOnly:true,infographicArchived:true});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
+// Reconcile visibility without reloading finance/budget content or losing typed inputs.
+function resumeView(){
+ if(document.hidden||!page()?.classList.contains('active')||!panel?.isConnected)return false;
+ sync();return true;
+}
+async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await activate('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,directWorkspaceRouter:true,instantTabSwitch:true,sectionRefreshIsolation:true,navigationEpoch:true,lazyDataByTab:true,fastMonthlyTasks:true,singleMotivationSurface:true,forcedDirectCardVisibility:true,nonStickyMenu:true,separateSalesWorkspace:true,noLegacyButtonDependency:true,salesRealtimeRefresh:true,noSalesPolling:true,infographicPayushinOnly:true,infographicArchived:true,readOnlyResume:true,resumeView});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
 // Only one initialization (including the home RPC) may run at a time.
 let n=0,bootPending=false;
 const t=setInterval(async()=>{

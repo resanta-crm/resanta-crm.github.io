@@ -6,8 +6,8 @@ import vm from 'node:vm';
 const read=n=>fs.readFileSync(new URL('../'+n,import.meta.url),'utf8');
 const code=read('assets/178-crm-view-resume-v1.js');
 
-function fixture({email='payushin_ar@resanta.ru',role='boss',scope='all',section='triovist',subtab='competitors',storage=new Map()}={}){
- let selected=section,tab=subtab,loggedIn=true,clicks=0;
+function fixture({email='payushin_ar@resanta.ru',role='boss',scope='all',section='triovist',subtab='competitors',storage=new Map(),hiddenPanel=false,blankPanel=false}={}){
+ let selected=section,tab=subtab,loggedIn=true,clicks=0,resumeCalls=0,visible=!hiddenPanel,content=!blankPanel;
  const timers=[],docEvents={},windowEvents={};
  const profile={email,role,access_scope:scope};
  const app={style:{display:'flex'},dataset:{activePage:section}};
@@ -15,8 +15,9 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',scope='all',section
  const title={textContent:'Триовист / 21vek.by'};
  const pages=['dashboard','triovist','clients','routes-boss','tasks'].map(n=>({id:'page-'+n,style:{},dataset:{triovistView:n==='triovist'?tab:''}}));
  const navs=pages.map(p=>({id:'nav-'+p.id.slice(5),style:{display:'flex'}}));
- const buttons=['home','competitors','tasks','cards','groups'].map(n=>({dataset:{tr14:n},classList:{contains:c=>c==='on'&&tab===n},click(){tab=n; pages.find(p=>p.id==='page-triovist').dataset.triovistView=n;clicks++}}));
- const byId=id=>id==='app'?app:id==='login-wrap'?login:id==='topbar-title'?title:pages.find(p=>p.id===id)||navs.find(p=>p.id===id)||null;
+ const buttons=['home','competitors','tasks','cards','groups','budget'].map(n=>({dataset:{tr14:n},classList:{contains:c=>c==='on'&&tab===n},click(){tab=n;content=true;visible=true;pages.find(p=>p.id==='page-triovist').dataset.triovistView=n;clicks++}}));
+ const panel={style:{getPropertyValue:k=>k==='display'?(visible?'block':'none'):''},querySelector:q=>q==='.tr14-sec'?(content?{}:null):null};
+ const byId=id=>id==='app'?app:id==='login-wrap'?login:id==='topbar-title'?title:id==='tr14-panel'?panel:pages.find(p=>p.id===id)||navs.find(p=>p.id===id)||null;
  const document={
   visibilityState:'visible',
   getElementById:byId,
@@ -29,7 +30,7 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',scope='all',section
   addEventListener(type,fn){(docEvents[type]??=[]).push(fn)}
  };
  const window={
-  currentProfile:profile,sessionStorage:{
+  currentProfile:profile,RESANTA_TRIOVIST_ROOT_V23614:{resumeView(){resumeCalls++;visible=true;return true}},sessionStorage:{
    getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)
   },
   addEventListener(type,fn){(windowEvents[type]??=[]).push(fn)},
@@ -46,7 +47,7 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',scope='all',section
  return {window,document,storage,emit,signal,flush,profile,app,login,
   get section(){return selected},set section(v){selected=v;app.dataset.activePage=v},
   get tab(){return tab},set tab(v){tab=v},
-  get clicks(){return clicks},
+  get clicks(){return clicks},get resumeCalls(){return resumeCalls},get panelVisible(){return visible},get panelHasContent(){return content},
   navClick(){for(const fn of(docEvents.click||[]))fn({target:{closest:()=>({})}})},
   loginOut(){loggedIn=false;login.style.display='flex';app.style.display='none'}
  };
@@ -96,8 +97,26 @@ test('Triovist pages are refused for unrelated roles even with sessionStorage ma
 });
 test('only one isolated versioned script is added and core routes remain unchanged',()=>{
  const index=read('index.html');
- assert.match(index,/178-crm-view-resume-v1\.js\?v=20261105-tabreturn1/);
+ assert.match(index,/178-crm-view-resume-v1\.js\?v=20261105-budgets-resume2/);
  assert.match(index,/03-triovist-routes\.js/);
  assert.match(index,/34-triovist-root-v23614\.js/);
  assert.match(index,/169-triovist-tasks360-ux-v1\.js/);
+});
+
+test('video repro: Budget header remains, panel hidden after tab switch, resume shows content without re-render',()=>{
+ const f=fixture({subtab:'budget',hiddenPanel:true});
+ f.emit('visibilitychange',{hidden:true});
+ f.emit('visibilitychange',{hidden:false});f.flush();
+ assert.equal(f.section,'triovist');
+ assert.equal(f.tab,'budget');
+ assert.equal(f.panelVisible,true);
+ assert.ok(f.resumeCalls>=1);
+ assert.equal(f.clicks,0,'healthy budget content is not destroyed or reloaded');
+});
+test('video repro: genuinely detached Budget content reopens once through the existing router',()=>{
+ const f=fixture({subtab:'budget',blankPanel:true});
+ f.emit('visibilitychange',{hidden:true});
+ f.emit('visibilitychange',{hidden:false});f.flush();
+ assert.equal(f.panelHasContent,true);
+ assert.equal(f.clicks,1,'repair is one-time, not an infinite data refresh');
 });

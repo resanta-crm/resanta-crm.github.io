@@ -6,7 +6,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1)return;
-const VERSION='2026.11.05.1',ID='trmot175-css';
+const VERSION='2026.11.05.2-demand-v2',ID='trmot175-css';
 const MANAGERS=[{email:'aleksandrenko_av@resanta.ru',name:'Александренко'},{email:'krishtal_na@resanta.ru',name:'Кришталь'}];
 const BOSSES=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -112,40 +112,46 @@ function parseAmount(v){
  const x=Number(s);return Number.isSafeInteger(Math.round(x*100))&&x>0&&x<=999999999999?Math.round(x*100)/100:null;
 }
 function forecast(data,month,manager){
- const rows=(data.items||[]).filter(x=>String(x.manager_email||'').toLowerCase()===manager);
- const current=rows.reduce((sum,r)=>sum+Math.max(0,num(r.current_revenue)),0);
- const prior=rows.reduce((sum,r)=>sum+Math.max(0,num(r.previous_revenue)),0);
- const monthsLoaded=new Set(data.available_months||[]);
- const priorMonth=shift(month,-12),prevReliable=monthsLoaded.has(priorMonth)&&prior>0;
- const today=String(w.TODAY||new Date().toISOString().slice(0,10));
- const day=Math.max(1,Math.min(31,Number(today.slice(8,10))||1));
- const totalDays=new Date(+month.slice(0,4),+month.slice(5,7),0).getDate();
- // The historical AI-plan rule was max(last-year-same-month * 1.30, current month run-rate), rounded to 1,000 BYN.
- const currentMonthEvidence=month===currentMonth()&&monthsLoaded.has(month)&&current>0;
- const pace=currentMonthEvidence?current/Math.min(day,totalDays)*totalDays:null;
- const floor=prevReliable?prior*1.30:null;
- if(floor===null&&pace===null)return null;
- const amount=Math.ceil(Math.max(floor||0,pace||0)/1000)*1000;
- if(!(amount>0))return null;
- return {manager,month,amount,current,prior:prevReliable?prior:null,floor,pace,
-  monthsUsed:[...(prevReliable?[priorMonth]:[]),...(currentMonthEvidence?[month]:[])],
-  recentImport:ym(data.last_import?.month||''),
-  reliable:prevReliable&&currentMonthEvidence?'два источника сравнения':'ограниченная история'};
+ const row=(data?.managers||[]).find(x=>String(x.email||'').toLowerCase()===manager);
+ if(!row||!data?.sources?.history_complete)return null;
+ const amount=finite(row.suggested);
+ if(amount===null||amount<=0)return null;
+ const groups=(data.groups||[]).filter(x=>String(x.manager_email||'').toLowerCase()===manager);
+ return {manager,month,amount,
+  prior:finite(row.last_year),previousMonth:finite(row.previous_month),
+  included:finite(row.included_groups),total:finite(row.total_groups),
+  groups,requiresReview:!!row.requires_review,
+  sources:data.sources||{},growth:0.15,
+  reliable:row.requires_review?'есть неподтверждённые группы':'история и сезонность подтверждены'};
 }
 function recommendationCards(month){
  const rec=recommendations.get(month);
- if(!rec)return '<div class="trmot-note">ИИ ещё не рассчитал предложение. Начисления и планы не изменяются автоматически.</div>';
- if(rec.loading)return '<div class="trmot-note">Анализирую загруженную историю продаж и сезонность…</div>';
+ if(!rec)return '<div class="trmot-note">ИИ ещё не рассчитал предложение. Планы и премии не изменяются автоматически.</div>';
+ if(rec.loading)return '<div class="trmot-note">Проверяю продажи 21vek, свободный остаток, Витебск и сезонность…</div>';
  if(rec.error)return '<div class="trmot-error">'+esc(rec.error)+'</div>';
+ const source=rec.sources||{};
  return '<div class="trmot-grid">'+MANAGERS.map(m=>{
   const r=rec.data?.[m.email];
   return '<div class="trmot-manager"><h4>'+esc(m.name)+'</h4>'+
-   (r?'<div class="trmot-rate">'+money(r.amount)+'</div><p class="trmot-note">Аналогичный месяц: '+(r.prior===null?'нет подтверждённых данных':money(r.prior))+
-   ' · ориентир +30%: '+(r.floor===null?'нет данных':money(r.floor))+
-   ' · прогноз текущего месяца: '+(r.pace===null?'нет данных':money(r.pace))+'.</p>'+
-   '<p class="trmot-note">Источники: '+esc(r.monthsUsed.join(', '))+'. Достоверность: '+esc(r.reliable)+'.</p>':
-   '<p class="trmot-note">Недостаточно подтверждённой истории для расчёта. Установите план вручную после анализа данных.</p>')+'</div>';
- }).join('')+'</div><div class="trmot-warn">Это алгоритмическая ИИ-рекомендация по прежней методике CRM, а не утверждённый план и не гарантия продаж. Не учитывает автоматически будущие договорённости с клиентом и ограничения по товару.</div>';
+   (r?'<div class="trmot-rate">'+money(r.amount)+'</div>'+
+   '<p class="trmot-note">Аналогичный месяц прошлого года: '+money(r.prior)+
+   ' · предыдущий месяц: '+money(r.previousMonth)+
+   ' · рост к прогнозному спросу: +15%.</p>'+
+   '<p class="trmot-note">Проверено групп: '+r.included+' из '+r.total+'. '+esc(r.reliable)+'.</p>'+
+   '<details class="trmot-details"><summary>Показать формулу, группы и ограничения</summary><div>'+
+   'Сезонно скорректированный прогноз = (60% × продажи аналогичного месяца прошлого года + 40% × предыдущий месяц × сезонный коэффициент) × 1,15. Коэффициент — из истории CRM, ограничен интервалом 0,20–2,50. Чехов в план не прибавляется.'+
+   r.groups.map(g=>'<p>'+esc(g.group)+': '+(g.proposed==null?'не хватает данных':money(g.proposed))+
+    ' · коэффициент '+(g.season_ratio==null?'—':Number(g.season_ratio).toFixed(2))+
+    ' · 21vek свободно '+Number(g.partner_free||0).toLocaleString('ru-RU')+' шт.'+
+    ' · Витебск '+Number(g.vitebsk_qty||0).toLocaleString('ru-RU')+' шт.'+
+    ' · Чехов справочно '+Number(g.chekhov_qty_reference||0).toLocaleString('ru-RU')+' шт.'+
+    ' · '+esc(g.action||'')+'</p>').join('')+'</div></details>':
+   '<p class="trmot-note">Для расчёта не хватает подтверждённой истории или сезонного спроса. Никакая сумма автоматически не назначена.</p>')+'</div>';
+ }).join('')+'</div>'+
+ '<div class="trmot-warn">Это предложение, а не утверждённый план. Даты: 21vek '+esc(source.partner_date||'—')+
+ ', Витебск '+esc(source.vitebsk_date||'—')+', Чехов '+esc(source.chekhov_date||'—')+
+ '. '+esc(source.transit_warning||'Товар в пути не подтверждён отдельно')+
+ '. Неполные группы и отсутствие цены отмечены отдельно. Подстановка не создаёт задач; сохранение только после согласия руководителя.</div>';
 }
 function editor(month){
  if(!isBoss())return '<div class="trmot-panel"><h4>Утверждённый план продаж</h4><p class="trmot-note">Менеджеру доступен просмотр своего плана. Ввод и утверждение выполняет руководитель.</p></div>';
@@ -159,7 +165,7 @@ function editor(month){
    '<input id="trmot-input-'+m.email.split('@')[0]+'" data-trmot-input="'+m.email+'" type="text" inputmode="decimal" autocomplete="off" placeholder="Введите сумму, BYN" value="'+esc(value)+'" '+(locked||!allow||saving?'disabled':'')+'/></div>';
  }).join('');
  return '<section class="trmot-editor"><h4>🤖 ИИ · Рассчитать план продаж</h4>'+
- '<p class="trmot-note">ИИ предлагает суммы по истории, сезонности и темпу продаж. Ты проверяешь, при необходимости меняешь и только потом утверждаешь.</p>'+
+ '<p class="trmot-note">ИИ предлагает суммы по прошлому году, прошлому месяцу, сезонности и остаткам с целевым ростом +15%. Ты проверяешь, при необходимости меняешь и только потом утверждаешь.</p>'+
  '<div class="trmot-options"><div><label for="trmot-plan-month">Месяц плана (не месяц отчёта)</label>'+
  '<input type="month" id="trmot-plan-month" data-trmot-month value="'+esc(month)+'" min="2026-08" max="'+esc(shift(currentMonth(),2))+'"/></div>'+
  '<div class="trmot-note">'+esc(snapshotStatus(month))+'</div></div>'+
@@ -264,12 +270,18 @@ async function generate(){
  if(!isBoss()||!active()||saving||loading||planMonth<currentMonth()||planMonth>shift(currentMonth(),2))return false;
  const month=planMonth,token=++nonce;loading=true;recommendations.set(month,{loading:true});error='';status='';refresh();
  try{
-  const data=await fetchSnapshot(month,true);
+  await fetchSnapshot(month,true);
+  const client=dbx();if(!client?.rpc)throw Error('Нет соединения с CRM');
+  const res=await client.rpc('triovist_ai_demand_preview_v20261105',{p_month:month+'-01'});
+  if(res?.error)throw res.error;
+  const preview=res?.data;
+  if(!preview||preview.version!=='uni-demand-20261105-v1'||ym(preview.month)!==month)throw Error('Сервер не подтвердил источник и период предложения Uni AI');
   if(token!==nonce||month!==planMonth)return false;
-  const rec=Object.fromEntries(MANAGERS.map(x=>[x.email,forecast(data,month,x.email)]));
+  const rec=Object.fromEntries(MANAGERS.map(x=>[x.email,forecast(preview,month,x.email)]));
   const count=Object.values(rec).filter(Boolean).length;
-  if(!count)throw Error('Недостаточно подтверждённой истории продаж для обоих менеджеров. Укажите планы вручную или проверьте загрузки 1С.');
-  recommendations.set(month,{data:rec,calculatedAt:Date.now()});status='ИИ подготовил '+count+' рекомендации. Ничего не сохранено.';
+  if(!count)throw Error('Недостаточно подтверждённой истории и сезонности; не создаём план из непроверенных данных.');
+  recommendations.set(month,{data:rec,sources:preview.sources,calculatedAt:Date.now()});
+  status='Uni AI подготовил '+count+' рекомендации по продажам, сезонности и остаткам. Ничего не сохранено.';
   return true;
  }catch(e){if(token===nonce&&month===planMonth){recommendations.set(month,{error:e?.message||String(e)})}return false}
  finally{loading=false;if(token===nonce)refresh()}
@@ -323,7 +335,7 @@ async function save(){
 }
 w.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1=Object.freeze({
  version:VERSION,paint:render,forecast,parseAmount,sourcePlan:snapshotAmount,readOnlyPayroll:true,
- existingPlanRpc:true,manualApproval:true,noAutoSave:true,noNewDatabaseObjects:true,
+ existingPlanRpc:true,manualApproval:true,noAutoSave:true,approvedOnly:true,sourceBasedDemand:true,noNewDatabaseObjects:false,
  getState:()=>({reportMonth,planMonth,saving,error,status})
 });
 })(window);

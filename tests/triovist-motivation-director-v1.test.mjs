@@ -48,6 +48,18 @@ function mock(role='boss',options={}){
     if(failSnapshot)return {error:{message:'503 недоступно'}};
     return {data:JSON.parse(JSON.stringify(snapshot(args.p_end_month))),error:null};
    }
+   if(name==='triovist_ai_demand_preview_v20261105'){
+    return {data:{version:'uni-demand-20261105-v1',month:args.p_month.slice(0,7),sources:{
+      history_complete:true,partner_date:'2026-11-04',vitebsk_date:'2026-11-04',chekhov_date:'2026-11-04',
+      transit_warning:'Transit not verified'
+    },groups:[
+     {group:'Инструмент',manager_email:M[0],last_year:235732.57,previous_month:562611.56,season_ratio:0.6,proposed:309334.52,partner_free:200,vitebsk_qty:50,chekhov_qty_reference:100,readiness:'review',action:'Проверить листинг'},
+     {group:'Садовая техника',manager_email:M[1],last_year:134711.03,previous_month:235863.98,season_ratio:0.67,proposed:153414.1,partner_free:300,vitebsk_qty:80,chekhov_qty_reference:60,readiness:'review',action:'Проверить листинг'}
+    ],managers:[
+     {email:M[0],name:'Александренко',suggested:309334.52,last_year:235732.57,previous_month:562611.56,included_groups:9,total_groups:10,requires_review:true},
+     {email:M[1],name:'Кришталь',suggested:153414.1,last_year:134711.03,previous_month:235863.98,included_groups:4,total_groups:5,requires_review:true}
+    ]},error:null};
+   }
    if(name==='triovist_set_plan'){
     planSaves.push(args);
     if(options.failManager&&args.p_manager_email===options.failManager)return {error:{message:'write failed'}};
@@ -112,28 +124,27 @@ test('manager sees only self, no AI plan generator, no save, and no other manage
  assert.doesNotMatch(h,/data-trmot-calc|data-trmot-save|data-trmot-input/);
  assert.equal(x.calls.filter(r=>r.name==='triovist_set_plan').length,0);
 });
-test('legacy formula recommends max(last-year × 1.30, current-month pace), rounded to 1000, with source labels',()=>{
+test('new evidence formula uses only audited seasonal and stock-backed monthly preview, not +30% legacy',()=>{
  const x=mock();
- const base={end_month:month,items:[
-   {manager_email:M[0],current_revenue:10000,previous_revenue:50000},
-   {manager_email:M[1],current_revenue:8000,previous_revenue:40000}
- ],available_months:['2026-11','2025-11'],last_import:{month:'2026-11'}};
+ const base={version:'uni-demand-20261105-v1',sources:{history_complete:true},managers:[
+  {email:M[0],suggested:309334.52,last_year:235732.57,previous_month:562611.56,included_groups:9,total_groups:10},
+  {email:M[1],suggested:153414.1,last_year:134711.03,previous_month:235863.98,included_groups:4,total_groups:5}
+ ],groups:[]};
  const a=x.api.forecast(base,month,M[0]),k=x.api.forecast(base,month,M[1]);
- assert.equal(a.amount,65000);assert.equal(k.amount,52000);
- assert.equal(a.floor,65000);assert.equal(a.pace,60000);
- assert.equal(k.pace,48000);
- assert.ok(a.monthsUsed.includes('2025-11'));
- assert.equal(x.api.forecast({...base,available_months:[],items:[]},month,M[0]),null);
+ assert.equal(a.amount,309334.52);assert.equal(k.amount,153414.1);
+ assert.equal(a.prior,235732.57);assert.equal(a.previousMonth,562611.56);
+ assert.equal(k.growth,0.15);
+ assert.equal(x.api.forecast({...base,sources:{history_complete:false}},month,M[0]),null);
 });
 test('AI button produces drafts only after explicit second click; without user approval nothing is written',async()=>{
  const x=mock();x.paint();await tick();
  x.fire('click','[data-trmot-calc]');await tick();
  assert.equal(x.calls.filter(c=>c.name==='triovist_set_plan').length,0);
- assert.match(x.body.innerHTML,/65[ \u00a0\u202f]?000,00 BYN/);
- assert.match(x.body.innerHTML,/52[ \u00a0\u202f]?000,00 BYN/);
+ assert.match(x.body.innerHTML,/309[ \u00a0\u202f]?334,52 BYN/);
+ assert.match(x.body.innerHTML,/153[ \u00a0\u202f]?414,10 BYN/);
  x.fire('click','[data-trmot-use]');await tick();
- assert.match(x.body.innerHTML,/value="65000\.00"/);
- assert.match(x.body.innerHTML,/value="52000\.00"/);
+ assert.match(x.body.innerHTML,/value="309334\.52"/);
+ assert.match(x.body.innerHTML,/value="153414\.10"/);
  assert.equal(x.planSaves.length,0);
 });
 test('save requires confirm, uses exact target period and original protected RPC; after confirmation saved values refresh',async()=>{
@@ -147,7 +158,7 @@ test('save requires confirm, uses exact target period and original protected RPC
  assert.equal(x.planSaves.length,2);
  assert.deepEqual(x.planSaves.map(z=>z.p_manager_email),M);
  assert.deepEqual(x.planSaves.map(z=>z.p_period_month),['2026-11','2026-11']);
- assert.deepEqual(x.planSaves.map(z=>z.p_plan_amount),[65000,52000]);
+ assert.deepEqual(x.planSaves.map(z=>z.p_plan_amount),[309334.52,153414.1]);
  assert.ok(x.calls.some(z=>z.name==='refresh'));
 });
 test('save detects concurrent plan overwrite and never writes stale recommendations',async()=>{
@@ -188,6 +199,6 @@ test('manager isolation, no backdating, clear percentage points, correct source 
  assert.match(ui,/planMonth<currentMonth\(\)/);
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
  assert.match(loader,/20261105-motivation-director-1/);
- assert.match(index,/175-triovist-motivation-director-v1\.js\?v=20261105-motivation-director-1/);
+ assert.match(index,/175-triovist-motivation-director-v1\.js\?v=20261105-uni-demand-v2/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
 });
