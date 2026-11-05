@@ -96,8 +96,8 @@ function installNativeAudioGate(){
      androidAudioReady=true;
      window.__resantaAI360AndroidVoiceArmed=true;
      for(const control of [mic,wake])if(control){control.disabled=false;control.title='';}
-     start.textContent='✓ Голосовые модули подключены';
-     note.textContent='Голосовые модули готовы. Нажми «🔊 Проверить звук Леры» и подтверди озвучку Яндекса, затем задавай вопросы голосом.';
+     start.textContent='Модули загружены · голос не проверен';
+     note.textContent='Микрофон и динамики пока НЕ проверены. Сначала нажми «🔊 Проверить звук Леры»; запись проверь отдельно кнопкой «🎤 Спросить». Подтверждение Яндекса отдельно.';
    }catch(e){
      console.warn('AIR3 optional audio init:',e);
      start.textContent='🎤 Повторить подключение голоса';
