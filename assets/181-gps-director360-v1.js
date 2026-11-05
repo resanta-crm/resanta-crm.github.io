@@ -191,7 +191,7 @@ function render(){
  '<div class="g-card attention"><small>⚠ Зона внимания</small><strong>'+esc(u?.manager||'Нет данных')+'</strong>'+
  '<small>Спорных случаев: '+num(u?.review)+'</small>'+
  '<small>Неопознанных стоянок: '+num(u?.unidentified)+'</small></div></div>';
- if(stale)html+='<div class="g-warn">⚠ '+num(stale)+' рабочих дней имеют устаревшую GPS-сводку остановок. Посещения считаются по независимым трекам, остановки — предварительно. Это не нарушение менеджера.</div>';
+ if(stale)html+='<div class="g-warn">⚠ '+num(stale)+' рабочих дней имеют устаревший старый GPS-агрегат. Новый обзор пересчитывает GPS и стоянки непосредственно по исходным точкам; цифры старого экрана могут отличаться. Это не нарушение менеджера.</div>';
  html+='<section class="g-box"><div class="g-head"><div><h3>Динамика по менеджерам · 6 недель</h3>'+
  '<div class="g-muted">Шесть последовательных недель; отсутствие GPS не означает отсутствие визита.</div></div>'+
  '<div class="g-tabs">'+[['reports','Посещения'],['gps_confirmed','GPS'],['issues','Отклонения']].map(a=>
@@ -291,8 +291,8 @@ async function saveStop(id){
    p_workday_id:item.workday_id,p_stop_seq:item.seq,p_action:action,p_comment:comment,p_due_date:due
   });
   if(r.error)throw r.error;if(!r.data?.ok)throw Error('Решение не подтверждено сервером');
-  editingStop='';lastKey='';notice='✓ Решение руководителя сохранено. GPS-треки не изменялись.';
-  busy=false;await load(true);
+  editingStop='';lastKey='';busy=false;await load(true);
+  notice='✓ Решение руководителя сохранено. GPS-треки не изменялись.';
  }catch(e){notice='Решение не сохранено: '+String(e?.message||e)}
  finally{busy=false;render()}
 }
