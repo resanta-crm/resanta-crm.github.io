@@ -28,10 +28,32 @@ const nativeTextScripts=[
  './assets/143-resanta-ai360-unified-dialog-v1.js?v=8'
 ];
 const nativeAudioScripts=[
- './assets/136-resanta-voice-quality-v3.js?v=17',
+ './assets/136-resanta-voice-quality-v3.js?v=18',
  './assets/135-resanta-voice-capture-fix-v2.js?v=17'
 ];
 let androidAudioReady=false,androidAudioLoading=false;
+// Create and resume the output context synchronously within the explicit
+// Android button click, BEFORE any script fetch or network/STT/TTS request.
+// Desktop users and other Android accounts never create this context.
+function primeAndroidOutput(){
+ if(!nativeAndroid||!owner())return false;
+ try{
+   const Constructor=window.AudioContext||window.webkitAudioContext;
+   if(!Constructor)return false;
+   let context=window.__resantaAI360AndroidOutputContextV1;
+   if(!context||context.state==='closed'){
+     context=new Constructor();
+     window.__resantaAI360AndroidOutputContextV1=context;
+   }
+   const attempt=context.resume();
+   if(attempt&&typeof attempt.catch==='function')
+     void attempt.catch(e=>console.warn('AIR3 audio output unlock:',String(e?.name||'error').slice(0,60)));
+   return true;
+ }catch(e){
+   console.warn('AIR3 Web Audio unavailable:',String(e?.name||'error').slice(0,60));
+   return false;
+ }
+}
 function installNativeAudioGate(){
  if(!nativeAndroid||!owner())return;
  const panel=document.querySelector('.rva-window');
@@ -55,6 +77,8 @@ function installNativeAudioGate(){
  actions.before(box);
  start.addEventListener('click',async()=>{
    if(androidAudioReady||androidAudioLoading||!owner())return;
+   // User gesture unlock: do this synchronously, before awaiting any scripts.
+   primeAndroidOutput();
    // Detect missing WebView media support without touching the mic itself.
    if(typeof navigator.mediaDevices?.getUserMedia!=='function'||typeof window.MediaRecorder!=='function'){
      note.textContent='Встроенный WebView не поддерживает запись. CRM и текстовая Лера продолжают работать.';
@@ -73,7 +97,7 @@ function installNativeAudioGate(){
      window.__resantaAI360AndroidVoiceArmed=true;
      for(const control of [mic,wake])if(control){control.disabled=false;control.title='';}
      start.textContent='✓ Голосовые модули подключены';
-     note.textContent='Теперь нажми «Спросить» или «Привет, Ресанта». Разрешение микрофона будет запрошено при первом использовании.';
+     note.textContent='Голосовые модули готовы. Нажми «🔊 Проверить звук Леры» и подтверди озвучку Яндекса, затем задавай вопросы голосом.';
    }catch(e){
      console.warn('AIR3 optional audio init:',e);
      start.textContent='🎤 Повторить подключение голоса';

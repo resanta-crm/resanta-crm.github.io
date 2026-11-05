@@ -12,6 +12,56 @@ window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,budgetLabel,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
 let checkBtn=null,checkFeedback=null,checkBusy=false;
 let current='yandex:lera',epoch=0,prevVisible=true,paused=false;
+let androidSource=null,androidOutputMode='';
+const nativeAndroidDirector=()=>window.__resantaAI360AndroidDirectorOptIn===true &&
+ window.Capacitor?.isNativePlatform?.()===true &&
+ window.Capacitor?.getPlatform?.()==='android';
+function androidContext(){return nativeAndroidDirector()?window.__resantaAI360AndroidOutputContextV1:null;}
+// This is called from the already explicit sound-test click. No autoplay on login.
+function resumeAndroidOutputFromGesture(){
+ if(!nativeAndroidDirector())return;
+ const context=androidContext();
+ if(!context)return;
+ try{
+   const attempt=context.resume();
+   if(attempt&&typeof attempt.catch==='function')
+     void attempt.catch(e=>console.warn('AIR3 output unlock:',String(e?.name||'error').slice(0,60)));
+ }catch(e){console.warn('AIR3 output resume unavailable:',String(e?.name||'error').slice(0,60));}
+}
+async function playAndroidWav(blob,run){
+ const context=androidContext();
+ if(!context||context.state!=='running')throw new Error('android_audio_context_suspended');
+ let decoded;
+ try{decoded=await context.decodeAudioData(await blob.arrayBuffer());}
+ catch(e){throw new Error('android_wav_decode_failed');}
+ if(run!==epoch)return;
+ if(!(decoded?.duration>0))throw new Error('android_audio_empty_duration');
+ await new Promise((resolve,reject)=>{
+   let settled=false,timeout;
+   const source=context.createBufferSource();
+   androidSource=source;
+   source.buffer=decoded;
+   source.connect(context.destination);
+   const finish=(error)=>{
+     if(settled)return;
+     settled=true;clearTimeout(timeout);
+     if(androidSource===source)androidSource=null;
+     if(audioDone===done)audioDone=null;
+     try{source.disconnect();}catch{}
+     if(error)reject(error);else resolve();
+   };
+   const done=()=>finish();
+   audioDone=done;
+   source.onended=done;
+   timeout=setTimeout(()=>finish(new Error('android_audio_timeout')),Math.min(90000,Math.max(7000,(decoded.duration+7)*1000)));
+   try{
+     source.start(0);
+     androidOutputMode='webaudio';
+     setStatus('🔊 Лера · Web Audio запущен на очках ('+decoded.duration.toFixed(1)+' сек.)');
+   }catch(e){finish(new Error('android_audio_start_failed'));}
+ });
+}
+
 const VOICE_KEY='resanta-ai360-yandex-voice-v4';
 const CONSENT_KEY='resanta-ai360-yandex-consent-monthly-v5';
 try {
@@ -144,6 +194,7 @@ function stopSpeech(){
  epoch++;
  updatePlaybackControls();
  window.__resantaVoiceOutputBusy=false;
+ if(androidSource){try{androidSource.stop();}catch{}try{androidSource.disconnect();}catch{}androidSource=null;}
  if(output){try{output.pause();output.currentTime=0;}catch{}output=null;}
  if(audioDone){const resolve=audioDone;audioDone=null;resolve();}
  if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
@@ -162,6 +213,14 @@ window.crmResantaVoiceTogglePauseV3=()=>{
  paused=!paused;
  if(output){
   try{if(paused)output.pause();else Promise.resolve(output.play()).catch(e=>setStatus('Не удалось продолжить воспроизведение: '+String(e?.message||e).slice(0,100)));}catch(e){console.warn('Voice pause/resume',e);}
+ }
+ if(androidSource&&androidContext()){
+   const context=androidContext();
+   try{
+     const task=paused?context.suspend():context.resume();
+     if(task&&typeof task.catch==='function')
+       void task.catch(e=>setStatus('Не удалось переключить паузу звука: '+String(e?.name||'error').slice(0,55)));
+   }catch(e){console.warn('AIR3 pause unavailable:',String(e?.name||'error').slice(0,50));}
  }
  updatePlaybackControls();
  setStatus(paused?'⏸ Озвучка на паузе.':'🔊 Озвучка продолжается.');
@@ -217,18 +276,35 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  const wave=String.fromCharCode(...header.slice(8,12));
  if(isYandex && (riff!=='RIFF'||wave!=='WAVE'))throw new Error('yandex_invalid_wav');
  const blob=isYandex?new Blob([rawBlob],{type:'audio/wav'}):rawBlob;
+ if(nativeAndroidDirector()){
+   const context=androidContext();
+   console.info('AIR3 Yandex audio validated',{bytes:blob.size,format:isYandex?'WAV':'audio',contextState:context?.state||'unavailable'});
+   if(context){
+     await playAndroidWav(blob,run);
+     return;
+   }
+   // Only if Web Audio API is truly unavailable, retain HTML audio fallback.
+   androidOutputMode='html-audio-fallback';
+   setStatus('🔊 Web Audio недоступен, проверяю стандартный аудиоплеер очков…');
+ }
  // Release the previous completed part, preserving the newest playback.
  if(output){try{output.pause();}catch(_){}output=null;}
  if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
  outputUrl=URL.createObjectURL(blob);
  output=new Audio(outputUrl);output.preload='auto';
+ if(nativeAndroidDirector()){output.muted=false;output.volume=1;}
  await new Promise((resolve,reject)=>{
-  let settled=false;
-  const done=()=>{if(settled)return;settled=true;if(audioDone===done)audioDone=null;resolve();};
+  let settled=false,timer=0;
+  const done=()=>{if(settled)return;settled=true;clearTimeout(timer);if(audioDone===done)audioDone=null;resolve();};
+  const fail=(code)=>{if(settled)return;settled=true;clearTimeout(timer);if(audioDone===done)audioDone=null;reject(new Error(code));};
   audioDone=done;
   output.addEventListener('ended',done,{once:true});
-  output.addEventListener('error',()=>{if(!settled){settled=true;audioDone=null;reject(new Error('audio_device_error'));}},{once:true});
-  Promise.resolve(output.play()).catch(()=>reject(new Error('autoplay_denied')));
+  output.addEventListener('error',()=>fail('audio_device_error'),{once:true});
+  if(nativeAndroidDirector()){
+    timer=setTimeout(()=>fail('android_html_audio_stalled'),30000);
+    output.addEventListener('playing',()=>console.info('AIR3 HTML fallback started'),{once:true});
+  }
+  Promise.resolve(output.play()).catch(()=>fail('autoplay_denied'));
  });
 }
 window.crmResantaVoiceSpeakV3=async function(message,options={}){
@@ -267,6 +343,12 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
          explanation='Сервер временно не смог проверить месячный бюджет озвучки. Расход не подтверждён.';
        }else if(why.includes('tts_quota_check_unavailable')||why.includes('quota_unavailable')){
          explanation='Сервер пока не смог проверить лимит озвучки. Можно повторить попытку.';
+       }else if(why.includes('android_audio_context_suspended')){
+         explanation='Android Web Audio не активирован. Нажми «Проверить звук Леры» и повтори тест.';
+       }else if(why.includes('android_wav_decode_failed')||why.includes('android_audio_start_failed')){
+         explanation='WebView очков не смог декодировать или запустить WAV-файл. Попробуй снова; CRM продолжает работать.';
+       }else if(why.includes('android_audio_timeout')||why.includes('android_html_audio_stalled')){
+         explanation='Воспроизведение на очках не завершилось. Проверка звука остановлена, CRM продолжает работать.';
        }else if(why.includes('autoplay_denied')){
          explanation='Браузер заблокировал воспроизведение звука. Разреши звук для сайта и повтори проверку.';
        }else if(why.includes('audio_device_error')){
@@ -333,6 +415,7 @@ function mount(){
  }
  async function testYandexAudio(){
    if(checkBusy||!allowed())return;
+   resumeAndroidOutputFromGesture();
    if(!approveYandex()){
      if(checkFeedback)checkFeedback.textContent='Озвучка не разрешена. Никаких запросов Яндексу не отправлено.';
      setStatus('Озвучка не разрешена. Для проверки нажми «Проверить звук Леры» и согласись с условиями.');
@@ -343,13 +426,13 @@ function mount(){
    if(checkBtn)checkBtn.disabled=true;
    if(testBtn)testBtn.disabled=true;
    if(checkFeedback)checkFeedback.textContent='Проверяю Яндекс и воспроизведение звука…';
-   setStatus('🔊 Проверяю озвучку Яндекс на этом Mac…');
+   setStatus(nativeAndroidDirector()?'🔊 Проверяю озвучку через динамики очков…':'🔊 Проверяю озвучку Яндекс на этом Mac…');
    try{
      const outcome=await window.crmResantaVoiceSpeakV3(
        'Привет! Я Лера. Если ты меня слышишь, звук работает.');
      if(checkFeedback){
        checkFeedback.textContent=outcome?.ok?
-         '✅ Яндекс озвучил тест. Если звук не слышен, проверь громкость и выход Mac.':
+         (nativeAndroidDirector()?'✅ Воспроизведение завершилось через '+(androidOutputMode==='webaudio'?'Web Audio':'HTML Audio')+'. Если нет звука, нужен журнал аудиовывода очков.':'✅ Яндекс озвучил тест. Если звук не слышен, проверь громкость и выход Mac.'):
          '⚠️ Тест не воспроизведён: '+String(outcome?.reason||'неизвестная причина').slice(0,100);
      }
    }catch(e){
@@ -392,7 +475,7 @@ function mount(){
  optionalPreview.after(budgetLabel);
  void refreshMonthlyBudget();
  fillVoices();
- if(!approvedYandex)setStatus('Основной голос — Лера. Разрешение озвучки появится при первом включении «Привет, Ресанта». Проверка голоса необязательна.');
+ if(!approvedYandex)setStatus(nativeAndroidDirector()?'Чтобы Лера говорила на очках, нажми «🔊 Проверить звук Леры» и подтверди озвучку Яндекса.':'Основной голос — Лера. Разрешение озвучки появится при первом включении «Привет, Ресанта». Проверка голоса необязательна.');
  select.addEventListener('change',()=>{
    const chosen=select.value;
    if(chosen!=='yandex:lera'&&chosen!=='yandex:dasha'){select.value=current;return;}

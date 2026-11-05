@@ -1,0 +1,27 @@
+name: AIR3 Yandex speaker output WebView safety
+on:
+  pull_request:
+    paths:
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'tests/air3-yandex-output-safety-20261105.test.mjs'
+      - '.github/workflows/air3-yandex-output-safety.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-output:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify syntax and isolated Android audio behavior
+        run: |
+          set -euo pipefail
+          node --check assets/136-resanta-voice-quality-v3.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+          node --test tests/air3-yandex-output-safety-20261105.test.mjs
+          node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
