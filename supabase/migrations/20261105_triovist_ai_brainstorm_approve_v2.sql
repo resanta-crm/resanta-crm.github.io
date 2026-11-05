@@ -232,6 +232,14 @@ BEGIN
   RAISE EXCEPTION 'Это предложение уже было утверждено в данном месяце'
    USING ERRCODE='23505';
  END IF;
+ IF (
+     (v_candidate->>'suggested_target') IS NULL
+     OR (v_candidate->>'suggested_target')::numeric<=0
+     OR p_target_revenue>(v_candidate->>'suggested_target')::numeric*1.5
+   ) AND length(v_note)<15 THEN
+  RAISE EXCEPTION 'Ручная или повышенная денежная цель требует объяснения минимум из 15 символов'
+   USING ERRCODE='22023';
+ END IF;
  IF v_title='' THEN v_title:=to_char(v_month,'MM.YYYY')||' · '||v_subgroup||' · восстановление объёма и листинга';END IF;
  v_actions:=coalesce((
   SELECT jsonb_agg(jsonb_build_object('sku',x->>'sku',
