@@ -9,14 +9,14 @@ RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path TO 'public','auth','pg_catalog'
 AS $func$
 DECLARE
- a record;
+ v_actor record;
  v_month date:=date_trunc('month',coalesce(p_month,current_date))::date;
  v_manager text:=nullif(lower(trim(coalesce(p_manager_email,''))),'');
  v_result jsonb;
 BEGIN
- SELECT * INTO a FROM public.triovist_content_actor();
- IF auth.uid() IS NULL OR a.actor_email IS DISTINCT FROM 'payushin_ar@resanta.ru'
-   OR a.actor_role IS DISTINCT FROM 'boss' THEN
+ SELECT * INTO v_actor FROM public.triovist_content_actor();
+ IF auth.uid() IS NULL OR v_actor.actor_email IS DISTINCT FROM 'payushin_ar@resanta.ru'
+   OR v_actor.actor_role IS DISTINCT FROM 'boss' THEN
   RAISE EXCEPTION 'Мозговой штурм ИИ доступен только директору филиальной сети'
    USING ERRCODE='42501';
  END IF;
