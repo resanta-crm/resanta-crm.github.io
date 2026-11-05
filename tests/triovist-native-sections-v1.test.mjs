@@ -73,8 +73,8 @@ test('native group module owns the complete dashboard; generic overlay never dup
  assert.match(groups,/data-trgd-details/);
  assert.doesNotMatch(groups,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh\?\.\('groups'\)/);
 });
-test('other four briefings mount ONLY inside their active native containers',()=>{
- for(const tab of ['motivation','cards','parser','competitors']){
+test('other three briefings mount ONLY inside their active native containers',()=>{
+ for(const tab of ['cards','parser','competitors']){
   const f=fixture(tab);
   assert.equal(f.api.mount(tab,f.ctx),true,tab);
   assert.ok(f.roots[tab].box?.innerHTML.includes('Краткий брифинг'),tab);
@@ -101,9 +101,9 @@ test('cross-section calls never mount: selected tab must match exact requested k
  assert.equal(f.creations.length,0);
 });
 test('stale identity cannot refresh native surface after profile switch',()=>{
- const f=fixture('motivation');assert.equal(f.api.mount('motivation',f.ctx),true);
+ const f=fixture('cards');assert.equal(f.api.mount('cards',f.ctx),true);
  f.window.currentProfile.email='krishtal_na@resanta.ru';
- assert.equal(f.api.refresh('motivation'),false);
+ assert.equal(f.api.refresh('cards'),false);
 });
 test('router contains only active native-section mount after successful navigation',()=>{
  assert.match(router,/if\(page\(\)\?\.classList\.contains\('active'\)\)window\.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.mount\?\.\(k,ctx\)/);
@@ -115,7 +115,7 @@ test('router contains only active native-section mount after successful navigati
 test('UI does not expose developer jargon and existing parser/business handlers are preserved',()=>{
  assert.doesNotMatch(script,/\bUI\/UX\b|Uni X Director/);
  for(const x of ['anp','si','budget','price'])assert.match(router,new RegExp("'"+x+"'"));
- assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-tasks-director-1/);
+ assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
  assert.match(lazy,/20261105-groups-single-1/);
  assert.match(groups,/readOnlySnapshot/);
  assert.match(motivation,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh/);
@@ -137,9 +137,9 @@ test('entering Triovist after loading another CRM page mounts saved active tab',
  assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
 });
 test('new modules reject a cached account when currentProfile switched',()=>{
- const f=fixture('motivation');
+ const f=fixture('cards');
  f.window.currentProfile.email='krishtal_na@resanta.ru';
- assert.equal(f.api.mount('motivation',f.ctx),false);
+ assert.equal(f.api.mount('cards',f.ctx),false);
  assert.equal(f.creations.length,0);
 });
 
@@ -148,19 +148,25 @@ test('old group overlay remains disabled without affecting other six tabs',()=>{
  assert.equal(f.api.mount('groups',f.ctx),false);
  assert.doesNotMatch(f.roots.groups.box?.innerHTML||'',/Краткий брифинг/);
  for(const k of ['stock','tasks','motivation','cards','parser','competitors'])assert.match(script,new RegExp(k+":\\{name:"));
- assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\)return false/);
+ assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
 });
 
 test('native Stock owns its full dashboard; generic brief never overlays stock table',()=>{
  const f=fixture('stock');
  assert.equal(f.api.mount('stock',f.ctx),false);
  assert.equal(f.roots.stock.box,null);
- assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\)return false/);
+ assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
 });
 
 test('native Tasks screen owns its task KPI and manager cards: no duplicate generic overlay',()=>{
  const f=fixture('tasks');
  assert.equal(f.api.mount('tasks',f.ctx),false);
  assert.equal(f.roots.tasks.box,null);
- assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\)return false/);
+ assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
+});
+
+test('motivation dashboard has one owner and no generic overlay',()=>{
+ const f=fixture('motivation');assert.equal(f.api.mount('motivation',f.ctx),false);
+ assert.equal(f.roots.motivation.box,null);
+ assert.match(script,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
 });
