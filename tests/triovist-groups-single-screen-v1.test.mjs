@@ -139,3 +139,15 @@ test('cache busting makes native group version visible after hard reload',()=>{
  assert.match(index,/100-safe-upgrades-loader-v236272\.js\?v=20261105-groups-single-1/);
  assert.match(native,/if\(k==='groups'\)return false/);
 });
+
+test('director choosing a manager uses the existing scoped RPC and hides other manager cards',async()=>{
+ const x=fixture();await x.api.open(x.host,x.ctx);
+ const email=encodeURIComponent('krishtal_na@resanta.ru');
+ x.click('[data-trgd-select-manager]',{trgdSelectManager:email});
+ for(let i=0;i<12;i++)await Promise.resolve();
+ const calls=x.rpcCalls.filter(v=>v.name==='triovist_group_dynamics_v1');
+ assert.ok(calls.some(c=>c.args.p_manager_email==='krishtal_na@resanta.ru'));
+ const summary=x.get('[data-trgd-managers]').innerHTML;
+ assert.match(summary,/Кришталь/);
+ assert.doesNotMatch(summary,/Александренко/);
+});
