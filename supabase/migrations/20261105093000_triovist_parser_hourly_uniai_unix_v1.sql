@@ -102,7 +102,7 @@ begin
           m.current_observed_at as published_top_at
    from latest l
    left join lateral (
-     select p.position,p.observed_at from public.triovist_own_hourly_observations_v1 p
+     select p.position,p.observed_at,p.observed_price,p.observed_stock from public.triovist_own_hourly_observations_v1 p
      where p.manager_email=l.manager_email and p.card_key=l.card_key
        and p.keyword=l.keyword and p.observed_at<l.observed_at
      order by p.observed_at desc limit 1
@@ -137,6 +137,7 @@ begin
           case when l.position is null then '>120' else '№'||l.position::text end position_label,
           l.observed_at,l.search_total,l.observed_price,l.observed_stock,
           prior.position previous_position,prior.observed_at previous_observed_at,
+          prior.observed_price previous_observed_price,prior.observed_stock previous_observed_stock,
           case when prior.observed_at is null then 'new'
                when l.position is null and prior.position is null then 'outside'
                when l.position is null then 'exited'
@@ -149,7 +150,7 @@ begin
           m.category,m.subgroup,m.current_observed_at as published_top_at
    from latest l
    left join lateral (
-     select p.position,p.observed_at from public.triovist_own_hourly_observations_v1 p
+     select p.position,p.observed_at,p.observed_price,p.observed_stock from public.triovist_own_hourly_observations_v1 p
      where p.manager_email=l.manager_email and p.card_key=l.card_key
        and p.keyword=l.keyword and p.observed_at<l.observed_at
      order by p.observed_at desc limit 1
