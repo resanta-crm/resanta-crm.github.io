@@ -73,7 +73,7 @@ BEGIN
     rev.action review_action,rev.comment review_comment,rev.due_date review_due,
     rev.created_at review_at
   FROM days d CROSS JOIN LATERAL
-    jsonb_array_elements(public.gps_classify_workday_stops_v236421(d.id)) s
+    jsonb_array_elements(public.gps_director360_classify_live_stops_v20261105(d.id)) s
   LEFT JOIN LATERAL (
     SELECT action,comment,due_date,created_at
     FROM public.gps_director360_stop_reviews_v1 r
