@@ -54,7 +54,10 @@ function setMode(next){
   document.getElementById('gps-tab-route-v236427')?.classList.toggle('btn-secondary',mode!=='route');
   document.getElementById('gps-tab-director-v236427')?.classList.toggle('btn-primary',mode==='director');
   document.getElementById('gps-tab-director-v236427')?.classList.toggle('btn-secondary',mode!=='director');
-  if(mode==='director')load(false);
+  if(mode==='director'){
+    if(window.RESANTA_GPS_DIRECTOR360_V1?.open)window.RESANTA_GPS_DIRECTOR360_V1.open(false);
+    else load(false); // Safe fallback if the new module is unavailable.
+  }
 }
 function ensureUi(){
   if(!allowed())return null;
@@ -510,5 +513,5 @@ setInterval(()=>{
   if(document.getElementById('page-gps-control')?.classList.contains('active')&&allowed()&&!document.getElementById('gps-director-view-v236427'))install();
 },2000);
 
-window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.446',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false});
+window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.446',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false,loadDetails:()=>load(true),downloadExcel:exportExcel,legacyUiPreserved:true});
 })();
