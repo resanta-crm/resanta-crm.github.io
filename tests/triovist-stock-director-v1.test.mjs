@@ -119,7 +119,7 @@ test('errors are retryable and real stock data cannot leave the manager scope',(
  assert.match(routes,/window\.triovistExportStock=function\(\)/);
 });
 test('legacy stock stays fallback and six other tabs are untouched by overlay removal',()=>{
- assert.match(native,/if\(k==='groups'\|\|k==='stock'\)return false/);
+ assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
  assert.match(index,/174-triovist-stock-director-v1\.js\?v=20261105-stock-director-1/);
  assert.match(index,/03-triovist-routes\.js\?v=20261105-stock-director-1/);
  assert.match(routes,/Triovist stock native director fallback/);
