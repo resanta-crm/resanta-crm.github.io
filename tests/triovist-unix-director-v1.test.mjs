@@ -103,7 +103,7 @@ test('root selects new Home and hides legacy page, while detail paths and Commer
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
  assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix4-fast-ui'));
- assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js?v=20261104-seven-native-406'));
+ assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
 });
@@ -177,4 +177,20 @@ test('new seven-section module mounts only after native tab activation and is no
  assert.ok(index.includes('173-triovist-native-sections-v1.js?v=20261105-motivation-director-1'));
  assert.match(router,/mo\.observe\(p,\{attributes:true,attributeFilter:\['class'\]\}\)/);
  assert.doesNotMatch(router,/mo\.observe\(document\.documentElement/);
+});
+
+
+test('Triovist Work and Commerce navigation is anchored above all page content',()=>{
+ assert.match(router,/h\.insertBefore\(shell,h\.firstChild\)/);
+ assert.doesNotMatch(router,/h\.insertBefore\(shell,p\)/);
+ assert.match(router,/shell\.insertAdjacentElement\('afterend',panel\)/);
+});
+
+test('Navigation fix loads a fresh router asset and preserves all original tabs',()=>{
+ assert.match(index,/34-triovist-root-v23614\.js\?v=20261105-navigation-top-202/);
+ for(const key of ['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','anp','si','budget','price']){
+  assert.ok(router.includes("["+String.fromCharCode(39)+key+String.fromCharCode(39)+","),"Missing navigation key "+key);
+ }
+ assert.match(router,/shell\.onclick=e=>/);
+ assert.match(router,/activate\(b\.dataset\.tr14,true\)/);
 });
