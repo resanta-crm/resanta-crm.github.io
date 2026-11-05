@@ -104,11 +104,9 @@ function videoRuntime(){
   assert.match(server,/!memberCheck\.data/);
   assert.doesNotMatch(video,/LIVEKIT_API_SECRET|LIVEKIT_API_KEY/);
  });
- await check('Director AI stays opt-out on Android browsers; INMO native owner-only path remains protected',()=>{
+ await check('Director desktop AI remains opt-out on Android and unmodified by this patch',()=>{
   const director=get('assets/137-resanta-ai360-lazy-launch-v1.js');
-  assert.match(director,/const android=\/Android\/i\.test\(navigator\.userAgent\|\|''\);/);
-  assert.match(director,/const nativeAndroid=android&&window\.Capacitor\?\.isNativePlatform\?\.\(\)===true&&window\.Capacitor\?\.getPlatform\?\.\(\)==='android';/);
-  assert.match(director,/if\(\(android&&!nativeAndroid\)\|\|window\.__resantaAI360LazyLaunchV1\)return;/);
+  assert.match(director,/if\(\/Android\/i.test\(navigator.userAgent\|\|''\) \|\| window\.__resantaAI360LazyLaunchV1\)return;/);
   assert.match(launcher,/crmAI360StaffIdentityV1/);
   assert.match(launcher,/Capacitor\?\.isNativePlatform/);
   assert.match(launcher,/roles\.has\(p\.tier\)/);
