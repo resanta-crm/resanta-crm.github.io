@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.5 · actual visit order + all off-plan GPS visits */
 (function(){
 'use strict';
-const V='v23.6.5',src=document.currentScript?.src||'';
+const V='v23.6.6',src=document.currentScript?.src||'';
 let child=false;try{child=new URL(src,location.href).searchParams.get('child')==='1'}catch(_){}
 
 function patchRpc2365(){
@@ -69,12 +69,12 @@ if(!child){
   function open(id,silent){
     if(!id||silent===true)return;
     if(window.crmMobileGpsOpenV1?.(id))return;
-    const w=window.open('./assets/gps-viewer-v2360.html?workday='+encodeURIComponent(id)+'&v=23.6.5&_='+Date.now(),'_blank');
+    const w=window.open('./assets/gps-viewer-v2360.html?workday='+encodeURIComponent(id)+'&v=23.6.6&_='+Date.now(),'_blank');
     if(!w)return;
     const inject=()=>{try{
       if(w.closed||w.location.origin!==location.origin)return false;
       const d=w.document;if(d.querySelector('script[data-v2365]'))return true;
-      const s=d.createElement('script');s.src='./26-gps-visit-order-v2364.js?child=1&v=23.6.5&_='+Date.now();s.dataset.v2365='1';d.head.appendChild(s);return true;
+      const s=d.createElement('script');s.src='./26-gps-visit-order-v2364.js?child=1&v=23.6.6&_='+Date.now();s.dataset.v2365='1';d.head.appendChild(s);return true;
     }catch(_){return false}};
     try{w.addEventListener('load',inject,{once:true})}catch(_){}
     let n=0;const t=setInterval(()=>{n++;if(inject()||w.closed||n>40)clearInterval(t)},200);
@@ -100,22 +100,31 @@ const visited=p=>['confirmed','gps_and_report','gps_only'].includes(String(p?.st
 
 function build(a){
   const x=[];
+  // Only independently GPS-confirmed client events receive numbers.
+  // Report-only visits and unidentified stops remain visible, without a numbered visit.
   for(const p of (a.planned_points||[])){
     if(!visited(p))continue;
-    const t=p.visit_created_at||p.stop_start_at||p.stop_end_at||null;
-    x.push({k:key('p',p),t,ms:t?new Date(t).getTime():Infinity,n:p.client_name||'Клиент',c:coord(p.lat,p.lng)||coord(p.report_gps_lat,p.report_gps_lng),p,kind:'p'});
+    const t=p.stop_start_at||p.visit_created_at||p.stop_end_at||null;
+    x.push({k:key('p',p),t,ms:t?new Date(t).getTime():Infinity,n:p.client_name||'Клиент',
+      c:coord(p.lat,p.lng)||coord(p.report_gps_lat,p.report_gps_lng),p,kind:'p',confirmed:true});
   }
   for(const o of (a.offplan_visits||[])){
     const t=o.created_at||null;
-    x.push({k:key('o',o),t,ms:t?new Date(t).getTime():Infinity,n:o.client_name||'Клиент',c:coord(o.lat,o.lng),o,kind:'o'});
+    x.push({k:key('o',o),t,ms:t?new Date(t).getTime():Infinity,n:o.client_name||'Клиент',
+      c:coord(o.lat,o.lng),o,kind:'o',confirmed:false});
   }
   for(const g of (a.offplan_gps_stops||[])){
     const t=g.start_at||null;
     const n=g.ambiguous?'Несколько клиентов рядом':(g.client_name||'GPS вне плана');
-    x.push({k:key('g',g),t,ms:t?new Date(t).getTime():Infinity,n,c:coord(g.lat,g.lng),g,kind:'g'});
+    x.push({k:key('g',g),t,ms:t?new Date(t).getTime():Infinity,n,
+      c:coord(g.lat,g.lng),g,kind:'g',confirmed:false});
   }
   x.sort((a,b)=>a.ms-b.ms||a.n.localeCompare(b.n,'ru'));
-  x.forEach((z,i)=>z.no=i+1);
+  let actualNumber=0;
+  x.forEach((z,i)=>{
+    z.id=i+1; // internal marker reference, not a visit number
+    z.no=z.confirmed?++actualNumber:null;
+  });
   return x;
 }
 const pe=p=>ev.find(x=>x.k===key('p',p));
@@ -152,12 +161,12 @@ function renderGpsOnly(a){
   if(!rows.length){card.classList.add('hide');list.innerHTML='';return;}
   card.classList.remove('hide');
   list.innerHTML=rows.map(g=>{
-    const x=ge(g),no=x?.no||'?',time=(g.start_at?tm(g.start_at):'—')+(g.end_at?'—'+tm(g.end_at):''),mins=Number(g.minutes||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
+    const x=ge(g),no=g.seq||'?',time=(g.start_at?tm(g.start_at):'—')+(g.end_at?'—'+tm(g.end_at):''),mins=Number(g.minutes||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
     if(g.ambiguous){
       const cand=(g.candidates||[]).map(c=>'<div class="v2365cand">• '+esc(c.client_name||'Клиент')+(c.address?' — '+esc(c.address):'')+(c.distance_m!=null?' · '+esc(dist(c.distance_m)):'')+'</div>').join('');
-      return '<div class="v2365gps v2365amb"><div><b>№'+no+' · '+esc(time)+' · '+mins+' мин</b></div><div style="font-weight:800;color:#92400E;margin-top:4px">⚠ Несколько клиентов рядом — требуется уточнение</div>'+cand+'<button class="btn" style="margin-top:7px" onclick="focusVisitV2364('+no+')">Показать на карте</button></div>';
+      return '<div class="v2365gps v2365amb"><div><b>№'+no+' · '+esc(time)+' · '+mins+' мин</b></div><div style="font-weight:800;color:#92400E;margin-top:4px">⚠ Несколько клиентов рядом — требуется уточнение</div>'+cand+'<button class="btn" style="margin-top:7px" onclick="focusVisitV2364('+x?.id+')">Показать на карте</button></div>';
     }
-    return '<div class="v2365gps"><div><b>№'+no+' · '+esc(time)+' · '+mins+' мин</b></div><div style="font-weight:800;margin-top:4px">📍 '+esc(g.client_name||'Клиент')+'</div><div class="muted">'+esc([g.city,g.address].filter(Boolean).join(', '))+(g.distance_m!=null?' · GPS '+esc(dist(g.distance_m)):'')+'</div><div style="font-size:12px;color:#0F766E;font-weight:800;margin-top:4px">Вне утверждённого плана'+(g.route_not_approved?' · маршрут не согласован':' · отчёт менеджера не заполнен')+'</div><button class="btn" style="margin-top:7px" onclick="focusVisitV2364('+no+')">Показать на карте</button></div>';
+    return '<div class="v2365gps"><div><b>№'+no+' · '+esc(time)+' · '+mins+' мин</b></div><div style="font-weight:800;margin-top:4px">📍 '+esc(g.client_name||'Клиент')+'</div><div class="muted">'+esc([g.city,g.address].filter(Boolean).join(', '))+(g.distance_m!=null?' · GPS '+esc(dist(g.distance_m)):'')+'</div><div style="font-size:12px;color:#0F766E;font-weight:800;margin-top:4px">Вне утверждённого плана'+(g.route_not_approved?' · маршрут не согласован':' · отчёт менеджера не заполнен')+'</div><button class="btn" style="margin-top:7px" onclick="focusVisitV2364('+x?.id+')">Показать на карте</button></div>';
   }).join('');
 }
 
@@ -166,10 +175,13 @@ function decorate(a){
   const bar=document.getElementById('v2364bar'),wrap=document.getElementById('v2364wrap');
   if(bar&&wrap){
     wrap.style.display=ev.length?'block':'none';
-    bar.innerHTML=ev.map(x=>{
-      const extra=x.kind==='g'?' · GPS вне плана':'';
-      return '<button class="v2364chip" onclick="focusVisitV2364('+x.no+')"><b>№'+x.no+'</b> '+(x.t?esc(tm(x.t)):'—')+' · '+esc(x.n)+extra+'</button>';
-    }).join('');
+    const proven=ev.filter(x=>x.confirmed);
+    const pending=ev.filter(x=>!x.confirmed);
+    bar.innerHTML='<div style="width:100%;font-size:11px;color:#147b48;font-weight:800">GPS-посещения подтверждены · '+proven.length+'</div>'
+      +proven.map(x=>'<button class="v2364chip" onclick="focusVisitV2364('+x.id+')"><b>№'+x.no+'</b> '+(x.t?esc(tm(x.t)):'—')+' · '+esc(x.n)+'</button>').join('')
+      +(pending.length?'<div style="width:100%;font-size:11px;color:#926b1b;font-weight:800">Другие события · без номера подтверждённого визита</div>':'')
+      +pending.map(x=>'<button class="v2364chip" style="background:#FFFBEB" onclick="focusVisitV2364('+x.id+')">'
+        +(x.kind==='g'?'◌ GPS-стоянка': '◌ Отчёт без доказанного GPS')+' · '+(x.t?esc(tm(x.t)):'—')+' · '+esc(x.n)+'</button>').join('');
   }
   const rows=[...document.querySelectorAll('#visits .visit')],plans=a.planned_points||[];
   rows.forEach((r,i)=>{
@@ -216,17 +228,17 @@ drawMap=async function(a){
       if(warn)preset='islands#yellowCircleIcon';
     }
     const m=new ymaps.Placemark(x.c,{
-      iconContent:String(x.no),
-      hintContent:'№'+x.no+' · '+x.n,
-      balloonContent:'<b>Визит №'+x.no+(x.t?' · '+tm(x.t):'')+'</b><br>'+esc(x.n)+(warn&&x.kind!=='g'?'<br>⚠ GPS требует проверки':'')+balloonExtra
+      iconContent:x.confirmed?String(x.no):'',
+      hintContent:(x.confirmed?'GPS-визит №'+x.no:'Событие без GPS-подтверждения')+' · '+x.n,
+      balloonContent:'<b>'+(x.confirmed?'GPS-визит №'+x.no:'Не подтверждено как отдельное посещение')+(x.t?' · '+tm(x.t):'')+'</b><br>'+esc(x.n)+(warn&&x.kind!=='g'?'<br>⚠ GPS требует проверки':'')+balloonExtra
     },{preset});
-    map.geoObjects.add(m);marks.set(x.no,m);
+    map.geoObjects.add(m);marks.set(x.id,m);
   }
 };
 
 window.focusVisitV2364=function(no){
-  const x=ev.find(z=>z.no===Number(no));if(!x?.c||!map)return;
-  map.setCenter(x.c,16);try{marks.get(x.no)?.balloon.open()}catch(_){}
+  const x=ev.find(z=>z.id===Number(no));if(!x?.c||!map)return;
+  map.setCenter(x.c,16);try{marks.get(x.id)?.balloon.open()}catch(_){}
 };
 
 const baseRender=render;
