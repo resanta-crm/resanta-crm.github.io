@@ -148,8 +148,7 @@ begin
     'rows',v_rows
   );
 end;
-$function$
-
+$function$;
 
 -- Reversible cleanup of the accidental client-card created automatically on 04.11.
 -- Do not delete any historical sales, visits, tasks or original 1C documents.
