@@ -10,6 +10,7 @@ on:
       - 'assets/183-gps-store-verify-v1.js'
       - 'index.html'
       - 'supabase/migrations/20261106_gps360_*.sql'
+      - 'supabase/migrations/20261106142000_gps360_*.sql'
       - 'tests/gps360-complete-one-time-geo-v1.test.mjs'
       - 'tests/gps360-trusted-store-vip-20261106.test.mjs'
       - 'tests/gps-director360-evidence-v1.test.mjs'
@@ -48,7 +49,7 @@ jobs:
           if [ "$GITHUB_HEAD_REF" = "fix/manager-feedback-20261106" ]; then exit 0; fi
           git diff --name-only origin/main...HEAD | tee /tmp/gps360-one-time-change
           ! grep -E '^assets/(02-mobile-gps-base|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|125-gps-integrity-v236429|127-gps-director-case-review-v236440)[.]js$' /tmp/gps360-one-time-change
-          ! (grep '^supabase/migrations/' /tmp/gps360-one-time-change | grep -v -E '^supabase/migrations/20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)[.]sql$')
+          ! (grep '^supabase/migrations/' /tmp/gps360-one-time-change | grep -v -E '^supabase/migrations/(20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)|20261106142000_gps360_exact_physical_store_read_v1)[.]sql$')
           test -f supabase/migrations/20261106_gps360_safe_history_v1.sql
           test -f supabase/migrations/20261106_gps360_store_onsite_v1.sql
           test -f supabase/migrations/20261106_gps360_probable_stops_v1.sql
