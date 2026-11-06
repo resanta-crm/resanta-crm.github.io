@@ -39,7 +39,7 @@ details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;m
     </div>
     <div class="kpis" style="margin-top:14px">
       <div class="kpi"><small>Пробег</small><strong id="km">—</strong></div>
-      <div class="kpi"><small>Клиентов посещено</small><strong id="visTotal">—</strong></div>
+      <div class="kpi"><small>Визиты по отчётам</small><strong id="visTotal">—</strong></div>
       <div class="kpi"><small>План</small><strong id="pf">—</strong></div>
       <div class="kpi"><small>GPS к проверке</small><strong id="warnings">—</strong></div>
     </div>
@@ -65,7 +65,7 @@ details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;m
     </div>
     <div id="map"></div>
     <div class="legend">
-      <span>🟢 клиент посещён</span>
+      <span>🟢 визит зафиксирован (GPS отдельно)</span>
       <span>🟡 отчёт есть, GPS требует проверки</span>
       <span>🔴 плановый клиент пока не посещён</span>
       <span>🔵 внеплановый визит</span>
@@ -74,7 +74,7 @@ details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;m
 
   <div class="card">
     <b>Плановые клиенты</b>
-    <div class="muted" style="margin-top:5px">Главный факт — был менеджер у клиента или нет. Качество GPS показывается отдельно и не стирает записанный визит.</div>
+    <div class="muted" style="margin-top:5px">Отчёт менеджера, GPS-сессия и выверенные координаты — разные подтверждения. Отсутствие GPS не доказывает отсутствие визита.</div><div id="coordWarning" class="msg warnbox hide" style="margin-top:10px"></div>
     <div id="visits" style="margin-top:8px"></div>
   </div>
 
@@ -172,12 +172,15 @@ function visitPresentation(p,a){
     return{cls:'st-ok',title:'✅ Визит записан',note:'Посещение связано с маршрутом'};
   }
   if(state==='report_no_gps')return{cls:'st-warn',title:'⚠ Отчёт есть, GPS не подтвердил',note:p.report_gps_distance?'Расхождение '+dist(p.report_gps_distance):'Нужна проверка руководителя'};
-  if(state==='no_coordinates')return{cls:'st-warn',title:'⚠ Нет координат клиента',note:'GPS не может подтвердить эту ТТ, пока не выверена точка'};
+  if(state==='no_coordinates')return{cls:'st-warn',title:'⚠ Геозона ТТ не выверена',note:'Трек может существовать, но без достоверных координат конкретного магазина GPS-визит не подтверждается. Требуется выверение ТТ в CRM.'};
   return{cls:a?.workday_status==='active'?'st-muted':'st-bad',title:pendingText(a),note:'Отчёта и подтверждения посещения пока нет'};
 }
 function renderVisits(a){
   const plans=Array.isArray(a.planned_points)?a.planned_points:[];
-  if(!plans.length){$('visits').innerHTML='<div class="muted">На этот день плановых ТТ нет.</div>';return;}
+  const missing=plans.filter(p=>String(p.state||'')==='no_coordinates'||!coord(p.lat,p.lng)).length;
+   const warning=$('coordWarning');warning.classList.toggle('hide',!missing);
+   if(missing)warning.textContent='⚠ У '+missing+' из '+plans.length+' плановых ТТ нет выверенной GPS-геозоны или координат для карты. Это проблема справочника адресов, а не доказательство отсутствия менеджера. Выверяй конкретную физическую ТТ, не юридическое лицо.';
+   if(!plans.length){$('visits').innerHTML='<div class="muted">На этот день плановых ТТ нет.</div>';return;}
   $('visits').innerHTML=plans.map(p=>{
     const st=visitPresentation(p,a);
     const where=[p.city,p.address].filter(Boolean).join(', ');
@@ -204,10 +207,10 @@ function renderDiagnostics(a){
   $('diagSummary').textContent='GPS-точек: '+(a.valid_points||0)+' валидных / '+(a.raw_points||0)+' сырых · физических остановок ≥5 минут: '+stops.length+'. Эти цифры диагностические и не являются количеством клиентов.';
   if(!stops.length){$('stopList').innerHTML='<div class="muted">Физических остановок ≥5 минут пока не найдено.</div>';return;}
   $('stopList').innerHTML=stops.map(s=>{
-    const cls=String(s.classification||'technical');
+    const original=String(s.classification||'unidentified');const cls=original==='technical'?'unidentified':original;
     const css=cls==='planned_tt'?'st-ok':cls==='home'?'st-ok':cls==='offplan'?'st-warn':cls==='start_zone'?'st-warn':'muted';
-    const label=s.classification_label||'🔧 Техническая остановка';
-    const detail=s.classification_detail||'';
+    const label=cls==='unidentified'?'❔ Неопознанная GPS-стоянка · требуется разбор':(s.classification_label||'GPS-стоянка');
+    const detail=cls==='unidentified'?'Причина не подтверждена директором. Нельзя автоматически считать технической или нарушением.':(s.classification_detail||'');
     return `<div class="stop"><b>Остановка ${s.seq}</b> · ${tm(s.start_at)}—${tm(s.end_at)} · <b>${Number(s.minutes||0).toFixed(0)} мин</b> · <span class="${css}">${esc(label)}</span><div class="muted">точек: ${s.samples||0} · средняя точность ±${Number(s.avg_accuracy||0).toFixed(0)} м${detail?' · '+esc(detail):''}</div></div>`;
   }).join('');
 }
@@ -243,7 +246,7 @@ async function drawMap(a){
   mapRouteCoords=rows.map(p=>coord(p.lat,p.lng)).filter(Boolean);mapPlanCoords=plans.map(p=>coord(p.lat,p.lng)).filter(Boolean);stopsVisible=true;
   $('toggleStops').textContent='Скрыть остановки';
   $('mapStatus').className='msg info';
-  $('mapStatus').textContent=`Посещено клиентов: ${a.visit_total||0} · по плану ${a.visited_count||0}/${a.planned_count||0}${Number(a.offplan_count)>0?' · вне плана '+a.offplan_count:''}.`;
+  $('mapStatus').textContent=`Отметок о визите: ${a.visit_total||0} · по плану ${a.visited_count||0}/${a.planned_count||0}${Number(a.offplan_count)>0?' · вне плана '+a.offplan_count:''}. GPS-трек и подтверждённое посещение ТТ — разные показатели.`;
   if(map){try{map.destroy()}catch(_){}map=null;}
   const center=mapRouteCoords.length?mapRouteCoords[mapRouteCoords.length-1]:mapPlanCoords.length?mapPlanCoords[0]:[55.19,30.20];
   map=new y.Map('map',{center,zoom:14,controls:['zoomControl','typeSelector','fullscreenControl']},{suppressMapOpenBlock:true});
@@ -272,11 +275,11 @@ async function drawMap(a){
   stopCollection=new y.GeoObjectCollection();
   for(const s of stops){
     const cc=coord(s.lat,s.lng);if(!cc)continue;
-    const cls=String(s.classification||'technical');
+    const original=String(s.classification||'unidentified');const cls=original==='technical'?'unidentified':original;
     if(cls==='planned_tt')continue;
     const m=Number(s.minutes||0).toFixed(0);
     let icon='Ост. '+s.seq+' · '+m+' мин',preset='islands#orangeStretchyIcon',title=s.classification_label||'Остановка '+s.seq;
-    if(cls==='technical'){icon='Тех. '+s.seq+' · '+m+' мин';preset='islands#grayStretchyIcon';title='🔧 Техническая остановка '+s.seq;}
+    if(cls==='unidentified'){icon='Разбор '+s.seq+' · '+m+' мин';preset='islands#orangeStretchyIcon';title='❔ Неопознанная GPS-стоянка · причина не подтверждена';}
     else if(cls==='home'){icon='🏠 Дом · '+m+' мин';preset='islands#brownStretchyIcon';title='🏠 Дом';}
     else if(cls==='start_zone'){icon='Старт · '+m+' мин';preset='islands#yellowStretchyIcon';title='📍 Стартовая стоянка';}
     else if(cls==='offplan'){icon='Вне плана · '+m+' мин';preset='islands#orangeStretchyIcon';title=s.classification_label||'⚠️ Внеплановая остановка';}
