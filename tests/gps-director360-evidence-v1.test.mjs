@@ -148,3 +148,10 @@ test('SQL separates reports and GPS and keeps technical stops director-verified'
  assert.match(REV,/INSERT INTO public\.gps_director360_stop_reviews_v1/);
  assert.doesNotMatch(REV,/DELETE FROM public\.gps_track_points|UPDATE public\.visits|UPDATE public\.route_plans/);
 });
+
+test('stop review requires completed GPS day and does not overwrite legacy stop classifications',()=>{
+ assert.match(REV,/v_workday\.status='active'/);
+ assert.match(REV,/gps_director360_classify_live_stops_v20261105/);
+ assert.doesNotMatch(REV,/UPDATE\s+public\.gps_stop_classifications_v236417|UPDATE\s+public\.gps_workday_aggregates/i);
+ assert.doesNotMatch(SQL,/UPDATE\s+public\.gps_workday_aggregates|DELETE\s+FROM\s+public\.gps_track_points/i);
+});
