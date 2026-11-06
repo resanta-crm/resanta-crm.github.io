@@ -1,0 +1,29 @@
+name: GPS viewer physical TT coordinates and unverified-stop safety
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/gps-viewer-osm-v23616.html'
+      - 'assets/gps-viewer-v2360.html'
+      - 'tests/gps-viewer-geo-stop-evidence-20261106.test.mjs'
+      - '.github/workflows/gps-viewer-geo-stop-20261106.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify both map viewers and new GPS360 independent evidence
+        run: |
+          node --test tests/gps-viewer-geo-stop-evidence-20261106.test.mjs tests/gps-director360-evidence-v1.test.mjs
+      - name: No touch to GPS points, current route plans, parser, 21vek or CRM auth
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD | tee /tmp/gps-map-files
+          ! grep -E '^(assets/02-mobile-gps-base[.]js|assets/03-triovist-routes[.]js|assets/181-gps-director360-v1[.]js|assets/106-triovist-competitors-v236218[.]js|supabase/|tools/|index[.]html$)' /tmp/gps-map-files
