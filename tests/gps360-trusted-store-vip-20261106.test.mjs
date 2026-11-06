@@ -8,6 +8,7 @@ const core=get('assets/01-crm-core.js');
 const imp=get('import_sales.py');
 const map=get('assets/26-gps-visit-order-v2364.js');
 const server=get('supabase/migrations/20261106142000_gps360_exact_physical_store_read_v1.sql');
+const vipSql=get('supabase/migrations/20261106143500_gps360_vip_new_clients_guard_v1.sql');
 const begin=core.indexOf('async function gpsResolveRoutePointForVisit(');
 const end=core.indexOf('// Записать замер и пересчитать эталон.',begin);
 assert.ok(begin>0&&end>begin);
@@ -100,4 +101,14 @@ test('server still requires independent GPS sessions and never uses an unverifie
   assert.match(server,/where rn=1 and point_count>=2 and minutes>=2/);
   assert.match(server,/g\.is_mock,false\)=false/);
   assert.doesNotMatch(server,/\b(DELETE\s+FROM|TRUNCATE|UPDATE\s+public\.gps_track_points|UPDATE\s+public\.visits|UPDATE\s+public\.route_plans)\b/i);
+});
+
+test('VIP cleanup excludes false new client but never edits historical sales',()=>{
+ assert.match(vipSql,/crm_manager_new_clients_detail_v236135/);
+ assert.match(vipSql,/crm_client_key\(ph\.client_name\)<>public\.crm_client_key\('Триовист ООО'\)/);
+ assert.match(vipSql,/c\.auto_created IS TRUE/);
+ assert.match(vipSql,/c\.reviewed IS FALSE/);
+ assert.match(vipSql,/SET manager_name=NULL/);
+ assert.match(vipSql,/is_archived=TRUE/);
+ assert.doesNotMatch(vipSql,/\bDELETE\s+FROM\b|\bUPDATE\s+public\.purchase_history\b/i);
 });
