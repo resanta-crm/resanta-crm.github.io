@@ -37,7 +37,7 @@ function clock(v){if(!v)return'—';try{return new Date(v).toLocaleTimeString('r
 function duration(a,b){const x=new Date(a).getTime(),y=b?new Date(b).getTime():Date.now();if(!Number.isFinite(x)||!Number.isFinite(y))return'';const m=Math.max(0,Math.round((y-x)/60000));return Math.floor(m/60)+' ч '+(m%60)+' мин';}
 function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000?Math.round(n)+' м':(n/1000).toLocaleString('ru-RU',{maximumFractionDigits:1})+' км';}
 function viewerUrl(id){return './assets/gps-viewer-v2360.html?v=23.6.427&workday='+encodeURIComponent(String(id||''));}
-function openViewer(id){if(!id)return;window.open(viewerUrl(id),'_blank','noopener');}
+function openViewer(id,silent){if(!id||silent===true)return;if(window.crmMobileGpsOpenV1?.(id))return;window.open(viewerUrl(id),'_blank','noopener');}
 window.crmOpenGpsViewerV2360=openViewer;
 
 function disableLegacyMap(){
@@ -142,7 +142,7 @@ function installFilters(){
   }
 }
 async function lightweightRender(){installFilters();disableLegacyMap();return load(false);}
-function aggregatedOpen(id){openViewer(id);}
+function aggregatedOpen(id,silent){openViewer(id,silent);}
 function install(){
   window.v19RenderGpsControl=lightweightRender;try{v19RenderGpsControl=lightweightRender;}catch(_){}
   window.v19OpenGpsWorkday=aggregatedOpen;try{v19OpenGpsWorkday=aggregatedOpen;}catch(_){}

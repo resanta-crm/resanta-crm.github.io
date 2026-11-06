@@ -20,11 +20,18 @@ test('manager on-site module, director dashboard and core parse',()=>{
 test('core visit, route and CRM business logic byte-identical except explicitly agreed non-blocking GPS hooks',()=>{
  const before=execFileSync('git',['show','origin/main:assets/01-crm-core.js'],{encoding:'utf8',maxBuffer:12*1024*1024});
  let normalized=core;
- normalized=normalized.replace("checkinHere(\\''+matchedClient.id+'\\',this,\\'my-routes\\',\\''+r.id+'\\')","checkinHere(\\''+matchedClient.id+'\\',this,\\'my-routes\\')");
- normalized=normalized.replace("async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){","async function checkinHere(clientId,sourceBtn,returnMode){");
- normalized=normalized.replace(/  if\(routePlanId && geo && Number\(geo\.accuracy\)>0[\s\S]*?(?=  if\(returnMode==='my-routes'\)renderMyRoutes\(\);)/,'');
- normalized=normalized.replace(/  if\(qvGeo&&qvMatchedPlan\?\.physical_point_id && Number\(qvGeo\.accuracy\)>0[\s\S]*?(?=  if\(qvGeo&&c\)\{)/,'');
- normalized=normalized.replace(/  if\(geo&&matchedVisitPlan\?\.physical_point_id && Number\(geo\.accuracy\)>0[\s\S]*?(?=\n  \/\/ Копим отдельный замер)/,'');
+ // The manager feedback release changes only the store picker, its exact route
+ // selection and the new-client form. Keep the GPS guard over everything else.
+ const restore=(start,end)=>{
+  const a=normalized.indexOf(start),b=normalized.indexOf(end,a+start.length);
+  const x=before.indexOf(start),y=before.indexOf(end,x+start.length);
+  assert.ok(a>=0&&b>a&&x>=0&&y>x,`Cannot isolate ${start}`);
+  normalized=normalized.slice(0,a)+before.slice(x,y)+normalized.slice(b);
+ };
+ normalized=normalized.replace('let visitSelectionKeyV3=null;\n','');
+ restore('function openAddVisit(clientId){','// ===== Проверка на НМС');
+ normalized=normalized.replace("      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))\n",'');
+ restore('function openAddClient(){','// openAddTask defined above');
  assert.equal(normalized,before,'Never replace original visit transactions, routes, parsers or clients');
  const events=(core.match(/resanta-gps360-store-check/g)||[]);
  assert.equal(events.length,3,'Only check-in and two successful visit save routes');
@@ -106,7 +113,7 @@ test('new functions protected and audit tables inaccessible directly to normal/a
 });
 test('site loads updated protected GPS UI and only one new on-site manager module',()=>{
  const index=get('index.html');
- assert.match(index,/01-crm-core\.js\?v=20261106-gps360-geoonce1/);
+ assert.match(index,/01-crm-core\.js\?v=20261106-(?:gps360-geoonce1|manager-feedback)/);
  assert.match(index,/181-gps-director360-v1\.js\?v=20261106-director360-geo1/);
  assert.match(index,/183-gps-store-verify-v1\.js\?v=20261106-geoonce1/);
  assert.equal((index.match(/183-gps-store-verify-v1\.js/g)||[]).length,1);

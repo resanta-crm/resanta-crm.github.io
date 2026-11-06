@@ -53,11 +53,13 @@ export function narrowKpi(snapshot,managers){
  const permitted=new Set(managers.map(norm));
  const selected=snapshot.managers.filter(row=>permitted.has(norm(row.manager_name)))
    .map(x=>({manager_name:x.manager_name,region:x.region,plan:x.plan,
-     actual:x.actual,plan_pct:x.plan_pct,to_plan:x.to_plan,clients_current:x.clients_current}));
+     actual:x.actual,plan_pct:x.plan_pct,to_plan:x.to_plan,clients_current:x.clients_current,
+     akb:x.akb,akb_plan:x.akb_plan}));
  return {source:'crm_ai360_sales_kpi_snapshot_v1',scope:'authorized_managers',
   month:snapshot.month,managers:selected,
   // Network revenue, bonus categories and other managers are deliberately absent.
-  freshness:snapshot.freshness?.last_success_at||null,
+  freshness:snapshot.freshness?.last_success_at||null,freshness_status:snapshot.freshness?.status||null,
+  currency:'BYN',money_unit:'one Belarusian ruble',akb_unit:'customers',
   methodology:'KPI positive shipments, not all-branch turnover; not individual daily sales.'};
 }
 export function narrowDebt(snapshots,managers){

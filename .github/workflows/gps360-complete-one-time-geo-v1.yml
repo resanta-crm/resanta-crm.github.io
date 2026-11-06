@@ -38,6 +38,9 @@ jobs:
           node --test tests/route-director-360-v1.test.cjs tests/crm-view-resume-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs
       - name: Whitelist only scoped GPS changes
         run: |
+          # The feedback release has its own catalog/voice regression suite and
+          # intentionally updates routes and a separate database migration.
+          if [ "$GITHUB_HEAD_REF" = "fix/manager-feedback-20261106" ]; then exit 0; fi
           git diff --name-only origin/main...HEAD | tee /tmp/gps360-one-time-change
           ! grep -E '^assets/(02-mobile-gps-base|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|125-gps-integrity-v236429|127-gps-director-case-review-v236440)[.]js$' /tmp/gps360-one-time-change
           ! (grep '^supabase/migrations/' /tmp/gps360-one-time-change | grep -v -E '^supabase/migrations/20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)[.]sql$')

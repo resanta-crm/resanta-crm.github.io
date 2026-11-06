@@ -269,7 +269,7 @@
   window.crmConnectAccess136?.init({client:dbClient,profile,notify:notice});
   window.crmConnectVideo131?.init({
    client:dbClient,roomId:()=>roomId,actor:()=>actor,
-   actorName:()=>staffName(actor),isOpen,
+   actorName:()=>staffName(actor),roomName:()=>roomLabel(rooms.find(r=>r.id===roomId)||{}),isOpen,
    // Keep an active meeting when switching pages; end it immediately on sign-out/account change.
    isSignedIn:expectedId=>!!expectedId && $('app')?.style?.display!=='none' &&
     profile()?.id===expectedId && typeof currentUser!=='undefined' && currentUser?.id===expectedId,

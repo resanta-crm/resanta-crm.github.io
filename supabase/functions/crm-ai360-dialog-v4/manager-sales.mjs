@@ -28,13 +28,14 @@ function staffMention(question,managerNames=[]){
 }
 export function isManagerSalesQuestion(question,{managerNames=[],memory={}}={}){
  const q=n(question);
- const questionIsSales=/(продаж|продал|продали|выруч|оборот|отгруз|реализац|план.*продаж|выполнен.*план|факт.*план|план.*факт)/i.test(q);
+ const akbQuestion=/(?:^|[^а-яa-z])акб(?:$|[^а-яa-z])|активн[а-я]* клиентск[а-я]* баз/.test(q)&&!/(аккумулятор|товар|вольт|артикул)/.test(q);
+ const questionIsSales=akbQuestion||/(продаж|продал|продали|выруч|оборот|отгруз|реализац|план.*продаж|выполнен.*план|факт.*план|план.*факт)/i.test(q);
  const managerNamed=staffMention(q,managerNames);
  const managerScope=/(менеджер|сотрудник|по всем|по остальн|руководител.*продаж)/i.test(q);
  const managerFollowup=memory?.domain==='sales_managers'&&
    /^(а\s|и\s|покажи|сравни|остальн|дальше|продолж|подробнее|что\s+у|какой\s+план|сколько)/i.test(q)&&
    !/(пдз|долг|задолж|остатк|gps|маршрут|акци|триовист|21\s*век|клиент)/i.test(q);
- return (questionIsSales&&(managerNamed||managerScope))||managerFollowup;
+ return akbQuestion||(questionIsSales&&(managerNamed||managerScope))||managerFollowup;
 }
 function selectManager(question,records,managerNames=[]){
  const q=n(question);
@@ -61,6 +62,11 @@ export function formatManagerSales({question,data,month,managerNames=[]}){
  if(all.length===0)return {error:'manager_kpi_rows_missing'};
  const compareNamed=nameMention.length>1&&/(сравн|сопостав)/.test(q)&&!/(по всем|всех)/.test(q);
  const rows=selected?[selected]:compareNamed?all.filter(r=>nameMention.some(name=>n(name)===n(r.manager_name))):all;
+ if(/(?:^|[^а-яa-z])акб(?:$|[^а-яa-z])|активн[а-я]* клиентск[а-я]* баз/.test(q)){
+  if(rows.some(r=>r.akb==null||r.akb_plan==null||!Number.isInteger(Number(r.akb))||!Number.isInteger(Number(r.akb_plan))))return {error:'akb_source_unavailable'};
+  const brief=rows.map(r=>r.manager_name+': АКБ '+fmt(r.akb)+' клиентов, план '+fmt(r.akb_plan)+(Number(r.akb_plan)>0?', выполнение '+(Number(r.akb)/Number(r.akb_plan)*100).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%':'')+'.').join(' ');
+  return {brief,detail:'АКБ — активная клиентская база за '+month+', по тому же источнику, что раздел «Менеджеры · KPI».',offer:'',verified:true,source:'crm_ai360_sales_kpi_snapshot_v1'};
+ }
  const lines=rows.map(r=>r.manager_name+': план '+money(r.plan)+', факт '+money(r.actual)+
   ', выполнено '+Number(r.plan_pct).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%, '+
   (Number(r.to_plan)>0?'до плана '+money(r.to_plan):'план закрыт')+'.');

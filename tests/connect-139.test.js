@@ -68,7 +68,7 @@ function videoRuntime(){
  });
  window.crmConnectVideo131.init({client,roomId:()=>roomId,actor:()=>actor,
   isOpen:()=>true,isSignedIn:()=>valid,actorName:()=> 'Сотрудник',notify:()=>{},onMessage:()=>{}});
- return {window,ids,calls,send,history,flush:()=>new Promise(r=>setTimeout(r,40))};
+ return {window,ids,calls,send,history,setRoom:id=>roomId=id,flush:()=>new Promise(r=>setTimeout(r,40))};
 }
 (async()=>{
  await check('Starting a video meeting automatically saves ONE invitation and requests FCM',async()=>{
@@ -79,6 +79,14 @@ function videoRuntime(){
   assert.match(t.history[0].body,/^📹 Начался видеозвонок/);
   assert.equal(t.send.length,1,'automatic invite should request push');
   t.ids.get('c131-leave').click();await t.flush();
+ });
+ await check('Explicitly joining another chat leaves old room and joins the selected room',async()=>{
+  const t=videoRuntime();await t.window.crmConnectVideo131.join();await t.flush();
+  t.setRoom('another-room');await t.window.crmConnectVideo131.join({incoming:true});await t.flush();
+  assert.equal(t.calls.filter(x=>x==='connected').length,2);
+  assert.equal(t.calls.filter(x=>x==='disconnected').length,1);
+  assert.equal(t.history.length,1,'joining incoming call must not send another invite');
+  assert.equal(t.ids.get('c131-waiting').hidden,false);
  });
  await check('Recipient joining an incoming call NEVER sends reverse invite/push',async()=>{
   const t=videoRuntime();
@@ -131,7 +139,7 @@ function videoRuntime(){
  });
  await check('All role and invitation cache versions are present, modules syntax parse',()=>{
   for(const version of [
-   '151-resanta-connect-v1.js?v=8','154-resanta-connect-video-v1.js?v=7',
+   '151-resanta-connect-v1.js?v=20261106-manager-feedback','154-resanta-connect-video-v1.js?v=20261106-manager-feedback',
    '156-resanta-connect-android-push-v1.js?v=2',
    '144-resanta-ai360-branch-voice-v1.js?v=9',
    '146-resanta-ai360-branch-premium-voice-v1.js?v=5',

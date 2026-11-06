@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 const ctx={};
 const SDK_URL='https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js';
 let ready=false, connecting=false, call=null, callChat=null, sdkLoading=null, monitor=null, requestEpoch=0;
-let minimized=false, callIdentity=null,screenBusy=false,micBusy=false;
+let minimized=false, callIdentity=null,screenBusy=false,micBusy=false,callName='';
 // Recent invitations suppress a reverse notification when the recipient joins.
 const incomingRooms=new Map();
 let invitationBusy=false;
@@ -38,6 +38,8 @@ function tile(id,name){
 }
 function count(){
  if(call&&$('c131-count'))$('c131-count').textContent=(1+call.remoteParticipants.size)+' участник(ов)';
+ if(call&&$('c131-room'))$('c131-room').textContent='Чат: '+callName;
+ if(call&&$('c131-waiting')){$('c131-waiting').hidden=call.remoteParticipants.size>0;$('c131-waiting').textContent='Вы в комнате одни. Ожидаем подключения коллег из этого чата.';}
  updateMini();
 }
 function updateMini(){
@@ -110,7 +112,11 @@ function rememberIncoming(message){
   incomingRooms.set(message.room_id,ts+4*60*1000);
 }
 async function join(options){
- if(call){restore();return;}
+ if(call){
+  if(callChat===ctx.roomId?.()){restore();return;}
+  // Explicitly joining another chat switches to THAT chat, never silently restores the old room.
+  await leave(true);
+ }
  if(connecting)return;
  if(!ctx.isOpen?.()||!ctx.roomId?.()||!ctx.actor?.())return;
  if(!window.isSecureContext){ctx.notify?.('Видеосвязь требует HTTPS.',true);return;}
@@ -156,7 +162,7 @@ async function join(options){
   candidate.on(livekit.RoomEvent.Disconnected,()=>{if(call===candidate)leave(true);});
   await candidate.connect(response.data.url,response.data.token);
   if(epoch!==requestEpoch||!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат закрыт.');
-  call=candidate;callChat=selected;callIdentity=expectedActor;connecting=false;$('c131-start').disabled=false;
+  call=candidate;callChat=selected;callName=ctx.roomName?.()||'Текущий чат';callIdentity=expectedActor;connecting=false;$('c131-start').disabled=false;
   $('c131-start').textContent='📹 Вернуться в звонок';
   tile('local',(ctx.actorName?.()||'Вы')+' (вы)');
   for(const p of call.remoteParticipants.values())tile(p.identity,p.name);
@@ -260,6 +266,7 @@ function init(hooks){
   '<div class="c131-head"><div><strong>📹 РЕСАНТА CONNECT · Видеозвонок</strong><small id="c131-count">Подключение…</small></div>',
   '<div class="c131-header-actions"><button type="button" id="c131-minimize" class="c126-btn">▁ Свернуть</button>',
   '<button type="button" id="c131-close" class="c126-btn">✕ Завершить</button></div></div>',
+  '<div id="c131-room" class="c131-status"></div><div id="c131-waiting" class="c131-status" hidden></div>',
   '<div id="c131-status" class="c131-status" role="status">Подключение…</div>',
   '<div class="c131-share-hint">Чтобы показать свою работу, нажмите «Показать экран», выберите вкладку CRM или весь экран и разрешите доступ. При сворачивании видеосвязь не прерывается.</div>',
   '<div id="c131-wall" class="c131-wall"></div><div id="c131-audio" hidden></div>',
