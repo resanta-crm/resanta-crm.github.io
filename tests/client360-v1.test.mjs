@@ -23,8 +23,12 @@ test('Manager route selects an exact physical store, not first company GPS',()=>
  for(const token of ['client360_points_for_client_v1','client360_create_route_v1',
    'p_point_id:pointId','client360_request_store_v1'])
   assert.ok(core.includes(token),token);
- assert.match(core,/gpsCheckAgainstClient\(c,qvGeo,qvMatchedPlan\)/);
- assert.match(core,/gpsCheckAgainstClient\(c,geo,matchedVisitPlan\)/);
+ assert.match(core,/qvGpsPoint=qvGeo\?await gpsResolveRoutePointForVisit\(c,qvMatchedPlan\)/);
+ assert.match(core,/gpsCheckAgainstClient\(c,qvGeo,qvGpsPoint\)/);
+ assert.match(core,/resolvedVisitPoint=geo\?await gpsResolveRoutePointForVisit\(c,matchedVisitPlan\)/);
+ assert.match(core,/gpsCheckAgainstClient\(c,geo,resolvedVisitPoint\)/);
+ assert.match(core,/linkedClients\.length===1/);
+ assert.match(core,/sameText\(client\.address,point\.address\)/);
  assert.match(schema,/selected_physical_store/);
  assert.match(schema,/Обязательно выберите торговую точку/);
 });

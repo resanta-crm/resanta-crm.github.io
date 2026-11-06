@@ -1692,29 +1692,93 @@ function getGeoNow(timeout){
 
 // Сверка замера с геозоной клиента.
 // unverified — это НЕ обвинение. Это честное «мы пока не знаем, где точка».
+// Определяем GPS-якорь именно ВЫБРАННОЙ физической ТТ, не юрлица.
+// Старый клиентский GPS допустим только при однозначной связи «один клиент → одна ТТ»
+// и отсутствии конфликта с актуальной координатой физической точки.
+// Исторический снимок route_lat/lng НЕ считается доказательством выверки.
+async function gpsResolveRoutePointForVisit(client, route){
+  if(!route?.physical_point_id) return route;
+  const resolved={...route,gps_anchor_verified:false};
+  try{
+    const [pointResult,linksResult,peersResult]=await Promise.all([
+      db.from('route_physical_points').select('id,city,address,lat,lng').eq('id',route.physical_point_id).maybeSingle(),
+      client?.id
+        ? db.from('route_physical_point_clients').select('point_id').eq('client_id',client.id).limit(3)
+        : Promise.resolve({data:[],error:null}),
+      db.from('route_physical_point_clients').select('client_id').eq('point_id',route.physical_point_id).limit(3)
+    ]);
+    if(pointResult.error||linksResult.error||peersResult.error)
+      throw pointResult.error||linksResult.error||peersResult.error;
+    const point=pointResult.data;
+    // Do not treat a historical route snapshot as a live, verified physical-store anchor.
+    resolved.route_lat=point?.lat??null;
+    resolved.route_lng=point?.lng??null;
+    if(!point||!client) return resolved;
+    const gf=clientGeofence(client);
+    const linkedPoints=(linksResult.data||[]).map(v=>String(v.point_id));
+    const linkedClients=(peersResult.data||[]).map(v=>String(v.client_id));
+    const sameText=(x,y)=>String(x||'').trim().toLocaleLowerCase('ru')===String(y||'').trim().toLocaleLowerCase('ru');
+    // Client and physical store must be mutually 1:1, with the SAME nonblank address/city.
+    // A market, shared legal entity or ambiguous pavilion can never inherit a different store's GPS.
+    const exactLink=linkedPoints.length===1&&linkedPoints[0]===String(route.physical_point_id)
+      &&linkedClients.length===1&&linkedClients[0]===String(client.id);
+    const exactAddress=client.city&&point.city&&client.address&&point.address
+      &&sameText(client.city,point.city)&&sameText(client.address,point.address);
+    resolved.gps_anchor_linked_exact=!!(exactLink&&exactAddress);
+    const sourceVerified=client.gps_verified_at&&gf?.verified
+      &&Number.isFinite(Number(gf.lat))&&Number.isFinite(Number(gf.lng));
+    if(!exactLink||!exactAddress||!sourceVerified) return resolved;
+    if(point.lat!=null&&point.lng!=null&&gpsDistance(Number(point.lat),Number(point.lng),gf.lat,gf.lng)>35){
+      resolved.gps_anchor_conflict=true;
+      return resolved;
+    }
+    resolved.gps_anchor_verified=true;
+    resolved.gps_anchor_lat=gf.lat;
+    resolved.gps_anchor_lng=gf.lng;
+    resolved.gps_anchor_radius=gf.radius;
+    resolved.gps_anchor_source='client_verified_exact_store_link';
+  }catch(error){
+    console.warn('GPS-якорь физической ТТ не проверен: визит сохраняется без ложного подтверждения',error);
+    resolved.route_lat=null;
+    resolved.route_lng=null;
+  }
+  return resolved;
+}
+
+// Чекин — GPS в конкретной геозоне, а НЕ доказательство длительности визита.
+// Доказанное пребывание рассчитывает сервер по независимому треку (≥2 точки, ≥2 мин).
 function gpsCheckAgainstClient(c, geo, matchedPoint){
-  if(!geo) return {status:'no_gps', distance:null, note:'GPS недоступен'};
-  // The route's chosen PHYSICAL shop takes precedence over the parent legal entity.
-  // Non-verified route coordinates never turn into a false violation or a false proof.
+  if(!geo) return {status:'no_gps',distance:null,note:'GPS недоступен'};
   if(matchedPoint?.physical_point_id){
-    if(matchedPoint.route_lat==null||matchedPoint.route_lng==null)
-      return {status:'unverified',distance:null,note:'координаты выбранной торговой точки не выверены'};
-    const pointDistance=gpsDistance(geo.lat,geo.lng,Number(matchedPoint.route_lat),Number(matchedPoint.route_lng));
-    return {status:'unverified',distance:pointDistance,note:pointDistance<=250+Math.min(geo.accuracy||0,200)
-      ?'GPS рядом с выбранной ТТ; координаты требуют выверения'
-      :'GPS вне предварительной геозоны выбранной ТТ; проверить адрес'};
+    const verified=matchedPoint.gps_anchor_verified===true;
+    const lat=verified?matchedPoint.gps_anchor_lat:matchedPoint.route_lat;
+    const lng=verified?matchedPoint.gps_anchor_lng:matchedPoint.route_lng;
+    if(lat==null||lng==null){
+      return {status:'unverified',distance:null,note:matchedPoint.gps_anchor_conflict
+        ?'Координаты выбранной ТТ противоречат выверенному якорю — требуется уточнение'
+        :'Нет проверенной координаты выбранной торговой точки'};
+    }
+    const distance=gpsDistance(geo.lat,geo.lng,Number(lat),Number(lng));
+    const accuracy=Math.min(Math.max(Number(geo.accuracy)||0,0),200);
+    if(!verified){
+      return {status:'unverified',distance,note:distance<=250+accuracy
+        ?'GPS рядом с выбранной ТТ, но её координаты не выверены'
+        :'GPS вне предварительной зоны, координаты ТТ требуют проверки'};
+    }
+    const allowed=Number(matchedPoint.gps_anchor_radius)||GPS_RADIUS_VERIFIED;
+    if(distance<=allowed+accuracy)
+      return {status:'confirmed',distance,note:'GPS на месте у выверенной физической ТТ; длительность отдельно проверяется по треку'};
+    return {status:'far',distance,note:'Вне выверенной геозоны конкретной ТТ: '+distance+' м'};
   }
   const gf=clientGeofence(c);
-  if(!gf) return {status:'unverified', distance:null, note:'у клиента нет координат ТТ'};
-
-  const d=gpsDistance(geo.lat, geo.lng, gf.lat, gf.lng);
-  // Точность GPS расширяет допуск: если телефон говорит «±80 м», нечестно
-  // требовать попадания в 150 м от эталона.
-  const allow=gf.radius + Math.min(geo.accuracy||0, 200);
-
-  if(d<=allow) return {status:'confirmed', distance:d, note:'в геозоне ('+d+' м)'};
-  if(!gf.verified) return {status:'unverified', distance:d, note:'вне зоны ('+d+' м), но координаты ТТ не выверены'};
-  return {status:'far', distance:d, note:'вне геозоны: '+d+' м от точки'};
+  if(!gf) return {status:'unverified',distance:null,note:'у клиента нет координат ТТ'};
+  const distance=gpsDistance(geo.lat,geo.lng,gf.lat,gf.lng);
+  const accuracy=Math.min(Math.max(Number(geo.accuracy)||0,0),200);
+  if(!gf.verified)
+    return {status:'unverified',distance,note:'GPS замер получен, но координата клиента ещё не выверена'};
+  if(distance<=gf.radius+accuracy)
+    return {status:'confirmed',distance,note:'GPS в геозоне выверенной ТТ; длительность отдельно проверяется по треку'};
+  return {status:'far',distance,note:'Вне выверенной геозоны: '+distance+' м'};
 }
 
 // Записать замер и пересчитать эталон.
@@ -1820,8 +1884,12 @@ async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
     return;
   }
 
-  const chk=gpsCheckAgainstClient(c, geo);
-  const saved=await gpsSaveSample(c, geo, 'checkin');
+  const checkinPlan=routePlanId?allRoutePlans.find(r=>String(r.id)===String(routePlanId)):null;
+  const checkinPoint=await gpsResolveRoutePointForVisit(c,checkinPlan);
+  const chk=gpsCheckAgainstClient(c, geo, checkinPoint);
+  // Never mix GPS samples of several physical shops into one legal-entity median.
+  const canSample=!checkinPlan?.physical_point_id||checkinPoint?.gps_anchor_linked_exact===true;
+  const saved=canSample?await gpsSaveSample(c,geo,'checkin'):{ok:true,skipped:true};
   if(!saved.ok){
     alert('Координаты телефона получены, но CRM не смогла сохранить замер.\n\n'+saved.error+'\n\nСообщите руководителю.');
     return;
@@ -1835,7 +1903,7 @@ async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
 
   const gf=clientGeofence(c);
   const left=Math.max(0, GPS_MIN_SAMPLES-(c.gps_samples_cnt||0));
-  alert('✅ Замер записан (точность ±'+(geo.accuracy||'?')+' м).\n\n'
+  alert((saved.skipped?'📍 Координата получена. GPS конкретной ТТ проверяется отдельно.':'✅ Замер записан (точность ±'+(geo.accuracy||'?')+' м).')+'\n\n'
     + (gf && gf.verified
         ? 'Координаты ТТ выверены.'
         : 'Осталось замеров с других дней: '+left+'.')
@@ -4631,7 +4699,8 @@ async function saveQuickVisit(){
   // Раньше быстрый визит сохранялся без GPS, поэтому руководитель видел запись
   // в карточке, но не мог подтвердить её на карте.
   const qvGeo=await getGeoNow(8000);
-  const qvGpsCheck=gpsCheckAgainstClient(c,qvGeo,qvMatchedPlan);
+  const qvGpsPoint=qvGeo?await gpsResolveRoutePointForVisit(c,qvMatchedPlan):qvMatchedPlan;
+  const qvGpsCheck=gpsCheckAgainstClient(c,qvGeo,qvGpsPoint);
   var visitData={
     date:qvVisitDate,text,result,manager_id:currentUser.id,
     manager_name:currentProfile?.name||(c&&c.manager_name)||null,
@@ -4668,7 +4737,7 @@ async function saveQuickVisit(){
       source:'quick_visit',visit_id:visit.id
     }}));}catch(e){console.warn('GPS360 координаты ТТ будут проверены позже',e);}
   }
-  if(qvGeo&&c){
+  if(qvGeo&&c&&(!qvMatchedPlan?.physical_point_id||qvGpsPoint?.gps_anchor_linked_exact===true)){
     try{await gpsSaveSample(c,qvGeo,'quick_visit');}catch(e){console.warn('Дополнительный эталон GPS быстрого визита не сохранён',e);}
   }
   // Обновляем категорию и SKU у клиента — каждое поле проверяем отдельно
@@ -5533,7 +5602,8 @@ async function saveVisit(){
     // Автосвязь разрешена только при одном точном совпадении на сегодня.
     matchedVisitPlan=exact.length===1?exact[0]:null;
   }
-  const gchk=gpsCheckAgainstClient(c,geo,matchedVisitPlan);
+  const resolvedVisitPoint=geo?await gpsResolveRoutePointForVisit(c,matchedVisitPlan):matchedVisitPlan;
+  const gchk=gpsCheckAgainstClient(c,geo,resolvedVisitPoint);
   const visitRow={
     client_id:liveCid, date:TODAY, text, result, manager_id:currentUser.id,
     manager_name:currentProfile?.name||(c&&c.manager_name)||null,

@@ -31,16 +31,36 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
  // A CI-only PR may leave CRM core byte-identical to main. Normalize only
  // when the branch actually changed core; otherwise retain exact equality.
  if(core!==before){
-  normalized=normalized.replace('let visitSelectionKeyV3=null;\n','');
+  if(!before.includes('let visitSelectionKeyV3=null;\n'))
+    normalized=normalized.replace('let visitSelectionKeyV3=null;\n','');
   restore('function openAddVisit(clientId){','// ===== Проверка на НМС');
-  normalized=normalized.replace("      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))\n",'');
+  if(!before.includes("      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))\n"))
+    normalized=normalized.replace("      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))\n",'');
   restore('function openAddClient(){','// openAddTask defined above');
+  restore('// Сверка замера с геозоной клиента.','// Записать замер и пересчитать эталон.');
+  restore('async function checkinHere(','// Дата в человеческом виде');
+  normalized=normalized.replace(
+    '  const qvGpsPoint=qvGeo?await gpsResolveRoutePointForVisit(c,qvMatchedPlan):qvMatchedPlan;\n  const qvGpsCheck=gpsCheckAgainstClient(c,qvGeo,qvGpsPoint);',
+    '  const qvGpsCheck=gpsCheckAgainstClient(c,qvGeo,qvMatchedPlan);'
+  );
+  normalized=normalized.replace(
+    '  if(qvGeo&&c&&(!qvMatchedPlan?.physical_point_id||qvGpsPoint?.gps_anchor_linked_exact===true)){',
+    '  if(qvGeo&&c){'
+  );
+  normalized=normalized.replace(
+    '  const resolvedVisitPoint=geo?await gpsResolveRoutePointForVisit(c,matchedVisitPlan):matchedVisitPlan;\n  const gchk=gpsCheckAgainstClient(c,geo,resolvedVisitPoint);',
+    '  const gchk=gpsCheckAgainstClient(c,geo,matchedVisitPlan);'
+  );
  }
  assert.equal(normalized,before,'Never replace original visit transactions, routes, parsers or clients');
  const events=(core.match(/resanta-gps360-store-check/g)||[]);
  assert.equal(events.length,3,'Only check-in and two successful visit save routes');
  assert.match(core,/qvMatchedPlan\?\.physical_point_id/);
  assert.match(core,/matchedVisitPlan\?\.physical_point_id/);
+ assert.match(core,/gpsResolveRoutePointForVisit/);
+ assert.match(core,/gps_anchor_linked_exact/);
+ assert.match(core,/gps_anchor_verified===true/);
+ assert.match(core,/const canSample=!checkinPlan/);
 });
 test('history: only missing physical store coordinates, 3 independent days, <=35m spread, no nearby candidate or known TT',()=>{
  assert.match(history,/COUNT\(DISTINCT visit_date\)>=3/);

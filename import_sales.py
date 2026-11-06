@@ -853,6 +853,25 @@ def attach_client_ids(rows):
             log(f"    ? {name}")
 
 
+def protected_vip_import_keys():
+    """Нельзя автоматически превращать контрагентов ВИП-контура в обычные ТТ.
+
+    Только точные нормализованные ключи, без совпадений по подстроке.
+    Защищённый Триовист учитывается отдельно: он не входит в старый
+    реестр vip_membership, но ведётся в собственном контуре 21vek.
+    """
+    protected = {canonical_client_key("Триовист ООО")}
+    try:
+        rows = _get_all_rest_rows("vip_membership_v236429", "client_name,active")
+        protected.update(
+            canonical_client_key(r.get("client_name"))
+            for r in rows if r.get("active") is True and r.get("client_name")
+        )
+    except Exception as exc:
+        log(f"  ⚠️ Реестр VIP при импорте недоступен, действует минимальная защита: {exc}")
+    return {key for key in protected if key}
+
+
 def ensure_clients_exist(rows):
     """Заводит в CRM клиентов, которые покупают, но карточки не имеют."""
     headers = {
@@ -892,6 +911,8 @@ def ensure_clients_exist(rows):
         d = from_1c.setdefault(key, {"manager": r["manager_name"], "revenue": 0.0})
         d["revenue"] += r["revenue"]
 
+    protected_vip = protected_vip_import_keys()
+    skipped_vip = []
     to_create = []
     seen = set()      # защита от дублей внутри самого отчёта
     fuzzy = []        # неточные совпадения — их стоит показать человеку
@@ -899,6 +920,9 @@ def ensure_clients_exist(rows):
     for name, info in from_1c.items():
         norm = normalize_name(name)
         if not norm or norm in seen:
+            continue
+        if canonical_client_key(name) in protected_vip:
+            skipped_vip.append(name)
             continue
 
         exact = any(norm == e for e in existing_norm)
@@ -922,6 +946,11 @@ def ensure_clients_exist(rows):
             "created_from": "1С: продажи",
             "reviewed": False,
         })
+
+    if skipped_vip:
+        log(f"  🔒 VIP-контрагенты не созданы как обычные ТТ ({len(skipped_vip)}):")
+        for name in sorted(skipped_vip):
+            log(f"    VIP: {name} — требуется сверка финансовой атрибуции с 1С")
 
     if fuzzy:
         log(f"  ⚠️ Похожи на существующих — НЕ заведены, проверьте вручную ({len(fuzzy)}):")
