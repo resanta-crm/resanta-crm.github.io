@@ -958,7 +958,7 @@ function renderMyRoutes(){
       const visitBtn=isNetwork
         ?(networkDone?'<span style="font-size:11px;color:var(--g);font-weight:700">✅ Передача выполнена</span>':date===TODAY?'<button onclick="event.stopPropagation();openNetworkTransfer(\''+r.id+'\')" style="padding:6px 10px;background:#1D4ED8;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Отметить передачу</button>':'<span style="font-size:11px;color:#1D4ED8;font-weight:700">Запланировано</span>')
         :((!r.visited&&matchedClient)?'<button onclick="event.stopPropagation();openQuickVisit(\''+matchedClient.id+'\',\''+date+'\',\''+r.id+'\')" style="padding:6px 10px;background:var(--a);color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">Визит ✍️</button>':'');
-      const gpsBtn=(!isNetwork&&matchedClient)?'<button onclick="event.stopPropagation();checkinHere(\''+matchedClient.id+'\',this,\'my-routes\')" style="padding:6px 9px;background:#fff;color:var(--g);border:1px solid var(--g);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">📍 На точке</button>':'';
+      const gpsBtn=(!isNetwork&&matchedClient)?'<button onclick="event.stopPropagation();checkinHere(\''+matchedClient.id+'\',this,\'my-routes\',\''+r.id+'\')" style="padding:6px 9px;background:#fff;color:var(--g);border:1px solid var(--g);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">📍 На точке</button>':'';
       const cityNow=(r.city||'—').trim()||'—';
       const cityHeader=cityNow!==lastCity?'<div style="font-size:11px;font-weight:600;color:var(--at);margin:'+(lastCity===null?'0':'8px')+' 0 4px">📍 '+esc(cityNow)+'</div>':'';
       lastCity=cityNow;
@@ -1801,7 +1801,7 @@ function gpsBlock(c){
 
 // Ручной чекин. Нужен, чтобы не ждать три визита по важным клиентам и быстро
 // набрать эталон. Замер с плохой точностью не берём — лучше ничего, чем мусор.
-async function checkinHere(clientId,sourceBtn,returnMode){
+async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
   const c=allClients.find(x=>String(x.id)===String(clientId));
   if(!c)return;
   const btn=sourceBtn||document.getElementById('checkin-btn');
@@ -1841,6 +1841,12 @@ async function checkinHere(clientId,sourceBtn,returnMode){
         : 'Осталось замеров с других дней: '+left+'.')
     + (chk.distance!=null ? '\n\nРасстояние до текущей точки клиента: '+chk.distance+' м.' : ''));
 
+  if(routePlanId && geo && Number(geo.accuracy)>0 && Number(geo.accuracy)<=60){
+    try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{
+      detail:{route_plan_id:routePlanId,lat:geo.lat,lng:geo.lng,
+        accuracy:Number(geo.accuracy),taken_at:new Date().toISOString(),source:'checkin'}
+    }));}catch(e){console.warn('Дополнительное подтверждение ТТ не открылось',e);}
+  }
   if(returnMode==='my-routes')renderMyRoutes();
   else if(returnMode==='route')renderRoute();
   else openClient(clientId);
@@ -4655,6 +4661,13 @@ async function saveQuickVisit(){
   if(!visit){alert('Сервер не вернул сохранённый визит. Обновите страницу и сообщите руководителю.');return;}
   if(!allVisits.some(x=>String(x.id)===String(visit.id)))allVisits.unshift(visit);
   v2264MergeReturnedTasks(saveBundle.tasks);
+  if(qvGeo&&qvMatchedPlan?.physical_point_id && Number(qvGeo.accuracy)>0 && Number(qvGeo.accuracy)<=60){
+    try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{detail:{
+      route_plan_id:qvMatchedPlan.id,lat:qvGeo.lat,lng:qvGeo.lng,
+      accuracy:Number(qvGeo.accuracy),taken_at:new Date().toISOString(),
+      source:'quick_visit',visit_id:visit.id
+    }}));}catch(e){console.warn('GPS360 координаты ТТ будут проверены позже',e);}
+  }
   if(qvGeo&&c){
     try{await gpsSaveSample(c,qvGeo,'quick_visit');}catch(e){console.warn('Дополнительный эталон GPS быстрого визита не сохранён',e);}
   }
@@ -5546,6 +5559,13 @@ async function saveVisit(){
   if(!visit){alert('Сервер не вернул сохранённый визит. Обновите страницу и сообщите руководителю.');return;}
   if(!allVisits.some(x=>String(x.id)===String(visit.id)))allVisits.unshift(visit);
   v2264MergeReturnedTasks(saveBundle.tasks);
+  if(geo&&matchedVisitPlan?.physical_point_id && Number(geo.accuracy)>0 && Number(geo.accuracy)<=60){
+    try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{detail:{
+      route_plan_id:matchedVisitPlan.id,lat:geo.lat,lng:geo.lng,
+      accuracy:Number(geo.accuracy),taken_at:new Date().toISOString(),
+      source:'visit',visit_id:visit.id
+    }}));}catch(e){console.warn('GPS360 координаты ТТ будут проверены позже',e);}
+  }
 
   // Копим отдельный замер для уточнения эталонных координат клиента. Он не
   // влияет на факт визита: факт/маршрут/GPS-точка уже сохранены сервером.
