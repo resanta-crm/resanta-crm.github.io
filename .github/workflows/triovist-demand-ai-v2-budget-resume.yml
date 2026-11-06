@@ -57,5 +57,6 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/changes
-          ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1)[.]js$' /tmp/changes
-          ! (grep '^supabase/migrations/' /tmp/changes | grep -v -E '^supabase/migrations/20261105_(triovist_ai_|gps_director360_(evidence_v1|stop_reviews_v1|live_stops_v1)[.]sql$)')
+          node --test tests/gps360-complete-one-time-geo-v1.test.mjs
+          ! grep -E '^assets/(03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1)[.]js$' /tmp/changes
+          ! (grep '^supabase/migrations/' /tmp/changes | grep -v -E '^supabase/migrations/(20261105_(triovist_ai_|gps_director360_(evidence_v1|stop_reviews_v1|live_stops_v1)[.]sql$)|20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)[.]sql$)')
