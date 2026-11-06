@@ -76,7 +76,7 @@ test('GPS 360 parses; route screen remains fallback and cache-busted in index',(
  assert.match(old,/else load\(false\)/);
  assert.match(old,/downloadExcel:exportExcel/);
  const index=read('index.html');
- assert.match(index,/181-gps-director360-v1\.js\?v=20261105-director360-1/);
+ assert.match(index,/181-gps-director360-v1\.js\?v=20261106-director360-geo1/);
  assert.match(index,/124-gps-director-report-v236427\.js\?v=20261105-director360-1/);
 });
 test('unauthorized role sees no new director screen and calls no RPC',async()=>{
