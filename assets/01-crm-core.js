@@ -1724,6 +1724,7 @@ async function gpsResolveRoutePointForVisit(client, route){
       &&linkedClients.length===1&&linkedClients[0]===String(client.id);
     const exactAddress=client.city&&point.city&&client.address&&point.address
       &&sameText(client.city,point.city)&&sameText(client.address,point.address);
+    resolved.gps_anchor_linked_exact=!!(exactLink&&exactAddress);
     const sourceVerified=client.gps_verified_at&&gf?.verified
       &&Number.isFinite(Number(gf.lat))&&Number.isFinite(Number(gf.lng));
     if(!exactLink||!exactAddress||!sourceVerified) return resolved;
@@ -1884,8 +1885,11 @@ async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
   }
 
   const checkinPlan=routePlanId?allRoutePlans.find(r=>String(r.id)===String(routePlanId)):null;
-  const chk=gpsCheckAgainstClient(c, geo, await gpsResolveRoutePointForVisit(c,checkinPlan));
-  const saved=await gpsSaveSample(c, geo, 'checkin');
+  const checkinPoint=await gpsResolveRoutePointForVisit(c,checkinPlan);
+  const chk=gpsCheckAgainstClient(c, geo, checkinPoint);
+  // Never mix GPS samples of several physical shops into one legal-entity median.
+  const canSample=!checkinPlan?.physical_point_id||checkinPoint?.gps_anchor_linked_exact===true;
+  const saved=canSample?await gpsSaveSample(c,geo,'checkin'):{ok:true,skipped:true};
   if(!saved.ok){
     alert('Координаты телефона получены, но CRM не смогла сохранить замер.\n\n'+saved.error+'\n\nСообщите руководителю.');
     return;
@@ -1899,7 +1903,7 @@ async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
 
   const gf=clientGeofence(c);
   const left=Math.max(0, GPS_MIN_SAMPLES-(c.gps_samples_cnt||0));
-  alert('✅ Замер записан (точность ±'+(geo.accuracy||'?')+' м).\n\n'
+  alert((saved.skipped?'📍 Координата получена. GPS конкретной ТТ проверяется отдельно.':'✅ Замер записан (точность ±'+(geo.accuracy||'?')+' м).')+'\n\n'
     + (gf && gf.verified
         ? 'Координаты ТТ выверены.'
         : 'Осталось замеров с других дней: '+left+'.')
@@ -4733,7 +4737,7 @@ async function saveQuickVisit(){
       source:'quick_visit',visit_id:visit.id
     }}));}catch(e){console.warn('GPS360 координаты ТТ будут проверены позже',e);}
   }
-  if(qvGeo&&c){
+  if(qvGeo&&c&&(!qvMatchedPlan?.physical_point_id||qvGpsPoint?.gps_anchor_linked_exact===true)){
     try{await gpsSaveSample(c,qvGeo,'quick_visit');}catch(e){console.warn('Дополнительный эталон GPS быстрого визита не сохранён',e);}
   }
   // Обновляем категорию и SKU у клиента — каждое поле проверяем отдельно
