@@ -9,15 +9,15 @@ const REV=read('supabase/migrations/20261105_gps_director360_stop_reviews_v1.sql
 const LIVE=read('supabase/migrations/20261105_gps_director360_live_stops_v1.sql');
 const u='payushin_ar@resanta.ru';
 const d={
- version:'gps-director360-evidence-v1',
+ version:'gps-director360-evidence-v2',
  period:{from:'2026-10-30',to:'2026-11-05',manager:'all'},
- kpi:{planned:145,reports:143,gps_confirmed:64,review:85,no_coordinates:66,
+ kpi:{planned:145,reports:143,gps_confirmed:64,geo_eligible:79,active_planned:0,active_no_geo:0,review:85,no_coordinates:66,
   verified_technical:0,unidentified_stops:76,resolved_stops:0,stale_days:9},
  urgent:{manager:'Руднев',review:31,no_coordinates:24,unidentified:29},
  managers:[
- {manager_name:'Ачинович',planned:50,reports:50,gps_confirmed:22,attention_visits:28,no_coordinates:23,unidentified_stops:39,verified_technical:0},
- {manager_name:'Руднев',planned:49,reports:49,gps_confirmed:19,attention_visits:31,no_coordinates:24,unidentified_stops:29,verified_technical:0},
- {manager_name:'Шкуран',planned:46,reports:44,gps_confirmed:23,attention_visits:26,no_coordinates:19,unidentified_stops:8,verified_technical:0}
+ {manager_name:'Ачинович',geo_eligible:27,planned:50,reports:50,gps_confirmed:22,attention_visits:28,no_coordinates:23,unidentified_stops:39,verified_technical:0},
+ {manager_name:'Руднев',geo_eligible:25,planned:49,reports:49,gps_confirmed:19,attention_visits:31,no_coordinates:24,unidentified_stops:29,verified_technical:0},
+ {manager_name:'Шкуран',geo_eligible:27,planned:46,reports:44,gps_confirmed:23,attention_visits:26,no_coordinates:19,unidentified_stops:8,verified_technical:0}
  ],
  weeks:[{start:'2026-10-30',end:'2026-11-05',manager:'Руднев',planned:49,reports:49,gps_confirmed:19,issues:30}],
  problems:[{key:'no_coordinates',label:'Нет доверенных координат ТТ',count:66}],
@@ -54,7 +54,7 @@ function fixture({role='boss',email=u,visible=true}={}){
  const w={currentProfile:{role,email},confirm:()=>true,RESANTA_GPS_DIRECTOR_REPORT_V236427:{
   async loadDetails(){},downloadExcel(){}},db:{
   rpc:async(name,args)=>{calls.push({name,args});
-   if(name==='gps_director360_evidence_v20261105')return{data:d,error:null};
+   if(name==='gps_director360_evidence_v20261106')return{data:d,error:null};
    if(name==='gps_director360_stop_decide_v20261105')return{data:{ok:true,action:'technical_verified'},error:null};
    throw new Error('Unexpected RPC '+name)}
  }};
@@ -98,7 +98,7 @@ test('source-based KPIs and six-week manager chart load without writing GPS or d
  assert.match(html,/Динамика по менеджерам/);
  assert.match(html,/Коротко за период/);
  assert.match(html,/Менеджеры · детализация по нажатию/);
- assert.deepEqual(f.calls.map(c=>c.name),['gps_director360_evidence_v20261105']);
+ assert.deepEqual(f.calls.map(c=>c.name),['gps_director360_evidence_v20261106']);
 });
 test('chart switches among visit reports, independent GPS and problems',async()=>{
  const f=fixture();await f.api.open();
