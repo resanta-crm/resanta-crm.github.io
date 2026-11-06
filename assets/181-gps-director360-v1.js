@@ -2,7 +2,7 @@
 (function(w,d){
 'use strict';
 if(w.RESANTA_GPS_DIRECTOR360_V1)return;
-const VERSION='2026.11.05-gps360-evidence-v1',ID='gps360-director-v1',CSS='gps360-director-style-v1';
+const VERSION='2026.11.06-gps360-evidence-v2',ID='gps360-director-v1',CSS='gps360-director-style-v1';
 const MANAGERS=['Ачинович','Руднев','Шкуран'];
 const COLORS={'Ачинович':'#1768dd','Руднев':'#945af5','Шкуран':'#13936c'};
 let filters=null,data=null,busy=false,metric='reports',detailMode='closed',detailManager='all',editingStop='',notice='',lastKey='';
@@ -183,14 +183,21 @@ function render(){
  if(notice)html+='<div class="'+(notice.startsWith('✓')?'g-brief':'g-warn')+'" role="status">'+esc(notice)+'</div>';
  if(!data){el.innerHTML=html+'<section class="g-box"><h3>Проверяю GPS-сводку…</h3><p class="g-muted">Данные берутся из сохранённых GPS-треков. Исходные данные не меняются.</p></section>';return true}
  html+='<div class="g-grid" id="g360-summary">'+
- card('Плановых ТТ',k.planned,'За выбранный период')+
- card('Визитов по отчётам',k.reports,pct(r,p)+' плана',p?r/p*100:0)+
- card('GPS подтверждено',k.gps_confirmed,pct(g,p)+' плана',p?g/p*100:0,'#148653')+
- card('Спорных посещений',k.review,'Требуют проверки',p?n(k.review)/p*100:0,'#b95024')+
- card('Нет координат ТТ',k.no_coordinates,'Нужна выверка ТТ',p?n(k.no_coordinates)/p*100:0)+
+ card('Плановых ТТ',k.planned,'Завершённые дни; сегодня отдельно')+
+ card('Визитов по отчётам',k.reports,pct(r,p)+' плана завершённых дней',p?r/p*100:0)+
+ card('GPS подтверждено',k.gps_confirmed,pct(g,k.geo_eligible)+' из '+num(k.geo_eligible)+' ТТ с геозонами',k.geo_eligible?g/n(k.geo_eligible)*100:0,'#148653')+
+ card('На разбор руководителю',k.review,'Только завершённые дни · не нарушения',p?n(k.review)/p*100:0,'#b95024')+
+ card('Нет координат ТТ',k.no_coordinates,'В очередь менеджерам, не руководителю',p?n(k.no_coordinates)/p*100:0)+
  '<div class="g-card attention"><small>⚠ Зона внимания</small><strong>'+esc(u?.manager||'Нет данных')+'</strong>'+
- '<small>Спорных случаев: '+num(u?.review)+'</small>'+
- '<small>Неопознанных стоянок: '+num(u?.unidentified)+'</small></div></div>';
+ '<small>На разборе (не обвинение): '+num(u?.review)+'</small>'+
+ '<small>ТТ для выверки: '+num(u?.no_coordinates)+'</small></div></div>';
+ if(n(k.active_planned)>0){
+  html+='<div class="g-brief"><div class="g-head"><b>⏳ Рабочий день продолжается</b>'+
+   '<span class="g-pill">'+num(k.active_planned)+' ТТ сегодня</span></div>'+
+   '<p>Сегодня пока '+num(k.active_reports)+' отчётов по плановым точкам. '+
+   'ТТ без готовых координат: '+num(k.active_no_geo)+'. '+
+   'Незавершённый день НЕ считается просрочкой или нарушением менеджера.</p></div>';
+ }
  if(stale)html+='<div class="g-warn">⚠ '+num(stale)+' рабочих дней имеют устаревший старый GPS-агрегат. Новый обзор пересчитывает GPS и стоянки непосредственно по исходным точкам; цифры старого экрана могут отличаться. Это не нарушение менеджера.</div>';
  html+='<section class="g-box"><div class="g-head"><div><h3>Динамика по менеджерам · 6 недель</h3>'+
  '<div class="g-muted">Шесть последовательных недель; отсутствие GPS не означает отсутствие визита.</div></div>'+
@@ -200,26 +207,27 @@ function render(){
  html+='<section class="g-brief"><div class="g-head"><h3>◉ Коротко за период</h3>'+
  '<div class="g-tabs"><button type="button" class="g-primary" data-g360-legacy="meeting">✦ ИИ-повестка</button>'+
  '<button type="button" data-g360-details="visits">Маршруты и точки ↓</button></div></div>'+
- '<p>Отчёты о визитах: '+num(r)+' из '+num(p)+'. Независимых GPS-сессий: '+num(g)+' ('+pct(g,p)+'). '+
- 'На проверке '+num(k.review)+' посещений, нет доверенных координат по '+num(k.no_coordinates)+' ТТ. '+
- 'Неопознанных стоянок от пяти минут: '+num(k.unidentified_stops)+'. Подтверждённых технических: '+num(k.verified_technical)+
+ '<p>По завершённым дням: '+num(r)+' отчётов из '+num(p)+' плановых посещений ('+pct(r,p)+'). GPS-подтверждено: '+num(g)+' из '+num(k.geo_eligible)+' ТТ с доверенными координатами ('+pct(g,k.geo_eligible)+'). '+
+ 'Руководителю на разбор '+num(k.review)+' неоднозначных случаев; менеджерам на геопривязку '+num(k.no_coordinates)+' ТТ. '+
+ 'Неопознанных стоянок: '+num(k.unidentified_stops)+' (система проверяет связь с ТТ; это не нарушения). Подтверждённых технических: '+num(k.verified_technical)+
  '. Зона внимания — '+esc(u?.manager||'нет данных')+'.</p>'+
  '<div class="g-muted">Отметка менеджера не является GPS-доказательством. Причины стоянок фиксируются только по решению руководителя.</div></section>';
  html+='<div class="g-two"><section class="g-box"><h3>Отклонения по менеджерам</h3>'+
- '<div class="g-muted">Доля посещений, требующих проверки; это не рейтинг нарушений.</div>'+
+ '<div class="g-muted">Только завершённые дни и случаи без проблем геопривязки. Не рейтинг нарушений.</div>'+
  managers.map(x=>'<div class="g-rowbar"><b>'+esc(x.manager_name)+'</b><div class="g-bar">'+
  '<i style="width:'+Math.min(100,n(x.attention_visits)/Math.max(1,n(x.planned))*100)+'%"></i></div>'+
  '<b>'+pct(x.attention_visits,x.planned)+'</b></div>').join('')+'</section>'+
  '<section class="g-box"><h3>Причины проблем</h3>'+
- '<div class="g-muted">Категории пересекаются, суммы нельзя складывать.</div>'+
- (data.problems||[]).map(x=>'<div class="g-problem"><span>'+esc(x.label)+'</span><b>'+num(x.count)+'</b></div>').join('')+
+ '<div class="g-muted">Критичные случаи отдельно; отсутствие координат и неопознанные стоянки не являются нарушениями.</div>'+
+ (data.problems||[]).filter(x=>!['unidentified_stops','no_coordinates','stale_days'].includes(x.key)).map(x=>'<div class="g-problem"><span>'+esc(x.label)+'</span><b>'+num(x.count)+'</b></div>').join('')+
+ '<div class="g-muted" style="margin-top:10px">На выверку координат менеджерам: '+num(k.no_coordinates)+' ТТ · неопознанные стоянки (не нарушения): '+num(k.unidentified_stops)+' · вероятные ТТ: '+num(k.probable_tt_stops)+'</div>'+
  '<div class="g-muted">Подтверждённых технических остановок: '+num(k.verified_technical)+
  '; закрытых разбором: '+num(k.resolved_stops)+'.</div></section></div>';
  html+='<section class="g-box"><h3>Менеджеры · детализация по нажатию</h3>'+
  '<div class="g-scroll"><table><thead><tr><th>Менеджер</th><th>План / отчёты</th><th>GPS подтверждено</th>'+
  '<th>На проверке</th><th>Нет координат</th><th>Стоянки без причины</th><th>Тех. подтверждены</th><th></th></tr></thead><tbody>'+
  managers.map(x=>'<tr><td><b>'+esc(x.manager_name)+'</b></td><td>'+num(x.planned)+' / '+num(x.reports)+'</td>'+
- '<td>'+num(x.gps_confirmed)+' · '+pct(x.gps_confirmed,x.planned)+'</td>'+
+ '<td>'+num(x.gps_confirmed)+' · '+pct(x.gps_confirmed,x.geo_eligible)+'</td>'+
  '<td>'+num(x.attention_visits)+'</td><td>'+num(x.no_coordinates)+'</td>'+
  '<td>'+num(x.unidentified_stops)+'</td><td>'+num(x.verified_technical)+'</td>'+
  '<td><button type="button" data-g360-manager="'+esc(x.manager_name)+'">Подробнее →</button></td></tr>').join('')+
@@ -251,9 +259,9 @@ async function load(force=false){
  const client=dbx();if(!client?.rpc){notice='Не удалось подключиться к CRM';render();return false}
  busy=true;notice='';render();sync();
  try{
-  const r=await client.rpc('gps_director360_evidence_v20261105',{p_from:f.from,p_to:f.to,p_manager:f.manager});
+  const r=await client.rpc('gps_director360_evidence_v20261106',{p_from:f.from,p_to:f.to,p_manager:f.manager});
   if(r.error)throw r.error;
-  if(r.data?.version!=='gps-director360-evidence-v1'||r.data?.period?.from!==f.from||
+  if(r.data?.version!=='gps-director360-evidence-v2'||r.data?.period?.from!==f.from||
     r.data?.period?.to!==f.to)throw Error('Данные GPS не прошли контроль источника и периода');
   data=r.data;lastKey=key;return true;
  }catch(e){notice='GPS 360° временно недоступен: '+String(e?.message||e)+'. Маршруты доступны в соседней вкладке.';return false}

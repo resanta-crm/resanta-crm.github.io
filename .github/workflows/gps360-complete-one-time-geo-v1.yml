@@ -1,0 +1,48 @@
+name: GPS360 one-time exact store recovery and director truth
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/01-crm-core.js'
+      - 'assets/181-gps-director360-v1.js'
+      - 'assets/183-gps-store-verify-v1.js'
+      - 'index.html'
+      - 'supabase/migrations/20261106_gps360_*.sql'
+      - 'tests/gps360-complete-one-time-geo-v1.test.mjs'
+      - 'tests/gps-director360-evidence-v1.test.mjs'
+      - 'tests/gps-viewer-geo-stop-evidence-20261106.test.mjs'
+      - '.github/workflows/gps360-complete-one-time-geo-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gps360-safe-rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Protect native GPS and CRM visit source, compile scripts
+        run: |
+          git fetch origin main
+          node --check assets/01-crm-core.js
+          node --check assets/181-gps-director360-v1.js
+          node --check assets/183-gps-store-verify-v1.js
+      - name: Exact-store recovery, manager controls, director dashboard, route regressions
+        run: |
+          node --test tests/gps360-complete-one-time-geo-v1.test.mjs tests/gps-director360-evidence-v1.test.mjs tests/gps-viewer-geo-stop-evidence-20261106.test.mjs
+          node --test tests/route-director-360-v1.test.cjs tests/crm-view-resume-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs
+      - name: Whitelist only scoped GPS changes
+        run: |
+          git diff --name-only origin/main...HEAD | tee /tmp/gps360-one-time-change
+          ! grep -E '^assets/(02-mobile-gps-base|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|125-gps-integrity-v236429|127-gps-director-case-review-v236440)[.]js$' /tmp/gps360-one-time-change
+          ! (grep '^supabase/migrations/' /tmp/gps360-one-time-change | grep -v -E '^supabase/migrations/20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)[.]sql$')
+          test -f supabase/migrations/20261106_gps360_safe_history_v1.sql
+          test -f supabase/migrations/20261106_gps360_store_onsite_v1.sql
+          test -f supabase/migrations/20261106_gps360_probable_stops_v1.sql
+          test -f supabase/migrations/20261106_gps360_evidence_completed_v2.sql
+          ! grep -Ei 'UPDATE (public[.])?(gps_track_points|visits|route_plans)|DELETE FROM (public[.])?(gps_track_points|visits|route_plans)|TRUNCATE' supabase/migrations/20261106_gps360_*.sql

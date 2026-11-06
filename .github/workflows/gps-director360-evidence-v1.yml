@@ -28,7 +28,9 @@ jobs:
           node --check assets/181-gps-director360-v1.js
           node --check assets/124-gps-director-report-v236427.js
       - name: Director GPS evidence, on-demand UI, security, manager views
-        run: node --test tests/gps-director360-evidence-v1.test.mjs
+        run: |
+          git fetch origin main
+          node --test tests/gps-director360-evidence-v1.test.mjs tests/gps360-complete-one-time-geo-v1.test.mjs
       - name: Ensure routes, tab-resume and financial management remain stable
         run: node --test tests/route-director-360-v1.test.cjs tests/crm-view-resume-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs
       - name: Keep original GPS tracks, clients, parsers and CRM untouched
@@ -36,7 +38,7 @@ jobs:
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/gps360-changes
           ! grep -E '^assets/(02-mobile-gps-base|03-triovist-routes|106-triovist-competitors-v236218|125-gps-integrity-v236429|127-gps-director-case-review-v236440|128-gps-meeting-ai-v236441)[.]js$' /tmp/gps360-changes
-          ! (grep '^supabase/migrations/' /tmp/gps360-changes | grep -v '^supabase/migrations/20261105_gps_director360_')
+          ! (grep '^supabase/migrations/' /tmp/gps360-changes | grep -v '^supabase/migrations/(20261105_gps_director360_|20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)[.]sql$)')
           test -f supabase/migrations/20261105_gps_director360_evidence_v1.sql
           test -f supabase/migrations/20261105_gps_director360_stop_reviews_v1.sql
           test -f supabase/migrations/20261105_gps_director360_live_stops_v1.sql
