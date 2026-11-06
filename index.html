@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-06-manager-feedback-v1';
+const APP_VERSION = '2026-11-06-gps360-safe-v1';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -38,10 +38,10 @@ const APP_VERSION = '2026-11-06-manager-feedback-v1';
 })();
 </script>
 <title>Ресанта CRM</title>
-<link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback" as="script">
+<link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=20261105-stock-director-1&fix=20261106" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback"></script>
+<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
 <script defer src="./assets/124-gps-director-report-v236427.js?v=20261105-director360-1"></script>
