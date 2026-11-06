@@ -51,7 +51,23 @@ function mark(route){
 async function preview(evt){
  if(!manager()||!evt?.route_plan_id||active||marked(evt.route_plan_id))return false;
  if(!Number.isFinite(Number(evt.lat))||!Number.isFinite(Number(evt.lng))||!(evt.accuracy>0&&evt.accuracy<=60))return false;
- if(!navigator.onLine)return false; // do not request store privacy data without server permission
+ if(!navigator.onLine){
+  // We can offer an offline, explicit one-time confirmation ONLY for a
+  // preloaded approved route with its exact physical point lacking coordinates.
+  // It will be rechecked by the server after reconnect; it does not update any
+  // coordinate by itself.
+  let plan=null;
+  try{const plans=typeof allRoutePlans!=='undefined'?allRoutePlans:w.allRoutePlans;
+    plan=Array.isArray(plans)?plans.find(x=>String(x.id)===String(evt.route_plan_id)):null;
+  }catch(_){}
+  if(plan && plan.approved===true && plan.review_status==='approved'
+     && plan.physical_point_id && plan.route_lat==null && plan.route_lng==null
+     && plan.manager_name===prof()?.name){
+   mark(evt.route_plan_id);show(evt,{client:plan.client_name,city:plan.city,address:plan.address});
+   return true;
+  }
+  return false;
+ }
  const api=client();if(!api?.rpc)return false;
  const r=await api.rpc('gps360_store_onsite_preview_v20261106',{
   p_route_plan_id:evt.route_plan_id,p_accuracy_m:evt.accuracy
