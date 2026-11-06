@@ -57,6 +57,10 @@ BEGIN
    public.gps_haversine_m(g.minlat,g.minlng,g.maxlat,g.maxlng) spread_m
   FROM grouped g JOIN public.route_physical_points p ON p.id=g.point_id
   WHERE NOT EXISTS(
+    SELECT 1 FROM grouped peer
+    WHERE peer.point_id<>g.point_id
+      AND public.gps_haversine_m(g.lat,g.lng,peer.lat,peer.lng)<50
+  ) AND NOT EXISTS(
     SELECT 1 FROM public.route_physical_points other
     WHERE other.id<>p.id AND other.active IS DISTINCT FROM false
      AND other.lat IS NOT NULL AND other.lng IS NOT NULL
