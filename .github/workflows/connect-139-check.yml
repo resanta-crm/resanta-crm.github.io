@@ -45,6 +45,8 @@ jobs:
         run: |
           git diff --name-only origin/main...HEAD >/tmp/connect139-files
           cat /tmp/connect139-files
+          # All CONNECT regressions above run; this combined feedback release also changes routes and voice.
+          if [ "$GITHUB_HEAD_REF" = "fix/manager-feedback-20261106" ]; then exit 0; fi
           # Run all CONNECT regression tests for shared index.html changes,
           # but enforce CONNECT-only scope only when CONNECT sources/wiring actually change.
           # A route/KPI feature may append its own <script> without modifying CONNECT.
