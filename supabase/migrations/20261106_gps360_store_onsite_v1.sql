@@ -41,8 +41,8 @@ BEGIN
  END IF;
  SELECT * INTO v_plan FROM public.route_plans WHERE id=p_route_plan_id AND
   lower(trim(manager_name))=lower(trim(v_user.name)) AND
-  coalesce(removed,false)=false AND
-  coalesce(review_status,'approved') NOT IN ('pending','rejected');
+  approved IS TRUE AND review_status='approved' AND
+  coalesce(removed,false)=false;
  IF NOT FOUND OR v_plan.physical_point_id IS NULL OR
   v_plan.visit_date<timezone('Europe/Minsk',now())::date-7 OR
   v_plan.visit_date>timezone('Europe/Minsk',now())::date THEN
