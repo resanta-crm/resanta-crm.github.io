@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-06-gps360-safe-v1';
+const APP_VERSION = '2026-11-06-release-guard-v1';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -1825,5 +1825,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <script defer src="./assets/179-triovist-demand-ai-v1.js?v=20261105-subgroup-listing-fix3"></script>
 <script defer src="./assets/178-crm-view-resume-v1.js?v=20261105-budgets-resume2"></script>
 <script defer src="./assets/185-mobile-navigation-v1.js?v=20261106-1"></script>
+<!-- Notice-only release guard: never reload a live CRM tab automatically. -->
+<script defer src="./assets/186-crm-release-guard-v1.js?v=20261106-1"></script>
 </body>
 </html>
