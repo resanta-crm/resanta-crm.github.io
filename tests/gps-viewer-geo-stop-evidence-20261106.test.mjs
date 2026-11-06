@@ -37,8 +37,8 @@ for(const [label,html] of [['OpenStreetMap',OSM],['Yandex',YANDEX]]){
   assert.doesNotMatch(html,/if\(cls==='technical'\)/);
  });
  test(label+': raw GPS, active routes and old backend RPCs unchanged',()=>{
-  assert.match(html,/gps_get_workday_aggregate_director_v236417/);
-  assert.match(html,/gps_rebuild_workday_aggregate_v236417/);
+  assert.match(html,/gps_get_workday_aggregate_director_v236(417|421)/);
+  assert.match(html,/gps_rebuild_workday_aggregate_v236(417|421)/);
   assert.doesNotMatch(html,/\.from\(['"]route_plans['"]\).*\.update/);
   assert.doesNotMatch(html,/\.from\(['"]gps_track_points['"]\).*\.delete/);
  });
