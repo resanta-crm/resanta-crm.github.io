@@ -7,6 +7,7 @@ const get=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const core=get('assets/01-crm-core.js');
 const imp=get('import_sales.py');
 const map=get('assets/26-gps-visit-order-v2364.js');
+const server=get('supabase/migrations/20261106142000_gps360_exact_physical_store_read_v1.sql');
 const begin=core.indexOf('async function gpsResolveRoutePointForVisit(');
 const end=core.indexOf('// Записать замер и пересчитать эталон.',begin);
 assert.ok(begin>0&&end>begin);
@@ -87,4 +88,16 @@ test('map distinguishes confirmed visit numbers from stops/reports',()=>{
   assert.match(map,/const proven=ev\.filter\(x=>x\.confirmed\)/);
   assert.match(map,/const pending=ev\.filter\(x=>!x\.confirmed\)/);
   assert.match(map,/iconContent:x\.confirmed\?String\(x\.no\):''/);
+});
+
+test('server still requires independent GPS sessions and never uses an unverified legal-store location',()=>{
+  assert.match(server,/verified_exact_store_link/);
+  assert.match(server,/other_pc\.client_id=c\.id and other_pc\.point_id<>r\.physical_point_id/);
+  assert.match(server,/other_client\.point_id=r\.physical_point_id and other_client\.client_id<>c\.id/);
+  assert.match(server,/lower\(btrim\(c\.address\)\)=lower\(btrim\(pp\.address\)\)/);
+  assert.match(server,/b\.verified_exact_store_link then b\.client_gps_lat/);
+  assert.match(server,/b\.verified_exact_store_link then b\.client_gps_lng/);
+  assert.match(server,/where rn=1 and point_count>=2 and minutes>=2/);
+  assert.match(server,/g\.is_mock,false\)=false/);
+  assert.doesNotMatch(server,/\b(DELETE\s+FROM|TRUNCATE|UPDATE\s+public\.gps_track_points|UPDATE\s+public\.visits|UPDATE\s+public\.route_plans)\b/i);
 });
