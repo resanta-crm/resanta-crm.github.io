@@ -56,5 +56,5 @@ test('director GPS360 module, independent server evidence and tasks untouched',(
  const index=read('index.html');
  assert.match(index,/181-gps-director360-v1\.js\?v=20261105-director360-1/);
  assert.match(index,/124-gps-director-report-v236427\.js\?v=20261105-director360-1/);
- assert.match(read('assets/181-gps-director360-v1.js'),/gps_director360_evidence_v20261105/);
+ assert.match(read('assets/181-gps-director360-v1.js'),/gps_director360_evidence_v20261106/);
 });
