@@ -4,11 +4,14 @@ on:
     branches: [main]
     paths:
       - 'assets/01-crm-core.js'
+      - 'assets/26-gps-visit-order-v2364.js'
+      - 'import_sales.py'
       - 'assets/181-gps-director360-v1.js'
       - 'assets/183-gps-store-verify-v1.js'
       - 'index.html'
       - 'supabase/migrations/20261106_gps360_*.sql'
       - 'tests/gps360-complete-one-time-geo-v1.test.mjs'
+      - 'tests/gps360-trusted-store-vip-20261106.test.mjs'
       - 'tests/gps-director360-evidence-v1.test.mjs'
       - 'tests/gps-viewer-geo-stop-evidence-20261106.test.mjs'
       - '.github/workflows/gps360-complete-one-time-geo-v1.yml'
@@ -30,11 +33,13 @@ jobs:
         run: |
           git fetch origin main
           node --check assets/01-crm-core.js
+          node --check assets/26-gps-visit-order-v2364.js
+          python3 -m py_compile import_sales.py
           node --check assets/181-gps-director360-v1.js
           node --check assets/183-gps-store-verify-v1.js
       - name: Exact-store recovery, manager controls, director dashboard, route regressions
         run: |
-          node --test tests/gps360-complete-one-time-geo-v1.test.mjs tests/gps-director360-evidence-v1.test.mjs tests/gps-viewer-geo-stop-evidence-20261106.test.mjs
+          node --test tests/gps360-complete-one-time-geo-v1.test.mjs tests/gps360-trusted-store-vip-20261106.test.mjs tests/gps-director360-evidence-v1.test.mjs tests/gps-viewer-geo-stop-evidence-20261106.test.mjs
           node --test tests/route-director-360-v1.test.cjs tests/crm-view-resume-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs
       - name: Whitelist only scoped GPS changes
         run: |
