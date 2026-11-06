@@ -27,7 +27,7 @@ details.diag{border:1px solid var(--border);border-radius:12px;background:#fff;m
 </style>
 </head>
 <body>
-<header><b>📍 Маршрут менеджера</b><span id="head">Ресанта CRM · контроль руководителя</span><div style="flex:1"></div><button class="btn" onclick="window.close()">Закрыть</button></header>
+<header><b>📍 Маршрут менеджера</b><span id="head">Ресанта CRM · контроль руководителя</span><div style="flex:1"></div><button class="btn" onclick="closeGpsView()">Закрыть</button></header>
 <main>
 <div id="status" class="msg info">Проверяю данные рабочего дня…</div>
 <section id="content" class="hide">
@@ -101,6 +101,8 @@ const qs=new URLSearchParams(location.search),workday=qs.get('workday');
 let aggregate=null,map=null,busy=false,autoTimer=null,mapRouteCoords=[],mapPlanCoords=[],stopCollection=null,stopsVisible=false;
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function setStatus(text,kind='info'){const e=$('status');e.className='msg '+kind;e.innerHTML=text;}
+function closeGpsView(){if(parent!==window)parent.postMessage({type:'resanta-gps-close'},location.origin);else window.close();}
+function workDate(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v))?new Date(v+'T12:00:00Z').toLocaleDateString('ru-RU',{timeZone:'UTC'}):String(v||'');}
 function km(v){return((Number(v)||0)/1000).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1})+' км';}
 function dt(v){if(!v)return'—';return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
 function tm(v){if(!v)return'—';return new Date(v).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
@@ -216,12 +218,12 @@ function renderDiagnostics(a){
 }
 function render(a){
   aggregate=a;$('content').classList.remove('hide');$('status').classList.add('hide');
-  $('title').textContent=(a.manager_name||'Менеджер')+' · '+(a.work_date||'');
+  $('title').textContent=(a.manager_name||'Менеджер')+' · '+workDate(a.work_date);
   const depart=a.actual_departure_at?tm(a.actual_departure_at):'—';
   const enabled=a.gps_enabled_at?tm(a.gps_enabled_at):'—';
   const departNote=a.departure_basis==='confirmed_home_zone'?' · 🏠 Дом подтверждён':a.departure_basis==='suggested_start_zone'?' · 📍 стартовая зона ожидает подтверждения':'';
   $('meta').textContent='GPS включён: '+enabled+' · фактический выезд: '+depart+departNote+' · последняя GPS '+dt(a.source_last_point_at)+' · данные обновлены '+dt(a.generated_at);
-  $('head').textContent=(a.manager_name||'GPS')+' · '+(a.work_date||'');
+  $('head').textContent=(a.manager_name||'GPS')+' · '+workDate(a.work_date);
   $('km').textContent=km(a.distance_m);
   $('visTotal').textContent=String(a.visit_total||0)+(Number(a.offplan_count)>0?' (+'+a.offplan_count+' вне плана)':'');
   $('pf').textContent=(a.visited_count||0)+' / '+(a.planned_count||0);

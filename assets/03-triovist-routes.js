@@ -2266,7 +2266,7 @@ install();
   const clientCategory=c=>String(c?.role_type||c?.category||'').trim();
   const clientCity=c=>String(c?.city||c?.region||'').trim()||'Без города';
   const clientAddress=c=>String(c?.address||'').trim()||'Адрес не указан';
-  const pointId=p=>String(p?.route_client_id||p?.primary?.id||'');
+  const pointId=p=>String(p?.route_selection_key||p?.route_client_id||p?.primary?.id||'');
   const pointCity=p=>String(p?.route_city||p?.primary?.city||p?.point?.city||p?.primary?.region||p?.point?.region||'').trim()||'Без города';
   const pointAddress=p=>String(p?.route_address||p?.primary?.address||p?.point?.address||'').trim()||'Адрес не указан';
   const clientSku=c=>Number(c?.sku_count)||0;
@@ -2315,6 +2315,8 @@ install();
     return map;
   }
   function getPlans(manager){
+    const catalog=window.crmRouteCatalogV3?.plans();
+    if(catalog)return catalog;
     const cacheKey='__all_active_clients__';
     if(state.plansCache.has(cacheKey))return state.plansCache.get(cacheKey);
     const physical=physicalClientMap();
@@ -2335,6 +2337,7 @@ install();
   function clearIndexes(){state.monthIndexCache.clear();state.rowPointCache.clear();}
   function rowClientIds(row,manager){
     if(row?.is_network_point)return [];
+    if(window.crmRouteCatalogV3?.plans())return window.crmRouteCatalogV3.rowKeys(row);
     const key=String(row?.id||'')+'|'+manager;
     if(state.rowPointCache.has(key))return state.rowPointCache.get(key);
     const ids=[];
@@ -2453,7 +2456,8 @@ install();
       state.manager=document.getElementById('mrl-manager').value;state.date=document.getElementById('mrl-date').value;state.type=document.getElementById('mrl-type').value;
       if(!state.date)throw new Error('Выберите дату.');
       if(state.date<=todayM())throw new Error('Выберите будущую дату после '+todayM()+'.');
-      await loadNetworkPoints();
+      await Promise.all([loadNetworkPoints(),window.crmRouteCatalogV3.load(true)]);
+      clearIndexes();state.plansCache.clear();state.planMapCache.clear();
       const ps=getPlans(state.manager),idx=monthIndex(state.manager,state.date.slice(0,7));
       state.selected=new Set();state.locked=new Set();state.networkSelected=new Set();state.networkLocked=new Set();
       for(const r of (idx.dayRows.get(state.date)||[])){
@@ -2481,7 +2485,7 @@ install();
     return getPlans(state.manager)
       .filter(p=>q?true:assignedToSelectedManager(p))
       .filter(p=>q||!state.city||pointCity(p)===state.city)
-      .filter(p=>!q||normM(p.label+' '+pointAddress(p)+' '+pointCity(p)+' '+(p.assigned_manager||'')+' '+(p.primary?.client_status||'')+' '+(p.category||'')).includes(q))
+      .filter(p=>!q||normM(p.label+' '+(p.names||[]).join(' ')+' '+pointAddress(p)+' '+pointCity(p)+' '+(p.assigned_manager||'')+' '+(p.primary?.client_status||'')+' '+(p.category||'')).includes(q))
       .sort((a,b)=>rank[recommendation(a,counts).level]-rank[recommendation(b,counts).level]||pointCity(a).localeCompare(pointCity(b),'ru')||String(a.label||'').localeCompare(String(b.label||''),'ru'));
   }
   function renderPoints(){
@@ -2534,15 +2538,15 @@ install();
     const manager=document.getElementById('mrl-manager')?.value||state.manager,date=document.getElementById('mrl-date')?.value||state.date||defaultDate();
     const rows=(allRoutePlans||[]).filter(r=>r.manager_name===manager&&r.visit_date===date&&activeRow(r));
     if(!rows.length){root.innerHTML='<b>Выбранный день:</b> '+escM(manager)+' · '+escM(date)+' — маршрут пока не задан.';return;}
-    const active=rows.sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
+    const active=(window.crmRouteCatalogV3?.plans()?window.crmRouteCatalogV3.uniqueDisplayRows(rows,isVisited):rows).sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
     root.innerHTML='<b>Выбранный день:</b> '+escM(manager)+' · '+escM(date)+' · '+active.length+' строк'+active.map((r,i)=>'<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border)">'+(i+1)+'. '+escM(r.is_office_day?'Офисный день 09:00–18:00':r.is_network_point?'🏬 '+(r.network_name||r.client_name||'Сеть')+' — передача · '+(r.city||'')+', '+(r.address||''):(r.client_name||'ТТ')+' — '+(r.city||'')+', '+(r.address||''))+(isVisited(r)?' · ✅ выполнено':'')+'</div>').join('');
   }
 
   function plannedTimes(count,index){if(!count)return{start:'09:00:00',end:'18:00:00',minutes:540};const slot=Math.max(20,Math.floor(540/count)),start=9*60+slot*index,end=index===count-1?18*60:Math.min(18*60,start+slot);const fmt=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')+':00';return{start:fmt(start),end:fmt(end),minutes:end-start};}
   function rowFromPlan(plan,manager,date,index,count){const t=plannedTimes(count,index),primary=plan.primary||plan.eligible?.[0]?.client,now=new Date().toISOString(),point=plan.point||{};return{
-    client_id:primary?.id||null,manager_name:manager,visit_date:date,client_name:primary?.name||plan.label,city:primary?.city||point.city||primary?.region||'',region:primary?.region||point.region||'',address:primary?.address||point.address||'',category:clientCategory(primary)||plan.category||'',
+    client_id:primary?.id||null,manager_name:manager,visit_date:date,client_name:primary?.name||plan.label,city:plan.route_city||point.city||primary?.city||'',region:point.region||primary?.region||'',address:plan.route_address||point.address||primary?.address||'',category:clientCategory(primary)||plan.category||'',
     approved:true,review_status:'approved',source:'boss_manual_approved_v23675',generated_month:date.slice(0,7),removed:false,sort_order:index+1,planned_minutes:t.minutes,planned_start:t.start,planned_end:t.end,is_office_day:false,
-    physical_point_id:plan.physical_point_id||null,physical_point_key:plan.physical_point_key||null,linked_client_ids:primary?.id?[primary.id]:[],linked_client_names:primary?.name?[primary.name]:[],route_lat:point.lat??null,route_lng:point.lng??null,
+    physical_point_id:plan.physical_point_id||null,physical_point_key:plan.physical_point_key||null,linked_client_ids:(plan.linked||[]).map(x=>x.client.id),linked_client_names:(plan.names||[]).slice(),route_lat:point.lat??null,route_lng:point.lng??null,
     route_zone:[primary?.region||point.region,primary?.city||point.city].filter(Boolean).join(' / '),route_version:VERSION,reason:'Маршрут вручную составлен из активной карточки clients и утверждён руководителем',approved_by:currentProfile?.name||null,approved_at:now,
     is_network_point:false,network_point_id:null,network_name:null,network_category:null
   };}
@@ -2697,12 +2701,14 @@ install();
     state.aiFocus=null;
     await loadEditor();
     if(state.loading||document.getElementById('mrl-editor')?.style.display==='none')throw new Error('Редактор не открылся. Повторите');
-    const plan=getPlans(manager).find(p=>pointId(p)===clientId);
+    const matches=getPlans(manager).filter(p=>p.linked.some(x=>String(x.client.id)===clientId));
+    if(matches.length>1)throw new Error('У клиента несколько ТТ. Выберите точный адрес в ручном редакторе.');
+    const plan=matches[0];
     if(!plan)throw new Error('Клиент не найден в актуальном перечне маршрута');
-    const old=state.selected.has(clientId);
+    const selectionKey=pointId(plan),old=state.selected.has(selectionKey);
     if(!old&&state.selected.size+state.networkSelected.size>=MAX_POINTS)
       throw new Error('В выбранном дне уже 15 точек. Пересмотрите маршрут вручную');
-    state.selected.add(clientId);
+    state.selected.add(selectionKey);
     state.city=pointCity(plan);
     state.query='';
     state.aiFocus={manager,date,clientId,review:request.review};
@@ -2723,7 +2729,7 @@ install();
     try{return previousMyRender?.();}finally{allRoutePlans=saved;setTimeout(stripManagerEditing,0);}
   };
   const previousToday=window.loadTodayToRoute;
-  if(typeof previousToday==='function')window.loadTodayToRoute=function(date){const saved=allRoutePlans,my=currentProfile?.name;allRoutePlans=(saved||[]).filter(r=>r.manager_name===my&&r.visit_date===date&&(approvedRow(r)||isVisited(r)));try{return previousToday(date);}finally{allRoutePlans=saved;}};
+  if(typeof previousToday==='function')window.loadTodayToRoute=function(date){const saved=allRoutePlans,my=currentProfile?.name;const active=(saved||[]).filter(r=>r.manager_name===my&&r.visit_date===date&&(approvedRow(r)||isVisited(r)));allRoutePlans=window.crmRouteCatalogV3?.plans()?window.crmRouteCatalogV3.uniqueDisplayRows(active,isVisited):active;try{return previousToday(date);}finally{allRoutePlans=saved;}};
   window.addRouteStop=function(){alert('Маршрут изменяет только руководитель.');};
   window.removeRouteStop=function(){alert('Маршрут изменяет только руководитель.');};
 
@@ -2741,6 +2747,7 @@ install();
   window.goPage=function(page,title){const r=previousGo(page,title);if(page==='my-routes')crmSchedulePageHook('my-routes',()=>{stripManagerEditing();startManagerUpdates();},35);return r;};
   const previousLoad=window.loadData;
   if(typeof previousLoad==='function')window.loadData=async function(){const r=await previousLoad();state.plansCache.clear();state.planMapCache.clear();state.physicalClientMap=null;state.networkLoaded=false;state.networkPoints=[];clearIndexes();if(document.getElementById('page-routes-boss')?.classList.contains('active'))lightweightBossRender();return r;};
+  window.addEventListener('resanta-client360-updated',()=>{state.plansCache.clear();state.planMapCache.clear();state.physicalClientMap=null;clearIndexes();resetEditor();});
   window.addEventListener('resanta-network-points-updated',async()=>{state.networkLoaded=false;state.networkPoints=[];await loadNetworkPoints();if(document.getElementById('mrl-editor')?.style.display!=='none'){renderNetworkPoints();renderSummary();}});
 
   setTimeout(()=>{if(document.getElementById('page-routes-boss')?.classList.contains('active'))lightweightBossRender();startManagerUpdates();},0);
@@ -4990,11 +4997,12 @@ async function refreshOwnStoreRequests2270(block){
   }
  }catch(e){el.textContent='Статусы заявок временно недоступны: '+String(e?.message||e);}
 }
-window.openAddRouteStop=function(date){
+window.openAddRouteStop=async function(date){
   if(!isFieldManager2270()){alert('Добавлять клиентов в маршрут могут только полевые менеджеры.');return;}
   const d=date2270(date);
   if(!d||d<String(TODAY)){alert('Добавлять клиента можно только на сегодня или будущую дату.');return;}
   routeStopAddDate=d;
+  try{await window.crmRouteCatalogV3.load(true)}catch(e){alert('Не удалось загрузить торговые точки: '+(e.message||e));return;}
   ensureReasonUi2270();
   ensureStoreRequestUi2270();
   const label=document.getElementById('ars-date');
@@ -5012,34 +5020,34 @@ window.filterRouteStopAdd=function(){
   const q=norm2270(input.value);
   const own=(allClients||[]).filter(isOwnRouteClient2270);
   if(!q){res.style.display='block';res.innerHTML='<div style="padding:10px 12px;color:var(--sub);font-size:12px">Введите название клиента.</div>';return;}
-  const active=activeDayRows2270(routeStopAddDate);
-  const filtered=own.filter(c=>norm2270(c.name).includes(q)&&!active.some(r=>sameClient2270(r,c))).slice(0,30);
+  const active=activeDayRows2270(routeStopAddDate),catalog=window.crmRouteCatalogV3;
+  const selected=new Set(active.flatMap(r=>catalog.rowKeys(r)));
+  const filtered=(catalog.plans()||[]).filter(p=>isOwnRouteClient2270(p.primary)&&
+    norm2270(p.label+' '+p.names.join(' ')+' '+p.route_city+' '+p.route_address).includes(q)&&!selected.has(p.route_selection_key)).slice(0,30);
   res.style.display='block';
-  if(!filtered.length){res.innerHTML='<div style="padding:12px;color:var(--sub);font-size:12px">Среди ваших рабочих и потенциальных клиентов свободных совпадений не найдено.</div>';return;}
-  res.innerHTML=filtered.map(c=>{
-    const status=c.client_status||'—',addr=[c.city,c.address].filter(Boolean).join(' · ')||'адрес не указан';
-    return '<button type="button" onmousedown="event.preventDefault();addRouteStop(\''+escAttr(String(c.id))+'\')" style="display:block;width:100%;padding:10px 12px;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--border);background:#fff">'
-      +'<div style="font-size:13px;font-weight:700">'+esc(c.name)+'</div>'
-      +'<div style="font-size:11px;color:var(--sub);margin-top:3px">'+esc(status)+' · 📍 '+esc(addr)+'</div></button>';
-  }).join('');
+  if(!filtered.length){res.innerHTML='<div style="padding:12px;color:var(--sub);font-size:12px">Свободных торговых точек не найдено. Измените поиск.</div>';return;}
+  res.innerHTML=filtered.map(p=>'<button type="button" onmousedown="event.preventDefault();addRouteStop(\''+escAttr(p.route_selection_key)+'\')" style="display:block;width:100%;padding:10px 12px;text-align:left;border:0;border-bottom:1px solid var(--border);background:#fff">'
+    +'<b>'+esc(p.label)+'</b><div style="font-size:11px;color:var(--sub);margin-top:3px">📍 '+esc(p.route_city+' · '+p.route_address)+'</div></button>').join('');
+
 };
 
 window.addRouteStop=async function(clientId){
   if(!isFieldManager2270()){alert('Недостаточно прав.');return;}
-  const c=(allClients||[]).find(x=>String(x.id)===String(clientId));
+  const selected=window.crmRouteCatalogV3.find(clientId),c=selected?.primary;
   if(!isOwnRouteClient2270(c)){alert('Можно добавить только своего рабочего или потенциального клиента.');return;}
   const date=date2270(routeStopAddDate);
   if(!date||date<String(TODAY)){alert('Дата маршрута уже прошла.');return;}
   const reason=String(document.getElementById('ars-reason')?.value||'').trim();
   if(reason.length<3){alert('Укажите краткую причину добавления клиента.');document.getElementById('ars-reason')?.focus();return;}
   const day=activeDayRows2270(date);
-  if(day.some(r=>sameClient2270(r,c))){alert('Этот клиент уже есть в маршруте на выбранную дату.');return;}
+  if(day.some(r=>window.crmRouteCatalogV3.rowKeys(r).includes(selected.route_selection_key))){alert('Этот клиент уже есть в маршруте на выбранную дату.');return;}
   if(day.length>=MAX_POINTS_WARNING&&!confirm('В маршруте уже '+day.length+' точек. Добавить ещё одного клиента?'))return;
 
   const search=document.getElementById('ars-search');if(search)search.disabled=true;
   try{
-    const {data,error}=await db.rpc('crm_v2270_manager_add_route_stop',{
+    const {data,error}=await db.rpc('crm_manager_add_route_stop_v3',{
       p_client_id:c.id,
+      p_point_id:selected.physical_point_id,
       p_visit_date:date,
       p_reason:reason
     });
@@ -5065,7 +5073,13 @@ window.removeRouteStop=function(){alert('Удалять точки маршру�
 // После каждого открытия маршрута прячем старые кнопки удаления, если они остались в кеше DOM.
 const renderMyRoutes2270=window.renderMyRoutes;
 window.renderMyRoutes=function(){
-  const out=renderMyRoutes2270?.apply(this,arguments);
+  const original=allRoutePlans,ready=window.crmRouteCatalogV3?.plans();
+  if(ready)allRoutePlans=window.crmRouteCatalogV3.uniqueDisplayRows(original,r=>!!(r?.visited||r?.linked_visit_id));
+  let out;
+  try{out=renderMyRoutes2270?.apply(this,arguments);}finally{allRoutePlans=original;}
+  if(!ready&&isFieldManager2270())window.crmRouteCatalogV3?.load().then(()=>{
+    if(document.getElementById('page-my-routes')?.classList.contains('active'))window.renderMyRoutes?.();
+  }).catch(e=>console.warn('Route catalog not available',e));
   if(isFieldManager2270())document.querySelectorAll('#page-my-routes .route-stop-delete').forEach(x=>x.remove());
   return out;
 };

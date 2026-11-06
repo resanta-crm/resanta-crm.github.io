@@ -66,8 +66,9 @@ if(!child){
   patchRpc2365();
   let tries=0;const rpcTimer=setInterval(()=>{tries++;if(patchRpc2365()||tries>=30)clearInterval(rpcTimer)},200);
 
-  function open(id){
-    if(!id)return;
+  function open(id,silent){
+    if(!id||silent===true)return;
+    if(window.crmMobileGpsOpenV1?.(id))return;
     const w=window.open('./assets/gps-viewer-v2360.html?workday='+encodeURIComponent(id)+'&v=23.6.5&_='+Date.now(),'_blank');
     if(!w)return;
     const inject=()=>{try{

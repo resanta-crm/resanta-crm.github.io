@@ -5391,7 +5391,9 @@ function toggleVisitGroup(gid){
   if(willOpen)visitGroupsOpen.add(gid); else visitGroupsOpen.delete(gid);
 }
 
+let visitSelectionKeyV3=null;
 function openAddVisit(clientId){
+  visitSelectionKeyV3=null;
   visitClientId=clientId;
   document.getElementById('visit-modal-title').textContent=clientId?'Визит — '+(allClients.find(x=>x.id===clientId)?.name||''):'Записать визит';
   if(!clientId){
@@ -5424,20 +5426,30 @@ function showVisitClientTasks(clientId){
 function validateVOpenTasks(){return validateOpenTasksBlock('v-client-tasks',vTaskDecisions);}
 function applyVTaskDecisions(){return applyOpenTasksDecisions('v-client-tasks',vTaskDecisions);}
 
-function filterVisitClients(){
+async function filterVisitClients(){
   const q=document.getElementById('v-client-search').value.toLowerCase();
   const list=document.getElementById('v-client-list');
   if(!q){list.style.display='none';return;}
-  const filtered=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
-  list.style.display=filtered.length?'block':'none';
-  list.innerHTML=filtered.map(c=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectVisitClient(\''+c.id+'\',\''+escAttr(c.name)+'\')" >'+esc(c.name)+'</div>').join('');
+  list.style.display='block';list.textContent='Загружаю торговые точки…';
+  try{
+    const plans=await window.crmRouteCatalogV3.load();
+    if(document.getElementById('v-client-search')?.value.toLowerCase()!==q)return;
+    const filtered=plans.filter(p=>(p.label+' '+p.names.join(' ')+' '+p.route_city+' '+p.route_address).toLowerCase().includes(q)).slice(0,20);
+    list.innerHTML=filtered.map(p=>'<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px" onmousedown="selectVisitStoreV3(\''+escAttr(p.route_selection_key)+'\')"><b>'+esc(p.label)+'</b><div style="font-size:11px;color:var(--sub)">'+esc(p.route_city+' · '+p.route_address)+'</div></div>').join('')||'Торговые точки не найдены';
+  }catch(e){list.textContent='Не удалось загрузить ТТ: '+String(e?.message||e);}
 }
 
 function selectVisitClient(id,name){
+  visitSelectionKeyV3=null;
   document.getElementById('v-client').value=id;
   document.getElementById('v-client-search').value=name;
   document.getElementById('v-client-list').style.display='none';
   showVisitClientTasks(id);
+}
+function selectVisitStoreV3(key){
+  const plan=window.crmRouteCatalogV3.find(key);if(!plan)return;
+  selectVisitClient(plan.primary.id,plan.label+' · '+plan.route_city+', '+plan.route_address);
+  visitSelectionKeyV3=key;
 }
 
 // ===== Проверка на НМС (негативные мыслительные стереотипы) =====
@@ -5515,6 +5527,7 @@ async function saveVisit(){
     const probeVisit={client_id:liveCid,manager_name:currentProfile?.name||(c&&c.manager_name)||null,date:TODAY};
     const exact=allRoutePlans.filter(r=>!r.removed&&!routePlanVerified(r)&&r.visit_date===TODAY
       &&routeClientMatchesVisit(r,probeVisit)
+      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))
       &&managerLooseMatch(r.manager_name,currentProfile?.name||(c&&c.manager_name)));
     // Общая кнопка визита не должна закрывать старую или случайную точку.
     // Автосвязь разрешена только при одном точном совпадении на сегодня.
@@ -5668,15 +5681,49 @@ async function _aiTaskFromVisit(c, visit, nextDate){
   return t;
 }
 
-function openAddClient(){document.getElementById('modal-add-client').classList.add('open');}
+function openAddClient(){
+  const manager=document.getElementById('nc-manager');
+  if(manager){manager.innerHTML='<option value="">Выберите менеджера</option>'+managerOptionsHtml(currentProfile?.role==='manager'?currentProfile.name:'');manager.disabled=currentProfile?.role==='manager';}
+  document.getElementById('nc-result').textContent='';
+  document.getElementById('modal-add-client').classList.add('open');
+}
 
 async function saveNewClient(){
   const name=document.getElementById('nc-name').value.trim();
-  if(!name){alert('Введите название клиента');return;}
-  const {data:client}=await db.from('clients').insert({name,region:document.getElementById('nc-region').value,contact:document.getElementById('nc-contact').value,phone:document.getElementById('nc-phone').value,code:document.getElementById('nc-code').value,revenue_total:parseFloat(document.getElementById('nc-rev').value)||0}).select().single();
-  if(client)allClients.unshift(client);
-  closeModal('modal-add-client');renderClients();
-  // task client search is handled by filterTaskClients()
+  const output=document.getElementById('nc-result'),button=document.getElementById('nc-save');
+  if(button.disabled)return;
+  const manager=currentProfile?.role==='manager'?currentProfile.name:document.getElementById('nc-manager').value;
+  const city=document.getElementById('nc-city').value.trim(),address=document.getElementById('nc-address').value.trim();
+  if(!['boss','manager'].includes(currentProfile?.role)){output.textContent='Недостаточно прав для создания клиента.';return;}
+  if(name.length<2||!manager||city.length<2||address.length<5){output.textContent='Заполните название, менеджера, город и полный адрес ТТ.';return;}
+  const payload={name,manager_name:manager,city,address,client_status:document.getElementById('nc-status').value,
+    region:document.getElementById('nc-region').value,contact:document.getElementById('nc-contact').value.trim(),
+    phone:document.getElementById('nc-phone').value.trim(),code:document.getElementById('nc-code').value.trim()||null,
+    revenue_total:parseFloat(document.getElementById('nc-rev').value)||0,created_from:'crm_manual',reviewed:true};
+  // Reuse an ID after an interrupted response, but never reuse it for edited input or another account.
+  const signature=JSON.stringify([currentUser?.id,payload]);
+  if(button.dataset.signature!==signature){button.dataset.signature=signature;button.dataset.clientId=crypto.randomUUID();}
+  const id=button.dataset.clientId;
+  button.disabled=true;output.textContent='Сохраняю клиента…';
+  try{
+    let {data:client,error}=await db.from('clients').insert({...payload,id}).select().single();
+    if(error?.code==='23505'){
+      const recovered=await db.from('clients').select('*').eq('id',id).single();client=recovered.data;error=recovered.error;
+    }
+    if(error||!client?.id)throw error||Error('Сервер не подтвердил сохранение');
+    allClients=[client,...allClients.filter(c=>String(c.id)!==String(client.id))];
+    _clientNameMatchCache=null;_phClientMatchCache=null;_phNameSet=null;
+    window.dispatchEvent(new Event('resanta-client360-updated'));
+    // A newly saved card must not disappear behind an earlier search/status/manager filter.
+    regionFilter='all';managerFilter=currentProfile?.role==='manager'?'mine':'all';statusFilter='all';
+    window.__crmClientSearchQuery='';
+    const search=document.getElementById('client-search');if(search)search.value='';
+    delete button.dataset.signature;delete button.dataset.clientId;
+    closeModal('modal-add-client');renderClients();
+    try{openClient(client.id);}catch(e){console.warn('Client was saved, but its card could not open',e);}
+    document.getElementById('nc-name').value='';document.getElementById('nc-address').value='';
+  }catch(e){output.textContent='Клиент не сохранён: '+String(e?.message||e)+'. Данные формы сохранены — исправьте причину и повторите.';}
+  finally{button.disabled=false;}
 }
 
 // openAddTask defined above

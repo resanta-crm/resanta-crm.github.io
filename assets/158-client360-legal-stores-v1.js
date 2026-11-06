@@ -94,7 +94,7 @@ async function group(){
   const {data,error}=await db.rpc('client360_group_clients_v1',{p_name:name,p_client_ids:[...checked]});
   if(error||!data?.ok)throw error||new Error('Связь не сохранена');
   checked.clear();page.querySelector('#c360-legal').value='';alert('✅ Связано '+data.linked_cards+' карточек под юрлицом «'+name+'». История и адреса сохранены.');
-  await load();
+  root.dispatchEvent(new Event('resanta-client360-updated'));await load();
  }catch(e){alert('Не удалось связать карточки: '+(e?.message||e))}
  finally{button.disabled=false}
 }
@@ -103,7 +103,7 @@ async function reviewPoint(requestId,approve){
  try{
    const {data,error}=await db.rpc('client360_approve_store_v1',{p_request_id:requestId,p_approve:approve,p_comment:approve?'Подтверждён адрес; GPS требует выверения':'Адрес не подтверждён'});
    if(error||!data?.ok)throw error||new Error('Нет подтверждения');
-   await load();
+   root.dispatchEvent(new Event('resanta-client360-updated'));await load();
  }catch(e){alert('Ошибка проверки ТТ: '+(e?.message||e))}
 }
 async function openGroup(entityId){

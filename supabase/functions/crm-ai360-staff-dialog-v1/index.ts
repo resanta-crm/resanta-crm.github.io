@@ -5,6 +5,7 @@ import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {runToolCore,CORE_MODEL} from './core.mjs';
 import {staffPermission} from './permissions.mjs';
 import {isPersonalPlanQuestion,concisePlan} from './short-plan.mjs';
+import {kpiMetric,questionMonth,kpiAnswer} from './kpi-answer.mjs';
 const NAMES=['Руднев','Ачинович','Шкуран'];
 const TRI_NAMES=['Александренко','Кришталь'];
 const DOMAINS=['sales','debt','clients','tasks','routes','visits','gps','stock','client_detail',
@@ -55,8 +56,9 @@ Deno.serve(async req=>{
  if(!question)return reply(req,{error:'empty_question'},400);
  const day=today(),currentMonth=day.slice(0,7);
  const requestedMonth=String(body?.month||'').slice(0,7);
- const month=/^20\d{2}-(0[1-9]|1[0-2])$/.test(requestedMonth)&&
+ const fallbackMonth=/^20\d{2}-(0[1-9]|1[0-2])$/.test(requestedMonth)&&
    requestedMonth>='2025-01'&&requestedMonth<=currentMonth?requestedMonth:currentMonth;
+ const month=questionMonth(question,fallbackMonth,day);
  const directMatches=[...NAMES,...TRI_NAMES].filter(name=>norm(question).includes(norm(name).slice(0,4)));
  if(directMatches.length>1)return reply(req,{error:'ambiguous_manager'},400);
  const priorManager=NAMES.find(x=>norm(x)===norm(body?.memory?.manager||''))||null;
@@ -79,6 +81,25 @@ Deno.serve(async req=>{
   role:x?.role==='assistant'?'assistant':'user',
   content:String(x?.content||'').slice(0,250)
  })):[];
+ // Numeric KPI answers use the verified dashboard fields without LLM scaling or reinterpretation.
+ const metric=permission.tier!=='triovist_category'?kpiMetric(question):null;
+ if(metric){
+  let evidence=null;
+  try{
+   const res=await fetch(url+'/functions/v1/crm-ai360-staff-read-v1',{
+    method:'POST',headers:{'Authorization':'Bearer '+token,'apikey':anon,'Content-Type':'application/json'},
+    body:JSON.stringify({kind:'read',domain:'sales',manager:subject||null,month}),signal:AbortSignal.timeout(6000)
+   });
+   if(res.ok)evidence=await res.json();
+  }catch(_){}
+  const selected=subject?[subject]:permitted;
+  const answer=evidence?.scope?.role===permission.tier?kpiAnswer(evidence,selected,month,metric):null;
+  if(!answer)return reply(req,{error:'sales_source_unavailable',answer_verified:false},503);
+  return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:true,read_only:true,
+   model:'verified_staff_kpi',scope:'Витебск',role:permission.tier,subject_manager:subject,month,
+   answer,speech_summary:answer,offer:'',domains_used:['sales'],as_of:day,
+   memory:{...memory,domain:'sales',metric}});
+ }
  // A precise question about one's personal sales plan needs one verified CRM number,
  // not an OpenAI essay. Authorization is checked above and again by the staff read gateway.
  if(permission.tier==='field_manager'&&isPersonalPlanQuestion(question)){
