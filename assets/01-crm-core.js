@@ -1700,22 +1700,33 @@ async function gpsResolveRoutePointForVisit(client, route){
   if(!route?.physical_point_id) return route;
   const resolved={...route,gps_anchor_verified:false};
   try{
-    const [pointResult,linksResult]=await Promise.all([
-      db.from('route_physical_points').select('id,lat,lng').eq('id',route.physical_point_id).maybeSingle(),
+    const [pointResult,linksResult,peersResult]=await Promise.all([
+      db.from('route_physical_points').select('id,city,address,lat,lng').eq('id',route.physical_point_id).maybeSingle(),
       client?.id
         ? db.from('route_physical_point_clients').select('point_id').eq('client_id',client.id).limit(3)
-        : Promise.resolve({data:[],error:null})
+        : Promise.resolve({data:[],error:null}),
+      db.from('route_physical_point_clients').select('client_id').eq('point_id',route.physical_point_id).limit(3)
     ]);
-    if(pointResult.error||linksResult.error) throw pointResult.error||linksResult.error;
-    // Только актуальные координаты выбранной ТТ; устаревший снимок маршрута не используем.
+    if(pointResult.error||linksResult.error||peersResult.error)
+      throw pointResult.error||linksResult.error||peersResult.error;
     const point=pointResult.data;
+    // Do not treat a historical route snapshot as a live, verified physical-store anchor.
     resolved.route_lat=point?.lat??null;
     resolved.route_lng=point?.lng??null;
     if(!point||!client) return resolved;
     const gf=clientGeofence(client);
-    const ids=(linksResult.data||[]).map(v=>String(v.point_id));
-    if(!gf?.verified||ids.length!==1||ids[0]!==String(route.physical_point_id)) return resolved;
-    // Не используем якорь, если он конфликтует с координатой физической ТТ.
+    const linkedPoints=(linksResult.data||[]).map(v=>String(v.point_id));
+    const linkedClients=(peersResult.data||[]).map(v=>String(v.client_id));
+    const sameText=(x,y)=>String(x||'').trim().toLocaleLowerCase('ru')===String(y||'').trim().toLocaleLowerCase('ru');
+    // Client and physical store must be mutually 1:1, with the SAME nonblank address/city.
+    // A market, shared legal entity or ambiguous pavilion can never inherit a different store's GPS.
+    const exactLink=linkedPoints.length===1&&linkedPoints[0]===String(route.physical_point_id)
+      &&linkedClients.length===1&&linkedClients[0]===String(client.id);
+    const exactAddress=client.city&&point.city&&client.address&&point.address
+      &&sameText(client.city,point.city)&&sameText(client.address,point.address);
+    const sourceVerified=client.gps_verified_at&&gf?.verified
+      &&Number.isFinite(Number(gf.lat))&&Number.isFinite(Number(gf.lng));
+    if(!exactLink||!exactAddress||!sourceVerified) return resolved;
     if(point.lat!=null&&point.lng!=null&&gpsDistance(Number(point.lat),Number(point.lng),gf.lat,gf.lng)>35){
       resolved.gps_anchor_conflict=true;
       return resolved;
@@ -1724,7 +1735,7 @@ async function gpsResolveRoutePointForVisit(client, route){
     resolved.gps_anchor_lat=gf.lat;
     resolved.gps_anchor_lng=gf.lng;
     resolved.gps_anchor_radius=gf.radius;
-    resolved.gps_anchor_source='client_verified_1to1';
+    resolved.gps_anchor_source='client_verified_exact_store_link';
   }catch(error){
     console.warn('GPS-якорь физической ТТ не проверен: визит сохраняется без ложного подтверждения',error);
     resolved.route_lat=null;
