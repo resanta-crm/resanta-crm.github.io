@@ -43,6 +43,15 @@ for(const [label,html] of [['OpenStreetMap',OSM],['Yandex',YANDEX]]){
   assert.doesNotMatch(html,/\.from\(['"]gps_track_points['"]\).*\.delete/);
  });
 }
+test('both maps use the same verified v236421 GPS and coordinate evidence; legacy 417 is not called',()=>{
+ for(const [name,html] of [['OSM',OSM],['Yandex',YANDEX]]){
+  assert.match(html,/gps_rebuild_workday_aggregate_v236421/,name);
+  assert.match(html,/gps_get_workday_aggregate_director_v236421/,name);
+  assert.match(html,/v23\.6\.421/,name);
+  assert.match(html,/v23\.6\.425/,name);
+  assert.doesNotMatch(html,/gps_get_workday_aggregate_director_v236417/);
+ }
+});
 test('director GPS360 module, independent server evidence and tasks untouched',()=>{
  const index=read('index.html');
  assert.match(index,/181-gps-director360-v1\.js\?v=20261105-director360-1/);
