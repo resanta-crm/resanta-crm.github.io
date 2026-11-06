@@ -38,7 +38,7 @@ jobs:
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/gps360-changes
           ! grep -E '^assets/(02-mobile-gps-base|03-triovist-routes|106-triovist-competitors-v236218|125-gps-integrity-v236429|127-gps-director-case-review-v236440|128-gps-meeting-ai-v236441)[.]js$' /tmp/gps360-changes
-          ! (grep '^supabase/migrations/' /tmp/gps360-changes | grep -v '^supabase/migrations/(20261105_gps_director360_|20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)[.]sql$)')
+          ! (grep '^supabase/migrations/' /tmp/gps360-changes | grep -v -E '^supabase/migrations/(20261105_gps_director360_.*|20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)|20261106142000_gps360_exact_physical_store_read_v1)[.]sql$')
           test -f supabase/migrations/20261105_gps_director360_evidence_v1.sql
           test -f supabase/migrations/20261105_gps_director360_stop_reviews_v1.sql
           test -f supabase/migrations/20261105_gps_director360_live_stops_v1.sql
