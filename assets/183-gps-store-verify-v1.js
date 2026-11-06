@@ -4,7 +4,7 @@
 'use strict';
 if(w.RESANTA_GPS360_STORE_VERIFY_V1)return;
 const VERSION='gps360-geo-once-20261106';
-const KEY='resanta_gps360_geo_queue_v1',PROMPTED='resanta_gps360_geo_prompted_v1';
+const KEY='resanta_gps360_geo_queue_v1',PROMPTED='resanta_gps360_geo_prompted_v1',PENDING='resanta_gps360_geo_sync_v1';
 let active=null,sending=false,ready=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const prof=()=>{try{return typeof currentProfile!=='undefined'?currentProfile:w.currentProfile}catch(_){return w.currentProfile}};
@@ -67,10 +67,19 @@ async function send(item,choice){
   p_accuracy_m:item.accuracy,p_observed_at:item.taken_at,p_choice:choice
  });if(r.error)throw r.error;return r.data;
 }
+function trackPending(route){
+ const rows=read(PENDING).filter(x=>x.actor===email()&&Date.now()-x.time<7*864e5);
+ if(!rows.some(x=>x.route===route))rows.push({route,actor:email(),time:Date.now()});
+ write(PENDING,rows);
+}
+function clearPending(route){
+ write(PENDING,read(PENDING).filter(x=>!(x.actor===email()&&x.route===route)));
+}
 async function retry(route){
  const api=client();if(!api?.rpc)return;
  try{const r=await api.rpc('gps360_store_onsite_retry_v20261106',{p_route_plan_id:route});
-  if(r.error)throw r.error;if(r.data?.status==='verified')console.info('GPS360 точка подтверждена исходным GPS-треком');
+  if(r.error)throw r.error;if(['verified','already_verified','conflict','none'].includes(r.data?.status))clearPending(route);
+  if(r.data?.status==='verified')console.info('GPS360 точка подтверждена исходным GPS-треком');
  }catch(e){console.warn('GPS360 проверка синхронизации отложена',e?.message||e)}
 }
 async function decide(choice){
@@ -84,10 +93,12 @@ async function decide(choice){
   const result=await send(item,choice);
   if(!result?.ok)throw Error('Сервер не подтвердил сохранение');
   if(result.status==='pending_sync'){
+   trackPending(item.route_plan_id);
    notice('Решение принято. Координаты будут проверены после синхронизации GPS. Повторно отвечать не нужно.');
    setTimeout(()=>retry(item.route_plan_id),12000);
    setTimeout(()=>retry(item.route_plan_id),45000);
   }else if(result.status==='verified'||result.status==='already_verified'){
+   clearPending(item.route_plan_id);
    notice('✓ Координаты магазина подтверждены GPS и сохранены.');
   }else if(result.status==='conflict')notice('Точка рядом с другим магазином — отправлена на дополнительную проверку.');
   else notice('Решение сохранено.');
@@ -111,16 +122,19 @@ async function flush(){
  if(!rows.length)return;
  sending=true;
  const pending=[];
- for(const x of rows){
+ for(let i=0;i<rows.length;i++){
+  const x=rows[i];
   try{
    const api=client();const p=await api.rpc('gps360_store_onsite_preview_v20261106',{p_route_plan_id:x.route_plan_id,p_accuracy_m:x.accuracy});
    if(p.error)throw p.error;
    if(p.data?.prompt){
     const result=await send(x,x.choice);if(!result?.ok)throw Error('Pending response');
    }
-  }catch(e){pending.push(x);if(!navigator.onLine)break}
+  }catch(e){pending.push(x);if(!navigator.onLine){pending.push(...rows.slice(i+1));break}}
  }
  write(KEY,pending);sending=false;
+ const syncs=read(PENDING).filter(x=>x.actor===email()&&Date.now()-x.time<7*864e5).slice(-40);
+ for(const x of syncs)await retry(x.route);
 }
 d.addEventListener('click',e=>{
  const t=e.target;if(!t.closest?.('#gps360-store-geo-once'))return;
