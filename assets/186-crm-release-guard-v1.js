@@ -42,7 +42,7 @@ async function check(){
   const response=await w.fetch(url.toString(),{cache:'no-store',credentials:'same-origin',signal:controller.signal});
   if(!response.ok)return;
   const source=await response.text();
-  const match=source.match(/const\\s+APP_VERSION\\s*=\\s*['"]([^'"]+)['"]/);
+  const match=source.match(/const\s+APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
   if(match&&match[1]!==build)show(match[1]);
  }catch(e){ /* Offline or blocked: do not interrupt the CRM. */ }
  finally{w.clearTimeout(timeout);busy=false}
