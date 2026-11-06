@@ -1,0 +1,25 @@
+name: CRM stale UI release guard
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'assets/186-crm-release-guard-v1.js'
+      - 'tests/crm-release-guard-v1.test.mjs'
+      - '.github/workflows/crm-release-guard-v1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'assets/186-crm-release-guard-v1.js'
+      - 'tests/crm-release-guard-v1.test.mjs'
+      - '.github/workflows/crm-release-guard-v1.yml'
+permissions:
+  contents: read
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check stale UI notice, version stamp, and safety
+        run: node --test tests/crm-release-guard-v1.test.mjs
