@@ -28,10 +28,14 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
   assert.ok(a>=0&&b>a&&x>=0&&y>x,`Cannot isolate ${start}`);
   normalized=normalized.slice(0,a)+before.slice(x,y)+normalized.slice(b);
  };
- normalized=normalized.replace('let visitSelectionKeyV3=null;\n','');
- restore('function openAddVisit(clientId){','// ===== Проверка на НМС');
- normalized=normalized.replace("      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))\n",'');
- restore('function openAddClient(){','// openAddTask defined above');
+ // A CI-only PR may leave CRM core byte-identical to main. Normalize only
+ // when the branch actually changed core; otherwise retain exact equality.
+ if(core!==before){
+  normalized=normalized.replace('let visitSelectionKeyV3=null;\n','');
+  restore('function openAddVisit(clientId){','// ===== Проверка на НМС');
+  normalized=normalized.replace("      &&(!visitSelectionKeyV3||window.crmRouteCatalogV3.rowKeys(r).includes(visitSelectionKeyV3))\n",'');
+  restore('function openAddClient(){','// openAddTask defined above');
+ }
  assert.equal(normalized,before,'Never replace original visit transactions, routes, parsers or clients');
  const events=(core.match(/resanta-gps360-store-check/g)||[]);
  assert.equal(events.length,3,'Only check-in and two successful visit save routes');
