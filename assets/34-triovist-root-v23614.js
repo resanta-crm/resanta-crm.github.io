@@ -1,10 +1,10 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.407',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
+const V='v23.6.407-shares360-20261106',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
-const WORK=['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
+const WORK=['home','sales','groups','shares','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
 let ctx=null,shell=null,panel=null,active='home',unixHealthy=false,busy=false,refreshBusy=false,navEpoch=0,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -111,7 +111,7 @@ function visibleWorkKeys(){return WORK.filter(k=>k!=='infographics')}
 function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''));if(k==='infographics'&&!canSeeInfographics())return'home';return[...visibleWorkKeys(),...COMM].includes(k)?k:'home'}catch(_){return'home'}}
 function shellComplete(el=shell){if(!el?.isConnected)return false;const need=[...visibleWorkKeys(),...COMM],keys=[...el.querySelectorAll('[data-tr14]')].map(b=>b.dataset.tr14),got=new Set(keys);return keys.length===need.length&&need.every(k=>got.has(k))}
 function repairShell(){const el=shell?.isConnected?shell:document.getElementById('tr14-shell');if(!el)return false;const orphan=el!==shell;if(orphan||!shellComplete(el)){el.remove();const pp=panel?.isConnected?panel:document.getElementById('tr14-panel');pp?.remove();shell=null;panel=null;return true}return false}
-function dom(){const p=page(),h=host();if(!p||!h)return false;repairShell();if(!shell?.isConnected){shell=document.createElement('div');shell.id='tr14-shell';const w=[['home','📊 Сводка 360°'],['sales','💰 Продажи'],['groups','📈 Группы и категории'],['stock','📦 Остатки и заказ'],['tasks','🤖 Задачи ИИ'],['motivation','🏆 Бонусы и план'],['cards','🧩 Карточки 21vek'],['parser','🌐 Парсер 21vek'],['competitors','⚔️ Конкуренты 21vek'],...[]],c=[['anp','🧾 АНП'],['si','🛠 Компенсация СИ'],['budget','💼 Бюджет'],['price','🧮 Расчёт цены']],r=a=>a.map(x=>`<button type="button" data-tr14="${x[0]}">${x[1]}</button>`).join('');shell.innerHTML=`<div class="tr14-head"><b>РЕСАНТА CRM · Триовист (21vek.by)</b><div class="tr14-head-actions"><span>${esc(ctx?.name||ctx?.email||'')}</span><button type="button" class="tr14-refresh" data-tr14-refresh>↻ Обновить</button></div></div><div class="tr14-g"><div class="tr14-box"><div class="tr14-label">РАБОТА</div><div class="tr14-row">${r(w)}</div></div><div class="tr14-box c"><div class="tr14-label">КОММЕРЦИЯ</div><div class="tr14-row">${r(c)}</div></div></div>`;shell.onclick=e=>{const rb=e.target.closest('[data-tr14-refresh]');if(rb){e.preventDefault();refreshCurrent();return}const b=e.target.closest('[data-tr14]');if(b)activate(b.dataset.tr14,true).catch(error)};h.insertBefore(shell,h.firstChild)}if(!panel?.isConnected){panel=document.createElement('div');panel.id='tr14-panel';shell.insertAdjacentElement('afterend',panel);bind()}hideOld();sync();return true}
+function dom(){const p=page(),h=host();if(!p||!h)return false;repairShell();if(!shell?.isConnected){shell=document.createElement('div');shell.id='tr14-shell';const w=[['home','📊 Сводка 360°'],['sales','💰 Продажи'],['groups','📈 Группы и категории'],['shares','📊 Доли 21vek'],['stock','📦 Остатки и заказ'],['tasks','🤖 Задачи ИИ'],['motivation','🏆 Бонусы и план'],['cards','🧩 Карточки 21vek'],['parser','🌐 Парсер 21vek'],['competitors','⚔️ Конкуренты 21vek'],...[]],c=[['anp','🧾 АНП'],['si','🛠 Компенсация СИ'],['budget','💼 Бюджет'],['price','🧮 Расчёт цены']],r=a=>a.map(x=>`<button type="button" data-tr14="${x[0]}">${x[1]}</button>`).join('');shell.innerHTML=`<div class="tr14-head"><b>РЕСАНТА CRM · Триовист (21vek.by)</b><div class="tr14-head-actions"><span>${esc(ctx?.name||ctx?.email||'')}</span><button type="button" class="tr14-refresh" data-tr14-refresh>↻ Обновить</button></div></div><div class="tr14-g"><div class="tr14-box"><div class="tr14-label">РАБОТА</div><div class="tr14-row">${r(w)}</div></div><div class="tr14-box c"><div class="tr14-label">КОММЕРЦИЯ</div><div class="tr14-row">${r(c)}</div></div></div>`;shell.onclick=e=>{const rb=e.target.closest('[data-tr14-refresh]');if(rb){e.preventDefault();refreshCurrent();return}const b=e.target.closest('[data-tr14]');if(b)activate(b.dataset.tr14,true).catch(error)};h.insertBefore(shell,h.firstChild)}if(!panel?.isConnected){panel=document.createElement('div');panel.id='tr14-panel';shell.insertAdjacentElement('afterend',panel);bind()}hideOld();sync();return true}
 async function refreshCurrent(){
  if(refreshBusy)return;
  const b=shell?.querySelector('[data-tr14-refresh]'),label=b?.textContent||'↻ Обновить',k=active;
@@ -134,7 +134,8 @@ async function refreshCurrent(){
    else if(k==='groups'){
      const mod=window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120;
      if(mod?.refresh)await mod.refresh();else if(mod?.open)await mod.open(panel,ctx);
-   }else if(k==='competitors'){
+   }else if(k==='shares')await window.RESANTA_TRIOVIST_SHARES360_V1?.refresh?.();
+   else if(k==='competitors'){
      const mod=window.RESANTA_TRIOVIST_COMPETITORS_V236218;
      if(mod?.open)await mod.open(panel,ctx,true);
     }else if(k==='infographics'){
@@ -175,7 +176,7 @@ function subscribeSalesImport(){
 function sync(){const p=page();if(!p||!shell||!panel)return;const on=p.classList.contains('active');
  const mot=document.getElementById('tri-mot-compare-v236200');
  if(mot)mot.style.setProperty('display',on&&active==='motivation'?'block':'none','important');
- shell.style.setProperty('display',on?'block':'none','important');if(!on){panel.style.setProperty('display','none','important');p.style.removeProperty('display');window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(false);return}if(active==='home'&&unixHealthy&&window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.open){p.style.setProperty('display','none','important');panel.style.setProperty('display','none','important');window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1.show(true)}else if(active==='motivation'){p.style.setProperty('display','none','important');panel.style.setProperty('display','none','important')}else if(COMM.includes(active)||active==='groups'||active==='competitors'||active==='infographics'){p.style.setProperty('display','none','important');panel.style.setProperty('display','block','important')}else{p.style.setProperty('display','block','important');panel.style.setProperty('display','none','important')}if(active!=='home'||!unixHealthy)window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(false);hideOld();
+ shell.style.setProperty('display',on?'block':'none','important');if(!on){panel.style.setProperty('display','none','important');p.style.removeProperty('display');window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(false);return}if(active==='home'&&unixHealthy&&window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.open){p.style.setProperty('display','none','important');panel.style.setProperty('display','none','important');window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1.show(true)}else if(active==='motivation'){p.style.setProperty('display','none','important');panel.style.setProperty('display','none','important')}else if(COMM.includes(active)||active==='groups'||active==='shares'||active==='competitors'||active==='infographics'){p.style.setProperty('display','none','important');panel.style.setProperty('display','block','important')}else{p.style.setProperty('display','block','important');panel.style.setProperty('display','none','important')}if(active!=='home'||!unixHealthy)window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(false);hideOld();
  // On first entry, start() may have opened the saved tab while Triovist was hidden.
  if(on)window.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1?.mount?.(active,ctx);
 }
@@ -265,7 +266,13 @@ async function activate(k,save=false){
   if(token===navEpoch&&active===k)sync();
   return;
  }
- if(k==='competitors'){
+ if(k==='shares'){
+   choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
+   panel.innerHTML='<div class="tr14-info">Загружаю Доли 21vek…</div>';
+   const mod=window.RESANTA_TRIOVIST_SHARES360_V1;
+   if(!mod?.open)throw Error('Модуль «Доли 21vek» ещё не загрузился.');
+   await mod.open(panel,ctx);
+ }else if(k==='competitors'){
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');
    panel.innerHTML='<div class="tr14-info">Загружаю конкурентный анализ 21vek…</div>';
    for(let i=0;i<30&&!window.RESANTA_TRIOVIST_COMPETITORS_V236218&&token===navEpoch;i++)await new Promise(r=>setTimeout(r,60));
