@@ -131,3 +131,11 @@ test('AIR3: opening text panel cannot auto-call director briefing on Android',()
  assert.ok(brief.includes('window.crmAI360DirectorBriefHandleV1=function(text,ui)'),
            'manual director briefing remains available');
 });
+
+test('AIR3 status must never claim a working microphone or speaker after JS-only readiness',()=>{
+ assert.ok(lazy.includes("start.textContent='Модули загружены · голос не проверен'"));
+ assert.ok(lazy.includes("Микрофон и динамики пока НЕ проверены"));
+ assert.ok(!lazy.includes("start.textContent='✓ Голосовые модули подключены'"));
+ assert.ok(lazy.includes("window.__resantaAI360AndroidVoiceArmed=true"),
+     'existing explicit voice opt-in remains unchanged');
+});
