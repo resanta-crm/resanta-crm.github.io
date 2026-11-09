@@ -10,7 +10,7 @@ const usd=x=>"$"+N(x).toLocaleString("ru-RU",{maximumFractionDigits:0});
 const compact=x=>Math.abs(N(x))>=1000000?"$"+(N(x)/1e6).toLocaleString("ru-RU",{maximumFractionDigits:2})+" млн":Math.abs(N(x))>=1000?"$"+(N(x)/1e3).toLocaleString("ru-RU",{maximumFractionDigits:1})+" тыс.":usd(x);
 const pct=x=>N(x).toLocaleString("ru-RU",{maximumFractionDigits:2})+"%";
 const pp=x=>N(x).toLocaleString("ru-RU",{maximumFractionDigits:2})+" п. п.";
-const S={host:null,ctx:null,categories:[],brands:[],assignments:[],goals:[],tasks:[],answers:[],selected:"",brand:"all",owner:"all",view:"shares",taskId:"",loading:false,error:"",last:0};
+const S={host:null,ctx:null,categories:[],brands:[],assignments:[],goals:[],tasks:[],answers:[],selected:"",brand:"all",owner:"all",view:"shares",taskId:"",loading:false,error:"",last:0,evidence:{},evidenceLoading:{}};
 const ownerName=e=>e===ALEKS?"Александренко":e===KRIS?"Кришталь":"Не закреплена";
 const boss=()=>S.ctx?.is_leader===true;
 const me=()=>String(S.ctx?.email||"").toLowerCase();
@@ -46,6 +46,7 @@ function css(){
  "#"+ID+" .sh-bottom{display:grid;grid-template-columns:1.1fr 1fr;gap:11px;margin-top:12px}#"+ID+" .sh-status{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}"+
  "#"+ID+" .sh-state{padding:11px;border-radius:10px;background:#eef6ff}#"+ID+" .sh-state:nth-child(2){background:#fff8e6}#"+ID+" .sh-state:nth-child(3){background:#ebf9ed}#"+ID+" .sh-state:nth-child(4){background:#fff0ef}#"+ID+" .sh-state b{display:block;font-size:20px;margin:4px 0}"+
  "#"+ID+" .sh-note{background:#f7f4ff;border:1px solid #ddd2fc;border-radius:10px;padding:11px;margin:9px 0;line-height:1.55}"+
+ "#"+ID+" .sh-evidence{margin:10px 0;background:#f7fbff;border-color:#c7dff4}#"+ID+" .sh-evidence h3{color:#215b87}#"+ID+" .sh-sku-list{max-height:410px;overflow:auto;border:1px solid #dae8f6;border-radius:9px;margin:8px 0}#"+ID+" .sh-sku-row{display:grid;grid-template-columns:minmax(125px,1.6fr) 90px 90px 80px minmax(130px,1.5fr);gap:8px;border-top:1px solid #e5edf6;align-items:start;padding:8px;font-size:11px}#"+ID+" .sh-sku-row:first-child{border-top:0}#"+ID+" .sh-sku-row small{display:block;font-size:10px;color:#667b91;line-height:1.4;margin-top:3px}#"+ID+" .sh-sku-row>span{min-width:0;overflow-wrap:anywhere}@media(max-width:720px){#"+ID+" .sh-sku-row{grid-template-columns:1fr 1fr}#"+ID+" .sh-sku-row>span:last-child{grid-column:1/-1}}"+
  "#"+ID+" .sh-green{color:#217844}#"+ID+" .sh-red{color:#a53232}#"+ID+" .sh-pill{display:inline-block;border-radius:99px;padding:4px 9px;background:#efe8ff;color:#633cb6;font-size:10px;font-weight:800}"+
  "#"+ID+" .sh-primary{background:#7653dc;border-color:#7653dc;color:white}#"+ID+" .sh-button{border:1px solid #cfc9eb;border-radius:9px;padding:9px 13px;font-weight:800;background:white;color:#5f46ac}#"+ID+" .sh-button.sh-primary{background:#7653dc;color:white;border-color:#7653dc}"+
  "#"+ID+" .sh-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}#"+ID+" .sh-detail{display:grid;grid-template-columns:1.1fr 1fr;gap:10px}#"+ID+" .sh-field{margin:9px 0}"+
@@ -82,7 +83,7 @@ function tiles(rows){
  const bits=[["Оборот категорий 21vek",compact(market),"9 месяцев · без НДС"],
  ["Наши продажи брендов",compact(ours),S.brand==="all"?"Ресанта · Huter · Вихрь · Eurolux":"Фильтр по выбранному бренду"],
  ["Наша доля",pct(share),"Базовая доля за 9 месяцев"],
- ["Потенциал +1 п. п.",compact(market/100),"Дополнительные продажи 21vek при том же объёме"],
+ ["Модель +1 п. п. (9 мес.)",compact(market/100),"Дополнительный исторический оборот при неизменном рынке; не прибыль, не факт Q4"],
  ["Цель квартала",g?("+"+pp(g.target_pp)):"Не утверждена",g?"Только после согласования":"Не показываем вымышленный план"]];
  return '<div class="sh-kpis">'+bits.map(x=>'<div class="sh-kpi"><b>'+E(x[0])+'</b><strong>'+E(x[1])+'</strong><small>'+E(x[2])+'</small></div>').join("")+'</div>';
 }
@@ -113,16 +114,110 @@ function overview(rows){
  return tiles(rows)+'<div class="sh-grid">'+briefing(rows)+chart(rows)+opportunities(rows)+'</div>'+
  '<div class="sh-bottom"><div class="sh-panel"><h3>◎ План / факт доли</h3><div class="sh-note"><b>База: январь–сентябрь 2026.</b> Величина доли подтверждена файлом. Для фактического роста в IV квартале требуется новый срез продаж категорий 21vek. Без него прогресс не рисуем.</div><div class="sh-row"><span>Оборот категорий: <b>'+E(compact(market))+'</b></span><span class="sh-pill">Контрольная дата 15.12.2026</span></div></div>'+statusBoard()+'</div>';
 }
+const sourceDay=x=>x?String(x).slice(0,10).split("-").reverse().join("."):"—";
+const problemLabel={
+ partner_stock_gap_with_chekhov:"21vek: нет свободного остатка; Чехов: есть",
+ listing_not_freshly_verified:"Нет свежей подтверждённой позиции",
+ weak_exact_position:"Позиция хуже TOP-60",
+ not_in_last_price_import:"SKU отсутствует в последнем загруженном прайсе",
+ check_commercial_decision:"Возможность для коммерческого решения"
+};
+function currentEvidence(cat){return S.evidence[cat]?.data||null;}
+async function loadEvidence(cat,force=false){
+ if(!cat)return;
+ const key=String(cat),old=S.evidence[key];
+ if(!force&&old&&Date.now()-old.at<90000)return;
+ if(S.evidenceLoading[key])return S.evidenceLoading[key];
+ S.evidenceLoading[key]=(async()=>{
+  try{
+   const r=await database().rpc("triovist_decisions360_category_evidence_v1",{p_category:key});
+   if(r.error)throw r.error;
+   S.evidence[key]={data:r.data,at:Date.now()};
+  }catch(err){S.evidence[key]={data:{error:String(err?.message||err)},at:Date.now()}}
+  finally{delete S.evidenceLoading[key];if(S.host)render()}
+ })();
+ return S.evidenceLoading[key];
+}
+function evidenceHtml(cat){
+ const ev=currentEvidence(cat);
+ if(!ev)return '<div class="sh-note">✦ Загружаем обзор CRM: доли, прайс, Чехов, 21vek и конкуренты…</div>';
+ if(ev.error)return '<div class="sh-message">Не удалось получить подтверждённые данные: '+E(ev.error)+'</div>';
+ const brands=(ev.brands||[]).filter(x=>!OWN.has(String(x.brand||"").toLowerCase())).slice(0,5);
+ const sku=(ev.sku_evidence||[]),competitors=(ev.competitor_evidence||[]);
+ const goal=N(ev.q4_target_delta_pp),hasGoal=ev.q4_target_delta_pp!=null;
+ const products=sku.slice(0,16).map(x=>
+   '<div class="sh-sku-row"><span><b>'+E(x.sku)+'</b><small>'+E(x.subgroup||"")+'</small></span>'+
+   '<span>'+E(x.price_list??"—")+'<small>прайс '+E(sourceDay(x.price_list_at))+'</small></span>'+
+   '<span>'+E(x.partner_free??"—")+'<small>своб. 21vek '+E(sourceDay(x.partner_date))+'</small></span>'+
+   '<span>'+E(x.chekhov_total??"—")+'<small>Чехов '+E(sourceDay(x.chekhov_date))+'</small></span>'+
+   '<span>'+(x.position_verified?'№'+E(x.position):'Не подтверждена')+
+   '<small>'+E(problemLabel[x.opportunity]||"Проверить")+'</small></span></div>').join("");
+ const rivalLines=competitors.slice(0,8).map(x=>'<div class="sh-sku-row"><span><b>'+E(x.brand)+'</b><small>'+E(x.model||"")+'</small></span>'+
+   '<span>№'+E(x.position||"—")+'<small>листинг</small></span>'+
+   '<span>'+E(x.price??"—")+'<small>цена парсера</small></span>'+
+   '<span>'+E(x.in_stock===true?"Есть":x.in_stock===false?"Нет":"—")+'<small>наличие</small></span>'+
+   '<span>'+E(sourceDay(x.observed_at))+'<small>дата сбора</small></span></div>').join("");
+ return '<div class="sh-panel sh-evidence"><h3>✦ CRM изучила источники вместо менеджера</h3>'+
+ '<div class="sh-muted">Выверенные данные 21vek за январь–сентябрь 2026, USD без НДС. Обороты брендов могут быть неполными; позиции — не объёмы продаж.</div>'+
+ '<div class="sh-note"><b>Наша доля '+E(pct(ev.our_share_pct))+'.</b> Категория: '+E(usd(ev.market_usd))+
+ '; наши бренды: '+E(usd(ev.our_usd))+' за 9 месяцев. <b>+1 п. п. = '+E(usd(ev.one_pp_usd_9m))+
+ '</b> дополнительного оборота на той же девятимесячной базе и неизменном рынке. Это модель, а не факт Q4 или прибыль.</div>'+
+ (hasGoal?'<div class="sh-note" style="background:#fff8ea;border-color:#f0d3a4"><b>Утверждённая цель Q4: +'+E(pp(goal))+
+ '.</b> Это изменение доли в пунктах, итоговая целевая доля ≈'+E(pct(ev.q4_target_final_share_pct))+
+ (ev.goal_requires_review?'. <b>ВНИМАНИЕ: высокая цель, перепроверить реалистичность.</b>':'.')+'</div>':'')+
+ '<details><summary><b>Подтверждённые обороты брендов-конкурентов · 9 месяцев</b></summary>'+
+ brands.map(x=>'<div class="sh-row" style="border-top:1px solid #edf1f6;padding:6px"><span>'+E(x.brand)+'</span><b>'+E(usd(x.usd_9m))+' · '+E(pct(x.share_pct))+'</b></div>').join("")+
+ '<p class="sh-muted">Оборот отдельного товара из этих данных неизвестен.</p></details>'+
+ '<h3 style="margin-top:13px">Наши SKU: цены, остатки и листинг</h3>'+
+ '<div class="sh-muted">Сопоставлено '+E(sku.length)+' SKU из задач по категории. Прайс датирован '+E(sourceDay(ev.price_imported_at))+
+ '; если он старый — цену нельзя считать актуальной. Свободный остаток 21vek ≠ товар в пути.</div>'+
+ (sku.length?'<div class="sh-sku-list">'+products+'</div>':
+ '<div class="sh-note">Для этой категории пока нет надёжной связи SKU с парсером. Автоматически не объявляем товары отсутствующими.</div>')+
+ (sku.length>16?'<div class="sh-muted">Показаны первые 16 приоритетных SKU из '+E(sku.length)+'. При подготовке ответа используются данные всей выборки.</div>':'')+
+ '<details><summary><b>Конкуренты из нашего парсера 21vek</b> · '+E(competitors.length)+' примеров</summary>'+
+ (competitors.length?'<div class="sh-sku-list">'+rivalLines+'</div>':'<p class="sh-muted">Нет проверенных совпадений поисковых запросов.</p>')+
+ '<div class="sh-muted">Позиции, цены и наличие — из парсера, подтверждённые объёмы отдельных конкурентных SKU не доступны.</div></details></div>';
+}
+function automaticAnswer(cat){
+ const e=currentEvidence(cat);
+ if(!e||e.error)throw Error("Источники CRM для категории пока недоступны. Обновите экран и повторите.");
+ const brands=(e.brands||[]).filter(x=>!OWN.has(String(x.brand||"").toLowerCase())).slice(0,8);
+ const comps=(e.competitor_evidence||[]).slice(0,10);
+ const sku=(e.sku_evidence||[]).slice(0,40);
+ const competitor_evidence=brands.map(x=>x.brand+" — "+usd(x.usd_9m)+" за 9 месяцев; доля "+pct(x.share_pct)).join("; ")+
+  "\nПозиции конкурентов (не продажи SKU): "+(comps.length?comps.map(x=>x.brand+" "+x.model+
+   " · "+x.search_query+" · №"+x.position+" · цена "+(x.price??"—")+" · "+sourceDay(x.observed_at)).join("; "):"не подтверждены")+
+  "\nОтдельные объёмы продаж конкурирующих SKU не подтверждены.";
+ const own_assortment_gap=sku.length?sku.map(x=>x.sku+" · "+x.subgroup+
+   " · прайс "+(x.price_list??"—")+" ("+sourceDay(x.price_list_at)+")"+
+   " · свободно 21vek "+(x.partner_free??"—")+
+   " · Чехов "+(x.chekhov_total??"—")+
+   " · позиция "+(x.position_verified?"№"+x.position:"не подтверждена")+
+   " · "+(problemLabel[x.opportunity]||"проверить")).join("; "):
+   "Привязка SKU к категории в действующей CRM не подтверждена. Не заявляем об отсутствии товаров.";
+ const evidence_source="21vek 01–09.2026, USD без НДС (категория и бренды); прайс "+
+   sourceDay(e.price_imported_at)+"; 21vek TOP и конкуренты: датированные снимки парсера; "+
+   "остатки 21vek и Чехова: даты на карточках. 1 п. п. рассчитан от исторического рынка.";
+ return {competitor_evidence:competitor_evidence.slice(0,5000),own_assortment_gap:own_assortment_gap.slice(0,5000),evidence_source};
+}
 function managerForm(t,ans){
- if(!t)return '<div class="sh-empty">Выбери исследование, чтобы увидеть вопрос, ответ и следующий шаг.</div>';
+ if(!t)return '<div class="sh-empty">Выбери исследование, чтобы увидеть источники и принять решение.</div>';
  const canRespond=!boss()&&me()===String(t.manager_email||"").toLowerCase()&&["research","answered","review"].includes(t.status);
- const val=(key)=>E(ans?.[key]||"");
- return '<div class="sh-panel"><div class="sh-row"><h3>Исследование: '+E(t.category)+'</h3><span class="sh-pill">'+E(statusText(t.status))+'</span></div><div class="sh-note"><b>Задача:</b> '+E(t.research_question)+'<br><b>Основание:</b> '+E(t.reason)+'</div>'+
- '<h3>Ответ менеджера</h3>'+[['subgroup','Ключевая подгруппа'],['competitor_evidence','Что продаётся у конкурентов, объём и позиции'],['own_assortment_gap','Наш ассортимент и пробелы'],['recommendation','Конкретное предложение менеджера'],['evidence_source','Источники: ссылка, отчёт, дата']].map(x=>'<div class="sh-field"><label>'+E(x[1])+'</label><textarea data-answer="'+E(x[0])+'" '+(canRespond?"":"disabled")+'>'+val(x[0])+'</textarea></div>').join("")+
- (canRespond?'<div class="sh-actions"><button class="sh-button sh-primary" data-action="save-answer">Сохранить ответ и передать ИИ на анализ</button></div>':'<div class="sh-muted">'+(boss()?"Ответ вводит ответственный менеджер.":"Ответ доступен только закреплённому менеджеру.")+'</div>')+
- (t.ai_analyst_note?'<div class="sh-note"><b>ИИ · Мозговой штурм:</b> '+E(t.ai_analyst_note)+'</div>':'')+
- (t.proposed_next_step?'<div class="sh-note"><b>Предложение следующего шага:</b> '+E(t.proposed_next_step)+'</div>':'')+
- (boss()?'<div class="sh-field"><label>Решение директора</label><select id="sh-task-status">'+["research","review","approved","in_progress","effect_check","done","cancelled"].map(x=>'<option value="'+x+'" '+(x===t.status?"selected":"")+'>'+E(statusText(x))+'</option>').join("")+'</select></div><div class="sh-field"><label>Комментарий руководителя</label><textarea id="sh-task-director">'+E(t.director_note||"")+'</textarea></div><button class="sh-button sh-primary" data-action="save-status">Сохранить решение</button>':'')+'</div>';
+ const ev=currentEvidence(t.category),subgroups=[...new Set((ev?.sku_evidence||[]).map(x=>x.subgroup).filter(Boolean))].sort();
+ const chosen=ans?.subgroup||subgroups[0]||t.category;
+ const select=subgroups.length
+  ?'<select data-answer="subgroup" '+(canRespond?'':'disabled')+'>'+subgroups.map(x=>'<option value="'+E(x)+'" '+(x===chosen?'selected':'')+'>'+E(x)+'</option>').join("")+'</select>'
+  :'<input data-answer="subgroup" value="'+E(chosen)+'" '+(canRespond?'':'disabled')+' placeholder="Приоритетная подгруппа">';
+ return '<div class="sh-panel"><div class="sh-row"><h3>Коммерческое решение · '+E(t.category)+'</h3><span class="sh-pill">'+E(statusText(t.status))+'</span></div>'+
+ '<div class="sh-note"><b>Данные ИИ уже собрал:</b> доли брендов, доступный прайс, остатки Чехова и 21vek, позиции парсера. Выберите подгруппу и предложите действие — повторно вводить источники не требуется.</div>'+
+ '<div class="sh-field"><label>Приоритетная подгруппа</label>'+select+'</div>'+
+ '<div class="sh-field"><label>Ваше решение: ассортимент, цена, поставка или продвижение</label>'+
+ '<textarea data-answer="recommendation" '+(canRespond?'':'disabled')+' placeholder="Какое действие предлагаете и почему?">'+E(ans?.recommendation||"")+'</textarea></div>'+
+ (canRespond?'<div class="sh-actions"><button class="sh-button sh-primary" data-action="save-answer">Передать решение и доказательства CRM на анализ ИИ</button></div>':
+  '<div class="sh-muted">'+(boss()?"Решение вводит закреплённый категорийный менеджер.":"Задача закреплена за другим менеджером.")+'</div>')+
+ (t.ai_analyst_note?'<div class="sh-note"><b>ИИ · Анализ:</b> '+E(t.ai_analyst_note)+'</div>':'')+
+ (t.proposed_next_step?'<div class="sh-note"><b>Следующее действие:</b> '+E(t.proposed_next_step)+'</div>':'')+
+ (boss()?'<div class="sh-field"><label>Решение директора</label><select id="sh-task-status">'+["research","review","approved","in_progress","effect_check","done","cancelled"].map(x=>'<option value="'+x+'" '+(x===t.status?'selected':'')+'>'+E(statusText(x))+'</option>').join("")+'</select></div><div class="sh-field"><label>Комментарий руководителя</label><textarea id="sh-task-director">'+E(t.director_note||"")+'</textarea></div><button class="sh-button sh-primary" data-action="save-status">Сохранить решение</button>':'')+'</div>';
 }
 function categoryDetail(rows){
  const c=rows.find(x=>x.category===S.selected);
@@ -136,18 +231,18 @@ function categoryDetail(rows){
  const answer=S.answers.find(a=>a.task_id===chosen?.id);
  return '<div class="sh-row"><h3 style="margin:0">▣ '+E(c.category)+'</h3><button class="sh-button" data-action="back">← Все категории</button></div>'+
  '<div class="sh-kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px">'+
- [["Оборот 21vek",compact(c.market)],["Наши бренды",compact(c.allOwn)],["Наша доля",pct(c.market?100*c.allOwn/c.market:0)],["+1 п. п.",compact(c.market/100)]].map(x=>'<div class="sh-kpi"><b>'+E(x[0])+'</b><strong>'+E(x[1])+'</strong></div>').join("")+'</div>'+
+ [["Оборот 21vek · 9 мес.",compact(c.market)],["Наши бренды · 9 мес.",compact(c.allOwn)],["Базовая доля · 9 мес.",pct(c.market?100*c.allOwn/c.market:0)],["Модель +1 п. п. · 9 мес.",compact(c.market/100)]].map(x=>'<div class="sh-kpi"><b>'+E(x[0])+'</b><strong>'+E(x[1])+'</strong></div>').join("")+'</div>'+
  '<div class="sh-detail"><div class="sh-panel"><h3>Бренды и конкуренты · Данные 9 мес. 2026</h3><div class="sh-muted">Показаны только бренды из Excel. Их сумма может быть меньше всего рынка категории.</div>'+
  c.brands.slice().sort((a,b)=>N(b.revenue_usd)-N(a.revenue_usd)).map(b=>'<div class="sh-bar" style="grid-template-columns:125px minmax(50px,1fr) 90px;cursor:default"><b>'+E(b.brand)+'</b><span class="sh-track"><i style="width:'+(100*N(b.revenue_usd)/max).toFixed(1)+'%"></i></span><b>'+E(compact(b.revenue_usd))+'</b></div>').join("")+
  '<div class="sh-note"><b>Ответственный:</b> '+E(ownerName(assigned))+'<br><span class="sh-muted">'+E(c.assignment.note||"")+'</span></div>'+
  (boss()?'<div class="sh-field"><label>Закрепить категорию за менеджером</label><select id="sh-owner"><option value="">Не закреплена</option><option value="'+ALEKS+'" '+(assigned===ALEKS?"selected":"")+'>Александренко</option><option value="'+KRIS+'" '+(assigned===KRIS?"selected":"")+'>Кришталь</option></select></div><button class="sh-button" data-action="save-owner">Сохранить закрепление</button>'+
  '<div class="sh-field"><label>Цель роста Q4 2026 (процентные пункты)</label><input type="number" id="sh-goal" min="0" max="100" step="0.25" value="'+(goal?E(goal.target_pp):"")+'" placeholder="Не утверждена"></div><button class="sh-button" data-action="save-goal">Утвердить квартальную цель</button>':'<div class="sh-note"><b>Цель Q4:</b> '+(goal?"+"+E(pp(goal.target_pp)):"Не утверждена")+'</div>')+'</div>'+
- '<div><div class="sh-panel"><h3>Задачи по доле</h3>'+task.map(x=>detailTask(x)).join("")+(task.length?"":'<div class="sh-empty">Исследование ещё не поставлено. Новые задачи формируются автоматически по рабочим дням.</div>')+'</div><div style="margin-top:11px">'+managerForm(chosen,answer)+'</div></div></div>';
+ '<div><div class="sh-panel"><h3>Задачи по доле</h3>'+task.map(x=>detailTask(x)).join("")+(task.length?"":'<div class="sh-empty">Исследование ещё не поставлено. Новые задачи формируются автоматически по рабочим дням.</div>')+'</div><div style="margin-top:11px">'+evidenceHtml(c.category)+managerForm(chosen,answer)+'</div></div></div>';
 }
 function tasksView(){
  const rows=currentRows();const count=S.tasks.filter(x=>!["done","cancelled"].includes(x.status)).length;
  let html='<div class="sh-row"><h3>Задачи по долям · Контроль исследований</h3><span class="sh-pill">Активных: '+count+'</span></div><div class="sh-detail"><div class="sh-panel"><h3>Очередь исследований</h3>'+
- S.tasks.map(t=>detailTask(t)).join("")+(S.tasks.length?"":'<div class="sh-empty">Новых задач пока нет.</div>')+'</div><div>'+managerForm(selectedTask(),S.answers.find(a=>a.task_id===S.taskId))+'</div></div>';
+ S.tasks.map(t=>detailTask(t)).join("")+(S.tasks.length?"":'<div class="sh-empty">Новых задач пока нет.</div>')+'</div><div>'+evidenceHtml(selectedTask()?.category)+managerForm(selectedTask(),S.answers.find(a=>a.task_id===S.taskId))+'</div></div>';
  return html;
 }
 function render(){
@@ -190,8 +285,10 @@ async function writeTaskStatus(){
 async function saveAnswer(){
  const t=selectedTask();if(!t||boss()||me()!==String(t.manager_email).toLowerCase())return;
  const ans={task_id:t.id,manager_email:me()};
- node().querySelectorAll("[data-answer]").forEach(x=>ans[x.dataset.answer]=x.value.trim().slice(0,5000));
- if(!ans.recommendation||!ans.competitor_evidence||!ans.evidence_source)throw Error("Нужны сведения о конкурентах, предложение и подтверждающий источник.");
+ node().querySelectorAll("[data-answer]").forEach(x=>ans[x.dataset.answer]=String(x.value||"").trim().slice(0,5000));
+ if(!ans.recommendation||ans.recommendation.length<10)throw Error("Укажите конкретное предложение (не менее 10 символов).");
+ Object.assign(ans,automaticAnswer(t.category));
+ if(!ans.subgroup)ans.subgroup=t.category;
  const d=database();const r=await d.from("triovist_share_answers_v1").upsert(ans,{onConflict:"task_id"});
  if(r.error)throw r.error;
  message("Ответ сохранён. ИИ проверяет доказательства и готовит следующий шаг…");
@@ -216,23 +313,24 @@ async function saveGoal(){
 function events(r){
  r.addEventListener("click",e=>{
   const b=e.target.closest("[data-view],[data-cat],[data-task],[data-action]");if(!b||!r.contains(b))return;
-  if(b.dataset.view){S.view=b.dataset.view;S.selected="";S.taskId=S.tasks[0]?.id||"";render();return}
-  if(b.dataset.cat){S.selected=b.dataset.cat;S.view="shares";S.taskId=S.tasks.find(t=>t.category===S.selected)?.id||"";render();return}
-  if(b.dataset.task){S.taskId=b.dataset.task;S.view="tasks";render();return}
+  if(b.dataset.view){S.view=b.dataset.view;S.selected="";S.taskId=S.tasks[0]?.id||"";render();if(S.view==="tasks")void loadEvidence(selectedTask()?.category);return}
+  if(b.dataset.cat){S.selected=b.dataset.cat;S.view="shares";S.taskId=S.tasks.find(t=>t.category===S.selected)?.id||"";render();void loadEvidence(S.selected);return}
+  if(b.dataset.task){S.taskId=b.dataset.task;S.view="tasks";render();void loadEvidence(selectedTask()?.category);return}
   const a=b.dataset.action;
   if(a==="back"){S.selected="";S.view="shares";render();return}
   if(a==="reload"){void load();return}
   const work={ "save-answer":saveAnswer,"save-status":writeTaskStatus,"save-owner":saveOwner,"save-goal":saveGoal}[a];
   if(work){b.disabled=true;Promise.resolve().then(work).catch(err=>{message("Не удалось сохранить: "+String(err?.message||err));console.warn("Shares360 write",err)}).finally(()=>{if(b.isConnected)b.disabled=false})}
  });
- r.addEventListener("change",e=>{const el=e.target;if(!el.dataset.filter)return;S[el.dataset.filter]=el.value;if(el.dataset.filter==="selected")S.view="shares";render()});
+ r.addEventListener("change",e=>{const el=e.target;if(!el.dataset.filter)return;S[el.dataset.filter]=el.value;if(el.dataset.filter==="selected")S.view="shares";render();if(S.selected)void loadEvidence(S.selected)});
 }
 async function open(host,ctx){
  if(!host||!ctx||(ctx.is_leader!==true&&ctx.is_manager!==true))return false;
  S.host=host;S.ctx=ctx;css();let r=node();
  if(!r){r=document.createElement("div");r.id=ID;host.replaceChildren(r);events(r)}
  if(!S.last||Date.now()-S.last>90000)await load();else render();
+ if(S.selected)void loadEvidence(S.selected);else if(S.view==="tasks")void loadEvidence(selectedTask()?.category);
  return true;
 }
-w.RESANTA_TRIOVIST_SHARES360_V1={version:"2026.11.06.1",open,refresh:load};
+w.RESANTA_TRIOVIST_SHARES360_V1={version:"2026.11.09.1-decisions360",open,refresh:load};
 })(window);

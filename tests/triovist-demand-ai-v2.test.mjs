@@ -128,8 +128,8 @@ test('approve is per subgroup only after explicit confirm; can manually edit tar
 test('past month tasks, old parser and approved plans are not touched',()=>{
  const html=read('index.html');
  assert.match(html,/179-triovist-demand-ai-v1\.js\?v=20261105-subgroup-listing-fix3/);
- assert.match(html,/61-triovist-task-month-safe-v23651\.js\?v=20261105-subgroup-brainstorm-v2/);
- assert.match(html,/169-triovist-tasks360-ux-v1\.js\?v=20261105-subgroup-brainstorm-v2/);
+ assert.match(html,/61-triovist-task-month-safe-v23651\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261109-decisions360-fact1)/);
+ assert.match(html,/169-triovist-tasks360-ux-v1\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261109-decisions360-motivation1)/);
  const task=read('assets/61-triovist-task-month-safe-v23651.js');
  assert.match(task,/isBrainstormTask/);
  assert.match(task,/triovist_ai_brainstorm_verify_v20261105/);

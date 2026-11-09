@@ -145,7 +145,7 @@ test('preserves work, commercial routes, original parser and competitor modules'
  assert.match(router,/RESANTA_TRIOVIST_21VEK_CONTROL_V236107/);
  assert.match(router,/RESANTA_TRIOVIST_COMPETITORS_V236218/);
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
- assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-subgroup-brainstorm-v2/);
+ assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261109-decisions360-motivation1)/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
  assert.ok(parser.length>3000);assert.ok(competitors.length>3000);
 });
