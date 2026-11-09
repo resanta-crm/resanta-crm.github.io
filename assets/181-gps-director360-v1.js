@@ -134,6 +134,7 @@ const directorCase=x=>caseStates[String(x.route_plan_id||'')]||null;
 const caseState=x=>directorCase(x)?.case_state||'new';
 const closedCount=()=>data?.cases?.filter(x=>!x.day_active&&caseState(x)==='closed').length||0;
 const openReview=()=>Math.max(0,Number(data?.kpi?.review||0)-closedCount());
+const managerOpen=x=>Math.max(0,Number(x?.attention_visits||0)-(data?.cases||[]).filter(c=>!c.day_active&&c.manager===x.manager_name&&caseState(c)==='closed').length);
 function visitDetails(payload){
  const all=(payload.cases||[]).filter(x=>detailManager==='all'||x.manager===detailManager);
  const rows=all.filter(x=>visitScope==='all'||caseState(x)===visitScope).slice(0,80);
@@ -207,7 +208,7 @@ function render(){
  card('На разбор руководителю',openReview(),'Только завершённые дни · не нарушения',p?openReview()/p*100:0,'#b95024')+
  card('Нет координат ТТ',k.no_coordinates,'В очередь менеджерам, не руководителю',p?n(k.no_coordinates)/p*100:0)+
  '<div class="g-card attention"><small>⚠ Зона внимания</small><strong>'+esc(u?.manager||'Нет данных')+'</strong>'+
- '<small>На разборе (не обвинение): '+num(u?.review)+'</small>'+
+ '<small>На разборе (не обвинение): '+num(Math.max(0,n(u?.review)-(data.cases||[]).filter(c=>!c.day_active&&c.manager===u?.manager&&caseState(c)==='closed').length))+'</small>'+
  '<small>ТТ для выверки: '+num(u?.no_coordinates)+'</small></div></div>';
  if(n(k.active_planned)>0){
   html+='<div class="g-brief"><div class="g-head"><b>⏳ Рабочий день продолжается</b>'+
@@ -233,8 +234,8 @@ function render(){
  html+='<div class="g-two"><section class="g-box"><h3>Отклонения по менеджерам</h3>'+
  '<div class="g-muted">Только завершённые дни и случаи без проблем геопривязки. Не рейтинг нарушений.</div>'+
  managers.map(x=>'<div class="g-rowbar"><b>'+esc(x.manager_name)+'</b><div class="g-bar">'+
- '<i style="width:'+Math.min(100,n(x.attention_visits)/Math.max(1,n(x.planned))*100)+'%"></i></div>'+
- '<b>'+pct(x.attention_visits,x.planned)+'</b></div>').join('')+'</section>'+
+ '<i style="width:'+Math.min(100,managerOpen(x)/Math.max(1,n(x.planned))*100)+'%"></i></div>'+
+ '<b>'+pct(managerOpen(x),x.planned)+'</b></div>').join('')+'</section>'+
  '<section class="g-box"><h3>Причины проблем</h3>'+
  '<div class="g-muted">Критичные случаи отдельно; отсутствие координат и неопознанные стоянки не являются нарушениями.</div>'+
  (data.problems||[]).filter(x=>!['unidentified_stops','no_coordinates','stale_days'].includes(x.key)).map(x=>'<div class="g-problem"><span>'+esc(x.label)+'</span><b>'+num(x.count)+'</b></div>').join('')+
@@ -246,7 +247,7 @@ function render(){
  '<th>На проверке</th><th>Нет координат</th><th>Стоянки без причины</th><th>Тех. подтверждены</th><th></th></tr></thead><tbody>'+
  managers.map(x=>'<tr><td><b>'+esc(x.manager_name)+'</b></td><td>'+num(x.planned)+' / '+num(x.reports)+'</td>'+
  '<td>'+num(x.gps_confirmed)+' · '+pct(x.gps_confirmed,x.geo_eligible)+'</td>'+
- '<td>'+num(Math.max(0,n(x.attention_visits)-(data.cases||[]).filter(c=>c.manager===x.manager_name&&!c.day_active&&caseState(c)==='closed').length))+'</td><td>'+num(x.no_coordinates)+'</td>'+
+ '<td>'+num(managerOpen(x))+'</td><td>'+num(x.no_coordinates)+'</td>'+
  '<td>'+num(x.unidentified_stops)+'</td><td>'+num(x.verified_technical)+'</td>'+
  '<td><button type="button" data-g360-manager="'+esc(x.manager_name)+'">Подробнее →</button></td></tr>').join('')+
  '<tr style="background:#edf4ff;font-weight:800"><td>ИТОГО</td><td>'+num(p)+' / '+num(r)+'</td>'+
