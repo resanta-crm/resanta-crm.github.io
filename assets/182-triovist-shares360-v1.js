@@ -201,15 +201,23 @@ function automaticAnswer(cat){
  return {competitor_evidence:competitor_evidence.slice(0,5000),own_assortment_gap:own_assortment_gap.slice(0,5000),evidence_source};
 }
 function managerForm(t,ans){
- if(!t)return '<div class="sh-empty">Выбери исследование, чтобы увидеть вопрос, ответ и следующий шаг.</div>';
+ if(!t)return '<div class="sh-empty">Выбери исследование, чтобы увидеть источники и принять решение.</div>';
  const canRespond=!boss()&&me()===String(t.manager_email||"").toLowerCase()&&["research","answered","review"].includes(t.status);
- const val=(key)=>E(ans?.[key]||"");
- return '<div class="sh-panel"><div class="sh-row"><h3>Исследование: '+E(t.category)+'</h3><span class="sh-pill">'+E(statusText(t.status))+'</span></div><div class="sh-note"><b>Задача:</b> '+E(t.research_question)+'<br><b>Основание:</b> '+E(t.reason)+'</div>'+
- '<h3>Ответ менеджера</h3>'+[['subgroup','Ключевая подгруппа'],['competitor_evidence','Что продаётся у конкурентов, объём и позиции'],['own_assortment_gap','Наш ассортимент и пробелы'],['recommendation','Конкретное предложение менеджера'],['evidence_source','Источники: ссылка, отчёт, дата']].map(x=>'<div class="sh-field"><label>'+E(x[1])+'</label><textarea data-answer="'+E(x[0])+'" '+(canRespond?"":"disabled")+'>'+val(x[0])+'</textarea></div>').join("")+
- (canRespond?'<div class="sh-actions"><button class="sh-button sh-primary" data-action="save-answer">Сохранить ответ и передать ИИ на анализ</button></div>':'<div class="sh-muted">'+(boss()?"Ответ вводит ответственный менеджер.":"Ответ доступен только закреплённому менеджеру.")+'</div>')+
- (t.ai_analyst_note?'<div class="sh-note"><b>ИИ · Мозговой штурм:</b> '+E(t.ai_analyst_note)+'</div>':'')+
- (t.proposed_next_step?'<div class="sh-note"><b>Предложение следующего шага:</b> '+E(t.proposed_next_step)+'</div>':'')+
- (boss()?'<div class="sh-field"><label>Решение директора</label><select id="sh-task-status">'+["research","review","approved","in_progress","effect_check","done","cancelled"].map(x=>'<option value="'+x+'" '+(x===t.status?"selected":"")+'>'+E(statusText(x))+'</option>').join("")+'</select></div><div class="sh-field"><label>Комментарий руководителя</label><textarea id="sh-task-director">'+E(t.director_note||"")+'</textarea></div><button class="sh-button sh-primary" data-action="save-status">Сохранить решение</button>':'')+'</div>';
+ const ev=currentEvidence(t.category),subgroups=[...new Set((ev?.sku_evidence||[]).map(x=>x.subgroup).filter(Boolean))].sort();
+ const chosen=ans?.subgroup||subgroups[0]||t.category;
+ const select=subgroups.length
+  ?'<select data-answer="subgroup" '+(canRespond?'':'disabled')+'>'+subgroups.map(x=>'<option value="'+E(x)+'" '+(x===chosen?'selected':'')+'>'+E(x)+'</option>').join("")+'</select>'
+  :'<input data-answer="subgroup" value="'+E(chosen)+'" '+(canRespond?'':'disabled')+' placeholder="Приоритетная подгруппа">';
+ return '<div class="sh-panel"><div class="sh-row"><h3>Коммерческое решение · '+E(t.category)+'</h3><span class="sh-pill">'+E(statusText(t.status))+'</span></div>'+
+ '<div class="sh-note"><b>Данные ИИ уже собрал:</b> доли брендов, доступный прайс, остатки Чехова и 21vek, позиции парсера. Выберите подгруппу и предложите действие — повторно вводить источники не требуется.</div>'+
+ '<div class="sh-field"><label>Приоритетная подгруппа</label>'+select+'</div>'+
+ '<div class="sh-field"><label>Ваше решение: ассортимент, цена, поставка или продвижение</label>'+
+ '<textarea data-answer="recommendation" '+(canRespond?'':'disabled')+' placeholder="Какое действие предлагаете и почему?">'+E(ans?.recommendation||"")+'</textarea></div>'+
+ (canRespond?'<div class="sh-actions"><button class="sh-button sh-primary" data-action="save-answer">Передать решение и доказательства CRM на анализ ИИ</button></div>':
+  '<div class="sh-muted">'+(boss()?"Решение вводит закреплённый категорийный менеджер.":"Задача закреплена за другим менеджером.")+'</div>')+
+ (t.ai_analyst_note?'<div class="sh-note"><b>ИИ · Анализ:</b> '+E(t.ai_analyst_note)+'</div>':'')+
+ (t.proposed_next_step?'<div class="sh-note"><b>Следующее действие:</b> '+E(t.proposed_next_step)+'</div>':'')+
+ (boss()?'<div class="sh-field"><label>Решение директора</label><select id="sh-task-status">'+["research","review","approved","in_progress","effect_check","done","cancelled"].map(x=>'<option value="'+x+'" '+(x===t.status?'selected':'')+'>'+E(statusText(x))+'</option>').join("")+'</select></div><div class="sh-field"><label>Комментарий руководителя</label><textarea id="sh-task-director">'+E(t.director_note||"")+'</textarea></div><button class="sh-button sh-primary" data-action="save-status">Сохранить решение</button>':'')+'</div>';
 }
 function categoryDetail(rows){
  const c=rows.find(x=>x.category===S.selected);
@@ -277,8 +285,10 @@ async function writeTaskStatus(){
 async function saveAnswer(){
  const t=selectedTask();if(!t||boss()||me()!==String(t.manager_email).toLowerCase())return;
  const ans={task_id:t.id,manager_email:me()};
- node().querySelectorAll("[data-answer]").forEach(x=>ans[x.dataset.answer]=x.value.trim().slice(0,5000));
- if(!ans.recommendation||!ans.competitor_evidence||!ans.evidence_source)throw Error("Нужны сведения о конкурентах, предложение и подтверждающий источник.");
+ node().querySelectorAll("[data-answer]").forEach(x=>ans[x.dataset.answer]=String(x.value||"").trim().slice(0,5000));
+ if(!ans.recommendation||ans.recommendation.length<10)throw Error("Укажите конкретное предложение (не менее 10 символов).");
+ Object.assign(ans,automaticAnswer(t.category));
+ if(!ans.subgroup)ans.subgroup=t.category;
  const d=database();const r=await d.from("triovist_share_answers_v1").upsert(ans,{onConflict:"task_id"});
  if(r.error)throw r.error;
  message("Ответ сохранён. ИИ проверяет доказательства и готовит следующий шаг…");
