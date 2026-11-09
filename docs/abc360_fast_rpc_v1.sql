@@ -1,7 +1,6 @@
--- Recovery copy of separately applied Supabase migration abc360_fast_rpc_v20261109.
--- In Supabase migration history: abc360_fast_rpc_v20261109. This file is documentation-only.
--- ABC360: optimized, independent RPC. Existing v236342 remains unchanged.
--- Preserves 1C sales; avoids to_char() index defeat and quadratic first-SKU join.
+-- Current deployed ABC RPC after migration abc_manager_filter_fast_v2_20261109.
+-- Documentation only; the migration was applied to Supabase separately.
+-- The function is SECURITY INVOKER and requires authenticated access.
 CREATE OR REPLACE FUNCTION public.crm_abc_slice_v20261109(p_scope text, p_manager text, p_client_id uuid, p_current_months text[], p_previous_months text[])
  RETURNS jsonb
  LANGUAGE sql
@@ -15,6 +14,8 @@ with params as (
     p_client_id client_id,
     coalesce(p_current_months,array[]::text[]) current_months,
     coalesce(p_previous_months,array[]::text[]) previous_months,
+    ARRAY(SELECT to_date(v,'YYYY-MM') FROM unnest(coalesce(p_current_months,array[]::text[])) AS v) current_dates,
+    ARRAY(SELECT to_date(v,'YYYY-MM') FROM unnest(coalesce(p_previous_months,array[]::text[])) AS v) previous_dates,
     ARRAY(SELECT to_date(v,'YYYY-MM') FROM unnest(coalesce(p_current_months,array[]::text[]) || coalesce(p_previous_months,array[]::text[])) AS v) all_month_dates
 ),
 keys as materialized (
@@ -54,7 +55,7 @@ scope_base as materialized (
   cross join params p
   where
     p.scope='branch'
-    or (p.scope='manager' and b.resolved_manager=p.manager_name)
+    or (p.scope='manager' and (p.manager_name is null or lower(p.manager_name)='all' or b.resolved_manager=p.manager_name))
     or (p.scope='client' and b.resolved_client_id=p.client_id)
 ),
 scope_agg as materialized (
@@ -62,12 +63,12 @@ scope_agg as materialized (
     case when p.scope='branch' then null::uuid else b.resolved_client_id end client_id,
     case when p.scope='branch' then null::text else max(b.resolved_client_name) end client_name,
     b.category,b.subgroup,b.product,b.sku,
-    round(sum(b.revenue) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.current_months)),2) current_revenue,
-    round(sum(b.qty) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.current_months)),3) current_qty,
-    max(to_char(b.sale_month,'YYYY-MM')) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.current_months) and b.revenue<>0) last_current_month,
-    round(sum(b.revenue) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.previous_months)),2) previous_revenue,
-    round(sum(b.qty) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.previous_months)),3) previous_qty,
-    max(to_char(b.sale_month,'YYYY-MM')) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.previous_months) and b.revenue<>0) last_previous_month
+    round(sum(b.revenue) filter(where b.sale_month=any(p.current_dates)),2) current_revenue,
+    round(sum(b.qty) filter(where b.sale_month=any(p.current_dates)),3) current_qty,
+    max(to_char(b.sale_month,'YYYY-MM')) filter(where b.sale_month=any(p.current_dates) and b.revenue<>0) last_current_month,
+    round(sum(b.revenue) filter(where b.sale_month=any(p.previous_dates)),2) previous_revenue,
+    round(sum(b.qty) filter(where b.sale_month=any(p.previous_dates)),3) previous_qty,
+    max(to_char(b.sale_month,'YYYY-MM')) filter(where b.sale_month=any(p.previous_dates) and b.revenue<>0) last_previous_month
   from scope_base b
   cross join params p
   group by
@@ -76,10 +77,10 @@ scope_agg as materialized (
     b.category,b.subgroup,b.product,b.sku,
     p.current_months,p.previous_months
   having
-    coalesce(sum(b.revenue) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.current_months)),0)<>0
-    or coalesce(sum(b.qty) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.current_months)),0)<>0
-    or coalesce(sum(b.revenue) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.previous_months)),0)<>0
-    or coalesce(sum(b.qty) filter(where to_char(b.sale_month,'YYYY-MM')=any(p.previous_months)),0)<>0
+    coalesce(sum(b.revenue) filter(where b.sale_month=any(p.current_dates)),0)<>0
+    or coalesce(sum(b.qty) filter(where b.sale_month=any(p.current_dates)),0)<>0
+    or coalesce(sum(b.revenue) filter(where b.sale_month=any(p.previous_dates)),0)<>0
+    or coalesce(sum(b.qty) filter(where b.sale_month=any(p.previous_dates)),0)<>0
 ),
 branch_other as materialized (
   select
@@ -95,7 +96,7 @@ branch_other as materialized (
   from base b
   cross join params p
   where p.scope='client'
-    and to_char(b.sale_month,'YYYY-MM')=any(p.current_months)
+    and b.sale_month=any(p.current_dates)
     and (b.resolved_client_id is distinct from p.client_id)
   group by b.category,b.subgroup,b.product,b.sku
   having coalesce(sum(b.revenue),0)<>0 or coalesce(sum(b.qty),0)<>0
@@ -105,15 +106,6 @@ combined as materialized (
   union all
   select * from branch_other
 ),
-item_keys as materialized (
-  select distinct
-    coalesce(nullif(trim(category),''),'') category,
-    case
-      when nullif(trim(coalesce(sku,'')),'') is not null then 's:'||lower(trim(sku))
-      else 'p:'||public.crm_client_key(product)
-    end item_key
-  from combined
-),
 firsts as materialized (
   select
     coalesce(nullif(trim(ph.category),''),'') category,
@@ -121,7 +113,7 @@ firsts as materialized (
       when nullif(trim(coalesce(ph.sku,'')),'') is not null then 's:'||lower(trim(ph.sku))
       else 'p:'||public.crm_client_key(ph.product)
     end item_key,
-    min(to_char(ph.month,'YYYY-MM')) first_month
+    to_char(min(ph.month),'YYYY-MM') first_month
   from public.purchase_history ph
   group by 1,2
 )
@@ -155,6 +147,7 @@ left join firsts f
     when nullif(trim(coalesce(c.sku,'')),'') is not null then 's:'||lower(trim(c.sku))
     else 'p:'||public.crm_client_key(c.product)
   end;
-$function$;
+$function$
+;
 REVOKE ALL ON FUNCTION public.crm_abc_slice_v20261109(text,text,uuid,text[],text[]) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.crm_abc_slice_v20261109(text,text,uuid,text[],text[]) TO authenticated,service_role;

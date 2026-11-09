@@ -6,8 +6,9 @@ const index=read('index.html'),core=read('assets/01-crm-core.js');
 const agg=read('assets/113-analytics-aggregates-v236342.js');
 const dash=read('assets/187-abc-director360-v1.js');
 const sql=read('docs/abc360_fast_rpc_v1.sql');
+const gps=read('assets/124-gps-director-report-v236427.js');
 test('ABC 360 loads after core and server aggregate; unrelated navigations stay intact',()=>{
- assert.match(index,/assets\/187-abc-director360-v1\.js\?v=20261109-abc360-1/);
+ assert.match(index,/assets\/187-abc-director360-v1\.js\?v=20261109-manager-tabs-fix2/);
  assert.ok(index.indexOf('assets/01-crm-core.js')<index.indexOf('assets/113-analytics-aggregates-v236342.js'));
  assert.ok(index.indexOf('assets/113-analytics-aggregates-v236342.js')<index.indexOf('assets/187-abc-director360-v1.js'));
  assert.match(index,/id="page-abc"/);
@@ -40,4 +41,24 @@ test('ABC 360 stays confined to ABC page and retains existing task approvals and
  assert.match(core,/function exportABCToCsv\(\)/);
  assert.match(dash,/goPage\('tasks','Задачи ИИ'\)/);
  assert.match(index,/window\.abc360DebouncedSearch\?abc360DebouncedSearch\(\):renderABC\(\)/);
+});
+
+test('All managers returns a real dataset and manager filter is indexed by sale month',()=>{
+ assert.match(sql,/p\.manager_name is null or lower\(p\.manager_name\)='all'/);
+ assert.match(sql,/b\.sale_month=any\(p\.current_dates\)/);
+ assert.match(sql,/b\.sale_month=any\(p\.previous_dates\)/);
+ assert.match(agg,/pending=new Map\(\)/);
+ assert.match(agg,/if\(pending\.has\(k\)\)return pending\.get\(k\)/);
+ assert.match(agg,/requestId!==abcRequestVersion/);
+ assert.match(dash,/data-abc-action="manager"/);
+ assert.match(dash,/abcScopeChanged\(false\)/);
+});
+test('Sidarovich GPS director uses resilient delegated click without changing access controls',()=>{
+ assert.match(gps,/const ALLOWED=new Set\(\['payushin_ar@resanta\.ru','sidarovich_kn@resanta\.ru'\]\)/);
+ assert.match(gps,/const allowed=\(\)=>profile\(\)\?\.role==='boss'&&ALLOWED\.has\(email\(\)\)/);
+ assert.match(gps,/const existing=document\.getElementById\('gps-director-view-v236427'\)/);
+ assert.match(gps,/const director=e\.target\.closest\?\.\('#gps-tab-director-v236427'\)/);
+ assert.match(gps,/setMode\(director\?'director':'route'\)/);
+ assert.doesNotMatch(gps,/tabs\.querySelector\('#gps-tab-director-v236427'\)\.addEventListener\('click'/);
+ assert.match(index,/124-gps-director-report-v236427\.js\?v=20261109-decisions1&fix=sidarovich-tabs2/);
 });

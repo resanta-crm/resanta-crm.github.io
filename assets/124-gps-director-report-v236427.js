@@ -62,7 +62,24 @@ function setMode(next){
 function ensureUi(){
   if(!allowed())return null;
   const page=document.getElementById('page-gps-control');if(!page)return null;
-  if(document.getElementById('gps-director-view-v236427'))return document.getElementById('gps-director-view-v236427');
+  const existing=document.getElementById('gps-director-view-v236427');
+  if(existing){
+    // CRM route panel can be rerendered without these tabs; restore the UI while
+    // keeping the existing director panel and server permissions unchanged.
+    let tabs=document.getElementById('gps-tabs-v236427');
+    if(!tabs||!tabs.querySelector('#gps-tab-route-v236427')||!tabs.querySelector('#gps-tab-director-v236427')){
+      if(tabs)tabs.remove();
+      tabs=document.createElement('div');
+      tabs.id='gps-tabs-v236427';
+      tabs.style.cssText='display:flex;gap:8px;align-items:center;margin:-4px 0 14px;flex-wrap:wrap';
+      tabs.innerHTML='<button type="button" id="gps-tab-route-v236427" class="btn-secondary">Маршруты</button>'+
+                     '<button type="button" id="gps-tab-director-v236427" class="btn-secondary">Руководитель</button>';
+      page.firstElementChild?.insertAdjacentElement('afterend',tabs);
+    }
+    document.getElementById('gps-tab-route-v236427')?.classList.toggle('btn-primary',mode==='route');
+    document.getElementById('gps-tab-director-v236427')?.classList.toggle('btn-primary',mode==='director');
+    return existing;
+  }
 
   const head=page.firstElementChild;
   const tabs=document.createElement('div');
@@ -190,8 +207,7 @@ function ensureUi(){
 
   page.appendChild(panel);
 
-  tabs.querySelector('#gps-tab-route-v236427').addEventListener('click',()=>setMode('route'));
-  tabs.querySelector('#gps-tab-director-v236427').addEventListener('click',()=>setMode('director'));
+  // Tab handlers are delegated below so they survive a CRM panel re-render.
   panel.querySelector('#gps-dir-load-v236427').addEventListener('click',()=>load(true));
   panel.querySelector('#gps-dir-xlsx-v236427').addEventListener('click',exportExcel);
   panel.querySelector('#gps-brief-issues-v236438').addEventListener('click',()=>{onlyIssues=true;activeFindingFilter='all';caseScope='new';pageOffset=0;load(true);});
@@ -508,6 +524,13 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 setTimeout(install,500);setTimeout(install,1200);
 document.addEventListener('click',e=>{
   if(e.target.closest?.('#bn-gps-control,[onclick*="gps-control"]'))setTimeout(install,220);
+  if(!allowed())return;
+  const route=e.target.closest?.('#gps-tab-route-v236427');
+  const director=e.target.closest?.('#gps-tab-director-v236427');
+  if(!route&&!director)return;
+  // One delegated listener, regardless of how often the tab DOM was replaced.
+  ensureUi();
+  setMode(director?'director':'route');
 },true);
 setInterval(()=>{
   if(document.getElementById('page-gps-control')?.classList.contains('active')&&allowed()&&!document.getElementById('gps-director-view-v236427'))install();
