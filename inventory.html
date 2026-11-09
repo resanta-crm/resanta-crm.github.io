@@ -482,9 +482,9 @@ async function flushQueue(){
    try{
     const r=await rpc('warehouse_inventory_scan_v1',{p_session_id:x.session_id,p_code:x.code,p_qty:x.qty,p_input_mode:'offline_replay',p_client_event_id:x.id});
     if(r?.ok){ql.splice(i,1);changed=true;continue}
-    if(r?.reason==='session_not_active'){i++;continue}
-    i++
-   }catch(e){if(e?.network||!navigator.onLine)break;i++}
+    if(r?.reason==='session_not_active'){status('Критическая ошибка: инвентаризация закрыта. Сканы остаются в очереди; обратитесь к руководителю.','red');break}
+    status('Сервер отклонил отложенный скан '+String(x.code)+': '+String(r?.reason||'неизвестная причина')+'. Запись осталась в очереди.','red');break
+   }catch(e){if(e?.network||!navigator.onLine)break;status('Ошибка синхронизации: '+String(e?.message||e)+'. Сканы не удалены.','red');break}
   }
   if(changed){saveQueue(ql);await reloadActive();text('tsd-ack',new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));status('Отложенные сканы подтверждены CRM. Запись корректировок в 1С не выполнялась.','green')}
  }finally{flushing=false;updateQueueKpi()}
@@ -494,19 +494,19 @@ async function init(){
  const savedEmail=String(localStorage.getItem(LOGIN_EMAIL_KEY)||'vitebsk@resanta.ru').toLowerCase();$('login-email').value=ALLOWED_EMAILS.includes(savedEmail)?savedEmail:'vitebsk@resanta.ru';
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
- $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');$('zero-btn').onclick=markZero;
+ $('logout-btn').onclick=logout;$('send-btn').onclick=()=>submitIntent($('code').value,'manual');$('zero-btn').onclick=markZero;
  $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);show('scanner-hw-warning',false);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.');focusCode();armScannerWatchdog()};
  const codeEl=$('code');
  // Every physical scan is a new intent; its retry UUID is reused by offline replay.
  // Enter is authoritative; 190 ms idle is a fallback for scanners without Enter.
- function submitIntent(v){
+ function submitIntent(v,mode='scan'){
    v=String(v||'').trim();
    if(!v)return;
    clearTimeout(inputAutoTimer);clearTimeout(scannerTimer);clearTimeout(lookupTimer);
    inputAutoTimer=null;scannerTimer=null;
    if(codeEl.value.trim()===v)codeEl.value='';
    scannerBuffer='';
-   sendScan(v,$('scan-qty').value,'scan');
+   sendScan(v,$('scan-qty').value,mode);
  }
  codeEl.onkeydown=e=>{
    unlockAudio();browserInputSeen();
