@@ -42,9 +42,9 @@ test('RPC is boss-only and keeps existing 1C order and export math untouched',()
  assert.match(compact,/const mapper=r=>\[r\.sku,r\.product,abcLabelForSku\(abcClasses,r\.sku\),n\(r\.vitebsk_avail\)/);
 });
 test('only warehouse compact renderer receives a new cache-key',()=>{
- assert.match(loader,/path==='assets\/51-warehouse-compact-days-v23637\.js'\?'20261109-warehouse-abc-column1'/);
+ assert.match(loader,/path==='assets\/51-warehouse-compact-days-v23637\.js'\?'20261109-warehouse-abc-excel2'/);
  assert.match(loader,/RESANTA_WAREHOUSE_COMPACT_V23637:'v23\.6\.320'/);
- assert.match(html,/66-performance-root-v23657\.js\?v=20261106-manager-feedback&abcOrder=20261109-1/);
+ assert.match(html,/66-performance-root-v23657\.js\?v=20261106-manager-feedback&abcOrder=20261109-2/);
 });
 
 test('on-screen and XLSX/CSV share one ABC lookup and exactly one new column',()=>{
