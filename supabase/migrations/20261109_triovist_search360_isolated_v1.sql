@@ -100,7 +100,7 @@ BEGIN
     JOIN LATERAL (
       SELECT x.value review
       FROM jsonb_array_elements(r.parser_payload->'reviews') x(value)
-      WHERE x.value->>'rating' ~ '^[123]
+      WHERE x.value->>'rating' ~ '^[123]$'
       ORDER BY x.value->>'dateTimestamp' DESC NULLS LAST
       LIMIT 1
     ) rv ON TRUE
