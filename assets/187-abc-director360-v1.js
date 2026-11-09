@@ -7,6 +7,29 @@ const html=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/
 const percent=n=>(Number(n)||0).toFixed(1).replace('.',',')+'%';
 const colors={A:'#16a34a',B:'#eab308',C:'#94a3b8',N:'#3b82f6'};
 let opened=false,seq=0,searchTimer=null,filterTimer=null;
+// The core rebuild helper sorts every price/stock timestamp on every SKU
+// lookup. Memoize its *check*, not the SKU resolution, within an unchanged
+// catalogue generation; invalidate on reference/length/signature changes.
+function installCatalogGenerationGuard(){
+ const original=window.abcBuildCatalogSkuMap;
+ if(typeof original!=='function'||original.__abc360GenerationGuard)return;
+ let price=null,stock=null,priceLen=-1,stockLen=-1,lastSig='',lastCheck=0;
+ const wrapper=function(){
+  const p=typeof allPrice!=='undefined'?(allPrice||[]):[];
+  const w=typeof allStock!=='undefined'?(allStock||[]):[];
+  const sig=typeof _abcCatalogSkuSig!=='undefined'?_abcCatalogSkuSig:'';
+  const stable=price===p&&stock===w&&priceLen===p.length&&stockLen===w.length&&
+    lastSig===sig&&!!sig&&Date.now()-lastCheck<30000;
+  if(stable)return;
+  const result=original.apply(this,arguments);
+  price=p;stock=w;priceLen=p.length;stockLen=w.length;
+  lastSig=typeof _abcCatalogSkuSig!=='undefined'?_abcCatalogSkuSig:'';
+  lastCheck=Date.now();
+  return result;
+ };
+ wrapper.__abc360GenerationGuard=true;
+ window.abcBuildCatalogSkuMap=wrapper;
+}
 const styles=[
 '#page-abc.abc360-on #abc-kpi{display:none}',
 '#page-abc.abc360-on:not(.abc360-open) #abc-results{display:none}',
@@ -184,6 +207,7 @@ function syncFromLegacy(){
  }catch(err){console.warn('ABC360: legacy section retained after visual error',err);}
 }
 function bind(){
+ installCatalogGenerationGuard();
  mount();
  const results=el('abc-results');
  if(results&&typeof MutationObserver!=='undefined'){
