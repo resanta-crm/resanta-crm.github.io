@@ -284,12 +284,26 @@ def run_one(req: dict, registry: dict[str,list[dict]]) -> dict:
         return {"id":rid,"status":record["status"],"rows":len(record["rows"]),
                 "pages":record["pages_checked"],"suggestion":record["suggestion_status"]}
     except Exception as exc:
+        message=str(exc)[:700]
         top.rest_patch(QUEUE,{"id":"eq."+rid},{
-            "status":"failed","error_text":str(exc)[:700],"finished_at":utcnow()})
-        return {"id":rid,"status":"failed","reason":type(exc).__name__}
+            "status":"failed","error_text":message,"finished_at":utcnow()})
+        throttled=any(word in message.lower() for word in ('429','captcha','403','rate limit'))
+        return {"id":rid,"status":"failed","reason":type(exc).__name__,"throttled":throttled}
 
 
 def run() -> list[dict]:
+    # Do not compete with full production card collection.
+    try:
+        active=top.rest_get('triovist_21vek_shadow_runs',{
+            'select':'id','status':'eq.running','started_at':'gte.'+datetime.fromtimestamp(
+                datetime.now(timezone.utc).timestamp()-7200,timezone.utc).isoformat(),'limit':'1'})
+        if active:
+            print('Search360 queued safely: full 21vek parser currently active',flush=True)
+            return []
+    except Exception:
+        # Safety-first: if full-parser state cannot be verified, defer own scans.
+        print('Search360 deferred: cannot verify the full-parser status',flush=True)
+        return []
     pending=top.rest_get(QUEUE,{"select":"*","status":"eq.queued",
                                 "order":"requested_at.asc","limit":str(MAX_JOBS)})
     if not pending:return []
@@ -300,7 +314,8 @@ def run() -> list[dict]:
         outcomes.append(outcome)
         print("Search360",outcome,flush=True)
         time.sleep(REQUEST_PAUSE)
-        if outcome["status"]=="failed" and any(x in str(outcome).lower() for x in ("429","captcha")):
+        if outcome.get('throttled'):
+            print('Search360 stopped due to 21vek access/rate limit',flush=True)
             break
     return outcomes
 
