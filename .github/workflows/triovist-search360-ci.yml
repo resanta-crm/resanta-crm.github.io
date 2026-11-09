@@ -7,6 +7,7 @@ on:
       - 'tools/test_triovist_21vek_search360.py'
       - 'assets/185-triovist-search360-v1.js'
       - 'supabase/migrations/20261109_triovist_search360_isolated_v1.sql'
+      - 'supabase/migrations/20261109_triovist_search360_negative_coverage_v2.sql'
       - 'index.html'
       - '.github/workflows/triovist-search360-ci.yml'
       - '.github/workflows/triovist-search360-worker.yml'
@@ -43,5 +44,7 @@ jobs:
           git diff --name-only origin/main...HEAD > /tmp/search360-changed
           cat /tmp/search360-changed
           ! grep -E '^tools/(triovist_21vek_parser|triovist_21vek_top_shadow|triovist_21vek_shadow_sync|triovist_21vek_promote|triovist_21vek_market)[.]py$' /tmp/search360-changed
-          ! (grep '^supabase/migrations/' /tmp/search360-changed | grep -v '^supabase/migrations/20261109_triovist_search360_isolated_v1[.]sql$')
+          ! (grep '^supabase/migrations/' /tmp/search360-changed | grep -v -E '^supabase/migrations/20261109_triovist_search360_(isolated_v1|negative_coverage_v2)[.]sql)
+          ! grep -E 'TRUNCATE|DELETE FROM public[.](triovist_21vek|triovist_content)|DROP TABLE public[.]triovist_' supabase/migrations/20261109_triovist_search360_isolated_v1.sql
+)
           ! grep -E 'TRUNCATE|DELETE FROM public[.](triovist_21vek|triovist_content)|DROP TABLE public[.]triovist_' supabase/migrations/20261109_triovist_search360_isolated_v1.sql
