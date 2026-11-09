@@ -13,35 +13,44 @@ let mode='overview',offset=0,limit=100,search='';
 
 const abcClassCache=new Map(),abcClassPending=new Map();
 let abcClassPaintSeq=0;
+async function abcClassMapForMonth(month){
+ if(!/^\d{4}-\d{2}$/.test(String(month||'')))throw new Error('Не определён месяц отчёта для ABC-категорий');
+ let entry=abcClassCache.get(month);
+ if(!entry||Date.now()-entry.at>120000){
+  let pending=abcClassPending.get(month);
+  if(!pending){
+   pending=rpc('warehouse_control_abc_classes_v1',{p_month:month+'-01'})
+    .then(result=>{
+     if(!result?.classes||typeof result.classes!=='object')throw new Error('Не удалось получить ABC-категории из 1С');
+     const next={value:result.classes,at:Date.now()};abcClassCache.set(month,next);return next;
+    }).finally(()=>abcClassPending.delete(month));
+   abcClassPending.set(month,pending);
+  }
+  entry=await pending;
+ }
+ return entry.value;
+}
+function abcLabelForSku(classes,sku){
+ if(!String(sku||'').trim())return '';
+ const cls=classes?.[String(sku).trim().toLowerCase()];
+ return ['A','B','C','N','R'].includes(cls)?cls:'—';
+}
 async function decorateAbcOrder(data,root){
  if(mode!=='order')return;
  const seq=++abcClassPaintSeq,month=String(data?.report_month||'').slice(0,7);
  if(!/^\d{4}-\d{2}$/.test(month)||!root.querySelector('[data-wc-abc-sku]'))return;
  try{
-  let entry=abcClassCache.get(month);
-  if(!entry||Date.now()-entry.at>120000){
-   let pending=abcClassPending.get(month);
-   if(!pending){
-    pending=rpc('warehouse_control_abc_classes_v1',{p_month:month+'-01'})
-     .then(result=>{
-      const value=result?.classes&&typeof result.classes==='object'?result.classes:{};
-      const next={value,at:Date.now()};abcClassCache.set(month,next);return next;
-     }).finally(()=>abcClassPending.delete(month));
-    abcClassPending.set(month,pending);
-   }
-   entry=await pending;
-  }
+  const classes=await abcClassMapForMonth(month);
   if(seq!==abcClassPaintSeq||mode!=='order'||$('wc-body')!==root)return;
   root.querySelectorAll('[data-wc-abc-sku]').forEach(cell=>{
-   const cls=entry.value[String(cell.dataset.wcAbcSku||'').toLowerCase()]||'—';
-   const label=['A','B','C','N','R'].includes(cls)?cls:'—';
+   const label=abcLabelForSku(classes,cell.dataset.wcAbcSku);
    cell.textContent=label;
    cell.title=label==='—'?'ABC по филиалу: класс не определён':'ABC филиала · класс '+label+' · '+month;
    cell.style.fontWeight='800';
    cell.style.color=label==='A'?'var(--g)':label==='C'||label==='R'?'var(--r)':label==='B'?'var(--w)':'var(--sub)';
   });
  }catch(e){
-  // ABC labels are optional; stock operations continue unchanged.
+  // ABC labels are optional for onscreen warehouse operations.
   console.warn('ABC-категория автозаказа временно недоступна',e);
  }
 }
@@ -124,12 +133,12 @@ function render(data){
  try{window.crmWarehouseVitebsk360V1?.attachOrderRows?.(rows,data,mode,root)}catch(e){console.warn('Vitebsk360 order explanation',e)}
  if(mode==='order')void decorateAbcOrder(data,root);
 }
-async function allRowsFor(m){let out=[],off=0;for(let i=0;i<30;i++){const d=await rpc('warehouse_control_get_items_v2',{p_month:monthArg(),p_mode:m,p_search:'',p_limit:500,p_offset:off});const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}return out}
+async function allRowsFor(m){let out=[],off=0,reportMonth='';for(let i=0;i<30;i++){const d=await rpc('warehouse_control_get_items_v2',{p_month:monthArg(),p_mode:m,p_search:'',p_limit:500,p_offset:off});if(!reportMonth)reportMonth=String(d?.report_month||'').slice(0,7);const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}out.reportMonth=reportMonth;return out}
 async function ensureXlsx(){if(window.XLSX)return true;try{if(typeof _loadSheetJS==='function'){await _loadSheetJS();return !!window.XLSX}}catch(_){}return false}
 function csv(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
 function fallbackCsv(rows,headers,mapper,name){const lines=[headers.map(csv).join(';'),...rows.map(r=>mapper(r).map(csv).join(';'))];const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function writeExcel(rows,headers,mapper,name){if(await ensureXlsx()){const aoa=[headers,...rows.map(mapper)];const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!freeze']={xSplit:0,ySplit:1};const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Отчёт');XLSX.writeFile(wb,name+'.xlsx');return}fallbackCsv(rows,headers,mapper,name)}
-async function exportOrder(){try{const fresh=await rpc('warehouse_control_get_freshness_v1',{});const stale=!fresh?.auto_sources_fresh;if(stale){const msg='Свежие отчёты ещё не пришли.\n\nСебестоимость 1С: '+String(fresh?.cost_date||'—')+'\nОстаток Витебск: '+String(fresh?.vitebsk_stock_date||'—')+'\nПродажи: '+String(fresh?.sales_date||'—')+'\nЧехов: '+String(fresh?.chekhov_date||'—')+'\n\nВыгрузить автозаказ по последним доступным данным?';if(!confirm(msg))return}const rows=(await allRowsFor('order')).filter(r=>n(r.recommended_order_qty)>0);if(!rows.length){alert('Сейчас нет позиций для заказа из Чехова.');return}const total=rows.reduce((s,r)=>s+n(r.estimated_order_cost_byn),0);const headers=['Артикул','Товар','Остаток Витебск','Дней запаса','Цель дней','Прогноз месяца','Среднее 3 мес.','Прошлый год','Источник прогноза','Целевой остаток 14 дней','Нужно','Остаток Чехов','Мин. упаковка','Заказать','Оценка BYN'];const mapper=r=>[r.sku,r.product,n(r.vitebsk_avail),r.days_cover,FIXED_HORIZON,n(r.forecast_qty),n(r.avg3_qty),n(r.ly_qty),r.forecast_source,n(r.target_qty),n(r.need_qty),n(r.chekhov_qty),n(r.box_qty),n(r.recommended_order_qty),n(r.estimated_order_cost_byn)];rows.push({sku:'',product:'ИТОГО',estimated_order_cost_byn:total});const suffix=stale?'_ПОСЛЕДНИЕ_ДАННЫЕ_Витебск_'+String(fresh?.vitebsk_stock_date||'нет').replaceAll('-','_')+'_Продажи_'+String(fresh?.sales_date||'нет').replaceAll('-','_'):'';await writeExcel(rows,headers,mapper,'Автозаказ_Чехов_'+new Date().toISOString().slice(0,10)+suffix)}catch(e){alert('Не удалось сформировать автозаказ: '+(e?.message||e))}}
+async function exportOrder(){try{const fresh=await rpc('warehouse_control_get_freshness_v1',{});const stale=!fresh?.auto_sources_fresh;if(stale){const msg='Свежие отчёты ещё не пришли.\n\nСебестоимость 1С: '+String(fresh?.cost_date||'—')+'\nОстаток Витебск: '+String(fresh?.vitebsk_stock_date||'—')+'\nПродажи: '+String(fresh?.sales_date||'—')+'\nЧехов: '+String(fresh?.chekhov_date||'—')+'\n\nВыгрузить автозаказ по последним доступным данным?';if(!confirm(msg))return}const orderData=await allRowsFor('order');const rows=orderData.filter(r=>n(r.recommended_order_qty)>0);if(!rows.length){alert('Сейчас нет позиций для заказа из Чехова.');return}const abcClasses=await abcClassMapForMonth(orderData.reportMonth);const total=rows.reduce((s,r)=>s+n(r.estimated_order_cost_byn),0);const headers=['Артикул','Товар','Категория','Остаток Витебск','Дней запаса','Цель дней','Прогноз месяца','Среднее 3 мес.','Прошлый год','Источник прогноза','Целевой остаток 14 дней','Нужно','Остаток Чехов','Мин. упаковка','Заказать','Оценка BYN'];const mapper=r=>[r.sku,r.product,abcLabelForSku(abcClasses,r.sku),n(r.vitebsk_avail),r.days_cover,FIXED_HORIZON,n(r.forecast_qty),n(r.avg3_qty),n(r.ly_qty),r.forecast_source,n(r.target_qty),n(r.need_qty),n(r.chekhov_qty),n(r.box_qty),n(r.recommended_order_qty),n(r.estimated_order_cost_byn)];rows.push({sku:'',product:'ИТОГО',estimated_order_cost_byn:total});const suffix=stale?'_ПОСЛЕДНИЕ_ДАННЫЕ_Витебск_'+String(fresh?.vitebsk_stock_date||'нет').replaceAll('-','_')+'_Продажи_'+String(fresh?.sales_date||'нет').replaceAll('-','_'):'';await writeExcel(rows,headers,mapper,'Автозаказ_Чехов_'+new Date().toISOString().slice(0,10)+suffix)}catch(e){alert('Не удалось сформировать автозаказ: '+(e?.message||e))}}
 async function exportExcess(){try{const rows=await allRowsFor('excess');if(!rows.length){alert('Сейчас нет позиций в перелимите.');return}const headers=['Артикул','Товар','Остаток Витебск','Дней запаса','Норма склада, дней','Нормальный остаток, шт.','Лишних, шт.','Излишек BYN','Излишек RUB','Прогноз продаж/мес.','Среднее 3 мес.','Прошлый год','Источник прогноза','Уровень перелимита','Рекомендация','Группа 900'];const mapper=r=>[r.sku,r.product,n(r.vitebsk_avail),r.days_cover,n(r.norm_days),n(r.norm_target_qty),n(r.excess_qty),n(r.excess_cost_byn),n(r.excess_cost_rub),n(r.forecast_qty),n(r.avg3_qty),n(r.ly_qty),r.forecast_source,r.excess_severity,r.excess_action,r.group900?'Да':'Нет'];await writeExcel(rows,headers,mapper,'Перелимит_акция_на_слив_'+new Date().toISOString().slice(0,10))}catch(e){alert('Не удалось выгрузить перелимит: '+(e?.message||e))}}
 function install(){ensureCss();ensureFixedHorizon();const page=$('page-warehouse-control');if(!page||page.dataset.compactV23639)return;page.dataset.compactV23639='1';page.addEventListener('click',async e=>{const tab=e.target.closest('#wc-v23620 .wc-tab');if(tab){const m=tab.dataset.mode;if(!m)return;if(m==='overview'){mode='overview';setTimeout(ensureFixedHorizon,0);return}if(!['all','excess','stockout','order'].includes(m)){mode=m;return}e.preventDefault();e.stopImmediatePropagation();mode=m;offset=0;document.querySelectorAll('#wc-v23620 .wc-tab').forEach(b=>b.classList.toggle('active',b===tab));await load();return}const refresh=e.target.closest('#wc-refresh');if(refresh){setTimeout(ensureFixedHorizon,0);if(!['all','excess','stockout','order'].includes(mode))return;e.preventDefault();e.stopImmediatePropagation();refresh.disabled=true;try{const api=window.crmWarehouseControlV1;if(api?.__freshnessOriginalOpen)await api.__freshnessOriginalOpen(true);else if(api?.open)await api.open(true);ensureFixedHorizon();document.querySelectorAll('#wc-v23620 .wc-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));await load()}finally{const b=$('wc-refresh');if(b)b.disabled=false}}},true)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();[400,1000,2200,4500].forEach(ms=>setTimeout(()=>{install();ensureFixedHorizon()},ms));

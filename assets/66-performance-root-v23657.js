@@ -48,7 +48,7 @@ function waitGuard(guard,ms=1400){
 function inject(path,marker,guard){
   return new Promise(resolve=>{
     const s=document.createElement('script');
-    s.src='./'+path+'?v='+(path==='assets/21-gps-control-performance-v2357.js'?'20261106-manager-feedback':path==='assets/51-warehouse-compact-days-v23637.js'?'20261109-warehouse-abc-column1':V);
+    s.src='./'+path+'?v='+(path==='assets/21-gps-control-performance-v2357.js'?'20261106-manager-feedback':path==='assets/51-warehouse-compact-days-v23637.js'?'20261109-warehouse-abc-excel2':V);
     s.async=false;
     s.setAttribute(attrName(marker),'1');
     s.onload=async()=>resolve(await waitGuard(guard,1400));
