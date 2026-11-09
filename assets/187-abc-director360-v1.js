@@ -41,6 +41,10 @@ const styles=[
 '#page-abc .abc360-riskgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}',
 '#page-abc .abc360-risk{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px}',
 '#page-abc .abc360-warn{background:#fffbeb;color:#854d0e;border:1px solid #fde68a;border-radius:8px;padding:10px;font-size:11px}',
+'#page-abc .abc360-managerbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:12px}',
+'#page-abc .abc360-managerlist{display:flex;gap:7px;flex-wrap:wrap}',
+'#page-abc .abc360-managerlist button{border:1px solid var(--border);background:var(--card);padding:9px 12px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:650;color:var(--text)}',
+'#page-abc .abc360-managerlist button[aria-pressed="true"]{background:var(--ab);color:var(--at);border-color:var(--a)}',
 '@media(max-width:990px){#page-abc .abc360-kpis{grid-template-columns:repeat(3,1fr)}}',
 '@media(max-width:700px){#page-abc .abc360-kpis{grid-template-columns:repeat(2,1fr)}#page-abc .abc360-two{grid-template-columns:1fr}#page-abc .abc360-riskgrid{grid-template-columns:1fr}}'
 ].join('');
@@ -56,6 +60,16 @@ function mount(){
   root.addEventListener('click',function(e){
    const b=e.target.closest('button[data-abc-action]');if(!b)return;
    const action=b.dataset.abcAction;
+   if(action==='manager'){
+    if(typeof currentProfile==='undefined'||currentProfile?.role!=='boss')return;
+    const value=b.dataset.value||'all';
+    const scope=el('abc-scope'),manager=el('abc-manager');
+    if(!scope||!manager)return;
+    scope.value=value==='all'?'branch':'manager';
+    if(value!=='all')manager.value=value;
+    if(typeof abcScopeChanged==='function')abcScopeChanged(false);
+    opened=false;openState();refresh(false);return;
+   }
    if(action==='details'){opened=!opened;openState();const t=el('abc360-expand');if(t){t.textContent=opened?'Скрыть детали':'Раскрыть группы и SKU';t.setAttribute('aria-expanded',String(opened));}}
    if(action==='class'){el('abc-class').value=b.dataset.value;opened=true;openState();renderABC();}
    if(action==='group'){el('abc-group').value=b.dataset.value;opened=true;openState();renderABC();}
@@ -102,6 +116,14 @@ function render(info){
  const legend=['A','B','C','N'].map(k=>'<span><i style="background:'+colors[k]+'"></i>'+k+' · '+percent(part(k))+' · '+fmt(cls[k])+' SKU</span>').join('');
  const tophtml=top.map(g=>'<div class="abc360-gr"><button data-abc-action="group" data-value="'+html(g.group)+'" title="Открыть группу">'+html(g.group)+'</button><div class="track"><div style="width:'+Math.max(0,100*g.netTotal/max)+'%"></div></div><b>'+fmt(g.netTotal)+'</b></div>').join('');
  const tile=(title,val,sub)=>'<div class="abc360-kpi"><small>'+html(title)+'</small><strong>'+html(val)+'</strong><em>'+html(sub)+'</em></div>';
+ // Manager-specific ABC is loaded from the authoritative CRM RPC on selection;
+ // never fabricate per-manager figures from a branch-wide aggregate.
+ const isBoss=typeof currentProfile!=='undefined'&&currentProfile?.role==='boss';
+ const managerOptions=[...(el('abc-manager')?.options||[])].filter(o=>o.value!=='all'&&!o.disabled).map(o=>({value:o.value,label:o.textContent||o.value}));
+ const chosen=info.scope==='manager'?info.manager:'all';
+ const quickManager=isBoss?'<div class="abc360-managerbar"><div><b>Управление ассортиментом менеджеров</b><div class="abc360-sub">Выберите менеджера — KPI, группы, ABC и остатки пересчитаются по его клиентам.</div></div><div class="abc360-managerlist" role="group" aria-label="Менеджеры ABC">'+
+ [{value:'all',label:'Весь филиал'},...managerOptions].map(o=>'<button type="button" data-abc-action="manager" data-value="'+html(o.value)+'" aria-pressed="'+String(chosen===o.value)+'">'+html(o.label)+'</button>').join('')+'</div></div>':'';
+
  const risktext=risk.length?'У '+fmt(risk.length)+' SKU класса A остаток Витебска составляет 0–1 шт.':'Среди класса A с известными остатками нет позиций с уровнем 0–1 шт.';
  const brief='<div class="abc360-note"><label>Наличие · склад Витебск</label><b>'+risktext+'</b><div class="abc360-sub">Сигнал для проверки заказа, не автоматическое списание или заказ.</div></div>'+
  '<div class="abc360-note"><label>Изменения класса</label><b>'+fmt(falling)+' A→B/C · '+fmt(rising)+' B/C→A</b><div class="abc360-sub">Сравнение тех же SKU с предыдущим равным периодом.</div></div>'+
@@ -111,7 +133,7 @@ function render(info){
  const warn=checks.length?'<div class="abc360-warn">В '+checks.length+' группах итог SKU не равен сумме A+B+C+N+R. Проверьте расчёт.</div>':'';
  const cards=risk.slice(0,3).map(z=>'<div class="abc360-risk"><b>'+html(z.x.product)+'</b><div class="abc360-sub">'+html(z.x.sku)+' · '+html(z.x.group)+'</div><div style="margin-top:7px"><b>Витебск: '+fmt(z.st.qty)+' шт.</b></div><div class="abc360-sub">Оборот: '+fmt(z.x.revenue)+' BYN'+(z.st.date?' · '+html(z.st.date):'')+'</div></div>').join('');
  root.innerHTML='<div class="abc360-head"><div><div class="abc360-title">ABC-анализ 360°</div><div class="abc360-sub">1С · с НДС · '+html(abcPeriodText(info.mode,0))+' · '+fmt(groups.length)+' групп</div></div><span class="abc360-sub">Данные CRM · без демонстрационных значений</span></div>'+
- '<div class="abc360-kpis">'+tile('Нетто-оборот',fmt(info.net),'BYN · с НДС')+tile('Класс A',fmt(cls.A),'SKU · приоритет')+tile('Класс B',fmt(cls.B),'SKU · развитие')+tile('Класс C / N',fmt(cls.C)+' / '+fmt(cls.N),'SKU · в том числе новые')+tile('Класс R',fmt(cls.R),'SKU · возвраты и ≤ 0')+'</div>'+
+ quickManager+'<div class="abc360-kpis">'+tile('Нетто-оборот',fmt(info.net),'BYN · с НДС')+tile('Класс A',fmt(cls.A),'SKU · приоритет')+tile('Класс B',fmt(cls.B),'SKU · развитие')+tile('Класс C / N',fmt(cls.C)+' / '+fmt(cls.N),'SKU · в том числе новые')+tile('Класс R',fmt(cls.R),'SKU · возвраты и ≤ 0')+'</div>'+
  '<div class="abc360-two"><div class="abc360-panel"><h3>✦ ИИ · Директорский брифинг</h3>'+brief+'</div><div class="abc360-panel"><h3>'+(info.group==='all'?'Структура по классам':'Кривая ABC · '+html(info.group))+'</h3>'+right+'</div></div>'+
  (cards?'<div class="abc360-panel"><h3>Класс A · Проверить остатки Витебска</h3><div class="abc360-riskgrid">'+cards+'</div></div>':'')+warn+
  '<div class="abc360-actions"><button class="abc360-btn primary" id="abc360-expand" data-abc-action="details" aria-expanded="'+String(opened)+'">'+(opened?'Скрыть детали':'Раскрыть группы и SKU')+'</button><button class="abc360-btn" data-abc-action="class" data-value="A">Только A</button><button class="abc360-btn" data-abc-action="class" data-value="R">Проверить R</button><button class="abc360-btn" data-abc-action="tasks">Открыть задачи ИИ</button><button class="abc360-btn" data-abc-action="refresh">↻ Обновить</button></div>'+
@@ -173,6 +195,6 @@ function bind(){
 }
 window.abc360DebouncedSearch=function(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>{opened=true;openState();if(typeof renderABC==='function')renderABC();},150);};
 window.RESANTA_ABC360={render,refresh};
-window.RESANTA_ABC360_V1=Object.freeze({version:'20261109.1',readOnly:true,source:'existing ABC + 1C'});
+window.RESANTA_ABC360_V1=Object.freeze({version:'20261109.2',readOnly:true,source:'existing ABC + 1C'});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();
