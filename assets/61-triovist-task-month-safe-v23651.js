@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651)return;
-const V='v23.6.381-brainstorm-v2',ALEKS='aleksandrenko_av@resanta.ru',KRIS='krishtal_na@resanta.ru';
+const V='v23.6.382-decisions360-fact-v1',ALEKS='aleksandrenko_av@resanta.ru',KRIS='krishtal_na@resanta.ru';
 const MANAGERS=[ALEKS,KRIS],LEADERS=['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru'];
 const EXCLUDED=new Set(['cancelled','not_relevant']);
 const FINAL=new Set(['verified','partial','not_achieved','cancelled','not_relevant']);
@@ -43,12 +43,20 @@ async function loadExtras(key,m,mgr){
  if(extrasFlight&&extrasKey===key)return extrasFlight;
  extrasKey=key;
  extrasFlight=(async()=>{
-   let summary=null,policy=null;
-   try{summary=await rpc('triovist_month_summary_v23647',{p_month:m+'-01',p_manager_email:mgr})}catch(e){console.warn('Triovist task summary deferred',e)}
-   try{policy=await rpc('triovist_motivation_get_policy',{})}catch(e){console.warn('Triovist task policy deferred',e)}
+   let summary=null,policy=null,facts=null;
+   const extra=await Promise.allSettled([
+     rpc('triovist_month_summary_v23647',{p_month:m+'-01',p_manager_email:mgr}),
+     rpc('triovist_motivation_get_policy',{}),
+     rpc('triovist_decisions360_task_facts_v1',{p_month:m+'-01',p_manager_email:mgr})
+   ]);
+   if(extra[0].status==='fulfilled')summary=extra[0].value;
+   if(extra[1].status==='fulfilled')policy=extra[1].value;
+   if(extra[2].status==='fulfilled')facts=extra[2].value;
+   else facts={error:String(extra[2].reason?.message||extra[2].reason),facts:[]};
    if(lastKey!==key||!lastPack)return;
    if(summary)lastPack.summary=summary;
    if(policy)lastPack.policy=policy;
+   if(facts)lastPack.facts=facts;
    lastAt=Date.now();
    if(isTaskTab())setTimeout(()=>render(false),0);
  })().finally(()=>{extrasFlight=null;extrasKey=''});
@@ -85,13 +93,29 @@ function brainListingHtml(t){
  '<div class="tm51-note" style="color:#166534">Менеджер направляет отчёт; только Паюшин подтверждает его. Неизвестная позиция — не доказанное выпадение из TOP-60. Денежный объём проверяется отдельно.</div></div>';
 }
 function brainResultHtml(t){
- const ctx=taskCtx(t)||{};
- const checked=t.result_checked_at?'<div class="tm51-note">Проверено '+esc(dateLabel(t.result_checked_at))+'. '+esc(t.result_summary||'')+'</div>':
- '<div class="tm51-note">Ожидаем подтверждения менеджером объёма и листинга, затем проверки руководителем.</div>';
- return '<div class="tm51-result"><b>Объём:</b> цель <b>'+money(t.target_revenue)+'</b> · '+
- (t.result_revenue==null?'факт ещё не проверен':'факт '+money(t.result_revenue))+
- ' · <b>Листинг:</b> '+(ctx.listing_verified_by?'отчёт подтверждён Паюшиным':'отчёт подлежит проверке')+checked+
- '</div>';
+ const ctx=taskCtx(t)||{},data=lastPack?.facts||null;
+ const live=(data?.facts||[]).find(x=>String(x.task_id)===String(t.id));
+ const hasSource=live?.fact_by_task!=null&&data?.source_rows>0;
+ const fact=hasSource?Number(live.fact_by_task):null;
+ const moneyProgress=hasSource&&Number(t.target_revenue)>0
+   ?Math.min(100,Math.max(0,fact/Number(t.target_revenue)*100)):null;
+ const sourceStatus=!data?'Проверка факта загружается из 1С…'
+   :data.error?'Сверка 1С недоступна: '+String(data.error)
+   :!hasSource?'Сопоставимый факт не определён — не подменяем его нулём.'
+   :live.fact_status==='no_matched_sales'?'В загруженных продажах 1С совпадений по этой подгруппе и бренду пока нет.'
+   :'Подгруппа и бренд сопоставлены с первичными строками продаж 1С.';
+ const listing=ctx.listing_verified_by?'отчёт подтверждён Паюшиным':'листинг требует проверки';
+ const check=t.result_checked_at?'Результат задачи проверен '+dateLabel(t.result_checked_at)
+   :'Продажи — текущий факт; итог задачи и премию подтверждает руководитель.';
+ return '<div class="tm51-result"><b>Цель по объёму:</b> '+money(t.target_revenue)+
+   ' · <b>Факт по подгруппе:</b> <strong>'+(hasSource?money(fact):'Не определён')+'</strong>'+
+   ' · <b>Выполнение объёма:</b> '+(moneyProgress==null?'—':moneyProgress.toLocaleString('ru-RU',{maximumFractionDigits:1})+'%')+
+   '<div class="tm51-note">'+esc(sourceStatus)+'</div>'+
+   '<div class="tm51-note">Источник: '+esc(data?.source||'продажи 1С')+
+   ' · обновлено '+esc(data?.sales_imported_at?dateLabel(data.sales_imported_at):'—')+
+   ' · совпавших строк: '+esc(live?.matched_lines??'—')+
+   '. Факты нескольких задач не суммировать: одна отгрузка может относиться к нескольким поручениям.</div>'+
+   '<div><b>Листинг:</b> '+esc(listing)+'. '+esc(check)+'</div></div>';
 }
 
 function listingProgressActions(t){const p=taskCtx(t)?.listing_progress;return Array.isArray(p?.actions)?p.actions:[]}
