@@ -101,6 +101,21 @@ jobs:
                   for h in hits:print('JS_META',repr(h))
               except Exception as e:print('JS_FILE_ERROR',type(e).__name__)
           PY
+      - name: Inspect verified 21vek search-suggest method and params
+        run: |
+          python - <<'PY'
+          import requests
+          url='https://cdn21vek.by/desktop/_next/static/chunks/pages/_app-b7127587465ead02.js'
+          try:
+              r=requests.get(url,timeout=16)
+              print('Search source status',r.status_code)
+              if r.ok:
+                  t=r.text
+                  for needle in ['this.getSearchSuggest=','getSearchSuggest(e','search-composer/api/v1/search']:
+                      i=t.find(needle)
+                      if i>=0: print('SUGGEST_METHOD',needle,repr(t[i:i+930]))
+          except Exception as e: print('Suggestion contract inspection unavailable',type(e).__name__)
+          PY
       - name: Read-only 21vek public search metadata (one request)
         run: |
           python - <<'PY'
