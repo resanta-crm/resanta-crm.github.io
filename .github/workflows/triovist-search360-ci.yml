@@ -47,6 +47,34 @@ jobs:
           except Exception as e:
               print('Homepage probe unavailable:',type(e).__name__)
           PY
+      - name: Find public autosuggest endpoint in 21vek frontend script references
+        run: |
+          python - <<'PY'
+          import requests,re,concurrent.futures
+          from bs4 import BeautifulSoup
+          try:
+              html=requests.get('https://www.21vek.by/',timeout=12).text
+              js=[x.get('src') for x in BeautifulSoup(html,'html.parser').select('script[src]')
+                  if (x.get('src') or '').startswith('https://cdn21vek.by/') and '.js' in x.get('src')]
+              print('JS scanned:',len(js))
+              def scan(url):
+                  try:
+                      z=requests.get(url,timeout=12)
+                      if not z.ok or len(z.content)>2500000:return []
+                      t=z.text
+                      found=[]
+                      for m in re.finditer(r'(?:search-composer|search-suggest|catalogSuggest|autoComplete|suggestions|autocomplete|suggest)',t,re.I):
+                          span=t[max(0,m.start()-90):min(len(t),m.end()+90)]
+                          if any(x in span for x in ('api/','https:','/suggest','/search')):
+                              found.append(span[:170])
+                          if len(found)>=6:break
+                      return [(url.rsplit('/',1)[-1],x) for x in found]
+                  except Exception:return []
+              with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+                  out=[x for pack in pool.map(scan,js) for x in pack]
+              for name,excerpt in out[:18]:print('JS_REF',name,repr(excerpt))
+          except Exception as e:print('bundle lookup inconclusive:',type(e).__name__)
+          PY
       - name: Read-only 21vek public search metadata (one request)
         run: |
           python - <<'PY'
