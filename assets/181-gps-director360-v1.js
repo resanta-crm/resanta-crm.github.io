@@ -187,7 +187,7 @@ function render(){
  const options='<option value="all">Все менеджеры</option>'+MANAGERS.map(x=>
   '<option value="'+esc(x)+'" '+(f.manager===x?'selected':'')+'>'+esc(x)+'</option>').join('');
  let html='<div class="g-header"><div><h2>GPS · Директорский обзор</h2>'+
- '<div class="g-muted">Отдельно отчёты, доказательства GPS и случаи для проверки · Uni AI / Uni X</div></div>'+
+ '<div class="g-muted">Отдельно отчёты, доказательства GPS и решения руководителя</div></div>'+
  '<div class="g-controls"><label>Период с<input data-g360-filter="from" type="date" value="'+esc(f.from)+'" max="'+today()+'"></label>'+
  '<label>по<input data-g360-filter="to" type="date" value="'+esc(f.to)+'" max="'+today()+'"></label>'+
  '<label>Менеджер<select data-g360-filter="manager">'+options+'</select></label>'+
@@ -204,7 +204,7 @@ function render(){
  card('Плановых ТТ',k.planned,'Завершённые дни; сегодня отдельно')+
  card('Визитов по отчётам',k.reports,pct(r,p)+' плана завершённых дней',p?r/p*100:0)+
  card('GPS подтверждено',k.gps_confirmed,pct(g,k.geo_eligible)+' из '+num(k.geo_eligible)+' ТТ с геозонами',k.geo_eligible?g/n(k.geo_eligible)*100:0,'#148653')+
- card('На разбор руководителю',k.review,'Только завершённые дни · не нарушения',p?n(k.review)/p*100:0,'#b95024')+
+ card('На разбор руководителю',openReview(),'Только завершённые дни · не нарушения',p?openReview()/p*100:0,'#b95024')+
  card('Нет координат ТТ',k.no_coordinates,'В очередь менеджерам, не руководителю',p?n(k.no_coordinates)/p*100:0)+
  '<div class="g-card attention"><small>⚠ Зона внимания</small><strong>'+esc(u?.manager||'Нет данных')+'</strong>'+
  '<small>На разборе (не обвинение): '+num(u?.review)+'</small>'+
@@ -226,7 +226,7 @@ function render(){
  '<div class="g-tabs"><button type="button" class="g-primary" data-g360-legacy="meeting">✦ ИИ-повестка</button>'+
  '<button type="button" data-g360-details="visits">Маршруты и точки ↓</button></div></div>'+
  '<p>По завершённым дням: '+num(r)+' отчётов из '+num(p)+' плановых посещений ('+pct(r,p)+'). GPS-подтверждено: '+num(g)+' из '+num(k.geo_eligible)+' ТТ с доверенными координатами ('+pct(g,k.geo_eligible)+'). '+
- 'Руководителю на разбор '+num(k.review)+' неоднозначных случаев; менеджерам на геопривязку '+num(k.no_coordinates)+' ТТ. '+
+ 'Руководителю на разбор '+num(openReview())+' неоднозначных случаев; менеджерам на геопривязку '+num(k.no_coordinates)+' ТТ. '+
  'Неопознанных стоянок: '+num(k.unidentified_stops)+' (система проверяет связь с ТТ; это не нарушения). Подтверждённых технических: '+num(k.verified_technical)+
  '. Зона внимания — '+esc(u?.manager||'нет данных')+'.</p>'+
  '<div class="g-muted">Отметка менеджера не является GPS-доказательством. Причины стоянок фиксируются только по решению руководителя.</div></section>';
@@ -246,11 +246,11 @@ function render(){
  '<th>На проверке</th><th>Нет координат</th><th>Стоянки без причины</th><th>Тех. подтверждены</th><th></th></tr></thead><tbody>'+
  managers.map(x=>'<tr><td><b>'+esc(x.manager_name)+'</b></td><td>'+num(x.planned)+' / '+num(x.reports)+'</td>'+
  '<td>'+num(x.gps_confirmed)+' · '+pct(x.gps_confirmed,x.geo_eligible)+'</td>'+
- '<td>'+num(x.attention_visits)+'</td><td>'+num(x.no_coordinates)+'</td>'+
+ '<td>'+num(Math.max(0,n(x.attention_visits)-(data.cases||[]).filter(c=>c.manager===x.manager_name&&!c.day_active&&caseState(c)==='closed').length))+'</td><td>'+num(x.no_coordinates)+'</td>'+
  '<td>'+num(x.unidentified_stops)+'</td><td>'+num(x.verified_technical)+'</td>'+
  '<td><button type="button" data-g360-manager="'+esc(x.manager_name)+'">Подробнее →</button></td></tr>').join('')+
  '<tr style="background:#edf4ff;font-weight:800"><td>ИТОГО</td><td>'+num(p)+' / '+num(r)+'</td>'+
- '<td>'+num(g)+'</td><td>'+num(k.review)+'</td><td>'+num(k.no_coordinates)+'</td>'+
+ '<td>'+num(g)+'</td><td>'+num(openReview())+'</td><td>'+num(k.no_coordinates)+'</td>'+
  '<td>'+num(k.unidentified_stops)+'</td><td>'+num(k.verified_technical)+'</td><td>—</td></tr></tbody></table></div></section>';
  html+='<section class="g-box"><div class="g-head"><h3>Торговые точки, стоянки и решения</h3>'+
  '<div class="g-tabs"><button type="button" data-g360-details="visits">Спорные ТТ</button>'+
@@ -277,8 +277,13 @@ async function load(force=false){
  const client=dbx();if(!client?.rpc){notice='Не удалось подключиться к CRM';render();return false}
  busy=true;notice='';render();sync();
  try{
-  const r=await client.rpc('gps_director360_evidence_v20261106',{p_from:f.from,p_to:f.to,p_manager:f.manager});
+  const [r,decision]=await Promise.all([
+    client.rpc('gps_director360_evidence_v20261109',{p_from:f.from,p_to:f.to,p_manager:f.manager}),
+    client.rpc('gps_director360_decisions_v20261109',{p_from:f.from,p_to:f.to})
+  ]);
   if(r.error)throw r.error;
+  if(decision.error)throw decision.error;
+  caseStates=decision.data?.states||{};
   if(r.data?.version!=='gps-director360-evidence-v2'||r.data?.period?.from!==f.from||
     r.data?.period?.to!==f.to)throw Error('Данные GPS не прошли контроль источника и периода');
   data=r.data;lastKey=key;return true;
@@ -313,12 +318,14 @@ async function saveStop(id){
  if(!w.confirm?.('Сохранить решение по стоянке '+item.manager+' '+day(item.date)+' · '+num(item.minutes)+' минут?\nИсходный трек не изменяется.'))return;
  const client=dbx();busy=true;notice='';render();
  try{
-  const r=await client.rpc('gps_director360_stop_decide_v20261105',{
-   p_workday_id:item.workday_id,p_stop_seq:item.seq,p_action:action,p_comment:comment,p_due_date:due
-  });
+  const r=await client.rpc(action==='forgot_end_day'
+    ?'gps_director360_stop_close_v20261109':'gps_director360_stop_decide_v20261105',
+    action==='forgot_end_day'
+    ?{p_workday_id:item.workday_id,p_stop_seq:item.seq,p_action:action,p_comment:comment}
+    :{p_workday_id:item.workday_id,p_stop_seq:item.seq,p_action:action,p_comment:comment,p_due_date:due});
   if(r.error)throw r.error;if(!r.data?.ok)throw Error('Решение не подтверждено сервером');
   editingStop='';lastKey='';busy=false;await load(true);
-  notice='✓ Решение руководителя сохранено. GPS-треки не изменялись.';
+  notice='✓ Решение сохранено. Закрытые случаи находятся во вкладке «Закрытые». GPS-треки не изменялись.';
  }catch(e){notice='Решение не сохранено: '+String(e?.message||e)}
  finally{busy=false;render()}
 }
@@ -333,7 +340,16 @@ d.addEventListener('click',e=>{
  if(t.closest('[data-g360-close]')){detailMode='closed';editingStop='';render();return}
  const stop=t.closest('[data-g360-stop]');if(stop){detailMode='stops';editingStop=editingStop===stop.dataset.g360Stop?'':stop.dataset.g360Stop;render();return}
  const save=t.closest('[data-g360-save]');if(save){saveStop(save.dataset.g360Save);return}
- const map=t.closest('[data-g360-map]');if(map){w.crmOpenGpsViewerV2360?.(map.dataset.g360Map);return}
+ const vs=t.closest('[data-g360-visit-scope]');if(vs){visitScope=vs.dataset.g360VisitScope;render();return}
+ const ss=t.closest('[data-g360-stop-scope]');if(ss){stopScope=ss.dataset.g360StopScope;render();return}
+ const caseMap=t.closest('[data-g360-case-map]');if(caseMap){
+  if(typeof w.crmGpsOpenFocusV20261109==='function')w.crmGpsOpenFocusV20261109(caseMap.dataset.g360CaseMap,{route_plan_id:caseMap.dataset.g360Plan});
+  else w.alert?.('Карта недоступна. Обновите страницу CRM.');return;
+ }
+ const map=t.closest('[data-g360-map]');if(map){
+  if(typeof w.crmGpsOpenFocusV20261109==='function')w.crmGpsOpenFocusV20261109(map.dataset.g360Map,{stop_seq:Number(map.dataset.g360MapSeq)});
+  else w.alert?.('Карта недоступна. Обновите страницу CRM.');return;
+ }
  const lg=t.closest('[data-g360-legacy]');if(lg){legacy(lg.dataset.g360Legacy);return}
  if(t.closest('[data-g360-top]'))root()?.querySelector('#g360-summary')?.scrollIntoView?.({behavior:'smooth',block:'start'});
 },true);
@@ -341,6 +357,7 @@ d.addEventListener('change',e=>{const t=e.target.closest?.('[data-g360-filter]')
 function install(){if(!allowed())return;mount();if(isActive())open(false)}
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 d.addEventListener('click',e=>{if(e.target.closest?.('#gps-tab-director-v236427,#bn-gps-control'))setTimeout(install,170)},true);
+d.addEventListener('resanta-gps-decision-updated',()=>{if(allowed()&&isActive()){lastKey='';load(true)}},true);
 w.RESANTA_GPS_DIRECTOR360_V1=Object.freeze({
  version:VERSION,open,render,readOnlyGps:true,originalRoutesPreserved:true,
  verifiedTechnicalRequiresDecision:true,stopReviewsAreAdditive:true
