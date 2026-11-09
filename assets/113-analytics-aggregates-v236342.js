@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_ANALYTICS_AGGREGATES_V236342)return;
-const V='v23.6.342', TTL=60000;
+const V='v23.6.342-abc360-20261109', TTL=60000;
 const baseEnsure=window.v22722EnsureHistory;
 const cache=new Map();
 
@@ -62,7 +62,7 @@ async function prepareAbc(force=false){
   if(p.scope==='client'&&!p.clientId)return setRows([],'ABC no client');
   const k='abc|'+[p.scope,p.manager,p.clientId||'',p.cur.join(','),p.prev.join(',')].join('|');
   const data=await cached(k,async()=>{
-    const {data,error}=await db.rpc('crm_abc_slice_v236342',{
+    const {data,error}=await db.rpc('crm_abc_slice_v20261109',{
       p_scope:p.scope,
       p_manager:p.scope==='manager'&&p.manager!=='all'?p.manager:null,
       p_client_id:p.scope==='client'?p.clientId:null,
