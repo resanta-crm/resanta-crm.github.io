@@ -321,7 +321,7 @@ function renderVisits(rows){
      '<td>'+esc(showTime(r.actual_arrival_at))+'–'+esc(showTime(r.actual_departure_at))+
         (r.actual_minutes!=null?'<div style="font-size:10px">'+esc(mins(r.actual_minutes))+'</div>':'')+'</td>'+
      '<td style="font-size:10px">'+esc(info)+'</td>'+
-     '<td><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn-primary" data-gps-brief-case="'+esc(r.route_plan_id)+'">Разобрать</button><button type="button" class="btn-secondary" onclick="crmOpenGpsViewerV2360(\''+esc(r.workday_id)+'\')">Карта</button></div></td></tr>';
+     '<td><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn-primary" data-gps-brief-case="'+esc(r.route_plan_id)+'">Разобрать</button><button type="button" class="btn-secondary" onclick="crmGpsOpenFocusV20261109(\''+esc(r.workday_id)+'\')">Карта</button></div></td></tr>';
     }).join('')+'</tbody></table>';
 }
 
@@ -357,7 +357,7 @@ function renderGroupedVisits(data){
       const visitTitle=(r.client_name&&r.client_name!==g.client_name)?'<div class="gps-brief-micro">'+esc(r.client_name)+'</div>':'';
       const decisionButton=r.decision==='review'?
         '<button type="button" class="btn-primary" data-gps-brief-case="'+esc(r.route_plan_id)+'">Разобрать</button>':'';
-      const mapButton=r.workday_id?'<button type="button" class="btn-secondary" onclick="crmOpenGpsViewerV2360(\''+esc(r.workday_id)+'\')">Карта</button>':'';
+      const mapButton=r.workday_id?'<button type="button" class="btn-secondary" onclick="crmGpsOpenFocusV20261109(\''+esc(r.workday_id)+'\')">Карта</button>':'';
       return '<tr><td><b>'+esc(day(r.date))+'</b>'+visitTitle+'</td>'+
         '<td>'+esc(r.reason||'—')+marker+'</td>'+
         '<td>'+esc(hhmm(r.planned_start))+'–'+esc(hhmm(r.planned_end))+'</td>'+
@@ -401,7 +401,7 @@ function renderTech(rows,total){
   '<table class="gps-route-table"><thead><tr><th>Дата</th><th>Менеджер</th><th>Остановка</th><th>Время</th><th>Длительность</th><th></th></tr></thead><tbody>'+
   rows.map(r=>'<tr><td>'+esc(day(r.work_date))+'</td><td>'+esc(r.manager_name)+'</td><td>'+esc(r.label||'Техническая остановка')+
   '</td><td>'+esc(showTime(r.stop?.start_at))+'–'+esc(showTime(r.stop?.end_at))+'</td>'+
-  '<td>'+esc(mins(r.stop?.minutes))+'</td><td><button class="btn-secondary" onclick="crmOpenGpsViewerV2360(\''+esc(r.workday_id)+'\')">Карта</button></td></tr>').join('')+'</tbody></table>';
+  '<td>'+esc(mins(r.stop?.minutes))+'</td><td><button class="btn-secondary" onclick="crmGpsOpenFocusV20261109(\''+esc(r.workday_id)+'\')">Карта</button></td></tr>').join('')+'</tbody></table>';
 }
 async function loadTechnical(){
  if(!allowed()||mode!=='director')return;
@@ -513,5 +513,6 @@ setInterval(()=>{
   if(document.getElementById('page-gps-control')?.classList.contains('active')&&allowed()&&!document.getElementById('gps-director-view-v236427'))install();
 },2000);
 
+document.addEventListener('resanta-gps-decision-updated',()=>{if(allowed()&&mode==='director')load(true)},true);
 window.RESANTA_GPS_DIRECTOR_REPORT_V236427=Object.freeze({version:'v23.6.446',access:['payushin','sidarovich'],factsOnly:true,briefing:true,drilldown:true,snapshotReport:true,heavyGpsOnOpen:false,loadDetails:()=>load(true),downloadExcel:exportExcel,legacyUiPreserved:true});
 })();

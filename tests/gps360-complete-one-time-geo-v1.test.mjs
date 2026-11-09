@@ -116,7 +116,7 @@ test('new director summary excludes active workday from problems AND weekly char
  assert.match(v2,/geo_eligible/);
  assert.match(v2,/review_is_not_violation/);
  assert.match(v2,/NOT coordinates_issue/);
- assert.match(director,/gps_director360_evidence_v20261106/);
+ assert.match(director,/gps_director360_evidence_v2026110(?:6|9)/);
  assert.match(director,/Незавершённый день НЕ считается просрочкой/);
  assert.match(director,/На разбор руководителю/);
 });
@@ -138,7 +138,7 @@ test('new functions protected and audit tables inaccessible directly to normal/a
 test('site loads updated protected GPS UI and only one new on-site manager module',()=>{
  const index=get('index.html');
  assert.match(index,/01-crm-core\.js\?v=20261106-(?:gps360-geoonce1|manager-feedback)/);
- assert.match(index,/181-gps-director360-v1\.js\?v=20261106-director360-geo1/);
+ assert.match(index,/181-gps-director360-v1\.js\?v=(?:20261106-director360-geo1|20261109-decisions1)/);
  assert.match(index,/183-gps-store-verify-v1\.js\?v=20261106-geoonce1/);
  assert.equal((index.match(/183-gps-store-verify-v1\.js/g)||[]).length,1);
  assert.match(index,/124-gps-director-report-v236427\.js/);

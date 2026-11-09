@@ -109,6 +109,32 @@ function tm(v){if(!v)return'—';return new Date(v).toLocaleTimeString('ru-RU',{
 function dist(v){const n=Number(v);if(!Number.isFinite(n))return'';return n<1000?Math.round(n)+' м':(n/1000).toLocaleString('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:2})+' км';}
 function validCoord(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));}
 function coord(lat,lng){return validCoord(lat)&&validCoord(lng)?[Number(lat),Number(lng)]:null;}
+function haversine(a,b){
+ const R=6371000,rad=Math.PI/180,dLat=(b[0]-a[0])*rad,dLon=(b[1]-a[1])*rad;
+ const x=Math.sin(dLat/2)**2+Math.cos(a[0]*rad)*Math.cos(b[0]*rad)*Math.sin(dLon/2)**2;
+ return 2*R*Math.asin(Math.min(1,Math.sqrt(x)));
+}
+function safeTrackSegments(points){
+ const segments=[],ok=[],tally={invalid:0,broken:0};
+ let segment=[],prev=null;
+ function finish(){if(segment.length>1)segments.push(segment);segment=[]}
+ for(const p of points||[]){
+  const c=coord(p.lat,p.lng),a=Number(p.accuracy??999),t=new Date(p.t||p.recorded_at||0).getTime();
+  if(!c||p.valid===false||a>80||a<0||!Number.isFinite(t)){
+    tally.invalid++;finish();prev=null;continue;
+  }
+  if(prev){
+   const sec=(t-prev.t)/1000,distM=haversine(prev.c,c);
+   // Gaps and implausibly fast jumps are not driven route segments.
+   if(sec<=0||sec>240||distM>3000||distM/sec>45){
+    tally.broken++;finish();
+   }
+  }
+  segment.push(c);ok.push(c);prev={c,t};
+ }
+ finish();
+ return {segments,valid:ok,skipped:tally.invalid,breaks:tally.broken};
+}
 function key(){try{return String(localStorage.getItem('resanta_yandex_maps_api_key_v2358')||localStorage.getItem('resanta_yandex_maps_api_key_v2351')||'').trim();}catch(_){return'';}}
 function storeLocalKey(v){try{localStorage.setItem('resanta_yandex_maps_api_key_v2351',v);localStorage.setItem('resanta_yandex_maps_api_key_v2358',v);return true}catch(_){return false}}
 async function hydrateSharedMapKey(){
@@ -245,17 +271,20 @@ function toggleStops(){
 }
 async function drawMap(a){
   const y=await loadYandex(),rows=Array.isArray(a.route_points)?a.route_points:[],stops=Array.isArray(a.physical_stops)?a.physical_stops:[],plans=Array.isArray(a.planned_points)?a.planned_points:[],off=Array.isArray(a.offplan_visits)?a.offplan_visits:[];
-  mapRouteCoords=rows.map(p=>coord(p.lat,p.lng)).filter(Boolean);mapPlanCoords=plans.map(p=>coord(p.lat,p.lng)).filter(Boolean);stopsVisible=true;
+  const clean=safeTrackSegments(rows);
+  mapRouteCoords=clean.valid;mapPlanCoords=plans.map(p=>coord(p.lat,p.lng)).filter(Boolean);stopsVisible=true;
   $('toggleStops').textContent='Скрыть остановки';
   $('mapStatus').className='msg info';
-  $('mapStatus').textContent=`Отметок о визите: ${a.visit_total||0} · по плану ${a.visited_count||0}/${a.planned_count||0}${Number(a.offplan_count)>0?' · вне плана '+a.offplan_count:''}. GPS-трек и подтверждённое посещение ТТ — разные показатели.`;
+  $('mapStatus').textContent=`Отметок о визите: ${a.visit_total||0} · по плану ${a.visited_count||0}/${a.planned_count||0}${Number(a.offplan_count)>0?' · вне плана '+a.offplan_count:''}. GPS-трек и подтверждённое посещение ТТ — разные показатели. Неподтверждённых точек: ${clean.skipped}; разрывов ненадёжной линии: ${clean.breaks}.`;
   if(map){try{map.destroy()}catch(_){}map=null;}
   const center=mapRouteCoords.length?mapRouteCoords[mapRouteCoords.length-1]:mapPlanCoords.length?mapPlanCoords[0]:[55.19,30.20];
   map=new y.Map('map',{center,zoom:14,controls:['zoomControl','typeSelector','fullscreenControl']},{suppressMapOpenBlock:true});
 
   if(mapRouteCoords.length>1){
-    map.geoObjects.add(new y.Polyline(mapRouteCoords,{}, {strokeColor:'#1666d3',strokeWidth:5,strokeOpacity:.92}));
-    map.geoObjects.add(new y.Placemark(mapRouteCoords[0],{hintContent:'Начало рабочего маршрута'},{preset:'islands#greenCircleDotIcon'}));
+    for(const segment of clean.segments){
+      map.geoObjects.add(new y.Polyline(segment,{}, {strokeColor:'#1666d3',strokeWidth:5,strokeOpacity:.92}));
+    }
+    map.geoObjects.add(new y.Placemark(mapRouteCoords[0],{hintContent:'Первая пригодная GPS-точка'},{preset:'islands#greenCircleDotIcon'}));
   }
   if(mapRouteCoords.length){
     map.geoObjects.add(new y.Placemark(mapRouteCoords[mapRouteCoords.length-1],{hintContent:'Менеджер сейчас / последняя GPS',balloonContent:'<b>Последняя GPS-точка</b><br>'+esc(dt(a.source_last_point_at))},{preset:'islands#blueCircleDotIcon'}));
@@ -293,7 +322,36 @@ async function drawMap(a){
   }
   try{if(stopCollection.getLength()>0)map.geoObjects.add(stopCollection);}catch(_){}
 
-  focusNow();
+  const focus=qs.get('focus'),requestedStop=Number(qs.get('stop_seq')),requestedPlan=qs.get('route_plan_id');
+  if(focus==='stop'&&Number.isInteger(requestedStop)&&requestedStop>0){
+    const selected=stops.find(x=>Number(x.seq)===requestedStop);
+    const c=selected?coord(selected.lat,selected.lng):null;
+    if(c){
+      const m=new y.Placemark(c,{
+        hintContent:'Выбранная остановка №'+requestedStop,
+        balloonContent:'<b>Остановка №'+requestedStop+'</b><br>'+tm(selected.start_at)+'—'+tm(selected.end_at)+
+          ' · '+Number(selected.minutes||0).toFixed(1)+' минут. Данные GPS не являются автоматическим доказательством визита.'
+      },{preset:'islands#redDotIcon'});
+      map.geoObjects.add(m);map.setCenter(c,17);try{m.balloon.open()}catch(_){}
+    }else{
+      $('mapStatus').textContent='Для выбранной остановки нет надёжных координат. Выведен маршрут рабочего дня.';
+      focusNow();
+    }
+  }else if(focus==='case'&&/^[a-f0-9-]{36}$/i.test(String(requestedPlan||''))){
+    const found=plans.find(x=>String(x.route_plan_id)===requestedPlan);
+    const c=found?coord(found.lat,found.lng):null;
+    if(c){
+      const m=new y.Placemark(c,{
+        hintContent:'ТТ на разборе: '+String(found.client_name||''),
+        balloonContent:'<b>'+esc(found.client_name||'Торговая точка')+
+         '</b><br>Решение руководителя и GPS-доказательства имеют разный статус.'
+      },{preset:'islands#violetDotIcon'});
+      map.geoObjects.add(m);map.setCenter(c,17);try{m.balloon.open()}catch(_){}
+    }else{
+      $('mapStatus').textContent='Для выбранной ТТ нет достоверных координат. Открыт маршрут дня.';
+      focusNow();
+    }
+  }else focusNow();
 }
 async function boot(force=false,quiet=false){
   if(busy)return;busy=true;
@@ -324,6 +382,6 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&aggregate
 boot(false,false);
 </script>
 <!-- Fact map: confirmed client visits have numbered pins; other stops remain unnumbered. -->
-<script src="./26-gps-visit-order-v2364.js?child=1&v=23.6.6" data-v2365="1"></script>
+<script src="./26-gps-visit-order-v2364.js?child=1&v=20261109-focus-v1" data-v2365="1"></script>
 </body>
 </html>

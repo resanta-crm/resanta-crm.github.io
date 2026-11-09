@@ -19,7 +19,11 @@ function root(){
  document.body.appendChild(el);
  el.querySelector('#gp-case-close').addEventListener('click',close);
  el.addEventListener('click',e=>{if(e.target===el)close();});
- el.addEventListener('click',e=>{if(e.target.closest('#gp-case-map')){if(typeof window.crmOpenGpsViewerV2360==='function')window.crmOpenGpsViewerV2360(e.target.closest('#gp-case-map').dataset.workday);else alert('Откройте маршрут на вкладке «Маршруты».');}});
+ el.addEventListener('click',e=>{if(e.target.closest('#gp-case-map')){
+   const button=e.target.closest('#gp-case-map');
+   if(typeof window.crmGpsOpenFocusV20261109==='function')window.crmGpsOpenFocusV20261109(button.dataset.workday,{route_plan_id:selected});
+   else alert('Модуль GPS-карты не загружен. Обновите страницу CRM.');
+ }});
  el.addEventListener('click',e=>{if(e.target.closest('#gp-case-save'))save();});
  return el;
 }
@@ -38,8 +42,19 @@ function render(d){
  if(diff)notices.push('Дистанция старого отчёта расходится с расстоянием до текущего эталона. Возможна смена геозоны или правил.');
  if(!d.trusted_anchor?.verified_at)notices.push('Координаты ТТ ещё не выверены. Можно закрыть РАЗБОР с комментарием руководителя, не присваивая визиту статус «GPS подтверждён». Выверение адреса остаётся отдельной задачей.');
  if(conflicts.length)notices.push('Есть несколько записей с одинаковым адресом, но разными координатами. Автоматически объединять их нельзя.');
- const prev=d.last_director_decision;
- b.innerHTML=notices.map(n=>'<div class="gp-notice">'+esc(n)+'</div>').join('')+
+ const prev=d.last_director_decision,recheck=d.gps_recheck||{};
+ const closed=['resolved_verified','resolved_technical'].includes(prev?.action);
+ b.innerHTML=(closed?'<div class="gp-box" style="background:#effaf4;border-color:#afd5bd"><b>✓ Управленческий разбор закрыт</b><div class="gp-note">'+
+ esc(prev.comment||'Решение руководителя сохранено')+' · '+time(prev.created_at)+
+ '. GPS-подтверждение от решения не появляется. Случай перенесён во вкладку «Закрытые».</div></div>':'')+
+ '<div class="gp-box" style="background:#f3f8ff;border-color:#cbdff4"><b>Повторная проверка GPS на доверенной геозоне</b><div class="gp-note">'+
+ (recheck.gps_proximity_evidence?'Найдены две надёжные GPS-точки с пребыванием от двух минут. Это подтверждает геопозицию, но не содержание встречи.':
+ 'Достоверных GPS-доказательств по строгим условиям недостаточно. Это не означает, что менеджер не был в ТТ.')+
+ '<br>Проверенных точек: '+esc(recheck.gps_points_qualifying??'—')+
+ ' · доверенные координаты: '+(recheck.anchor_verified?'да':'нет')+
+ ' · несколько ТТ рядом: '+(recheck.ambiguous_clients?'да, автоподтверждение запрещено':'нет')+
+ '. Исходный GPS и отчёт не изменены.</div></div>'+
+ notices.map(n=>'<div class="gp-notice">'+esc(n)+'</div>').join('')+
  '<div class="gp-box"><b>Проверенные факты</b><div class="gp-grid">'+
  cell('Отчёт менеджера',r.id?'Оформлен · '+time(r.created_at):'Не найден')+
  cell('Сохранённый GPS-статус',r.gps_status||'—')+
@@ -70,8 +85,15 @@ async function openCase(id){
  if(!allowed()||!/^[-a-f0-9]{36}$/i.test(id))return;
  selected=id;const el=root();el.style.display='flex';
  el.querySelector('#gp-case-body').textContent='Загрузка доказательств по выбранной ТТ…';
- try{const {data,error}=await db.rpc('gps_director_case_detail_v236440',{p_route_plan_id:id});
- if(error)throw error;if(selected===id)render(data);}
+ try{
+  const [detail,recheck]=await Promise.all([
+   db.rpc('gps_director_case_detail_v236440',{p_route_plan_id:id}),
+   db.rpc('gps_director_case_recheck_v20261109',{p_route_plan_id:id})
+  ]);
+  if(detail.error)throw detail.error;
+  if(recheck.error)throw recheck.error;
+  if(selected===id)render({...detail.data,gps_recheck:recheck.data});
+ }
  catch(e){if(selected===id)el.querySelector('#gp-case-body').innerHTML='<div class="gp-notice">Ошибка: '+esc(e?.message||e)+'</div>';}
 }
 async function save(){
@@ -84,7 +106,10 @@ async function save(){
  try{const {error}=await db.rpc('gps_director_case_decide_v236440',{
   p_route_plan_id:selected,p_action:action,p_comment:comment,
   p_next_step:el.querySelector('#gp-case-next').value||'',p_due_date:el.querySelector('#gp-case-due').value||null
- });if(error)throw error;s.textContent='Решение сохранено в журнале. Данные GPS не изменены.';b.textContent='Сохранено ✓';document.dispatchEvent(new CustomEvent('resanta-gps-decision-updated'));}
+ });if(error)throw error;s.textContent='✓ Решение сохранено. '+(['resolved_verified','resolved_technical'].includes(action)?'Разбор закрыт, запись доступна во вкладке «Закрытые». ':'')+'GPS не изменялся.';
+ b.textContent='Сохранено ✓';
+ document.dispatchEvent(new CustomEvent('resanta-gps-decision-updated'));
+ await openCase(selected);}
  catch(e){s.textContent='Ошибка сохранения: '+(e?.message||e);}
  finally{busy=false;b.disabled=false;}
 }

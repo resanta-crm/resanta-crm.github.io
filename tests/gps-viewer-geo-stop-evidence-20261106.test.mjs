@@ -54,7 +54,7 @@ test('both maps use the same verified v236421 GPS and coordinate evidence; legac
 });
 test('director GPS360 module, independent server evidence and tasks untouched',()=>{
  const index=read('index.html');
- assert.match(index,/181-gps-director360-v1\.js\?v=20261106-director360-geo1/);
- assert.match(index,/124-gps-director-report-v236427\.js\?v=20261105-director360-1/);
- assert.match(read('assets/181-gps-director360-v1.js'),/gps_director360_evidence_v20261106/);
+ assert.match(index,/181-gps-director360-v1\.js\?v=(?:20261106-director360-geo1|20261109-decisions1)/);
+ assert.match(index,/124-gps-director-report-v236427\.js\?v=(?:20261105-director360-1|20261109-decisions1)/);
+ assert.match(read('assets/181-gps-director360-v1.js'),/gps_director360_evidence_v2026110(?:6|9)/);
 });
