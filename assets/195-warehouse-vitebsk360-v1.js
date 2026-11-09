@@ -5,7 +5,7 @@
 'use strict';
 if(window.RESANTA_WAREHOUSE_VITEBSK360_V1)return;
 const ID='wc-vitebsk360-v1',CSS='wc-vitebsk360-style-v1';
-const state={data:null,loading:false,last:0,mode:'unmatched',search:'',offset:0,limit:50,error:'',approval:null};
+const state={data:null,loading:false,last:0,mode:'unmatched',search:'',offset:0,limit:50,error:'',approval:null,detailsOpen:false};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>v==null?null:Number(v);
@@ -56,6 +56,7 @@ function rowTitle(x){return x.source_state==='not_in_physical_snapshot'?'Нет 
 function render(){
  const root=$(ID);if(!root)return;
  const d=state.data;
+ if(root.querySelector('details')?.open)state.detailsOpen=true;
  if(!d){root.innerHTML='<div class="vb360-sub">'+esc(state.error||'Сверяю физический склад Витебск с отдельным отчётом себестоимости…')+'</div>';return}
  const fac=num(d.norm_factor)||0,exp=num(d.expense_cost_byn),opening=num(d.opening_cost_byn);
  const formula='MAX(0; '+money(opening)+' − '+money(exp)+' × '+qty(fac)+') = '+money(d.sn_overlimit_byn);
@@ -81,7 +82,7 @@ function render(){
  (inv?'<div class="vb360-info"><b>Открытая инвентаризация</b> · '+esc(day(inv.started_at))+
  ' · исходный остаток '+esc(day(inv.stock_report_date))+' · '+esc(inv.sku_count)+' SKU, '+esc(qty(inv.stock_onhand))+
  ' шт. <div class="vb360-sub">Физическая база инвентаризации зафиксирована на дату старта. Новый снимок от '+esc(day(d.stock_date))+' не заменяет её.</div></div>':'')+
- '<details><summary><b>Сопоставление SKU · '+esc(d.unmatched_sku)+' расхождений</b></summary>'+
+ '<details '+(state.detailsOpen?'open':'')+'><summary><b>Сопоставление SKU · '+esc(d.unmatched_sku)+' расхождений</b></summary>'+
  '<div class="vb360-controls"><button data-vb360-mode="unmatched" class="'+(state.mode==='unmatched'?'vb360-active':'')+'">Только расхождения</button>'+
  '<button data-vb360-mode="all" class="'+(state.mode==='all'?'vb360-active':'')+'">Все SKU</button>'+
  '<input data-vb360-search placeholder="Артикул или товар" value="'+esc(state.search)+'"><button data-vb360-find>Найти</button></div>'+
@@ -89,7 +90,14 @@ function render(){
  '<div class="vb360-controls"><span class="vb360-sub">Показано '+(d.rows||[]).length+' из '+esc(d.total)+
  ' · неизвестный остаток ≠ 0</span><button data-vb360-prev '+(state.offset<=0?'disabled':'')+'>←</button>'+
  '<button data-vb360-next '+(state.offset+(d.rows||[]).length>=Number(d.total)?'disabled':'')+'>→</button></div></details>'+
- '<div class="vb360-sub">Автозаказ — только проект для согласования. В 1С и на склад Чехова ничего автоматически не отправляется.</div>';
+ '<div class="vb360-sub">Автозаказ — только проект для согласования. В 1С и на склад Чехова ничего автоматически не отправляется.</div>'+
+ (state.approval?.approval_id?'<div class="vb360-info"><b>Последний согласованный автозаказ</b> · '+esc(day(state.approval.approved_at))+
+ ' · '+esc(state.approval.sku_count)+' SKU · '+esc(qty(state.approval.units))+' шт. · '+esc(money(state.approval.cost_byn))+
+ '. Снимок Витебска: '+esc(day(state.approval.stock_report_date))+
+ (state.approval.stock_report_date!==d.stock_date?' · <b>Снимок изменился, необходимо новое согласование.</b>':' · совпадает с текущим')+
+ '. Отправка в 1С: <b>не выполнялась автоматически</b>.</div>':
+ '<div class="vb360-info">Согласованного проекта автозаказа пока нет. CRM не отправляет товар в 1С и Чехов без отдельного действия руководителя.</div>');
+ root.querySelector('details')?.addEventListener('toggle',e=>{state.detailsOpen=e.currentTarget.open});
  root.querySelector('[data-vb360-refresh]')?.addEventListener('click',()=>load(true));
  root.querySelectorAll('[data-vb360-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.vb360Mode;state.offset=0;load(true)}));
  root.querySelector('[data-vb360-find]')?.addEventListener('click',()=>{state.search=root.querySelector('[data-vb360-search]')?.value.trim()||'';state.offset=0;load(true)});
@@ -103,10 +111,12 @@ async function load(force=false){
  if(!force&&state.data&&Date.now()-state.last<90000){render();return}
  state.loading=true;
  try{
-  const data=await rpc('warehouse_vitebsk360_truth_v1',{
-   p_mode:state.mode,p_search:state.search,p_limit:state.limit,p_offset:state.offset
-  });
-  state.data=data;state.last=Date.now();state.error='';
+  const [data,approval]=await Promise.all([
+   rpc('warehouse_vitebsk360_truth_v1',{
+    p_mode:state.mode,p_search:state.search,p_limit:state.limit,p_offset:state.offset
+   }),rpc('warehouse_vitebsk360_last_approval_v1',{}).catch(e=>({error:String(e?.message||e)}))
+  ]);
+  state.data=data;state.approval=approval;state.last=Date.now();state.error='';
  }catch(e){state.error='Источник склада Витебск временно недоступен: '+(e?.message||e)}
  finally{state.loading=false;render()}
 }
@@ -154,15 +164,92 @@ function attachOrderRows(rows,data,mode,tableHost){
   button.textContent=mode==='excess'?'Почему перелимит?':'Почему столько?';
   button.setAttribute('aria-expanded','false');
   button.addEventListener('click',()=>{
+    const already=button.getAttribute('aria-expanded')==='true';
     const other=tableHost.querySelector('.vb360-expanded-row');
     if(other){other.previousElementSibling?.querySelector('.vb360-why')?.setAttribute('aria-expanded','false');other.remove()}
-    if(button.getAttribute('aria-expanded')==='true'){button.setAttribute('aria-expanded','false');return}
+    if(already)return;
     const detail=document.createElement('tr');detail.className='vb360-expanded-row';
     const cell=document.createElement('td');cell.colSpan=tr.children.length;cell.innerHTML=explanation(r,data);
     detail.appendChild(cell);tr.after(detail);button.setAttribute('aria-expanded','true');
   });
   titleCell.appendChild(button);
  });
+ if(mode==='order')installApprovalActions(data,tableHost);
+}
+function safeCsv(v){
+ let s=String(v??'');
+ if(/^[\s]*[=+@-]/.test(s))s="'"+s;
+ return '"'+s.replace(/"/g,'""')+'"';
+}
+async function exportApproved(id){
+ if(!id)return;
+ const doc=await rpc('warehouse_vitebsk360_approved_document_v1',{p_approval_id:id});
+ const items=doc.items||[];
+ if(!items.length)throw Error('Согласованная заявка не содержит товаров');
+ const headers=['Артикул','Наименование','Витебск свободно','Прогноз месяц','Цель 14 дней','Дефицит','Чехов','Коробка','Утверждено шт.','Оценка BYN','Источник прогноза'];
+ const lines=[
+ ['Согласованный проект автозаказа Витебск','№ '+doc.id].map(safeCsv).join(';'),
+ ['Утвердил',doc.approved_by_email,'Дата',doc.approved_at].map(safeCsv).join(';'),
+ ['Остаток Витебск',doc.stock_report_date,'Себестоимость',doc.cost_report_date,'Чехов',doc.chekhov_snapshot_date].map(safeCsv).join(';'),
+ ['Статус передачи','НЕ ОТПРАВЛЕНО В 1С / ЧЕХОВ'].map(safeCsv).join(';'),'',headers.map(safeCsv).join(';'),
+ ...items.map(r=>[r.sku,r.product,r.vitebsk_free,r.forecast_qty,r.target_qty,r.need_qty,r.chekhov_qty,r.box_qty,r.approved_qty,r.cost_byn,r.forecast_source].map(safeCsv).join(';'))
+ ];
+ const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='Согласованный_автозаказ_Витебск_'+String(doc.id).slice(0,8)+'.csv';
+ document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function installApprovalActions(data,tableHost){
+ const toolbar=tableHost.querySelector('.wc-tools');
+ if(!toolbar||toolbar.querySelector('[data-vb360-approve]'))return;
+ const btn=document.createElement('button');
+ btn.type='button';btn.textContent='✓ Согласовать проект автозаказа';
+ btn.dataset.vb360Approve='1';btn.className='primary';
+ const ack=document.createElement('div');ack.style.cssText='font-size:11px;line-height:1.5;color:#325c80;flex-basis:100%';
+ ack.textContent='Руководитель утверждает весь проект из '+Number(data.total||0)+' SKU, не только текущую страницу. Запись в 1С и Чехов не выполняется.';
+ btn.addEventListener('click',async()=>{
+  if(!data.report_date||!data.vitebsk_stock_date)return alert('Нет подтверждённых дат источников 1С');
+  const msg='Согласовать проект автозаказа по всем '+Number(data.total||0)+' SKU?\n'+
+    'Витебск: '+day(data.vitebsk_stock_date)+'; себестоимость: '+day(data.report_date)+
+    '; Чехов: '+day(data.chekhov_stock_date)+'.\n'+
+    'CRM ещё раз пересчитает все позиции на сервере. Ничего не отправится в 1С или Чехов. Продолжить?';
+  if(!confirm(msg))return;
+  btn.disabled=true;btn.textContent='Проверяю и согласовываю…';
+  try{
+   const approval=await rpc('warehouse_vitebsk360_approve_order_v1',{
+    p_expected_cost_date:data.report_date,p_expected_stock_date:data.vitebsk_stock_date,p_note:'Согласовано руководителем в интерфейсе Витебск 360°'
+   });
+   ack.textContent='✓ Проект согласован · '+approval.sku_count+' SKU · '+qty(approval.units)+' шт. · '+money(approval.cost_byn)+
+    ' · №'+approval.approval_id+'. В 1С и Чехов ничего не отправлено.';
+   state.approval=await rpc('warehouse_vitebsk360_last_approval_v1',{}).catch(()=>approval);
+   const exp=toolbar.querySelector('[data-vb360-approved-export]');
+   if(exp)exp.remove();
+   addApprovedExport(toolbar,approval.approval_id,ack);
+   btn.textContent='✓ Согласовано';
+  }catch(e){
+   ack.textContent='Критическая проверка не пройдена: '+String(e?.message||e);
+   btn.textContent='✓ Повторить согласование';
+  }finally{btn.disabled=false}
+ });
+ toolbar.appendChild(btn);
+ const a=state.approval;
+ if(a?.approval_id&&a.stock_report_date===data.vitebsk_stock_date
+     &&a.cost_report_date===data.report_date){
+  addApprovedExport(toolbar,a.approval_id,ack);
+ }
+ toolbar.appendChild(ack);
+}
+function addApprovedExport(toolbar,id,ack){
+ const btn=document.createElement('button');
+ btn.type='button';btn.dataset.vb360ApprovedExport='1';
+ btn.textContent='⬇ Согласованная заявка (CSV)';
+ btn.addEventListener('click',async()=>{
+  btn.disabled=true;
+  try{await exportApproved(id);ack.textContent='Скачан согласованный проект №'+id+'. Отправка в 1С/Чехов не выполнялась.'}
+  catch(e){ack.textContent='Ошибка выгрузки согласованной заявки: '+String(e?.message||e)}
+  finally{btn.disabled=false}
+ });
+ toolbar.appendChild(btn);
 }
 window.crmWarehouseVitebsk360V1=Object.freeze({mount,refresh:()=>load(true),attachOrderRows,readOnly:true,version:'2026-11-09-v1'});
 window.RESANTA_WAREHOUSE_VITEBSK360_V1=true;
