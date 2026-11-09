@@ -1,0 +1,43 @@
+name: Triovist Decisions360 verified facts and shares
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/61-triovist-task-month-safe-v23651.js'
+      - 'assets/169-triovist-tasks360-ux-v1.js'
+      - 'assets/182-triovist-shares360-v1.js'
+      - 'tests/triovist-decisions360-v1.test.mjs'
+      - 'supabase/migrations/20261109_triovist_decisions360_*.sql'
+      - 'index.html'
+      - '.github/workflows/triovist-decisions360-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Source syntax
+        run: |
+          node --check assets/61-triovist-task-month-safe-v23651.js
+          node --check assets/169-triovist-tasks360-ux-v1.js
+          node --check assets/182-triovist-shares360-v1.js
+      - name: New factual and access regression checks
+        run: node --test tests/triovist-decisions360-v1.test.mjs
+      - name: Preserve existing Triovist tasks, motivation and category screens
+        run: |
+          node --test tests/triovist-motivation-director-v1.test.mjs tests/triovist-tasks360-ux-v1.test.mjs tests/triovist-native-sections-v1.test.mjs tests/triovist-demand-ai-v2.test.mjs
+      - name: No destructive SQL and no unrelated parser changes
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD > /tmp/triovist-decisions-changed
+          ! grep -E '^tools/triovist_21vek_.*[.]py$' /tmp/triovist-decisions-changed
+          ! (grep '^supabase/migrations/' /tmp/triovist-decisions-changed | grep -v -E '^supabase/migrations/20261109_triovist_decisions360_(task_facts|category_evidence)_v1[.]sql$')
+          ! grep -E '(UPDATE public[.]triovist_|DELETE FROM public[.]triovist_|TRUNCATE|DROP TABLE)' supabase/migrations/20261109_triovist_decisions360_*.sql
