@@ -1,0 +1,47 @@
+name: GPS AI360 closures map and independent evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/181-gps-director360-v1.js'
+      - 'assets/124-gps-director-report-v236427.js'
+      - 'assets/127-gps-director-case-review-v236440.js'
+      - 'assets/26-gps-visit-order-v2364.js'
+      - 'assets/gps-viewer-v2360.html'
+      - 'assets/197-gps-map-unified-v1.js'
+      - 'supabase/migrations/20261109_gps360_director_decisions_recheck_v1.sql'
+      - 'tests/gps360-map-decisions-20261109.test.mjs'
+      - 'index.html'
+      - '.github/workflows/gps360-map-decisions-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-gps-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static source parsing
+        run: |
+          node --check assets/197-gps-map-unified-v1.js
+          node --check assets/181-gps-director360-v1.js
+          node --check assets/127-gps-director-case-review-v236440.js
+          node --check assets/124-gps-director-report-v236427.js
+          node --check assets/26-gps-visit-order-v2364.js
+      - name: Map/closure evidence and historical GPS regression
+        run: |
+          node --test tests/gps360-map-decisions-20261109.test.mjs tests/gps-director360-evidence-v1.test.mjs tests/gps-viewer-geo-stop-evidence-20261106.test.mjs tests/gps360-complete-one-time-geo-v1.test.mjs tests/gps360-trusted-store-vip-20261106.test.mjs
+      - name: No raw GPS edits, parser edits or unauthorized migrations
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD > /tmp/gps360-changed
+          cat /tmp/gps360-changed
+          ! grep -E '^tools/triovist_21vek.*[.]py$' /tmp/gps360-changed
+          ! (grep '^supabase/migrations/' /tmp/gps360-changed | grep -v '^supabase/migrations/20261109_gps360_director_decisions_recheck_v1[.]sql$')
+          ! grep -E -i '(DELETE FROM public[.](gps_track_points|gps_workdays|visits)|UPDATE public[.](gps_track_points|gps_workdays|visits)|TRUNCATE|DROP TABLE)' supabase/migrations/20261109_gps360_director_decisions_recheck_v1.sql
