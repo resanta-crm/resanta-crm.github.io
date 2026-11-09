@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const INVENTORY_APP_VERSION='2026-11-03-v23.6.380-auth-recovery';
+const INVENTORY_APP_VERSION='2026-11-09-v23.6.381-vitebsk360-tsd';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -18,7 +18,7 @@ const INVENTORY_APP_VERSION='2026-11-03-v23.6.380-auth-recovery';
       if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.update().catch(()=>{})))).catch(()=>{});
       if(old!==null&&!sessionStorage.getItem('inventory_reload_'+INVENTORY_APP_VERSION)){
         sessionStorage.setItem('inventory_reload_'+INVENTORY_APP_VERSION,'1');
-        location.replace('/inventory.html?legacy-module=1&v=380&ts='+Date.now());
+        location.replace('/inventory.html?legacy-module=1&v=381&ts='+Date.now());
       }
     }
   }catch(_){}
@@ -39,6 +39,15 @@ label{display:block;font-size:13px;color:#6B7280;font-weight:700;margin:9px 0 5p
 .login{max-width:520px;margin:5vh auto 0}.login h1{text-align:center;color:#185FA5}.install{white-space:nowrap;padding:8px 10px;min-height:auto;font-size:11px}
 .bind{margin-top:10px;padding-top:10px;border-top:1px solid #E5E7EB}
 @media(max-width:420px){.wrap{padding:12px 10px 96px}.title{font-size:20px}.sub{font-size:12px}.card{padding:14px}.kpis{grid-template-columns:1fr 1fr}.kpis .kpi:last-child{grid-column:1/-1}.scan{font-size:26px}.btn{font-size:15px}.status{font-size:14px}}
+.tsd-keypad{margin:9px 0;border:1px solid #C7D8EA;border-radius:12px;padding:10px;background:#F5FAFF}
+.tsd-keypad[hidden]{display:none!important}
+.tsd-keypad-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.tsd-keypad-grid button{min-height:55px;border:1px solid #ABC7E5;background:#fff;border-radius:10px;font-size:24px;font-weight:800;color:#174D80;touch-action:manipulation}
+.tsd-keypad-grid button:active{background:#DCEEFF}
+.tsd-keypad-extra{display:flex;gap:7px;margin:9px 0 2px}
+.tsd-keypad-extra button{min-height:41px;padding:8px;border:1px solid #C1D6EB;background:#fff;border-radius:8px;flex:1}
+.tsd-mini{font-size:12px;margin-top:7px;line-height:1.5;color:#4B6882}
+.tsd-status-link{font-size:12px;border:1px solid #D0DDF0;border-radius:9px;background:#F1F7FF;padding:9px;margin-top:9px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -78,7 +87,20 @@ label{display:block;font-size:13px;color:#6B7280;font-weight:700;margin:9px 0 5p
       <div id="scanner-hw-warning" class="status amber hidden" style="margin-bottom:8px"><b>ТСД не передаёт данные сканера в браузер.</b><br>CRM и ручной ввод работают. На самом терминале нужно включить вывод сканера как клавиатуру: <b>Keyboard Wedge / Keystroke / Output mode = Keyboard</b> и суффикс <b>Enter</b>.</div>
       <label>Штрихкод / артикул</label>
       <input id="code" class="inp scan" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Сканируйте…">
-      <div class="sub" style="margin-top:6px">Ручной ввод артикула тоже работает. После распознавания ТСД показывает остаток 1С и общий уже насчитанный факт по этому SKU.</div>
+      <div class="sub" style="margin-top:6px">Сканер принимает артикул или штрихкод. Для ручного ввода нажмите «Цифровая панель».</div>
+      <button id="keypad-toggle" type="button" class="btn secondary" style="width:100%;margin-top:8px">⌨ Цифровая панель</button>
+      <div id="keypad-panel" class="tsd-keypad" hidden>
+        <div class="tsd-keypad-grid" id="keypad-grid" role="group" aria-label="Ручная цифровая клавиатура">
+          <button type="button" data-digit="1">1</button><button type="button" data-digit="2">2</button><button type="button" data-digit="3">3</button>
+          <button type="button" data-digit="4">4</button><button type="button" data-digit="5">5</button><button type="button" data-digit="6">6</button>
+          <button type="button" data-digit="7">7</button><button type="button" data-digit="8">8</button><button type="button" data-digit="9">9</button>
+          <button type="button" data-digit="/">/</button><button type="button" data-digit="0">0</button><button type="button" id="keypad-abc">абв</button>
+        </div>
+        <div class="tsd-keypad-extra"><button type="button" id="keypad-back">⌫ Удалить</button><button type="button" id="keypad-clear">Очистить</button></div>
+        <div class="tsd-mini">Панель для артикула. «абв» открывает обычную клавиатуру. Сканирование курком продолжает работать.</div>
+      </div>
+      <div id="tsd-sync-state" class="tsd-status-link">CRM: ждём начало инвентаризации. Обмен результатами с 1С не выполняется автоматически.</div>
+      <div class="tsd-mini">Последнее подтверждение сервера: <b id="tsd-ack">—</b></div>
       <div class="row">
         <div style="flex:1"><label>Количество</label><input id="scan-qty" class="inp" type="number" min="0.01" step="1" value="1"></div>
         <button id="send-btn" class="btn primary" style="align-self:flex-end;flex:1">Добавить</button>
@@ -131,7 +153,7 @@ function tsdLabel(email){
  return 'ТСД';
 }
 let session=null,active=null,access=null,lastUnknown='',flushing=false,refreshTimer=null,refreshFlight=null,lastFactRow=null;
-let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,lastSubmittedCode='',lastSubmittedAt=0,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
+let audioCtx=null,scannerBuffer='',scannerLastKeyAt=0,scannerTimer=null,inputAutoTimer=null,lookupTimer=null,lastBrowserInputAt=0,scannerWatchdog=null;
 const $=id=>document.getElementById(id);
 const text=(id,v)=>{const e=$(id);if(e)e.textContent=String(v??'')};
 const show=(id,on=true)=>$(id)?.classList.toggle('hidden',!on);
@@ -141,7 +163,17 @@ function tokenEmail(s){try{const p=JSON.parse(atob(String(s?.access_token||'').s
 function loadSession(){try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null');if(s&&!ALLOWED_EMAILS.includes(tokenEmail(s))){localStorage.removeItem(SESSION_KEY);return null}return s}catch(_){return null}}
 function queue(){try{const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');return Array.isArray(q)?q:[]}catch(_){return[]}}
 function saveQueue(q){localStorage.setItem(QUEUE_KEY,JSON.stringify(q));updateQueueKpi()}
-function updateQueueKpi(){const q=queue().filter(x=>active&&x.session_id===active.id);text('kpi-queue',q.length)}
+function updateQueueKpi(){
+ const unsent=queue().filter(x=>active&&x.session_id===active.id),n=unsent.length;
+ text('kpi-queue',n);
+ const el=$('tsd-sync-state');
+ if(el){
+  const dated=String(active?.stock_report_date||'—').slice(0,10);
+  el.textContent=n?'CRM: '+n+' скан(ов) ожидают подтверждения сервера · остаток 1С на '+dated+'. Не закрывайте инвентаризацию, пока очередь не опустеет.'
+    :'CRM: все переданные сканы подтверждены сервером · исходный снимок 1С '+dated+'. В 1С корректировки автоматически НЕ проводятся.';
+  el.style.background=n?'#FFF7E6':'#F0FDF4';
+ }
+}
 function status(msg,kind='blue'){const e=$('scan-status');if(!e)return;e.className='status '+kind;e.textContent=msg}
 function showLast(r){
  const system=Number(r?.system_qty_onhand||0),counted=Number(r?.counted_qty||0),diff=counted-system;
@@ -193,11 +225,9 @@ function beep(ok=true){
  }catch(_){}
  if(navigator.vibrate)try{navigator.vibrate(ok?45:[90,40,90])}catch(_){}
 }
-function recentlySubmitted(code){
- const now=Date.now(),same=code===lastSubmittedCode&&now-lastSubmittedAt<250;
- if(!same){lastSubmittedCode=code;lastSubmittedAt=now}
- return same
-}
+// Independent hardware scan attempts are never discarded based on an arbitrary 250 ms interval.
+// One physical scan is submitted once by the Enter-or-debounce input state machine.
+// Each accepted intent has its own UUID; offline retries reuse that same UUID.
 function readableError(v,fallback='Ошибка соединения с CRM'){
  if(typeof v==='string')return v.slice(0,240);
  if(v&&typeof v==='object'){
@@ -356,13 +386,12 @@ async function previewManualCode(code){
 }
 async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
  code=String(code||'').trim();const q=Number(qtyVal);
- if(code&&recentlySubmitted(code))return;
  unlockAudio();
  if(!active?.id)return status('Инвентаризация не запущена.','red');
  if(!code)return focusCode();
  if(!Number.isFinite(q)||q<=0)return status('Количество должно быть больше 0.','red');
  const eventId=clientId||uuid();
- status('Отправляю…','blue');
+ status('Отправляю скан в CRM · ожидаю подтверждения сервера…','blue');
  try{
   const r=await rpc('warehouse_inventory_scan_v1',{p_session_id:active.id,p_code:code,p_qty:q,p_input_mode:mode,p_client_event_id:eventId});
   if(!r?.ok){
@@ -383,14 +412,15 @@ async function sendScan(code,qtyVal=1,mode='scan',clientId=null){
   const diff=Number(r.difference_qty||0);
   status((diff>0?'⚠ ':'✓ ')+(r.sku||'')+' · '+(r.product||'товар найден')+' · добавлено '+q+(diff>0?' · выше учёта на '+diff:''),diff>0?'amber':'green');
   scannerDiag('Код принят CRM: '+code+' · остаток 1С '+Number(r.system_qty_onhand||0)+' · факт '+Number(r.counted_qty||0));
-  beep(diff<=0);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);
+  text('tsd-ack',new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+  beep(diff<=0);active.event_count=Number(active.event_count||0)+1;text('kpi-events',active.event_count);updateQueueKpi();
   focusCode();scheduleActiveRefresh(700)
  }catch(e){
   if(e?.network||!navigator.onLine){
    const ql=queue();ql.push({id:eventId,session_id:active.id,code,qty:q,queued_at:new Date().toISOString()});saveQueue(ql);
-   $('code').value='';$('scan-qty').value='1';status('Нет связи. Скан сохранён на ТСД и отправится автоматически.','amber');focusCode();return
+   $('code').value='';$('scan-qty').value='1';status('Нет связи. Скан №'+eventId.slice(0,8)+' сохранён в очереди ТСД; сервер ещё НЕ подтвердил его.','amber');focusCode();return
   }
-  status('Ошибка: '+(e?.message||e),'red');scannerDiag('Код был получен, но сервер вернул ошибку.');beep(false);focusCode()
+  status('Критическая ошибка сохранения скана: '+(e?.message||e)+'. Факт не подтверждён сервером.','red');scannerDiag('Код получен, но сервер не подтвердил запись. Не считайте его проведённым.');beep(false);focusCode()
  }
 }
 async function markZero(){
@@ -416,7 +446,7 @@ async function bindUnknown(){
  try{
   const r=await rpc('warehouse_inventory_bind_barcode_v1',{p_session_id:active.id,p_barcode:lastUnknown,p_sku:sku});
   if(!r?.ok)throw new Error(r?.reason||'Не удалось привязать');
-  const code=lastUnknown;show('bind-box',false);lastUnknown='';lastSubmittedCode='';lastSubmittedAt=0;await sendScan(code,Number($('scan-qty').value)||1,'scan')
+  const code=lastUnknown;show('bind-box',false);lastUnknown='';await sendScan(code,Number($('scan-qty').value)||1,'scan')
  }catch(e){status('Привязка: '+(e?.message||e),'red')}
  finally{$('bind-btn').disabled=false;focusCode()}
 }
@@ -452,11 +482,11 @@ async function flushQueue(){
    try{
     const r=await rpc('warehouse_inventory_scan_v1',{p_session_id:x.session_id,p_code:x.code,p_qty:x.qty,p_input_mode:'offline_replay',p_client_event_id:x.id});
     if(r?.ok){ql.splice(i,1);changed=true;continue}
-    if(r?.reason==='session_not_active'){i++;continue}
-    i++
-   }catch(e){if(e?.network||!navigator.onLine)break;i++}
+    if(r?.reason==='session_not_active'){status('Критическая ошибка: инвентаризация закрыта. Сканы остаются в очереди; обратитесь к руководителю.','red');break}
+    status('Сервер отклонил отложенный скан '+String(x.code)+': '+String(r?.reason||'неизвестная причина')+'. Запись осталась в очереди.','red');break
+   }catch(e){if(e?.network||!navigator.onLine)break;status('Ошибка синхронизации: '+String(e?.message||e)+'. Сканы не удалены.','red');break}
   }
-  if(changed){saveQueue(ql);await reloadActive();status('Отложенные сканы синхронизированы.','green')}
+  if(changed){saveQueue(ql);await reloadActive();text('tsd-ack',new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));status('Отложенные сканы подтверждены CRM. Запись корректировок в 1С не выполнялась.','green')}
  }finally{flushing=false;updateQueueKpi()}
 }
 function net(msg){const e=$('net');if(!msg){e.style.display='none';return}e.textContent=msg;e.style.display='block'}
@@ -464,33 +494,58 @@ async function init(){
  const savedEmail=String(localStorage.getItem(LOGIN_EMAIL_KEY)||'vitebsk@resanta.ru').toLowerCase();$('login-email').value=ALLOWED_EMAILS.includes(savedEmail)?savedEmail:'vitebsk@resanta.ru';
  session=loadSession();
  $('login-btn').onclick=login;$('login-pass').onkeydown=e=>{if(e.key==='Enter')login()};
- $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');$('zero-btn').onclick=markZero;
+ $('logout-btn').onclick=logout;$('send-btn').onclick=()=>submitIntent($('code').value,'manual');$('zero-btn').onclick=markZero;
  $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);show('scanner-hw-warning',false);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.');focusCode();armScannerWatchdog()};
  const codeEl=$('code');
- codeEl.onkeydown=e=>{unlockAudio();browserInputSeen();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
+ // Every physical scan is a new intent; its retry UUID is reused by offline replay.
+ // Enter is authoritative; 190 ms idle is a fallback for scanners without Enter.
+ function submitIntent(v,mode='scan'){
+   v=String(v||'').trim();
+   if(!v)return;
+   clearTimeout(inputAutoTimer);clearTimeout(scannerTimer);clearTimeout(lookupTimer);
+   inputAutoTimer=null;scannerTimer=null;
+   if(codeEl.value.trim()===v)codeEl.value='';
+   scannerBuffer='';
+   sendScan(v,$('scan-qty').value,mode);
+ }
+ codeEl.onkeydown=e=>{
+   unlockAudio();browserInputSeen();
+   if(e.key==='Enter'||e.key==='Tab'){
+     e.preventDefault();
+     const v=codeEl.value.trim();
+     if(v)submitIntent(v);
+   }
+ };
  const maybeAutoSubmit=()=>{
    browserInputSeen();
-   scannerDiag('ТСД передаёт код в поле…');
    clearTimeout(inputAutoTimer);clearTimeout(lookupTimer);
    const v=codeEl.value.trim();
-   if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},55);
-   else if(v.length>=4)lookupTimer=setTimeout(()=>previewManualCode(v),320);
+   if(!$('keypad-panel').hidden){
+     scannerDiag('Ручной ввод. Нажмите «Добавить», когда артикул введён.');
+     return;
+   }
+   scannerDiag('ТСД передаёт код в поле…');
+   if(/^\d{8,32}$/.test(v)){
+     inputAutoTimer=setTimeout(()=>{
+       if(codeEl.value.trim()===v)submitIntent(v);
+     },190);
+   }else if(v.length>=4)lookupTimer=setTimeout(()=>previewManualCode(v),320);
  };
  codeEl.addEventListener('input',maybeAutoSubmit);
- codeEl.addEventListener('keyup',maybeAutoSubmit);
  codeEl.addEventListener('paste',()=>setTimeout(maybeAutoSubmit,0));
- codeEl.addEventListener('textInput',()=>setTimeout(maybeAutoSubmit,0));
+ // Legacy keypress handler was a second submit path, duplicating the same
+ // hardware event. Keep a single capture path when the input itself is not focused.
  document.addEventListener('keydown',e=>{
    unlockAudio();browserInputSeen();
    if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
    const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
-   if(editable)return;
+   if(editable||target?.closest?.('#keypad-panel'))return;
    const now=Date.now();
    if(now-scannerLastKeyAt>120)scannerBuffer='';
    scannerLastKeyAt=now;
    if(e.key==='Enter'||e.key==='Tab'){
-     const v=scannerBuffer.trim();scannerBuffer='';
-     if(v.length>=4){e.preventDefault();scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
+     const v=scannerBuffer.trim();scannerBuffer='';clearTimeout(scannerTimer);
+     if(v.length>=4){e.preventDefault();scannerDiag('Аппаратный сканер передал код: '+v);submitIntent(v)}
      return;
    }
    if(e.key&&e.key.length===1){
@@ -498,28 +553,37 @@ async function init(){
      clearTimeout(scannerTimer);
      scannerTimer=setTimeout(()=>{
        const v=scannerBuffer.trim();scannerBuffer='';
-       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
-     },80);
+       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);submitIntent(v)}
+     },190);
    }
  },true);
- document.addEventListener('keypress',e=>{
-   browserInputSeen();
-   if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
-   const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
-   if(editable)return;
-   const code=Number(e.which||e.keyCode||0);
-   if(code>=32&&code<=126){
-     const ch=String.fromCharCode(code);
-     const now=Date.now();
-     if(now-scannerLastKeyAt>120)scannerBuffer='';
-     scannerLastKeyAt=now;scannerBuffer+=ch;
-     clearTimeout(scannerTimer);
-     scannerTimer=setTimeout(()=>{
-       const v=scannerBuffer.trim();scannerBuffer='';
-       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
-     },80);
-   }
- },true);
+ const panel=$('keypad-panel');
+ $('keypad-toggle').onclick=()=>{
+   panel.hidden=!panel.hidden;
+   $('keypad-toggle').textContent=panel.hidden?'⌨ Цифровая панель':'✓ Закрыть цифровую панель';
+   codeEl.setAttribute('inputmode',panel.hidden?'text':'none');
+   if(!panel.hidden){clearTimeout(inputAutoTimer);clearTimeout(lookupTimer)}
+   focusCode();
+ };
+ $('keypad-grid').addEventListener('click',e=>{
+   const b=e.target.closest('[data-digit]');
+   if(!b)return;
+   const digit=b.dataset.digit,from=codeEl.selectionStart??codeEl.value.length,to=codeEl.selectionEnd??from;
+   codeEl.setRangeText(digit,from,to,'end');
+   scannerDiag('Ввод артикула вручную: '+codeEl.value);
+   focusCode();
+ });
+ $('keypad-back').onclick=()=>{
+   const start=codeEl.selectionStart??codeEl.value.length,end=codeEl.selectionEnd??start;
+   codeEl.setRangeText('',Math.max(0,start-(start===end?1:0)),end,'end');focusCode();
+ };
+ $('keypad-clear').onclick=()=>{codeEl.value='';scannerDiag('Артикул очищен.');focusCode()};
+ $('keypad-abc').onclick=()=>{
+   panel.hidden=true;
+   $('keypad-toggle').textContent='⌨ Цифровая панель';
+   codeEl.setAttribute('inputmode','text');
+   focusCode();codeEl.click();
+ };
  document.addEventListener('beforeinput',browserInputSeen,true);
  document.addEventListener('compositionend',browserInputSeen,true);
  document.addEventListener('touchstart',unlockAudio,{passive:true,once:false});
