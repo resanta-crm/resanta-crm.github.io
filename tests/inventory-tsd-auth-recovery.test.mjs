@@ -45,7 +45,7 @@ test('session recovery does not delete offline inventory scans',()=>{
  assert.match(inventory,/showFreshLogin\('Сессия истекла/);
 });
 test('TSД hub loads fixed inventory module instead of cached v379',()=>{
- assert.match(hub,/\/inventory\.html\?legacy-module=1&v=380/);
- assert.match(inventory,/2026-11-03-v23\.6\.380-auth-recovery/);
- assert.match(inventory,/\/inventory\.html\?legacy-module=1&v=380&ts=/);
+ assert.match(hub,/\/inventory\.html\?legacy-module=1&v=381/);
+ assert.match(inventory,/2026-11-09-v23\.6\.381-vitebsk360-tsd/);
+ assert.match(inventory,/\/inventory\.html\?legacy-module=1&v=381&ts=/);
 });
