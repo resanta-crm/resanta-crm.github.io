@@ -54,7 +54,8 @@ function fixture({role='boss',email=u,visible=true}={}){
  const w={currentProfile:{role,email},confirm:()=>true,RESANTA_GPS_DIRECTOR_REPORT_V236427:{
   async loadDetails(){},downloadExcel(){}},db:{
   rpc:async(name,args)=>{calls.push({name,args});
-   if(name==='gps_director360_evidence_v20261106')return{data:d,error:null};
+   if(name==='gps_director360_evidence_v20261109')return{data:d,error:null};
+   if(name==='gps_director360_decisions_v20261109')return{data:{states:{}},error:null};
    if(name==='gps_director360_stop_decide_v20261105')return{data:{ok:true,action:'technical_verified'},error:null};
    throw new Error('Unexpected RPC '+name)}
  }};
@@ -76,8 +77,8 @@ test('GPS 360 parses; route screen remains fallback and cache-busted in index',(
  assert.match(old,/else load\(false\)/);
  assert.match(old,/downloadExcel:exportExcel/);
  const index=read('index.html');
- assert.match(index,/181-gps-director360-v1\.js\?v=20261106-director360-geo1/);
- assert.match(index,/124-gps-director-report-v236427\.js\?v=20261105-director360-1/);
+ assert.match(index,/181-gps-director360-v1\.js\?v=(?:20261106-director360-geo1|20261109-decisions1)/);
+ assert.match(index,/124-gps-director-report-v236427\.js\?v=(?:20261105-director360-1|20261109-decisions1)/);
 });
 test('unauthorized role sees no new director screen and calls no RPC',async()=>{
  const f=fixture({role:'manager',email:'rudnev@resanta.ru'});
@@ -98,7 +99,7 @@ test('source-based KPIs and six-week manager chart load without writing GPS or d
  assert.match(html,/Динамика по менеджерам/);
  assert.match(html,/Коротко за период/);
  assert.match(html,/Менеджеры · детализация по нажатию/);
- assert.deepEqual(f.calls.map(c=>c.name),['gps_director360_evidence_v20261106']);
+ assert.deepEqual(f.calls.map(c=>c.name),['gps_director360_evidence_v20261109','gps_director360_decisions_v20261109']);
 });
 test('chart switches among visit reports, independent GPS and problems',async()=>{
  const f=fixture();await f.api.open();
@@ -106,7 +107,7 @@ test('chart switches among visit reports, independent GPS and problems',async()=
  assert.match(f.html(),/aria-pressed="true">GPS<\/button>/);
  f.click('[data-g360-metric]',{g360Metric:'issues'});
  assert.match(f.html(),/aria-pressed="true">Отклонения<\/button>/);
- assert.equal(f.calls.length,1,'UI filters do not cause automatic backend refresh');
+ assert.equal(f.calls.length,2,'UI filters do not cause automatic backend refresh');
 });
 test('opening specific disputed manager and unclassified stop is an explicit drilldown',async()=>{
  const f=fixture();await f.api.open();
@@ -117,7 +118,7 @@ test('opening specific disputed manager and unclassified stop is an explicit dri
  assert.match(f.html(),/52 мин/);
  f.click('[data-g360-stop]',{g360Stop:'w1|2'});
  assert.match(f.html(),/g360-review-comment/);
- assert.equal(f.calls.length,1,'opening detail and editor has no write side effects');
+ assert.equal(f.calls.length,2,'opening detail and editor has no write side effects');
 });
 test('director action makes just one server-side decision and preserves GPS source',async()=>{
  const f=fixture();await f.api.open();
