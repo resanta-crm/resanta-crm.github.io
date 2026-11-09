@@ -116,6 +116,31 @@ jobs:
                       if i>=0: print('SUGGEST_METHOD',needle,repr(t[i:i+930]))
           except Exception as e: print('Suggestion contract inspection unavailable',type(e).__name__)
           PY
+      - name: Check real first-search suggestion response on public 21vek
+        run: |
+          python - <<'PY'
+          import requests
+          endpoint='https://gate.21vek.by/search-composer/api/v1/search/suggest'
+          try:
+              r=requests.get(endpoint,params={'query':'перфоратор','mode':'desktop'},
+                  headers={'User-Agent':'ResantaCRM-21vekSearch360/1.0 (+https://resanta-crm.by)',
+                           'Origin':'https://www.21vek.by','Referer':'https://www.21vek.by/',
+                           'Accept':'application/json'},timeout=14)
+              print('LIVE_SUGGEST_STATUS',r.status_code)
+              if r.ok:
+                  data=r.json()
+                  print('LIVE_SUGGEST_TYPE',type(data).__name__)
+                  if isinstance(data,dict):
+                      print('LIVE_SUGGEST_KEYS',list(data)[:15])
+                      for k,v in data.items():
+                          if isinstance(v,list):
+                              print('LIVE_SUGGEST_LIST',k,str(v[:2])[:850])
+                          elif isinstance(v,dict):
+                              print('LIVE_SUGGEST_OBJECT',k,list(v)[:15])
+                  elif isinstance(data,list):print('LIVE_SUGGEST_ITEMS',str(data[:3])[:1100])
+          except Exception as e:
+              print('LIVE_SUGGEST_UNAVAILABLE',type(e).__name__)
+          PY
       - name: Read-only 21vek public search metadata (one request)
         run: |
           python - <<'PY'
