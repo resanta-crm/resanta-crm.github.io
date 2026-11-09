@@ -62,3 +62,18 @@ test('Sidarovich GPS director uses resilient delegated click without changing ac
  assert.doesNotMatch(gps,/tabs\.querySelector\('#gps-tab-director-v236427'\)\.addEventListener\('click'/);
  assert.match(index,/124-gps-director-report-v236427\.js\?v=20261109-decisions1&fix=sidarovich-tabs2/);
 });
+
+test('ABC fast filter transitions reuse compiled snapshots and do not call the RPC for local group/class/search',()=>{
+ assert.match(agg,/ABC_TTL=300000/);
+ assert.match(agg,/if\(!force&&k===lastAbcKey&&allPurchaseHistory===lastAbcRows\)return true/);
+ assert.match(agg,/const managerKey=p.scope==='branch'\?'all':p.manager/);
+ assert.match(agg,/const viewer=String\(currentProfile/);
+ assert.match(agg,/abcCompiled=new Map/);
+ assert.match(dash,/installCatalogGenerationGuard/);
+ assert.match(dash,/window\.abcBuildCatalogSkuMap=wrapper/);
+ assert.match(dash,/\['abc-period','abc-scope','abc-manager'\]/);
+ assert.match(dash,/e\.stopPropagation\(\)/);
+ assert.match(dash,/clearTimeout\(filterTimer\)/);
+ assert.match(dash,/if\(id==='abc-client-search'\)/);
+ assert.doesNotMatch(core,/installCatalogGenerationGuard/);
+});
