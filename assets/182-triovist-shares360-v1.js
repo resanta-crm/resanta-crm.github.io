@@ -10,7 +10,7 @@ const usd=x=>"$"+N(x).toLocaleString("ru-RU",{maximumFractionDigits:0});
 const compact=x=>Math.abs(N(x))>=1000000?"$"+(N(x)/1e6).toLocaleString("ru-RU",{maximumFractionDigits:2})+" млн":Math.abs(N(x))>=1000?"$"+(N(x)/1e3).toLocaleString("ru-RU",{maximumFractionDigits:1})+" тыс.":usd(x);
 const pct=x=>N(x).toLocaleString("ru-RU",{maximumFractionDigits:2})+"%";
 const pp=x=>N(x).toLocaleString("ru-RU",{maximumFractionDigits:2})+" п. п.";
-const S={host:null,ctx:null,categories:[],brands:[],assignments:[],goals:[],tasks:[],answers:[],selected:"",brand:"all",owner:"all",view:"shares",taskId:"",loading:false,error:"",last:0};
+const S={host:null,ctx:null,categories:[],brands:[],assignments:[],goals:[],tasks:[],answers:[],selected:"",brand:"all",owner:"all",view:"shares",taskId:"",loading:false,error:"",last:0,evidence:{},evidenceLoading:{}};
 const ownerName=e=>e===ALEKS?"Александренко":e===KRIS?"Кришталь":"Не закреплена";
 const boss=()=>S.ctx?.is_leader===true;
 const me=()=>String(S.ctx?.email||"").toLowerCase();
@@ -46,6 +46,7 @@ function css(){
  "#"+ID+" .sh-bottom{display:grid;grid-template-columns:1.1fr 1fr;gap:11px;margin-top:12px}#"+ID+" .sh-status{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}"+
  "#"+ID+" .sh-state{padding:11px;border-radius:10px;background:#eef6ff}#"+ID+" .sh-state:nth-child(2){background:#fff8e6}#"+ID+" .sh-state:nth-child(3){background:#ebf9ed}#"+ID+" .sh-state:nth-child(4){background:#fff0ef}#"+ID+" .sh-state b{display:block;font-size:20px;margin:4px 0}"+
  "#"+ID+" .sh-note{background:#f7f4ff;border:1px solid #ddd2fc;border-radius:10px;padding:11px;margin:9px 0;line-height:1.55}"+
+ "#"+ID+" .sh-evidence{margin:10px 0;background:#f7fbff;border-color:#c7dff4}#"+ID+" .sh-evidence h3{color:#215b87}#"+ID+" .sh-sku-list{max-height:410px;overflow:auto;border:1px solid #dae8f6;border-radius:9px;margin:8px 0}#"+ID+" .sh-sku-row{display:grid;grid-template-columns:minmax(125px,1.6fr) 90px 90px 80px minmax(130px,1.5fr);gap:8px;border-top:1px solid #e5edf6;align-items:start;padding:8px;font-size:11px}#"+ID+" .sh-sku-row:first-child{border-top:0}#"+ID+" .sh-sku-row small{display:block;font-size:10px;color:#667b91;line-height:1.4;margin-top:3px}#"+ID+" .sh-sku-row>span{min-width:0;overflow-wrap:anywhere}@media(max-width:720px){#"+ID+" .sh-sku-row{grid-template-columns:1fr 1fr}#"+ID+" .sh-sku-row>span:last-child{grid-column:1/-1}}"+
  "#"+ID+" .sh-green{color:#217844}#"+ID+" .sh-red{color:#a53232}#"+ID+" .sh-pill{display:inline-block;border-radius:99px;padding:4px 9px;background:#efe8ff;color:#633cb6;font-size:10px;font-weight:800}"+
  "#"+ID+" .sh-primary{background:#7653dc;border-color:#7653dc;color:white}#"+ID+" .sh-button{border:1px solid #cfc9eb;border-radius:9px;padding:9px 13px;font-weight:800;background:white;color:#5f46ac}#"+ID+" .sh-button.sh-primary{background:#7653dc;color:white;border-color:#7653dc}"+
  "#"+ID+" .sh-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}#"+ID+" .sh-detail{display:grid;grid-template-columns:1.1fr 1fr;gap:10px}#"+ID+" .sh-field{margin:9px 0}"+
@@ -112,6 +113,92 @@ function overview(rows){
  const market=rows.reduce((s,x)=>s+x.market,0);
  return tiles(rows)+'<div class="sh-grid">'+briefing(rows)+chart(rows)+opportunities(rows)+'</div>'+
  '<div class="sh-bottom"><div class="sh-panel"><h3>◎ План / факт доли</h3><div class="sh-note"><b>База: январь–сентябрь 2026.</b> Величина доли подтверждена файлом. Для фактического роста в IV квартале требуется новый срез продаж категорий 21vek. Без него прогресс не рисуем.</div><div class="sh-row"><span>Оборот категорий: <b>'+E(compact(market))+'</b></span><span class="sh-pill">Контрольная дата 15.12.2026</span></div></div>'+statusBoard()+'</div>';
+}
+const sourceDay=x=>x?String(x).slice(0,10).split("-").reverse().join("."):"—";
+const problemLabel={
+ partner_stock_gap_with_chekhov:"21vek: нет свободного остатка; Чехов: есть",
+ listing_not_freshly_verified:"Нет свежей подтверждённой позиции",
+ weak_exact_position:"Позиция хуже TOP-60",
+ not_in_last_price_import:"SKU отсутствует в последнем загруженном прайсе",
+ check_commercial_decision:"Возможность для коммерческого решения"
+};
+function currentEvidence(cat){return S.evidence[cat]?.data||null;}
+async function loadEvidence(cat,force=false){
+ if(!cat)return;
+ const key=String(cat),old=S.evidence[key];
+ if(!force&&old&&Date.now()-old.at<90000)return;
+ if(S.evidenceLoading[key])return S.evidenceLoading[key];
+ S.evidenceLoading[key]=(async()=>{
+  try{
+   const r=await database().rpc("triovist_decisions360_category_evidence_v1",{p_category:key});
+   if(r.error)throw r.error;
+   S.evidence[key]={data:r.data,at:Date.now()};
+  }catch(err){S.evidence[key]={data:{error:String(err?.message||err)},at:Date.now()}}
+  finally{delete S.evidenceLoading[key];if(S.host)render()}
+ })();
+ return S.evidenceLoading[key];
+}
+function evidenceHtml(cat){
+ const ev=currentEvidence(cat);
+ if(!ev)return '<div class="sh-note">✦ Загружаем обзор CRM: доли, прайс, Чехов, 21vek и конкуренты…</div>';
+ if(ev.error)return '<div class="sh-message">Не удалось получить подтверждённые данные: '+E(ev.error)+'</div>';
+ const brands=(ev.brands||[]).filter(x=>!OWN.has(String(x.brand||"").toLowerCase())).slice(0,5);
+ const sku=(ev.sku_evidence||[]),competitors=(ev.competitor_evidence||[]);
+ const goal=N(ev.q4_target_delta_pp),hasGoal=ev.q4_target_delta_pp!=null;
+ const products=sku.slice(0,16).map(x=>
+   '<div class="sh-sku-row"><span><b>'+E(x.sku)+'</b><small>'+E(x.subgroup||"")+'</small></span>'+
+   '<span>'+E(x.price_list??"—")+'<small>прайс '+E(sourceDay(x.price_list_at))+'</small></span>'+
+   '<span>'+E(x.partner_free??"—")+'<small>своб. 21vek '+E(sourceDay(x.partner_date))+'</small></span>'+
+   '<span>'+E(x.chekhov_total??"—")+'<small>Чехов '+E(sourceDay(x.chekhov_date))+'</small></span>'+
+   '<span>'+(x.position_verified?'№'+E(x.position):'Не подтверждена')+
+   '<small>'+E(problemLabel[x.opportunity]||"Проверить")+'</small></span></div>').join("");
+ const rivalLines=competitors.slice(0,8).map(x=>'<div class="sh-sku-row"><span><b>'+E(x.brand)+'</b><small>'+E(x.model||"")+'</small></span>'+
+   '<span>№'+E(x.position||"—")+'<small>листинг</small></span>'+
+   '<span>'+E(x.price??"—")+'<small>цена парсера</small></span>'+
+   '<span>'+E(x.in_stock===true?"Есть":x.in_stock===false?"Нет":"—")+'<small>наличие</small></span>'+
+   '<span>'+E(sourceDay(x.observed_at))+'<small>дата сбора</small></span></div>').join("");
+ return '<div class="sh-panel sh-evidence"><h3>✦ CRM изучила источники вместо менеджера</h3>'+
+ '<div class="sh-muted">Выверенные данные 21vek за январь–сентябрь 2026, USD без НДС. Обороты брендов могут быть неполными; позиции — не объёмы продаж.</div>'+
+ '<div class="sh-note"><b>Наша доля '+E(pct(ev.our_share_pct))+'.</b> Категория: '+E(usd(ev.market_usd))+
+ '; наши бренды: '+E(usd(ev.our_usd))+' за 9 месяцев. <b>+1 п. п. = '+E(usd(ev.one_pp_usd_9m))+
+ '</b> дополнительного оборота на той же девятимесячной базе и неизменном рынке. Это модель, а не факт Q4 или прибыль.</div>'+
+ (hasGoal?'<div class="sh-note" style="background:#fff8ea;border-color:#f0d3a4"><b>Утверждённая цель Q4: +'+E(pp(goal))+
+ '.</b> Это изменение доли в пунктах, итоговая целевая доля ≈'+E(pct(ev.q4_target_final_share_pct))+
+ (ev.goal_requires_review?'. <b>ВНИМАНИЕ: высокая цель, перепроверить реалистичность.</b>':'.')+'</div>':'')+
+ '<details><summary><b>Подтверждённые обороты брендов-конкурентов · 9 месяцев</b></summary>'+
+ brands.map(x=>'<div class="sh-row" style="border-top:1px solid #edf1f6;padding:6px"><span>'+E(x.brand)+'</span><b>'+E(usd(x.usd_9m))+' · '+E(pct(x.share_pct))+'</b></div>').join("")+
+ '<p class="sh-muted">Оборот отдельного товара из этих данных неизвестен.</p></details>'+
+ '<h3 style="margin-top:13px">Наши SKU: цены, остатки и листинг</h3>'+
+ '<div class="sh-muted">Сопоставлено '+E(sku.length)+' SKU из задач по категории. Прайс датирован '+E(sourceDay(ev.price_imported_at))+
+ '; если он старый — цену нельзя считать актуальной. Свободный остаток 21vek ≠ товар в пути.</div>'+
+ (sku.length?'<div class="sh-sku-list">'+products+'</div>':
+ '<div class="sh-note">Для этой категории пока нет надёжной связи SKU с парсером. Автоматически не объявляем товары отсутствующими.</div>')+
+ (sku.length>16?'<div class="sh-muted">Показаны первые 16 приоритетных SKU из '+E(sku.length)+'. При подготовке ответа используются данные всей выборки.</div>':'')+
+ '<details><summary><b>Конкуренты из нашего парсера 21vek</b> · '+E(competitors.length)+' примеров</summary>'+
+ (competitors.length?'<div class="sh-sku-list">'+rivalLines+'</div>':'<p class="sh-muted">Нет проверенных совпадений поисковых запросов.</p>')+
+ '<div class="sh-muted">Позиции, цены и наличие — из парсера, подтверждённые объёмы отдельных конкурентных SKU не доступны.</div></details></div>';
+}
+function automaticAnswer(cat){
+ const e=currentEvidence(cat);
+ if(!e||e.error)throw Error("Источники CRM для категории пока недоступны. Обновите экран и повторите.");
+ const brands=(e.brands||[]).filter(x=>!OWN.has(String(x.brand||"").toLowerCase())).slice(0,8);
+ const comps=(e.competitor_evidence||[]).slice(0,10);
+ const sku=(e.sku_evidence||[]).slice(0,40);
+ const competitor_evidence=brands.map(x=>x.brand+" — "+usd(x.usd_9m)+" за 9 месяцев; доля "+pct(x.share_pct)).join("; ")+
+  "\nПозиции конкурентов (не продажи SKU): "+(comps.length?comps.map(x=>x.brand+" "+x.model+
+   " · "+x.search_query+" · №"+x.position+" · цена "+(x.price??"—")+" · "+sourceDay(x.observed_at)).join("; "):"не подтверждены")+
+  "\nОтдельные объёмы продаж конкурирующих SKU не подтверждены.";
+ const own_assortment_gap=sku.length?sku.map(x=>x.sku+" · "+x.subgroup+
+   " · прайс "+(x.price_list??"—")+" ("+sourceDay(x.price_list_at)+")"+
+   " · свободно 21vek "+(x.partner_free??"—")+
+   " · Чехов "+(x.chekhov_total??"—")+
+   " · позиция "+(x.position_verified?"№"+x.position:"не подтверждена")+
+   " · "+(problemLabel[x.opportunity]||"проверить")).join("; "):
+   "Привязка SKU к категории в действующей CRM не подтверждена. Не заявляем об отсутствии товаров.";
+ const evidence_source="21vek 01–09.2026, USD без НДС (категория и бренды); прайс "+
+   sourceDay(e.price_imported_at)+"; 21vek TOP и конкуренты: датированные снимки парсера; "+
+   "остатки 21vek и Чехова: даты на карточках. 1 п. п. рассчитан от исторического рынка.";
+ return {competitor_evidence:competitor_evidence.slice(0,5000),own_assortment_gap:own_assortment_gap.slice(0,5000),evidence_source};
 }
 function managerForm(t,ans){
  if(!t)return '<div class="sh-empty">Выбери исследование, чтобы увидеть вопрос, ответ и следующий шаг.</div>';
