@@ -60,5 +60,5 @@ test('Sidarovich GPS director uses resilient delegated click without changing ac
  assert.match(gps,/const director=e\.target\.closest\?\.\('#gps-tab-director-v236427'\)/);
  assert.match(gps,/setMode\(director\?'director':'route'\)/);
  assert.doesNotMatch(gps,/tabs\.querySelector\('#gps-tab-director-v236427'\)\.addEventListener\('click'/);
- assert.match(index,/124-gps-director-report-v236427\.js\?v=20261109-tabs-fix2/);
+ assert.match(index,/124-gps-director-report-v236427\.js\?v=20261109-decisions1&fix=sidarovich-tabs2/);
 });
