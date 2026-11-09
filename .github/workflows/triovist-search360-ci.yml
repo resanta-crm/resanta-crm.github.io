@@ -75,6 +75,32 @@ jobs:
               for name,excerpt in out[:18]:print('JS_REF',name,repr(excerpt))
           except Exception as e:print('bundle lookup inconclusive:',type(e).__name__)
           PY
+      - name: Inspect public 21vek bundled search module metadata
+        run: |
+          python - <<'PY'
+          import requests,re
+          files=[
+           'https://cdn21vek.by/desktop/_next/static/chunks/pages/_app-b7127587465ead02.js',
+           'https://cdn21vek.by/desktop/_next/static/chunks/main-c11d326d01c88e96.js',
+           'https://cdn21vek.by/desktop/_next/static/chunks/1232-070dd0645b975b63.js',
+           'https://cdn21vek.by/desktop/_next/static/chunks/8104-6b385568c999fe9d.js',
+           'https://cdn21vek.by/desktop/_next/static/chunks/5369-e2ab34dbdad4386e.js'
+          ]
+          for url in files:
+              try:
+                  r=requests.get(url,timeout=12)
+                  print('JS_FILE',url.rsplit('/',1)[-1],r.status_code,len(r.content))
+                  if not r.ok or len(r.content)>5000000:continue
+                  t=r.text
+                  hits=[]
+                  for m in re.finditer('suggest|autocomplete|search-composer',t,re.I):
+                      snippet=t[max(0,m.start()-130):m.end()+130]
+                      if 'api/' in snippet or 'http' in snippet or 'fetch(' in snippet:
+                          hits.append(snippet[:230])
+                      if len(hits)>=4:break
+                  for h in hits:print('JS_META',repr(h))
+              except Exception as e:print('JS_FILE_ERROR',type(e).__name__)
+          PY
       - name: Read-only 21vek public search metadata (one request)
         run: |
           python - <<'PY'
