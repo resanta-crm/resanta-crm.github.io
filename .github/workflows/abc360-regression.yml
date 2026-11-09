@@ -1,0 +1,30 @@
+name: ABC 360 regression
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'assets/01-crm-core.js'
+      - 'assets/113-analytics-aggregates-v236342.js'
+      - 'assets/187-abc-director360-v1.js'
+      - 'docs/abc360_fast_rpc_v1.sql'
+      - 'tests/abc360-director-v1.test.mjs'
+      - '.github/workflows/abc360-regression.yml'
+  push:
+    branches: ['feature/abc360-director-20261109']
+jobs:
+  abc360:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check assets/01-crm-core.js
+          node --check assets/113-analytics-aggregates-v236342.js
+          node --check assets/187-abc-director360-v1.js
+      - name: Run ABC 360 regression tests
+        run: node --test tests/abc360-director-v1.test.mjs
