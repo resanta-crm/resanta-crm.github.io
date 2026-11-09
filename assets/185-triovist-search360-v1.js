@@ -5,7 +5,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_TRIOVIST_SEARCH360_V1)return;
-const V='20261109-1',ROOT_ID='triovist-search360-v1',MAX_RESULTS=600,TTL=120000;
+const V='20261109-2',ROOT_ID='triovist-search360-v1',MAX_RESULTS=850,TTL=120000;
 const state={requests:[],selected:null,rows:[],negatives:[],loadedAt:0,busy:false,filter:'ours',error:'',sending:false};
 let refreshFlight=null,lastRole='';
 function dbx(){try{return typeof db!=='undefined'?db:(window.db||null)}catch(_){return window.db||null}}
@@ -19,7 +19,7 @@ function productRow(r){
  const hasSku=!!String(r.sku||'').trim();
  const url=String(r.product_url||'');
  const validUrl=/^https:\/\/(?:www\.)?21vek\.by\//i.test(url);
- return '<div class="ts360-product"><div class="ts360-position">№'+esc(r.position??'—')+'</div><div class="ts360-product-name"><b>'+esc(r.product_name||'Товар 21vek')+'</b><small>'+esc(r.brand||'Бренд не указан')+(hasSku?' · Наш SKU '+esc(r.sku):'')+'</small></div>'
+ return '<div class="ts360-product"><div class="ts360-position">'+(r.position_state==='exact'?'№'+esc(r.position):'Не найден в проверенной части')+'</div><div class="ts360-product-name"><b>'+esc(r.product_name||'Товар 21vek')+'</b><small>'+esc(r.brand||'Бренд не указан')+(hasSku?' · Наш SKU '+esc(r.sku):'')+'</small></div>'
   +(hasSku?'<span class="ts360-ours">Наш товар</span>':'')+
   (validUrl?'<a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">Карточка 21vek</a>':'')+'</div>';
 }
@@ -52,7 +52,7 @@ function summary(){
  const req=currentRequest();
  const own=state.rows.filter(r=>r.sku).length;
  const bad=state.negatives.filter(n=>!n.last_negative_answered).length;
- const found=state.rows.length;
+ const found=state.rows.filter(r=>r.position_state==='exact').length;
  const depth=req?.pages_checked?req.pages_checked*60:0;
  return [['Товаров в выдаче',found],['Наших SKU',own],['Негатив без ответа',bad],['Проверено позиций',depth||'—']]
    .map(([label,value])=>'<div class="ts360-kpi"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong></div>').join('');
@@ -116,7 +116,7 @@ function mount(){
    #triovist-search360-v1 .ts360-filters{display:flex;gap:7px;margin:10px 0}#triovist-search360-v1 .ts360-filters .is-active{background:#185fa5;color:#fff}
    #triovist-search360-v1 .ts360-list{max-height:370px;overflow:auto;border-top:1px solid #eef2f7}
    #triovist-search360-v1 .ts360-product{display:flex;align-items:center;gap:10px;padding:9px 3px;border-bottom:1px solid #edf1f5}
-   #triovist-search360-v1 .ts360-position{font-size:17px;font-weight:800;color:#0c447c;min-width:60px}
+   #triovist-search360-v1 .ts360-position{font-size:13px;font-weight:800;color:#0c447c;min-width:75px;max-width:135px}
    #triovist-search360-v1 .ts360-product-name{flex:1;min-width:0}#triovist-search360-v1 .ts360-product-name b{display:block;font-size:12px}#triovist-search360-v1 .ts360-product-name small{display:block;color:#64748b;font-size:10px}
    #triovist-search360-v1 .ts360-ours{font-size:10px;padding:4px 7px;border:1px solid #a9dfc3;border-radius:6px;background:#f0fff6;color:#116440;white-space:nowrap}
    #triovist-search360-v1 a{font-size:11px;color:#185fa5;font-weight:650}
