@@ -5,7 +5,7 @@
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_TASKS360_V1)return;
-const ID='tri-tasks360-style-v2',VERSION='2026.11.05.3-brainstorm';
+const ID='tri-tasks360-style-v2',VERSION='2026.11.09.1-decisions360';
 const root=()=>document.getElementById('tri-month-safe-v23651');
 const active=()=>document.getElementById('page-triovist')?.classList.contains('active')&&
  document.querySelector('#tr14-shell [data-tr14="tasks"]')?.classList.contains('on');
@@ -47,6 +47,8 @@ function css(){
  '#page-triovist[data-triovist-view="tasks"] .tm360-manager b{display:block;font-size:13px;color:#21476e}',
  '#page-triovist[data-triovist-view="tasks"] .tm360-manager p{font-size:11px;color:#536a83;line-height:1.5;margin:7px 0}',
  '#page-triovist[data-triovist-view="tasks"] .tm360-manager strong{font-size:20px;color:#19639d}',
+ '#page-triovist[data-triovist-view="tasks"] .tm360-motivation{background:#f3f9ff;border:1px solid #bdd8f0;border-radius:10px;padding:10px;margin:9px 0;font-size:12px;color:#17476a}',
+ '#page-triovist[data-triovist-view="tasks"] .tm360-motivation small{display:block;font-size:10px;color:#4c6884;line-height:1.5;margin-top:5px}',
  '#page-triovist[data-triovist-view="tasks"] .tm360-track{display:flex;overflow:hidden;border-radius:8px;height:10px;background:#e8eef6;margin:9px 0}',
  '#page-triovist[data-triovist-view="tasks"] .tm360-track span{display:block;height:100%}',
  '#page-triovist[data-triovist-view="tasks"] .tm360-legend{display:flex;gap:9px;flex-wrap:wrap;font-size:10px;color:#74859c}',
@@ -71,13 +73,20 @@ const stat=(label,n,sub,warning=false)=>'<div class="tm360-item'+(warning?' warn
 function managerSummary(tasks,who,name){
  const mine=tasks.filter(t=>String(t.dataset.manager||'').toLowerCase()===who),total=mine.length,done=tally(mine,CONFIRMED);
  const work=tally(mine,WORK),checking=tally(mine,CHECK),late=tally(mine,LATE),approval=tally(mine,APPROVAL);
+ const pack=w.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651?.readOnlySnapshot?.()?.pack;
+ const payroll=(pack?.summary?.managers||[]).find(m=>String(m.manager_email||'').toLowerCase()===who);
+ const taskRate=payroll?.task_kpi_rate;
+ const taskBonus=taskRate==null?'Не рассчитана':('+'+(Number(taskRate)*100).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' п. п.');
+ const maxBonus=pack?.policy?.task_kpi_max==null?'0,10':(Number(pack.policy.task_kpi_max)*100).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
  return '<div class="tm360-manager"><b>'+escapeHtml(name)+'</b><p><strong>'+q(total)+'</strong> рабочих задач · подтверждено '+q(done)+'</p>'+
  '<div class="tm360-track"><span style="background:#178858;width:'+percent(done,total).toFixed(2)+'%"></span>'+
  '<span style="background:#3d86c7;width:'+percent(work,total).toFixed(2)+'%"></span>'+
  '<span style="background:#d89e47;width:'+percent(approval+checking,total).toFixed(2)+'%"></span>'+
  '<span style="background:#cc4854;width:'+percent(late,total).toFixed(2)+'%"></span></div>'+
  '<p>В работе: '+q(work)+' · на согласовании: '+q(approval)+' · на проверке: '+q(checking)+' · просрочено: '+q(late)+'</p>'+
- '<p class="tm360-optional">Доля подтверждённых задач: '+percent(done,total).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%. Это не зарплатный KPI.</p>'+
+ '<p class="tm360-optional">Доля подтверждённых задач: '+percent(done,total).toLocaleString('ru-RU',{maximumFractionDigits:1})+'%. Не равна зарплатному KPI.</p>'+
+ '<div class="tm360-motivation"><b>Мотивация по задачам: '+escapeHtml(taskBonus)+'</b>'+
+ '<small>Максимум +'+escapeHtml(maxBonus)+' п. п. к ставке по действующей политике CRM. В работе ≠ премия: в заработке участвуют только утверждённые итоги. План, рост и командный KPI — в «Мотивации».</small></div>'+
  (isManager()?'':'<button type="button" data-tm360-owner="'+escapeHtml(who)+'">Показать задачи менеджера</button>')+'</div>';
 }
 function briefing(tasks,working,approvals,checking,late,done){
