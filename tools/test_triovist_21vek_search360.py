@@ -35,6 +35,17 @@ class Search360Tests(unittest.TestCase):
                                                                   {'text':'перфораторы макита'}]}]}
         self.assertEqual(s.parse_first_text_suggestion(payload),('перфораторы бош','data.popular_requests'))
 
+    def test_actual_21vek_suggest_reply_chooses_first_text_row(self):
+        data={'total':9,'request':'перфоратор','data':[
+            {'group_type':'popular_categories','items':[]},
+            {'group_type':'popular_requests','items':[]},
+            {'group_type':'suggest','items':[{'type':'suggest','name':'перфоратор'}]},
+            {'group_type':'completions','items':[{'type':'completion','name':'перфоратор аккумуляторный'}]},
+            {'group_type':'products','items':[{'type':'product','name':'Перфоратор Forsage'}]}]}
+        self.assertEqual(s.parse_first_text_suggestion(data),('перфоратор','data.suggest'))
+        data['data'][2]['items']=[]
+        self.assertEqual(s.parse_first_text_suggestion(data),('перфоратор аккумуляторный','data.completions'))
+
     def test_unsafe_suggestion_endpoint_rejected(self):
         with patch.dict(os.environ,{"SEARCH360_SUGGEST_URL":"https://untrusted.test/redirect"}):
             with self.assertRaises(ValueError):s.trusted_suggest_endpoint()
