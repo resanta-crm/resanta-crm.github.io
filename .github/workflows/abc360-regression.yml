@@ -6,7 +6,7 @@ on:
       - 'assets/01-crm-core.js'
       - 'assets/113-analytics-aggregates-v236342.js'
       - 'assets/187-abc-director360-v1.js'
-      - 'supabase/migrations/20261109_abc360_fast_rpc_v1.sql'
+      - 'docs/abc360_fast_rpc_v1.sql'
       - 'tests/abc360-director-v1.test.mjs'
       - '.github/workflows/abc360-regression.yml'
   push:
