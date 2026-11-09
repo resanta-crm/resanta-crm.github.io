@@ -119,7 +119,8 @@ test('director dashboard renders exact KPI values and both years from known clie
  assert.match(html,/2,4 тыс. BYN/);
  assert.match(html,/Критично/);
  assert.match(html,/Без задачи возврата/);
- assert.match(html,/2026 \/ выбранный год/);
+ assert.match(html,/f360-swatch current/);
+ assert.match(html,/>2026<\/span>/);
  assert.match(html,/Аналог прошлого года/);
  assert.match(html,/Тестовый Клиент А/);
  assert.match(html,/Тестовый Клиент Б/);
