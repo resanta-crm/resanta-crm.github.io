@@ -109,6 +109,15 @@ test('chart switches among visit reports, independent GPS and problems',async()=
  assert.match(f.html(),/aria-pressed="true">Отклонения<\/button>/);
  assert.equal(f.calls.length,2,'UI filters do not cause automatic backend refresh');
 });
+test('GPS director date and manager controls auto-refresh and preserve newest selection',async()=>{
+ const f=fixture();await f.api.open();
+ assert.match(src,/filters\[field\]=t\.value/);
+ assert.match(src,/setTimeout\(\(\)=>\{if\(isActive\(\)\)load\(false\)\},160\)/);
+ assert.match(src,/if\(busy\)\{reloadPending=true;return false;\}/);
+ assert.match(src,/if\(key!==filters\.from\+'\|'\+filters\.to\+'\|'\+filters\.manager\)/);
+ assert.match(src,/if\(reloadPending&&isActive\(\)\)/);
+ assert.equal(f.calls.length,2,'opening GPS runs only one pair of RPC calls');
+});
 test('opening specific disputed manager and unclassified stop is an explicit drilldown',async()=>{
  const f=fixture();await f.api.open();
  f.click('[data-g360-manager]',{g360Manager:'Руднев'});
