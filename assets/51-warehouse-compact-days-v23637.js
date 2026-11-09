@@ -10,6 +10,42 @@ if(window.RESANTA_WAREHOUSE_COMPACT_V23637)return;
 const V='v23.6.320';
 const FIXED_HORIZON=14;
 let mode='overview',offset=0,limit=100,search='';
+
+const abcClassCache=new Map(),abcClassPending=new Map();
+let abcClassPaintSeq=0;
+async function decorateAbcOrder(data,root){
+ if(mode!=='order')return;
+ const seq=++abcClassPaintSeq,month=String(data?.report_month||'').slice(0,7);
+ if(!/^\d{4}-\d{2}$/.test(month)||!root.querySelector('[data-wc-abc-sku]'))return;
+ try{
+  let entry=abcClassCache.get(month);
+  if(!entry||Date.now()-entry.at>120000){
+   let pending=abcClassPending.get(month);
+   if(!pending){
+    pending=rpc('warehouse_control_abc_classes_v1',{p_month:month+'-01'})
+     .then(result=>{
+      const value=result?.classes&&typeof result.classes==='object'?result.classes:{};
+      const next={value,at:Date.now()};abcClassCache.set(month,next);return next;
+     }).finally(()=>abcClassPending.delete(month));
+    abcClassPending.set(month,pending);
+   }
+   entry=await pending;
+  }
+  if(seq!==abcClassPaintSeq||mode!=='order'||$('wc-body')!==root)return;
+  root.querySelectorAll('[data-wc-abc-sku]').forEach(cell=>{
+   const cls=entry.value[String(cell.dataset.wcAbcSku||'').toLowerCase()]||'—';
+   const label=['A','B','C','N','R'].includes(cls)?cls:'—';
+   cell.textContent=label;
+   cell.title=label==='—'?'ABC по филиалу: класс не определён':'ABC филиала · класс '+label+' · '+month;
+   cell.style.fontWeight='800';
+   cell.style.color=label==='A'?'var(--g)':label==='C'||label==='R'?'var(--r)':label==='B'?'var(--w)':'var(--sub)';
+  });
+ }catch(e){
+  // ABC labels are optional; stock operations continue unchanged.
+  console.warn('ABC-категория автозаказа временно недоступна',e);
+ }
+}
+
 const $=id=>document.getElementById(id);
 const n=v=>Number(v)||0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -35,7 +71,7 @@ function ensureCss(){
 #wc-v23620 .wc-horizon{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;font-size:10px;font-weight:800;white-space:nowrap}
 #wc-v23620 .wc-sev{display:inline-flex;padding:3px 7px;border-radius:999px;font-size:9px;font-weight:800;margin-bottom:4px}.wc-sev.critical{background:#FEE2E2;color:#991B1B}.wc-sev.high{background:#FFEDD5;color:#9A3412}.wc-sev.medium{background:#FEF3C7;color:#92400E}
 #wc-v23620 .wc-action{white-space:normal;line-height:1.35;font-weight:650;color:#9A3412}
-#wc-v23620 .wc-compact .c-sku{width:37%}.wc-compact .c-vb{width:7%}.wc-compact .c-days{width:9%}.wc-compact .c-need{width:9%}.wc-compact .c-ch{width:8%}.wc-compact .c-box{width:6%}.wc-compact .c-order{width:9%}.wc-compact .c-cost{width:15%}
+#wc-v23620 .wc-compact .c-sku{width:37%}#wc-v23620 .wc-compact.wc-abc-order .c-sku{width:30%}#wc-v23620 .wc-compact.wc-abc-order .c-abc{width:7%;text-align:center}.wc-compact .c-vb{width:7%}.wc-compact .c-days{width:9%}.wc-compact .c-need{width:9%}.wc-compact .c-ch{width:8%}.wc-compact .c-box{width:6%}.wc-compact .c-order{width:9%}.wc-compact .c-cost{width:15%}
 #wc-v23620 .wc-excess .c-sku{width:29%}.wc-excess .c-stock{width:7%}.wc-excess .c-days{width:10%}.wc-excess .c-excess{width:8%}.wc-excess .c-value{width:13%}.wc-excess .c-demand{width:13%}.wc-excess .c-action{width:20%}
 @media(max-width:1050px){#wc-v23620 .wc-compact{min-width:900px!important}#wc-v23620 .wc-compact .c-sku{width:320px}#wc-v23620 .wc-excess{min-width:1050px!important}}
 `;document.head.appendChild(s)
@@ -69,8 +105,9 @@ function render(data){
  const rows=Array.isArray(data?.rows)?data.rows:[],total=Number(data?.total)||0,horizon=Number(data?.order_cycle_days)||FIXED_HORIZON;
  let head='',body='',tableClass='wc-compact';
  if(mode==='order'||mode==='stockout'){
-  head='<th class="c-sku">SKU / товар</th><th class="c-vb">Витебск</th><th class="c-days">Дней</th><th class="c-need">Нужно</th><th class="c-ch">Чехов</th><th class="c-box">Упак.</th><th class="c-order">Автозаказ</th><th class="c-cost">Стоимость</th>';
-  body=rows.map(r=>`<tr><td class="wc-sku"><b>${esc(r.sku)}</b><div>${esc(r.product||'')}</div></td><td class="${n(r.vitebsk_avail)<=0?'wc-bad':''}">${qty(r.vitebsk_avail??r.closing_qty)}</td><td>${daysCell(r,data,'order')}</td><td class="wc-warn"><b>${qty(r.need_qty)}</b>${demandMini(r)}<div class="wc-mini">цель 14 дней: ${qty(r.target_qty)} шт.</div></td><td>${qty(r.chekhov_qty)}</td><td>${qty(r.box_qty)}</td><td class="wc-good"><b>${qty(r.recommended_order_qty)}</b></td><td>${money(r.estimated_order_cost_byn)}<div class="wc-mini">${money(r.estimated_order_cost_rub,'RUB')}</div></td></tr>`).join('')
+  if(mode==='order')tableClass+=' wc-abc-order';
+  head='<th class="c-sku">SKU / товар</th>'+(mode==='order'?'<th class="c-abc">Категория</th>':'')+'<th class="c-vb">Витебск</th><th class="c-days">Дней</th><th class="c-need">Нужно</th><th class="c-ch">Чехов</th><th class="c-box">Упак.</th><th class="c-order">Автозаказ</th><th class="c-cost">Стоимость</th>';
+  body=rows.map(r=>`<tr><td class="wc-sku"><b>${esc(r.sku)}</b><div>${esc(r.product||'')}</div></td>${mode==='order'?`<td class="c-abc" data-wc-abc-sku="${esc(String(r.sku||'').trim().toLowerCase())}">—</td>`:''}<td class="${n(r.vitebsk_avail)<=0?'wc-bad':''}">${qty(r.vitebsk_avail??r.closing_qty)}</td><td>${daysCell(r,data,'order')}</td><td class="wc-warn"><b>${qty(r.need_qty)}</b>${demandMini(r)}<div class="wc-mini">цель 14 дней: ${qty(r.target_qty)} шт.</div></td><td>${qty(r.chekhov_qty)}</td><td>${qty(r.box_qty)}</td><td class="wc-good"><b>${qty(r.recommended_order_qty)}</b></td><td>${money(r.estimated_order_cost_byn)}<div class="wc-mini">${money(r.estimated_order_cost_rub,'RUB')}</div></td></tr>`).join('')
  }else if(mode==='excess'){
   tableClass='wc-compact wc-excess';
   head='<th class="c-sku">SKU / товар</th><th class="c-stock">Остаток</th><th class="c-days">Дней / норма</th><th class="c-excess">Лишних</th><th class="c-value">Лишних BYN</th><th class="c-demand">Спрос</th><th class="c-action">Что делать</th>';
@@ -85,6 +122,7 @@ function render(data){
  const find=$('wc-find'),inp=$('wc-search'),prev=$('wc-prev'),next=$('wc-next');
  if(find)find.onclick=()=>{search=inp?.value.trim()||'';offset=0;load()};if(inp)inp.onkeydown=e=>{if(e.key==='Enter')find?.click()};if(prev)prev.onclick=()=>{offset=Math.max(0,offset-limit);load()};if(next)next.onclick=()=>{offset+=limit;load()};if($('wc-export'))$('wc-export').onclick=exportOrder;if($('wc-export-excess'))$('wc-export-excess').onclick=exportExcess;
  try{window.crmWarehouseVitebsk360V1?.attachOrderRows?.(rows,data,mode,root)}catch(e){console.warn('Vitebsk360 order explanation',e)}
+ if(mode==='order')void decorateAbcOrder(data,root);
 }
 async function allRowsFor(m){let out=[],off=0;for(let i=0;i<30;i++){const d=await rpc('warehouse_control_get_items_v2',{p_month:monthArg(),p_mode:m,p_search:'',p_limit:500,p_offset:off});const rows=Array.isArray(d?.rows)?d.rows:[];out.push(...rows);off+=rows.length;if(rows.length<500||off>=Number(d?.total||0))break}return out}
 async function ensureXlsx(){if(window.XLSX)return true;try{if(typeof _loadSheetJS==='function'){await _loadSheetJS();return !!window.XLSX}}catch(_){}return false}
