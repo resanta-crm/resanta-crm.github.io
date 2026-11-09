@@ -157,7 +157,7 @@ function visitDetails(payload){
 const stopClosed=x=>['technical_verified','work_related','home_related','no_issue','forgot_end_day'].includes(x.review_action);
 function stopDetails(payload){
  const all=(payload.stops||[]).filter(x=>detailManager==='all'||x.manager===detailManager);
- const matches=(x,id)=>id==='all'||(id==='closed'?stopClosed(x):id==='new'?!x.review_action:!!x.review_action&&!stopClosed(x));
+ const matches=(x,id)=>id==='all'||(id==='closed'?stopClosed(x):id==='new'?!x.review_action:!stopClosed(x));
  const list=all.filter(x=>matches(x,stopScope)).slice(0,60);
  const labels={investigate:'На разборе',technical_verified:'Техническая подтверждена',work_related:'Рабочая',home_related:'Дом / старт',no_issue:'Без замечаний',forgot_end_day:'Забыл завершить GPS-день · закрыто'};
  const tabs=[['new','Новые'],['open','На проверке'],['closed','Закрытые'],['all','История']];
