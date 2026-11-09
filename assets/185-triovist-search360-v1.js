@@ -6,7 +6,7 @@
 'use strict';
 if(window.RESANTA_TRIOVIST_SEARCH360_V1)return;
 const V='20261109-2',ROOT_ID='triovist-search360-v1',MAX_RESULTS=850,TTL=120000;
-const state={requests:[],selected:null,rows:[],negatives:[],loadedAt:0,busy:false,filter:'ours',error:'',sending:false};
+const state={requests:[],selected:null,rows:[],negatives:[],loadedAt:0,busy:false,filter:'ours',error:'',sending:false,negativeQuery:''};
 let refreshFlight=null,lastRole='';
 function dbx(){try{return typeof db!=='undefined'?db:(window.db||null)}catch(_){return window.db||null}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
@@ -24,9 +24,10 @@ function productRow(r){
   (validUrl?'<a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">Карточка 21vek</a>':'')+'</div>';
 }
 function negativesHtml(){
- const list=state.negatives;
+ const q=String(state.negativeQuery||'').toLocaleLowerCase('ru');
+ const list=state.negatives.filter(x=>!q||[x.sku,x.product_name,x.last_negative_text].join(' ').toLocaleLowerCase('ru').includes(q));
  if(!list.length)return '<div class="ts360-empty">Негативные отзывы в доступных публичных данных не найдены.</div>';
- return list.slice(0,40).map(x=>{
+ return list.slice(0,100).map(x=>{
    const url=String(x.product_url||'');
    const good=/^https:\/\/(?:www\.)?21vek\.by\//i.test(url);
    return '<div class="ts360-negative"><div class="ts360-neg-head"><b>'+esc(x.product_name||x.sku||'Карточка 21vek')+'</b><span class="'+(x.last_negative_answered?'ts360-done':'ts360-alert')+'">'+(x.last_negative_answered?'Есть ответ':'Без ответа')+'</span></div>'
@@ -54,7 +55,7 @@ function summary(){
  const bad=state.negatives.filter(n=>!n.last_negative_answered).length;
  const found=state.rows.filter(r=>r.position_state==='exact').length;
  const depth=req?.pages_checked?req.pages_checked*60:0;
- return [['Товаров в выдаче',found],['Наших SKU',own],['Негатив без ответа',bad],['Проверено позиций',depth||'—']]
+ return [['Товаров в выдаче',found],['Наших SKU',own],['Без ответа (выборка)',bad],['Проверено позиций',depth||'—']]
    .map(([label,value])=>'<div class="ts360-kpi"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong></div>').join('');
 }
 function render(){
@@ -77,9 +78,10 @@ function render(){
    shown.length?'<div class="ts360-list">'+shown.map(productRow).join('')+'</div>'+'<div class="ts360-muted">Показано '+shown.length+' из '+records.length+'. Номера — позиции только в проверенном листинге. Не найдено в первых '+esc(q.pages_checked*60||0)+' не означает отсутствие товара на 21vek.</div>'
    :'<div class="ts360-empty">В проверенных результатах '+(filter==='ours'?'наши SKU не обнаружены':'товары не получены')+'. Это не означает, что товара нет в каталоге.</div>')
   +'</div>'
-  +'<div class="ts360-neg-title"><b>Последние отрицательные отзывы</b><span class="ts360-muted">Сортировка по дате · оценка 1–3 звезды</span></div>'
+  +'<div class="ts360-neg-title"><b>Последние отрицательные отзывы</b><input type="search" data-ts360-negative-search placeholder="Поиск по SKU или отзыву" value="'+esc(state.negativeQuery)+'" aria-label="Фильтр отрицательных отзывов"></div><div class="ts360-muted">Последние до 100 карточек · оценка 1–3 звезды · данные из публичных отзывов</div>'
   +'<div class="ts360-negatives">'+negativesHtml()+'</div>';
  root.querySelector('[data-ts360-refresh]')?.addEventListener('click',()=>load(true));
+ root.querySelector('[data-ts360-negative-search]')?.addEventListener('input',e=>{state.negativeQuery=e.target.value;const target=root.querySelector('.ts360-negatives');if(target)target.innerHTML=negativesHtml()});
  root.querySelector('[data-ts360-form]')?.addEventListener('submit',submit);
  root.querySelector('[data-ts360-history]')?.addEventListener('change',e=>{state.selected=e.target.value;loadResults(state.selected)});
  root.querySelectorAll('[data-ts360-filter]').forEach(b=>b.addEventListener('click',()=>{state.filter=b.dataset.ts360Filter;render()}));
@@ -134,7 +136,7 @@ function mount(){
  return true;
 }
 async function fetchNegatives(d){
- const {data,error}=await d.rpc('triovist_search360_negative_reviews_v1',{p_limit:80});
+ const {data,error}=await d.rpc('triovist_search360_negative_reviews_v1',{p_limit:100});
  if(error)throw error;
  return Array.isArray(data?.rows)?data.rows:[];
 }
