@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <script id="resanta_tsd_unified_redirect_v236187">if(window.top===window.self&&!location.search.includes('legacy-module=1')){location.replace('/tsd.html')}</script>
 <script>
-const INVENTORY_APP_VERSION='2026-11-03-v23.6.380-auth-recovery';
+const INVENTORY_APP_VERSION='2026-11-09-v23.6.381-vitebsk360-tsd';
 (function(){
   try{
     const k='resanta_inventory_app_version';
@@ -446,7 +446,7 @@ async function bindUnknown(){
  try{
   const r=await rpc('warehouse_inventory_bind_barcode_v1',{p_session_id:active.id,p_barcode:lastUnknown,p_sku:sku});
   if(!r?.ok)throw new Error(r?.reason||'Не удалось привязать');
-  const code=lastUnknown;show('bind-box',false);lastUnknown='';lastSubmittedCode='';lastSubmittedAt=0;await sendScan(code,Number($('scan-qty').value)||1,'scan')
+  const code=lastUnknown;show('bind-box',false);lastUnknown='';await sendScan(code,Number($('scan-qty').value)||1,'scan')
  }catch(e){status('Привязка: '+(e?.message||e),'red')}
  finally{$('bind-btn').disabled=false;focusCode()}
 }
@@ -497,30 +497,55 @@ async function init(){
  $('logout-btn').onclick=logout;$('send-btn').onclick=()=>sendScan($('code').value,$('scan-qty').value,'manual');$('zero-btn').onclick=markZero;
  $('sound-test-btn').onclick=()=>{unlockAudio();beep(true);show('scanner-hw-warning',false);scannerDiag('Звук приложения работает. Теперь нажмите курок сканера и наведите на штрихкод.');focusCode();armScannerWatchdog()};
  const codeEl=$('code');
- codeEl.onkeydown=e=>{unlockAudio();browserInputSeen();if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();const v=codeEl.value.trim();if(v)sendScan(v,$('scan-qty').value,'scan')}};
+ // Every physical scan is a new intent; its retry UUID is reused by offline replay.
+ // Enter is authoritative; 190 ms idle is a fallback for scanners without Enter.
+ function submitIntent(v){
+   v=String(v||'').trim();
+   if(!v)return;
+   clearTimeout(inputAutoTimer);clearTimeout(scannerTimer);clearTimeout(lookupTimer);
+   inputAutoTimer=null;scannerTimer=null;
+   if(codeEl.value.trim()===v)codeEl.value='';
+   scannerBuffer='';
+   sendScan(v,$('scan-qty').value,'scan');
+ }
+ codeEl.onkeydown=e=>{
+   unlockAudio();browserInputSeen();
+   if(e.key==='Enter'||e.key==='Tab'){
+     e.preventDefault();
+     const v=codeEl.value.trim();
+     if(v)submitIntent(v);
+   }
+ };
  const maybeAutoSubmit=()=>{
    browserInputSeen();
-   scannerDiag('ТСД передаёт код в поле…');
    clearTimeout(inputAutoTimer);clearTimeout(lookupTimer);
    const v=codeEl.value.trim();
-   if(/^\d{8,32}$/.test(v))inputAutoTimer=setTimeout(()=>{if(codeEl.value.trim()===v)sendScan(v,$('scan-qty').value,'scan')},55);
-   else if(v.length>=4)lookupTimer=setTimeout(()=>previewManualCode(v),320);
+   if(!$('keypad-panel').hidden){
+     scannerDiag('Ручной ввод. Нажмите «Добавить», когда артикул введён.');
+     return;
+   }
+   scannerDiag('ТСД передаёт код в поле…');
+   if(/^\d{8,32}$/.test(v)){
+     inputAutoTimer=setTimeout(()=>{
+       if(codeEl.value.trim()===v)submitIntent(v);
+     },190);
+   }else if(v.length>=4)lookupTimer=setTimeout(()=>previewManualCode(v),320);
  };
  codeEl.addEventListener('input',maybeAutoSubmit);
- codeEl.addEventListener('keyup',maybeAutoSubmit);
  codeEl.addEventListener('paste',()=>setTimeout(maybeAutoSubmit,0));
- codeEl.addEventListener('textInput',()=>setTimeout(maybeAutoSubmit,0));
+ // Legacy keypress handler was a second submit path, duplicating the same
+ // hardware event. Keep a single capture path when the input itself is not focused.
  document.addEventListener('keydown',e=>{
    unlockAudio();browserInputSeen();
    if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
    const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
-   if(editable)return;
+   if(editable||target?.closest?.('#keypad-panel'))return;
    const now=Date.now();
    if(now-scannerLastKeyAt>120)scannerBuffer='';
    scannerLastKeyAt=now;
    if(e.key==='Enter'||e.key==='Tab'){
-     const v=scannerBuffer.trim();scannerBuffer='';
-     if(v.length>=4){e.preventDefault();scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
+     const v=scannerBuffer.trim();scannerBuffer='';clearTimeout(scannerTimer);
+     if(v.length>=4){e.preventDefault();scannerDiag('Аппаратный сканер передал код: '+v);submitIntent(v)}
      return;
    }
    if(e.key&&e.key.length===1){
@@ -528,28 +553,37 @@ async function init(){
      clearTimeout(scannerTimer);
      scannerTimer=setTimeout(()=>{
        const v=scannerBuffer.trim();scannerBuffer='';
-       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
-     },80);
+       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);submitIntent(v)}
+     },190);
    }
  },true);
- document.addEventListener('keypress',e=>{
-   browserInputSeen();
-   if(!active?.id||!$('scanner')||$('scanner').classList.contains('hidden'))return;
-   const target=e.target,editable=target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable);
-   if(editable)return;
-   const code=Number(e.which||e.keyCode||0);
-   if(code>=32&&code<=126){
-     const ch=String.fromCharCode(code);
-     const now=Date.now();
-     if(now-scannerLastKeyAt>120)scannerBuffer='';
-     scannerLastKeyAt=now;scannerBuffer+=ch;
-     clearTimeout(scannerTimer);
-     scannerTimer=setTimeout(()=>{
-       const v=scannerBuffer.trim();scannerBuffer='';
-       if(/^\d{8,32}$/.test(v)){scannerDiag('Аппаратный сканер передал код: '+v);sendScan(v,$('scan-qty').value,'scan')}
-     },80);
-   }
- },true);
+ const panel=$('keypad-panel');
+ $('keypad-toggle').onclick=()=>{
+   panel.hidden=!panel.hidden;
+   $('keypad-toggle').textContent=panel.hidden?'⌨ Цифровая панель':'✓ Закрыть цифровую панель';
+   codeEl.setAttribute('inputmode',panel.hidden?'text':'none');
+   if(!panel.hidden){clearTimeout(inputAutoTimer);clearTimeout(lookupTimer)}
+   focusCode();
+ };
+ $('keypad-grid').addEventListener('click',e=>{
+   const b=e.target.closest('[data-digit]');
+   if(!b)return;
+   const digit=b.dataset.digit,from=codeEl.selectionStart??codeEl.value.length,to=codeEl.selectionEnd??from;
+   codeEl.setRangeText(digit,from,to,'end');
+   scannerDiag('Ввод артикула вручную: '+codeEl.value);
+   focusCode();
+ });
+ $('keypad-back').onclick=()=>{
+   const start=codeEl.selectionStart??codeEl.value.length,end=codeEl.selectionEnd??start;
+   codeEl.setRangeText('',Math.max(0,start-(start===end?1:0)),end,'end');focusCode();
+ };
+ $('keypad-clear').onclick=()=>{codeEl.value='';scannerDiag('Артикул очищен.');focusCode()};
+ $('keypad-abc').onclick=()=>{
+   panel.hidden=true;
+   $('keypad-toggle').textContent='⌨ Цифровая панель';
+   codeEl.setAttribute('inputmode','text');
+   focusCode();codeEl.click();
+ };
  document.addEventListener('beforeinput',browserInputSeen,true);
  document.addEventListener('compositionend',browserInputSeen,true);
  document.addEventListener('touchstart',unlockAudio,{passive:true,once:false});
