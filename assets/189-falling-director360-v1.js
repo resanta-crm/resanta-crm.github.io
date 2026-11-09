@@ -116,6 +116,7 @@ function mount(){
   root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Возврат продаж 360°');
   pivot.parentElement.insertBefore(root,pivot);
   root.addEventListener('click',onClick);
+  root.addEventListener('input',onInput);
  }
  return root;
 }
@@ -162,6 +163,8 @@ function focusDetails(x,end){
  if(!x)return'';
  const cats=asArray(x.breakdown?.cats).slice(0,4),items=asArray(x.breakdown?.items).slice(0,4);
  const st=status(x),qs=questionsFor(x);
+ const noteSource=$('fall-note-'+String(x.client?.id||''));
+ const priorNote=noteSource?String(noteSource.value||''):'';
  const monthTrend=trendFor([x],end);
  return '<div class="f360-detail" id="f360-client-detail">'+
   '<div class="f360-detail-head"><div><b>'+esc(x.client?.name||'Клиент')+'</b><div class="f360-muted">'+esc(x.client?.manager_name||'—')+' · '+esc(x.client?.region||'—')+'</div></div>'+
@@ -172,6 +175,7 @@ function focusDetails(x,end){
   '<div><h4>ИИ · Мозговой штурм</h4><p class="f360-muted">Это вопросы и гипотезы для проверки, не установленные причины.</p>'+
   qs.map((q,i)=>'<div class="f360-question"><span>'+(i+1)+'.</span><span>'+esc(q)+'</span></div>').join('')+
   '<div class="f360-detailtrend"><h4>Продажи клиента по месяцам</h4>'+trendChart(monthTrend)+'</div></div></div>'+
+  (isBoss()?'<div class="f360-noteedit"><label for="f360-note-edit">Комментарий руководителя для ИИ-задачи</label><textarea id="f360-note-edit" data-f360-note="'+esc(x.client?.id||'')+'" rows="2" placeholder="Что проверить, предложить или проконтролировать">'+esc(priorNote)+'</textarea><button type="button" class="f360-btn" data-f360-save="'+esc(x.client?.id||'')+'" data-f360-name="'+esc(x.client?.name||'')+'">Сохранить комментарий</button></div>':'')+
   '<div class="f360-buttons"><button type="button" class="f360-btn" data-f360-client="'+esc(x.client?.id||'')+'">Открыть клиента</button>'+
   '<button type="button" class="f360-btn" data-f360-abc="'+esc(x.client?.id||'')+'">ABC клиента</button>'+
   (isBoss()?'<button type="button" class="f360-btn primary" data-f360-ai="'+esc(x.client?.id||'')+'">Сформировать ИИ-задачу</button>':'')+'</div>'+
@@ -241,6 +245,12 @@ function render(){
  }catch(e){console.warn('Falling360 view failed; existing cards retained',e);$(PAGE)?.classList.remove('f360-installed');return false}
  finally{rendering=false}
 }
+function onInput(event){
+ const area=event.target;
+ if(!area?.hasAttribute?.('data-f360-note'))return;
+ const source=$('fall-note-'+area.getAttribute('data-f360-note'));
+ if(source)source.value=area.value;
+}
 function onClick(event){
  const node=event.target.closest?.('button');if(!node)return;
  if(node.hasAttribute('data-f360-filter')){
@@ -259,7 +269,15 @@ function onClick(event){
  if(node.hasAttribute('data-f360-more')){showMore=true;render();return}
  if(node.hasAttribute('data-f360-client')){openClient(node.getAttribute('data-f360-client'));return}
  if(node.hasAttribute('data-f360-abc')){openABC(node.getAttribute('data-f360-abc'));return}
- if(node.hasAttribute('data-f360-ai')&&isBoss()){openAI(node.getAttribute('data-f360-ai'));return}
+ if(node.hasAttribute('data-f360-save')&&isBoss()){
+  if(typeof w.v221SaveFallingNote==='function')w.v221SaveFallingNote(node.getAttribute('data-f360-save'),node.getAttribute('data-f360-name'));
+  return;
+ }
+ if(node.hasAttribute('data-f360-ai')&&isBoss()){
+  const area=$('f360-note-edit');
+  if(area){const source=$('fall-note-'+node.getAttribute('data-f360-ai'));if(source)source.value=area.value;}
+  openAI(node.getAttribute('data-f360-ai'));return;
+ }
  if(node.hasAttribute('data-f360-legacy')){legacyOpen=!legacyOpen;$(PAGE)?.classList.toggle('f360-legacy-open',legacyOpen);node.setAttribute('aria-expanded',String(legacyOpen));node.textContent=legacyOpen?'Скрыть старые карточки':'Раскрыть прежние карточки и комментарии';}
 }
 function install(){
@@ -357,6 +375,10 @@ const styles=[
 '#'+ID+' .f360-question{display:flex;gap:7px;font-size:11px;padding:7px 0;border-bottom:1px solid var(--border)}',
 '#'+ID+' .f360-question>span:first-child{font-weight:800;color:var(--a)}',
 '#'+ID+' .f360-detailtrend{margin-top:10px}',
+'#'+ID+' .f360-noteedit{margin-top:12px;display:grid;gap:7px}',
+'#'+ID+' .f360-noteedit label{font-size:11px;font-weight:740}',
+'#'+ID+' .f360-noteedit textarea{font:inherit;width:100%;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--card);color:var(--text);resize:vertical;font-size:12px}',
+'#'+ID+' .f360-noteedit button{justify-self:start}',
 '#'+ID+' .f360-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}',
 '#page-falling.f360-installed #falling-kpi,#page-falling.f360-installed #falling-period-note{display:none}',
 '#page-falling.f360-installed #falling-list{display:none}',
