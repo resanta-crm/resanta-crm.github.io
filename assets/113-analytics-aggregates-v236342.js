@@ -5,9 +5,10 @@
 (function(){
 'use strict';
 if(window.RESANTA_ANALYTICS_AGGREGATES_V236342)return;
-const V='v23.6.342-abc360-20261109', TTL=60000;
+const V='v23.6.342-abc360-20261109-fix2', TTL=90000;
 const baseEnsure=window.v22722EnsureHistory;
-const cache=new Map();
+const cache=new Map(),pending=new Map();
+let abcRequestVersion=0;
 
 function active(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}catch(_){return''}}
 function keyName(v){try{return typeof canonicalSalesClientName==='function'?canonicalSalesClientName(v):String(v||'').toLowerCase().replace(/[^a-zа-я0-9]+/gi,'')}catch(_){return String(v||'').toLowerCase()}}
@@ -31,9 +32,14 @@ function setRows(rows,label){
 async function cached(k,loader,force=false){
   const hit=cache.get(k);
   if(!force&&hit&&Date.now()-hit.at<TTL)return hit.data;
-  const data=await loader();
-  cache.set(k,{data,at:Date.now()});
-  return data;
+  // Deduplicate overlapping filter/refresh requests to avoid a Postgres RPC storm.
+  if(pending.has(k))return pending.get(k);
+  const run=Promise.resolve().then(loader).then(data=>{
+    cache.set(k,{data,at:Date.now()});
+    return data;
+  }).finally(()=>{if(pending.get(k)===run)pending.delete(k);});
+  pending.set(k,run);
+  return run;
 }
 function abcParams(){
   const mode=document.getElementById('abc-period')?.value||'90';
@@ -58,6 +64,7 @@ function abcSynthetic(data,p){
   return out;
 }
 async function prepareAbc(force=false){
+  const requestId=++abcRequestVersion;
   const p=abcParams();
   if(p.scope==='client'&&!p.clientId)return setRows([],'ABC no client');
   const k='abc|'+[p.scope,p.manager,p.clientId||'',p.cur.join(','),p.prev.join(',')].join('|');
@@ -71,6 +78,8 @@ async function prepareAbc(force=false){
     });
     if(error)throw error;return data||{};
   },force);
+  // Never paint a slow response for a filter the director has already changed.
+  if(requestId!==abcRequestVersion)return false;
   setRows(abcSynthetic(data,p),'ABC aggregate');
   return true;
 }
@@ -133,6 +142,6 @@ window.v22722EnsureHistory=async function(options={}){
   if(typeof baseEnsure==='function')return baseEnsure(options);
   return allPurchaseHistory||[];
 };
-window.crmFastAnalyticsInvalidateV236342=function(){cache.clear();};
+window.crmFastAnalyticsInvalidateV236342=function(){cache.clear();abcRequestVersion++;};
 window.RESANTA_ANALYTICS_AGGREGATES_V236342=Object.freeze({version:V,abcServerAggregate:true,fallingServerAggregate:true,noFullHistoryOnAbc:true,noFullHistoryOnFalling:true,cacheTtlMs:TTL});
 })();
