@@ -1,7 +1,7 @@
 /* RESANTA CRM v23.6.5 · actual visit order + all off-plan GPS visits */
 (function(){
 'use strict';
-const V='v23.6.6',src=document.currentScript?.src||'';
+const V='v23.6.7-gps-focus',src=document.currentScript?.src||'';
 let child=false;try{child=new URL(src,location.href).searchParams.get('child')==='1'}catch(_){}
 
 function patchRpc2365(){
@@ -94,7 +94,7 @@ if(window.RESANTA_GPS_VISIT_ORDER_V2364_CHILD?.version===V)return;
 if(typeof render!=='function'||typeof drawMap!=='function'||typeof coord!=='function')return;
 patchRpc2365();
 
-let ev=[],marks=new Map();
+let ev=[],marks=new Map(),pendingFocus=null;
 const key=(k,r)=>k==='p'?'p:'+(r.route_plan_id||r.client_id||r.client_name||''):k==='o'?'o:'+(r.visit_id||r.client_id||r.client_name||''):'g:'+(r.cluster_id||r.first_seq||r.start_at||'');
 const visited=p=>['confirmed','gps_and_report','gps_only'].includes(String(p?.state||''));
 
@@ -234,11 +234,44 @@ drawMap=async function(a){
     },{preset});
     map.geoObjects.add(m);marks.set(x.id,m);
   }
+  if(pendingFocus!==null) {
+    const target=pendingFocus;pendingFocus=null;
+    setTimeout(()=>window.focusVisitV2364?.(target),70);
+  }
 };
 
 window.focusVisitV2364=function(no){
-  const x=ev.find(z=>z.id===Number(no));if(!x?.c||!map)return;
-  map.setCenter(x.c,16);try{marks.get(x.id)?.balloon.open()}catch(_){}
+ const x=ev.find(z=>z.id===Number(no)),card=document.getElementById('map');
+ card?.scrollIntoView?.({behavior:'smooth',block:'center'});
+ if(!x){if(typeof setStatus==='function')setStatus('GPS-событие не найдено в текущем маршруте. Нажмите «Обновить».','bad');return false;}
+ if(!x.c){
+  if(typeof setStatus==='function')setStatus('У этого GPS-события нет достоверных координат. На карте точка не строится.','bad');
+  return false;
+ }
+ if(!map){
+  pendingFocus=Number(no);
+  const info=document.getElementById('mapStatus');
+  if(info){info.className='msg info';info.textContent='Готовлю карту и выделение GPS-события '+String(no)+'…'}
+  if(typeof key==='function'&&!key()&&typeof openKeyPanel==='function')openKeyPanel();
+  return false;
+ }
+ try{
+  const mark=marks.get(x.id);
+  map.setCenter(x.c,17,{duration:300});
+  if(mark)mark.balloon.open();
+  else{
+   map.geoObjects.add(new ymaps.Placemark(x.c,{hintContent:'Выбранная GPS-остановка',balloonContent:
+    '<b>'+esc(x.n)+'</b><br>GPS-стоянка не является доказательством посещения конкретной ТТ.'},
+    {preset:'islands#redCircleDotIcon'}));
+  }
+  const info=document.getElementById('mapStatus');
+  if(info){info.className='msg info';info.textContent='На карте выделено GPS-событие: '+x.n+
+   '. Близость к нескольким ТТ не подтверждает посещение конкретного клиента.'}
+  return true;
+ }catch(err){
+  if(typeof setStatus==='function')setStatus('Не удалось выделить остановку: '+String(err?.message||err),'bad');
+  return false;
+ }
 };
 
 const baseRender=render;
