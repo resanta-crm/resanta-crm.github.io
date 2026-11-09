@@ -30,6 +30,23 @@ jobs:
           if [ -f tools/triovist_21vek_search360.py ]; then python -m py_compile tools/triovist_21vek_search360.py; fi
           if [ -f tools/test_triovist_21vek_search360.py ]; then python -m unittest discover -s tools -p 'test_triovist_21vek_search360.py' -v; fi
           if [ -f assets/185-triovist-search360-v1.js ]; then node --check assets/185-triovist-search360-v1.js; fi
+      - name: Probe 21vek search UI links without bypass (one homepage)
+        run: |
+          python - <<'PY'
+          import requests,re
+          from bs4 import BeautifulSoup
+          try:
+              r=requests.get('https://www.21vek.by/',headers={'User-Agent':'Mozilla/5.0 (compatible; ResantaCRM-Search360/1.0)'},timeout=14)
+              print('homepage HTTP:',r.status_code,'bytes:',len(r.content))
+              if r.status_code==200:
+                  soup=BeautifulSoup(r.text,'html.parser')
+                  scripts=[s.get('src') for s in soup.select('script[src]') if s.get('src')]
+                  print('scripts:',len(scripts),'samples:',scripts[:10])
+                  refs=re.findall(r'[\\\"\\\']([^\\\"\\\']*(?:suggest|complete|search-composer)[^\\\"\\\']*)[\\\"\\\']',r.text,re.I)
+                  print('suggest/search references:',[x[:140] for x in refs[:12]])
+          except Exception as e:
+              print('Homepage probe unavailable:',type(e).__name__)
+          PY
       - name: Read-only 21vek public search metadata (one request)
         run: |
           python - <<'PY'
