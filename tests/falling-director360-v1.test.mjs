@@ -77,7 +77,7 @@ function fixture(role='boss'){
 function press(f,selector,attrs={}){
  const click=f.events.click;assert.equal(typeof click,'function');
  click({target:{closest(query){
-   return query==='button'?{hasAttribute:key=>Object.hasOwn(attrs,key),getAttribute:key=>attrs[key]}:null;
+   return query==='button'?{hasAttribute:key=>Object.hasOwn(attrs,key),getAttribute:key=>attrs[key],setAttribute(){},textContent:''}:null;
  }}});
 }
 test('isolated view loads after the established falling engine and task guards',()=>{
@@ -121,7 +121,7 @@ test('director dashboard renders exact KPI values and both years from known clie
  assert.match(html,/Без задачи возврата/);
  assert.match(html,/f360-swatch current/);
  assert.match(html,/>2026<\/span>/);
- assert.match(html,/Аналог прошлого года/);
+ assert.match(html,/>2025<\/span>/);
  assert.match(html,/Тестовый Клиент А/);
  assert.match(html,/Тестовый Клиент Б/);
  assert.match(html,/У 1 есть задачи другого типа/);
