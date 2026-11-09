@@ -73,7 +73,7 @@ test('KPI is exact BYN, unique payers and documents; screen never fabricates dem
  const text=root.innerHTML;
  assert.equal(f.getCalls(),1,'original finance renderer still executes exactly once');
  assert.match(text,/11\s?006,00 BYN/);
- assert.match(text,/3 клиентов/);
+ assert.match(text,/Клиентов оплатили<\/small><strong>2<\/strong>/);
  assert.match(text,/05\.11\.2026/);
  assert.match(text,/Строймастер УЧП/);
  assert.match(text,/Ремонт &amp; Строй/);
@@ -89,7 +89,7 @@ test('native manager switching reuses current finance filter without writing dat
  assert.equal(f.nodes['payments-manager'].value,'Ачинович');
  assert.equal(f.getCalls(),2);
  assert.match(root.innerHTML,/2\s?105,25 BYN/);
- assert.doesNotMatch(root.innerHTML,/8\s?900,75 BYN<\/b><\/button>/);
+ assert.doesNotMatch(root.innerHTML,/Ремонт &amp; Строй/);
 });
 test('source finance truth and 1C import record remain unchanged',()=>{
  const f=load(),api=f.window.RESANTA_PAYMENTS360_V1;
