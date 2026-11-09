@@ -1,4 +1,4 @@
-name: Triovist Search360 isolated tests
+name: Triovist Search360 isolated integration and regression
 on:
   pull_request:
     branches: [main]
@@ -6,160 +6,42 @@ on:
       - 'tools/triovist_21vek_search360.py'
       - 'tools/test_triovist_21vek_search360.py'
       - 'assets/185-triovist-search360-v1.js'
-      - 'supabase/migrations/*triovist_search360*'
+      - 'supabase/migrations/20261109_triovist_search360_isolated_v1.sql'
       - 'index.html'
       - '.github/workflows/triovist-search360-ci.yml'
+      - '.github/workflows/triovist-search360-worker.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  tests:
+  isolated-search360:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: python -m pip install requests beautifulsoup4
-      - name: Isolated parser and UI tests
+      - run: python -m pip install requests
+      - name: Check new parser and UI syntax
         run: |
-          if [ -f tools/triovist_21vek_search360.py ]; then python -m py_compile tools/triovist_21vek_search360.py; fi
-          if [ -f tools/test_triovist_21vek_search360.py ]; then python -m unittest discover -s tools -p 'test_triovist_21vek_search360.py' -v; fi
-          if [ -f assets/185-triovist-search360-v1.js ]; then node --check assets/185-triovist-search360-v1.js; fi
-      - name: Probe 21vek search UI links without bypass (one homepage)
+          python -m py_compile tools/triovist_21vek_search360.py
+          node --check assets/185-triovist-search360-v1.js
+          grep -q '185-triovist-search360-v1.js' index.html
+      - name: Test live response shape, first suggestion ordering and deep ranking with fixtures
+        run: python -m unittest discover -s tools -p 'test_triovist_21vek_search360.py' -v
+      - name: Regression for older Triovist/Cards screens
+        run: node --test tests/triovist-competitors-uni-listing.test.mjs tests/triovist-native-sections-v1.test.mjs tests/triovist-unix-director-v1.test.mjs
+      - name: Preserve existing production parsers and restrict migration scope
         run: |
-          python - <<'PY'
-          import requests,re
-          from bs4 import BeautifulSoup
-          try:
-              r=requests.get('https://www.21vek.by/',headers={'User-Agent':'Mozilla/5.0 (compatible; ResantaCRM-Search360/1.0)'},timeout=14)
-              print('homepage HTTP:',r.status_code,'bytes:',len(r.content))
-              if r.status_code==200:
-                  soup=BeautifulSoup(r.text,'html.parser')
-                  scripts=[s.get('src') for s in soup.select('script[src]') if s.get('src')]
-                  print('scripts:',len(scripts),'samples:',scripts[:10])
-                  refs=re.findall(r'[\\\"\\\']([^\\\"\\\']*(?:suggest|complete|search-composer)[^\\\"\\\']*)[\\\"\\\']',r.text,re.I)
-                  print('suggest/search references:',[x[:140] for x in refs[:12]])
-          except Exception as e:
-              print('Homepage probe unavailable:',type(e).__name__)
-          PY
-      - name: Find public autosuggest endpoint in 21vek frontend script references
-        run: |
-          python - <<'PY'
-          import requests,re,concurrent.futures
-          from bs4 import BeautifulSoup
-          try:
-              html=requests.get('https://www.21vek.by/',timeout=12).text
-              js=[x.get('src') for x in BeautifulSoup(html,'html.parser').select('script[src]')
-                  if (x.get('src') or '').startswith('https://cdn21vek.by/') and '.js' in x.get('src')]
-              print('JS scanned:',len(js))
-              def scan(url):
-                  try:
-                      z=requests.get(url,timeout=12)
-                      if not z.ok or len(z.content)>2500000:return []
-                      t=z.text
-                      found=[]
-                      for m in re.finditer(r'(?:search-composer|search-suggest|catalogSuggest|autoComplete|suggestions|autocomplete|suggest)',t,re.I):
-                          span=t[max(0,m.start()-90):min(len(t),m.end()+90)]
-                          if any(x in span for x in ('api/','https:','/suggest','/search')):
-                              found.append(span[:170])
-                          if len(found)>=6:break
-                      return [(url.rsplit('/',1)[-1],x) for x in found]
-                  except Exception:return []
-              with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-                  out=[x for pack in pool.map(scan,js) for x in pack]
-              for name,excerpt in out[:18]:print('JS_REF',name,repr(excerpt))
-          except Exception as e:print('bundle lookup inconclusive:',type(e).__name__)
-          PY
-      - name: Inspect public 21vek bundled search module metadata
-        run: |
-          python - <<'PY'
-          import requests,re
-          files=[
-           'https://cdn21vek.by/desktop/_next/static/chunks/pages/_app-b7127587465ead02.js',
-           'https://cdn21vek.by/desktop/_next/static/chunks/main-c11d326d01c88e96.js',
-           'https://cdn21vek.by/desktop/_next/static/chunks/1232-070dd0645b975b63.js',
-           'https://cdn21vek.by/desktop/_next/static/chunks/8104-6b385568c999fe9d.js',
-           'https://cdn21vek.by/desktop/_next/static/chunks/5369-e2ab34dbdad4386e.js'
-          ]
-          for url in files:
-              try:
-                  r=requests.get(url,timeout=12)
-                  print('JS_FILE',url.rsplit('/',1)[-1],r.status_code,len(r.content))
-                  if not r.ok or len(r.content)>5000000:continue
-                  t=r.text
-                  hits=[]
-                  for m in re.finditer('suggest|autocomplete|search-composer',t,re.I):
-                      snippet=t[max(0,m.start()-130):m.end()+130]
-                      if 'api/' in snippet or 'http' in snippet or 'fetch(' in snippet:
-                          hits.append(snippet[:230])
-                      if len(hits)>=4:break
-                  for h in hits:print('JS_META',repr(h))
-              except Exception as e:print('JS_FILE_ERROR',type(e).__name__)
-          PY
-      - name: Inspect verified 21vek search-suggest method and params
-        run: |
-          python - <<'PY'
-          import requests
-          url='https://cdn21vek.by/desktop/_next/static/chunks/pages/_app-b7127587465ead02.js'
-          try:
-              r=requests.get(url,timeout=16)
-              print('Search source status',r.status_code)
-              if r.ok:
-                  t=r.text
-                  for needle in ['this.getSearchSuggest=','getSearchSuggest(e','search-composer/api/v1/search']:
-                      i=t.find(needle)
-                      if i>=0: print('SUGGEST_METHOD',needle,repr(t[i:i+930]))
-          except Exception as e: print('Suggestion contract inspection unavailable',type(e).__name__)
-          PY
-      - name: Check real first-search suggestion response on public 21vek
-        run: |
-          python - <<'PY'
-          import requests
-          endpoint='https://gate.21vek.by/search-composer/api/v1/search/suggest'
-          try:
-              r=requests.get(endpoint,params={'query':'перфоратор','mode':'desktop'},
-                  headers={'User-Agent':'ResantaCRM-21vekSearch360/1.0 (+https://resanta-crm.by)',
-                           'Origin':'https://www.21vek.by','Referer':'https://www.21vek.by/',
-                           'Accept':'application/json'},timeout=14)
-              print('LIVE_SUGGEST_STATUS',r.status_code)
-              if r.ok:
-                  data=r.json()
-                  print('LIVE_SUGGEST_TYPE',type(data).__name__)
-                  if isinstance(data,dict):
-                      print('LIVE_SUGGEST_KEYS',list(data)[:15])
-                      for k,v in data.items():
-                          if isinstance(v,list):
-                              print('LIVE_SUGGEST_LIST',k,str(v[:2])[:850])
-                              for group in v[:12]:
-                                  if isinstance(group,dict):
-                                      items=group.get('items') or []
-                                      print('LIVE_SUGGEST_GROUP',group.get('group_type'),len(items),'item',str(items[:1])[:400])
-                          elif isinstance(v,dict):
-                              print('LIVE_SUGGEST_OBJECT',k,list(v)[:15])
-                  elif isinstance(data,list):print('LIVE_SUGGEST_ITEMS',str(data[:3])[:1100])
-          except Exception as e:
-              print('LIVE_SUGGEST_UNAVAILABLE',type(e).__name__)
-          PY
-      - name: Read-only 21vek public search metadata (one request)
-        run: |
-          python - <<'PY'
-          import requests
-          try:
-              h={'User-Agent':'ResantaCRM-21vekSearch360/1.0 (+https://resanta-crm.by)','Accept':'application/json','Origin':'https://www.21vek.by','Referer':'https://www.21vek.by/'}
-              q={'query':'перфоратор','order':'default','page':1,'limit':60,'mode':'desktop','searchId':'','filters':[]}
-              r=requests.post('https://gate.21vek.by/search-composer/api/v3/products',json=q,headers=h,timeout=14)
-              print('search HTTP status:',r.status_code)
-              if r.ok:
-                  d=r.json()
-                  print('search top-level keys:',sorted(d.keys())[:55])
-                  for k,v in d.items():
-                      if any(x in k.lower() for x in ('suggest','spell','correct','query','alternative','search')):
-                          print('potential suggestion field:',k,type(v).__name__,str(v)[:220])
-          except Exception as e:
-              print('Search endpoint inspect inconclusive:',type(e).__name__)
-          PY
+          git fetch origin main
+          git diff --name-only origin/main...HEAD > /tmp/search360-changed
+          cat /tmp/search360-changed
+          ! grep -E '^tools/(triovist_21vek_parser|triovist_21vek_top_shadow|triovist_21vek_shadow_sync|triovist_21vek_promote|triovist_21vek_market)[.]py$' /tmp/search360-changed
+          ! (grep '^supabase/migrations/' /tmp/search360-changed | grep -v '^supabase/migrations/20261109_triovist_search360_isolated_v1[.]sql$')
+          ! grep -E 'TRUNCATE|DELETE FROM public[.](triovist_21vek|triovist_content)|DROP TABLE public[.]triovist_' supabase/migrations/20261109_triovist_search360_isolated_v1.sql
