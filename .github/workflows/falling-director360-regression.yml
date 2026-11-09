@@ -1,0 +1,25 @@
+name: Falling Recovery 360 regression
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'assets/189-falling-director360-v1.js'
+      - 'tests/falling-director360-v1.test.mjs'
+      - '.github/workflows/falling-director360-regression.yml'
+  push:
+    branches:
+      - 'feature/falling-director360-20261109'
+jobs:
+  recovery360:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate isolated view syntax
+        run: node --check assets/189-falling-director360-v1.js
+      - name: Run director, 1C and recovery workflow tests
+        run: node --test tests/falling-director360-v1.test.mjs
