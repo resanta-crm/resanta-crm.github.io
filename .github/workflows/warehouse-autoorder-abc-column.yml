@@ -1,0 +1,25 @@
+name: Warehouse autoorder ABC category
+on:
+  pull_request:
+    paths:
+      - 'assets/51-warehouse-compact-days-v23637.js'
+      - 'assets/66-performance-root-v23657.js'
+      - 'index.html'
+      - 'docs/warehouse_autoorder_abc_classes_v1.sql'
+      - 'tests/warehouse-autoorder-abc-column.test.mjs'
+      - '.github/workflows/warehouse-autoorder-abc-column.yml'
+  push:
+    branches: ['feature/warehouse-autoorder-abc-column-20261109']
+jobs:
+  abc-category:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/51-warehouse-compact-days-v23637.js
+      - run: node --check assets/66-performance-root-v23657.js
+      - run: node --test tests/warehouse-autoorder-abc-column.test.mjs
