@@ -7,6 +7,29 @@ const html=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/
 const percent=n=>(Number(n)||0).toFixed(1).replace('.',',')+'%';
 const colors={A:'#16a34a',B:'#eab308',C:'#94a3b8',N:'#3b82f6'};
 let opened=false,seq=0,searchTimer=null,filterTimer=null;
+// The core rebuild helper sorts every price/stock timestamp on every SKU
+// lookup. Memoize its *check*, not the SKU resolution, within an unchanged
+// catalogue generation; invalidate on reference/length/signature changes.
+function installCatalogGenerationGuard(){
+ const original=window.abcBuildCatalogSkuMap;
+ if(typeof original!=='function'||original.__abc360GenerationGuard)return;
+ let price=null,stock=null,priceLen=-1,stockLen=-1,lastSig='',lastCheck=0;
+ const wrapper=function(){
+  const p=typeof allPrice!=='undefined'?(allPrice||[]):[];
+  const w=typeof allStock!=='undefined'?(allStock||[]):[];
+  const sig=typeof _abcCatalogSkuSig!=='undefined'?_abcCatalogSkuSig:'';
+  const stable=price===p&&stock===w&&priceLen===p.length&&stockLen===w.length&&
+    lastSig===sig&&!!sig&&Date.now()-lastCheck<30000;
+  if(stable)return;
+  const result=original.apply(this,arguments);
+  price=p;stock=w;priceLen=p.length;stockLen=w.length;
+  lastSig=typeof _abcCatalogSkuSig!=='undefined'?_abcCatalogSkuSig:'';
+  lastCheck=Date.now();
+  return result;
+ };
+ wrapper.__abc360GenerationGuard=true;
+ window.abcBuildCatalogSkuMap=wrapper;
+}
 const styles=[
 '#page-abc.abc360-on #abc-kpi{display:none}',
 '#page-abc.abc360-on:not(.abc360-open) #abc-results{display:none}',
@@ -143,10 +166,12 @@ async function refresh(force){
  const page=el('page-abc'),n=++seq;
  if(!page?.classList.contains('active')||typeof window.crmFastAnalyticsEnsure!=='function')return;
  try{
-  await window.crmFastAnalyticsEnsure('abc',!!force);
-  if(n===seq&&page.classList.contains('active')&&typeof renderABC==='function')renderABC();
+  const loaded=await window.crmFastAnalyticsEnsure('abc',!!force);
+  if(n===seq&&page.classList.contains('active')&&loaded!==false&&typeof renderABC==='function')renderABC();
+  if(n===seq)el('abc360-root')?.removeAttribute('aria-busy');
  }catch(e){
   if(n!==seq)return;
+  el('abc360-root')?.removeAttribute('aria-busy');
   const target=el('abc-quality');if(target)target.innerHTML='<div class="abc360-warn">Не удалось обновить ABC: '+html(e?.message||e)+'. Действующие данные не изменены.</div>';
  }
 }
@@ -182,19 +207,42 @@ function syncFromLegacy(){
  }catch(err){console.warn('ABC360: legacy section retained after visual error',err);}
 }
 function bind(){
+ installCatalogGenerationGuard();
  mount();
  const results=el('abc-results');
  if(results&&typeof MutationObserver!=='undefined'){
+  // The legacy engine only rebuilds direct children after ABC is calculated.
+  // Do not observe subtree mutations: our own R labels must not recurse.
   const observer=new MutationObserver(()=>syncFromLegacy());
   observer.observe(results,{childList:true});
  }
  document.addEventListener('change',function(e){
-  if(!el('page-abc')?.contains(e.target)||!['abc-period','abc-scope','abc-manager','abc-client-search'].includes(e.target.id))return;
-  clearTimeout(filterTimer);filterTimer=setTimeout(()=>refresh(false),65);
- });
+  if(!el('page-abc')?.contains(e.target))return;
+  const id=e.target.id;
+  if(['abc-period','abc-scope','abc-manager'].includes(id)){
+   // Run one server load per data-scope change, before legacy inline onchange
+   // paints stale rows from the previous manager or period.
+   e.stopPropagation();
+   if(id==='abc-scope'&&typeof abcScopeChanged==='function')abcScopeChanged(false);
+   if(id==='abc-manager'){
+    const target=el('abc-client-id'),search=el('abc-client-search');
+    if(target)target.value='';if(search)search.value='';
+    if(typeof abcRefreshClientDatalist==='function')abcRefreshClientDatalist();
+   }
+   clearTimeout(filterTimer);
+   const result=el('abc360-root');
+   if(result)result.setAttribute('aria-busy','true');
+   filterTimer=setTimeout(()=>refresh(false),110);
+   return;
+  }
+  if(id==='abc-client-search'){
+   clearTimeout(filterTimer);
+   filterTimer=setTimeout(()=>refresh(false),130);
+  }
+ },true);
 }
 window.abc360DebouncedSearch=function(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>{opened=true;openState();if(typeof renderABC==='function')renderABC();},150);};
 window.RESANTA_ABC360={render,refresh};
-window.RESANTA_ABC360_V1=Object.freeze({version:'20261109.2',readOnly:true,source:'existing ABC + 1C'});
+window.RESANTA_ABC360_V1=Object.freeze({version:'20261109.3',readOnly:true,source:'existing ABC + 1C'});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();

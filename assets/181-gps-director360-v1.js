@@ -2,10 +2,10 @@
 (function(w,d){
 'use strict';
 if(w.RESANTA_GPS_DIRECTOR360_V1)return;
-const VERSION='2026.11.09-gps360-decisions-v3',ID='gps360-director-v1',CSS='gps360-director-style-v1';
+const VERSION='2026.11.09-gps360-filter-speed-v4',ID='gps360-director-v1',CSS='gps360-director-style-v1';
 const MANAGERS=['Ачинович','Руднев','Шкуран'];
 const COLORS={'Ачинович':'#1768dd','Руднев':'#945af5','Шкуран':'#13936c'};
-let filters=null,data=null,busy=false,metric='reports',detailMode='closed',detailManager='all',visitScope='new',stopScope='open',caseStates={},editingStop='',notice='',lastKey='';
+let filters=null,data=null,busy=false,metric='reports',detailMode='closed',detailManager='all',visitScope='new',stopScope='open',caseStates={},editingStop='',notice='',lastKey='',reloadPending=false,refreshTimer=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>(Number(v)||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
 const n=v=>Number(v)||0;
@@ -267,8 +267,9 @@ function render(){
  el.innerHTML=html;return true;
 }
 async function load(force=false){
- if(!allowed()||!mount()||!isActive()||busy)return false;
- const f=filters,key=f.from+'|'+f.to+'|'+f.manager;
+ if(!allowed()||!mount()||!isActive())return false;
+ if(busy){reloadPending=true;return false;}
+ const f={...filters},key=f.from+'|'+f.to+'|'+f.manager;
  if(!force&&data&&lastKey===key){render();return true}
  const from=new Date(f.from+'T12:00:00Z'),to=new Date(f.to+'T12:00:00Z');
  if(!/^\d{4}-\d{2}-\d{2}$/.test(f.from)||!/^\d{4}-\d{2}-\d{2}$/.test(f.to)||
@@ -287,9 +288,16 @@ async function load(force=false){
   caseStates=decision.data?.states||{};
   if(r.data?.version!=='gps-director360-evidence-v2'||r.data?.period?.from!==f.from||
     r.data?.period?.to!==f.to)throw Error('Данные GPS не прошли контроль источника и периода');
+  if(key!==filters.from+'|'+filters.to+'|'+filters.manager){reloadPending=true;return false;}
   data=r.data;lastKey=key;return true;
  }catch(e){notice='GPS 360° временно недоступен: '+String(e?.message||e)+'. Маршруты доступны в соседней вкладке.';return false}
- finally{busy=false;render()}
+ finally{
+  busy=false;render();
+  if(reloadPending&&isActive()){
+   reloadPending=false;
+   clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>load(false),60);
+  }
+ }
 }
 function open(force=false){if(!allowed()||!mount()||!isActive())return false;return load(force)}
 function showDetails(mode,manager){
@@ -333,7 +341,7 @@ async function saveStop(id){
 d.addEventListener('click',e=>{
  if(!allowed()||!e.target.closest?.('#'+ID))return;
  const t=e.target;
- if(t.closest('[data-g360-load]')){load(true);return}
+ if(t.closest('[data-g360-load]')){clearTimeout(refreshTimer);load(true);return}
  if(t.closest('[data-g360-export]')){sync();w.RESANTA_GPS_DIRECTOR_REPORT_V236427?.downloadExcel?.();return}
  const mt=t.closest('[data-g360-metric]');if(mt){metric=mt.dataset.g360Metric;render();return}
  const man=t.closest('[data-g360-manager]');if(man){showDetails('visits',man.dataset.g360Manager);return}
@@ -354,7 +362,17 @@ d.addEventListener('click',e=>{
  const lg=t.closest('[data-g360-legacy]');if(lg){legacy(lg.dataset.g360Legacy);return}
  if(t.closest('[data-g360-top]'))root()?.querySelector('#g360-summary')?.scrollIntoView?.({behavior:'smooth',block:'start'});
 },true);
-d.addEventListener('change',e=>{const t=e.target.closest?.('[data-g360-filter]');if(t&&filters)filters[t.dataset.g360Filter]=t.value},true);
+d.addEventListener('change',e=>{
+ const t=e.target.closest?.('[data-g360-filter]');
+ if(!t||!filters||!allowed())return;
+ const field=t.dataset.g360Filter;
+ if(!['from','to','manager'].includes(field))return;
+ filters[field]=t.value;
+ // Filter changes immediately recalculate, instead of only changing a select's label.
+ clearTimeout(refreshTimer);
+ if(busy){reloadPending=true;return;}
+ refreshTimer=setTimeout(()=>{if(isActive())load(false)},160);
+},true);
 function install(){if(!allowed())return;mount();if(isActive())open(false)}
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 d.addEventListener('click',e=>{if(e.target.closest?.('#gps-tab-director-v236427,#bn-gps-control'))setTimeout(install,170)},true);

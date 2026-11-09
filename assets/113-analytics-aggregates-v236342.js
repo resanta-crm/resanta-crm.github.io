@@ -5,10 +5,10 @@
 (function(){
 'use strict';
 if(window.RESANTA_ANALYTICS_AGGREGATES_V236342)return;
-const V='v23.6.342-abc360-20261109-fix2', TTL=90000;
+const V='v23.6.342-abc360-20261109-speed3', TTL=90000, ABC_TTL=300000;
 const baseEnsure=window.v22722EnsureHistory;
-const cache=new Map(),pending=new Map();
-let abcRequestVersion=0;
+const cache=new Map(),pending=new Map(),abcCompiled=new Map();
+let abcRequestVersion=0,lastAbcKey='',lastAbcRows=null;
 
 function active(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}catch(_){return''}}
 function keyName(v){try{return typeof canonicalSalesClientName==='function'?canonicalSalesClientName(v):String(v||'').toLowerCase().replace(/[^a-zа-я0-9]+/gi,'')}catch(_){return String(v||'').toLowerCase()}}
@@ -31,7 +31,7 @@ function setRows(rows,label){
 }
 async function cached(k,loader,force=false){
   const hit=cache.get(k);
-  if(!force&&hit&&Date.now()-hit.at<TTL)return hit.data;
+  if(!force&&hit&&Date.now()-hit.at<(k.startsWith('abc|')?ABC_TTL:TTL))return hit.data;
   // Deduplicate overlapping filter/refresh requests to avoid a Postgres RPC storm.
   if(pending.has(k))return pending.get(k);
   const run=Promise.resolve().then(loader).then(data=>{
@@ -64,10 +64,21 @@ function abcSynthetic(data,p){
   return out;
 }
 async function prepareAbc(force=false){
-  const requestId=++abcRequestVersion;
-  const p=abcParams();
-  if(p.scope==='client'&&!p.clientId)return setRows([],'ABC no client');
-  const k='abc|'+[p.scope,p.manager,p.clientId||'',p.cur.join(','),p.prev.join(',')].join('|');
+  const requestId=++abcRequestVersion,p=abcParams();
+  const viewer=String(currentProfile?.id||currentProfile?.email||currentProfile?.name||'');
+  let importStamp='';
+  try{importStamp=String(crmImportStatus('sales')?.last_success_at||'')}catch(_){}
+  // A manager selection must not invalidate the branch-wide cache.
+  const managerKey=p.scope==='branch'?'all':p.manager;
+  const k='abc|'+[viewer,importStamp,p.scope,managerKey,p.clientId||'',p.cur.join(','),p.prev.join(',')].join('|');
+  if(p.scope==='client'&&!p.clientId){
+    if(lastAbcKey!=='abc:empty'||allPurchaseHistory!==lastAbcRows){
+      lastAbcRows=[];lastAbcKey='abc:empty';setRows(lastAbcRows,'ABC no client');
+    }
+    return true;
+  }
+  // Reopening ABC or changing group/class/search never needs to rebuild history.
+  if(!force&&k===lastAbcKey&&allPurchaseHistory===lastAbcRows)return true;
   const data=await cached(k,async()=>{
     const {data,error}=await db.rpc('crm_abc_slice_v20261109',{
       p_scope:p.scope,
@@ -78,9 +89,15 @@ async function prepareAbc(force=false){
     });
     if(error)throw error;return data||{};
   },force);
-  // Never paint a slow response for a filter the director has already changed.
-  if(requestId!==abcRequestVersion)return false;
-  setRows(abcSynthetic(data,p),'ABC aggregate');
+  if(requestId!==abcRequestVersion||active()!=='abc')return false;
+  const prior=abcCompiled.get(k);
+  const rows=!force&&prior&&prior.data===data?prior.rows:abcSynthetic(data,p);
+  if(!prior||prior.data!==data){
+    abcCompiled.delete(k);abcCompiled.set(k,{data,rows});
+    while(abcCompiled.size>8)abcCompiled.delete(abcCompiled.keys().next().value);
+  }
+  lastAbcKey=k;lastAbcRows=rows;
+  if(allPurchaseHistory!==rows)setRows(rows,'ABC aggregate');
   return true;
 }
 function fallingPeriod(){
@@ -142,6 +159,6 @@ window.v22722EnsureHistory=async function(options={}){
   if(typeof baseEnsure==='function')return baseEnsure(options);
   return allPurchaseHistory||[];
 };
-window.crmFastAnalyticsInvalidateV236342=function(){cache.clear();abcRequestVersion++;};
+window.crmFastAnalyticsInvalidateV236342=function(){cache.clear();pending.clear();abcCompiled.clear();lastAbcKey='';lastAbcRows=null;abcRequestVersion++;};
 window.RESANTA_ANALYTICS_AGGREGATES_V236342=Object.freeze({version:V,abcServerAggregate:true,fallingServerAggregate:true,noFullHistoryOnAbc:true,noFullHistoryOnFalling:true,cacheTtlMs:TTL});
 })();
