@@ -8,7 +8,7 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path TO 'public','auth','pg_catalog'
 AS $function$
 DECLARE
- a record;
+ v_actor record;
  v_market numeric;
  v_ours numeric;
  v_owner text;
@@ -20,8 +20,8 @@ DECLARE
  v_price_at timestamptz;
  v_price_id uuid;
 BEGIN
- SELECT * INTO a FROM public.triovist_content_actor();
- IF a.actor_email IS NULL THEN RAISE EXCEPTION 'Нет авторизации'; END IF;
+ SELECT * INTO v_actor FROM public.triovist_content_actor();
+ IF v_actor.actor_email IS NULL THEN RAISE EXCEPTION 'Нет авторизации'; END IF;
 
  SELECT c.market_usd,c.source_notes,x.manager_email
  INTO v_market,v_notes,v_owner
@@ -29,11 +29,11 @@ BEGIN
  LEFT JOIN public.triovist_share_assignments_v1 x ON x.category=c.category
  WHERE c.period_end='2026-09-30' AND c.category=p_category;
  IF NOT FOUND THEN RAISE EXCEPTION 'Категория не найдена'; END IF;
- IF a.actor_role='boss' AND a.actor_email IN ('payushin_ar@resanta.ru','sidarovich_kn@resanta.ru') THEN
+ IF v_actor.actor_role='boss' AND v_actor.actor_email IN ('payushin_ar@resanta.ru','sidarovich_kn@resanta.ru') THEN
    NULL;
- ELSIF a.actor_scope='triovist'
-  AND a.actor_email IN ('aleksandrenko_av@resanta.ru','krishtal_na@resanta.ru')
-  AND a.actor_email=lower(coalesce(v_owner,'')) THEN
+ ELSIF v_actor.actor_scope='triovist'
+  AND v_actor.actor_email IN ('aleksandrenko_av@resanta.ru','krishtal_na@resanta.ru')
+  AND v_actor.actor_email=lower(coalesce(v_owner,'')) THEN
    NULL;
  ELSE RAISE EXCEPTION 'Нет доступа к этой категории'; END IF;
 
