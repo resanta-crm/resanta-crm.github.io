@@ -15,7 +15,7 @@ test('existing modules parse without source syntax errors',()=>{
 test('subgroup task output displays live 1C shipment fact, source and independent listing check',()=>{
  assert.match(task,/triovist_decisions360_task_facts_v1/);
  assert.match(task,/live\.fact_by_task/);
- assert.match(task,/live\.matched_lines/);
+ assert.match(task,/live\?\.matched_lines/);
  assert.match(task,/fact_status/);
  assert.match(task,/факты нескольких задач не суммировать|Факты нескольких задач не суммировать|Факты нескольких задач не суммировать|Факты нескольких задач не суммировать/i);
  assert.match(task,/листинг требует проверки/);
