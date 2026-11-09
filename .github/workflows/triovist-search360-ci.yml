@@ -135,6 +135,10 @@ jobs:
                       for k,v in data.items():
                           if isinstance(v,list):
                               print('LIVE_SUGGEST_LIST',k,str(v[:2])[:850])
+                              for group in v[:12]:
+                                  if isinstance(group,dict):
+                                      items=group.get('items') or []
+                                      print('LIVE_SUGGEST_GROUP',group.get('group_type'),len(items),'item',str(items[:1])[:400])
                           elif isinstance(v,dict):
                               print('LIVE_SUGGEST_OBJECT',k,list(v)[:15])
                   elif isinstance(data,list):print('LIVE_SUGGEST_ITEMS',str(data[:3])[:1100])
