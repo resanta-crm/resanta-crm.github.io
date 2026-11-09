@@ -1,0 +1,45 @@
+name: Vitebsk 360 stock and TSD isolated regressions
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/36-warehouse-control-v23620.js'
+      - 'assets/51-warehouse-compact-days-v23637.js'
+      - 'assets/195-warehouse-vitebsk360-v1.js'
+      - 'inventory.html'
+      - 'tsd.html'
+      - 'tests/warehouse-vitebsk360-v1.test.mjs'
+      - 'tests/inventory-tsd-auth-recovery.test.mjs'
+      - 'supabase/migrations/20261109_warehouse_vitebsk360_*.sql'
+      - 'index.html'
+      - '.github/workflows/warehouse-vitebsk360-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse new and old warehouse scripts
+        run: |
+          node --check assets/195-warehouse-vitebsk360-v1.js
+          node --check assets/36-warehouse-control-v23620.js
+          node --check assets/51-warehouse-compact-days-v23637.js
+      - name: Director warehouse, scanner and existing login recovery regression
+        run: |
+          node --test tests/warehouse-vitebsk360-v1.test.mjs tests/inventory-tsd-auth-recovery.test.mjs tests/crm-release-guard-v1.test.mjs tests/crm-view-resume-v1.test.mjs
+      - name: No mutation to existing inventory, historic scans, original parsers or branch stock
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main...HEAD > /tmp/vb360-changed
+          cat /tmp/vb360-changed
+          ! (grep '^supabase/migrations/' /tmp/vb360-changed | grep -v -E '^supabase/migrations/20261109_warehouse_vitebsk360_(truth|order_approval|approved_document)_v1[.]sql$')
+          ! grep -E '^tools/triovist_21vek.*[.]py$' /tmp/vb360-changed
+          ! grep -E -i '(TRUNCATE|DELETE FROM public[.](stock_balances|warehouse_inventory_events)|UPDATE public[.](stock_balances|warehouse_inventory_sessions))' supabase/migrations/20261109_warehouse_vitebsk360_*.sql
