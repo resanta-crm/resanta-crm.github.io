@@ -127,6 +127,7 @@ function makeCard(label,value,subtitle,tone,filterMode){
 function trendChart(items){
  if(!items.length)return'<p class="f360-muted">Помесячная история не загружена.</p>';
  const max=Math.max(1,...items.flatMap(x=>[Math.max(x.now,0),Math.max(x.prev,0)]));
+ const year=items[0].month.slice(0,4),previousYear=String(Number(year)-1);
  const currentMonth=(typeof TODAY!=='undefined'?String(TODAY).slice(0,7):new Date().toISOString().slice(0,7));
  return '<div class="f360-bars" role="img" aria-label="Продажи клиентов в динамике: текущий и аналогичный год">'+items.map(x=>{
   const unfinished=x.month>=currentMonth;
@@ -137,7 +138,7 @@ function trendChart(items){
   return '<div class="f360-chartrow"><span class="f360-month">'+esc(monthName(x.month))+(unfinished?'*':'')+'</span>'+
    '<div class="f360-duobars"><div class="f360-bar previous" style="width:'+prevPct.toFixed(1)+'%"></div><div class="f360-bar current" style="width:'+currPct.toFixed(1)+'%"></div></div>'+
    '<div class="f360-chartvalue">'+(empty?'нет данных':esc(short(x.now))+' / '+esc(short(x.prev)))+(!empty&&unfinished?'<small>неполный</small>':'')+'</div></div>';
- }).join('')+'</div><div class="f360-legend"><span><i class="f360-swatch current"></i>2026 / выбранный год</span><span><i class="f360-swatch previous"></i>Аналог прошлого года</span></div>';
+ }).join('')+'</div><div class="f360-legend"><span><i class="f360-swatch current"></i>'+esc(year)+'</span><span><i class="f360-swatch previous"></i>'+esc(previousYear)+'</span></div>';
 }
 function managerBars(groups){
  if(!groups.length)return'<p class="f360-muted">Нет менеджеров в выбранной выборке.</p>';
