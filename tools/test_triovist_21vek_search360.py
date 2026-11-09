@@ -22,8 +22,18 @@ class Search360Tests(unittest.TestCase):
 
     def test_no_unverified_suggestion_invented(self):
         with patch.dict(os.environ,{"SEARCH360_SUGGEST_URL":""}):
-            self.assertEqual(s.resolve_search_phrase(None,"  насос  дренажный "),
-                             ("насос дренажный","suggestion_unavailable",None,None))
+            found=s.resolve_search_phrase(None,"  насос  дренажный ",
+                         fetch=lambda _url,_phrase:{'data':[]})
+        self.assertEqual(found[0],"насос дренажный")
+        self.assertEqual(found[1],"suggestion_missing")
+        self.assertIsNone(found[2])
+        self.assertIn("21vek.by",found[3])
+
+    def test_21vek_group_order_skips_categories(self):
+        payload={'data':[{'group_type':'popular_categories','items':[{'title':'Перфораторы','url':'/category'}]},
+                         {'group_type':'popular_requests','items':[{'text':'перфораторы бош'},
+                                                                  {'text':'перфораторы макита'}]}]}
+        self.assertEqual(s.parse_first_text_suggestion(payload),('перфораторы бош','data.popular_requests'))
 
     def test_unsafe_suggestion_endpoint_rejected(self):
         with patch.dict(os.environ,{"SEARCH360_SUGGEST_URL":"https://untrusted.test/redirect"}):
