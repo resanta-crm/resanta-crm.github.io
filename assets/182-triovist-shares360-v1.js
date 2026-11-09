@@ -83,7 +83,7 @@ function tiles(rows){
  const bits=[["Оборот категорий 21vek",compact(market),"9 месяцев · без НДС"],
  ["Наши продажи брендов",compact(ours),S.brand==="all"?"Ресанта · Huter · Вихрь · Eurolux":"Фильтр по выбранному бренду"],
  ["Наша доля",pct(share),"Базовая доля за 9 месяцев"],
- ["Потенциал +1 п. п.",compact(market/100),"Дополнительные продажи 21vek при том же объёме"],
+ ["Модель +1 п. п. (9 мес.)",compact(market/100),"Дополнительный исторический оборот при неизменном рынке; не прибыль, не факт Q4"],
  ["Цель квартала",g?("+"+pp(g.target_pp)):"Не утверждена",g?"Только после согласования":"Не показываем вымышленный план"]];
  return '<div class="sh-kpis">'+bits.map(x=>'<div class="sh-kpi"><b>'+E(x[0])+'</b><strong>'+E(x[1])+'</strong><small>'+E(x[2])+'</small></div>').join("")+'</div>';
 }
@@ -231,18 +231,18 @@ function categoryDetail(rows){
  const answer=S.answers.find(a=>a.task_id===chosen?.id);
  return '<div class="sh-row"><h3 style="margin:0">▣ '+E(c.category)+'</h3><button class="sh-button" data-action="back">← Все категории</button></div>'+
  '<div class="sh-kpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px">'+
- [["Оборот 21vek",compact(c.market)],["Наши бренды",compact(c.allOwn)],["Наша доля",pct(c.market?100*c.allOwn/c.market:0)],["+1 п. п.",compact(c.market/100)]].map(x=>'<div class="sh-kpi"><b>'+E(x[0])+'</b><strong>'+E(x[1])+'</strong></div>').join("")+'</div>'+
+ [["Оборот 21vek · 9 мес.",compact(c.market)],["Наши бренды · 9 мес.",compact(c.allOwn)],["Базовая доля · 9 мес.",pct(c.market?100*c.allOwn/c.market:0)],["Модель +1 п. п. · 9 мес.",compact(c.market/100)]].map(x=>'<div class="sh-kpi"><b>'+E(x[0])+'</b><strong>'+E(x[1])+'</strong></div>').join("")+'</div>'+
  '<div class="sh-detail"><div class="sh-panel"><h3>Бренды и конкуренты · Данные 9 мес. 2026</h3><div class="sh-muted">Показаны только бренды из Excel. Их сумма может быть меньше всего рынка категории.</div>'+
  c.brands.slice().sort((a,b)=>N(b.revenue_usd)-N(a.revenue_usd)).map(b=>'<div class="sh-bar" style="grid-template-columns:125px minmax(50px,1fr) 90px;cursor:default"><b>'+E(b.brand)+'</b><span class="sh-track"><i style="width:'+(100*N(b.revenue_usd)/max).toFixed(1)+'%"></i></span><b>'+E(compact(b.revenue_usd))+'</b></div>').join("")+
  '<div class="sh-note"><b>Ответственный:</b> '+E(ownerName(assigned))+'<br><span class="sh-muted">'+E(c.assignment.note||"")+'</span></div>'+
  (boss()?'<div class="sh-field"><label>Закрепить категорию за менеджером</label><select id="sh-owner"><option value="">Не закреплена</option><option value="'+ALEKS+'" '+(assigned===ALEKS?"selected":"")+'>Александренко</option><option value="'+KRIS+'" '+(assigned===KRIS?"selected":"")+'>Кришталь</option></select></div><button class="sh-button" data-action="save-owner">Сохранить закрепление</button>'+
  '<div class="sh-field"><label>Цель роста Q4 2026 (процентные пункты)</label><input type="number" id="sh-goal" min="0" max="100" step="0.25" value="'+(goal?E(goal.target_pp):"")+'" placeholder="Не утверждена"></div><button class="sh-button" data-action="save-goal">Утвердить квартальную цель</button>':'<div class="sh-note"><b>Цель Q4:</b> '+(goal?"+"+E(pp(goal.target_pp)):"Не утверждена")+'</div>')+'</div>'+
- '<div><div class="sh-panel"><h3>Задачи по доле</h3>'+task.map(x=>detailTask(x)).join("")+(task.length?"":'<div class="sh-empty">Исследование ещё не поставлено. Новые задачи формируются автоматически по рабочим дням.</div>')+'</div><div style="margin-top:11px">'+managerForm(chosen,answer)+'</div></div></div>';
+ '<div><div class="sh-panel"><h3>Задачи по доле</h3>'+task.map(x=>detailTask(x)).join("")+(task.length?"":'<div class="sh-empty">Исследование ещё не поставлено. Новые задачи формируются автоматически по рабочим дням.</div>')+'</div><div style="margin-top:11px">'+evidenceHtml(c.category)+managerForm(chosen,answer)+'</div></div></div>';
 }
 function tasksView(){
  const rows=currentRows();const count=S.tasks.filter(x=>!["done","cancelled"].includes(x.status)).length;
  let html='<div class="sh-row"><h3>Задачи по долям · Контроль исследований</h3><span class="sh-pill">Активных: '+count+'</span></div><div class="sh-detail"><div class="sh-panel"><h3>Очередь исследований</h3>'+
- S.tasks.map(t=>detailTask(t)).join("")+(S.tasks.length?"":'<div class="sh-empty">Новых задач пока нет.</div>')+'</div><div>'+managerForm(selectedTask(),S.answers.find(a=>a.task_id===S.taskId))+'</div></div>';
+ S.tasks.map(t=>detailTask(t)).join("")+(S.tasks.length?"":'<div class="sh-empty">Новых задач пока нет.</div>')+'</div><div>'+evidenceHtml(selectedTask()?.category)+managerForm(selectedTask(),S.answers.find(a=>a.task_id===S.taskId))+'</div></div>';
  return html;
 }
 function render(){
@@ -313,23 +313,24 @@ async function saveGoal(){
 function events(r){
  r.addEventListener("click",e=>{
   const b=e.target.closest("[data-view],[data-cat],[data-task],[data-action]");if(!b||!r.contains(b))return;
-  if(b.dataset.view){S.view=b.dataset.view;S.selected="";S.taskId=S.tasks[0]?.id||"";render();return}
-  if(b.dataset.cat){S.selected=b.dataset.cat;S.view="shares";S.taskId=S.tasks.find(t=>t.category===S.selected)?.id||"";render();return}
-  if(b.dataset.task){S.taskId=b.dataset.task;S.view="tasks";render();return}
+  if(b.dataset.view){S.view=b.dataset.view;S.selected="";S.taskId=S.tasks[0]?.id||"";render();if(S.view==="tasks")void loadEvidence(selectedTask()?.category);return}
+  if(b.dataset.cat){S.selected=b.dataset.cat;S.view="shares";S.taskId=S.tasks.find(t=>t.category===S.selected)?.id||"";render();void loadEvidence(S.selected);return}
+  if(b.dataset.task){S.taskId=b.dataset.task;S.view="tasks";render();void loadEvidence(selectedTask()?.category);return}
   const a=b.dataset.action;
   if(a==="back"){S.selected="";S.view="shares";render();return}
   if(a==="reload"){void load();return}
   const work={ "save-answer":saveAnswer,"save-status":writeTaskStatus,"save-owner":saveOwner,"save-goal":saveGoal}[a];
   if(work){b.disabled=true;Promise.resolve().then(work).catch(err=>{message("Не удалось сохранить: "+String(err?.message||err));console.warn("Shares360 write",err)}).finally(()=>{if(b.isConnected)b.disabled=false})}
  });
- r.addEventListener("change",e=>{const el=e.target;if(!el.dataset.filter)return;S[el.dataset.filter]=el.value;if(el.dataset.filter==="selected")S.view="shares";render()});
+ r.addEventListener("change",e=>{const el=e.target;if(!el.dataset.filter)return;S[el.dataset.filter]=el.value;if(el.dataset.filter==="selected")S.view="shares";render();if(S.selected)void loadEvidence(S.selected)});
 }
 async function open(host,ctx){
  if(!host||!ctx||(ctx.is_leader!==true&&ctx.is_manager!==true))return false;
  S.host=host;S.ctx=ctx;css();let r=node();
  if(!r){r=document.createElement("div");r.id=ID;host.replaceChildren(r);events(r)}
  if(!S.last||Date.now()-S.last>90000)await load();else render();
+ if(S.selected)void loadEvidence(S.selected);else if(S.view==="tasks")void loadEvidence(selectedTask()?.category);
  return true;
 }
-w.RESANTA_TRIOVIST_SHARES360_V1={version:"2026.11.06.1",open,refresh:load};
+w.RESANTA_TRIOVIST_SHARES360_V1={version:"2026.11.09.1-decisions360",open,refresh:load};
 })(window);
