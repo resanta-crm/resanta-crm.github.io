@@ -128,8 +128,44 @@ async function refresh(force){
   const target=el('abc-quality');if(target)target.innerHTML='<div class="abc360-warn">Не удалось обновить ABC: '+html(e?.message||e)+'. Действующие данные не изменены.</div>';
  }
 }
+// Observe only the legacy ABC result container: the shared CRM engine stays unchanged.
+function syncFromLegacy(){
+ const page=el('page-abc');
+ if(!page||!page.classList.contains('active'))return;
+ try{
+  const mode=el('abc-period')?.value||'90',group=el('abc-group')?.value||'all';
+  const scope=el('abc-scope')?.value||'branch';
+  let manager=el('abc-manager')?.value||'all';
+  if(typeof currentProfile!=='undefined'&&currentProfile?.role!=='boss')manager=currentProfile?.name||'';
+  const clientId=el('abc-client-id')?.value||'';
+  if(scope==='client'&&!clientId){
+   render({groups:[],items:[],net:0,mode,group,scope,manager,clientId});
+   return;
+  }
+  const rows=abcRowsFor(scope,manager,clientId,abcPeriodMonths(mode,0),group);
+  const groups=abcAggregate(rows),items=groups.flatMap(g=>g.items);
+  const net=groups.reduce((total,g)=>total+Number(g.netTotal||0),0);
+  render({groups,items,net,mode,group,scope,manager,clientId});
+  // Explain R inside the original expandable groups without changing the CRM core.
+  const cards=[...el('abc-results').querySelectorAll('.abc-group-card')];
+  groups.forEach((g,i)=>{
+   const node=cards[i]?.querySelector('.abc-head > div:last-child');
+   if(node&&g.counts.R&&!node.querySelector('[data-abc360-r]')){
+    node.insertAdjacentHTML('beforeend','<span class="abc-badge abc-R" data-abc360-r="1" title="Нетто-возвраты и оборот ≤ 0">R</span><span style="font-size:12px;padding-top:4px">'+fmt(g.counts.R)+'</span>');
+   }
+  });
+  el('abc-results').querySelectorAll('span').forEach(node=>{
+   if(node.textContent.trim()==='нет доступного')node.textContent='нет данных об остатке';
+  });
+ }catch(err){console.warn('ABC360: legacy section retained after visual error',err);}
+}
 function bind(){
  mount();
+ const results=el('abc-results');
+ if(results&&typeof MutationObserver!=='undefined'){
+  const observer=new MutationObserver(()=>syncFromLegacy());
+  observer.observe(results,{childList:true});
+ }
  document.addEventListener('change',function(e){
   if(!el('page-abc')?.contains(e.target)||!['abc-period','abc-scope','abc-manager','abc-client-search'].includes(e.target.id))return;
   clearTimeout(filterTimer);filterTimer=setTimeout(()=>refresh(false),65);
