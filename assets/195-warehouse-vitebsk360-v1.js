@@ -125,9 +125,24 @@ function mount(){
  const host=$('wc-v23620'),tabs=host?.querySelector('.wc-tabs');if(!host||!tabs)return;
  let root=$(ID);
  if(!root){css();root=document.createElement('section');root.id=ID;tabs.before(root);state.data=null;state.last=0;load(true)}
- else if(state.data)render();
+ else if(state.data&&!root.querySelector('.vb360-kpis'))render();
 }
-function explanation(r,data){
+function explanation(r,data,kind){
+ if(kind==='excess'){
+  const info=[
+   ['Прогноз месяца',qty(r.forecast_qty)+' шт.'],
+   ['Норма запаса',qty(r.norm_target_qty)+' шт.'],
+   ['Дней нормативного запаса',qty(r.norm_days)+' дн.'],
+   ['Свободно Витебск',qty(r.vitebsk_avail)+' шт.'],
+   ['Излишек',qty(r.excess_qty)+' шт.'],
+   ['Стоимость излишка',money(r.excess_cost_byn)]
+  ];
+  return '<div class="vb360-exp-card">'+info.map(x=>'<div><span>'+esc(x[0])+'</span><b>'+esc(x[1])+'</b></div>').join('')+
+   '</div><div class="vb360-exp-note">Нормативный запас = месячный прогноз × коэффициент склада '+esc(qty(data?.norm_factor??1.25))+
+   '. Излишек SKU = MAX(0; свободный Витебск − нормативный запас). Это не денежная формула SN.'+
+   '<br>Источники: Витебск '+esc(day(data?.vitebsk_stock_date))+' · отчёт себестоимости '+esc(day(data?.report_date))+'.</div>';
+ }
+
  const known=r.vitebsk_avail!==null&&r.vitebsk_avail!==undefined;
  const days=Number(data?.order_cycle_days||14),demand=num(r.monthly_forecast_qty);
  const t=known?qty(r.order_target_qty):'Нет данных';
@@ -169,7 +184,7 @@ function attachOrderRows(rows,data,mode,tableHost){
     if(other){other.previousElementSibling?.querySelector('.vb360-why')?.setAttribute('aria-expanded','false');other.remove()}
     if(already)return;
     const detail=document.createElement('tr');detail.className='vb360-expanded-row';
-    const cell=document.createElement('td');cell.colSpan=tr.children.length;cell.innerHTML=explanation(r,data);
+    const cell=document.createElement('td');cell.colSpan=tr.children.length;cell.innerHTML=explanation(r,data,mode);
     detail.appendChild(cell);tr.after(detail);button.setAttribute('aria-expanded','true');
   });
   titleCell.appendChild(button);
@@ -253,4 +268,11 @@ function addApprovedExport(toolbar,id,ack){
 }
 window.crmWarehouseVitebsk360V1=Object.freeze({mount,refresh:()=>load(true),attachOrderRows,readOnly:true,version:'2026-11-09-v1'});
 window.RESANTA_WAREHOUSE_VITEBSK360_V1=true;
+document.addEventListener('click',e=>{if(e.target?.closest?.('#nav-warehouse-control'))setTimeout(mount,350)},true);
+window.addEventListener('focus',()=>{
+ if(document.getElementById('page-warehouse-control')?.classList.contains('active'))mount();
+},{passive:true});
+[500,1600,4000].forEach(ms=>setTimeout(()=>{
+ if(document.getElementById('page-warehouse-control')?.classList.contains('active'))mount();
+},ms));
 })();
