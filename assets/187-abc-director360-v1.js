@@ -143,10 +143,12 @@ async function refresh(force){
  const page=el('page-abc'),n=++seq;
  if(!page?.classList.contains('active')||typeof window.crmFastAnalyticsEnsure!=='function')return;
  try{
-  await window.crmFastAnalyticsEnsure('abc',!!force);
-  if(n===seq&&page.classList.contains('active')&&typeof renderABC==='function')renderABC();
+  const loaded=await window.crmFastAnalyticsEnsure('abc',!!force);
+  if(n===seq&&page.classList.contains('active')&&loaded!==false&&typeof renderABC==='function')renderABC();
+  if(n===seq)el('abc360-root')?.removeAttribute('aria-busy');
  }catch(e){
   if(n!==seq)return;
+  el('abc360-root')?.removeAttribute('aria-busy');
   const target=el('abc-quality');if(target)target.innerHTML='<div class="abc360-warn">Не удалось обновить ABC: '+html(e?.message||e)+'. Действующие данные не изменены.</div>';
  }
 }
@@ -185,16 +187,38 @@ function bind(){
  mount();
  const results=el('abc-results');
  if(results&&typeof MutationObserver!=='undefined'){
+  // The legacy engine only rebuilds direct children after ABC is calculated.
+  // Do not observe subtree mutations: our own R labels must not recurse.
   const observer=new MutationObserver(()=>syncFromLegacy());
   observer.observe(results,{childList:true});
  }
  document.addEventListener('change',function(e){
-  if(!el('page-abc')?.contains(e.target)||!['abc-period','abc-scope','abc-manager','abc-client-search'].includes(e.target.id))return;
-  clearTimeout(filterTimer);filterTimer=setTimeout(()=>refresh(false),65);
- });
+  if(!el('page-abc')?.contains(e.target))return;
+  const id=e.target.id;
+  if(['abc-period','abc-scope','abc-manager'].includes(id)){
+   // Run one server load per data-scope change, before legacy inline onchange
+   // paints stale rows from the previous manager or period.
+   e.stopPropagation();
+   if(id==='abc-scope'&&typeof abcScopeChanged==='function')abcScopeChanged(false);
+   if(id==='abc-manager'){
+    const target=el('abc-client-id'),search=el('abc-client-search');
+    if(target)target.value='';if(search)search.value='';
+    if(typeof abcRefreshClientDatalist==='function')abcRefreshClientDatalist();
+   }
+   clearTimeout(filterTimer);
+   const result=el('abc360-root');
+   if(result)result.setAttribute('aria-busy','true');
+   filterTimer=setTimeout(()=>refresh(false),110);
+   return;
+  }
+  if(id==='abc-client-search'){
+   clearTimeout(filterTimer);
+   filterTimer=setTimeout(()=>refresh(false),130);
+  }
+ },true);
 }
 window.abc360DebouncedSearch=function(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>{opened=true;openState();if(typeof renderABC==='function')renderABC();},150);};
 window.RESANTA_ABC360={render,refresh};
-window.RESANTA_ABC360_V1=Object.freeze({version:'20261109.2',readOnly:true,source:'existing ABC + 1C'});
+window.RESANTA_ABC360_V1=Object.freeze({version:'20261109.3',readOnly:true,source:'existing ABC + 1C'});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();
