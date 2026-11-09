@@ -225,6 +225,36 @@ def annotate_our_skus(rows: list[dict], registry: dict[str,list[dict]]) -> None:
             x["product_url"]=product_url({"url":owners[0].get("product_url")})
 
 
+def add_unseen_own_skus(record: dict, registry: dict[str,list[dict]]) -> None:
+    """Distinguish exact rank from 'not in *checked* range' for this query.
+
+    Only records from the same canonical keyword are eligible. Never carry a
+    position across two different phrases or claim the product is absent on 21vek.
+    """
+    phrase=compact(record.get("query_text")).casefold()
+    resolved=compact(record.get("resolved_query")).casefold()
+    keys={phrase,resolved}
+    existing={str(x["product_id"]) for x in record["rows"]}
+    max_checked=(record.get("pages_checked") or 0)*60
+    if max_checked<60:return
+    for pid,owners in registry.items():
+        if pid in existing:continue
+        matching=[x for x in owners if compact(x.get("keyword")).casefold() in keys]
+        if not matching:continue
+        first=matching[0]
+        record["rows"].append({
+            "request_id":str(record["request_id"]),"product_id":pid,
+            "product_name":compact(first.get("product_name"))[:250],
+            "product_url":product_url({"url":first.get("product_url")}),
+            "brand":None,
+            "sku":", ".join(sorted({compact(x.get("sku")) for x in matching if x.get("sku")}))[:220],
+            "manager_email":", ".join(sorted({compact(x.get("manager_email")) for x in matching if x.get("manager_email")}))[:260],
+            "position":None,"page_no":None,"position_state":"not_found_within_checked",
+            "observed_at":utcnow()
+        })
+        existing.add(pid)
+
+
 def run_one(req: dict, registry: dict[str,list[dict]]) -> dict:
     rid=str(req["id"])
     # Atomic claim with a conditional status predicate; concurrent Actions cannot
@@ -241,6 +271,8 @@ def run_one(req: dict, registry: dict[str,list[dict]]) -> dict:
     try:
         record=collect_listing(req)
         annotate_our_skus(record["rows"],registry)
+        record["request_id"]=rid
+        add_unseen_own_skus(record,registry)
         for start in range(0,len(record["rows"]),80):
             top.rest_post(ROWS,record["rows"][start:start+80])
         patch={k:record.get(k) for k in (
