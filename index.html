@@ -38,10 +38,10 @@ const APP_VERSION = '2026-11-06-release-guard-v1';
 })();
 </script>
 <title>Ресанта CRM</title>
-<link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1" as="script">
+<link rel="preload" href="./assets/01-crm-core.js?v=20261109-abc360-1&fix=manager-feedback-gps360-safe1" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=20261105-stock-director-1&fix=20261106" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1"></script>
+<script defer src="./assets/01-crm-core.js?v=20261109-abc360-1&fix=manager-feedback-gps360-safe1"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
 <script defer src="./assets/197-gps-map-unified-v1.js?v=20261109-map1"></script>
@@ -88,7 +88,7 @@ const APP_VERSION = '2026-11-06-release-guard-v1';
 <script defer src="./assets/69-data-freshness-v23660.js?v=23.6.338"></script>
 <script defer src="./assets/77-sales-freshness-alert-v23698.js?v=23.6.167"></script>
 <script defer src="./assets/112-sales-fast-v236338.js?v=23.6.338"></script>
-<script defer src="./assets/113-analytics-aggregates-v236342.js?v=23.6.342"></script>
+<script defer src="./assets/113-analytics-aggregates-v236342.js?v=20261109-abc360-1"></script>
 <script defer src="./assets/70-vip-period-compare-v23662.js?v=23.6.433"></script>
 <script defer src="./assets/98-period-filters-v236198.js?v=23.6.277"></script>
 <script defer src="./assets/125-vip-date-range-v236434.js?v=23.6.437"></script>
@@ -788,7 +788,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
             <div><label class="form-label">Уровень анализа</label><select class="form-input" id="abc-scope" onchange="abcScopeChanged()"><option value="branch">Филиал</option><option value="manager">Менеджер</option><option value="client">Клиент</option></select></div>
             <div id="abc-manager-wrap"><label class="form-label">Менеджер</label><select class="form-input" id="abc-manager" onchange="abcManagerChanged()"><option value="all">Все менеджеры</option></select></div>
             <div id="abc-client-wrap" style="display:none"><label class="form-label">Клиент</label><input class="form-input" id="abc-client-search" list="abc-client-datalist" placeholder="Начните вводить название" onchange="abcResolveClient()" oninput="abcResolveClient(false)"><datalist id="abc-client-datalist"></datalist><input type="hidden" id="abc-client-id"></div>
-            <div><label class="form-label">Класс / поиск</label><div style="display:flex;gap:6px"><select class="form-input" id="abc-class" onchange="renderABC()" style="max-width:110px"><option value="all">Все</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="N">N</option><option value="R">Возврат</option></select><input class="form-input" id="abc-search" placeholder="SKU или товар" oninput="renderABC()"></div></div>
+            <div><label class="form-label">Класс / поиск</label><div style="display:flex;gap:6px"><select class="form-input" id="abc-class" onchange="renderABC()" style="max-width:110px"><option value="all">Все</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="N">N</option><option value="R">Возврат</option></select><input class="form-input" id="abc-search" placeholder="SKU или товар" oninput="window.abc360DebouncedSearch?abc360DebouncedSearch():renderABC()"></div></div>
           </div>
           <div id="abc-period-note" style="font-size:11px;color:var(--sub);margin-top:9px"></div>
         </div>
@@ -1830,5 +1830,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <script defer src="./assets/185-mobile-navigation-v1.js?v=20261106-1"></script>
 <!-- Notice-only release guard: never reload a live CRM tab automatically. -->
 <script defer src="./assets/186-crm-release-guard-v1.js?v=20261106-1"></script>
+<!-- Isolated ABC 360: read-only, uses original ABC engine and CSV export. -->
+<script defer src="./assets/187-abc-director360-v1.js?v=20261109-abc360-1"></script>
 </body>
 </html>
