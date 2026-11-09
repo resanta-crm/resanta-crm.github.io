@@ -72,6 +72,17 @@ def parse_first_text_suggestion(payload: object) -> tuple[str,str] | None:
         path="array"
     elif isinstance(payload,dict):
         entries=None;path=""
+        # Current 21vek search/suggest returns {data: [{group_type,items}, ...]}.
+        # Read group order, skip categories/products and use only request/query groups.
+        groups=payload.get('data')
+        if isinstance(groups,list):
+            for group in groups:
+                if not isinstance(group,dict):continue
+                kind=str(group.get('group_type') or '').lower()
+                if not any(x in kind for x in ('request','query','suggest','search')):continue
+                if any(x in kind for x in ('product','categor','brand')):continue
+                nested=parse_first_text_suggestion(group.get('items') or [])
+                if nested:return (nested[0],'data.'+kind)
         for key in ("querySuggestions","textSuggestions","suggestedQueries","suggestions","queries"):
             v=payload.get(key)
             if isinstance(v,list):
@@ -103,8 +114,8 @@ def parse_first_text_suggestion(payload: object) -> tuple[str,str] | None:
 
 
 def trusted_suggest_endpoint() -> str | None:
-    url=compact(os.environ.get("SEARCH360_SUGGEST_URL"))
-    if not url:return None
+    url=compact(os.environ.get('SEARCH360_SUGGEST_URL') or
+                'https://gate.21vek.by/search-composer/api/v1/search/suggest')
     p=urlsplit(url)
     if p.scheme!="https" or p.hostname not in ("gate.21vek.by","www.21vek.by","21vek.by"):
         raise ValueError("Suggestion source is not a permitted 21vek HTTPS URL")
@@ -131,7 +142,7 @@ def resolve_search_phrase(session: requests.Session, typed: str, fetch=None) -> 
             if method=="POST":
                 response=session.post(endpoint,json={"query":typed},timeout=top.TIMEOUT)
             else:
-                response=session.get(endpoint,params={"query":typed},timeout=top.TIMEOUT)
+                response=session.get(endpoint,params={"query":typed,"mode":"desktop"},timeout=top.TIMEOUT)
             if response.status_code in (403,429):
                 raise RuntimeError("21vek suggestion request limited")
             response.raise_for_status()
