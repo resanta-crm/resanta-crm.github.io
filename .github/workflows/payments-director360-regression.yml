@@ -1,0 +1,25 @@
+name: Payments 360 regression
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'assets/188-payments-director360-v1.js'
+      - 'tests/payments-director360-v1.test.mjs'
+      - '.github/workflows/payments-director360-regression.yml'
+  push:
+    branches:
+      - 'feature/payments-director360-20261109'
+jobs:
+  payments360:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check new module syntax
+        run: node --check assets/188-payments-director360-v1.js
+      - name: Verify source, KPI math, filtering and isolation
+        run: node --test tests/payments-director360-v1.test.mjs
