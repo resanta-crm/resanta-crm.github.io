@@ -1,4 +1,4 @@
--- Applied to Supabase as migration warehouse_abc_order_column_readonly_v1_20261109.
+-- Applied to Supabase as warehouse_abc_order_column_readonly_v1_20261109 and warehouse_abc_order_fast_first_months_20261109.
 -- Read-only ABC labels for "Склад -> Автозаказ Чехов".
 -- Same operative 3-month period and 80/95% group split as the branch ABC screen.
 -- No change to stock, automatic order calculation, order approval or 1C imports.
@@ -43,9 +43,7 @@ begin
            replace(lower(trim(p.category)),'ё','е') as category,
            min(p.month) as first_month
     from public.purchase_history p
-    join (select distinct sku,category from sales) s
-      on lower(trim(p.sku))=s.sku
-     and replace(lower(trim(p.category)),'ё','е')=s.category
+    where nullif(trim(p.sku),'') is not null
     group by 1,2
   ), classes as (
     select r.sku,r.category,
