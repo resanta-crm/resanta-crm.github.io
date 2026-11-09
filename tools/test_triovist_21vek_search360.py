@@ -110,6 +110,19 @@ class Search360Tests(unittest.TestCase):
         self.assertEqual(result["pages_checked"],2)
         self.assertEqual(len(result["rows"]),60)
 
+    def test_unfound_own_sku_is_not_credited_with_fictitious_position(self):
+        record={'request_id':'123','query_text':'перфоратор','resolved_query':'перфоратор',
+                'pages_checked':2,'rows':[{'product_id':'1','position':1}]}
+        registry={'42':[{'sku':'РС-1','manager_email':'a@example.org','keyword':'перфоратор',
+                         'product_name':'Наш перфоратор','product_url':'https://www.21vek.by/item'}],
+                  '57':[{'sku':'ДР-9','manager_email':'b@example.org','keyword':'дрель'}]}
+        s.add_unseen_own_skus(record,registry)
+        self.assertEqual(len(record['rows']),2)
+        missing=record['rows'][1]
+        self.assertEqual(missing['product_id'],'42')
+        self.assertIsNone(missing['position'])
+        self.assertEqual(missing['position_state'],'not_found_within_checked')
+
     def test_card_links_are_only_https_21vek(self):
         self.assertEqual(s.product_url({"url":"javascript:alert(1)"}),None)
         self.assertEqual(s.product_url({"url":"https://evil.com/sku"}),None)
