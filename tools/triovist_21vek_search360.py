@@ -79,7 +79,7 @@ def parse_first_text_suggestion(payload: object) -> tuple[str,str] | None:
             for group in groups:
                 if not isinstance(group,dict):continue
                 kind=str(group.get('group_type') or '').lower()
-                if not any(x in kind for x in ('request','query','suggest','search')):continue
+                if not any(x in kind for x in ('request','query','suggest','search','completion')):continue
                 if any(x in kind for x in ('product','categor','brand')):continue
                 nested=parse_first_text_suggestion(group.get('items') or [])
                 if nested:return (nested[0],'data.'+kind)
@@ -104,7 +104,9 @@ def parse_first_text_suggestion(payload: object) -> tuple[str,str] | None:
                 continue
             if any(k in element for k in ("productId","product_id","productUrl","product_url")):
                 continue
-            term=element.get("query") or element.get("text") or element.get("phrase") or element.get("value")
+            term=(element.get('query') or element.get('text') or element.get('phrase') or element.get('value')
+                  or (element.get('name') if str(element.get('type') or '').lower() in
+                      ('suggest','completion','query','request','popular_request') else None))
             if not isinstance(term,str):continue
         else:continue
         term=compact(term)
