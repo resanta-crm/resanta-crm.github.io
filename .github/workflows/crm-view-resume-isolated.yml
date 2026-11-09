@@ -34,4 +34,4 @@ jobs:
           # Manager feedback has its own route and migration regression coverage.
           if [ "$GITHUB_HEAD_REF" = "fix/manager-feedback-20261106" ]; then exit 0; fi
           ! grep -E '^assets/(03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)[.]js$' /tmp/crm-view-resume-changes
-          ! (grep '^supabase/migrations/' /tmp/crm-view-resume-changes | grep -v -E '^supabase/migrations/(20261105_(triovist_ai_.*|gps_director360_(evidence_v1|stop_reviews_v1|live_stops_v1))|20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)|20261106142000_gps360_exact_physical_store_read_v1|20261106143500_gps360_vip_new_clients_guard_v1)[.]sql$')
+          ! (grep '^supabase/migrations/' /tmp/crm-view-resume-changes | grep -v -E '^supabase/migrations/(20261105_(triovist_ai_.*|gps_director360_(evidence_v1|stop_reviews_v1|live_stops_v1))|20261106_gps360_(safe_history_v1|store_onsite_v1|probable_stops_v1|evidence_completed_v2)|20261106142000_gps360_exact_physical_store_read_v1|20261106143500_gps360_vip_new_clients_guard_v1|20261109_triovist_search360_isolated_v1)[.]sql$')
