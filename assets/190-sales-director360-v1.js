@@ -358,7 +358,7 @@ function draft(d){
 }
 function clientDetailHtml(detail){
  if(!detail?.client)return'';
- const c=detail.client,rows=arr(detail.months),cats=arr(detail.categories);
+ const c=detail.client,rows=arr(detail.months),cats=arr(detail.categories),yr=state.year,prev=yr-1;
  const limit=Math.max(1,...rows.flatMap(x=>[Math.max(0,num(x.current)),Math.max(0,num(x.previous))]));
  const bars=rows.filter(x=>x.has_current||x.has_previous).map(x=>
   '<div class="s360-client-month"><b>'+esc(monthLabel(x.month).split(' ')[0])+(x.partial?'*':'')+'</b>'+
@@ -370,13 +370,13 @@ function clientDetailHtml(detail){
   '<div class="s360-muted">'+esc(c.manager_name||'Менеджер не определён')+' · Из 1С, с НДС</div></div>'+
   '<div class="s360-tabs">'+(c.client_id?'<button type="button" class="s360-btn" data-s360-client-card="'+esc(c.client_id)+'">Карточка CRM</button>':'')+
   '<button type="button" class="s360-btn" data-s360-client-close>Закрыть детали</button></div></div>'+
-  '<div class="s360-focus"><b>Оборот по клиенту</b><div><small>2026 · закрытые месяцы</small><strong>'+esc(whole(c.current_revenue))+'</strong></div>'+
-  '<div><small>2025 · сопоставимые месяцы</small><strong>'+esc(whole(c.previous_revenue))+'</strong></div>'+
+  '<div class="s360-focus"><b>Оборот по клиенту</b><div><small>'+yr+' · закрытые месяцы</small><strong>'+esc(whole(c.current_revenue))+'</strong></div>'+
+  '<div><small>'+prev+' · сопоставимые месяцы</small><strong>'+esc(whole(c.previous_revenue))+'</strong></div>'+
   '<div><small>Изменение, BYN</small><strong>'+esc(whole(num(c.current_revenue)-num(c.previous_revenue)))+'</strong></div></div>'+
-  '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">2026 · синий / 2025 · серый</span></div>'+
+  '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">'+yr+' · синий / '+prev+' · серый</span></div>'+
   '<div class="s360-client-graph">'+bars+'</div>'+
   '<h3 style="margin-top:16px">Товарные группы клиента</h3>'+
-  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>2026, BYN</th><th>2025, BYN</th></tr></thead><tbody>'+
+  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>'+yr+', BYN</th><th>'+prev+', BYN</th></tr></thead><tbody>'+
   cats.map(x=>'<tr><td>'+esc(x.category)+'</td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+'</tbody></table></div>'+
   '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
 }
@@ -394,8 +394,8 @@ function clientsPanel(d){
  const list=rows.map(x=>
   '<button type="button" class="s360-client-item'+(state.clientKey===x.client_key?' active':'')+'" data-s360-client-key="'+esc(x.client_key)+'">'+
   '<span><b>'+esc(x.client_name||'—')+'</b><small class="s360-muted" style="display:block">'+esc(x.manager_name||'Менеджер не определён')+'</small></span>'+
-  '<span>'+esc(whole(x.current_revenue))+'<small class="s360-muted" style="display:block">2026</small></span>'+
-  '<span>'+esc(whole(x.previous_revenue))+'<small class="s360-muted" style="display:block">2025</small></span></button>'
+  '<span>'+esc(whole(x.current_revenue))+'<small class="s360-muted" style="display:block">'+d.year+'</small></span>'+
+  '<span>'+esc(whole(x.previous_revenue))+'<small class="s360-muted" style="display:block">'+d.previous_year+'</small></span></button>'
  ).join('');
  return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
  '<div class="s360-muted">Серверный поиск по всей клиентской базе с данными 1С · год/менеджер/режим синхронизированы</div></div>'+
