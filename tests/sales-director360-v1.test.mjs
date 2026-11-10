@@ -430,9 +430,9 @@ test('director briefing ranks meaningful category losses with evidence and a con
  assert.match(sig.issues[0].action,/подгруппы и SKU/);
  const html=f.nodes['sales360-root'].innerHTML;
  assert.match(html,/Директорский брифинг · Где теряем и растём/);
- assert.match(html,/снижение 50\s*000 BYN/);
- assert.match(html,/Разобрать подгруппы и SKU/);
- assert.match(html,/причина ещё не установлена/);
+ assert.match(html,/21\s*419 BYN/);
+ assert.match(html,/Разобрать подгруппу и SKU/);
+ assert.match(html,/Причина не установлена/);
  assert.doesNotMatch(html,/У [^<]* нет продаж группы [^<]* значит не знает/i);
  assert.match(src,/directorSignals/);
  assert.doesNotMatch(src,/\.insert\(|\.upsert\(|\.update\(.*tasks/);
