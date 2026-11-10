@@ -8,6 +8,7 @@ const src=read('assets/190-sales-director360-v1.js');
 const index=read('index.html');
 const sql=read('docs/sales360_annual_rpc_v1.sql');
 const v2sql=read('docs/sales360_scope_clients_rpc_v2.sql');
+const v3sql=read('docs/sales360_product_drill_rpc_v3.sql');
 const monthly=read('assets/118-sales-analytics-v236374.js');
 const core=read('assets/01-crm-core.js');
 const yoy=read('assets/49-manager-sales-yoy-v23634.js');
@@ -26,7 +27,8 @@ const sample={
            {name:'Шкуран',current_revenue:240000,previous_revenue:220000,client_count:80},
            {name:'Не распределено',current_revenue:26927.84,previous_revenue:20000,client_count:1}],
  categories:[{category:'Электроинструмент',current_revenue:700000,previous_revenue:630000,clients:120},
-             {category:'Генераторы',current_revenue:100000,previous_revenue:150000,clients:30}],
+             {category:'Генераторы',current_revenue:100000,previous_revenue:150000,clients:30},
+             {category:'САДОВАЯ ТЕХНИКА',current_revenue:40000,previous_revenue:35000,clients:13}],
  matrix:[{manager_name:'Руднев',category:'Генераторы',revenue:70000,previous_revenue:70000,clients:15},
          {manager_name:'Шкуран',category:'Генераторы',revenue:30000,previous_revenue:30000,clients:10},
          {manager_name:'Ачинович',category:'Электроинструмент',revenue:350000,previous_revenue:300000,clients:70}],
@@ -62,6 +64,14 @@ function fixture(role='boss'){
  };
  const db={rpc:async(name,args)=>{
   calls.push({name,args});
+  if(name==='crm_sales360_product_drill_v3'){
+   const rows=args.p_level==='subgroups'?
+    [{item_key:'subgroup:Бензопилы',item_name:'Бензопилы',current_revenue:42000,previous_revenue:38000,current_qty:110,previous_qty:100},
+     {item_key:'subgroup:Мойки высокого давления',item_name:'Мойки высокого давления',current_revenue:18000,previous_revenue:15000,current_qty:54,previous_qty:41}]:
+    [{item_key:'sku:70/6/4',item_name:'Бензопила BS-45М Huter',sku:'70/6/4',product:'Бензопила BS-45М Huter',current_revenue:31000,previous_revenue:26000,current_qty:65,previous_qty:57},
+     {item_key:'product:Без артикула',item_name:'Бензопила без артикула',sku:null,product:'Бензопила без артикула',current_revenue:11000,previous_revenue:12000,current_qty:45,previous_qty:43}];
+   return {data:{version:'sales360.product.3',level:args.p_level,category:args.p_category,subgroup:args.p_subgroup,total:rows.length,items:rows,current_revenue:60000,previous_revenue:53000},error:null};
+  }
   if(name==='crm_sales360_clients_v2'){
    const full=[
     {client_key:'c1',client_id:'c1',client_name:'Клиент & Строй',manager_name:'Руднев',current_revenue:75000,previous_revenue:65000},
@@ -144,15 +154,17 @@ test('sales native renderer executes, and server annual RPC has no local history
  await settle();
  assert.equal(f.calls.length,1,'same year/manager reused within TTL');
 });
-test('manager and period selection are real, and category switch does not fetch',async()=>{
+test('manager and period selection are real, and category requests subgroups',async()=>{
  const f=fixture();
  f.window.renderSales();await settle();
  const start=f.calls.length;
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'category'},value:'Генераторы'}:null}}});
- assert.equal(f.calls.length,start,'category filter uses existing category matrix');
+ await settle();
+ assert.equal(f.calls.length,start+1,'category resolves subgroups from server');
+ assert.equal(f.calls.at(-1).name,'crm_sales360_product_drill_v3');
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
  await settle();
- assert.equal(f.calls.length,start+1);
+ assert.equal(f.calls.length,start+2);
  assert.ok(!f.navigation.includes('native-manager:Руднев'),'old report stays dormant during Sales360 manager changes');
  assert.equal(f.calls.at(-1).args.p_manager,'Руднев');
  assert.ok(f.classes.has('s360-installed'));
@@ -176,7 +188,7 @@ test('plan/fact comes from same KPI leaderboard; unlabeled sales remain included
  assert.match(html,/План\/факт месяца/);
  assert.match(html,/Без точной ТТ/);
  assert.match(html,/Включено в общий оборот/);
- assert.match(html,/Продажи с января/);
+ assert.match(html,/Продажи · всего/);
 });
 test('all-clients button stays in Sales360 and uses server-side client RPC',async()=>{
  const f=fixture();f.window.renderSales();await settle();
@@ -267,20 +279,15 @@ test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
  assert.doesNotMatch(html,/316\s*927,84 BYN/,'chart/selected period no longer shows kopecks');
  assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('ИИ · Утренний брифинг продаж'),'graph occupies own full-width row before briefing');
 });
-test('switch between all and without Triovist uses separate scoped annual RPC and preserves role',async()=>{
+test('one full-sales KPI only, no Triovist exclusion UI or separate sale totals',async()=>{
  const f=fixture();f.window.renderSales();await settle();
- assert.match(f.nodes['sales360-root'].innerHTML,/Продажи с января · все/);
- assert.match(f.nodes['sales360-root'].innerHTML,/С января · без Триовиста/);
- assert.match(f.nodes['sales360-root'].innerHTML,/отгрузок «Триовиста» за закрытые месяцы не найдено/);
- f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'scope'},value:'without'}:null}}});
- await settle();
- assert.equal(f.calls.at(-1).name,'crm_sales360_annual_v2');
- assert.equal(f.calls.at(-1).args.p_exclude_triovist,true);
- assert.ok(!f.navigation.includes('native-manager:all'));
- assert.ok(f.classes.has('s360-installed'));
- f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'scope'},value:'all'}:null}}});
- await settle();
- assert.match(f.nodes['sales360-root'].innerHTML,/Все продажи/);
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/Продажи · всего/);
+ assert.doesNotMatch(html,/Без Триовиста/);
+ assert.doesNotMatch(html,/С января · без Триовиста/);
+ assert.doesNotMatch(html,/id="s360-scope"/);
+ assert.equal(f.calls.at(-1).args.p_exclude_triovist,false);
+ assert.equal((html.match(/s360-tile/g)||[]).length,5);
 });
 test('clicking a top client opens client detail within Sales360, no old YoY report',async()=>{
  const f=fixture();f.window.renderSales();await settle();
@@ -317,4 +324,49 @@ test('new RPC is additive, privilege-scoped, protects NULL client IDs and never 
  assert.match(v2sql,/revoke all on function public\.crm_sales360_clients_v2\(integer,text,boolean,text,integer,integer,text\) from public,anon/);
  assert.doesNotMatch(v2sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
  assert.match(v2sql,/least\(50,greatest\(1,coalesce\(p_limit,20\)\)\)/);
+});
+
+test('client product drill opens garden subgroups then specific SKU without leaving Sales360',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const fire=dataset=>f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?{dataset}:null}}});
+ fire({s360ClientKey:'c1'});await settle();
+ fire({s360DrillGroup:'САДОВАЯ ТЕХНИКА',s360DrillScope:'client'});await settle();
+ let last=f.calls.at(-1);
+ assert.equal(last.name,'crm_sales360_product_drill_v3');
+ assert.equal(last.args.p_client_key,'c1');
+ assert.equal(last.args.p_category,'САДОВАЯ ТЕХНИКА');
+ assert.equal(last.args.p_level,'subgroups');
+ assert.match(f.nodes['sales360-root'].innerHTML,/Бензопилы/);
+ fire({s360DrillSubgroup:'Бензопилы',s360DrillScope:'client'});await settle();
+ last=f.calls.at(-1);
+ assert.equal(last.args.p_level,'sku');
+ assert.equal(last.args.p_subgroup,'Бензопилы');
+ assert.match(f.nodes['sales360-root'].innerHTML,/Бензопила BS-45М Huter/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/SKU 70\/6\/4/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/SKU не указан/);
+ assert.ok(f.classes.has('s360-installed'));
+ assert.ok(!f.navigation.includes('native-yoy-open'));
+ fire({s360DrillBack:'',s360DrillScope:'client'});await settle();
+ assert.equal(f.calls.at(-1).args.p_level,'subgroups');
+});
+test('global product group drill respects manager and shows no raw 1C rows',async()=>{
+ const f=fixture('manager');f.window.renderSales();await settle();
+ const group={dataset:{s360Category:'САДОВАЯ ТЕХНИКА'}};
+ f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?group:null}}});
+ await settle();
+ const r=f.calls.at(-1);
+ assert.equal(r.name,'crm_sales360_product_drill_v3');
+ assert.equal(r.args.p_client_key,null);
+ assert.equal(r.args.p_manager,null);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Мойки высокого давления/);
+ assert.ok(f.classes.has('s360-installed'));
+});
+test('additive product drill RPC requires server auth, stays read-only and is paginated',()=>{
+ assert.match(v3sql,/create or replace function public\.crm_sales360_product_drill_v3/);
+ assert.match(v3sql,/auth\.uid\(\) is null/);
+ assert.match(v3sql,/Менеджер может просматривать только собственные данные/);
+ assert.match(v3sql,/revoke all on function public\.crm_sales360_product_drill_v3\(integer,text,text,text,text,text,text,integer,integer\) from public,anon/);
+ assert.match(v3sql,/grant execute on function public\.crm_sales360_product_drill_v3\(integer,text,text,text,text,text,text,integer,integer\) to authenticated,service_role/);
+ assert.match(v3sql,/least\(100,greatest\(1,coalesce\(p_limit,50\)\)\)/);
+ assert.doesNotMatch(v3sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
 });
