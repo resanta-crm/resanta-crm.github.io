@@ -515,7 +515,9 @@ function recoveryBrief(d){
  const more=current.length>7?'<button type="button" class="s360-btn" data-s360-rec-more>'+
   (state.recoveryExpanded?'Показать меньше':'Показать все '+current.length)+'</button>':'';
  const note='<div class="s360-muted s360-recovery-foot">* Клиенты: база от 5 000 BYN, падение ≥30%. Подгруппы: база от 5 000 BYN, отклонение от 2 500 BYN. Новые и сезонные позиции проверяются отдельно. Ноябрь без подтверждённой ежедневной детализации не сравнивается. Сигналы — не доказанные причины и не автоматически назначенные задачи.</div>';
- return '<div class="s360-panel" id="s360-director-brief">'+head+title+summary+spotlight+nav+
+ return '<div class="s360-panel" id="s360-director-brief">'+head+title+
+ (r.baseline_complete===false?'<div class="s360-warn">'+esc(r.data_quality_note||'История прошлого года неполная — сравнение условное')+'</div>':'')+
+ summary+spotlight+nav+
  '<div class="s360-recovery-list">'+list+'</div><div class="s360-tabs">'+more+'</div>'+
  '<div id="s360-rec-focus-container" aria-live="polite">'+recoveryFocusHtml()+'</div>'+note+'</div>';
 }
