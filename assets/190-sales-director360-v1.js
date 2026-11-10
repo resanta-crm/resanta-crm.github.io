@@ -21,8 +21,8 @@ const viewer=()=>{try{return String(currentProfile?.id||currentProfile?.email||m
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage():$('app')?.dataset?.activePage}catch(_){return''}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date().getFullYear()}catch(_){return new Date().getFullYear()}};
-const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0};
-let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,recoveryVersion=0,clientRecoveryVersion=0,sourceRender=null;
+const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',recoveryFocusCat:'',recoveryFocusSub:'',recoveryFocusData:null,recoveryFocusLoading:false,recoveryFocusError:'',clientRecoveryFilter:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0};
+let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,recoveryVersion=0,clientRecoveryVersion=0,recoveryFocusVersion=0,sourceRender=null;
 const newDrill=()=>({category:'',subgroup:'',level:'subgroups',search:'',offset:0,loading:false,error:'',data:null,clientKey:''});
 const drillStates={global:newDrill(),client:newDrill()};
 const drillVersions={global:0,client:0};
@@ -49,9 +49,10 @@ function paintDrill(scope){
  render();
 }
 
-function clearClientRecovery(){clientRecoveryVersion++;state.clientRecoveryData=null;state.clientRecoveryLoading=false;state.clientRecoveryError='';}
+function clearClientRecovery(){clientRecoveryVersion++;state.clientRecoveryData=null;state.clientRecoveryLoading=false;state.clientRecoveryError='';state.clientRecoveryFilter='';}
 function clearRecovery(){
  recoveryVersion++;state.recoveryData=null;state.recoveryLoading=false;state.recoveryError='';
+ recoveryFocusVersion++;state.recoveryFocusCat='';state.recoveryFocusSub='';state.recoveryFocusData=null;state.recoveryFocusLoading=false;state.recoveryFocusError='';
  clearClientRecovery();
 }
 function clearClientState(){clientVersion++;state.clientOffset=0;state.clientKey='';state.clientData=null;state.clientError='';state.clientLoading=false;state.focusClientOnLoad=false;clearClientRecovery();resetDrill('client');}
@@ -421,6 +422,60 @@ function recoveryRow(row,tab){
   '<span class="s360-recovery-delta '+(fall?'s360-negative':'s360-positive')+'"><b>'+(num(row.delta_byn)>0?'+':'')+esc(whole(row.delta_byn))+'</b><small>'+esc(recoveryStatus(row))+'</small></span>'+
   '<span class="s360-recovery-chevron">›</span></button>';
 }
+function recoveryFocusHtml(){
+ if(!state.recoveryFocusCat)return'';
+ const d=state.recoveryFocusData;
+ const title=esc(state.recoveryFocusCat+(state.recoveryFocusSub?' · '+state.recoveryFocusSub:''));
+ const close='<button type="button" class="s360-btn" data-s360-rec-focus-close>Закрыть</button>';
+ const head='<div class="s360-head-actions"><div><h4>Разбор потерь · '+title+'</h4><div class="s360-muted">Тот же закрытый период, что в брифинге. Ниже — SKU и затронутые клиенты.</div></div>'+close+'</div>';
+ if(state.recoveryFocusLoading||!d)return '<div class="s360-recovery-spotlight" id="s360-rec-focus">'+head+
+ (state.recoveryFocusError?'<div class="s360-warn">'+esc(state.recoveryFocusError)+'</div>':
+ '<div role="status" class="s360-muted">Получаю подробности из 1С…</div>')+'</div>';
+ const skus=arr(d.skus).slice(0,20),clients=arr(d.clients).slice(0,20);
+ const srows=skus.map(x=>'<div class="s360-recovery-row s360-recovery-static">'+
+ '<span class="s360-recovery-name"><b>'+esc(x.product||x.sku||'Без артикула')+'</b><small>'+esc(x.sku?'SKU '+x.sku:'SKU не указан')+'</small></span>'+
+ '<span>'+esc(whole(x.previous_revenue))+' → '+esc(whole(x.current_revenue))+'</span>'+
+ '<span class="s360-negative">−'+esc(whole(x.loss_byn))+' · '+esc(recoveryStatus(x))+'</span></div>').join('');
+ const crows=clients.map(x=>'<button type="button" class="s360-recovery-row" data-s360-rec-client="'+esc(x.client_key)+'">'+
+ '<span class="s360-recovery-name"><b>'+esc(x.client_name||'—')+'</b><small>'+esc(x.manager_name||'Не распределён')+'</small></span>'+
+ '<span>'+esc(whole(x.previous_revenue))+' → '+esc(whole(x.current_revenue))+'</span>'+
+ '<span class="s360-negative">−'+esc(whole(x.loss_byn))+' · '+esc(recoveryStatus(x))+'</span><span>›</span></button>').join('');
+ return '<div class="s360-recovery-spotlight" id="s360-rec-focus">'+head+
+ '<h4>Падающие SKU ('+skus.length+')</h4>'+
+ (srows||'<div class="s360-muted">По выбранной подгруппе SKU со снижением не найдено.</div>')+
+ '<h4>Клиенты с падением ('+clients.length+')</h4>'+
+ (crows||'<div class="s360-muted">По выбранной подгруппе клиентов со снижением нет.</div>')+
+ '<div class="s360-muted">Числа — изменение выручки за сопоставимые месяцы, а не подтверждённые причины.</div>'+
+ '<button type="button" class="s360-btn" data-s360-rec-open-full>Полная товарная детализация с января</button></div>';
+}
+function paintRecoveryFocus(){
+ const target=$('s360-rec-focus-container');
+ if(target)target.innerHTML=recoveryFocusHtml();
+ else render();
+}
+async function loadRecoveryFocus(category,subgroup){
+ if(!category||active()!=='sales')return;
+ state.recoveryFocusCat=String(category).slice(0,200);
+ state.recoveryFocusSub=String(subgroup||'').slice(0,250);
+ state.recoveryFocusData=null;state.recoveryFocusError='';state.recoveryFocusLoading=true;
+ const serial=++recoveryFocusVersion,cat=state.recoveryFocusCat,sub=state.recoveryFocusSub;
+ paintRecoveryFocus();
+ try{
+  const database=dbx();if(!database?.rpc)throw Error('Источник Supabase недоступен');
+  const {data,error}=await database.rpc('crm_sales360_recovery_v4',{
+   ...recoveryArgs(),p_category:cat,p_subgroup:sub||null
+  });
+  if(error)throw error;
+  if(serial!==recoveryFocusVersion||active()!=='sales')return;
+  if(data?.version!=='sales360.recovery.4'||!Array.isArray(data.skus)||!Array.isArray(data.clients))
+   throw Error('Неполный серверный разбор группы');
+  state.recoveryFocusData=data;
+ }catch(err){
+  if(serial===recoveryFocusVersion)state.recoveryFocusError=String(err?.message||err);
+ }finally{
+  if(serial===recoveryFocusVersion){state.recoveryFocusLoading=false;paintRecoveryFocus();}
+ }
+}
 function recoveryBrief(d){
  const r=state.recoveryData,loading=state.recoveryLoading;
  const periods=[['last3','3 месяца'],['quarter','Квартал'],['ytd','С января']];
@@ -460,7 +515,8 @@ function recoveryBrief(d){
   (state.recoveryExpanded?'Показать меньше':'Показать все '+current.length)+'</button>':'';
  const note='<div class="s360-muted s360-recovery-foot">* Клиенты: база от 5 000 BYN, падение ≥30%. Подгруппы: база от 5 000 BYN, отклонение от 2 500 BYN. Новые и сезонные позиции проверяются отдельно. Ноябрь без подтверждённой ежедневной детализации не сравнивается. Сигналы — не доказанные причины и не автоматически назначенные задачи.</div>';
  return '<div class="s360-panel" id="s360-director-brief">'+head+title+summary+spotlight+nav+
- '<div class="s360-recovery-list">'+list+'</div><div class="s360-tabs">'+more+'</div>'+note+'</div>';
+ '<div class="s360-recovery-list">'+list+'</div><div class="s360-tabs">'+more+'</div>'+
+ '<div id="s360-rec-focus-container" aria-live="polite">'+recoveryFocusHtml()+'</div>'+note+'</div>';
 }
 function clientRecoveryHtml(){
  const r=state.clientRecoveryData;
@@ -471,12 +527,19 @@ function clientRecoveryHtml(){
  if(!r)return base+'<div class="s360-muted">Аналитика выбранного клиента ещё не загружена.</div></div>';
  const categories=arr(r.subgroups),skus=arr(r.skus);
  if(!categories.length&&!skus.length)return base+'<div class="s360-muted">Значимых падений по порогам за сопоставимый период не выявлено.</div></div>';
- const rows=categories.slice(0,5).map(x=>
+ const selected=state.clientRecoveryFilter;
+ const selectedSkus=selected?skus.filter(x=>x.subgroup===selected):[];
+ const rows=categories.slice(0,8).map(x=>
  '<button type="button" class="s360-recovery-row" data-s360-rec-client-group="'+esc(x.category)+'" data-s360-rec-client-subgroup="'+esc(x.subgroup)+'">'+
  '<span class="s360-recovery-name"><b>'+esc(x.subgroup)+'</b><small>'+esc(x.category)+'</small></span>'+
  '<span class="s360-recovery-delta s360-negative"><b>−'+esc(whole(x.loss_byn))+'</b><small>'+esc(recoveryStatus(x))+'</small></span><span>›</span></button>').join('');
- return base+'<div class="s360-muted">Выберите подгруппу — откроются конкретные SKU данного клиента. Изменения выручки не равны доказанным потерям спроса.</div>'+
- '<div class="s360-recovery-list">'+rows+'</div></div>';
+ return base+'<div class="s360-muted">Выберите подгруппу — появятся SKU именно этого клиента за тот же сопоставимый период. Причины падения ещё проверяются.</div>'+
+ '<div class="s360-recovery-list">'+rows+'</div>'+
+ (selected?'<div class="s360-recovery-spotlight"><div class="s360-head-actions"><b>SKU в подгруппе '+esc(selected)+'</b><button type="button" class="s360-btn" data-s360-rec-client-back>← Подгруппы</button></div>'+
+ (selectedSkus.length?selectedSkus.map(x=>'<div class="s360-head-actions"><span>'+esc(x.product||x.sku||'Без артикула')+
+  '<small class="s360-muted"> '+esc(x.sku||'SKU не указан')+'</small></span><strong class="s360-negative">−'+esc(whole(x.loss_byn))+'</strong></div>').join(''):
+ '<div class="s360-muted">По выбранной подгруппе падающих SKU выше порога не найдено.</div>')+
+ '<button type="button" class="s360-btn" data-s360-rec-client-full>Полная история SKU с января</button></div>':'')+'</div>';
 }
 function brief(d){
  return recoveryBrief(d);
@@ -896,16 +959,30 @@ function onClick(e){
   loadClients();return;
  }
  if(a.s360RecClientGroup!==undefined){
-  const category=String(a.s360RecClientGroup||'').slice(0,200);
-  const subgroup=String(a.s360RecClientSubgroup||'').slice(0,250);
-  if(category&&state.clientKey){openDrill('client',category,subgroup);return;}
+  state.clientRecoveryFilter=String(a.s360RecClientSubgroup||'').slice(0,250);
+  render();return;
+ }
+ if(a.s360RecClientBack!==undefined){state.clientRecoveryFilter='';render();return;}
+ if(a.s360RecClientFull!==undefined){
+  const x=arr(state.clientRecoveryData?.subgroups).find(y=>y.subgroup===state.clientRecoveryFilter);
+  if(x&&state.clientKey)openDrill('client',x.category,x.subgroup);
+  return;
  }
  if(a.s360RecGroup!==undefined){
   const category=String(a.s360RecGroup||'').slice(0,200);
   const subgroup=String(a.s360RecSubgroup||'').slice(0,250);
-  const sku=String(a.s360RecSku||'').slice(0,100);
   if(!category)return;
-  state.category=category;openDrill('global',category,subgroup,sku);
+  void loadRecoveryFocus(category,subgroup);
+  $('s360-rec-focus-container')?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+  return;
+ }
+ if(a.s360RecFocusClose!==undefined){
+  recoveryFocusVersion++;state.recoveryFocusCat='';state.recoveryFocusSub='';
+  state.recoveryFocusData=null;state.recoveryFocusLoading=false;state.recoveryFocusError='';
+  paintRecoveryFocus();return;
+ }
+ if(a.s360RecOpenFull!==undefined){
+  openDrill('global',state.recoveryFocusCat,state.recoveryFocusSub);
   $('s360-drill-global-container')?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
   return;
  }
