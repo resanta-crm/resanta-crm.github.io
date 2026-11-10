@@ -176,7 +176,7 @@ test('plan/fact comes from same KPI leaderboard; unlabeled sales remain included
  assert.match(html,/План\/факт месяца/);
  assert.match(html,/Без точной ТТ/);
  assert.match(html,/Включено в общий оборот/);
- assert.match(html,/316/);
+ assert.match(html,/Продажи с января/);
 });
 test('all-clients button stays in Sales360 and uses server-side client RPC',async()=>{
  const f=fixture();f.window.renderSales();await settle();
@@ -209,7 +209,7 @@ test('unified month selector stays on top, exact BYN turnover on graph and live 
  assert.ok(root.innerHTML.indexOf('s360-month')<root.innerHTML.indexOf('s360-kpis'));
  assert.match(root.innerHTML,/Год сравнения/);
  assert.match(root.innerHTML,/Месяц · фокус графика/);
- assert.match(root.innerHTML,/Оборот, BYN/);
+ assert.match(root.innerHTML,/Оборот BYN/);
  assert.match(root.innerHTML,/data-s360-point="2026-11"/);
  assert.match(root.innerHTML,/54\s*579 BYN/);
  assert.match(root.innerHTML,/Без итогового сравнения/,'unfinished November does not get misleading YoY');
@@ -252,4 +252,69 @@ test('keyboard selecting a graph point changes focus without RPC or opening nati
  assert.equal(f.calls.length,start);
  assert.match(f.nodes['sales360-root'].innerHTML,/Сопоставимые закрытые периоды/);
  assert.ok(!f.navigation.some(x=>x.startsWith('native-month:')));
+});
+
+test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/Динамика с января/);
+ assert.match(html,/390/,'wide chart SVG is at least 390px high');
+ assert.match(html,/Выбранный/gi);
+ assert.match(html,/2025/);
+ assert.match(html,/2026/);
+ assert.match(html,/275тыс/,'2025 Oct monthly value is labeled in grey');
+ assert.match(html,/317тыс/,'2026 Oct value is labeled in blue');
+ assert.doesNotMatch(html,/316\s*927,84 BYN/,'chart/selected period no longer shows kopecks');
+ assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('ИИ · Утренний брифинг продаж'),'graph occupies own full-width row before briefing');
+});
+test('switch between all and without Triovist uses separate scoped annual RPC and preserves role',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ assert.match(f.nodes['sales360-root'].innerHTML,/Продажи с января · все/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/С января · без Триовиста/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/отгрузок «Триовиста» за закрытые месяцы не найдено/);
+ f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'scope'},value:'without'}:null}}});
+ await settle();
+ assert.equal(f.calls.at(-1).name,'crm_sales360_annual_v2');
+ assert.equal(f.calls.at(-1).args.p_exclude_triovist,true);
+ assert.ok(!f.navigation.includes('native-manager:all'));
+ assert.ok(f.classes.has('s360-installed'));
+ f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'scope'},value:'all'}:null}}});
+ await settle();
+ assert.match(f.nodes['sales360-root'].innerHTML,/Все продажи/);
+});
+test('clicking a top client opens client detail within Sales360, no old YoY report',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const target={dataset:{s360ClientKey:'c1'}};
+ f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?target:null}}});
+ await settle();
+ assert.equal(f.calls.at(-1).name,'crm_sales360_clients_v2');
+ assert.equal(f.calls.at(-1).args.p_client_key,'c1');
+ assert.ok(f.classes.has('s360-installed'));
+ assert.ok(!f.navigation.includes('native-yoy-open'));
+ assert.match(f.nodes['sales360-root'].innerHTML,/История продаж клиента по месяцам/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Товарные группы клиента/);
+});
+test('server client search and access scope stay within the selected manager',async()=>{
+ const f=fixture('manager');f.window.renderSales();await settle();
+ const target={dataset:{s360AllClients:''}};
+ f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?target:null}}});
+ await settle();
+ assert.equal(f.calls.at(-1).args.p_manager,null,'server enforces identity for manager');
+ assert.ok(!f.navigation.includes('native-yoy-open'));
+ f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?{dataset:{s360ClientKey:'c1'}}:null}}});
+ await settle();
+ assert.equal(f.calls.at(-1).args.p_client_key,'c1');
+ assert.match(v2sql,/crm_sales360_clients_v2/);
+ assert.match(v2sql,/Менеджер может просматривать только собственные данные/);
+});
+test('new RPC is additive, privilege-scoped, protects NULL client IDs and never writes sales',()=>{
+ assert.match(v2sql,/create or replace function public\.crm_sales360_annual_v2/);
+ assert.match(v2sql,/create or replace function public\.crm_sales360_clients_v2/);
+ assert.match(v2sql,/coalesce\(s\.resolved_client_id in \(select id from triovist_ids\),false\)/);
+ assert.match(v2sql,/v_role='manager'/);
+ assert.match(v2sql,/auth\.uid\(\) is null/);
+ assert.match(v2sql,/revoke all on function public\.crm_sales360_annual_v2\(integer,text,boolean\) from public,anon/);
+ assert.match(v2sql,/revoke all on function public\.crm_sales360_clients_v2\(integer,text,boolean,text,integer,integer,text\) from public,anon/);
+ assert.doesNotMatch(v2sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
+ assert.match(v2sql,/least\(50,greatest\(1,coalesce\(p_limit,20\)\)\)/);
 });
