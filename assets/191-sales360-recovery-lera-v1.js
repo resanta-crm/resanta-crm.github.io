@@ -145,6 +145,7 @@ function hookStaffRead(){
  root.document?.removeEventListener?.('click',hookStaffRead,true);
 }
 hookStaffRead();
-root.document?.addEventListener?.('click',hookStaffRead,true);
+if(!root.crmAI360BranchUnifiedHandleV1?.__sales360RecoveryWrapped)
+ root.document?.addEventListener?.('click',hookStaffRead,true);
 root.RESANTA_SALES_RECOVERY_LERA=Object.freeze({version:'20261110.1',rpc:RPC,detect,period,summarize,readOnly:true});
 })(window);
