@@ -10,7 +10,7 @@ const $=id=>d.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number.isFinite(Number(v))?Number(v):0;
 const fmt=v=>num(v).toLocaleString('ru-RU',{maximumFractionDigits:2});
-const money=v=>fmt(v)+' BYN';
+const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const short=v=>Math.abs(num(v))>=1e6?(num(v)/1e6).toFixed(2).replace('.',',')+' млн':Math.abs(num(v))>=1000?(num(v)/1000).toFixed(1).replace('.',',')+' тыс.':fmt(v);
 const MONTHS=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const arr=v=>Array.isArray(v)?v:[];
@@ -23,6 +23,56 @@ const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date
 const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false};
 let mounted=false,wrapped=false,requestVersion=0,sourceRender=null;
 const cache=new Map(),pending=new Map(),TTL=180000;
+const monthRows=d=>arr(d?.months).filter(x=>x?.has_current||x?.has_previous);
+const focusedMonth=d=>{const a=monthRows(d);return a.find(x=>x.month===state.selectedMonth)||a.filter(x=>x.has_current).slice(-1)[0]||a.slice(-1)[0]||null};
+function monthLabel(ym){const m=Number(String(ym||'').slice(5,7));return(MONTHS[m-1]||'—')+' '+String(ym||'').slice(0,4)}
+function freshLabel(f){
+ if(!f?.last_success_at)return f?.report_date?String(f.report_date).slice(0,10):'дата не подтверждена';
+ const raw=String(f.last_success_at).trim(),iso=/Z$|[+-]\\d\\d:?\\d\\d$/.test(raw)?raw:raw+'Z';
+ const date=new Date(iso);
+ if(Number.isNaN(date.getTime()))return 'дата не подтверждена';
+ return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(date)+' (Минск)';
+}
+const periodKey=()=>state.view==='quarters'?'Q'+Math.ceil(Number(state.selectedMonth.slice(5,7)||1)/3):state.selectedMonth;
+function chartValue(v){
+ const n=num(v);
+ if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1).replace('.',',')+'м';
+ if(Math.abs(n)>=1000)return Math.round(n/1000)+'тыс';
+ return Math.round(n).toLocaleString('ru-RU');
+}
+function focusedHtml(d,periods){
+ const p=periods.find(x=>x.key===periodKey())||periods.find(x=>x.hasCurrent);
+ if(!p)return'<div class="s360-muted">Нет выбранного периода для детализации.</div>';
+ const comparable=p.hasCurrent&&p.hasPrevious&&!p.partial&&num(p.previous)>0;
+ const difference=num(p.current)-num(p.previous);
+ const pct=comparable?((difference/p.previous)*100).toFixed(1).replace('.',','):'—';
+ const change=comparable?(difference>=0?'+':'')+money(difference)+' · '+(difference>=0?'+':'')+pct+'%':'Без итогового сравнения';
+ return '<div class="s360-focus"><b>'+esc(p.label)+'</b>'+
+ '<div><small>'+esc(d.year+' · оборот')+'</small><strong>'+esc(p.hasCurrent?money(p.current):'Нет данных')+'</strong></div>'+
+ '<div><small>'+esc(d.previous_year+' · оборот')+'</small><strong>'+esc(p.hasPrevious?money(p.previous):'Нет данных')+'</strong></div>'+
+ '<div><small>Разница</small><strong>'+esc(change)+'</strong></div></div>'+
+ '<div class="s360-muted" style="margin-top:8px">'+(p.partial?'Период не закрыт. Нельзя сравнивать его с полным аналогичным периодом прошлого года.':'Сопоставимые закрытые периоды.')+' Нажмите на точку графика или выберите месяц.</div>';
+}
+function monthControls(d){
+ const list=monthRows(d),months=list.length?list.map(x=>x.month):Array.from({length:12},(_,i)=>state.year+'-'+String(i+1).padStart(2,'0'));
+ const ym=focusedMonth(d)?.month||state.selectedMonth||months[months.length-1],selected=months.includes(ym)?ym:months[months.length-1],index=months.indexOf(selected);
+ return '<div class="s360-field s360-month"><label for="s360-month">Месяц · фокус графика</label><div class="s360-month-nav">'+
+ '<button type="button" class="s360-btn" data-s360-step="-1"'+(index<=0?' disabled':'')+' aria-label="Предыдущий месяц">←</button>'+
+ '<select id="s360-month" data-s360-select="month">'+months.map(x=>'<option value="'+esc(x)+'"'+(selected===x?' selected':'')+'>'+esc(monthLabel(x))+'</option>').join('')+'</select>'+
+ '<button type="button" class="s360-btn" data-s360-step="1"'+(index===months.length-1?' disabled':'')+' aria-label="Следующий месяц">→</button></div></div>';
+}
+function filtersHtml(d){
+ const years=[currentYear(),currentYear()-1,currentYear()-2,currentYear()-3].filter(x=>x>=2023);
+ return '<div class="s360-filters">'+
+ '<div class="s360-field"><label for="s360-year">Год сравнения</label><select id="s360-year" data-s360-select="year">'+years.map(x=>'<option value="'+x+'"'+(state.year===x?' selected':'')+'>'+x+' / '+(x-1)+'</option>').join('')+'</select></div>'+
+ monthControls(d)+showSelectorOptions(d)+
+ '<div class="s360-field"><label for="s360-view">График</label><select id="s360-view" data-s360-select="view"><option value="months"'+(state.view==='months'?' selected':'')+'>Месяцы</option><option value="quarters"'+(state.view==='quarters'?' selected':'')+'>Кварталы</option></select></div>'+
+ '<button type="button" class="s360-btn" data-s360-refresh>↻ Обновить</button></div>';
+}
+function headerHtml(d){
+ return '<div class="s360-head"><div><h2>Продажи 360° · Управление ростом</h2><div class="s360-muted">1С · менеджеры · товарные группы · клиенты · с НДС</div></div>'+
+ '<div class="s360-muted">Обновление 1С: '+esc(freshLabel(d?.freshness))+'</div></div>';
+}
 function monthKpi(d){
  const k=arr(d?.kpi).filter(x=>num(x.plan)>0);
  return {plan:k.reduce((s,x)=>s+num(x.plan),0),actual:k.reduce((s,x)=>s+num(x.actual),0),count:k.length};
@@ -107,7 +157,15 @@ function styles(){
  scope+' .s360-btn.active{background:var(--ab);color:var(--at);border-color:var(--a)}',
  scope+' .s360-btn.primary{background:var(--a);border-color:var(--a);color:#fff}',
  scope+' button:focus-visible, '+scope+' select:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}',
- scope+' .s360-chart{width:100%;height:auto;max-height:245px;display:block}',
+ scope+' .s360-chart-wrap{overflow-x:auto;max-width:100%}',
+ scope+' .s360-chart{width:100%;height:auto;min-width:690px;display:block}',
+ scope+' .s360-month{min-width:220px}',
+ scope+' .s360-month-nav{display:flex;align-items:center;gap:5px}',
+ scope+' .s360-month-nav select{min-width:130px;flex:1}',
+ scope+' .s360-btn:disabled{opacity:.45;cursor:not-allowed}',
+ scope+' .s360-focus{display:grid;grid-template-columns:90px repeat(3,minmax(0,1fr));gap:12px;padding:12px;background:var(--bg);border-radius:9px;margin-top:10px}',
+ scope+' .s360-focus small{display:block;color:var(--sub);font-size:10px}',
+ scope+' .s360-focus strong{display:block;font-size:13px;overflow-wrap:anywhere;margin-top:4px}',
  scope+' .s360-legend{display:flex;gap:15px;align-items:center;font-size:11px;color:var(--sub);flex-wrap:wrap}',
  scope+' .s360-legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px}',
  scope+' .s360-minirows{display:grid;gap:9px}',
@@ -134,8 +192,10 @@ function styles(){
  scope+' .s360-copy{width:100%;min-height:92px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font:inherit;font-size:11px;resize:vertical}',
  scope+' .s360-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}',
  scope+' .s360-loading{padding:35px 15px;border:1px solid var(--border);border-radius:12px;text-align:center;color:var(--sub)}',
+ scope+' .s360-load-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}',
+ scope+' .s360-load-kpis>div{border:1px solid var(--border);border-radius:12px;background:var(--card);min-height:88px;opacity:.6}',
  '@media(max-width:1050px){'+scope+' .s360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}'+scope+' .s360-grid{grid-template-columns:1fr}}',
- '@media(max-width:640px){'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}}'
+ '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}}'
  ].join('\n');
 }
 function mount(){
