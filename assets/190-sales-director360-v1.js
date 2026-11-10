@@ -21,7 +21,7 @@ const viewer=()=>{try{return String(currentProfile?.id||currentProfile?.email||m
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage():$('app')?.dataset?.activePage}catch(_){return''}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date().getFullYear()}catch(_){return new Date().getFullYear()}};
-const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:''};
+const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0};
 let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,recoveryVersion=0,clientRecoveryVersion=0,sourceRender=null;
 const newDrill=()=>({category:'',subgroup:'',level:'subgroups',search:'',offset:0,loading:false,error:'',data:null,clientKey:''});
 const drillStates={global:newDrill(),client:newDrill()};
@@ -203,6 +203,14 @@ function styles(){
  scope+' .s360-client-month{display:grid;grid-template-columns:46px minmax(60px,1fr) 100px 100px;gap:8px;align-items:center;font-size:11px}',
  scope+' .s360-client-track{height:11px;border-radius:7px;background:var(--card);display:flex;overflow:hidden}',
  scope+' .s360-client-track i{height:11px;display:block;background:#2563eb}',
+ scope+' .s360-client-split{display:grid;grid-template-columns:minmax(260px,0.83fr) minmax(430px,1.35fr);gap:12px;margin-top:14px;align-items:start}',
+ scope+' .s360-client-left{border:1px solid var(--border);border-radius:10px;padding:10px;max-height:75vh;overflow:auto;min-width:0}',
+ scope+' .s360-client-right{border:1px solid var(--border);border-radius:10px;padding:12px;min-height:220px;max-height:75vh;overflow-y:auto;min-width:0;scroll-margin-top:16px}',
+ scope+' .s360-client-right .s360-client-detail{border:0;background:transparent;margin:0;padding:0}',
+ scope+' .s360-client-empty{color:var(--sub);padding:25px 15px;text-align:center;line-height:1.7}',
+ scope+' .s360-client-split .s360-client-item{grid-template-columns:minmax(120px,1fr) minmax(128px,auto);padding:10px;gap:8px}',
+ scope+' .s360-client-item-amount{text-align:right;display:grid;gap:4px;white-space:nowrap}',
+ scope+' .s360-client-item-amount small{font-size:10px;color:var(--sub)}',
  scope+' .s360-recovery-tabs{margin-top:14px;margin-bottom:9px}',
  scope+' .s360-recovery-spotlight{padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:11px;display:grid;gap:9px}',
  scope+' .s360-recovery-list{display:grid;gap:5px;margin-top:9px}',
@@ -271,7 +279,8 @@ function styles(){
  scope+' .s360-load-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}',
  scope+' .s360-load-kpis>div{border:1px solid var(--border);border-radius:12px;background:var(--card);min-height:88px;opacity:.6}',
  '@media(max-width:1050px){'+scope+' .s360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}'+scope+' .s360-grid{grid-template-columns:1fr}}',
- '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}'+scope+' .s360-recovery-row{grid-template-columns:1fr auto 16px}'+scope+' .s360-recovery-values{display:none}}'
+ '@media(max-width:1030px){'+scope+' .s360-client-split{grid-template-columns:1fr}'+scope+' .s360-client-left{max-height:330px}'+scope+' .s360-client-right{max-height:none;scroll-margin-top:12px}}',
+ '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-split .s360-client-item span:first-child{grid-column:auto}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}'+scope+' .s360-recovery-row{grid-template-columns:1fr auto 16px}'+scope+' .s360-recovery-values{display:none}}'
  ].join('\n');
 }
 function mount(){
@@ -701,25 +710,30 @@ function clientsPanel(d){
   '<div class="s360-tabs" style="margin-top:12px"><button type="button" class="s360-btn primary" data-s360-all-clients>Все клиенты · Поиск и детализация</button></div></div>';
  }
  const result=state.clientData||{},rows=arr(result.items),total=num(result.total),pages=Math.max(1,Math.ceil(total/20)),page=Math.floor(state.clientOffset/20)+1;
- const list=rows.map(x=>
-  '<button type="button" class="s360-client-item'+(state.clientKey===x.client_key?' active':'')+'" data-s360-client-key="'+esc(x.client_key)+'">'+
+ const list=rows.map(x=>{
+  const current=num(x.current_revenue),previous=num(x.previous_revenue),delta=current-previous;
+  const trend=previous>0?(delta/previous*100).toFixed(1).replace('.',',')+'%':current>0?'Новый клиент':'—';
+  return '<button type="button" class="s360-client-item'+(state.clientKey===x.client_key?' active':'')+'" data-s360-client-key="'+esc(x.client_key)+'" aria-current="'+(state.clientKey===x.client_key?'true':'false')+'">'+
   '<span><b>'+esc(x.client_name||'—')+'</b><small class="s360-muted" style="display:block">'+esc(x.manager_name||'Менеджер не определён')+'</small></span>'+
-  '<span>'+esc(whole(x.current_revenue))+'<small class="s360-muted" style="display:block">'+d.year+'</small></span>'+
-  '<span>'+esc(whole(x.previous_revenue))+'<small class="s360-muted" style="display:block">'+d.previous_year+'</small></span></button>'
- ).join('');
- return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
- '<div class="s360-muted">Серверный поиск по данным 1С · год и менеджер синхронизированы</div></div>'+
- '<button type="button" class="s360-btn" data-s360-all-clients>Свернуть список</button></div>'+
- '<div class="s360-client-search" style="margin-top:12px">'+
+  '<span class="s360-client-item-amount"><b class="'+(delta<0?'s360-negative':'s360-positive')+'">'+esc(trend)+'</b>'+
+  '<small>'+d.year+': '+esc(whole(current))+'</small><small>'+d.previous_year+': '+esc(whole(previous))+'</small></span></button>';
+ }).join('');
+ const search='<div class="s360-client-search">'+
  '<input id="s360-client-search" data-s360-client-search value="'+esc(state.clientSearch)+'" placeholder="Название клиента или менеджер" aria-label="Поиск клиентов">'+
- '<button type="button" class="s360-btn primary" data-s360-client-find>Найти</button></div>'+
+ '<button type="button" class="s360-btn primary" data-s360-client-find>Найти</button></div>';
+ const paginator=(total>0?'<div class="s360-head-actions" style="margin-top:12px"><span class="s360-muted">Найдено '+total+' · страница '+page+' из '+pages+'</span>'+
+ '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-client-page="-1"'+(page===1?' disabled':'')+'>←</button>'+
+ '<button type="button" class="s360-btn" data-s360-client-page="1"'+(page>=pages?' disabled':'')+'>→</button></div></div>':'');
+ const details=result.detail?clientDetailHtml(result.detail):
+ '<div class="s360-client-empty">Выберите клиента слева. Его оборот, динамика, падения по группам, подгруппам и SKU откроются здесь, без поиска внизу страницы.</div>';
+ return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
+ '<div class="s360-muted">Единый адаптивный интерфейс · рост и падение по закрытым месяцам</div></div>'+
+ '<button type="button" class="s360-btn" data-s360-all-clients>Свернуть список</button></div>'+
+ '<div class="s360-client-split"><div class="s360-client-left">'+search+
  (state.clientError?'<div class="s360-warn">'+esc(state.clientError)+' <button type="button" class="s360-btn" data-s360-client-find>Повторить</button></div>':'')+
  (state.clientLoading?'<div class="s360-loading" role="status">Загружаю клиентов из 1С…</div>':
  '<div class="s360-client-list">'+(list||'<div class="s360-muted">По запросу клиентов нет.</div>')+'</div>')+
- (total>0?'<div class="s360-head-actions" style="margin-top:12px"><span class="s360-muted">Найдено '+total+' · страница '+page+' из '+pages+'</span>'+
- '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-client-page="-1"'+(page===1?' disabled':'')+'>← Предыдущие</button>'+
- '<button type="button" class="s360-btn" data-s360-client-page="1"'+(page>=pages?' disabled':'')+'>Следующие →</button></div></div>':'')+
- clientDetailHtml(result.detail)+'</div>';
+ paginator+'</div><div class="s360-client-right" id="s360-client-detail-anchor">'+details+'</div></div></div>';
 }
 function render(){
  const root=mount();if(!root)return;
@@ -763,6 +777,7 @@ function render(){
  matrix(d)+'<div id="s360-drill-global-container" aria-live="polite">'+drillView('global')+'</div>'+clientsPanel(d)+
  '<div class="s360-foot"><span class="s360-muted">ИИ-сигналы — гипотезы для проверки. Нельзя считать нулевые продажи доказательством незнания товара. Никакие задачи и экзамены автоматически не создаются.</span>'+
  '<button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div>';
+ if(state.clientsOpen&&$('s360-client-left'))$('s360-client-left').scrollTop=state.clientListScroll;
 }
 function activatePeriod(key){
  if(!state.data)return;
@@ -886,19 +901,22 @@ function onClick(e){
   return;
  }
  if(a.s360ClientKey!==undefined){
-  state.clientsOpen=true;resetDrill('client');state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;loadClients();return;
+  state.clientListScroll=$('s360-client-left')?.scrollTop||0;
+  state.clientsOpen=true;clearClientRecovery();resetDrill('client');
+  state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;
+  state.focusClientOnLoad=true;loadClients();return;
  }
  if(a.s360ClientFind!==undefined){
   state.clientsOpen=true;state.clientSearch=String($('s360-client-search')?.value??state.clientSearch).slice(0,120);
-  state.clientOffset=0;state.clientKey='';resetDrill('client');loadClients();return;
+  state.clientOffset=0;state.clientKey='';clearClientRecovery();resetDrill('client');loadClients();return;
  }
  if(a.s360ClientPage!==undefined){
   const count=num(state.clientData?.total);
   const next=state.clientOffset+Number(a.s360ClientPage)*20;
-  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';resetDrill('client');loadClients()}
+  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';clearClientRecovery();resetDrill('client');loadClients()}
   return;
  }
- if(a.s360ClientClose!==undefined){state.clientKey='';resetDrill('client');loadClients();return;}
+ if(a.s360ClientClose!==undefined){state.clientKey='';clearClientRecovery();resetDrill('client');loadClients();return;}
  if(a.s360Legacy!==undefined){
   if(state.legacy){state.legacy=false;mount();render()}
   else originalReports(false);
