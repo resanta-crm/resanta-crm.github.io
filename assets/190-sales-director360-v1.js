@@ -21,7 +21,7 @@ const viewer=()=>{try{return String(currentProfile?.id||currentProfile?.email||m
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage():$('app')?.dataset?.activePage}catch(_){return''}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date().getFullYear()}catch(_){return new Date().getFullYear()}};
-const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,excludeTriovist:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false};
+const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false};
 let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,sourceRender=null;
 const cache=new Map(),pending=new Map(),TTL=180000;
 function clearClientState(){clientVersion++;state.clientOffset=0;state.clientKey='';state.clientData=null;state.clientError='';state.clientLoading=false;}
@@ -68,7 +68,6 @@ function filtersHtml(d){
  return '<div class="s360-filters">'+
  '<div class="s360-field"><label for="s360-year">Год сравнения</label><select id="s360-year" data-s360-select="year">'+years.map(x=>'<option value="'+x+'"'+(state.year===x?' selected':'')+'>'+x+' / '+(x-1)+'</option>').join('')+'</select></div>'+
  monthControls(d)+showSelectorOptions(d)+
- '<div class="s360-field"><label for="s360-scope">Режим продаж</label><select id="s360-scope" data-s360-select="scope"><option value="all"'+(!state.excludeTriovist?' selected':'')+'>Все продажи</option><option value="without"'+(state.excludeTriovist?' selected':'')+'>Без Триовиста</option></select></div>'+
  '<div class="s360-field"><label for="s360-view">График</label><select id="s360-view" data-s360-select="view"><option value="months"'+(state.view==='months'?' selected':'')+'>Месяцы</option><option value="quarters"'+(state.view==='quarters'?' selected':'')+'>Кварталы</option></select></div>'+
  '<button type="button" class="s360-btn" data-s360-refresh>↻ Обновить</button></div>';
 }
@@ -144,7 +143,7 @@ function styles(){
  scope+' .s360-field label{font-size:10px;color:var(--sub);font-weight:600}',
  scope+' .s360-field select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:inherit;font-size:12px}',
  scope+' .s360-filters{display:flex;flex-wrap:wrap;gap:9px;align-items:end}',
- scope+' .s360-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}',
+ scope+' .s360-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}',
  scope+' .s360-tile,'+scope+' .s360-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;min-width:0}',
  scope+' .s360-tile small{display:block;font-size:11px;color:var(--sub)}',
  scope+' .s360-tile strong{display:block;font-size:23px;letter-spacing:-.6px;overflow-wrap:anywhere;margin:6px 0}',
@@ -398,7 +397,7 @@ function clientsPanel(d){
   '<span>'+esc(whole(x.previous_revenue))+'<small class="s360-muted" style="display:block">'+d.previous_year+'</small></span></button>'
  ).join('');
  return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
- '<div class="s360-muted">Серверный поиск по всей клиентской базе с данными 1С · год/менеджер/режим синхронизированы</div></div>'+
+ '<div class="s360-muted">Серверный поиск по данным 1С · год и менеджер синхронизированы</div></div>'+
  '<button type="button" class="s360-btn" data-s360-all-clients>Свернуть список</button></div>'+
  '<div class="s360-client-search" style="margin-top:12px">'+
  '<input id="s360-client-search" data-s360-client-search value="'+esc(state.clientSearch)+'" placeholder="Название клиента или менеджер" aria-label="Поиск клиентов">'+
@@ -429,22 +428,17 @@ function render(){
  const periods=chartData(d,state.view);
  const comparison=y.delta===null?'—':(y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'%';
  const colors=y.delta===null?'':y.delta<0?'s360-negative':'s360-positive';
- const trio=num(d.triovist_revenue_ytd);
- const overall=y.current+(state.excludeTriovist?trio:0);
- const without=overall-trio;
  root.innerHTML=headerHtml(d)+filtersHtml(d)+
  '<div class="s360-kpis">'+
- kpiCard('Продажи с января · все',whole(overall),y.months+' закрытых месяцев · 1С')+
- kpiCard('С января · без Триовиста',whole(without),'Вычет подтверждённых продаж клиента')+
+ kpiCard('Продажи · всего',whole(y.current),y.months+' закрытых месяцев · 1С, с НДС')+
  kpiCard('К прошлому году',comparison,'Сопоставимые закрытые месяцы',colors)+
  kpiCard('Покупателей',fmt(d.active_clients_ytd),'Уникальных с продажами по 1С')+
  kpiCard('План/факт месяца',kpi.display,kpi.description+' · KPI без фильтра Триовиста')+
  kpiCard('Без точной ТТ',whole(d.unallocated_client_revenue),'Включено в общий оборот')+'</div>'+
- (trio===0?'<div class="s360-muted">В текущем импорте 1С отгрузок «Триовиста» за закрытые месяцы не найдено: суммы двух KPI совпадают.</div>':
- '<div class="s360-muted">Подтверждённый оборот «Триовиста» за закрытые месяцы: '+esc(whole(trio))+'. Оба KPI показывают соответствующие режимы.</div>')+
+
  '<div class="s360-panel s360-chart-panel'+(state.chartExpanded?' expanded':'')+'"><div class="s360-head-actions">'+
  '<div><h3>Динамика с января · '+d.year+' / '+d.previous_year+'</h3>'+
- '<div class="s360-muted">'+(state.excludeTriovist?'Без Триовиста':'Все продажи')+' · с НДС · сумма без копеек</div></div>'+
+ '<div class="s360-muted">Все продажи · с НДС · сумма без копеек</div></div>'+
  '<button type="button" class="s360-btn" data-s360-chart-expand>'+(state.chartExpanded?'Обычный размер':'Увеличить график')+'</button></div>'+
  trendSvg(periods)+
  '<div class="s360-legend"><span><i style="background:#2563eb"></i>'+d.year+'</span>'+
@@ -498,7 +492,6 @@ function onChange(e){
   const choices=state.data?monthRows(state.data).map(x=>x.month):[];
   if(choices.includes(v)){state.selectedMonth=v;render()}
  }
- if(k==='scope'&&['all','without'].includes(v)){state.excludeTriovist=v==='without';clearClientState();load(false)}
  if(k==='view'&&['months','quarters'].includes(v)){state.view=v;render()}
  if(k==='category'){state.category=v;state.draft=false;render()}
 }
@@ -569,7 +562,7 @@ function onClick(e){
 async function load(force=false){
  const root=mount();if(!root||active()!=='sales')return;
  const serial=++requestVersion;
- const key=[viewer(),state.year,boss()?state.manager:managerMe(),state.excludeTriovist?'without':'all'].join('|');
+ const key=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
  const hit=cache.get(key);
  if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();if(state.clientsOpen&&!state.clientData)loadClients();return}
  state.data=null;state.error='';state.loading=true;render();
@@ -578,7 +571,7 @@ async function load(force=false){
   if(!work||force){
    const database=dbx();if(!database?.rpc)throw Error('Источник Supabase недоступен');
    work=Promise.resolve().then(()=>database.rpc('crm_sales360_annual_v2',{
-    p_year:state.year,p_manager:boss()&&state.manager!=='all'?state.manager:null,p_exclude_triovist:state.excludeTriovist
+    p_year:state.year,p_manager:boss()&&state.manager!=='all'?state.manager:null,p_exclude_triovist:false
    })).then(({data,error})=>{if(error)throw error;return data;});
    pending.set(key,work);
    work.finally(()=>{if(pending.get(key)===work)pending.delete(key)}).catch(()=>{});
@@ -601,7 +594,7 @@ async function loadClients(){
   const {data,error}=await database.rpc('crm_sales360_clients_v2',{
    p_year:state.year,
    p_manager:boss()&&state.manager!=='all'?state.manager:null,
-   p_exclude_triovist:state.excludeTriovist,
+   p_exclude_triovist:false,
    p_search:state.clientSearch.trim().slice(0,120),
    p_limit:20,p_offset:state.clientOffset,p_client_key:state.clientKey||null
   });
