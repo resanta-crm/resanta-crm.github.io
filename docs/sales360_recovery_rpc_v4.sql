@@ -171,6 +171,8 @@ begin
   'sales_imported_at',(select last_success_at from source_stamp),
   'source_status',(select status from source_stamp),
   'month_granularity',true,'partial_current_month_excluded',v_year=v_today_year,
+  'baseline_complete',not(v_year=2024 and v_start<=2),
+  'data_quality_note',case when v_year=2024 and v_start<=2 then 'История 2023 года начинается с марта: сравнение января–февраля неполное' else null end,
   'groups',coalesce((select jsonb_agg(to_jsonb(x) order by x.loss_byn desc) from (
      select * from signals where kind='group' and previous_revenue>=5000 and loss_byn>=2500
      order by loss_byn desc limit 30) x),'[]'::jsonb),
