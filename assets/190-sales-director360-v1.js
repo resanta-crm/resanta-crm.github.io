@@ -214,32 +214,43 @@ function mount(){
 }
 function trendSvg(items){
  const shown=items.filter(x=>x.hasCurrent||x.hasPrevious);
- if(!shown.length)return'<div class="s360-muted">За выбранный период нет подтверждённых данных.</div>';
- const max=Math.max(1,...shown.flatMap(x=>[x.hasCurrent?x.current:0,x.hasPrevious?x.previous:0]));
- const w=660,h=210,l=34,t=16,plotW=610,plotH=151;
+ if(!shown.length)return'<div class="s360-muted">Нет подтверждённых данных.</div>';
+ const values=shown.flatMap(x=>[x.hasCurrent?num(x.current):0,x.hasPrevious?num(x.previous):0]);
+ const hi=Math.max(1,...values),lo=Math.min(0,...values),range=Math.max(1,hi-lo);
+ const w=880,h=262,l=76,t=36,plotW=770,plotH=178;
  const x=i=>l+(items.length===1?plotW/2:i*plotW/(items.length-1));
- const y=v=>t+plotH-Math.max(0,num(v))/max*plotH;
- let lines='';
- for(const [key,color] of [['previous','#aab4c5'],['current','#2563eb']]){
+ const y=v=>t+(hi-num(v))/range*plotH;
+ const selected=periodKey();
+ let svg='';
+ for(const k of [0,0.5,1]){
+  const value=lo+range*k,cy=y(value).toFixed(1);
+  svg+='<path d="M'+l+' '+cy+'H'+(l+plotW)+'" stroke="#cbd5e1" stroke-dasharray="3 5"/>'+
+   '<text x="'+(l-9)+'" y="'+(Number(cy)+4)+'" text-anchor="end" font-size="11" fill="currentColor">'+esc(chartValue(value))+'</text>';
+ }
+ const si=items.findIndex(a=>a.key===selected);
+ if(si>=0)svg+='<rect x="'+(x(si)-plotW/items.length/2).toFixed(1)+'" y="'+t+'" width="'+(plotW/items.length).toFixed(1)+'" height="'+plotH+'" fill="#dbeafe" opacity=".35"/>';
+ for(const [key,color] of [['previous','#94a3b8'],['current','#2563eb']]){
   let seg=[];
   items.forEach((a,i)=>{
-   const exists=key==='current'?a.hasCurrent:a.hasPrevious;
-   if(!exists){if(seg.length){lines+='<polyline points="'+seg.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linejoin="round"/>';seg=[];}return;}
+   const has=key==='current'?a.hasCurrent:a.hasPrevious;
+   if(!has){if(seg.length)svg+='<polyline points="'+seg.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2.5"/>';seg=[];return;}
    seg.push(x(i).toFixed(1)+','+y(a[key]).toFixed(1));
   });
-  if(seg.length)lines+='<polyline points="'+seg.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linejoin="round"/>';
+  if(seg.length)svg+='<polyline points="'+seg.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2.5"/>';
   items.forEach((a,i)=>{
-   const exists=key==='current'?a.hasCurrent:a.hasPrevious;
-   if(!exists)return;
-   const title=a.label+' · '+(key==='current'?'текущий год':'прошлый год')+': '+money(a[key])+(a.partial?' · неполный период':'');
-   lines+='<circle cx="'+x(i).toFixed(1)+'" cy="'+y(a[key]).toFixed(1)+'" r="3.6" fill="'+color+'"><title>'+esc(title)+'</title></circle>';
+   const has=key==='current'?a.hasCurrent:a.hasPrevious;
+   if(!has)return;
+   const chosen=a.key===selected,description=a.label+' · '+(key==='current'?'текущий':'прошлый')+' год: '+money(a[key])+(a.partial?' (неполный период)':'');
+   svg+='<g data-s360-point="'+esc(a.key)+'" tabindex="0" role="button" aria-label="'+esc(description)+'" style="cursor:pointer">'+
+    '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(a[key]).toFixed(1)+'" r="12" fill="transparent"/>'+
+    '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(a[key]).toFixed(1)+'" r="'+(chosen?'6':'4')+'" fill="'+color+'" stroke="#fff" stroke-width="1"/>'+
+    '<title>'+esc(description)+'</title></g>';
+   if(key==='current')svg+='<text x="'+x(i).toFixed(1)+'" y="'+Math.max(13,y(a[key])-13).toFixed(1)+'" text-anchor="middle" fill="#1d4ed8" font-size="10" font-weight="700">'+esc(chartValue(a[key]))+'</text>';
   });
  }
- const marks=items.map((a,i)=>'<text x="'+x(i).toFixed(1)+'" y="194" text-anchor="middle" fill="currentColor" font-size="10">'+esc(a.label)+'</text>').join('');
- return '<svg class="s360-chart" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Годовая динамика продаж двух лет" preserveAspectRatio="xMidYMid meet">'+
-  '<path d="M'+l+' '+(t+plotH)+'H'+(l+plotW)+'" stroke="#b5bec9" stroke-width="1"/>'+
-  [0,0.5,1].map(k=>'<path d="M'+l+' '+y(k*max).toFixed(1)+'H'+(l+plotW)+'" stroke="#cbd5e1" opacity=".4" stroke-dasharray="3 5"/>').join('')+
-  lines+marks+'</svg>';
+ svg+=items.map((a,i)=>'<text x="'+x(i).toFixed(1)+'" y="240" text-anchor="middle" fill="currentColor" font-size="11">'+esc(a.label)+'</text>').join('');
+ return '<div class="s360-chart-wrap"><svg class="s360-chart" viewBox="0 0 '+w+' '+h+'" role="group" aria-label="Продажи по периодам, суммы в BYN, выбор точек" preserveAspectRatio="xMidYMid meet">'+
+ '<text x="'+l+'" y="18" fill="currentColor" font-size="11">Оборот, BYN · подписи сокращены, точные суммы ниже</text>'+svg+'</svg></div>';
 }
 function showSelectorOptions(d){
  const available=arr(d?.managers).map(x=>x.name).filter(x=>x&&x!=='Не распределено');
