@@ -378,9 +378,9 @@ test('drill patches only its own container and preserves client list/scroll cont
  const fire=dataset=>f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?{dataset}:null}}});
  fire({s360ClientKey:'c1'});await settle();
  const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/s360-drill-client-container/);
+ assert.match(html,/s360-client-product-container/);
  const partial={innerHTML:''};
- f.nodes['s360-drill-client-container']=partial;
+ f.nodes['s360-client-product-container']=partial;
  const callsBefore=f.calls.length;
  fire({s360DrillGroup:'САДОВАЯ ТЕХНИКА',s360DrillScope:'client'});await settle();
  assert.equal(f.nodes['sales360-root'].innerHTML,html,'the client/list DOM is not rebuilt');
