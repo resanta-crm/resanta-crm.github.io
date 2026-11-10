@@ -1,0 +1,38 @@
+name: PDZ 360 daily dashboard regression
+on:
+  pull_request:
+    paths:
+      - 'assets/193-pdz-director360-v1.js'
+      - 'assets/194-pdz360-lera-v1.js'
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'docs/pdz360_daily_rpc_v1.sql'
+      - 'tests/pdz-director360-v1.test.mjs'
+      - 'tests/pdz360-lera-v1.test.mjs'
+      - 'index.html'
+      - '.github/workflows/pdz-director360-regression.yml'
+  push:
+    paths:
+      - 'assets/193-pdz-director360-v1.js'
+      - 'assets/194-pdz360-lera-v1.js'
+      - 'docs/pdz360_daily_rpc_v1.sql'
+      - 'tests/pdz-director360-v1.test.mjs'
+      - 'tests/pdz360-lera-v1.test.mjs'
+      - '.github/workflows/pdz-director360-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: JS syntax
+        run: |
+          node --check assets/193-pdz-director360-v1.js
+          node --check assets/194-pdz360-lera-v1.js
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+      - name: PDZ director / manager and Lera read-only regressions
+        run: node --test tests/pdz-director360-v1.test.mjs tests/pdz360-lera-v1.test.mjs
