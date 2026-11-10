@@ -9,6 +9,8 @@ const index=read('index.html');
 const sql=read('docs/sales360_annual_rpc_v1.sql');
 const v2sql=read('docs/sales360_scope_clients_rpc_v2.sql');
 const v3sql=read('docs/sales360_product_drill_rpc_v3.sql');
+const v4sql=read('docs/sales360_recovery_rpc_v4.sql');
+const lera=read('assets/191-sales360-recovery-lera-v1.js');
 const monthly=read('assets/118-sales-analytics-v236374.js');
 const core=read('assets/01-crm-core.js');
 const yoy=read('assets/49-manager-sales-yoy-v23634.js');
@@ -40,8 +42,24 @@ const sample={
       {manager_name:'Шкуран',actual:10080.74,plan:89000}],
  freshness:{last_success_at:'2026-11-10T05:00:00'}
 };
+const sampleRecovery={
+ version:'sales360.recovery.4',year:2026,previous_year:2025,period:'last3',
+ from_month:8,to_month:10,closed:true,month_granularity:true,
+ sales_imported_at:'2026-11-10T06:01:31Z',
+ current_revenue:1077254.49,previous_revenue:738692.45,
+ client_drop_30_count:14,client_drop_30_gap:91900.39,
+ groups:[],
+ subgroups:[
+  {kind:'subgroup',category:'САДОВАЯ ТЕХНИКА',subgroup:'Бензопилы',status:'decline',previous_revenue:70404.73,current_revenue:48985.32,delta_byn:-21419.41,loss_byn:21419.41,delta_pct:-30.4},
+  {kind:'subgroup',category:'ЭЛЕКТРОГЕНЕРАТОРЫ',subgroup:'Дизельные',status:'stopped',previous_revenue:10794.56,current_revenue:0,delta_byn:-10794.56,loss_byn:10794.56,delta_pct:-100}
+ ],
+ skus:[{kind:'sku',category:'САДОВАЯ ТЕХНИКА',subgroup:'Бензопилы',sku:'70/6/4',product:'Бензопила BS-45М Huter',status:'decline',previous_revenue:40105.7,current_revenue:14972.32,delta_byn:-25133.38,loss_byn:25133.38,delta_pct:-62.7}],
+ clients:[{kind:'client',client_key:'c1',client_name:'Клиент & Строй',manager_name:'Руднев',status:'decline',previous_revenue:30000,current_revenue:17000,delta_byn:-13000,loss_byn:13000,delta_pct:-43.3}],
+ growing_subgroups:[{kind:'subgroup',category:'ИНСТРУМЕНТ',subgroup:'Аккумуляторы',status:'growth',previous_revenue:10000,current_revenue:25000,delta_byn:15000,loss_byn:0,delta_pct:150}],
+ growing_clients:[]
+};
 function fixture(role='boss'){
- const nodes={},events={},calls=[],navigation=[];
+ const nodes={},events={},calls=[],recoveryCalls=[],navigation=[];
  const classes=new Set();
  const page={classList:{toggle(name,flag){if(flag)classes.add(name);else classes.delete(name)}},
   insertAdjacentElement(_,node){nodes[node.id]=node;},
@@ -63,6 +81,13 @@ function fixture(role='boss'){
   navigator:{clipboard:{writeText:async()=>{}}}
  };
  const db={rpc:async(name,args)=>{
+  if(name==='crm_sales360_recovery_v4'){
+   recoveryCalls.push({name,args});
+   const result={...sampleRecovery,year:args.p_year,previous_year:args.p_year-1,period:args.p_period,
+    manager:args.p_manager,client_key:args.p_client_key||null,category_filter:args.p_category||null};
+   if(args.p_category)return {data:{...result,subgroups:sampleRecovery.subgroups.filter(x=>x.category===args.p_category),clients:sampleRecovery.clients,skus:sampleRecovery.skus},error:null};
+   return {data:result,error:null};
+  }
   calls.push({name,args});
   if(name==='crm_sales360_product_drill_v3'){
    const rows=args.p_level==='subgroups'?
@@ -94,12 +119,12 @@ function fixture(role='boss'){
    TODAY:'2026-11-10',crmActivePage:()=>nodes.app.dataset.activePage,setTimeout};
  vm.createContext(context);
  vm.runInContext(src,context,{filename:'190-sales-director360-v1.js'});
- return{window,context,nodes,events,calls,navigation,classes};
+ return{window,context,nodes,events,calls,recoveryCalls,navigation,classes};
 }
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
 test('sales module stays isolated after original analytics and keeps core unchanged',()=>{
  assert.doesNotThrow(()=>new vm.Script(src));
- assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-5'));
+ assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-6'));
  assert.ok(index.indexOf('assets/118-sales-analytics-v236374.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.ok(index.indexOf('assets/189-falling-director360-v1.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.match(core,/function renderSales\(\)/);
@@ -145,7 +170,7 @@ test('sales native renderer executes, and server annual RPC has no local history
  const root=f.nodes['sales360-root'];
  assert.ok(root.innerHTML.includes('Продажи 360°'));
  assert.ok(root.innerHTML.includes('Управление ростом'));
- assert.ok(root.innerHTML.includes('Директорский брифинг · Что требует решения'));
+ assert.ok(root.innerHTML.includes('Директорский брифинг · Где теряем и растём'));
  assert.ok(root.innerHTML.includes('Матрица')||root.innerHTML.includes('Потенциал менеджеров'));
  assert.ok(root.innerHTML.includes('Ноябрь')||root.innerHTML.includes('Ноя'));
  assert.ok(root.innerHTML.includes('Клиент &amp; Строй'));
@@ -277,7 +302,7 @@ test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
  assert.match(html,/275тыс/,'2025 Oct monthly value is labeled in grey');
  assert.match(html,/317тыс/,'2026 Oct value is labeled in blue');
  assert.doesNotMatch(html,/316\s*927,84 BYN/,'chart/selected period no longer shows kopecks');
- assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('Директорский брифинг · Что требует решения'),'graph occupies own full-width row before briefing');
+ assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('Директорский брифинг · Где теряем и растём'),'graph occupies own full-width row before briefing');
 });
 test('one full-sales KPI only, no Triovist exclusion UI or separate sale totals',async()=>{
  const f=fixture();f.window.renderSales();await settle();
@@ -404,7 +429,7 @@ test('director briefing ranks meaningful category losses with evidence and a con
  assert.equal(sig.issues[0].priority,'Высокий');
  assert.match(sig.issues[0].action,/подгруппы и SKU/);
  const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/Директорский брифинг · Что требует решения/);
+ assert.match(html,/Директорский брифинг · Где теряем и растём/);
  assert.match(html,/снижение 50\s*000 BYN/);
  assert.match(html,/Разобрать подгруппы и SKU/);
  assert.match(html,/причина ещё не установлена/);
@@ -420,4 +445,63 @@ test('director signals filter weak declines instead of labelling any zero sales 
  const result=f.window.RESANTA_SALES360_V1.directorSignals(a);
  assert.equal(result.declineCount,0);
  assert.equal(result.issues.length,0);
+});
+
+test('recovery brief uses same verified v4 RPC as Lera, including client and SKU losses',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ assert.equal(f.recoveryCalls[0].name,'crm_sales360_recovery_v4');
+ assert.equal(f.recoveryCalls[0].args.p_period,'last3');
+ assert.equal(f.recoveryCalls[0].args.p_year,2026);
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/Бензопилы/);
+ assert.match(html,/21\s*419 BYN/);
+ assert.match(html,/Клиентов со снижением/);
+ assert.match(html,/14/);
+ assert.match(html,/data-s360-rec-tab="clients"/);
+ assert.match(v4sql,/crm_sales360_recovery_v4/);
+ assert.match(lera,/crm_sales360_recovery_v4/);
+});
+test('recovery period changes month basis and open November is explicitly excluded',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const a=f.recoveryCalls.length;
+ f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360RecPeriod:'quarter'}}:null}}});
+ await settle();
+ assert.equal(f.recoveryCalls.length,a+1);
+ assert.equal(f.recoveryCalls.at(-1).args.p_period,'quarter');
+ assert.match(f.nodes['sales360-root'].innerHTML,/Текущий неполный месяц исключён|Ноябрь без подтверждённой ежедневной детализации не сравнивается/);
+});
+test('subgroup recovery opens matching same-period SKU and client signals on one screen',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const elem={dataset:{s360RecGroup:'САДОВАЯ ТЕХНИКА',s360RecSubgroup:'Бензопилы',s360RecSku:''}};
+ f.events.click({target:{closest(sel){return sel==='button'?elem:null}}});
+ await settle();
+ const call=f.recoveryCalls.at(-1);
+ assert.equal(call.args.p_category,'САДОВАЯ ТЕХНИКА');
+ assert.equal(call.args.p_subgroup,'Бензопилы');
+ assert.equal(call.args.p_period,'last3');
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/Разбор потерь/);
+ assert.match(html,/SKU 70\/6\/4/);
+ assert.match(html,/Клиенты с падением/);
+});
+test('recovery client signals open adaptive client view and maintain matching rights',async()=>{
+ const f=fixture('manager');f.window.renderSales();await settle();
+ assert.equal(f.recoveryCalls[0].args.p_manager,null);
+ f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360RecClient:'c1'}}:null}}});
+ await settle();
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/s360-client-split/);
+ assert.match(html,/s360-client-detail-anchor/);
+ assert.match(html,/Динамика клиента · где падение/);
+ assert.equal(f.recoveryCalls.at(-1).args.p_client_key,'c1');
+ assert.equal(f.recoveryCalls.at(-1).args.p_manager,null);
+});
+test('recovery RPC is additive, read only, manager scoped, monthly, non-intrusive',()=>{
+ assert.match(v4sql,/auth\.uid\(\) is null/);
+ assert.match(v4sql,/Менеджер может просматривать только собственные данные/);
+ assert.match(v4sql,/crm_client_exact_key_v236204/);
+ assert.match(v4sql,/from public\.purchase_history/);
+ assert.match(v4sql,/extract\(month from ph\.month\)::int between v_start and v_end/);
+ assert.match(v4sql,/revoke all on function public\.crm_sales360_recovery_v4\(integer,text,text,text,text,text\) from public,anon/);
+ assert.doesNotMatch(v4sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
 });
