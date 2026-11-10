@@ -445,9 +445,29 @@ function matrix(d){
   (state.draft?draft(d):'')+'</div></div>';
 }
 function draft(d){
- const focus=state.manager==='all'?'Выбранный менеджер':state.manager;
- const content='Проверить возможность роста продаж группы «'+state.category+'». Ответственный: '+focus+'. Проверить спрос клиентов, наличие на складе Витебск, историю предложений и визитов. При выявленном пробеле знаний: согласовать обучение, затем тест на 10 вопросов (порог 80%) по утверждённым материалам производителя. Представить подтверждённые действия и факт отгрузок из 1С. Задача создаётся только после согласования руководителем.';
- return'<label class="s360-muted" for="s360-draft-text">Черновик поручения · автоматически не создаётся</label><textarea class="s360-copy" id="s360-draft-text">'+esc(content)+'</textarea><button type="button" class="s360-btn" data-s360-copy>Копировать черновик</button>';
+ const signal=directorSignals(d).issues.find(s=>s.category===state.category);
+ const owner=signal?.manager||(state.manager==='all'?'Назначить директору филиала':state.manager);
+ const evidence=signal?.kind==='decline'?
+  ('Факт '+d.year+': '+whole(signal.current)+', '+d.previous_year+': '+whole(signal.previous)+', отклонение −'+whole(signal.loss)+' ('+signal.pct.toFixed(1).replace('.',',')+'%).'):
+  signal?.kind==='opportunity'?
+  ('Нет продаж группы у '+signal.manager+', при продажах коллег '+whole(signal.peerRevenue)+'. Причина не установлена.'):
+  'Зафиксировать оборот группы в сопоставимых закрытых периодах и определить проблему.';
+ const content=[
+  'ЧЕРНОВИК · НЕ НАЗНАЧЕНО',
+  'Тема: Проверить продажи товарной группы «'+state.category+'».',
+  'Ответственный (предложение): '+owner+'.',
+  'Основание: '+evidence,
+  'Проверить: 1) подгруппы и SKU с наибольшим снижением;',
+  '2) наличие товара на складе Витебск и в пути; 3) историю продаж и активность покупателей;',
+  '4) возвраты, сезонность, коммерческие предложения и переуступку клиентов.',
+  'Результат: подтвердить или отвергнуть гипотезу, назвать причины с источниками,',
+  'предложить конкретные действия по группам и клиентам, зафиксировать проверяемый результат.',
+  'Любое обучение/тест — только после выявления пробела и решения руководителя.',
+  'Поручение создаётся только после утверждения директором.'
+ ].join('\n');
+ return'<label class="s360-muted" for="s360-draft-text">Проект для руководителя · автоматически не создаётся</label>'+
+ '<textarea class="s360-copy" id="s360-draft-text">'+esc(content)+'</textarea>'+
+ '<button type="button" class="s360-btn" data-s360-copy>Копировать черновик</button>';
 }
 function drillView(scope){
  const st=drillStates[scope];
