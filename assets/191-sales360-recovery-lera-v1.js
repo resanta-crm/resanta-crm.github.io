@@ -130,5 +130,21 @@ function handle(question,ui,mode){
 }
 root.crmAI360SalesRecoveryHandleV1=(q,ui)=>handle(q,ui,'director');
 root.crmAI360BranchRecoveryHandleV1=(q,ui)=>handle(q,ui,'staff');
+// CONNECT/branch voice code remains unchanged. Install a transparent wrapper around
+// the existing staff unified delegate. The click capture handles Android lazy loads,
+// where that delegate appears only after employee opt-in.
+function hookStaffRead(){
+ const existing=root.crmAI360BranchUnifiedHandleV1;
+ if(typeof existing!=='function'||existing.__sales360RecoveryWrapped)return;
+ const wrapped=function(q,ui){
+  if(root.crmAI360BranchRecoveryHandleV1?.(q,ui))return true;
+  return existing.apply(this,arguments);
+ };
+ Object.defineProperty(wrapped,'__sales360RecoveryWrapped',{value:true});
+ root.crmAI360BranchUnifiedHandleV1=wrapped;
+ root.document?.removeEventListener?.('click',hookStaffRead,true);
+}
+hookStaffRead();
+root.document?.addEventListener?.('click',hookStaffRead,true);
 root.RESANTA_SALES_RECOVERY_LERA=Object.freeze({version:'20261110.1',rpc:RPC,detect,period,summarize,readOnly:true});
 })(window);
