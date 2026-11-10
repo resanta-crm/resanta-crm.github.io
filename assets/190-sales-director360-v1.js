@@ -21,8 +21,8 @@ const viewer=()=>{try{return String(currentProfile?.id||currentProfile?.email||m
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage():$('app')?.dataset?.activePage}catch(_){return''}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date().getFullYear()}catch(_){return new Date().getFullYear()}};
-const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false};
-let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,sourceRender=null;
+const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:''};
+let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,recoveryVersion=0,clientRecoveryVersion=0,sourceRender=null;
 const newDrill=()=>({category:'',subgroup:'',level:'subgroups',search:'',offset:0,loading:false,error:'',data:null,clientKey:''});
 const drillStates={global:newDrill(),client:newDrill()};
 const drillVersions={global:0,client:0};
@@ -34,6 +34,7 @@ function resetDrill(scope){
 function resetAllDrills(){resetDrill('global');resetDrill('client')}
 
 const cache=new Map(),pending=new Map(),TTL=180000;
+const recoveryCache=new Map(),recoveryPending=new Map(),RECOVERY_TTL=300000;
 // Drill responses are aggregate-only; repeat navigation should never rescan 1C.
 const drillCache=new Map(),drillPending=new Map(),DRILL_TTL=300000,DRILL_MAX=60;
 function drillKey(scope,st){return JSON.stringify([viewer(),state.year,boss()?state.manager:managerMe(),scope,st.clientKey||'',st.category,st.level,st.subgroup,st.search,st.offset]);}
@@ -48,7 +49,12 @@ function paintDrill(scope){
  render();
 }
 
-function clearClientState(){clientVersion++;state.clientOffset=0;state.clientKey='';state.clientData=null;state.clientError='';state.clientLoading=false;resetDrill('client');}
+function clearClientRecovery(){clientRecoveryVersion++;state.clientRecoveryData=null;state.clientRecoveryLoading=false;state.clientRecoveryError='';}
+function clearRecovery(){
+ recoveryVersion++;state.recoveryData=null;state.recoveryLoading=false;state.recoveryError='';
+ clearClientRecovery();
+}
+function clearClientState(){clientVersion++;state.clientOffset=0;state.clientKey='';state.clientData=null;state.clientError='';state.clientLoading=false;state.focusClientOnLoad=false;clearClientRecovery();resetDrill('client');}
 const monthRows=d=>arr(d?.months).filter(x=>x?.has_current||(state.year<currentYear()&&x?.has_previous));
 const focusedMonth=d=>{const a=monthRows(d);return a.find(x=>x.month===state.selectedMonth)||a.filter(x=>x.has_current).slice(-1)[0]||a.slice(-1)[0]||null};
 function monthLabel(ym){const m=Number(String(ym||'').slice(5,7));return(MONTHS[m-1]||'—')+' '+String(ym||'').slice(0,4)}
@@ -694,12 +700,12 @@ function onChange(e){
  const v=t.value,k=t.dataset.s360Select;
  if(k==='year'){
   const y=Number(v);if(y>=2023&&y<=currentYear()){
-   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();resetDrill('global');invalidateDrillCache();load(false);
+   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);
   }
  }
  if(k==='manager'){
   if(!boss())return;
-  state.manager=v;state.category='all';state.expanded=false;state.draft=false;clearClientState();resetDrill('global');invalidateDrillCache();load(false);
+  state.manager=v;state.category='all';state.expanded=false;state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);
  }
  if(k==='month'){
   const choices=state.data?monthRows(state.data).map(x=>x.month):[];
@@ -722,7 +728,7 @@ function onClick(e){
  if(point){activatePeriod(point.dataset.s360Point);return}
  const t=e.target.closest?.('button');if(!t)return;
  const a=t.dataset;
- if(a.s360Refresh!==undefined){clearClientState();resetDrill('global');invalidateDrillCache();load(true);return}
+ if(a.s360Refresh!==undefined){clearClientState();clearRecovery();recoveryCache.clear();resetDrill('global');invalidateDrillCache();load(true);return}
  if(a.s360ChartExpand!==undefined){state.chartExpanded=!state.chartExpanded;render();return}
  if(a.s360Step!==undefined){
   const months=monthRows(state.data).map(x=>x.month),i=months.indexOf(focusedMonth(state.data)?.month);
@@ -730,7 +736,7 @@ function onClick(e){
   if(next>=0&&next<months.length){state.selectedMonth=months[next];render()}
   return;
  }
- if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;clearClientState();resetDrill('global');invalidateDrillCache();load(false);return}
+ if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);return}
  if(a.s360Category!==undefined){state.category=a.s360Category;state.draft=false;openDrill('global',a.s360Category);return}
  if(a.s360BriefGroup!==undefined){
   const category=String(a.s360BriefGroup).slice(0,200);
@@ -816,7 +822,7 @@ async function load(force=false){
  const serial=++requestVersion;
  const key=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
  const hit=cache.get(key);
- if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();if(state.clientsOpen&&!state.clientData)loadClients();return}
+ if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();loadRecovery();if(state.clientsOpen&&!state.clientData)loadClients();return}
  state.data=null;state.error='';state.loading=true;render();
  try{
   let work=pending.get(key);
@@ -835,7 +841,7 @@ async function load(force=false){
   while(cache.size>16)cache.delete(cache.keys().next().value);
  }catch(err){
   if(serial===requestVersion){state.error=String(err?.message||err);state.data=null;console.warn('Sales360 annual read-only request',err)}
-  }finally{if(serial===requestVersion){state.loading=false;render();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
+  }finally{if(serial===requestVersion){state.loading=false;render();if(state.data)loadRecovery();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
 }
 async function loadClients(){
  if(!state.clientsOpen||!state.data||active()!=='sales')return;
@@ -856,7 +862,84 @@ async function loadClients(){
   state.clientData=data;
  }catch(err){
   if(serial===clientVersion){state.clientError=String(err?.message||err);state.clientData=null;console.warn('Sales360 client scoped RPC',err)}
- }finally{if(serial===clientVersion){state.clientLoading=false;render()}}
+ }finally{if(serial===clientVersion){state.clientLoading=false;render();if(state.clientData?.detail){loadClientRecovery();focusSelectedClient();}}}
+}
+function recoveryArgs(clientKey=null){
+ return {
+  p_year:state.year,
+  p_manager:boss()&&state.manager!=='all'?state.manager:null,
+  p_period:state.recoveryPeriod,
+  p_client_key:clientKey||null,p_category:null,p_subgroup:null
+ };
+}
+function recoveryKey(clientKey=null){
+ return JSON.stringify([viewer(),state.year,boss()?state.manager:managerMe(),state.recoveryPeriod,clientKey||'']);
+}
+async function fetchRecovery(clientKey=null){
+ const isClient=Boolean(clientKey),serial=isClient?++clientRecoveryVersion:++recoveryVersion;
+ if(isClient){
+  state.clientRecoveryLoading=true;state.clientRecoveryError='';state.clientRecoveryData=null;
+ }else{
+  state.recoveryLoading=true;state.recoveryError='';state.recoveryData=null;
+ }
+ render();
+ const key=recoveryKey(clientKey),hit=recoveryCache.get(key);
+ try{
+  let result;
+  if(hit&&Date.now()-hit.at<RECOVERY_TTL)result=hit.data;
+  else{
+   const database=dbx();if(!database?.rpc)throw Error('Источник Supabase недоступен');
+   let work=recoveryPending.get(key);
+   if(!work){
+    work=Promise.resolve().then(()=>database.rpc('crm_sales360_recovery_v4',recoveryArgs(clientKey)))
+     .then(({data,error})=>{if(error)throw error;return data});
+    recoveryPending.set(key,work);
+    work.finally(()=>{if(recoveryPending.get(key)===work)recoveryPending.delete(key)}).catch(()=>{});
+   }
+   result=await work;
+   if(result?.version==='sales360.recovery.4'){
+    recoveryCache.set(key,{at:Date.now(),data:result});
+    while(recoveryCache.size>24)recoveryCache.delete(recoveryCache.keys().next().value);
+   }
+  }
+  if(active()!=='sales')return;
+  if(isClient?(serial!==clientRecoveryVersion||clientKey!==state.clientKey):serial!==recoveryVersion)return;
+  if(result?.version!=='sales360.recovery.4'||!Array.isArray(result.subgroups)||!Array.isArray(result.clients))
+   throw Error('Неполный ответ аналитики продаж 1С');
+  if(isClient)state.clientRecoveryData=result;else state.recoveryData=result;
+ }catch(err){
+  if(isClient?(serial===clientRecoveryVersion&&clientKey===state.clientKey):serial===recoveryVersion){
+   if(isClient)state.clientRecoveryError=String(err?.message||err);
+   else state.recoveryError=String(err?.message||err);
+   console.warn('Sales360 recovery read-only source',err);
+  }
+ }finally{
+  if(isClient?(serial===clientRecoveryVersion&&clientKey===state.clientKey):serial===recoveryVersion){
+   if(isClient)state.clientRecoveryLoading=false;else state.recoveryLoading=false;
+   render();
+  }
+ }
+}
+function loadRecovery(){
+ if(!state.data||active()!=='sales')return;
+ const key=recoveryKey();
+ if(state.recoveryData?.version==='sales360.recovery.4')return;
+ if(state.recoveryLoading)return;
+ void fetchRecovery();
+}
+function loadClientRecovery(){
+ if(!state.clientKey||!state.clientData?.detail||active()!=='sales')return;
+ if(state.clientRecoveryData?.client_key===state.clientKey)return;
+ if(state.clientRecoveryLoading)return;
+ void fetchRecovery(state.clientKey);
+}
+function focusSelectedClient(){
+ if(!state.focusClientOnLoad)return;
+ state.focusClientOnLoad=false;
+ if(typeof w.requestAnimationFrame==='function')w.requestAnimationFrame(()=>{
+  const el=$('s360-client-detail-anchor')||$('s360-clients');
+  el?.scrollIntoView?.({behavior:'smooth',block: w.innerWidth<950?'start':'nearest'});
+ });
 }
 function install(){
  if(wrapped)return;
