@@ -1,0 +1,25 @@
+name: Sales Director 360 regression
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'assets/190-sales-director360-v1.js'
+      - 'docs/sales360_annual_rpc_v1.sql'
+      - 'tests/sales-director360-v1.test.mjs'
+      - '.github/workflows/sales-director360-regression.yml'
+  push:
+    branches: ['feature/sales-director360-20261110']
+jobs:
+  sales360:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: node --check assets/190-sales-director360-v1.js
+      - name: Sales 360 isolated regressions
+        run: node --test tests/sales-director360-v1.test.mjs
