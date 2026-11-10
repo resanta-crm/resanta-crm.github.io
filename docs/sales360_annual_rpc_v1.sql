@@ -73,6 +73,7 @@ begin
  sales as materialized (
   select ph.month::date as month,
    coalesce(ph.revenue,0)::numeric revenue,
+   ph.client_name as client_name,
    coalesce(nullif(trim(ph.category),''),'Без категории') category,
    coalesce(ac.manager_name,em.manager_name,lm.manager_name,nullif(trim(ph.manager_name),'')) manager_name,
    coalesce(ac.id,em.client_id,lm.client_id) resolved_client_id,
@@ -135,6 +136,19 @@ begin
   'managers',coalesce((select jsonb_agg(to_jsonb(m) order by m.current_revenue desc,m.name) from manager_sum m),'[]'::jsonb),
   'categories',coalesce((select jsonb_agg(to_jsonb(c) order by c.current_revenue desc,c.category) from cats c),'[]'::jsonb),
   'matrix',coalesce((select jsonb_agg(to_jsonb(x) order by x.manager_name,x.category) from matrix x),'[]'::jsonb),
+  'active_clients_ytd',(select count(distinct f.client_key)::int from filtered f where extract(year from f.month)::int=v_year and extract(month from f.month)::int<=v_closed and f.revenue>0),
+  'top_clients',coalesce((
+    select jsonb_agg(to_jsonb(t) order by t.revenue desc,t.client_name)
+    from (
+      select f.client_key, max(f.client_name) as client_name,
+       max(f.resolved_client_id::text) as client_id,
+       max(f.manager_name) as manager_name,
+       bool_or(f.resolved_client_id is null) as is_unallocated,
+       round(sum(f.revenue),2) as revenue
+      from filtered f
+      where extract(year from f.month)::int=v_year and extract(month from f.month)::int<=v_closed
+      group by f.client_key order by sum(f.revenue) desc, max(f.client_name) limit 15
+    ) t),'[]'::jsonb),
   'unallocated_manager_revenue',round(coalesce((select sum(f.revenue) from filtered f where extract(year from f.month)::int=v_year and extract(month from f.month)::int<=v_closed and f.manager_name is null),0),2),
   'unallocated_client_revenue',round(coalesce((select sum(f.revenue) from filtered f where extract(year from f.month)::int=v_year and extract(month from f.month)::int<=v_closed and f.resolved_client_id is null),0),2),
   'freshness',(select jsonb_build_object('status',s.status,'last_success_at',s.last_success_at,'report_period',s.report_period,'report_date',s.report_date,'row_count',s.row_count)
