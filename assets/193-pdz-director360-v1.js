@@ -159,6 +159,7 @@ function render(){
  const root=mount();if(!root)return;css();
  if(state.legacy){root.innerHTML='<div class="p-card p-header"><h3>Исходный раздел ПДЗ</h3><button class="p-btn p-primary" data-pdz-legacy>Вернуться к ПДЗ 360°</button></div>';return;}
  const d=state.data,m=d?.metrics||{},list=rows(),den=n(m.amount),delta=n(d?.day_change),changeLabel=d?.previous_report_date?'к '+date(d.previous_report_date):'нет предыдущего подтверждённого дня';
+ const changePct=d?.previous_report_date&&n(d.previous_amount)>0?' · '+(delta>=0?'+':'')+(delta/n(d.previous_amount)*100).toFixed(1).replace('.',',')+'%':'';
  const managers=boss()?(state.managerOptions.length?state.managerOptions:arr(d?.managers)):[];
  const filters='<div class="p-card p-controls">'+
  (boss()?'<div class="p-field"><label>Менеджер</label><select data-pdz-manager><option value="all">Все менеджеры</option>'+managers.map(x=>'<option value="'+E(x.manager_name)+'"'+(state.manager===x.manager_name?' selected':'')+'>'+E(x.manager_name)+'</option>').join('')+'</select></div>':'')+
@@ -172,7 +173,7 @@ function render(){
  const top='<div class="p-header"><div><h2>Задолженность 360°</h2><div class="p-muted">Последний отчёт 1С: '+E(date(d.report_date))+' · прошлый срез: '+E(date(d.previous_report_date))+' · по календарным датам, не по дате загрузки</div></div>'+
  '<div class="p-muted">'+(boss()?'Директор · все менеджеры':'Менеджер · только закреплённые клиенты')+'</div></div>';
  const kpi='<div class="p-kpis">'+
- card('Просрочено · всего',money(m.amount),'<span class="'+(delta>0?'p-danger':'p-good')+'">'+E(signed(delta))+'</span> · '+E(changeLabel),'')+
+ card('Просрочено · всего',money(m.amount),'<span class="'+(delta>0?'p-danger':'p-good')+'">'+E(signed(delta))+E(changePct)+'</span> · '+E(changeLabel),'')+
  card('Должников',String(n(m.debtors)),E('За отчёт '+date(d.report_date)))+
  card('Высокий риск',String(n(m.high_risk)),E(compact(m.high_amount))+' · 60+ дней и ≥1 000 BYN','')+
  card('Просрочка 30+ дней',money(m.over_30),'Включая более 60 дней')+
@@ -194,8 +195,8 @@ function render(){
 }
 async function load(force=false){
  if(!safe())return;
- const id=++state.requestId;
  if(state.loading&&!force)return;
+ const id=++state.requestId;
  if(!force&&state.data&&Date.now()-state.loadedAt<TTL){render();return}
  state.loading=true;state.error='';if(!state.data)render();
  try{
