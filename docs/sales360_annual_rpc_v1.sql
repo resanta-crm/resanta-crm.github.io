@@ -71,7 +71,7 @@ begin
   from legal_sources group by k
  ),
  sales as materialized (
-  select ph.month::date month,
+  select ph.month::date as month,
    coalesce(ph.revenue,0)::numeric revenue,
    coalesce(nullif(trim(ph.category),''),'Без категории') category,
    coalesce(ac.manager_name,em.manager_name,lm.manager_name,nullif(trim(ph.manager_name),'')) manager_name,
