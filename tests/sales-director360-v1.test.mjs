@@ -74,7 +74,7 @@ function fixture(role='boss'){
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
 test('sales module stays isolated after original analytics and keeps core unchanged',()=>{
  assert.doesNotThrow(()=>new vm.Script(src));
- assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-1'));
+ assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-2'));
  assert.ok(index.indexOf('assets/118-sales-analytics-v236374.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.ok(index.indexOf('assets/189-falling-director360-v1.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.match(core,/function renderSales\(\)/);
@@ -138,8 +138,10 @@ test('manager and period selection are real, and category switch does not fetch'
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
  await settle();
  assert.equal(f.calls.length,start+1);
- assert.ok(f.navigation.includes('native-manager:Руднев'));
+ assert.ok(!f.navigation.includes('native-manager:Руднев'),'old report stays dormant during Sales360 manager changes');
  assert.equal(f.calls.at(-1).args.p_manager,'Руднев');
+ assert.ok(f.classes.has('s360-installed'));
+ assert.match(f.nodes['sales360-root'].innerHTML,/Руднев/);
 });
 test('manager role never renders cross-manager choices and receives server-side scoped response',async()=>{
  const f=fixture('manager');
@@ -181,4 +183,55 @@ test('SQL RPC is authenticated and read-only; missing months are explicit',()=>{
  assert.match(sql,/unallocated_manager_revenue/);
  assert.match(sql,/unallocated_client_revenue/);
  assert.doesNotMatch(sql,/\b(update|delete|insert|truncate)\s+public\./i);
+});
+
+test('unified month selector stays on top, exact BYN turnover on graph and live month focus',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const root=f.nodes['sales360-root'];
+ assert.ok(root.innerHTML.indexOf('s360-month')<root.innerHTML.indexOf('s360-kpis'));
+ assert.match(root.innerHTML,/Год сравнения/);
+ assert.match(root.innerHTML,/Месяц · фокус графика/);
+ assert.match(root.innerHTML,/Оборот, BYN/);
+ assert.match(root.innerHTML,/data-s360-point="2026-11"/);
+ assert.match(root.innerHTML,/54\s*578,96 BYN/);
+ assert.match(root.innerHTML,/Без итогового сравнения/,'unfinished November does not get misleading YoY');
+ assert.match(root.innerHTML,/10\.11\.2026, 08:00 \(Минск\)/);
+ const oldCalls=f.calls.length;
+ f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'month'},value:'2026-10'}:null}}});
+ assert.equal(f.calls.length,oldCalls,'selecting month only focuses annual data');
+ assert.match(root.innerHTML,/316\s*927,84 BYN/);
+ assert.match(root.innerHTML,/Сопоставимые закрытые периоды/);
+ f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Step:'-1'}}:null}}});
+ assert.match(root.innerHTML,/Сен/);
+});
+test('manager switch does not reveal native reports or stale numbers during loading',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
+ const loading=f.nodes['sales360-root'].innerHTML;
+ assert.match(loading,/Загружаю данные выбранного менеджера/);
+ assert.match(loading,/s360-month/);
+ assert.ok(!loading.includes('Клиенты · Отгрузки за закрытые месяцы'));
+ assert.ok(f.classes.has('s360-installed'));
+ assert.ok(!f.navigation.includes('native-manager:Руднев'));
+ await settle();
+ assert.match(f.nodes['sales360-root'].innerHTML,/Управление ростом/);
+});
+test('legacy reports open only by explicit action and return to the director view',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Legacy:''}}:null}}});
+ assert.ok(!f.classes.has('s360-installed'));
+ assert.match(f.nodes['sales360-root'].innerHTML,/Вернуться к Продажи 360°/);
+ assert.ok(f.navigation.includes('native-manager:all'));
+ f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Legacy:''}}:null}}});
+ assert.ok(f.classes.has('s360-installed'));
+ assert.match(f.nodes['sales360-root'].innerHTML,/Динамика с января/);
+});
+test('keyboard selecting a graph point changes focus without RPC or opening native reports',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const start=f.calls.length;
+ const p={dataset:{s360Point:'2026-10'}};
+ f.events.keydown({key:'Enter',target:{closest(sel){return sel==='[data-s360-point]'?p:null}},preventDefault(){}});
+ assert.equal(f.calls.length,start);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Сопоставимые закрытые периоды/);
+ assert.ok(!f.navigation.some(x=>x.startsWith('native-month:')));
 });
