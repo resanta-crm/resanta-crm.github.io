@@ -519,6 +519,11 @@ function recoveryBrief(d){
  '<div class="s360-recovery-list">'+list+'</div><div class="s360-tabs">'+more+'</div>'+
  '<div id="s360-rec-focus-container" aria-live="polite">'+recoveryFocusHtml()+'</div>'+note+'</div>';
 }
+function paintClientRecovery(){
+ const target=$('s360-client-recovery-container');
+ if(target)target.innerHTML=clientRecoveryHtml();
+ else render();
+}
 function clientRecoveryHtml(){
  const r=state.clientRecoveryData;
  const base='<div class="s360-client-recovery"><div class="s360-head-actions"><h3>Динамика клиента · где падение</h3>'+
@@ -769,7 +774,7 @@ function clientDetailHtml(detail){
   '<div><small>Изменение, BYN</small><strong>'+esc(whole(num(c.current_revenue)-num(c.previous_revenue)))+'</strong></div></div>'+
   '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">'+yr+' · синий / '+prev+' · серый</span></div>'+
   '<div class="s360-client-graph">'+bars+'</div>'+
-  clientRecoveryHtml()+
+  '<div id="s360-client-recovery-container" aria-live="polite">'+clientRecoveryHtml()+'</div>'+ 
  '<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>'+
   '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
 }
@@ -961,9 +966,9 @@ function onClick(e){
  }
  if(a.s360RecClientGroup!==undefined){
   state.clientRecoveryFilter=String(a.s360RecClientSubgroup||'').slice(0,250);
-  render();return;
+  paintClientRecovery();return;
  }
- if(a.s360RecClientBack!==undefined){state.clientRecoveryFilter='';render();return;}
+ if(a.s360RecClientBack!==undefined){state.clientRecoveryFilter='';paintClientRecovery();return;}
  if(a.s360RecClientFull!==undefined){
   const x=arr(state.clientRecoveryData?.subgroups).find(y=>y.subgroup===state.clientRecoveryFilter);
   if(x&&state.clientKey)openDrill('client',x.category,x.subgroup);
