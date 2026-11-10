@@ -123,6 +123,12 @@ begin
   'version','sales360.1',
   'year',v_year,'previous_year',v_year-1,'closed_month',v_closed,
   'manager',v_manager,'scope_role',v_role,
+  'kpi_month',case when v_year=v_current_year then to_char((now() at time zone 'Europe/Minsk')::date,'YYYY-MM') else null end,
+  'kpi',case when v_year=v_current_year then coalesce((
+    select jsonb_agg(jsonb_build_object('manager_name',k.manager_name,'actual',k.shipment,'plan',k.shipment_plan,'akb',k.akb) order by k.manager_name)
+    from public.crm_manager_kpi_leaderboard(to_char((now() at time zone 'Europe/Minsk')::date,'YYYY-MM')) k
+    where v_manager is null or lower(trim(k.manager_name))=lower(v_manager)
+  ),'[]'::jsonb) else '[]'::jsonb end,
   'months',coalesce((select jsonb_agg(jsonb_build_object(
       'month',to_char(make_date(v_year,m.mn,1),'YYYY-MM'),
       'current',coalesce(s.current_revenue,0),
