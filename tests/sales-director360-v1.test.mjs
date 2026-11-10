@@ -167,9 +167,9 @@ test('legacy report and all clients remain reachable without disturbing native c
  f.events.click({target:{closest(x){return x==='button'?target:null}}});
  assert.ok(f.navigation.includes('native-yoy-open'));
  assert.ok(!f.classes.has('s360-installed'));
- assert.match(src,/window\.msyOpen374/);
- assert.match(src,/window\.salesMonth374/);
- assert.match(src,/window\.openClient/);
+ assert.match(src,/w\.msyOpen374/);
+ assert.match(src,/w\.salesMonth374/);
+ assert.match(src,/w\.openClient/);
 });
 test('SQL RPC is authenticated and read-only; missing months are explicit',()=>{
  assert.match(sql,/security definer/);
