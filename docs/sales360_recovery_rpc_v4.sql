@@ -110,7 +110,7 @@ begin
   left join legal_map lm on ac.id is null and em.client_id is null
    and lm.k=public.crm_client_legal_key_v236374(ph.client_name)
   where ph.month>=make_date(v_year-1,v_start,1)
-   and ph.month<make_date(v_year+1,v_end,1)+interval '1 month'
+   and ph.month<make_date(v_year,v_end,1)+interval '1 month'
    and extract(month from ph.month)::int between v_start and v_end
    and public.crm_client_exact_key_v236204(ph.client_name)<>'итого'
  ),
