@@ -88,7 +88,7 @@ begin
   from legal_sources group by k
  ),
  scoped_sales as materialized (
-  select ph.month::date month,
+  select ph.month::date as month,
    coalesce(ph.revenue,0)::numeric revenue,
    coalesce(ph.qty,0)::numeric quantity,
    coalesce(nullif(trim(ph.subgroup),''),'Без подгруппы') subgroup,
@@ -112,21 +112,23 @@ begin
   where (v_manager is null or lower(trim(coalesce(s.manager_name,'')))=lower(v_manager))
    and (v_key is null or s.client_key=v_key)
  ),
- grouped as materialized (
-  select
+ prepared as materialized (
+  select f.*,
    case when v_level='subgroups' then 'subgroup:'||f.subgroup
     when f.sku is not null then 'sku:'||f.sku
     else 'product:'||f.product end item_key,
-   case when v_level='subgroups' then f.subgroup
-    else max(f.product) end item_name,
+   case when v_level='subgroups' then f.subgroup else f.product end item_name
+  from filtered f
+ ),
+ grouped as materialized (
+  select f.item_key,max(f.item_name) item_name,
    case when v_level='sku' then max(f.sku) else null end sku,
    case when v_level='sku' then max(f.product) else null end product,
    round(coalesce(sum(f.revenue) filter(where extract(year from f.month)::int=v_year),0),2) current_revenue,
    round(coalesce(sum(f.revenue) filter(where extract(year from f.month)::int=v_year-1),0),2) previous_revenue,
    round(coalesce(sum(f.quantity) filter(where extract(year from f.month)::int=v_year),0),2) current_qty,
    round(coalesce(sum(f.quantity) filter(where extract(year from f.month)::int=v_year-1),0),2) previous_qty
-  from filtered f
-  group by 1,case when v_level='subgroups' then f.subgroup else null end
+  from prepared f group by f.item_key
  ),
  matched as materialized (
   select * from grouped g where v_search=''
