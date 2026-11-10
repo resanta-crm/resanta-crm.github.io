@@ -207,6 +207,7 @@ function mount(){
   page.insertAdjacentElement('afterbegin',root);
   root.addEventListener('click',onClick);
   root.addEventListener('change',onChange);
+  root.addEventListener('keydown',onKeyDown);
   mounted=true;
  }
  page.classList.toggle('s360-installed',!state.legacy);
@@ -380,15 +381,38 @@ function render(){
  '<div class="s360-foot"><span class="s360-muted">ИИ-сигналы — гипотезы для проверки. Нельзя считать нулевые продажи доказательством незнания товара. Никакие задачи и экзамены автоматически не создаются.</span>'+
  '<button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div>';
 }
+function activatePeriod(key){
+ if(!state.data)return;
+ const rows=monthRows(state.data);
+ let month=rows.find(x=>x.month===key);
+ if(/^Q[1-4]$/.test(String(key))){
+  const quarter=Number(String(key).slice(1));
+  month=rows.filter(x=>Math.ceil(Number(x.month.slice(5,7))/3)===quarter&&x.has_current).slice(-1)[0]||
+   rows.find(x=>Math.ceil(Number(x.month.slice(5,7))/3)===quarter);
+ }
+ if(month){state.selectedMonth=month.month;render()}
+}
+function onKeyDown(e){
+ if(e.key!=='Enter'&&e.key!==' ')return;
+ const p=e.target.closest?.('[data-s360-point]');
+ if(!p)return;
+ e.preventDefault();activatePeriod(p.dataset.s360Point);
+}
 function onChange(e){
  const t=e.target.closest?.('[data-s360-select]');if(!t)return;
  const v=t.value,k=t.dataset.s360Select;
- if(k==='year'){const y=Number(v);if(y>=2023&&y<=currentYear()){state.year=y;state.category='all';state.expanded=false;state.draft=false;load(false)}}
+ if(k==='year'){
+  const y=Number(v);if(y>=2023&&y<=currentYear()){
+   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;load(false);
+  }
+ }
  if(k==='manager'){
   if(!boss())return;
-  state.manager=v;state.category='all';state.expanded=false;state.draft=false;
-  if(typeof w.salesMgr374==='function')w.salesMgr374(v);
-  load(false);
+  state.manager=v;state.category='all';state.expanded=false;state.draft=false;load(false);
+ }
+ if(k==='month'){
+  const choices=state.data?monthRows(state.data).map(x=>x.month):[];
+  if(choices.includes(v)){state.selectedMonth=v;render()}
  }
  if(k==='view'&&['months','quarters'].includes(v)){state.view=v;render()}
  if(k==='category'){state.category=v;state.draft=false;render()}
@@ -396,21 +420,36 @@ function onChange(e){
 function jump(section){$(ID)?.querySelector?.('#s360-'+section)?.scrollIntoView?.({behavior:'smooth',block:'nearest'})}
 function originalReports(openCompare){
  state.legacy=true;mount();render();
+ // Native report is synchronized only when explicitly opened, never while changing Sales360 filters.
+ if(boss()&&typeof w.salesMgr374==='function')w.salesMgr374(state.manager);
+ if(state.selectedMonth&&typeof w.salesMonth374==='function')w.salesMonth374(state.selectedMonth);
  if(openCompare&&typeof w.msyOpen374==='function')w.msyOpen374();
  setTimeout(()=>$('manager-sales-yoy-v23634')?.scrollIntoView?.({behavior:'smooth',block:'start'}),70);
 }
 function onClick(e){
+ const point=e.target.closest?.('[data-s360-point]');
+ if(point){activatePeriod(point.dataset.s360Point);return}
  const t=e.target.closest?.('button');if(!t)return;
  const a=t.dataset;
  if(a.s360Refresh!==undefined){load(true);return}
- if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;if(typeof w.salesMgr374==='function')w.salesMgr374(state.manager);load(false);return}
+ if(a.s360Step!==undefined){
+  const months=monthRows(state.data).map(x=>x.month),i=months.indexOf(focusedMonth(state.data)?.month);
+  const next=i+Number(a.s360Step);
+  if(next>=0&&next<months.length){state.selectedMonth=months[next];render()}
+  return;
+ }
+ if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;load(false);return}
  if(a.s360Category!==undefined){state.category=a.s360Category;state.draft=false;jump('matrix');render();return}
  if(a.s360Jump!==undefined){jump(a.s360Jump);return}
  if(a.s360Expand!==undefined){state.expanded=true;render();return}
- if(a.s360Month!==undefined){if(typeof w.salesMonth374==='function')w.salesMonth374(a.s360Month);originalReports(false);return}
+ if(a.s360Month!==undefined){activatePeriod(a.s360Month);return}
  if(a.s360Client!==undefined){if(typeof w.openClient==='function')w.openClient(a.s360Client);return}
  if(a.s360AllClients!==undefined){originalReports(true);return}
- if(a.s360Legacy!==undefined){state.legacy=!state.legacy;mount();render();return}
+ if(a.s360Legacy!==undefined){
+  if(state.legacy){state.legacy=false;mount();render()}
+  else originalReports(false);
+  return;
+ }
  if(a.s360Draft!==undefined&&boss()){state.draft=!state.draft;render();return}
  if(a.s360Copy!==undefined&&boss()){
   const value=$('s360-draft-text')?.value||'';
@@ -427,7 +466,7 @@ async function load(force=false){
  const serial=++requestVersion;
  const key=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
  const hit=cache.get(key);
- if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';render();return}
+ if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();return}
  state.data=null;state.error='';state.loading=true;render();
  try{
   let work=pending.get(key);
@@ -461,7 +500,7 @@ function install(){
  wrapped=true;
  if(active()==='sales')load(false);
 }
-w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.1',readOnly:true,annualRpc:'crm_sales360_annual_v1',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
+w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.2',readOnly:true,annualRpc:'crm_sales360_annual_v1',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});
 else install();
 })(window,document);
