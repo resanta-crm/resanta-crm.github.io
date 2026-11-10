@@ -23,12 +23,12 @@ const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date
 const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false};
 let mounted=false,wrapped=false,requestVersion=0,sourceRender=null;
 const cache=new Map(),pending=new Map(),TTL=180000;
-const monthRows=d=>arr(d?.months).filter(x=>x?.has_current||x?.has_previous);
+const monthRows=d=>arr(d?.months).filter(x=>x?.has_current||(state.year<currentYear()&&x?.has_previous));
 const focusedMonth=d=>{const a=monthRows(d);return a.find(x=>x.month===state.selectedMonth)||a.filter(x=>x.has_current).slice(-1)[0]||a.slice(-1)[0]||null};
 function monthLabel(ym){const m=Number(String(ym||'').slice(5,7));return(MONTHS[m-1]||'—')+' '+String(ym||'').slice(0,4)}
 function freshLabel(f){
  if(!f?.last_success_at)return f?.report_date?String(f.report_date).slice(0,10):'дата не подтверждена';
- const raw=String(f.last_success_at).trim(),iso=/Z$|[+-]\\d\\d:?\\d\\d$/.test(raw)?raw:raw+'Z';
+ const raw=String(f.last_success_at).trim(),iso=/Z$|[+-]\d\d:?\d\d$/.test(raw)?raw:raw+'Z';
  const date=new Date(iso);
  if(Number.isNaN(date.getTime()))return 'дата не подтверждена';
  return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(date)+' (Минск)';
