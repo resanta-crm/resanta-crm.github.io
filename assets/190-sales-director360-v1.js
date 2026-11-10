@@ -223,6 +223,7 @@ function mount(){
   root.addEventListener('click',onClick);
   root.addEventListener('change',onChange);
   root.addEventListener('keydown',onKeyDown);
+  root.addEventListener('input',onInput);
   mounted=true;
  }
  page.classList.toggle('s360-installed',!state.legacy);
@@ -469,7 +470,13 @@ function activatePeriod(key){
  }
  if(month){state.selectedMonth=month.month;render()}
 }
+function onInput(e){
+ const search=e.target.closest?.('[data-s360-client-search]');
+ if(search)state.clientSearch=String(search.value||'').slice(0,120);
+}
 function onKeyDown(e){
+ const search=e.target.closest?.('[data-s360-client-search]');
+ if(search&&e.key==='Enter'){e.preventDefault();state.clientSearch=String(search.value||'').slice(0,120);state.clientOffset=0;state.clientKey='';loadClients();return}
  if(e.key!=='Enter'&&e.key!==' ')return;
  const p=e.target.closest?.('[data-s360-point]');
  if(!p)return;
@@ -480,17 +487,18 @@ function onChange(e){
  const v=t.value,k=t.dataset.s360Select;
  if(k==='year'){
   const y=Number(v);if(y>=2023&&y<=currentYear()){
-   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;load(false);
+   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();load(false);
   }
  }
  if(k==='manager'){
   if(!boss())return;
-  state.manager=v;state.category='all';state.expanded=false;state.draft=false;load(false);
+  state.manager=v;state.category='all';state.expanded=false;state.draft=false;clearClientState();load(false);
  }
  if(k==='month'){
   const choices=state.data?monthRows(state.data).map(x=>x.month):[];
   if(choices.includes(v)){state.selectedMonth=v;render()}
  }
+ if(k==='scope'&&['all','without'].includes(v)){state.excludeTriovist=v==='without';clearClientState();load(false)}
  if(k==='view'&&['months','quarters'].includes(v)){state.view=v;render()}
  if(k==='category'){state.category=v;state.draft=false;render()}
 }
@@ -508,20 +516,40 @@ function onClick(e){
  if(point){activatePeriod(point.dataset.s360Point);return}
  const t=e.target.closest?.('button');if(!t)return;
  const a=t.dataset;
- if(a.s360Refresh!==undefined){load(true);return}
+ if(a.s360Refresh!==undefined){clearClientState();load(true);return}
+ if(a.s360ChartExpand!==undefined){state.chartExpanded=!state.chartExpanded;render();return}
  if(a.s360Step!==undefined){
   const months=monthRows(state.data).map(x=>x.month),i=months.indexOf(focusedMonth(state.data)?.month);
   const next=i+Number(a.s360Step);
   if(next>=0&&next<months.length){state.selectedMonth=months[next];render()}
   return;
  }
- if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;load(false);return}
+ if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;clearClientState();load(false);return}
  if(a.s360Category!==undefined){state.category=a.s360Category;state.draft=false;jump('matrix');render();return}
  if(a.s360Jump!==undefined){jump(a.s360Jump);return}
  if(a.s360Expand!==undefined){state.expanded=true;render();return}
  if(a.s360Month!==undefined){activatePeriod(a.s360Month);return}
- if(a.s360Client!==undefined){if(typeof w.openClient==='function')w.openClient(a.s360Client);return}
- if(a.s360AllClients!==undefined){originalReports(true);return}
+ if(a.s360ClientCard!==undefined){if(typeof w.openClient==='function')w.openClient(a.s360ClientCard);return}
+ if(a.s360AllClients!==undefined){
+  state.clientsOpen=!state.clientsOpen;
+  if(state.clientsOpen){clearClientState();loadClients()}
+  else{clearClientState();render()}
+  return;
+ }
+ if(a.s360ClientKey!==undefined){
+  state.clientsOpen=true;state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;loadClients();return;
+ }
+ if(a.s360ClientFind!==undefined){
+  state.clientsOpen=true;state.clientSearch=String($('s360-client-search')?.value??state.clientSearch).slice(0,120);
+  state.clientOffset=0;state.clientKey='';loadClients();return;
+ }
+ if(a.s360ClientPage!==undefined){
+  const count=num(state.clientData?.total);
+  const next=state.clientOffset+Number(a.s360ClientPage)*20;
+  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';loadClients()}
+  return;
+ }
+ if(a.s360ClientClose!==undefined){state.clientKey='';loadClients();return;}
  if(a.s360Legacy!==undefined){
   if(state.legacy){state.legacy=false;mount();render()}
   else originalReports(false);
@@ -541,16 +569,16 @@ function onClick(e){
 async function load(force=false){
  const root=mount();if(!root||active()!=='sales')return;
  const serial=++requestVersion;
- const key=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
+ const key=[viewer(),state.year,boss()?state.manager:managerMe(),state.excludeTriovist?'without':'all'].join('|');
  const hit=cache.get(key);
- if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();return}
+ if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();if(state.clientsOpen&&!state.clientData)loadClients();return}
  state.data=null;state.error='';state.loading=true;render();
  try{
   let work=pending.get(key);
   if(!work||force){
    const database=dbx();if(!database?.rpc)throw Error('Источник Supabase недоступен');
-   work=Promise.resolve().then(()=>database.rpc('crm_sales360_annual_v1',{
-    p_year:state.year,p_manager:boss()&&state.manager!=='all'?state.manager:null
+   work=Promise.resolve().then(()=>database.rpc('crm_sales360_annual_v2',{
+    p_year:state.year,p_manager:boss()&&state.manager!=='all'?state.manager:null,p_exclude_triovist:state.excludeTriovist
    })).then(({data,error})=>{if(error)throw error;return data;});
    pending.set(key,work);
    work.finally(()=>{if(pending.get(key)===work)pending.delete(key)}).catch(()=>{});
@@ -562,7 +590,28 @@ async function load(force=false){
   while(cache.size>16)cache.delete(cache.keys().next().value);
  }catch(err){
   if(serial===requestVersion){state.error=String(err?.message||err);state.data=null;console.warn('Sales360 annual read-only request',err)}
- }finally{if(serial===requestVersion){state.loading=false;render()}}
+  }finally{if(serial===requestVersion){state.loading=false;render();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
+}
+async function loadClients(){
+ if(!state.clientsOpen||!state.data||active()!=='sales')return;
+ const serial=++clientVersion;
+ state.clientError='';state.clientLoading=true;render();
+ try{
+  const database=dbx();if(!database?.rpc)throw Error('Источник Supabase недоступен');
+  const {data,error}=await database.rpc('crm_sales360_clients_v2',{
+   p_year:state.year,
+   p_manager:boss()&&state.manager!=='all'?state.manager:null,
+   p_exclude_triovist:state.excludeTriovist,
+   p_search:state.clientSearch.trim().slice(0,120),
+   p_limit:20,p_offset:state.clientOffset,p_client_key:state.clientKey||null
+  });
+  if(error)throw error;
+  if(serial!==clientVersion||active()!=='sales')return;
+  if(!data||!Array.isArray(data.items))throw Error('Неполный ответ сервера по клиентам');
+  state.clientData=data;
+ }catch(err){
+  if(serial===clientVersion){state.clientError=String(err?.message||err);state.clientData=null;console.warn('Sales360 client scoped RPC',err)}
+ }finally{if(serial===clientVersion){state.clientLoading=false;render()}}
 }
 function install(){
  if(wrapped)return;
@@ -577,7 +626,7 @@ function install(){
  wrapped=true;
  if(active()==='sales')load(false);
 }
-w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.2',readOnly:true,annualRpc:'crm_sales360_annual_v1',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
+w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.3',readOnly:true,annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});
 else install();
 })(window,document);
