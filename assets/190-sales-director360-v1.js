@@ -194,6 +194,14 @@ function styles(){
  scope+' .s360-client-month{display:grid;grid-template-columns:46px minmax(60px,1fr) 100px 100px;gap:8px;align-items:center;font-size:11px}',
  scope+' .s360-client-track{height:11px;border-radius:7px;background:var(--card);display:flex;overflow:hidden}',
  scope+' .s360-client-track i{height:11px;display:block;background:#2563eb}',
+ scope+' .s360-brief-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}',
+ scope+' .s360-brief-overview>div{background:var(--bg);padding:12px;border-radius:9px;min-width:0}',
+ scope+' .s360-brief-overview small{font-size:10px;color:var(--sub);display:block}',
+ scope+' .s360-brief-overview strong{font-size:15px;line-height:1.3;display:block;margin-top:5px;overflow-wrap:anywhere}',
+ scope+' .s360-brief-item{padding:13px 0;border-top:1px solid var(--border);display:grid;gap:7px;line-height:1.5}',
+ scope+' .s360-brief-item>b{font-size:12px}',
+ scope+' .s360-brief-evidence{font-weight:730;font-size:12px}',
+ scope+' .s360-brief-next{font-size:12px}',
  scope+' .s360-drill{margin-top:14px;border:1px solid var(--border);border-radius:11px;padding:14px;background:var(--card)}',
  scope+' .s360-drill-nav{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:12px}',
  scope+' .s360-drill-rows{display:grid;gap:6px;margin-top:10px}',
@@ -241,7 +249,7 @@ function styles(){
  scope+' .s360-load-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}',
  scope+' .s360-load-kpis>div{border:1px solid var(--border);border-radius:12px;background:var(--card);min-height:88px;opacity:.6}',
  '@media(max-width:1050px){'+scope+' .s360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}'+scope+' .s360-grid{grid-template-columns:1fr}}',
- '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}}'
+ '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}}'
  ].join('\n');
 }
 function mount(){
@@ -321,22 +329,73 @@ function getKpi(d){
  const actual=k.actual,plan=k.plan;
  return{k,display:plan>0?(actual/plan*100).toFixed(1).replace('.',',')+'%':'—',description:plan>0?'Факт '+short(actual)+' / план '+short(plan)+' BYN · '+(d.kpi_month||''):'План не подтверждён в KPI 360°'};
 }
+// Director signals are evidence-backed, deterministic recommendations; not orders or AI diagnoses.
+function directorSignals(d){
+ const summary=ytd(d),rows=arr(d?.categories),matrix=arr(d?.matrix);
+ const relevant=rows.map(c=>{
+  const current=num(c.current_revenue),previous=num(c.previous_revenue);
+  const loss=previous-current,pct=previous>0?100*loss/previous:null;
+  return {...c,current,previous,loss,pct};
+ }).filter(c=>c.previous>=10000&&c.loss>=5000&&c.pct>=10)
+   .sort((a,b)=>b.loss-a.loss||b.pct-a.pct);
+ const issues=relevant.slice(0,3).map(c=>{
+  const peers=matrix.filter(m=>m.category===c.category&&m.manager_name&&m.manager_name!=='Не распределено');
+  const drop=peers.map(m=>({name:m.manager_name,
+   loss:num(m.previous_revenue)-num(m.revenue),previous:num(m.previous_revenue)}))
+   .filter(x=>x.loss>0&&x.previous>0).sort((a,b)=>b.loss-a.loss)[0];
+  const priority=c.loss>=20000&&c.pct>=15?'Высокий':'Контроль';
+  const action='Проверить подгруппы и SKU: где именно снизился оборот, затем сопоставить остатки Витебска, активность клиентов, возвраты и предложения менеджера.';
+  return {kind:'decline',category:c.category,priority,loss:c.loss,pct:c.pct,
+   current:c.current,previous:c.previous,
+   manager:drop?.name||null,
+   title:'Снижение: '+c.category,
+   action,source:'1С · сопоставимые закрытые месяцы',
+   signal_key:['sales360','decline',d.year,c.category].join(':')};
+ });
+ const gaps=managerGaps(d);
+ if(issues.length<3&&gaps.length){
+  const g=gaps[0];
+  issues.push({kind:'opportunity',category:g.category,manager:g.manager,
+   priority:'Возможность',peerRevenue:g.peerRevenue,
+   title:'Проверить потенциал: '+g.category,
+   action:'Уточнить клиентский спрос, наличие товара, проведённые предложения и потребность в обучении. Отсутствие продаж само по себе не доказывает нехватку знаний.',
+   source:'1С · сравнение менеджеров',
+   signal_key:['sales360','opportunity',d.year,g.manager,g.category].join(':')});
+ }
+ return {summary,issues,declineCount:relevant.length,closedMonth:num(d?.closed_month)};
+}
 function brief(d){
- const y=ytd(d),categories=arr(d.categories),gaps=managerGaps(d);
- const declines=categories.filter(x=>num(x.current_revenue)<num(x.previous_revenue)).sort((a,b)=>(num(a.current_revenue)-num(a.previous_revenue))-(num(b.current_revenue)-num(b.previous_revenue)));
- const lead=declines[0],month=arr(d.months).find(x=>x.partial);
- const compare=y.delta===null?'прошлогоднего сравнения нет':(y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'% к сопоставимому прошлому году';
- let texts=[
-  ['Продажи и темп','За '+y.months+' закрытых месяцев — '+short(y.current)+' BYN; '+compare+'.','Проверить план/факт в KPI 360° и группы, давшие снижение.','categories'],
-  ['Ассортимент',lead?'По группе «'+lead.category+'» отгрузки ниже прошлого года на '+short(num(lead.previous_revenue)-num(lead.current_revenue))+' BYN.':'Среди подтверждённых групп не найдено явного снижения к сопоставимому периоду.',
-    'Открыть динамику группы; проверить спрос, наличие и клиентскую базу.','categories'],
-  ['Проверка возможностей',gaps.length?'У '+gaps[0].manager+' нет продаж группы «'+gaps[0].category+'» за закрытые месяцы, хотя другие менеджеры её продавали.':'Явных нулевых товарных групп при подтверждённом спросе коллег не обнаружено.',
-    'Отсутствие продаж не доказывает нехватку знаний. Сначала проверить спрос, склад, клиентов и коммерческие предложения.','matrix']
- ];
- return '<div class="s360-panel"><h3>✦ ИИ · Утренний брифинг продаж</h3>'+
- texts.map((t,i)=>'<div class="s360-note"><b>'+(i+1)+'. '+esc(t[0])+'</b>'+esc(t[1])+'<small>'+esc(t[2])+'</small><button type="button" data-s360-jump="'+t[3]+'" class="s360-btn" style="margin-top:7px">Открыть детали</button></div>').join('')+
- (month?'<div class="s360-warn">Ноябрь или другой текущий месяц ещё не закрыт: его фактические отгрузки показаны на графике, но не включены в годовой процент роста/падения.</div>':'')+
- '<div class="s360-muted" style="margin-top:9px">Правила на подтверждённых данных 1С · Причины и знания сотрудников не определяются автоматически.</div></div>';
+ const report=directorSignals(d),y=report.summary,issues=report.issues;
+ const delta=y.delta===null?'Недостаточно данных для сравнения':
+   (y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'% к сопоставимому периоду '+d.previous_year;
+ const period=report.closedMonth?MONTHS[Math.min(11,report.closedMonth-1)]+' '+d.year:'Нет закрытых месяцев';
+ const blocks=issues.map((s,i)=>{
+  const evidence=s.kind==='decline'?
+   esc(d.year+': '+whole(s.current)+' · '+d.previous_year+': '+whole(s.previous)+
+    ' · снижение '+whole(s.loss)+' ('+s.pct.toFixed(1).replace('.',',')+'%)'):
+   esc('У '+s.manager+' нет продаж выбранной группы, хотя коллеги отгрузили '+whole(s.peerRevenue)+'.');
+  const responsibility=s.manager?' · менеджер для проверки: '+esc(s.manager):' · ответственный определяется руководителем';
+  return '<div class="s360-brief-item">'+
+   '<div class="s360-head-actions"><b>'+(i+1)+'. '+esc(s.title)+'</b><span class="s360-badge">'+esc(s.priority)+'</span></div>'+
+   '<div class="s360-brief-evidence">'+evidence+'</div>'+
+   '<div class="s360-brief-next"><b>Что сделать:</b> '+esc(s.action)+'</div>'+
+   '<small class="s360-muted">'+esc(s.source)+responsibility+' · причина ещё не установлена</small>'+
+   '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-brief-group="'+esc(s.category)+'">Разобрать подгруппы и SKU</button>'+
+   (boss()?'<button type="button" class="s360-btn" data-s360-brief-draft="'+esc(s.category)+'">Черновик поручения</button>':'')+
+   '</div></div>';
+ }).join('');
+ const empty='<div class="s360-note"><b>Критичных падений по установленным порогам не найдено.</b>'+
+  'Продолжить контроль крупных товарных групп, маржи и активности клиентов. Отсутствие сигнала не означает отсутствие проблем.'+
+  '<small>Порог: не менее 5 000 BYN и 10% снижения при прошлогоднем обороте от 10 000 BYN.</small></div>';
+ return '<div class="s360-panel" id="s360-director-brief">'+
+  '<div class="s360-head-actions"><div><h3>✦ Директорский брифинг · Что требует решения</h3>'+
+  '<div class="s360-muted">По данным 1С · с января по '+esc(period)+' · только закрытые месяцы</div></div>'+
+  '<span class="s360-badge">Проверенные цифры, гипотезы отдельно</span></div>'+
+  '<div class="s360-brief-overview"><div><small>Оборот</small><strong>'+esc(whole(y.current))+'</strong></div>'+
+   '<div><small>Динамика</small><strong>'+esc(delta)+'</strong></div>'+
+   '<div><small>Групп со снижением*</small><strong>'+report.declineCount+'</strong></div></div>'+
+  (issues.length?blocks:empty)+
+  '<div class="s360-muted">* Пороги: снижение ≥5 000 BYN и ≥10% при базе ≥10 000 BYN. Сигналы — не причины падения и не готовые поручения. Действия согласует руководитель; экзамены автоматически не назначаются.</div></div>';
 }
 function managerBars(d){
  const rows=arr(d.managers).filter(x=>x.name&&x.name!=='Не распределено');
@@ -643,6 +702,19 @@ function onClick(e){
  }
  if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;clearClientState();resetDrill('global');invalidateDrillCache();load(false);return}
  if(a.s360Category!==undefined){state.category=a.s360Category;state.draft=false;openDrill('global',a.s360Category);return}
+ if(a.s360BriefGroup!==undefined){
+  const category=String(a.s360BriefGroup).slice(0,200);
+  state.category=category;
+  openDrill('global',category);
+  $('s360-drill-global-container')?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+  return;
+ }
+ if(a.s360BriefDraft!==undefined&&boss()){
+  state.category=String(a.s360BriefDraft).slice(0,200);
+  state.draft=true;render();
+  $('s360-matrix')?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+  return;
+ }
  if(a.s360DrillGroup!==undefined){
   const scope=a.s360DrillScope==='client'?'client':'global';
   openDrill(scope,a.s360DrillGroup);return;
@@ -769,7 +841,7 @@ function install(){
  wrapped=true;
  if(active()==='sales')load(false);
 }
-w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.5',readOnly:true,annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',productRpc:'crm_sales360_product_drill_v3',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
+w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.5',readOnly:true,annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',productRpc:'crm_sales360_product_drill_v3',ytd,chartData,categoryMatrix,managerGaps,monthKpi,directorSignals});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});
 else install();
 })(window,document);
