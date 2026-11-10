@@ -566,10 +566,16 @@ function activatePeriod(key){
 function onInput(e){
  const search=e.target.closest?.('[data-s360-client-search]');
  if(search)state.clientSearch=String(search.value||'').slice(0,120);
+ const drill=e.target.closest?.('[data-s360-drill-input]');
+ const scope=drill?.dataset?.s360DrillInput;
+ if(drill&&drillStates[scope])drillStates[scope].search=String(drill.value||'').slice(0,120);
 }
 function onKeyDown(e){
  const search=e.target.closest?.('[data-s360-client-search]');
- if(search&&e.key==='Enter'){e.preventDefault();state.clientSearch=String(search.value||'').slice(0,120);state.clientOffset=0;state.clientKey='';loadClients();return}
+ if(search&&e.key==='Enter'){e.preventDefault();state.clientSearch=String(search.value||'').slice(0,120);state.clientOffset=0;state.clientKey='';resetDrill('client');loadClients();return}
+ const drill=e.target.closest?.('[data-s360-drill-input]');
+ const scope=drill?.dataset?.s360DrillInput;
+ if(drill&&e.key==='Enter'&&drillStates[scope]){e.preventDefault();drillStates[scope].search=String(drill.value||'').slice(0,120);drillStates[scope].offset=0;loadDrill(scope);return}
  if(e.key!=='Enter'&&e.key!==' ')return;
  const p=e.target.closest?.('[data-s360-point]');
  if(!p)return;
@@ -580,19 +586,19 @@ function onChange(e){
  const v=t.value,k=t.dataset.s360Select;
  if(k==='year'){
   const y=Number(v);if(y>=2023&&y<=currentYear()){
-   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();load(false);
+   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();resetDrill('global');load(false);
   }
  }
  if(k==='manager'){
   if(!boss())return;
-  state.manager=v;state.category='all';state.expanded=false;state.draft=false;clearClientState();load(false);
+  state.manager=v;state.category='all';state.expanded=false;state.draft=false;clearClientState();resetDrill('global');load(false);
  }
  if(k==='month'){
   const choices=state.data?monthRows(state.data).map(x=>x.month):[];
   if(choices.includes(v)){state.selectedMonth=v;render()}
  }
  if(k==='view'&&['months','quarters'].includes(v)){state.view=v;render()}
- if(k==='category'){state.category=v;state.draft=false;render()}
+ if(k==='category'){state.category=v;state.draft=false;openDrill('global',v)}
 }
 function jump(section){$(ID)?.querySelector?.('#s360-'+section)?.scrollIntoView?.({behavior:'smooth',block:'nearest'})}
 function originalReports(openCompare){
@@ -608,7 +614,7 @@ function onClick(e){
  if(point){activatePeriod(point.dataset.s360Point);return}
  const t=e.target.closest?.('button');if(!t)return;
  const a=t.dataset;
- if(a.s360Refresh!==undefined){clearClientState();load(true);return}
+ if(a.s360Refresh!==undefined){clearClientState();resetDrill('global');load(true);return}
  if(a.s360ChartExpand!==undefined){state.chartExpanded=!state.chartExpanded;render();return}
  if(a.s360Step!==undefined){
   const months=monthRows(state.data).map(x=>x.month),i=months.indexOf(focusedMonth(state.data)?.month);
@@ -616,8 +622,34 @@ function onClick(e){
   if(next>=0&&next<months.length){state.selectedMonth=months[next];render()}
   return;
  }
- if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;clearClientState();load(false);return}
- if(a.s360Category!==undefined){state.category=a.s360Category;state.draft=false;jump('matrix');render();return}
+ if(a.s360Mgr!==undefined&&boss()){state.manager=a.s360Mgr;state.category='all';state.draft=false;clearClientState();resetDrill('global');load(false);return}
+ if(a.s360Category!==undefined){state.category=a.s360Category;state.draft=false;openDrill('global',a.s360Category);return}
+ if(a.s360DrillGroup!==undefined){
+  const scope=a.s360DrillScope==='client'?'client':'global';
+  openDrill(scope,a.s360DrillGroup);return;
+ }
+ if(a.s360DrillSubgroup!==undefined){
+  const scope=a.s360DrillScope==='client'?'client':'global',st=drillStates[scope];
+  if(st?.category){st.level='sku';st.subgroup=String(a.s360DrillSubgroup).slice(0,250);st.offset=0;st.search='';st.data=null;loadDrill(scope)}return;
+ }
+ if(a.s360DrillBack!==undefined){
+  const scope=a.s360DrillScope==='client'?'client':'global',st=drillStates[scope];
+  if(st?.category){st.level='subgroups';st.subgroup='';st.offset=0;st.search='';st.data=null;loadDrill(scope)}return;
+ }
+ if(a.s360DrillClose!==undefined){
+  resetDrill(a.s360DrillScope==='client'?'client':'global');render();return;
+ }
+ if(a.s360DrillFind!==undefined){
+  const scope=a.s360DrillScope==='client'?'client':'global',st=drillStates[scope];
+  if(st?.category){st.search=String($('s360-drill-search-'+scope)?.value??st.search).slice(0,120);st.offset=0;loadDrill(scope)}return;
+ }
+ if(a.s360DrillPage!==undefined){
+  const scope=a.s360DrillScope==='client'?'client':'global',st=drillStates[scope];
+  if(st?.category){
+   const next=st.offset+Number(a.s360DrillPage)*50;
+   if(next>=0&&next<num(st.data?.total)){st.offset=next;loadDrill(scope)}
+  }return;
+ }
  if(a.s360Jump!==undefined){jump(a.s360Jump);return}
  if(a.s360Expand!==undefined){state.expanded=true;render();return}
  if(a.s360Month!==undefined){activatePeriod(a.s360Month);return}
@@ -629,19 +661,19 @@ function onClick(e){
   return;
  }
  if(a.s360ClientKey!==undefined){
-  state.clientsOpen=true;state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;loadClients();return;
+  state.clientsOpen=true;resetDrill('client');state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;loadClients();return;
  }
  if(a.s360ClientFind!==undefined){
   state.clientsOpen=true;state.clientSearch=String($('s360-client-search')?.value??state.clientSearch).slice(0,120);
-  state.clientOffset=0;state.clientKey='';loadClients();return;
+  state.clientOffset=0;state.clientKey='';resetDrill('client');loadClients();return;
  }
  if(a.s360ClientPage!==undefined){
   const count=num(state.clientData?.total);
   const next=state.clientOffset+Number(a.s360ClientPage)*20;
-  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';loadClients()}
+  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';resetDrill('client');loadClients()}
   return;
  }
- if(a.s360ClientClose!==undefined){state.clientKey='';loadClients();return;}
+ if(a.s360ClientClose!==undefined){state.clientKey='';resetDrill('client');loadClients();return;}
  if(a.s360Legacy!==undefined){
   if(state.legacy){state.legacy=false;mount();render()}
   else originalReports(false);
@@ -718,7 +750,7 @@ function install(){
  wrapped=true;
  if(active()==='sales')load(false);
 }
-w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.3',readOnly:true,annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
+w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.4',readOnly:true,annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',productRpc:'crm_sales360_product_drill_v3',ytd,chartData,categoryMatrix,managerGaps,monthKpi});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});
 else install();
 })(window,document);
