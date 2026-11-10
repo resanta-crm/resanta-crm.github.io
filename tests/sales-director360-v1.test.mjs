@@ -130,8 +130,8 @@ test('manager/category matrix surfaces testable opportunities, never a knowledge
  assert.equal(api.categoryMatrix(sample,'Генераторы').length,2);
  const gaps=api.managerGaps(sample);
  assert.ok(gaps.some(x=>x.manager==='Ачинович'&&x.category==='Генераторы'));
- assert.match(src,/Отсутствие продаж не доказывает нехватку знаний/);
- assert.match(src,/Задача создаётся только после согласования руководителем/);
+ assert.match(src,/Отсутствие продаж само по себе не доказывает нехватку знаний/);
+ assert.match(src,/Поручение создаётся только после утверждения директором/);
  assert.doesNotMatch(src,/\bcreateTask\(/);
 });
 test('sales native renderer executes, and server annual RPC has no local history scanning',async()=>{
@@ -145,7 +145,7 @@ test('sales native renderer executes, and server annual RPC has no local history
  const root=f.nodes['sales360-root'];
  assert.ok(root.innerHTML.includes('Продажи 360°'));
  assert.ok(root.innerHTML.includes('Управление ростом'));
- assert.ok(root.innerHTML.includes('ИИ · Утренний брифинг продаж'));
+ assert.ok(root.innerHTML.includes('Директорский брифинг · Что требует решения'));
  assert.ok(root.innerHTML.includes('Матрица')||root.innerHTML.includes('Потенциал менеджеров'));
  assert.ok(root.innerHTML.includes('Ноябрь')||root.innerHTML.includes('Ноя'));
  assert.ok(root.innerHTML.includes('Клиент &amp; Строй'));
@@ -277,7 +277,7 @@ test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
  assert.match(html,/275тыс/,'2025 Oct monthly value is labeled in grey');
  assert.match(html,/317тыс/,'2026 Oct value is labeled in blue');
  assert.doesNotMatch(html,/316\s*927,84 BYN/,'chart/selected period no longer shows kopecks');
- assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('ИИ · Утренний брифинг продаж'),'graph occupies own full-width row before briefing');
+ assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('Директорский брифинг · Что требует решения'),'graph occupies own full-width row before briefing');
 });
 test('one full-sales KPI only, no Triovist exclusion UI or separate sale totals',async()=>{
  const f=fixture();f.window.renderSales();await settle();
