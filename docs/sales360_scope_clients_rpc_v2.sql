@@ -269,7 +269,7 @@ begin
    lower(coalesce(c.name,'')) like '%триовист%' or lower(coalesce(c.name,'')) like '%triovist%'
  ),
  sales as materialized (
-  select ph.month::date month,coalesce(ph.revenue,0)::numeric revenue,
+  select ph.month::date as month,coalesce(ph.revenue,0)::numeric as revenue,
    ph.client_name,coalesce(nullif(trim(ph.category),''),'Без категории') category,
    coalesce(nullif(trim(ph.subgroup),''),'Без подгруппы') subgroup,
    coalesce(ac.manager_name,em.manager_name,lm.manager_name,nullif(trim(ph.manager_name),'')) manager_name,
