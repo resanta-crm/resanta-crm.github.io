@@ -58,6 +58,7 @@ function summarize(r,q){
   out+=growth.length?'Зоны роста: '+growth.slice(0,3).map(x=>x.subgroup+' +'+money(x.delta_byn)).join('; ')+'. ':
   'Подгрупп с ростом выше порога не обнаружено. ';
  }
+ if(r.baseline_complete===false)out+='Внимание: '+String(r.data_quality_note||'История прошлого года неполная')+'. ';
  out+='Причины снижения ещё не установлены. Проверь остатки, клиентов, возвраты, ассортимент и сезонность. Задачи без утверждения руководителя не создаются.';
  return out;
 }
