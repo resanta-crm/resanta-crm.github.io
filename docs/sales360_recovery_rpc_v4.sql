@@ -175,13 +175,13 @@ begin
      select * from signals where kind='group' and previous_revenue>=5000 and loss_byn>=2500
      order by loss_byn desc limit 30) x),'[]'::jsonb),
   'subgroups',coalesce((select jsonb_agg(to_jsonb(x) order by x.loss_byn desc) from (
-     select * from signals where kind='subgroup' and previous_revenue>=5000 and loss_byn>=2500
+     select * from signals where kind='subgroup' and ((v_cat is null and v_client is null and previous_revenue>=5000 and loss_byn>=2500) or ((v_cat is not null or v_client is not null) and previous_revenue>0 and loss_byn>0))
      order by loss_byn desc limit 60) x),'[]'::jsonb),
   'skus',coalesce((select jsonb_agg(to_jsonb(x) order by x.loss_byn desc) from (
-     select * from signals where kind='sku' and previous_revenue>=3000 and loss_byn>=1500
+     select * from signals where kind='sku' and ((v_cat is null and v_client is null and previous_revenue>=3000 and loss_byn>=1500) or ((v_cat is not null or v_client is not null) and previous_revenue>0 and loss_byn>0))
      order by loss_byn desc limit 60) x),'[]'::jsonb),
   'clients',coalesce((select jsonb_agg(to_jsonb(x) order by x.loss_byn desc) from (
-     select * from signals where kind='client' and previous_revenue>=5000 and loss_byn>=2500
+     select * from signals where kind='client' and ((v_cat is null and previous_revenue>=5000 and loss_byn>=2500) or (v_cat is not null and previous_revenue>0 and loss_byn>0))
      order by loss_byn desc limit 60) x),'[]'::jsonb),
   'growing_subgroups',coalesce((select jsonb_agg(to_jsonb(x) order by x.delta_byn desc) from (
      select * from signals where kind='subgroup' and current_revenue>previous_revenue
