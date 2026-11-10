@@ -99,7 +99,7 @@ function fixture(role='boss'){
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
 test('sales module stays isolated after original analytics and keeps core unchanged',()=>{
  assert.doesNotThrow(()=>new vm.Script(src));
- assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-4'));
+ assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-5'));
  assert.ok(index.indexOf('assets/118-sales-analytics-v236374.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.ok(index.indexOf('assets/189-falling-director360-v1.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.match(core,/function renderSales\(\)/);
@@ -130,8 +130,8 @@ test('manager/category matrix surfaces testable opportunities, never a knowledge
  assert.equal(api.categoryMatrix(sample,'Генераторы').length,2);
  const gaps=api.managerGaps(sample);
  assert.ok(gaps.some(x=>x.manager==='Ачинович'&&x.category==='Генераторы'));
- assert.match(src,/Отсутствие продаж не доказывает нехватку знаний/);
- assert.match(src,/Задача создаётся только после согласования руководителем/);
+ assert.match(src,/Отсутствие продаж само по себе не доказывает нехватку знаний/);
+ assert.match(src,/Поручение создаётся только после утверждения директором/);
  assert.doesNotMatch(src,/\bcreateTask\(/);
 });
 test('sales native renderer executes, and server annual RPC has no local history scanning',async()=>{
@@ -145,7 +145,7 @@ test('sales native renderer executes, and server annual RPC has no local history
  const root=f.nodes['sales360-root'];
  assert.ok(root.innerHTML.includes('Продажи 360°'));
  assert.ok(root.innerHTML.includes('Управление ростом'));
- assert.ok(root.innerHTML.includes('ИИ · Утренний брифинг продаж'));
+ assert.ok(root.innerHTML.includes('Директорский брифинг · Что требует решения'));
  assert.ok(root.innerHTML.includes('Матрица')||root.innerHTML.includes('Потенциал менеджеров'));
  assert.ok(root.innerHTML.includes('Ноябрь')||root.innerHTML.includes('Ноя'));
  assert.ok(root.innerHTML.includes('Клиент &amp; Строй'));
@@ -277,7 +277,7 @@ test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
  assert.match(html,/275тыс/,'2025 Oct monthly value is labeled in grey');
  assert.match(html,/317тыс/,'2026 Oct value is labeled in blue');
  assert.doesNotMatch(html,/316\s*927,84 BYN/,'chart/selected period no longer shows kopecks');
- assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('ИИ · Утренний брифинг продаж'),'graph occupies own full-width row before briefing');
+ assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('Директорский брифинг · Что требует решения'),'graph occupies own full-width row before briefing');
 });
 test('one full-sales KPI only, no Triovist exclusion UI or separate sale totals',async()=>{
  const f=fixture();f.window.renderSales();await settle();
@@ -346,8 +346,10 @@ test('client product drill opens garden subgroups then specific SKU without leav
  assert.match(f.nodes['sales360-root'].innerHTML,/SKU не указан/);
  assert.ok(f.classes.has('s360-installed'));
  assert.ok(!f.navigation.includes('native-yoy-open'));
+ const callCount=f.calls.length;
  fire({s360DrillBack:'',s360DrillScope:'client'});await settle();
- assert.equal(f.calls.at(-1).args.p_level,'subgroups');
+ assert.equal(f.calls.length,callCount,'returning to cached subgroups does not request 1C again');
+ assert.match(f.nodes['sales360-root'].innerHTML,/Бензопилы/);
 });
 test('global product group drill respects manager and shows no raw 1C rows',async()=>{
  const f=fixture('manager');f.window.renderSales();await settle();
@@ -369,4 +371,53 @@ test('additive product drill RPC requires server auth, stays read-only and is pa
  assert.match(v3sql,/grant execute on function public\.crm_sales360_product_drill_v3\(integer,text,text,text,text,text,text,integer,integer\) to authenticated,service_role/);
  assert.match(v3sql,/least\(100,greatest\(1,coalesce\(p_limit,50\)\)\)/);
  assert.doesNotMatch(v3sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
+});
+
+test('drill patches only its own container and preserves client list/scroll context',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const fire=dataset=>f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?{dataset}:null}}});
+ fire({s360ClientKey:'c1'});await settle();
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/s360-client-product-container/);
+ const partial={innerHTML:''};
+ f.nodes['s360-client-product-container']=partial;
+ const callsBefore=f.calls.length;
+ fire({s360DrillGroup:'САДОВАЯ ТЕХНИКА',s360DrillScope:'client'});await settle();
+ assert.equal(f.nodes['sales360-root'].innerHTML,html,'the client/list DOM is not rebuilt');
+ assert.match(partial.innerHTML,/Бензопилы/);
+ assert.equal(f.calls.length,callsBefore+1);
+ fire({s360DrillSubgroup:'Бензопилы',s360DrillScope:'client'});await settle();
+ assert.equal(f.nodes['sales360-root'].innerHTML,html,'SKU step keeps page DOM and focus');
+ assert.match(partial.innerHTML,/SKU 70\/6\/4/);
+ const n=f.calls.length;
+ fire({s360DrillBack:'',s360DrillScope:'client'});await settle();
+ assert.equal(f.calls.length,n,'second look at subgroups uses browser cache');
+ assert.match(partial.innerHTML,/Бензопилы/);
+});
+test('director briefing ranks meaningful category losses with evidence and a concrete next step',async()=>{
+ const f=fixture();f.window.renderSales();await settle();
+ const api=f.window.RESANTA_SALES360_V1;
+ const sig=api.directorSignals(sample);
+ assert.equal(sig.issues[0].kind,'decline');
+ assert.equal(sig.issues[0].category,'Генераторы');
+ assert.equal(sig.issues[0].loss,50000);
+ assert.equal(sig.issues[0].priority,'Высокий');
+ assert.match(sig.issues[0].action,/подгруппы и SKU/);
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.match(html,/Директорский брифинг · Что требует решения/);
+ assert.match(html,/снижение 50\s*000 BYN/);
+ assert.match(html,/Разобрать подгруппы и SKU/);
+ assert.match(html,/причина ещё не установлена/);
+ assert.doesNotMatch(html,/У [^<]* нет продаж группы [^<]* значит не знает/i);
+ assert.match(src,/directorSignals/);
+ assert.doesNotMatch(src,/\.insert\(|\.upsert\(|\.update\(.*tasks/);
+});
+test('director signals filter weak declines instead of labelling any zero sales as incompetence',()=>{
+ const f=fixture();const a={...sample};
+ a.categories=[{category:'Незначительное снижение',current_revenue:9500,previous_revenue:10200},
+  {category:'Возвраты',current_revenue:-2000,previous_revenue:250}];
+ a.matrix=[];a.managers=[];
+ const result=f.window.RESANTA_SALES360_V1.directorSignals(a);
+ assert.equal(result.declineCount,0);
+ assert.equal(result.issues.length,0);
 });
