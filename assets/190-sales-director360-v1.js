@@ -345,25 +345,23 @@ function topClients(d){
 }
 function render(){
  const root=mount();if(!root)return;
- if(!state.data){
-  root.innerHTML='<div class="s360-head"><h2>Продажи 360°</h2><span class="s360-badge">Директорский контроль</span></div><div class="s360-loading">'+
-  (state.error?'Не удалось получить годовую аналитику: '+esc(state.error):'Загружаю аналитику продаж 1С…')+
-  (state.error?'<div style="margin-top:10px"><button type="button" class="s360-btn" data-s360-refresh>Повторить загрузку</button><button type="button" class="s360-btn" data-s360-legacy>Открыть исходный отчёт</button></div>':'')+'</div>';
+ if(state.legacy){
+  root.innerHTML='<div class="s360-panel s360-head-actions"><div><h2>Исходные отчёты продаж</h2><div class="s360-muted">Режим подробных отчётов, новый директорский экран скрыт.</div></div>'+
+   '<button type="button" class="s360-btn primary" data-s360-legacy>← Вернуться к Продажи 360°</button></div>';
   return;
  }
+ if(!state.data){
+  root.innerHTML=headerHtml(null)+filtersHtml(null)+
+   (state.error?'<div class="s360-loading">Не удалось получить годовую аналитику: '+esc(state.error)+'<div style="margin-top:10px"><button type="button" class="s360-btn" data-s360-refresh>Повторить загрузку</button><button type="button" class="s360-btn" data-s360-legacy>Открыть исходный отчёт</button></div></div>':
+   '<div role="status" class="s360-loading">Загружаю данные выбранного менеджера из 1С. Старые отчёты скрыты.</div><div class="s360-load-kpis" aria-hidden="true">'+Array.from({length:5},()=>'<div></div>').join('')+'</div>');
+  return;
+ }
+ const focus=focusedMonth(state.data);if(focus)state.selectedMonth=focus.month;
  const d=state.data,y=ytd(d),kpi=getKpi(d);
  const periods=chartData(d,state.view);
  const comparison=y.delta===null?'—':(y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'%';
  const colors=y.delta===null?'':y.delta<0?'s360-negative':'s360-positive';
- const years=[currentYear(),currentYear()-1,currentYear()-2,currentYear()-3].filter(x=>x>=2023);
- const freshest=d.freshness?.last_success_at||d.freshness?.report_date;
- root.innerHTML=
- '<div class="s360-head"><div><h2>Продажи 360° · Управление ростом</h2><div class="s360-muted">Годовая аналитика · менеджеры · товарные группы · клиенты · данные 1С с НДС</div></div><div class="s360-muted">Обновление 1С: '+esc(freshest?String(freshest).replace('T',' ').slice(0,16):'дата не подтверждена')+'</div></div>'+
- '<div class="s360-filters">'+
- '<div class="s360-field"><label for="s360-year">Год</label><select id="s360-year" data-s360-select="year">'+years.map(x=>'<option value="'+x+'"'+(state.year===x?' selected':'')+'>'+x+' / '+(x-1)+'</option>').join('')+'</select></div>'+
- showSelectorOptions(d)+
- '<div class="s360-field"><label for="s360-view">Периодичность</label><select id="s360-view" data-s360-select="view"><option value="months"'+(state.view==='months'?' selected':'')+'>Месяцы</option><option value="quarters"'+(state.view==='quarters'?' selected':'')+'>Кварталы</option></select></div>'+
- '<button type="button" class="s360-btn" data-s360-refresh>↻ Обновить</button></div>'+
+ root.innerHTML=headerHtml(d)+filtersHtml(d)+
  '<div class="s360-kpis">'+
  kpiCard('Отгрузки с января',short(y.current)+' BYN',y.months+' закрытых месяцев, нетто 1С')+
  kpiCard('К прошлому году',comparison,'Сопоставимые закрытые месяцы',colors)+
@@ -372,9 +370,9 @@ function render(){
  kpiCard('Без точной ТТ',short(d.unallocated_client_revenue)+' BYN','Включено в общий оборот')+'</div>'+
  '<div class="s360-grid">'+brief(d)+
  '<div class="s360-panel"><div class="s360-head-actions"><h3>Динамика с января · '+d.year+' / '+d.previous_year+'</h3><span class="s360-badge">BYN · фактическая выручка</span></div>'+trendSvg(periods)+
- '<div class="s360-legend"><span><i style="background:#2563eb"></i>'+d.year+'</span><span><i style="background:#aab4c5"></i>'+d.previous_year+'</span></div>'+
- '<div class="s360-muted" style="margin-top:10px">* Текущий месяц или незакрытый квартал. Неполные периоды исключены из процента роста с начала года. Нажмите «Открыть месяц», чтобы посмотреть подробности в исходном отчёте.</div>'+
- '<div class="s360-tabs" style="margin-top:10px">'+arr(d.months).filter(x=>x.has_current).slice(-4).map(x=>'<button type="button" class="s360-btn" data-s360-month="'+esc(x.month)+'">'+MONTHS[Number(x.month.slice(5,7))-1]+'</button>').join('')+'</div></div></div>'+
+ '<div class="s360-legend"><span><i style="background:#2563eb"></i>'+d.year+'</span><span><i style="background:#94a3b8"></i>'+d.previous_year+'</span></div>'+focusedHtml(d,periods)+
+ '<div class="s360-muted" style="margin-top:10px">* Текущий месяц или незакрытый квартал. Неполные периоды исключены из итогового процента роста. Точные суммы доступны по нажатию на точки графика.</div>'+
+ '<div class="s360-tabs" style="margin-top:10px">'+arr(d.months).filter(x=>x.has_current).slice(-4).map(x=>'<button type="button" class="s360-btn'+(state.selectedMonth===x.month?' active':'')+'" data-s360-month="'+esc(x.month)+'">'+MONTHS[Number(x.month.slice(5,7))-1]+'</button>').join('')+'</div></div></div>'+
  '<div class="s360-grid"><div class="s360-panel" id="s360-managers"><h3>Менеджеры · Отгрузки с января</h3>'+managerBars(d)+
  '<p class="s360-muted" style="margin-top:12px">График использует текущее закрепление клиентской базы. Не распределённый по менеджеру оборот не приписывается сотруднику.</p></div>'+
  '<div class="s360-panel" id="s360-categories"><h3>Товарные группы · Рейтинг продаж</h3><div class="s360-minirows">'+categoryTable(d)+'</div></div></div>'+
