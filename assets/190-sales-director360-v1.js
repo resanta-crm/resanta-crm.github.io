@@ -212,6 +212,7 @@ function styles(){
  scope+' .s360-client-split .s360-client-item{grid-template-columns:minmax(120px,1fr) minmax(128px,auto);padding:10px;gap:8px}',
  scope+' .s360-client-item-amount{text-align:right;display:grid;gap:4px;white-space:nowrap}',
  scope+' .s360-client-item-amount small{font-size:10px;color:var(--sub)}',
+ scope+' .s360-recovery-scroll{max-height:380px;overflow:auto;display:grid;gap:6px;overscroll-behavior:contain}',
  scope+' .s360-recovery-tabs{margin-top:14px;margin-bottom:9px}',
  scope+' .s360-recovery-spotlight{padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:11px;display:grid;gap:9px}',
  scope+' .s360-recovery-list{display:grid;gap:5px;margin-top:9px}',
@@ -431,7 +432,7 @@ function recoveryFocusHtml(){
  if(state.recoveryFocusLoading||!d)return '<div class="s360-recovery-spotlight" id="s360-rec-focus">'+head+
  (state.recoveryFocusError?'<div class="s360-warn">'+esc(state.recoveryFocusError)+'</div>':
  '<div role="status" class="s360-muted">Получаю подробности из 1С…</div>')+'</div>';
- const skus=arr(d.skus).slice(0,20),clients=arr(d.clients).slice(0,20);
+ const skus=arr(d.skus).slice(0,60),clients=arr(d.clients).slice(0,60);
  const srows=skus.map(x=>'<div class="s360-recovery-row s360-recovery-static">'+
  '<span class="s360-recovery-name"><b>'+esc(x.product||x.sku||'Без артикула')+'</b><small>'+esc(x.sku?'SKU '+x.sku:'SKU не указан')+'</small></span>'+
  '<span>'+esc(whole(x.previous_revenue))+' → '+esc(whole(x.current_revenue))+'</span>'+
@@ -444,7 +445,7 @@ function recoveryFocusHtml(){
  '<h4>Падающие SKU ('+skus.length+')</h4>'+
  (srows||'<div class="s360-muted">По выбранной подгруппе SKU со снижением не найдено.</div>')+
  '<h4>Клиенты с падением ('+clients.length+')</h4>'+
- (crows||'<div class="s360-muted">По выбранной подгруппе клиентов со снижением нет.</div>')+
+ '<div class="s360-recovery-scroll">'+(crows||'<div class="s360-muted">По выбранной подгруппе клиентов со снижением нет.</div>')+'</div>'+
  '<div class="s360-muted">Числа — изменение выручки за сопоставимые месяцы, а не подтверждённые причины.</div>'+
  '<button type="button" class="s360-btn" data-s360-rec-open-full>Полная товарная детализация с января</button></div>';
 }
@@ -529,7 +530,7 @@ function clientRecoveryHtml(){
  if(!categories.length&&!skus.length)return base+'<div class="s360-muted">Значимых падений по порогам за сопоставимый период не выявлено.</div></div>';
  const selected=state.clientRecoveryFilter;
  const selectedSkus=selected?skus.filter(x=>x.subgroup===selected):[];
- const rows=categories.slice(0,8).map(x=>
+ const rows=categories.map(x=>
  '<button type="button" class="s360-recovery-row" data-s360-rec-client-group="'+esc(x.category)+'" data-s360-rec-client-subgroup="'+esc(x.subgroup)+'">'+
  '<span class="s360-recovery-name"><b>'+esc(x.subgroup)+'</b><small>'+esc(x.category)+'</small></span>'+
  '<span class="s360-recovery-delta s360-negative"><b>−'+esc(whole(x.loss_byn))+'</b><small>'+esc(recoveryStatus(x))+'</small></span><span>›</span></button>').join('');
