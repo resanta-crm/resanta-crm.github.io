@@ -39,9 +39,12 @@ const drillCache=new Map(),drillPending=new Map(),DRILL_TTL=300000,DRILL_MAX=60;
 function drillKey(scope,st){return JSON.stringify([viewer(),state.year,boss()?state.manager:managerMe(),scope,st.clientKey||'',st.category,st.level,st.subgroup,st.search,st.offset]);}
 function invalidateDrillCache(){drillCache.clear();drillPending.clear();}
 function paintDrill(scope){
- // Keep client list, selected client, focus and page position intact when drilling.
- const target=$('s360-drill-'+scope+'-container');
- if(target){target.innerHTML=drillView(scope);return;}
+ // Replace the product section in place: no client list remount and no scroll jump.
+ const target=scope==='client' ? $('s360-client-product-container') : $('s360-drill-global-container');
+ if(target){
+  target.innerHTML=scope==='client'?clientProductsHtml(state.clientData?.detail):drillView('global');
+  return;
+ }
  render();
 }
 
@@ -471,7 +474,7 @@ function drillView(scope){
  }).join('');
  return '<div class="s360-drill" id="s360-drill-'+context+'">'+
  '<div class="s360-head-actions"><div><h3>'+esc(title)+'</h3><div class="s360-muted">'+esc(parent)+'</div></div>'+
- '<button type="button" class="s360-btn" data-s360-drill-close data-s360-drill-scope="'+context+'">Закрыть детализацию</button></div>'+
+ '<button type="button" class="s360-btn" data-s360-drill-close data-s360-drill-scope="'+context+'">'+(scope==='client'?'← К товарным группам':'Закрыть детализацию')+'</button></div>'+
  '<div class="s360-drill-nav">'+
  (st.level==='sku'?'<button type="button" class="s360-btn" data-s360-drill-back data-s360-drill-scope="'+context+'">← К подгруппам</button>':'')+
  '<span class="s360-badge">'+(st.level==='subgroups'?'Подгруппы':'Конкретные SKU')+'</span>'+
@@ -533,6 +536,14 @@ async function loadDrill(scope){
   if(serial===drillVersions[scope]){st.loading=false;paintDrill(scope);}
  }
 }
+function clientProductsHtml(detail){
+ const cats=arr(detail?.categories),yr=state.year,prev=yr-1;
+ if(drillStates.client.category)return drillView('client');
+ return '<h3 style="margin-top:16px">Товарные группы клиента · выберите группу</h3>'+
+  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>'+yr+', BYN</th><th>'+prev+', BYN</th></tr></thead><tbody>'+
+  cats.map(x=>'<tr><td><button type="button" data-s360-drill-group="'+esc(x.category)+'" data-s360-drill-scope="client">'+esc(x.category)+' →</button></td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+
+  '</tbody></table></div>';
+}
 function clientDetailHtml(detail){
  if(!detail?.client)return'';
  const c=detail.client,rows=arr(detail.months),cats=arr(detail.categories),yr=state.year,prev=yr-1;
@@ -552,9 +563,7 @@ function clientDetailHtml(detail){
   '<div><small>Изменение, BYN</small><strong>'+esc(whole(num(c.current_revenue)-num(c.previous_revenue)))+'</strong></div></div>'+
   '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">'+yr+' · синий / '+prev+' · серый</span></div>'+
   '<div class="s360-client-graph">'+bars+'</div>'+
-  '<h3 style="margin-top:16px">Товарные группы клиента</h3>'+
-  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>'+yr+', BYN</th><th>'+prev+', BYN</th></tr></thead><tbody>'+
-  cats.map(x=>'<tr><td><button type="button" data-s360-drill-group="'+esc(x.category)+'" data-s360-drill-scope="client">'+esc(x.category)+' →</button></td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+'</tbody></table></div><div id="s360-drill-client-container" aria-live="polite">'+drillView('client')+'</div>'+
+  '<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>'+
   '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
 }
 function clientsPanel(d){
