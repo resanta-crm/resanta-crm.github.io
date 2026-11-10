@@ -270,6 +270,11 @@
       return;
     }
 
+    // Shared Sales360/Lera recovery evidence takes precedence only for sales-loss intents.
+    if (typeof window.crmAI360SalesRecoveryHandleV1 === 'function') {
+      try { if (window.crmAI360SalesRecoveryHandleV1(query, {answer, textStatus})) return; }
+      catch (e) { console.warn('Sales360 recovery voice unavailable',e); }
+    }
     // The director briefing has its own authenticated read-only data source.
     // It takes precedence over generic analytics on the explicit briefing intent.
     if (typeof window.crmAI360DirectorBriefHandleV1 === 'function') {
