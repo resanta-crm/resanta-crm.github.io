@@ -355,14 +355,60 @@ function draft(d){
  const content='Проверить возможность роста продаж группы «'+state.category+'». Ответственный: '+focus+'. Проверить спрос клиентов, наличие на складе Витебск, историю предложений и визитов. При выявленном пробеле знаний: согласовать обучение, затем тест на 10 вопросов (порог 80%) по утверждённым материалам производителя. Представить подтверждённые действия и факт отгрузок из 1С. Задача создаётся только после согласования руководителем.';
  return'<label class="s360-muted" for="s360-draft-text">Черновик поручения · автоматически не создаётся</label><textarea class="s360-copy" id="s360-draft-text">'+esc(content)+'</textarea><button type="button" class="s360-btn" data-s360-copy>Копировать черновик</button>';
 }
-function topClients(d){
- const rows=arr(d.top_clients).slice(0,state.expanded?15:7);
- return'<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><h3>Клиенты · Отгрузки за закрытые месяцы</h3><span class="s360-badge">Источник 1С</span></div>'+
- (rows.length?rows.map(x=>'<div class="s360-row"><button type="button" '+(x.client_id?'data-s360-client="'+esc(x.client_id)+'"':'disabled')+'><b>'+esc(x.client_name||'—')+'</b>'+(x.is_unallocated?'<span class="s360-muted"> · без точной ТТ</span>':'')+'</button><b>'+esc(short(x.revenue))+'</b><span>'+esc(x.manager_name||'—')+'</span><span>'+(x.client_id?'Карточка CRM':'1С')+'</span></div>').join(''):'<div class="s360-muted">Нет данных о клиентах.</div>')+
- '<div class="s360-tabs" style="margin-top:10px">'+
- (!state.expanded&&arr(d.top_clients).length>rows.length?'<button type="button" class="s360-btn" data-s360-expand>Показать ТОП-15</button>':'')+
- '<button type="button" class="s360-btn primary" data-s360-all-clients>Все клиенты · Поиск и детализация</button></div>'+
- '<div class="s360-muted" style="margin-top:9px">Полный поиск, сравнение кварталов и переходы к клиентам открываются в существующем отчёте «Менеджеры · год к году».</div></div>';
+function clientDetailHtml(detail){
+ if(!detail?.client)return'';
+ const c=detail.client,rows=arr(detail.months),cats=arr(detail.categories);
+ const limit=Math.max(1,...rows.flatMap(x=>[Math.max(0,num(x.current)),Math.max(0,num(x.previous))]));
+ const bars=rows.filter(x=>x.has_current||x.has_previous).map(x=>
+  '<div class="s360-client-month"><b>'+esc(monthLabel(x.month).split(' ')[0])+(x.partial?'*':'')+'</b>'+
+  '<span class="s360-client-track" title="'+esc(whole(x.current))+'"><i style="width:'+Math.min(100,Math.max(0,num(x.current))/limit*100)+'%"></i></span>'+
+  '<span style="color:#2563eb">'+esc(x.has_current?whole(x.current):'—')+'</span>'+
+  '<span style="color:#64748b">'+esc(x.has_previous?whole(x.previous):'—')+'</span></div>'
+ ).join('');
+ return '<div class="s360-client-detail"><div class="s360-head-actions"><div><h3>'+esc(c.client_name)+'</h3>'+
+  '<div class="s360-muted">'+esc(c.manager_name||'Менеджер не определён')+' · Из 1С, с НДС</div></div>'+
+  '<div class="s360-tabs">'+(c.client_id?'<button type="button" class="s360-btn" data-s360-client-card="'+esc(c.client_id)+'">Карточка CRM</button>':'')+
+  '<button type="button" class="s360-btn" data-s360-client-close>Закрыть детали</button></div></div>'+
+  '<div class="s360-focus"><b>Оборот по клиенту</b><div><small>2026 · закрытые месяцы</small><strong>'+esc(whole(c.current_revenue))+'</strong></div>'+
+  '<div><small>2025 · сопоставимые месяцы</small><strong>'+esc(whole(c.previous_revenue))+'</strong></div>'+
+  '<div><small>Изменение, BYN</small><strong>'+esc(whole(num(c.current_revenue)-num(c.previous_revenue)))+'</strong></div></div>'+
+  '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">2026 · синий / 2025 · серый</span></div>'+
+  '<div class="s360-client-graph">'+bars+'</div>'+
+  '<h3 style="margin-top:16px">Товарные группы клиента</h3>'+
+  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>2026, BYN</th><th>2025, BYN</th></tr></thead><tbody>'+
+  cats.map(x=>'<tr><td>'+esc(x.category)+'</td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+'</tbody></table></div>'+
+  '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
+}
+function clientsPanel(d){
+ const preview=arr(d.top_clients).slice(0,7);
+ if(!state.clientsOpen){
+  return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><h3>Клиенты 360° · Продажи с начала года</h3>'+
+  '<span class="s360-badge">1С · закрытые месяцы</span></div>'+
+  (preview.length?preview.map(x=>'<div class="s360-row"><button type="button" data-s360-client-key="'+esc(x.client_key)+'"><b>'+esc(x.client_name||'—')+'</b>'+
+  (x.is_unallocated?'<span class="s360-muted"> · без точной ТТ</span>':'')+'</button><b>'+esc(whole(x.revenue))+'</b>'+
+  '<span>'+esc(x.manager_name||'—')+'</span><span>Детали</span></div>').join(''):'<div class="s360-muted">Подтверждённых продаж нет.</div>')+
+  '<div class="s360-tabs" style="margin-top:12px"><button type="button" class="s360-btn primary" data-s360-all-clients>Все клиенты · Поиск и детализация</button></div></div>';
+ }
+ const result=state.clientData||{},rows=arr(result.items),total=num(result.total),pages=Math.max(1,Math.ceil(total/20)),page=Math.floor(state.clientOffset/20)+1;
+ const list=rows.map(x=>
+  '<button type="button" class="s360-client-item'+(state.clientKey===x.client_key?' active':'')+'" data-s360-client-key="'+esc(x.client_key)+'">'+
+  '<span><b>'+esc(x.client_name||'—')+'</b><small class="s360-muted" style="display:block">'+esc(x.manager_name||'Менеджер не определён')+'</small></span>'+
+  '<span>'+esc(whole(x.current_revenue))+'<small class="s360-muted" style="display:block">2026</small></span>'+
+  '<span>'+esc(whole(x.previous_revenue))+'<small class="s360-muted" style="display:block">2025</small></span></button>'
+ ).join('');
+ return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
+ '<div class="s360-muted">Серверный поиск по всей клиентской базе с данными 1С · год/менеджер/режим синхронизированы</div></div>'+
+ '<button type="button" class="s360-btn" data-s360-all-clients>Свернуть список</button></div>'+
+ '<div class="s360-client-search" style="margin-top:12px">'+
+ '<input id="s360-client-search" data-s360-client-search value="'+esc(state.clientSearch)+'" placeholder="Название клиента или менеджер" aria-label="Поиск клиентов">'+
+ '<button type="button" class="s360-btn primary" data-s360-client-find>Найти</button></div>'+
+ (state.clientError?'<div class="s360-warn">'+esc(state.clientError)+' <button type="button" class="s360-btn" data-s360-client-find>Повторить</button></div>':'')+
+ (state.clientLoading?'<div class="s360-loading" role="status">Загружаю клиентов из 1С…</div>':
+ '<div class="s360-client-list">'+(list||'<div class="s360-muted">По запросу клиентов нет.</div>')+'</div>')+
+ (total>0?'<div class="s360-head-actions" style="margin-top:12px"><span class="s360-muted">Найдено '+total+' · страница '+page+' из '+pages+'</span>'+
+ '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-client-page="-1"'+(page===1?' disabled':'')+'>← Предыдущие</button>'+
+ '<button type="button" class="s360-btn" data-s360-client-page="1"'+(page>=pages?' disabled':'')+'>Следующие →</button></div></div>':'')+
+ clientDetailHtml(result.detail)+'</div>';
 }
 function render(){
  const root=mount();if(!root)return;
