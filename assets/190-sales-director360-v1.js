@@ -203,6 +203,19 @@ function styles(){
  scope+' .s360-client-month{display:grid;grid-template-columns:46px minmax(60px,1fr) 100px 100px;gap:8px;align-items:center;font-size:11px}',
  scope+' .s360-client-track{height:11px;border-radius:7px;background:var(--card);display:flex;overflow:hidden}',
  scope+' .s360-client-track i{height:11px;display:block;background:#2563eb}',
+ scope+' .s360-recovery-tabs{margin-top:14px;margin-bottom:9px}',
+ scope+' .s360-recovery-spotlight{padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:11px;display:grid;gap:9px}',
+ scope+' .s360-recovery-list{display:grid;gap:5px;margin-top:9px}',
+ scope+' .s360-recovery-row{width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px;display:grid;grid-template-columns:minmax(135px,2fr) minmax(100px,1fr) minmax(105px,1.1fr) 16px;gap:10px;align-items:center;text-align:left;font:inherit;cursor:pointer}',
+ scope+' .s360-recovery-row:hover{background:var(--bg)}',
+ scope+' .s360-recovery-name{display:grid;gap:4px;min-width:0}',
+ scope+' .s360-recovery-name b{font-size:12px;overflow-wrap:anywhere}',
+ scope+' .s360-recovery-name small, '+scope+' .s360-recovery-values small, '+scope+' .s360-recovery-delta small{font-size:11px;color:var(--sub)}',
+ scope+' .s360-recovery-values, '+scope+' .s360-recovery-delta{display:grid;gap:3px;font-size:12px}',
+ scope+' .s360-recovery-delta small{color:inherit}',
+ scope+' .s360-recovery-foot{margin-top:10px;font-size:11px}',
+ scope+' .s360-client-recovery{margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px}',
+ scope+' .s360-client-recovery .s360-recovery-row{grid-template-columns:minmax(120px,1fr) auto 16px}',
  scope+' .s360-brief-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}',
  scope+' .s360-brief-overview>div{background:var(--bg);padding:12px;border-radius:9px;min-width:0}',
  scope+' .s360-brief-overview small{font-size:10px;color:var(--sub);display:block}',
@@ -258,7 +271,7 @@ function styles(){
  scope+' .s360-load-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}',
  scope+' .s360-load-kpis>div{border:1px solid var(--border);border-radius:12px;background:var(--card);min-height:88px;opacity:.6}',
  '@media(max-width:1050px){'+scope+' .s360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}'+scope+' .s360-grid{grid-template-columns:1fr}}',
- '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}}'
+ '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}'+scope+' .s360-recovery-row{grid-template-columns:1fr auto 16px}'+scope+' .s360-recovery-values{display:none}}'
  ].join('\n');
 }
 function mount(){
@@ -373,7 +386,91 @@ function directorSignals(d){
  }
  return {summary,issues,declineCount:relevant.length,closedMonth:num(d?.closed_month)};
 }
+function recoveryStatus(row){
+ const p=num(row?.delta_pct);
+ return row?.status==='stopped'?'Продажи прекратились':
+        row?.status==='new'?'Новое направление':
+        row?.status==='growth'?'+'+p.toFixed(1).replace('.',',')+'%':
+        row?.status==='decline'?p.toFixed(1).replace('.',',')+'%':'—';
+}
+function recoveryPeriodName(r){
+ if(!r)return'Последние 3 закрытых месяца';
+ const months=r.period==='ytd'?'С января':r.period==='quarter'?'Последний закрытый квартал':'Последние 3 закрытых месяца';
+ return months+' · '+MONTHS[num(r.from_month)-1]+'–'+MONTHS[num(r.to_month)-1]+' '+r.year+' / '+r.previous_year;
+}
+function recoveryRow(row,tab){
+ const positive=tab==='growth',isClient=tab==='clients'||(tab==='growth'&&row?.kind==='client');
+ const item=isClient?row.client_name:row.kind==='sku'?(row.product||row.sku):row.subgroup||row.category;
+ const sub=isClient?(row.manager_name||'Менеджер не определён'):
+     [row.category,row.kind==='sku'?row.subgroup:null,row.sku?'SKU '+row.sku:null].filter(Boolean).join(' · ');
+ const attrs=isClient?(' data-s360-rec-client="'+esc(row.client_key)+'"'):
+   (' data-s360-rec-group="'+esc(row.category||'')+'" data-s360-rec-subgroup="'+esc(row.subgroup||'')+'" data-s360-rec-sku="'+esc(row.sku||'')+'"');
+ const fall=row.delta_byn<0;
+ return '<button type="button" class="s360-recovery-row"'+attrs+'>'+
+  '<span class="s360-recovery-name"><b>'+esc(item||'Без названия')+'</b><small>'+esc(sub)+'</small></span>'+
+  '<span class="s360-recovery-values"><small>'+row.previous_revenue.toLocaleString?.('ru-RU')+'</small><b>'+esc(whole(row.current_revenue))+'</b></span>'+
+  '<span class="s360-recovery-delta '+(fall?'s360-negative':'s360-positive')+'"><b>'+(num(row.delta_byn)>0?'+':'')+esc(whole(row.delta_byn))+'</b><small>'+esc(recoveryStatus(row))+'</small></span>'+
+  '<span class="s360-recovery-chevron">›</span></button>';
+}
+function recoveryBrief(d){
+ const r=state.recoveryData,loading=state.recoveryLoading;
+ const periods=[['last3','3 месяца'],['quarter','Квартал'],['ytd','С января']];
+ const selectors=periods.map(([key,label])=>'<button type="button" class="s360-btn'+(state.recoveryPeriod===key?' active':'')+'" data-s360-rec-period="'+key+'">'+label+'</button>').join('');
+ const head='<div class="s360-head-actions"><div><h3>✦ Директорский брифинг · Где теряем и растём</h3>'+
+ '<div class="s360-muted">Подгруппы, SKU, клиенты · одинаковые полностью закрытые месяцы двух лет</div></div>'+
+ '<div class="s360-tabs">'+selectors+'</div></div>';
+ if(loading||!r){
+  const message=state.recoveryError?
+   'Не удалось прочитать проверенную аналитику: '+esc(state.recoveryError)+'. <button type="button" class="s360-btn" data-s360-rec-retry>Повторить</button>':
+   'Проверяю рост и падение по подгруппам, SKU и клиентам в 1С…';
+  return '<div class="s360-panel" id="s360-director-brief">'+head+'<div role="status" class="s360-loading">'+message+'</div></div>';
+ }
+ const loss=arr(r.subgroups),clients=arr(r.clients),skus=arr(r.skus),growth=arr(r.growing_subgroups);
+ const count=num(r.client_drop_30_count),gap=num(r.client_drop_30_gap);
+ const title='<div class="s360-muted">'+esc(recoveryPeriodName(r))+' · обновление: '+esc(freshLabel({last_success_at:r.sales_imported_at}))+'</div>';
+ const summary='<div class="s360-brief-overview">'+
+ '<div><small>Подгрупп с заметным снижением</small><strong>'+loss.length+'</strong></div>'+
+ '<div><small>Клиентов со снижением ≥30%*</small><strong>'+count+'</strong></div>'+
+ '<div><small>Отрицательное отклонение этих клиентов</small><strong class="s360-negative">'+esc(whole(gap))+'</strong></div></div>';
+ const first=loss[0],second=skus[0];
+ const spotlight=first?'<div class="s360-recovery-spotlight"><div class="s360-head-actions"><b>Приоритет: '+esc(first.category+' · '+first.subgroup)+'</b>'+
+ '<strong class="s360-negative">−'+esc(whole(first.loss_byn))+' · '+esc(recoveryStatus(first))+'</strong></div>'+
+ '<div class="s360-muted">'+r.previous_year+': '+esc(whole(first.previous_revenue))+' → '+r.year+': '+esc(whole(first.current_revenue))+
+ '. Проверь, какие SKU и какие клиенты дали снижение, наличие на складе, историю предложений, возвраты и сезонность. Причина не установлена.</div>'+
+ (second&&second.category===first.category&&second.subgroup===first.subgroup?
+ '<div class="s360-muted">Самое заметное снижение SKU: '+esc(second.product||second.sku||'—')+' · −'+esc(whole(second.loss_byn))+'</div>':'')+
+ '<button type="button" class="s360-btn" data-s360-rec-group="'+esc(first.category)+'" data-s360-rec-subgroup="'+esc(first.subgroup)+'" data-s360-rec-sku="">Разобрать подгруппу и SKU</button></div>':
+ '<div class="s360-note">Снижений подгрупп выше заданного порога в выбранном периоде не обнаружено. Проверь клиентов и SKU отдельно.</div>';
+ const tabs=[['subgroups','Подгруппы',loss.length],['skus','SKU',skus.length],['clients','Клиенты',clients.length],['growth','Точки роста',growth.length]];
+ const nav='<div class="s360-tabs s360-recovery-tabs">'+tabs.map(([key,name,n])=>
+ '<button type="button" class="s360-btn'+(state.recoveryTab===key?' active':'')+'" data-s360-rec-tab="'+key+'">'+name+' · '+n+'</button>').join('')+'</div>';
+ const current=state.recoveryTab==='skus'?skus:state.recoveryTab==='clients'?clients:state.recoveryTab==='growth'?growth:loss;
+ const visible=state.recoveryExpanded?current:current.slice(0,7);
+ const list=visible.length?visible.map(x=>recoveryRow(x,state.recoveryTab)).join(''):'<div class="s360-muted" style="padding:12px">По установленным порогам сигналов нет. Это не означает отсутствия проблем.</div>';
+ const more=current.length>7?'<button type="button" class="s360-btn" data-s360-rec-more>'+
+  (state.recoveryExpanded?'Показать меньше':'Показать все '+current.length)+'</button>':'';
+ const note='<div class="s360-muted s360-recovery-foot">* Клиенты: база от 5 000 BYN, падение ≥30%. Подгруппы: база от 5 000 BYN, отклонение от 2 500 BYN. Новые и сезонные позиции проверяются отдельно. Ноябрь без подтверждённой ежедневной детализации не сравнивается. Сигналы — не доказанные причины и не автоматически назначенные задачи.</div>';
+ return '<div class="s360-panel" id="s360-director-brief">'+head+title+summary+spotlight+nav+
+ '<div class="s360-recovery-list">'+list+'</div><div class="s360-tabs">'+more+'</div>'+note+'</div>';
+}
+function clientRecoveryHtml(){
+ const r=state.clientRecoveryData;
+ const base='<div class="s360-client-recovery"><div class="s360-head-actions"><h3>Динамика клиента · где падение</h3>'+
+ '<span class="s360-badge">'+esc(state.recoveryPeriod==='last3'?'Последние 3 месяца':state.recoveryPeriod==='ytd'?'С января':'Квартал')+'</span></div>';
+ if(state.clientRecoveryLoading)return base+'<div class="s360-muted">Проверяю подгруппы и SKU клиента…</div></div>';
+ if(state.clientRecoveryError)return base+'<div class="s360-warn">'+esc(state.clientRecoveryError)+'</div></div>';
+ if(!r)return base+'<div class="s360-muted">Аналитика выбранного клиента ещё не загружена.</div></div>';
+ const categories=arr(r.subgroups),skus=arr(r.skus);
+ if(!categories.length&&!skus.length)return base+'<div class="s360-muted">Значимых падений по порогам за сопоставимый период не выявлено.</div></div>';
+ const rows=categories.slice(0,5).map(x=>
+ '<button type="button" class="s360-recovery-row" data-s360-rec-client-group="'+esc(x.category)+'" data-s360-rec-client-subgroup="'+esc(x.subgroup)+'">'+
+ '<span class="s360-recovery-name"><b>'+esc(x.subgroup)+'</b><small>'+esc(x.category)+'</small></span>'+
+ '<span class="s360-recovery-delta s360-negative"><b>−'+esc(whole(x.loss_byn))+'</b><small>'+esc(recoveryStatus(x))+'</small></span><span>›</span></button>').join('');
+ return base+'<div class="s360-muted">Выберите подгруппу — откроются конкретные SKU данного клиента. Изменения выручки не равны доказанным потерям спроса.</div>'+
+ '<div class="s360-recovery-list">'+rows+'</div></div>';
+}
 function brief(d){
+ return recoveryBrief(d);
  const report=directorSignals(d),y=report.summary,issues=report.issues;
  const delta=y.delta===null?'Недостаточно данных для сравнения':
    (y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'% к сопоставимому периоду '+d.previous_year;
@@ -589,7 +686,8 @@ function clientDetailHtml(detail){
   '<div><small>Изменение, BYN</small><strong>'+esc(whole(num(c.current_revenue)-num(c.previous_revenue)))+'</strong></div></div>'+
   '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">'+yr+' · синий / '+prev+' · серый</span></div>'+
   '<div class="s360-client-graph">'+bars+'</div>'+
-  '<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>'+
+  clientRecoveryHtml()+
+ '<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>'+
   '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
 }
 function clientsPanel(d){
