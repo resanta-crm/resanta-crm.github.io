@@ -99,7 +99,7 @@ function fixture(role='boss'){
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
 test('sales module stays isolated after original analytics and keeps core unchanged',()=>{
  assert.doesNotThrow(()=>new vm.Script(src));
- assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-3'));
+ assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-4'));
  assert.ok(index.indexOf('assets/118-sales-analytics-v236374.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.ok(index.indexOf('assets/189-falling-director360-v1.js')<index.indexOf('assets/190-sales-director360-v1.js'));
  assert.match(core,/function renderSales\(\)/);
