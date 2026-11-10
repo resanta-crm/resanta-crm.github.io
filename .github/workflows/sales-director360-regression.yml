@@ -26,6 +26,10 @@ jobs:
         with:
           node-version: '22'
       - name: Syntax
-        run: |\n          node --check assets/190-sales-director360-v1.js\n          node --check assets/191-sales360-recovery-lera-v1.js\n          node --check assets/134-resanta-voice-ai360-pilot-v1.js\n          node --check assets/144-resanta-ai360-branch-voice-v1.js
+        run: |
+          node --check assets/190-sales-director360-v1.js
+          node --check assets/191-sales360-recovery-lera-v1.js
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/144-resanta-ai360-branch-voice-v1.js
       - name: Sales 360 isolated regressions
         run: node --test tests/sales-director360-v1.test.mjs tests/sales360-recovery-lera-v1.test.mjs
