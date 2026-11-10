@@ -492,6 +492,7 @@ function openDrill(scope,category,subgroup=''){
  resetDrill(scope);
  const st=drillStates[scope];
  st.category=String(category).slice(0,200);
+ if(scope==='global'&&$('s360-category'))$('s360-category').value=st.category;
  st.subgroup=String(subgroup||'').slice(0,250);
  st.level=subgroup?'sku':'subgroups';
  st.clientKey=scope==='client'?state.clientKey:'';
@@ -610,7 +611,7 @@ function render(){
  kpiCard('Продажи · всего',whole(y.current),y.months+' закрытых месяцев · 1С, с НДС')+
  kpiCard('К прошлому году',comparison,'Сопоставимые закрытые месяцы',colors)+
  kpiCard('Покупателей',fmt(d.active_clients_ytd),'Уникальных с продажами по 1С')+
- kpiCard('План/факт месяца',kpi.display,kpi.description+' · KPI без фильтра Триовиста')+
+ kpiCard('План/факт месяца',kpi.display,kpi.description)+
  kpiCard('Без точной ТТ',whole(d.unallocated_client_revenue),'Включено в общий оборот')+'</div>'+
 
  '<div class="s360-panel s360-chart-panel'+(state.chartExpanded?' expanded':'')+'"><div class="s360-head-actions">'+
