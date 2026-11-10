@@ -169,11 +169,11 @@ function render(){
  '<button type="button" class="p-btn" data-pdz-refresh>↻ Обновить</button><button type="button" class="p-btn" data-pdz-legacy>Исходный отчёт</button></div>';
  if(!d){root.innerHTML='<div class="p-header"><div><h2>Задолженность 360°</h2><div class="p-muted">ПДЗ · динамика день к дню · контроль возврата</div></div></div>'+
  '<div class="p-card p-empty" role="status">'+(state.error?'Не удалось прочитать подтверждённую ПДЗ: '+E(state.error):'Загружаю ежедневную историю ПДЗ из 1С…')+
- ' <button class="p-btn" data-pdz-refresh>Повторить</button></div>';return;}
+ ' <button class="p-btn" data-pdz-refresh>Повторить</button> <button class="p-btn" data-pdz-legacy>Исходный отчёт</button></div>';return;}
  const top='<div class="p-header"><div><h2>Задолженность 360°</h2><div class="p-muted">Последний отчёт 1С: '+E(date(d.report_date))+' · прошлый срез: '+E(date(d.previous_report_date))+' · по календарным датам, не по дате загрузки</div></div>'+
  '<div class="p-muted">'+(boss()?'Директор · все менеджеры':'Менеджер · только закреплённые клиенты')+'</div></div>';
  const kpi='<div class="p-kpis">'+
- card('Просрочено · всего',money(m.amount),'<span class="'+(delta>0?'p-danger':'p-good')+'">'+E(signed(delta))+E(changePct)+'</span> · '+E(changeLabel),'')+
+ card('Просрочено · всего',money(m.amount),'<span class="'+(delta>0?'p-danger':'p-good')+'">'+E(signed(delta))+E(changePct)+'</span> · '+E(changeLabel)+' · было '+E(money(d.previous_amount)),'')+
  card('Должников',String(n(m.debtors)),E('За отчёт '+date(d.report_date)))+
  card('Высокий риск',String(n(m.high_risk)),E(compact(m.high_amount))+' · 60+ дней и ≥1 000 BYN','')+
  card('Просрочка 30+ дней',money(m.over_30),'Включая более 60 дней')+
@@ -203,7 +203,7 @@ async function load(force=false){
   const client=dbc();if(!client?.rpc)throw Error('Supabase недоступен');
   const {data,error}=await client.rpc('crm_pdz360_daily_v1',{p_manager:boss()&&state.manager!=='all'?state.manager:null,p_days:30});
   if(error)throw error;
-  if(id!==state.requestId||!safe())return;
+  if(id!==state.requestId||!safe()||state.legacy)return;
   if(data?.version!==VERSION||!Array.isArray(data?.rows)||!Array.isArray(data?.series))throw Error('Неполный ответ ежедневной истории ПДЗ');
   state.data=data;if(boss()&&state.manager==='all')state.managerOptions=arr(data.managers);state.loadedAt=Date.now();state.selected=rows().some(x=>x.client_name===state.selected)?state.selected:data.rows[0]?.client_name||'';
  }catch(e){if(id===state.requestId){state.error=String(e?.message||e);console.warn('PDZ360 snapshot',e);}}
