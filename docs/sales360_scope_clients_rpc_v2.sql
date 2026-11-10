@@ -92,7 +92,7 @@ begin
  ),
  scoped as materialized (
   select s.*,
-    (s.resolved_client_id in (select id from triovist_ids)
+    (coalesce(s.resolved_client_id in (select id from triovist_ids),false)
       or lower(coalesce(s.client_name,'')) like '%триовист%'
       or lower(coalesce(s.client_name,'')) like '%triovist%'
       or public.crm_client_key(s.client_name) in (
@@ -285,7 +285,7 @@ begin
  ),
  scoped as materialized (
   select s.*,
-   (s.resolved_client_id in (select id from triovist_ids)
+   (coalesce(s.resolved_client_id in (select id from triovist_ids),false)
       or lower(coalesce(s.client_name,'')) like '%триовист%'
       or lower(coalesce(s.client_name,'')) like '%triovist%'
       or public.crm_client_key(s.client_name) in (
