@@ -376,6 +376,84 @@ function draft(d){
  const content='Проверить возможность роста продаж группы «'+state.category+'». Ответственный: '+focus+'. Проверить спрос клиентов, наличие на складе Витебск, историю предложений и визитов. При выявленном пробеле знаний: согласовать обучение, затем тест на 10 вопросов (порог 80%) по утверждённым материалам производителя. Представить подтверждённые действия и факт отгрузок из 1С. Задача создаётся только после согласования руководителем.';
  return'<label class="s360-muted" for="s360-draft-text">Черновик поручения · автоматически не создаётся</label><textarea class="s360-copy" id="s360-draft-text">'+esc(content)+'</textarea><button type="button" class="s360-btn" data-s360-copy>Копировать черновик</button>';
 }
+function drillView(scope){
+ const st=drillStates[scope];
+ if(!st?.category){
+  if(scope==='client')return'';
+  return '<div class="s360-panel" id="s360-drill-global"><div class="s360-head-actions"><h3>Товарная детализация · Группа → Подгруппа → SKU</h3><span class="s360-badge">1С · только реальные данные</span></div>'+
+   '<div class="s360-muted">Выберите товарную группу в рейтинге или матрице выше, чтобы открыть подгруппы и конкретные SKU, сравнить оборот двух лет.</div></div>';
+ }
+ const result=st.data||{},items=arr(result.items),total=num(result.total),limit=50,page=Math.floor(st.offset/limit)+1,pages=Math.max(1,Math.ceil(total/limit));
+ const context=scope==='client'?'client':'global';
+ const title=scope==='client'?'Товары выбранного клиента':'Все клиенты · Товарная детализация';
+ const parent=st.category+(st.level==='sku'?' › '+st.subgroup:'');
+ const noSku=v=>v?.sku?('SKU '+v.sku):'SKU не указан · позиция по названию';
+ const rows=items.map(x=>{
+  const name=st.level==='sku'?(x.product||x.item_name):x.item_name;
+  const amount=(num(x.current_revenue)-num(x.previous_revenue));
+  const nameCell='<span><b>'+esc(name||'—')+'</b><small>'+(st.level==='sku'?esc(noSku(x)):'Открыть конкретные SKU →')+'</small></span>';
+  const columns='<span>'+esc(whole(x.current_revenue))+'</span><span>'+esc(whole(x.previous_revenue))+'</span>'+
+   '<span class="'+(amount<0?'s360-negative':'s360-positive')+'">'+esc((amount>0?'+':'')+whole(amount))+'</span>'+
+   '<span>'+esc(fmt(x.current_qty))+' шт.</span>';
+  return st.level==='subgroups'?
+   '<button type="button" class="s360-drill-row" data-s360-drill-subgroup="'+esc(x.item_name)+'" data-s360-drill-scope="'+context+'">'+nameCell+columns+'</button>':
+   '<div class="s360-drill-row">'+nameCell+columns+'</div>';
+ }).join('');
+ return '<div class="s360-drill" id="s360-drill-'+context+'">'+
+ '<div class="s360-head-actions"><div><h3>'+esc(title)+'</h3><div class="s360-muted">'+esc(parent)+'</div></div>'+
+ '<button type="button" class="s360-btn" data-s360-drill-close data-s360-drill-scope="'+context+'">Закрыть детализацию</button></div>'+
+ '<div class="s360-drill-nav">'+
+ (st.level==='sku'?'<button type="button" class="s360-btn" data-s360-drill-back data-s360-drill-scope="'+context+'">← К подгруппам</button>':'')+
+ '<span class="s360-badge">'+(st.level==='subgroups'?'Подгруппы':'Конкретные SKU')+'</span>'+
+ '<span class="s360-badge">Закрытые месяцы · '+state.year+' / '+(state.year-1)+'</span></div>'+
+ '<div class="s360-client-search"><input id="s360-drill-search-'+context+'" data-s360-drill-input="'+context+'" value="'+esc(st.search)+'" placeholder="'+(st.level==='sku'?'Название товара или SKU':'Поиск подгруппы')+'" aria-label="Поиск товаров">'+
+ '<button type="button" class="s360-btn" data-s360-drill-find data-s360-drill-scope="'+context+'">Найти</button></div>'+
+ (st.error?'<div class="s360-warn">'+esc(st.error)+'</div>':'')+
+ (st.loading?'<div class="s360-loading" role="status">Загружаю детализацию из 1С…</div>':
+ '<div class="s360-drill-rows"><div class="s360-drill-row" style="background:var(--bg);font-weight:700"><span>Подгруппа / товар</span><span>'+state.year+'</span><span>'+(state.year-1)+'</span><span>Разница</span><span>Количество</span></div>'+
+ (rows||'<div class="s360-muted">По этому уровню подтверждённых продаж нет.</div>')+'</div>')+
+ (total>0?'<div class="s360-drill-footer"><span class="s360-muted">Позиций: '+total+' · страница '+page+' из '+pages+'</span>'+
+ '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-drill-page="-1" data-s360-drill-scope="'+context+'"'+(page===1?' disabled':'')+'>← Назад</button>'+
+ '<button type="button" class="s360-btn" data-s360-drill-page="1" data-s360-drill-scope="'+context+'"'+(page>=pages?' disabled':'')+'>Далее →</button></div></div>':'')+
+ (st.level==='sku'?'<div class="s360-muted" style="margin-top:10px">При отсутствии артикула SKU товар группируется по наименованию, чтобы оборот не терялся. Количество — суммарные штуки по данным 1С (с учётом возвратов).</div>':'')+'</div>';
+}
+function openDrill(scope,category,subgroup=''){
+ if(!['client','global'].includes(scope)||!String(category||'').trim())return;
+ resetDrill(scope);
+ const st=drillStates[scope];
+ st.category=String(category).slice(0,200);
+ st.subgroup=String(subgroup||'').slice(0,250);
+ st.level=subgroup?'sku':'subgroups';
+ st.clientKey=scope==='client'?state.clientKey:'';
+ loadDrill(scope);
+}
+async function loadDrill(scope){
+ const st=drillStates[scope];
+ if(!st?.category||active()!=='sales')return;
+ const serial=++drillVersions[scope];
+ st.loading=true;st.error='';render();
+ try{
+  const database=dbx();if(!database?.rpc)throw Error('Источник Supabase недоступен');
+  const {data,error}=await database.rpc('crm_sales360_product_drill_v3',{
+   p_year:state.year,p_manager:boss()&&state.manager!=='all'?state.manager:null,
+   p_client_key:scope==='client'?st.clientKey:null,
+   p_category:st.category,p_subgroup:st.level==='sku'?st.subgroup:null,p_level:st.level,
+   p_search:st.search.slice(0,120),p_limit:50,p_offset:st.offset
+  });
+  if(error)throw error;
+  if(serial!==drillVersions[scope]||active()!=='sales')return;
+  if(!data||!Array.isArray(data.items))throw Error('Неполный ответ сервера по товарным группам');
+  st.data=data;
+ }catch(err){
+  if(serial===drillVersions[scope]){st.error=String(err?.message||err);st.data=null;console.warn('Sales360 SKU drill read-only',err)}
+ }finally{
+  if(serial===drillVersions[scope]){
+   st.loading=false;render();
+   // Keep selected group in view without scrolling the page back to the top.
+   $('s360-drill-'+scope)?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+  }
+ }
+}
 function clientDetailHtml(detail){
  if(!detail?.client)return'';
  const c=detail.client,rows=arr(detail.months),cats=arr(detail.categories),yr=state.year,prev=yr-1;
@@ -397,7 +475,7 @@ function clientDetailHtml(detail){
   '<div class="s360-client-graph">'+bars+'</div>'+
   '<h3 style="margin-top:16px">Товарные группы клиента</h3>'+
   '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>'+yr+', BYN</th><th>'+prev+', BYN</th></tr></thead><tbody>'+
-  cats.map(x=>'<tr><td>'+esc(x.category)+'</td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+'</tbody></table></div>'+
+  cats.map(x=>'<tr><td><button type="button" data-s360-drill-group="'+esc(x.category)+'" data-s360-drill-scope="client">'+esc(x.category)+' →</button></td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+'</tbody></table></div>'+drillView('client')+
   '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
 }
 function clientsPanel(d){
@@ -470,7 +548,7 @@ function render(){
  '<div class="s360-grid"><div class="s360-panel" id="s360-managers"><h3>Менеджеры · Отгрузки с января</h3>'+managerBars(d)+
  '<p class="s360-muted" style="margin-top:12px">График использует текущее закрепление клиентской базы. Не распределённый по менеджеру оборот не приписывается сотруднику.</p></div>'+
  '<div class="s360-panel" id="s360-categories"><h3>Товарные группы · Рейтинг продаж</h3><div class="s360-minirows">'+categoryTable(d)+'</div></div></div>'+
- matrix(d)+clientsPanel(d)+
+ matrix(d)+drillView('global')+clientsPanel(d)+
  '<div class="s360-foot"><span class="s360-muted">ИИ-сигналы — гипотезы для проверки. Нельзя считать нулевые продажи доказательством незнания товара. Никакие задачи и экзамены автоматически не создаются.</span>'+
  '<button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div>';
 }
