@@ -4,7 +4,7 @@
 'use strict';
 if(w.RESANTA_PDZ360_V1)return;
 const ID='pdz360-root',VERSION='pdz360.daily.1',TTL=120000;
-const state={data:null,manager:'all',days:14,view:'amount',age:'all',query:'',selected:'',loading:false,error:'',loadedAt:0,legacy:false,requestId:0,debtorScroll:0};
+const state={data:null,manager:'all',managerOptions:[],days:14,view:'amount',age:'all',query:'',selected:'',loading:false,error:'',loadedAt:0,legacy:false,requestId:0,debtorScroll:0};
 const E=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=v=>Number.isFinite(Number(v))?Number(v):0;
 const money=v=>n(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -159,7 +159,7 @@ function render(){
  const root=mount();if(!root)return;css();
  if(state.legacy){root.innerHTML='<div class="p-card p-header"><h3>Исходный раздел ПДЗ</h3><button class="p-btn p-primary" data-pdz-legacy>Вернуться к ПДЗ 360°</button></div>';return;}
  const d=state.data,m=d?.metrics||{},list=rows(),den=n(m.amount),delta=n(d?.day_change),changeLabel=d?.previous_report_date?'к '+date(d.previous_report_date):'нет предыдущего подтверждённого дня';
- const managers=boss()?arr(d?.managers):[];
+ const managers=boss()?(state.managerOptions.length?state.managerOptions:arr(d?.managers)):[];
  const filters='<div class="p-card p-controls">'+
  (boss()?'<div class="p-field"><label>Менеджер</label><select data-pdz-manager><option value="all">Все менеджеры</option>'+managers.map(x=>'<option value="'+E(x.manager_name)+'"'+(state.manager===x.manager_name?' selected':'')+'>'+E(x.manager_name)+'</option>').join('')+'</select></div>':'')+
  '<div class="p-field"><label>Срок ПДЗ</label><select data-pdz-age>'+
@@ -204,7 +204,7 @@ async function load(force=false){
   if(error)throw error;
   if(id!==state.requestId||!safe())return;
   if(data?.version!==VERSION||!Array.isArray(data?.rows)||!Array.isArray(data?.series))throw Error('Неполный ответ ежедневной истории ПДЗ');
-  state.data=data;state.loadedAt=Date.now();state.selected=rows().some(x=>x.client_name===state.selected)?state.selected:data.rows[0]?.client_name||'';
+  state.data=data;if(boss()&&state.manager==='all')state.managerOptions=arr(data.managers);state.loadedAt=Date.now();state.selected=rows().some(x=>x.client_name===state.selected)?state.selected:data.rows[0]?.client_name||'';
  }catch(e){if(id===state.requestId){state.error=String(e?.message||e);console.warn('PDZ360 snapshot',e);}}
  finally{if(id===state.requestId){state.loading=false;render();}}
 }
