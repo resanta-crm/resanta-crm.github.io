@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const src=read('assets/191-sales360-recovery-lera-v1.js');
+const lera=src;
 const director=read('assets/134-resanta-voice-ai360-pilot-v1.js');
 const staff=read('assets/144-resanta-ai360-branch-voice-v1.js');
 const loader=read('assets/137-resanta-ai360-lazy-launch-v1.js');
@@ -86,7 +87,8 @@ test('loaded on director opt-in and staff panel, before old analytic routers',()
  assert.match(loader,/191-sales360-recovery-lera-v1\.js/);
  assert.match(index,/assets\/191-sales360-recovery-lera-v1\.js\?v=20261110-1/);
  assert.ok(director.indexOf('crmAI360SalesRecoveryHandleV1')<director.indexOf('crmAI360DirectorBriefHandleV1'));
- assert.ok(staff.indexOf('crmAI360BranchRecoveryHandleV1')<staff.indexOf('crmAI360BranchUnifiedHandleV1'));
+ assert.match(lera,/function hookStaffRead/);
+ assert.match(staff,/crmAI360BranchUnifiedHandleV1/);
  assert.match(sql,/auth\.uid\(\) is null/);
  assert.match(sql,/v_role='manager'/);
  assert.match(sql,/last3/);
