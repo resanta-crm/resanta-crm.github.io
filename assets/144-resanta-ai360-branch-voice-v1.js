@@ -229,8 +229,6 @@ async function managerBrief(manager,month,started){
 
 async function read(q){
  if(busy||!panelVisible())return;
- // New Sales360 recovery questions use the same server-verified data as the director screen.
- if(root.crmAI360BranchRecoveryHandleV1?.(q,{show,setStatus,authorized:panelVisible}))return;
  // Director-grade AI orchestration on the same OpenAI model; server limits every read
  // to branch-authorized data and never delegates task creation to the model.
  if(root.crmAI360BranchUnifiedHandleV1?.(q,{show,setStatus,authorized:panelVisible}))return;
