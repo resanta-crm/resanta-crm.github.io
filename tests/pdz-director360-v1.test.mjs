@@ -60,7 +60,7 @@ test('PDZ 360 mounts independently and calls only authenticated daily debt RPC',
  assert.match(html,/Динамика ПДЗ · день к дню/);
  assert.match(html,/52\s*462,66 BYN/);
  assert.match(html,/61\s*396,33 BYN/);
- assert.match(html,/−8\s*933,67 BYN|−8\s*933,67|−8/);
+ assert.match(html,/[-−]8[\s\u00a0]*933,67 BYN/);
  assert.doesNotMatch(html,/к октябрю|к 10 окт|к прошлому месяцу/i);
  assert.match(html,/В комментариях пока не зафиксировано/);
 });
