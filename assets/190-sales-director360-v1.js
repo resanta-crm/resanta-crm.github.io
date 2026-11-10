@@ -428,22 +428,33 @@ function render(){
  const periods=chartData(d,state.view);
  const comparison=y.delta===null?'—':(y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'%';
  const colors=y.delta===null?'':y.delta<0?'s360-negative':'s360-positive';
+ const trio=num(d.triovist_revenue_ytd);
+ const overall=y.current+(state.excludeTriovist?trio:0);
+ const without=overall-trio;
  root.innerHTML=headerHtml(d)+filtersHtml(d)+
  '<div class="s360-kpis">'+
- kpiCard('Отгрузки с января',short(y.current)+' BYN',y.months+' закрытых месяцев, нетто 1С')+
+ kpiCard('Продажи с января · все',whole(overall),y.months+' закрытых месяцев · 1С')+
+ kpiCard('С января · без Триовиста',whole(without),'Вычет подтверждённых продаж клиента')+
  kpiCard('К прошлому году',comparison,'Сопоставимые закрытые месяцы',colors)+
  kpiCard('Покупателей',fmt(d.active_clients_ytd),'Уникальных с продажами по 1С')+
- kpiCard('План/факт месяца',kpi.display,kpi.description)+
- kpiCard('Без точной ТТ',short(d.unallocated_client_revenue)+' BYN','Включено в общий оборот')+'</div>'+
- '<div class="s360-grid">'+brief(d)+
- '<div class="s360-panel"><div class="s360-head-actions"><h3>Динамика с января · '+d.year+' / '+d.previous_year+'</h3><span class="s360-badge">BYN · фактическая выручка</span></div>'+trendSvg(periods)+
- '<div class="s360-legend"><span><i style="background:#2563eb"></i>'+d.year+'</span><span><i style="background:#94a3b8"></i>'+d.previous_year+'</span></div>'+focusedHtml(d,periods)+
- '<div class="s360-muted" style="margin-top:10px">* Текущий месяц или незакрытый квартал. Неполные периоды исключены из итогового процента роста. Точные суммы доступны по нажатию на точки графика.</div>'+
- '<div class="s360-tabs" style="margin-top:10px">'+arr(d.months).filter(x=>x.has_current).slice(-4).map(x=>'<button type="button" class="s360-btn'+(state.selectedMonth===x.month?' active':'')+'" data-s360-month="'+esc(x.month)+'">'+MONTHS[Number(x.month.slice(5,7))-1]+'</button>').join('')+'</div></div></div>'+
+ kpiCard('План/факт месяца',kpi.display,kpi.description+' · KPI без фильтра Триовиста')+
+ kpiCard('Без точной ТТ',whole(d.unallocated_client_revenue),'Включено в общий оборот')+'</div>'+
+ (trio===0?'<div class="s360-muted">В текущем импорте 1С отгрузок «Триовиста» за закрытые месяцы не найдено: суммы двух KPI совпадают.</div>':
+ '<div class="s360-muted">Подтверждённый оборот «Триовиста» за закрытые месяцы: '+esc(whole(trio))+'. Оба KPI показывают соответствующие режимы.</div>')+
+ '<div class="s360-panel s360-chart-panel'+(state.chartExpanded?' expanded':'')+'"><div class="s360-head-actions">'+
+ '<div><h3>Динамика с января · '+d.year+' / '+d.previous_year+'</h3>'+
+ '<div class="s360-muted">'+(state.excludeTriovist?'Без Триовиста':'Все продажи')+' · с НДС · сумма без копеек</div></div>'+
+ '<button type="button" class="s360-btn" data-s360-chart-expand>'+(state.chartExpanded?'Обычный размер':'Увеличить график')+'</button></div>'+
+ trendSvg(periods)+
+ '<div class="s360-legend"><span><i style="background:#2563eb"></i>'+d.year+'</span>'+
+ '<span><i style="background:#94a3b8"></i>'+d.previous_year+'</span></div>'+
+ focusedHtml(d,periods)+
+ '<div class="s360-muted" style="margin-top:10px">* Незакрытые периоды показаны справочно и исключены из годового процента роста.</div></div>'+
+ brief(d)+
  '<div class="s360-grid"><div class="s360-panel" id="s360-managers"><h3>Менеджеры · Отгрузки с января</h3>'+managerBars(d)+
  '<p class="s360-muted" style="margin-top:12px">График использует текущее закрепление клиентской базы. Не распределённый по менеджеру оборот не приписывается сотруднику.</p></div>'+
  '<div class="s360-panel" id="s360-categories"><h3>Товарные группы · Рейтинг продаж</h3><div class="s360-minirows">'+categoryTable(d)+'</div></div></div>'+
- matrix(d)+topClients(d)+
+ matrix(d)+clientsPanel(d)+
  '<div class="s360-foot"><span class="s360-muted">ИИ-сигналы — гипотезы для проверки. Нельзя считать нулевые продажи доказательством незнания товара. Никакие задачи и экзамены автоматически не создаются.</span>'+
  '<button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div>';
 }
