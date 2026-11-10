@@ -597,8 +597,12 @@ function drillView(scope){
   const name=st.level==='sku'?(x.product||x.item_name):x.item_name;
   const amount=(num(x.current_revenue)-num(x.previous_revenue));
   const nameCell='<span><b>'+esc(name||'—')+'</b><small>'+(st.level==='sku'?esc(noSku(x)):'Открыть конкретные SKU →')+'</small></span>';
+  const pct=num(x.previous_revenue)>0?
+    (amount/num(x.previous_revenue)*100).toFixed(1).replace('.',',')+'%':
+    num(x.current_revenue)>0?'Новый':'—';
   const columns='<span>'+esc(whole(x.current_revenue))+'</span><span>'+esc(whole(x.previous_revenue))+'</span>'+
-   '<span class="'+(amount<0?'s360-negative':'s360-positive')+'">'+esc((amount>0?'+':'')+whole(amount))+'</span>'+
+   '<span class="'+(amount<0?'s360-negative':'s360-positive')+'"><b>'+esc((amount>0?'+':'')+whole(amount))+'</b>'+
+   '<small>'+esc(pct)+'</small></span>'+
    '<span>'+esc(fmt(x.current_qty))+' шт.</span>';
   return st.level==='subgroups'?
    '<button type="button" class="s360-drill-row" data-s360-drill-subgroup="'+esc(x.item_name)+'" data-s360-drill-scope="'+context+'">'+nameCell+columns+'</button>':
@@ -622,7 +626,7 @@ function drillView(scope){
  '<button type="button" class="s360-btn" data-s360-drill-page="1" data-s360-drill-scope="'+context+'"'+(page>=pages?' disabled':'')+'>Далее →</button></div></div>':'')+
  (st.level==='sku'?'<div class="s360-muted" style="margin-top:10px">При отсутствии артикула SKU товар группируется по наименованию, чтобы оборот не терялся. Количество — суммарные штуки по данным 1С (с учётом возвратов).</div>':'')+'</div>';
 }
-function openDrill(scope,category,subgroup=''){
+function openDrill(scope,category,subgroup='',skuSearch=''){
  if(!['client','global'].includes(scope)||!String(category||'').trim())return;
  resetDrill(scope);
  const st=drillStates[scope];
@@ -630,6 +634,7 @@ function openDrill(scope,category,subgroup=''){
  if(scope==='global'&&$('s360-category'))$('s360-category').value=st.category;
  st.subgroup=String(subgroup||'').slice(0,250);
  st.level=subgroup?'sku':'subgroups';
+ st.search=skuSearch?String(skuSearch).slice(0,100):'';
  st.clientKey=scope==='client'?state.clientKey:'';
  loadDrill(scope);
 }
@@ -672,8 +677,13 @@ function clientProductsHtml(detail){
  const cats=arr(detail?.categories),yr=state.year,prev=yr-1;
  if(drillStates.client.category)return drillView('client');
  return '<h3 style="margin-top:16px">Товарные группы клиента · выберите группу</h3>'+
-  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>'+yr+', BYN</th><th>'+prev+', BYN</th></tr></thead><tbody>'+
-  cats.map(x=>'<tr><td><button type="button" data-s360-drill-group="'+esc(x.category)+'" data-s360-drill-scope="client">'+esc(x.category)+' →</button></td><td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td></tr>').join('')+
+  '<div class="s360-tablewrap"><table><thead><tr><th>Группа</th><th>'+yr+', BYN</th><th>'+prev+', BYN</th><th>Рост / падение</th></tr></thead><tbody>'+
+  cats.map(x=>{const delta=num(x.current_revenue)-num(x.previous_revenue);
+   const pct=num(x.previous_revenue)>0?(delta/num(x.previous_revenue)*100).toFixed(1).replace('.',',')+'%':num(x.current_revenue)>0?'Новый':'—';
+   return '<tr><td><button type="button" data-s360-drill-group="'+esc(x.category)+'" data-s360-drill-scope="client">'+esc(x.category)+' →</button></td>'+
+    '<td>'+esc(whole(x.current_revenue))+'</td><td>'+esc(whole(x.previous_revenue))+'</td>'+
+    '<td class="'+(delta<0?'s360-negative':'s360-positive')+'">'+esc((delta>0?'+':'')+whole(delta)+' · '+pct)+'</td></tr>';
+  }).join('')+
   '</tbody></table></div>';
 }
 function clientDetailHtml(detail){
@@ -729,7 +739,7 @@ function clientsPanel(d){
  return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
  '<div class="s360-muted">Единый адаптивный интерфейс · рост и падение по закрытым месяцам</div></div>'+
  '<button type="button" class="s360-btn" data-s360-all-clients>Свернуть список</button></div>'+
- '<div class="s360-client-split"><div class="s360-client-left">'+search+
+ '<div class="s360-client-split"><div class="s360-client-left" id="s360-client-left">'+search+
  (state.clientError?'<div class="s360-warn">'+esc(state.clientError)+' <button type="button" class="s360-btn" data-s360-client-find>Повторить</button></div>':'')+
  (state.clientLoading?'<div class="s360-loading" role="status">Загружаю клиентов из 1С…</div>':
  '<div class="s360-client-list">'+(list||'<div class="s360-muted">По запросу клиентов нет.</div>')+'</div>')+
@@ -862,6 +872,41 @@ function onClick(e){
   state.category=String(a.s360BriefDraft).slice(0,200);
   state.draft=true;render();
   $('s360-matrix')?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+  return;
+ }
+ if(a.s360RecPeriod!==undefined){
+  const p=String(a.s360RecPeriod);
+  if(!['last3','quarter','ytd'].includes(p)||p===state.recoveryPeriod)return;
+  state.recoveryPeriod=p;state.recoveryExpanded=false;clearRecovery();
+  void fetchRecovery();
+  if(state.clientKey&&state.clientData?.detail)void fetchRecovery(state.clientKey);
+  return;
+ }
+ if(a.s360RecTab!==undefined){
+  if(!['subgroups','skus','clients','growth'].includes(a.s360RecTab))return;
+  state.recoveryTab=a.s360RecTab;state.recoveryExpanded=false;render();return;
+ }
+ if(a.s360RecMore!==undefined){state.recoveryExpanded=!state.recoveryExpanded;render();return;}
+ if(a.s360RecRetry!==undefined){clearRecovery();void fetchRecovery();return;}
+ if(a.s360RecClient!==undefined){
+  const key=String(a.s360RecClient||'').slice(0,300);
+  if(!key)return;
+  state.clientsOpen=true;state.clientSearch='';state.clientOffset=0;state.clientListScroll=0;
+  clearClientRecovery();resetDrill('client');state.clientKey=key;state.focusClientOnLoad=true;
+  loadClients();return;
+ }
+ if(a.s360RecClientGroup!==undefined){
+  const category=String(a.s360RecClientGroup||'').slice(0,200);
+  const subgroup=String(a.s360RecClientSubgroup||'').slice(0,250);
+  if(category&&state.clientKey){openDrill('client',category,subgroup);return;}
+ }
+ if(a.s360RecGroup!==undefined){
+  const category=String(a.s360RecGroup||'').slice(0,200);
+  const subgroup=String(a.s360RecSubgroup||'').slice(0,250);
+  const sku=String(a.s360RecSku||'').slice(0,100);
+  if(!category)return;
+  state.category=category;openDrill('global',category,subgroup,sku);
+  $('s360-drill-global-container')?.scrollIntoView?.({behavior:'smooth',block:'nearest'});
   return;
  }
  if(a.s360DrillGroup!==undefined){
