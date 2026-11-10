@@ -502,6 +502,8 @@ test('recovery RPC is additive, read only, manager scoped, monthly, non-intrusiv
  assert.match(v4sql,/crm_client_exact_key_v236204/);
  assert.match(v4sql,/from public\.purchase_history/);
  assert.match(v4sql,/extract\(month from ph\.month\)::int between v_start and v_end/);
+ assert.match(v4sql,/baseline_complete/);
+ assert.match(v4sql,/История 2023 года начинается с марта/);
  assert.match(v4sql,/revoke all on function public\.crm_sales360_recovery_v4\(integer,text,text,text,text,text\) from public,anon/);
  assert.doesNotMatch(v4sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
 });
