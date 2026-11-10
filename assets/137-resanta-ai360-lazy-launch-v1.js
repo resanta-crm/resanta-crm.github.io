@@ -16,6 +16,7 @@ const scripts=[
  './assets/140-resanta-ai360-task-drafts-preview-v1.js?v=7',
  './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=3',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
+ './assets/191-sales360-recovery-lera-v1.js?v=20261110-1',
  './assets/143-resanta-ai360-unified-dialog-v1.js?v=8'
 ];
 // Android director: text and authenticated navigation first. Audio is optional
@@ -25,6 +26,7 @@ const nativeTextScripts=[
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
  './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=4',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
+ './assets/191-sales360-recovery-lera-v1.js?v=20261110-1',
  './assets/143-resanta-ai360-unified-dialog-v1.js?v=8'
 ];
 const nativeAudioScripts=[
