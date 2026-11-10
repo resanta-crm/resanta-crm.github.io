@@ -270,6 +270,11 @@
       return;
     }
 
+    // Debt day-over-day questions share the authoritative scoped PDZ360 history.
+    if (typeof window.crmAI360PDZDailyHandleV1 === 'function') {
+      try { if (window.crmAI360PDZDailyHandleV1(query, {answer, textStatus})) return; }
+      catch(e){console.warn('PDZ360 read-only voice unavailable',e);}
+    }
     // Shared Sales360/Lera recovery evidence takes precedence only for sales-loss intents.
     if (typeof window.crmAI360SalesRecoveryHandleV1 === 'function') {
       try { if (window.crmAI360SalesRecoveryHandleV1(query, {answer, textStatus})) return; }
