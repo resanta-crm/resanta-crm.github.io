@@ -7,6 +7,7 @@
 if(w.RESANTA_BUDGETS360_V1)return;
 const TOP='budgets360-top',LIST='budgets360-list',STYLE='budgets360-style';
 const openManagers=new Set();let wrapped=false,baseRender=null,baseDetail=null,renderBusy=false,hooksReady=false,lastRenderError='',renderCount=0;
+let leraDraft='',leraLastQuestion='',leraLastClientId='',leraUserKey='';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number.isFinite(Number(v))?Number(v):0;
 const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -52,6 +53,13 @@ function css(){
  '#page-budgets .b360-brief{display:grid;gap:8px}',
  '#page-budgets .b360-brief button{width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--border,#dae1ea);background:var(--bg,#f8fafc);padding:10px;border-radius:9px;color:inherit;cursor:pointer;font:inherit}',
  '#page-budgets .b360-brief button small{display:block;color:var(--sub,#64748b);margin-top:3px}',
+ '#page-budgets .b360-ask-form{display:flex;align-items:stretch;gap:7px;margin:13px 0 9px}',
+ '#page-budgets .b360-ask-form input{flex:1;min-width:0;border:1px solid var(--border,#d1d5db);border-radius:9px;padding:10px;font-size:13px;background:var(--card,#fff);color:inherit}',
+ '#page-budgets .b360-ask-form button{border:0;background:#2563eb;color:#fff;border-radius:9px;padding:10px 15px;cursor:pointer;font-size:12px;font-weight:800}',
+ '#page-budgets .b360-ask-samples{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}',
+ '#page-budgets .b360-ask-samples button{border:1px solid var(--border,#d1d5db);background:var(--card,#fff);border-radius:999px;padding:6px 9px;font-size:11px;cursor:pointer;color:inherit}',
+ '#page-budgets .b360-answer{background:var(--bg,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:12px;margin-top:10px;font-size:12px;line-height:1.55;max-height:365px;overflow:auto}',
+ '#page-budgets .b360-answer b{font-weight:800}#page-budgets .b360-answer ul{margin:7px 0;padding-left:18px}#page-budgets .b360-answer li{margin:4px 0}',
  '#page-budgets .b360-red{color:#b91c1c!important}#page-budgets .b360-green{color:#15803d!important}',
  '#page-budgets .b360-months{display:grid;gap:9px}',
  '#page-budgets .b360-month-row{display:grid;grid-template-columns:70px 1fr 110px;gap:8px;align-items:center;font-size:11px}',
@@ -83,7 +91,19 @@ function mount(){
  let top=d.getElementById(TOP),bottom=d.getElementById(LIST);
  if(!top){top=d.createElement('section');top.id=TOP;kpi.insertAdjacentElement('beforebegin',top)}
  if(!bottom){bottom=d.createElement('section');bottom.id=LIST;list.insertAdjacentElement('beforebegin',bottom);bottom.addEventListener('click',onOpen);bottom.addEventListener('toggle',onToggle,true)}
- if(!top.__b360Click){top.addEventListener('click',onOpen);top.__b360Click=true}
+ if(!top.__b360Click){
+  top.addEventListener('click',e=>{
+   const btn=e.target.closest?.('[data-b360-ask]');
+   if(btn){e.preventDefault();askLera(btn.dataset.b360Ask);return}
+   onOpen(e);
+  });
+  top.addEventListener('submit',e=>{
+   if(!e.target?.matches?.('[data-b360-ask-form]'))return;
+   e.preventDefault();const field=e.target.querySelector('[data-b360-question]');askLera(field?.value||'');
+  });
+  top.addEventListener('input',e=>{if(e.target?.matches?.('[data-b360-question]'))leraDraft=String(e.target.value||'').slice(0,160)});
+  top.__b360Click=true
+ }
  page.classList.add('budgets360-installed');
  return {top,bottom,page};
 }
@@ -104,6 +124,107 @@ function monthRows(rows,context){
   '<div class="b360-month-track"><span style="width:'+Math.max(0,v.accrual/max*100)+'%;background:#16a34a" title="Начислено: '+esc(money(v.accrual))+'"></span>'+
   '<span style="width:'+Math.max(0,v.expense/max*100)+'%;background:#2563eb" title="Расходы: '+esc(money(v.expense))+'"></span></div>'+
   '<span style="text-align:right">'+esc(compact(v.accrual))+' / '+esc(compact(v.expense))+'</span></div>').join('')+'</div>';
+}
+
+function questionContext(data){
+ const key=String(current()?.email||current()?.name||'').toLowerCase();
+ if(key!==leraUserKey){leraDraft='';leraLastQuestion='';leraLastClientId='';leraUserKey=key}
+ return data;
+}
+function metricName(q){
+ if(/(свободн|остаток|остал|доступн|можно потрат)/.test(q))return 'free';
+ if(/(потрач|расход|списан)/.test(q))return 'spent';
+ if(/(резерв|зарезервир)/.test(q))return 'reserved';
+ if(/(начислен|начисл)/.test(q))return 'accrued';
+ return 'total';
+}
+const metricLabels={free:'Свободный остаток',spent:'Потрачено',reserved:'Резерв',accrued:'Начислено',total:'Общий бюджет'};
+function metricValue(entry,key){
+ const m=entry.metrics;
+ return key==='accrued'?num(m.accrued)+num(m.adjustments):num(m[key]);
+}
+function summaryRows(rows){
+ const metrics={total:0,spent:0,reserved:0,free:0,accrued:0};
+ rows.forEach(row=>Object.keys(metrics).forEach(key=>metrics[key]+=metricValue(row,key)));
+ return metrics;
+}
+function clientAnswer(entry,key){
+ const m=entry.metrics;
+ const detail='<div class="b360-muted" style="margin-top:6px">Бюджет '+esc(money(m.total))+' · потрачено '+esc(money(m.spent))+
+  ' · резерв '+esc(money(m.reserved))+' · свободно '+esc(money(m.free))+'</div>';
+ return '<b>'+esc(entry.budget.client_name)+'</b> · '+esc(entry.manager)+
+  '<div><b>'+esc(metricLabels[key])+': '+esc(money(metricValue(entry,key)))+'</b></div>'+detail;
+}
+function matchingEntries(q,rows){
+ // Require a substantial name token; never match generic "ООО", "ЧТУП", etc.
+ const ignored=new Set(['ооо','чтуп','одо','учп','ип','оао','зао','торговый','дом','компания','клиент']);
+ return rows.map(entry=>{
+  const name=normalize(entry.budget.client_name);
+  const tokens=name.split(/[^а-яa-z0-9]+/).filter(t=>t.length>=4&&!ignored.has(t));
+  const longest=tokens.filter(t=>q.includes(t)).sort((a,b)=>b.length-a.length)[0]||'';
+  return{entry,score:longest.length+(q.includes(name)?100:0)};
+ }).filter(x=>x.score>=4).sort((a,b)=>b.score-a.score);
+}
+function answerBudgetQuestion(raw,data){
+ const q=normalize(String(raw||'').replace(/[?!,.;:()]/g,' ')),rows=data.rows;
+ if(!q||q.length<3)return 'Спроси, например: «Какой бюджет у Бензоленд?» или «У каких клиентов перерасход?»';
+ if(!rows.length)return 'В доступной тебе выборке нет бюджетов клиентов. Проверь фильтр менеджера или поиск.';
+ const metric=metricName(q);
+ const bad=/перерасход|отрицательн|минус|превысили|перерасходовал/.test(q);
+ const low=/менее|меньше|заканчива|маленьк|не хватает/.test(q)&&!/клиент.{0,5}сколько/.test(q);
+ const explicit=matchingEntries(q,rows);
+ const managerNames=[...new Set(rows.map(x=>x.manager))];
+ const manager=managerNames.filter(n=>normalize(n).length>=4&&q.includes(normalize(n))).sort((a,b)=>b.length-a.length)[0];
+ // Follow-up "А сколько у него потрачено?" refers only to a client still in the authorized scope.
+ let target=explicit[0]?.entry||null;
+ if(!target&&leraLastClientId&&/(у него|у нее|у неё|у этого клиента|а сколько|его резерв|его расход|остаток)/.test(q))
+  target=rows.find(x=>String(x.budget.id)===leraLastClientId)||null;
+ if(target){
+  if(explicit.length>1&&explicit[1].score===explicit[0].score&&target.budget.id!==explicit[1].entry.budget.id){
+   leraLastClientId='';
+   return 'Нашла несколько похожих клиентов: '+explicit.filter(x=>x.score===explicit[0].score).slice(0,5).map(x=>'<b>'+esc(x.entry.budget.client_name)+'</b>').join(', ')+'. Уточни название.';
+  }
+  leraLastClientId=String(target.budget.id);
+  return clientAnswer(target,metric);
+ }
+ if(/у него|у нее|у неё|этого клиента/.test(q))return 'Уточни, о каком клиенте идёт речь, например: «Бюджет Бензоленд».';
+ leraLastClientId='';
+ let selected=manager?rows.filter(x=>x.manager===manager):rows;
+ const scope=manager?' менеджера '+esc(manager):' доступных клиентов';
+ const totals=summaryRows(selected);
+ if(bad||low){
+  const filtered=selected.filter(x=>bad?num(x.metrics.free)<-0.005:num(x.metrics.free)>=0&&num(x.metrics.free)<500)
+   .sort((a,b)=>num(a.metrics.free)-num(b.metrics.free));
+  if(!filtered.length)return 'По'+scope+(bad?' перерасхода бюджета нет.':' нет остатков от 0 до 500 BYN.');
+  return '<b>'+esc(bad?'Перерасход бюджета':'Остаток менее 500 BYN')+': '+filtered.length+' клиент(ов)</b><ul>'+
+   filtered.slice(0,30).map(x=>'<li><b>'+esc(x.budget.client_name)+'</b> · '+esc(x.manager)+' · свободно '+esc(money(x.metrics.free))+'</li>').join('')+'</ul>';
+ }
+ // For a plural question, list client-by-client budgets, not only a grand total.
+ const plural=/клиент|все бюджеты|по клиентам|список|покажи всех/.test(q)&&!/(сколько всего|общая сумма|общий объем|в сумме)/.test(q);
+ if(plural){
+  return '<b>'+esc(metricLabels[metric])+' по'+scope+' · '+selected.length+' клиентов</b>'+
+   '<div style="margin:5px 0">Итого: <b>'+esc(money(totals[metric]))+'</b></div><ul>'+
+   selected.slice().sort((a,b)=>a.budget.client_name.localeCompare(b.budget.client_name,'ru')).slice(0,30).map(x=>
+    '<li><b>'+esc(x.budget.client_name)+'</b> · '+esc(x.manager)+' — '+esc(money(metricValue(x,metric)))+'</li>').join('')+
+   '</ul>'+(selected.length>30?'<div class="b360-muted">Показаны первые 30 клиентов, уточни менеджера или название.</div>':'');
+ }
+ return '<b>'+esc(metricLabels[metric])+' по'+scope+': '+esc(money(totals[metric]))+'</b>'+
+  '<div class="b360-muted">Клиентов в выборке: '+selected.length+'. Могу показать суммы по каждому клиенту или объяснить, у кого перерасход.</div>';
+}
+function leraAskHtml(data){
+ questionContext(data);
+ const suggestion=['Какие бюджеты у клиентов?','У кого перерасход?','Сколько свободно?'];
+ const response=leraLastQuestion?'<div class="b360-answer" role="status" aria-live="polite">'+
+  '<div class="b360-muted">Твой вопрос: '+esc(leraLastQuestion)+'</div>'+
+  answerBudgetQuestion(leraLastQuestion,data)+'</div>':'';
+ return '<form class="b360-ask-form" data-b360-ask-form><input name="budgetQuestion" data-b360-question maxlength="160" autocomplete="off" aria-label="Спроси Леру о бюджете клиента" placeholder="Спроси Леру: какой бюджет у Бензоленд?" value="'+esc(leraDraft)+'"><button type="submit">Спросить</button></form>'+
+  '<div class="b360-ask-samples">'+suggestion.map(s=>'<button type="button" data-b360-ask="'+esc(s)+'">'+esc(s)+'</button>').join('')+'</div>'+response;
+}
+function askLera(text){
+ const q=String(text||'').trim().slice(0,160);
+ if(!q)return;
+ leraLastQuestion=q;leraDraft=q;
+ render();
 }
 function buildTop(data){
  const rows=data.rows,items=rows.map(x=>x.metrics),total=items.reduce((s,x)=>s+num(x.total),0),spent=items.reduce((s,x)=>s+num(x.spent),0),reserved=items.reduce((s,x)=>s+num(x.reserved),0),free=items.reduce((s,x)=>s+num(x.free),0),
@@ -126,7 +247,7 @@ function buildTop(data){
  '</div><div class="b360-top"><section class="b360-panel"><h3>Движения бюджета по месяцам</h3>'+monthRows(rows,data.context)+
  '<div class="b360-grid-legend"><span>🟢 Начисления</span><span>🔵 Расходы</span></div>'+
  '<div class="b360-muted" style="margin-top:10px">Даты из реальных операций. Стартовые остатки и текущие резервы в помесячный график не включены. Начисления и расходы не равны свободному остатку.</div></section>'+
- '<section class="b360-panel"><h3>✦ Лера · Что требует внимания</h3><div class="b360-brief">'+brief+'</div>'+
+ '<section class="b360-panel"><h3>✦ Лера · Спроси про бюджет</h3>'+leraAskHtml(data)+'<h3 style="font-size:13px;margin:15px 0 8px">Что требует внимания</h3><div class="b360-brief">'+brief+'</div>'+
  '<div class="b360-muted" style="margin-top:11px">Подсказки рассчитаны из текущих данных CRM. Лера не меняет бюджеты и не создаёт поручения автоматически.</div></section></div>';
 }
 function buildBottom(data){
@@ -260,5 +381,5 @@ function install(){
  if(isActive())render();
 }
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
-w.RESANTA_BUDGETS360_V1=Object.freeze({version:'20261111.2',readOnly:true,existingFinanceMath:true,historyFromExistingAudit:true,install,refresh:()=>{install();render()},diagnostics:()=>({wrapped,active:isActive(),root:!!d.getElementById(TOP),renders:renderCount,error:lastRenderError})});
+w.RESANTA_BUDGETS360_V1=Object.freeze({version:'20261111.3-lera-ask',readOnly:true,existingFinanceMath:true,historyFromExistingAudit:true,install,refresh:()=>{install();render()},diagnostics:()=>({wrapped,active:isActive(),root:!!d.getElementById(TOP),renders:renderCount,error:lastRenderError})});
 })(window,document);
