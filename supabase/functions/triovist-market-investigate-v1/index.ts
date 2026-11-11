@@ -55,12 +55,14 @@ async function page(svc,table,fields,mod,limit=5000){
 }
 function signal(s){
  const p=num(s.position),from=num(s.previous_position);
- if(from===null&&p===null)return null;
- let magnitude=from!==null&&p!==null?Math.abs(from-p):20;
- let drop=s.movement==="down"||s.movement==="exited";
- let rise=s.movement==="up"||s.movement==="entered";
- if(!drop&&!rise)return null;
- if(from!==null&&p!==null&&magnitude<(s.kind==="own"?7:12))return null;
+ // A listing "entered/exited" label is not a verified numerical move.
+ // Only two comparable, non-null rank observations can trigger a cause analysis.
+ if(from===null||p===null||from===p)return null;
+ const magnitude=Math.abs(from-p);
+ const drop=s.movement==="down"||s.movement==="exited";
+ const rise=s.movement==="up"||s.movement==="entered";
+ if((!drop&&!rise)||(drop&&p<=from)||(rise&&p>=from))return null;
+ if(magnitude<(s.kind==="own"?7:12))return null;
  return {...s,delta:from!==null&&p!==null?from-p:null,priority:Math.round(magnitude*(s.kind==="own"?1.8:1)+(drop&&s.kind==="own"?25:0)+(rise&&s.kind==="competitor"?14:0)+(p!==null&&p<=25?8:0))};
 }
 async function feed(svc){
@@ -187,6 +189,15 @@ async function investigate(svc,actor,body){
  const m=await meta(svc);
  if(!m.scopes.some(x=>x.scope_key===scope))throw fail("unknown_scope",404);
  const evidence=await itemEvidence(svc,scope,kind,key);
+ // Revalidate against immutable dated snapshots before ANY AI request or insert.
+ const before=num(evidence.position_before),after=num(evidence.position_at_start);
+ if(before===null||after===null||Math.abs(before-after)<(kind==="own"?7:12))
+   throw fail("insufficient_rank_evidence",422);
+ const observations=evidence.evidence?.history||[];
+ if(observations.length<2||num(observations[0]?.position)!==after||
+    num(observations[1]?.position)!==before||
+    Date.parse(observations[0]?.date)<=Date.parse(observations[1]?.date))
+   throw fail("rank_history_not_comparable",422);
  const today=day();
  const record={snapshot_day:today,scope_key:scope,kind,entity_key:key,title:evidence.title,
    manager_email:evidence.manager_email,created_by:actor.email,observed_at:evidence.observed_at,
