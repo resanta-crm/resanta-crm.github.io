@@ -229,6 +229,7 @@ async function managerBrief(manager,month,started){
 
 async function read(q){
  if(busy||!panelVisible())return;
+ if(root.crmAI360FinanceVoiceHandleV1?.(q,{show,setStatus,authorized:panelVisible}))return;
  // Director-grade AI orchestration on the same OpenAI model; server limits every read
  // to branch-authorized data and never delegates task creation to the model.
  if(root.crmAI360BranchUnifiedHandleV1?.(q,{show,setStatus,authorized:panelVisible}))return;
