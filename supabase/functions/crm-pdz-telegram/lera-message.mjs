@@ -31,7 +31,17 @@ const FRIENDLY_MANAGER_NAMES=Object.freeze({
  'ачинович':'Катюшка',
  'шкуран':'Танюшка'
 });
+// Personal leader greetings apply only to verified boss CRM accounts.
+const FRIENDLY_LEADER_NAMES=Object.freeze({
+ 'payushin_ar@resanta.ru':'родной',
+ 'sidarovich_kn@resanta.ru':'Кирюшка'
+});
+const friendlyLeader = user=>String(user?.role||'')==='boss'
+ ? FRIENDLY_LEADER_NAMES[String(user?.email||'').trim().toLowerCase()]||''
+ : '';
 export function greeting(user,rows,binding){
+ const leaderName=friendlyLeader(user);
+ if(leaderName)return html(leaderName);
  if(String(user.role)==='manager'){
   const friendly=FRIENDLY_MANAGER_NAMES[surname(user.name)];
   if(friendly)return html(friendly);
@@ -93,7 +103,7 @@ export function managerBrief({user,binding,rows,previousRows,reportDate,today,ev
 export function leaderBrief({user,rows,previousRows,reportDate,today,evidence,managerUsers}){
  const sorted=[...rows].sort((a,b)=>Number(b.debt_overdue||0)-Number(a.debt_overdue||0));
  const count=statusCounts(sorted,evidence,today),isDfs=clean(user.email)==='payushin ar resanta ru';
- const header='☀️ <b>Доброе утро, '+greeting(user,sorted)+'! Это Лера.</b>\n'+
+ const header='☀️ <b>'+(friendlyLeader(user)?'Привет':'Доброе утро')+', '+greeting(user,sorted)+'! Это Лера.</b>\n'+
   '📊 <b>Контроль ПДЗ '+(isDfs?'филиальной сети':'подразделения '+html(user.region||''))+'</b>\n'+
   'Отчёт 1С на '+dateRU(reportDate)+(today!==reportDate?' (последний загруженный)':'')+'.\n'+
   'Просрочено: <b>'+money(amount(sorted))+' BYN</b> · должников: <b>'+sorted.length+'</b>'+

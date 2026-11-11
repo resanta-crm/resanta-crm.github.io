@@ -75,7 +75,7 @@ test('known payment promises stop first-contact reminders but past promises requ
 test('leadership digest covers each scoped manager, unresolved contacts and customer priorities',()=>{
  const rows=chooseRecipientRows(users[1],debt,users);
  const digest=leaderBrief({user:users[1],rows,previousRows:null,reportDate,today,evidence:new Map(),managerUsers:users});
- assert.match(digest.header,/Сидарович К\.Н\./);
+ assert.match(digest.header,/Привет, Кирюшка! Это Лера/);
  assert.equal(digest.debtors,4);
  assert.equal(digest.counts.no_record,4);
  assert.match(digest.lines.join('\n'),/Руднев/);
@@ -109,5 +109,19 @@ test('Lera uses familiar individual names only for exactly matched manager accou
  assert.match(sh.header,/Привет, Танюшка! Это Лера/);
  const impostor={name:'Ачиновиченко',role:'manager'};
  assert.notEqual(greeting(impostor,[],{telegram_first_name:'Лена'}),'Катюшка');
- assert.match(greeting(users[1],[]),/Сидарович/);
+ assert.equal(greeting(users[1],[]),'Кирюшка');
+});
+
+
+test('leader greetings stay personal and cannot leak to other CRM accounts',()=>{
+ const opts={rows:[],previousRows:null,reportDate,today,evidence:new Map(),managerUsers:users};
+ const dfs=leaderBrief({...opts,user:users[0]});
+ const df=leaderBrief({...opts,user:users[1]});
+ const gomel=leaderBrief({...opts,user:users[2]});
+ assert.match(dfs.header,/Привет, родной! Это Лера/);
+ assert.match(df.header,/Привет, Кирюшка! Это Лера/);
+ assert.match(gomel.header,/Доброе утро, Самойлов Д\. С\.! Это Лера/);
+ assert.equal(greeting({...users[0],email:'other@example.com'},[]),'Александр Паюшин');
+ assert.equal(greeting({...users[0],role:'manager'},[]),'Александр Паюшин');
+ assert.equal(greeting({...users[1],email:'other@example.com'},[]),'Сидарович К.Н.');
 });
