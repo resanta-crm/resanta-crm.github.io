@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 if(window.RESANTA_STANDS_V236367)return;
-const V='v23.6.394';
+const V='v23.6.395-stands360';
 const safe=v=>String(v??'');
 const esc=v=>safe(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
@@ -16,7 +16,7 @@ function clients(){try{return typeof allClients!=='undefined'?(allClients||[]):(
 function profile(){try{return typeof currentProfile!=='undefined'?currentProfile:(window.currentProfile||{})}catch(_){return window.currentProfile||{}}}
 function active(){return document.getElementById('page-stands')?.classList.contains('active')||safe(document.getElementById('app')?.dataset?.activePage)==='stands'}
 function root(){return document.getElementById('stands-v236346-root')}
-const state={boot:null,loading:false,tab:'placements',sales:null,salesLevel:'category',salesCategory:null,salesSubgroup:null,requestId:null,reqCats:new Set(),dfs:null,catalog:null,catalogSelected:new Map(),catalogLegacy:[],catalogTimer:null};
+const state={boot:null,loading:false,tab:'overview360',sales:null,salesLevel:'category',salesCategory:null,salesSubgroup:null,requestId:null,reqCats:new Set(),dfs:null,catalog:null,catalogSelected:new Map(),catalogLegacy:[],catalogTimer:null};
 const role=()=>safe(state.boot?.actor?.stand_role);
 const isManager=()=>role()==='manager';
 const isDF=()=>role()==='df';
@@ -161,16 +161,18 @@ function header(){
  '</div>';
 }
 function tabs(){
- const a=[['placements','У клиентов'],['requests','Заявки'],['history','История / архив']];
+ const a=[['overview360','🧱 Стенды 360°'],['placements','Действующие / ОС'],['requests','Заявки'],['history','История / архив']];
  if(isDF()||isDFS())a.push(['os','ОС / реестр'],['recommendations','ИИ · кандидаты']);
  if(isDFS())a.push(['internal','Логика ИИ · ДФС']);
  return '<div class="st346-tabs">'+a.map(x=>'<button class="st346-tab '+(state.tab===x[0]?'active':'')+'" data-st346-tab="'+x[0]+'">'+x[1]+'</button>').join('')+'</div>';
 }
 function render(){
  if(!active()||!root()||!state.boot)return;
- root().innerHTML=header()+tabs()+'<div id="st346-body">'+body()+'</div>';
+ root().innerHTML=(state.tab==='overview360'?'<div id="st360-header"></div>':header())+tabs()+'<div id="st346-body">'+body()+'</div>';
+ if(state.tab==='overview360')queueMicrotask(()=>window.RESANTA_STANDS_360_V1?.render?.());
 }
 function body(){
+ if(state.tab==='overview360')return '<div id="st360-root"><div class="st346-card">Загружаю обзор эффективности стендов…</div></div>';
  if(state.tab==='requests')return requestsHtml();
  if(state.tab==='history')return historyHtml();
  if(state.tab==='os')return osHtml();

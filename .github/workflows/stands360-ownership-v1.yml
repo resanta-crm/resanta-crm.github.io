@@ -1,0 +1,44 @@
+name: Stand 360 ownership, sales and photo regression
+on:
+  pull_request:
+    paths:
+      - 'assets/115-stands-v236367.js'
+      - 'assets/267-stands360-director-ui-v1.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
+      - 'supabase/migrations/*stands_360*'
+      - 'tests/stands360-ownership-v1.test.mjs'
+      - 'tests/stands360-telegram-v1.test.mjs'
+      - 'supabase/functions/crm-stands-telegram-v1/**'
+      - '.github/workflows/stands360-ownership-v1.yml'
+  push:
+    paths:
+      - 'assets/115-stands-v236367.js'
+      - 'assets/267-stands360-director-ui-v1.js'
+      - 'assets/100-safe-upgrades-loader-v236272.js'
+      - 'supabase/migrations/*stands_360*'
+      - 'tests/stands360-ownership-v1.test.mjs'
+      - '.github/workflows/stands360-ownership-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stand360:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and security regression
+        run: |
+          node --check assets/115-stands-v236367.js
+          node --check assets/267-stands360-director-ui-v1.js
+          node --check assets/100-safe-upgrades-loader-v236272.js
+          node --check supabase/functions/crm-stands-telegram-v1/stands-brief.mjs
+          node --test tests/stands360-ownership-v1.test.mjs tests/stands360-telegram-v1.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check Telegram dispatcher TypeScript
+        run: deno check supabase/functions/crm-stands-telegram-v1/index.ts
