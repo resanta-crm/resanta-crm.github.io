@@ -22,7 +22,7 @@ async function tg(text:string,chatId:string|number){
  if(!r.ok||!j?.ok)throw new Error('TELEGRAM_SEND_FAILED');
 }
 
-async function synthesizePdzVoice(text:string,userId:string){
+async function synthesizePdzVoice(text:string,userId:string,format:'OGG_OPUS'|'MP3'='OGG_OPUS'){
  const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
  if(!apiKey)throw new Error('PDZ_TTS_NOT_CONFIGURED');
  // Reuse the existing per-user Yandex monthly quota; no new unmanaged budget.
@@ -35,10 +35,10 @@ async function synthesizePdzVoice(text:string,userId:string){
  const result=await fetch('https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis',{
   method:'POST',headers,signal:AbortSignal.timeout(26000),
   body:JSON.stringify({text,model:'general',hints:[{voice:'lera'},{role:'friendly'}],
-   outputAudioSpec:{containerAudio:{containerAudioType:'OGG_OPUS'}}})
+   outputAudioSpec:{containerAudio:{containerAudioType:format}}})
  });
  if(!result.ok)throw new Error('PDZ_TTS_PROVIDER_'+result.status);
- return yandexAudioBytes(await result.text());
+ return yandexAudioBytes(await result.text(),format);
 }
 async function tgVoice(chatId:string|number,audio:Uint8Array,reportDate:string){
  if(!BOT_TOKEN)throw new Error('TELEGRAM_BOT_TOKEN_NOT_SET');
@@ -52,6 +52,7 @@ async function tgVoice(chatId:string|number,audio:Uint8Array,reportDate:string){
  });
  const data=await res.json().catch(()=>({}));
  if(!res.ok||!data?.ok){
+  if(String(data?.description||'').includes('VOICE_MESSAGES_FORBIDDEN'))throw new Error('TELEGRAM_VOICE_FORBIDDEN');
   // Telegram error text may contain identifiers; keep only a bounded symbolic code.
   const description=String(data?.description||'unknown').replace(/\d{5,}/g,'#').replace(/[^a-zA-Z _:#.-]/g,'').slice(0,90);
   throw new Error('TELEGRAM_VOICE_SEND_FAILED_'+res.status+'_'+String(data?.error_code||'')+'_'+description);
@@ -59,6 +60,23 @@ async function tgVoice(chatId:string|number,audio:Uint8Array,reportDate:string){
  if(!data?.result?.voice){
   throw new Error('TELEGRAM_RETURNED_NON_VOICE_'+(data?.result?.audio?'audio':data?.result?.document?'document':'unknown'));
  }
+ return data.result.message_id;
+}
+
+async function tgAudio(chatId:string|number,audio:Uint8Array,reportDate:string){
+ if(!BOT_TOKEN)throw new Error('TELEGRAM_BOT_TOKEN_NOT_SET');
+ const form=new FormData();
+ form.append('chat_id',String(chatId));
+ form.append('caption','🎧 Лера · ПДЗ за '+ruDate(reportDate)+' · нажмите ▶️');
+ form.append('title','Лера · ПДЗ '+ruDate(reportDate));
+ form.append('performer','РЕСАНТА CRM');
+ const blobBytes=new Uint8Array(new ArrayBuffer(audio.length));blobBytes.set(audio);
+ form.append('audio',new Blob([blobBytes],{type:'audio/mpeg'}),'lera-pdz.mp3');
+ const res=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`,{
+  method:'POST',body:form,signal:AbortSignal.timeout(25000)
+ });
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok||!data?.ok||!data?.result?.audio)throw new Error('TELEGRAM_AUDIO_SEND_FAILED_'+res.status);
  return data.result.message_id;
 }
 
@@ -302,10 +320,27 @@ Deno.serve(async(req)=>{
    if(needsVoice){
     try{
      const speech=pdzVoiceText({user:u,binding:b,rows,previousRows:prior,reportDate,today,evidence});
-     const audio=await synthesizePdzVoice(speech,uid);
-     const messageId=await tgVoice(b.chat_id,audio,reportDate);
+     const modeKey='pdz_voice_delivery_mode:'+uid;
+     const preferred=await runtimeGet(modeKey);
+     let mode=preferred?.mode==='audio'?'audio':'voice',messageId:number;
+     if(mode==='audio'){
+      const mp3=await synthesizePdzVoice(speech,uid,'MP3');
+      messageId=await tgAudio(b.chat_id,mp3,reportDate);
+     }else{
+      const ogg=await synthesizePdzVoice(speech,uid);
+      try{
+       messageId=await tgVoice(b.chat_id,ogg,reportDate);
+      }catch(e){
+       if(!(e instanceof Error)||e.message!=='TELEGRAM_VOICE_FORBIDDEN')throw e;
+       // Telegram Premium privacy may block voice bubbles; MP3 playback is allowed.
+       const mp3=await synthesizePdzVoice(speech,uid,'MP3');
+       messageId=await tgAudio(b.chat_id,mp3,reportDate);
+       mode='audio';
+       await runtimeSet(modeKey,{mode:'audio',reason:'telegram_voice_privacy',updated_at:new Date().toISOString()});
+      }
+     }
      await runtimeSet(voiceKey,{sent_at:new Date().toISOString(),report_date:reportDate,source_imported_at:sourceImportedAt,
-      format:'lera-pdz-ogg-opus-v1',chars:speech.length,telegram_message_id:messageId});
+      format:mode==='audio'?'lera-pdz-mp3-v1':'lera-pdz-ogg-opus-v1',chars:speech.length,telegram_message_id:messageId});
      voiceSentUsers++;
     }catch(e){
      // Leave the voice revision unsent to retry at the next scheduled check.

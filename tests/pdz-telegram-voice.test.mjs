@@ -29,6 +29,9 @@ test('recognizes Telegram-compatible Ogg Opus output and rejects wav or invalid 
  const encoded=raw.toString('base64');
  assert.equal(yandexAudioBytes(JSON.stringify({audioChunk:{data:encoded}})).length,140);
  assert.equal(yandexAudioBytes(JSON.stringify({result:{audioChunk:{data:encoded}}})).length,140);
+ const mp3=Buffer.alloc(140);mp3.write('ID3',0);
+ assert.equal(yandexAudioBytes(JSON.stringify({audioChunk:{data:mp3.toString('base64')}}),'MP3').length,140);
+ assert.throws(()=>yandexAudioBytes(JSON.stringify({audioChunk:{data:encoded}}),'MP3'),/TTS_NOT_MP3/);
  assert.throws(()=>yandexAudioBytes(JSON.stringify({audioChunk:{data:Buffer.from('RIFF'+ 'x'.repeat(130)).toString('base64')}})),/TTS_NOT_OGG_OPUS/);
  assert.throws(()=>yandexAudioBytes(JSON.stringify({audioChunk:{data:'+'}})),/TTS_BAD_BASE64/);
 });
@@ -37,7 +40,8 @@ test('audio is separately deduplicated and never requires duplicate text',()=>{
  assert.equal(shouldSendPdzSnapshot(sent,'2026-11-11','2026-11-11T08:57:43Z'),false);
  assert.equal(shouldSendPdzSnapshot(sent,'2026-11-11','2026-11-11T11:57:43Z'),true);
  for(const part of ['pdz_daily_voice_sent:','pdz_voice_config','voicePilot','sendVoice','OGG_OPUS',
-  'voiceErrors','crm_ai360_yandex_monthly_claim_v1','chooseRecipientRows','x-crm-dispatch-secret']){
+  'voiceErrors','tgAudio','sendAudio','TELEGRAM_VOICE_FORBIDDEN','pdz_voice_delivery_mode:',
+  'crm_ai360_yandex_monthly_claim_v1','chooseRecipientRows','x-crm-dispatch-secret']){
   assert.ok(source.includes(part),part);
  }
  assert.match(source,/const needsText=!voicePilot&&shouldSendPdzSnapshot/);

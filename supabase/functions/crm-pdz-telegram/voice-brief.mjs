@@ -36,7 +36,7 @@ export function pdzVoiceText({user,binding,rows,previousRows,reportDate,today,ev
  return output;
 }
 // API v3 REST may deliver one JSON object or newline-delimited response chunks.
-export function yandexAudioBytes(body){
+export function yandexAudioBytes(body,format='OGG_OPUS'){
  if(typeof body!=='string'||!body.length||body.length>5000000)throw new Error('TTS_BAD_RESPONSE');
  const payloads=[];
  try{const obj=JSON.parse(body);payloads.push(...(Array.isArray(obj)?obj:[obj]));}
@@ -55,7 +55,11 @@ export function yandexAudioBytes(body){
  if(size<80||size>1800000)throw new Error('TTS_AUDIO_SIZE');
  const bytes=new Uint8Array(size);let offset=0;
  for(const p of parts){bytes.set(p,offset);offset+=p.length;}
- if(new TextDecoder().decode(bytes.slice(0,4))!=='OggS'||!new TextDecoder().decode(bytes.slice(0,100)).includes('OpusHead')){
+ if(format==='MP3'){
+  const id3=new TextDecoder().decode(bytes.slice(0,3))==='ID3';
+  const frame=bytes[0]===255&&(bytes[1]&224)===224;
+  if(!id3&&!frame)throw new Error('TTS_NOT_MP3');
+ }else if(new TextDecoder().decode(bytes.slice(0,4))!=='OggS'||!new TextDecoder().decode(bytes.slice(0,100)).includes('OpusHead')){
   throw new Error('TTS_NOT_OGG_OPUS');
  }
  return bytes;
