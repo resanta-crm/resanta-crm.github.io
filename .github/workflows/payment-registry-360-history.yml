@@ -1,0 +1,30 @@
+name: Payment Registry 360 history safety
+on:
+  pull_request:
+    paths:
+      - 'assets/38-payment-registry-v23623.js'
+      - 'index.html'
+      - 'supabase/migrations/*payment_registry_history*'
+      - 'tests/payment-registry-360-history.test.mjs'
+      - '.github/workflows/payment-registry-360-history.yml'
+  push:
+    paths:
+      - 'assets/38-payment-registry-v23623.js'
+      - 'index.html'
+      - 'supabase/migrations/*payment_registry_history*'
+      - 'tests/payment-registry-360-history.test.mjs'
+      - '.github/workflows/payment-registry-360-history.yml'
+permissions:
+  contents: read
+jobs:
+  registry360:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check assets/38-payment-registry-v23623.js
+          node --test tests/payment-registry-360-history.test.mjs
