@@ -3,18 +3,18 @@ import {assessStand,recipientStandRows,briefing,monthStart,surname} from './stan
 
 const sb=createClient(Deno.env.get('SUPABASE_URL')||'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'',{auth:{persistSession:false}});
 const token=Deno.env.get('TELEGRAM_BOT_TOKEN')||'';
-const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const reply=(x,status=200)=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
+const esc=(x:unknown)=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const reply=(x:unknown,status=200)=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-async function setting(key){
+async function setting(key:string){
  const {data,error}=await sb.from('crm_telegram_runtime').select('value').eq('key',key).maybeSingle();
  if(error)throw new Error('RUNTIME_UNAVAILABLE');return data?.value||null;
 }
-async function setSetting(key,value){
+async function setSetting(key:string,value:unknown){
  const {error}=await sb.from('crm_telegram_runtime').upsert({key,value,updated_at:new Date().toISOString()},{onConflict:'key'});
  if(error)throw new Error('RUNTIME_WRITE_FAILED');
 }
-async function sendText(chat,text){
+async function sendText(chat:number|string,text:string){
  if(!token)throw new Error('BOT_TOKEN_MISSING');
  const r=await fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'POST',
   headers:{'content-type':'application/json'},signal:AbortSignal.timeout(22000),
@@ -22,11 +22,11 @@ async function sendText(chat,text){
  const v=await r.json().catch(()=>({}));if(!r.ok||!v.ok)throw new Error('TEXT_SEND_'+r.status);
  return v.result?.message_id;
 }
-function speechBytes(body,format){
+function speechBytes(body:string,format:'MP3'|'OGG_OPUS'):Uint8Array{
  if(body.length>6000000)throw new Error('SPEECH_RESPONSE_TOO_LARGE');
- const payloads=[];try{const o=JSON.parse(body);payloads.push(...(Array.isArray(o)?o:[o]))}
+ const payloads:any[]=[];try{const o=JSON.parse(body);payloads.push(...(Array.isArray(o)?o:[o]))}
  catch{for(const s of body.split(/\r?\n/)){if(s.trim()){try{payloads.push(JSON.parse(s))}catch{throw new Error('SPEECH_BAD_RESPONSE')}}}}
- const parts=[];
+ const parts:Uint8Array[]=[];
  for(const p of payloads){const data=p?.result?.audioChunk?.data||p?.audioChunk?.data;if(typeof data!=='string'||!data)continue;
   const s=atob(data),b=new Uint8Array(s.length);for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i);parts.push(b)}
  const len=parts.reduce((a,b)=>a+b.length,0);if(len<80||len>1800000)throw new Error('SPEECH_SIZE');
@@ -36,7 +36,7 @@ function speechBytes(body,format){
  if(format==='OGG_OPUS'&&(!head.startsWith('OggS')||!head.includes('OpusHead')))throw new Error('SPEECH_NOT_OGG');
  return all;
 }
-async function synthesize(text,userId,format){
+async function synthesize(text:string,userId:string,format:'MP3'|'OGG_OPUS'){
  const key=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';if(!key)throw new Error('YANDEX_NOT_CONFIGURED');
  const reserve=await sb.rpc('crm_ai360_yandex_monthly_claim_v1',{p_user_id:userId,p_characters:text.length});
  if(reserve.error||!reserve.data?.allowed)throw new Error('YANDEX_MONTHLY_BUDGET_BLOCK');
@@ -48,7 +48,7 @@ async function synthesize(text,userId,format){
  });if(!res.ok)throw new Error('YANDEX_'+res.status);
  return speechBytes(await res.text(),format);
 }
-async function sendSound(chat,audio,format){
+async function sendSound(chat:number|string,audio:Uint8Array,format:'MP3'|'OGG_OPUS'){
  const form=new FormData();
  form.append('chat_id',String(chat));
  const b=new Uint8Array(new ArrayBuffer(audio.length));b.set(audio);
@@ -67,7 +67,7 @@ async function sendSound(chat,audio,format){
  if(format==='MP3'&&!data.result?.audio)throw new Error('TELEGRAM_AUDIO_NOT_CONFIRMED');
  return data.result.message_id;
 }
-async function voice(chat,userId,speech){
+async function voice(chat:number|string,userId:string,speech:string){
  const k='stand360_delivery_mode:'+userId;
  const pref=await setting(k);
  let format=pref?.mode==='audio'?'MP3':'OGG_OPUS',id;
@@ -83,7 +83,7 @@ async function voice(chat,userId,speech){
  }
  return {id,format};
 }
-async function loadRows(today){
+async function loadRows(today:string){
  const {data:stands,error:se}=await sb.from('stand_placements_v236346')
   .select('id,client_id,client_name,manager_name,asset_id,installed_at,last_control_at,last_control_photo_path,installation_photo_path,vision_status')
   .in('status',['active','legacy_unreconciled','return_requested']).limit(300);
@@ -95,7 +95,7 @@ async function loadRows(today){
  if(ie)throw new Error('SKU_READ_FAILED');
  if((items||[]).length>=3000)throw new Error('SKU_TRUNCATED');
  const clients=[...new Set(stands.map(p=>p.client_id).filter(Boolean))];
- const history=[];
+ const history:any[]=[];
  for(let i=0;i<20;i++){
   const {data,error}=await sb.from('purchase_history').select('client_id,sku,month,revenue')
     .in('client_id',clients).gte('month',monthStart(today,-11)).range(i*1000,i*1000+999);
@@ -116,7 +116,7 @@ async function loadRows(today){
   return assessStand({...p,days_installed:dayCount},(items||[]).filter(x=>x.placement_id===p.id),history,today,route);
  });
 }
-Deno.serve(async(req)=>{
+Deno.serve(async(req:Request)=>{
  try{
   if(req.method!=='POST')return reply({ok:false,error:'METHOD_NOT_ALLOWED'},405);
   const secret=await setting('dispatch_secret');
@@ -134,7 +134,7 @@ Deno.serve(async(req)=>{
   if(ue)throw new Error('USERS_UNAVAILABLE');
   const {data:managers,error:me}=await sb.from('users').select('id,name,role,region,email,access_scope').eq('role','manager').limit(300);
   if(me)throw new Error('MANAGERS_UNAVAILABLE');
-  let sentText=0,sentVoice=0;const errors=[];
+  let sentText=0,sentVoice=0;const errors:any[]=[];
   for(const b of bindings||[]){
    const user=(users||[]).find(u=>u.id===b.user_id);
    if(!user||!['boss','manager'].includes(user.role))continue;
