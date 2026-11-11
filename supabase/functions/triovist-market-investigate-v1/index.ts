@@ -55,41 +55,63 @@ async function page(svc,table,fields,mod,limit=5000){
 }
 function signal(s){
  const p=num(s.position),from=num(s.previous_position);
- if(from===null&&p===null)return null;
- let magnitude=from!==null&&p!==null?Math.abs(from-p):20;
- let drop=s.movement==="down"||s.movement==="exited";
- let rise=s.movement==="up"||s.movement==="entered";
- if(!drop&&!rise)return null;
- if(from!==null&&p!==null&&magnitude<(s.kind==="own"?7:12))return null;
+ // A listing "entered/exited" label is not a verified numerical move.
+ // Only two comparable, non-null rank observations can trigger a cause analysis.
+ if(from===null||p===null||from===p)return null;
+ const magnitude=Math.abs(from-p);
+ const drop=s.movement==="down"||s.movement==="exited";
+ const rise=s.movement==="up"||s.movement==="entered";
+ if((!drop&&!rise)||(drop&&p<=from)||(rise&&p>=from))return null;
+ if(magnitude<(s.kind==="own"?7:12))return null;
  return {...s,delta:from!==null&&p!==null?from-p:null,priority:Math.round(magnitude*(s.kind==="own"?1.8:1)+(drop&&s.kind==="own"?25:0)+(rise&&s.kind==="competitor"?14:0)+(p!==null&&p<=25?8:0))};
 }
 async function feed(svc){
  const m=await meta(svc);
- const [metrics,ownPositions,market]=await Promise.all([
-  page(svc,"triovist_21vek_position_metrics_v236351","manager_email,sku,product_name,movement,current_position,previous_position,price_21vek,in_stock,current_observed_at,current_error",
-    q=>q.in("movement",["down","up","exited","entered"]),2500),
-  page(svc,"triovist_market_own_positions_current_v1","scope_key,sku,position,current_price,observed_at",
-    q=>q.order("scope_key").order("sku"),1500),
+ const [metrics,ownPositions,ownHistory,market]=await Promise.all([
+  page(svc,"triovist_21vek_position_metrics_v236351","sku,manager_email,product_name",
+    q=>q.order("sku"),3000),
+  page(svc,"triovist_market_own_positions_current_v1","scope_key,sku,product_name,position,current_price,in_stock,observed_at",
+    q=>q.order("scope_key").order("sku"),3000),
+  page(svc,"triovist_market_own_position_snapshots_v1","scope_key,sku,position,observed_at",
+    q=>q.gte("observed_at",new Date(Date.now()-5*864e5).toISOString())
+      .order("scope_key").order("sku").order("observed_at",{ascending:false}),9000),
   page(svc,"triovist_market_comp_position_current_v236352","scope_key,product_key,brand,model,movement,position,previous_position,position_delta,current_price,observed_at",
-    q=>q.in("movement",["up","down","exited","entered"]).gte("observed_at",new Date(Date.now()-3*864e5).toISOString()).order("scope_key").order("product_key"),5000)
+    q=>q.in("movement",["up","down","exited","entered"])
+      .gte("observed_at",new Date(Date.now()-3*864e5).toISOString())
+      .order("scope_key").order("product_key"),5000)
  ]);
  const known=new Set(m.scopes.map(x=>S(x.scope_key)));
- const owned=new Map();
- for(const r of ownPositions){if(known.has(r.scope_key))owned.set(S(r.sku),r)}
- const signals=[],fresh=new Date(Date.now()-5*864e5);
- for(const r of metrics){
-  const own=owned.get(S(r.sku));
-  if(!own||!r.current_observed_at||new Date(r.current_observed_at)<fresh||r.current_error)continue;
-  const s=signal({kind:"own",scope_key:own.scope_key,entity_key:r.sku,title:clip(r.product_name,110),manager_email:S(r.manager_email).toLowerCase(),
-    movement:r.movement,position:num(r.current_position),previous_position:num(r.previous_position),
-    current_price:num(r.price_21vek),in_stock:r.in_stock,observed_at:r.current_observed_at});
+ const managers=new Map(metrics.map(x=>[S(x.sku),x]));
+ const history=new Map();
+ for(const r of ownHistory){
+  if(!known.has(r.scope_key))continue;
+  const key=S(r.scope_key)+"|"+S(r.sku);
+  const records=history.get(key)||[];
+  if(records.length<2)records.push(r);
+  history.set(key,records);
+ }
+ const signals=[];
+ for(const own of ownPositions){
+  if(!known.has(own.scope_key))continue;
+  const h=history.get(S(own.scope_key)+"|"+S(own.sku))||[];
+  const latest=h[0],prior=h[1],p=num(latest?.position),before=num(prior?.position);
+  if(p===null||before===null||p!==num(own.position))continue;
+  if(Date.parse(latest.observed_at)<=Date.parse(prior.observed_at))continue;
+  const movement=p>before?"down":"up";
+  const staff=managers.get(S(own.sku))||{};
+  const s=signal({kind:"own",scope_key:own.scope_key,entity_key:own.sku,
+    title:clip(own.product_name||staff.product_name,110),
+    manager_email:S(staff.manager_email).toLowerCase(),movement,
+    position:p,previous_position:before,current_price:num(own.current_price),
+    in_stock:own.in_stock,observed_at:latest.observed_at});
   if(s)signals.push(s);
  }
  for(const r of market){
   if(!known.has(r.scope_key))continue;
   const s=signal({kind:"competitor",scope_key:r.scope_key,entity_key:r.product_key,
-    title:clip([r.brand,r.model].filter(Boolean).join(" "),110),manager_email:null,movement:r.movement,
-    position:num(r.position),previous_position:num(r.previous_position),current_price:num(r.current_price),
+    title:clip([r.brand,r.model].filter(Boolean).join(" "),110),
+    manager_email:null,movement:r.movement,position:num(r.position),
+    previous_position:num(r.previous_position),current_price:num(r.current_price),
     in_stock:null,observed_at:r.observed_at});
   if(s)signals.push(s);
  }
@@ -187,6 +209,15 @@ async function investigate(svc,actor,body){
  const m=await meta(svc);
  if(!m.scopes.some(x=>x.scope_key===scope))throw fail("unknown_scope",404);
  const evidence=await itemEvidence(svc,scope,kind,key);
+ // Revalidate against immutable dated snapshots before ANY AI request or insert.
+ const before=num(evidence.position_before),after=num(evidence.position_at_start);
+ if(before===null||after===null||Math.abs(before-after)<(kind==="own"?7:12))
+   throw fail("insufficient_rank_evidence",422);
+ const observations=evidence.evidence?.history||[];
+ if(observations.length<2||num(observations[0]?.position)!==after||
+    num(observations[1]?.position)!==before||
+    Date.parse(observations[0]?.date)<=Date.parse(observations[1]?.date))
+   throw fail("rank_history_not_comparable",422);
  const today=day();
  const record={snapshot_day:today,scope_key:scope,kind,entity_key:key,title:evidence.title,
    manager_email:evidence.manager_email,created_by:actor.email,observed_at:evidence.observed_at,
@@ -278,20 +309,19 @@ async function daily(svc){
  }
  try{
   const data=await feed(svc);
-  const seen=new Set(),selection=[];
-  for(const candidate of data.cases.filter(x=>x.kind==="own"&&x.movement==="down"||
-     x.kind==="competitor"&&x.movement==="up").sort((a,b)=>b.priority-a.priority)){
-   if(selection.length>=MAX_CRON_AI)break;
-   if(seen.has(candidate.scope_key))continue;
-   seen.add(candidate.scope_key);
-   selection.push(candidate);
-  }
-  let generated=0;
-  for(const c of selection){
+  const seen=new Set();
+  let generated=0,attempts=0;
+  const ranked=data.cases.filter(x=>(x.kind==="own"&&x.movement==="down")||
+    (x.kind==="competitor"&&x.movement==="up")).sort((a,b)=>b.priority-a.priority);
+  // Try other scopes if a candidate cannot be backed by the latest two snapshots.
+  for(const c of ranked){
+   if(generated>=MAX_CRON_AI||attempts>=24)break;
+   if(seen.has(c.scope_key))continue;
+   attempts++;
    try{
     const out=await investigate(svc,{id:"544fb1e2-ef70-44de-bc62-e0e1596a4bfc",email:"scheduler",leader:true},c);
-    if(out.ai_available)generated++;
-   }catch(e){console.warn("AI investigation skipped",clip(e?.message,80))}
+    if(out.ai_available){generated++;seen.add(c.scope_key)}
+   }catch(e){console.warn("AI skipped unverified rank",clip(e?.message,80))}
   }
   const followups=await updateFollowups(svc);
   await svc.from(R).update({status:"completed",finished_at:new Date().toISOString(),
