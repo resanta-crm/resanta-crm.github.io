@@ -8,6 +8,7 @@
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchUnifiedHandleV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-staff-dialog-v1';
+const FINANCE_ENDPOINT='crm-ai360-budget-voice-v1';
 let history=[],memory={},pending=false,epoch=0;
 const allowed=()=>{
  const p=root.crmAI360StaffIdentityV1?.();
@@ -39,8 +40,12 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
     await db.auth.getSession().then(x=>x.data?.session);
    if(!session?.access_token)throw Error('not_authorized');
    const month=localMonth(question)||memory.month||null;
-   const result=await db.functions.invoke(ENDPOINT,{
-    body:{question,month,history:history.slice(-6),memory}
+   const budgetTopic=/бюджет|перерасход|зарезервир|сколько свободно|свободный остаток/i.test(question);
+   const budgetFollow=memory?.domain==='promotion_budgets'&&
+     /^(?:а\s|и\s|у него|у нее|у неё|сколько|какие|покажи|расскажи|его )/i.test(question);
+   const finance=budgetTopic||budgetFollow;
+   const result=await db.functions.invoke(finance?FINANCE_ENDPOINT:ENDPOINT,{
+    body:finance?{question,memory}:{question,month,history:history.slice(-6),memory}
    });
    if(result.error){
     let code='';
@@ -49,6 +54,8 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    }
    if(!allowed()||!ui.authorized()||run!==epoch)return;
    const data=result.data;
+   if(finance&&(data?.source!=='promotion_budget_truth_v1'||data?.read_only!==true))
+     throw Error('unverified_budget_source');
    if(data?.mode!=='staff_ai360_shared_core_v1'||data?.answer_verified!==true||
     data?.read_only!==true||data?.scope!==(root.crmAI360StaffIdentityV1?.()?.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск')||data?.role!==root.crmAI360StaffIdentityV1?.()?.tier||typeof data?.answer!=='string'||
     !Array.isArray(data?.domains_used))
@@ -57,7 +64,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    memory=data.memory||{};
    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,320)});
    history=history.slice(-6);
-   ui.setStatus?.('Проверено через CRM · '+String(data.as_of||'')+' · филиал Витебск');
+   ui.setStatus?.('Проверено через CRM · '+String(data.as_of||'')+' · '+String(root.crmAI360StaffIdentityV1?.()?.region||'филиал'));
    ui.show(data.answer);
   }catch(e){
    if(allowed()&&ui.authorized()&&run===epoch){
