@@ -77,7 +77,7 @@ test('briefing reads existing snapshots, never guesses causes or confirmed promo
  vm.runInNewContext(code+';uniCompetitorBrief(panel,d,"",[],[],null,7);',ctx);
  assert.match(el.innerHTML,/4\s146/);
  assert.match(el.innerHTML,/Подгруппа/);
- assert.equal((el.innerHTML.match(/class="tm225-item/g)||[]).length,5);
+ assert.equal((el.innerHTML.match(/class="tm225-item (?:bad|warn)"/g)||[]).length,5);
 });
 test('no unrelated files or rights are touched by this feature',()=>{
  assert.match(src,/fullMarketAccess:true/);
