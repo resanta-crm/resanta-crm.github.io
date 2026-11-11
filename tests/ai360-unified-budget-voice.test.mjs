@@ -81,3 +81,26 @@ test('JWT, server-verified identity, scoped finance data; no hidden client-trigg
  assert.doesNotMatch(index,/\.insert\(|\.upsert\(|\.update\(|\.delete\(/);
  assert.doesNotMatch(index,/MutationObserver|setInterval|setTimeout/);
 });
+
+test('existing director and staff voice handlers route budget questions through ONE secure backend',()=>{
+ const director=readFileSync(new URL('../assets/143-resanta-ai360-unified-dialog-v1.js',import.meta.url),'utf8');
+ const staff=readFileSync(new URL('../assets/147-resanta-ai360-staff-unified-dialog-v1.js',import.meta.url),'utf8');
+ for(const code of [director,staff]){
+  assert.match(code,/FINANCE_ENDPOINT='crm-ai360-budget-voice-v1'/);
+  assert.match(code,/budgetFollow=memory\?\.domain==='promotion_budgets'/);
+  assert.match(code,/finance\?FINANCE_ENDPOINT:ENDPOINT/);
+  assert.match(code,/source!=='promotion_budget_truth_v1'/);
+  assert.doesNotMatch(code,/setInterval|new MutationObserver|requestAnimationFrame/);
+ }
+ assert.match(director,/data\.answer_verified!==true/);
+ assert.match(staff,/unverified_budget_source/);
+});
+test('Hello Lera aliases are opt-in foreground only, prior Resanta wake remains',()=>{
+ const pilot=readFileSync(new URL('../assets/134-resanta-voice-ai360-pilot-v1.js',import.meta.url),'utf8');
+ const capture=readFileSync(new URL('../assets/135-resanta-voice-capture-fix-v2.js',import.meta.url),'utf8');
+ assert.match(pilot,/\(\?:ресанта\|лера\)/);
+ assert.match(capture,/\|лера\)\(\?=\$\|/);
+ assert.match(capture,/document\.hidden/);
+ assert.match(capture,/panel\.hidden/);
+ assert.match(pilot,/setWake\(false\)/);
+});
