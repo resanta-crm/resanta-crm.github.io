@@ -6,7 +6,7 @@
 'use strict';
 if(w.RESANTA_BUDGETS360_V1)return;
 const TOP='budgets360-top',LIST='budgets360-list',STYLE='budgets360-style';
-const openManagers=new Set();let wrapped=false,baseRender=null,baseDetail=null,renderBusy=false;
+const openManagers=new Set();let wrapped=false,baseRender=null,baseDetail=null,renderBusy=false,hooksReady=false,lastRenderError='',renderCount=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number.isFinite(Number(v))?Number(v):0;
 const money=v=>num(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -195,22 +195,70 @@ function enhanceDetail(id){
 }
 function render(){
  if(renderBusy||!isActive())return;
- const scope=records(),root=mount();if(!scope||!root)return;
- renderBusy=true;
- try{root.top.innerHTML=buildTop(scope);root.bottom.innerHTML=buildBottom(scope);}
- catch(e){console.warn('Budgets360 optional presentation failed, original budget controls preserved',e);root.page.classList.remove('budgets360-installed');}
- finally{renderBusy=false}
+ let root=null;
+ try{
+  // Avoid a silent blank upgrade: always leave the old finance view intact on failure.
+  const scope=records();if(!scope)return;
+  root=mount();if(!root)return;
+  renderBusy=true;
+  const topHtml=buildTop(scope),bottomHtml=buildBottom(scope);
+  root.top.innerHTML=topHtml;root.bottom.innerHTML=bottomHtml;
+  root.page.classList.add('budgets360-installed');
+  lastRenderError='';renderCount++;
+ }catch(e){
+  lastRenderError=String(e?.message||e);
+  console.warn('Budgets360 optional presentation failed, original budget controls preserved',e);
+  root?.page?.classList?.remove('budgets360-installed');
+ }finally{renderBusy=false}
+}
+function schedule(delay){
+ const run=()=>{if(!isActive())return;install();if(wrapped)render()};
+ if(typeof w.setTimeout==='function')w.setTimeout(run,delay||0);
+ else run();
+}
+function hookNavigation(){
+ if(hooksReady)return;hooksReady=true;
+ // The CRM lazy feature loader can render the original budgets view after a route change.
+ // Listen to actual route and filter actions rather than relying only on a global wrapper.
+ d.addEventListener('click',e=>{
+  const btn=e.target.closest?.('#nav-budgets,#bn-budgets,[onclick*="goPage(\'budgets\'"]');
+  if(btn){schedule(80);schedule(750)}
+ },true);
+ d.addEventListener('change',e=>{
+  if(e.target?.matches?.('#budgets-manager-filter'))schedule(0);
+ },true);
+ d.addEventListener('input',e=>{
+  if(e.target?.matches?.('#budgets-search'))schedule(0);
+ },true);
+ if(typeof w.addEventListener==='function')w.addEventListener('pageshow',()=>schedule(80));
+ // Also responds when navigation is programmatic, e.g. restoring a tab after an auth refresh.
+ const page=d.getElementById('page-budgets');
+ if(page&&typeof w.MutationObserver==='function'){
+  const obs=new w.MutationObserver(mutations=>{
+   if(mutations.some(m=>m.attributeName==='class')&&isActive()){schedule(80);schedule(800)}
+  });
+  obs.observe(page,{attributes:true,attributeFilter:['class']});
+ }
 }
 function install(){
- if(wrapped)return;
+ hookNavigation();
+ if(wrapped){if(isActive())render();return}
  baseRender=w.renderBudgetsPage;
  baseDetail=w.openBudgetDetail;
- if(typeof baseRender!=='function'||typeof baseDetail!=='function')return;
- w.renderBudgetsPage=function(){const out=baseRender.apply(this,arguments);render();return out};
- w.openBudgetDetail=function(id){const out=baseDetail.apply(this,arguments);try{enhanceDetail(id)}catch(e){console.warn('Budgets360 history optional',e)}return out};
+ if(typeof baseRender!=='function'||typeof baseDetail!=='function'){
+  lastRenderError='Базовый модуль бюджетов ещё не загружен';
+  return; // Route events try again without polling.
+ }
+ const renderWrapper=function(){const out=baseRender.apply(this,arguments);render();return out};
+ const detailWrapper=function(id){const out=baseDetail.apply(this,arguments);try{enhanceDetail(id)}catch(e){console.warn('Budgets360 history optional',e)}return out};
+ w.renderBudgetsPage=renderWrapper;
+ w.openBudgetDetail=detailWrapper;
+ // Explicitly rebind the classic-script global identifier; async CRM routers can use it directly.
+ try{renderBudgetsPage=renderWrapper}catch(_){}
+ try{openBudgetDetail=detailWrapper}catch(_){}
  wrapped=true;
- if(isActive())w.renderBudgetsPage();
+ if(isActive())render();
 }
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
-w.RESANTA_BUDGETS360_V1=Object.freeze({version:'20261111.1',readOnly:true,existingFinanceMath:true,historyFromExistingAudit:true,install,refresh:render});
+w.RESANTA_BUDGETS360_V1=Object.freeze({version:'20261111.2',readOnly:true,existingFinanceMath:true,historyFromExistingAudit:true,install,refresh:()=>{install();render()},diagnostics:()=>({wrapped,active:isActive(),root:!!d.getElementById(TOP),renders:renderCount,error:lastRenderError})});
 })(window,document);
