@@ -1,10 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { chooseRecipientRows, managerBrief, leaderBrief, keyOf, surname } from './lera-message.mjs';
 
 const SUPABASE_URL=Deno.env.get('SUPABASE_URL')||'';
 const SERVICE_ROLE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
 const BOT_TOKEN=Deno.env.get('TELEGRAM_BOT_TOKEN')||'';
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false}});
-const LEADER_EMAILS=new Set(['sidarovich_kn@resanta.ru','payushin_ar@resanta.ru']);
 const json=(x:unknown,status=200)=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8'}});
 const esc=(s:unknown)=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const money=(n:unknown)=>Number(n||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -92,6 +92,49 @@ function summaryHeader(rows:DebtRow[],reportDate:string,title:string,legalMap:Ma
    +'⚖ 60+: <b>'+courtRows.length+'</b> (не передано: <b>'+pendingCourts+'</b>)\n';
 }
 
+// Unique exact CRM client AND manager matches only. Never link an ambiguous
+// trading point to another legal entity's contact or payment promise.
+async function verifiedComments(debts:DebtRow[]){
+ const evidence=new Map<string,any>();
+ const names=[...new Set(debts.map(x=>x.client_name).filter(Boolean))];
+ if(!names.length)return evidence;
+ const {data:clientRows,error:ce}=await db.from('clients')
+  .select('id,name,manager_name,is_archived').in('name',names).limit(1000);
+ if(ce){console.warn('PDZ Lera: client linkage not available');return evidence;}
+ const matched=new Map<string,string>(),ambiguous=new Set<string>();
+ for(const c of clientRows||[]){
+  if(c.is_archived)continue;
+  const key=norm(c.name)+'|'+surname(c.manager_name);
+  if(!debts.some(d=>keyOf(d)===key))continue;
+  if(matched.has(key)&&matched.get(key)!==c.id)ambiguous.add(key);
+  else matched.set(key,c.id);
+ }
+ for(const key of ambiguous)matched.delete(key);
+ if(!matched.size)return evidence;
+ const ids=[...new Set(matched.values())];
+ const {data:comments,error:de}=await db.from('debt_comments')
+  .select('client_id,comment,promised_date,amount,created_at')
+  .in('client_id',ids).order('created_at',{ascending:false}).limit(1500);
+ if(de){console.warn('PDZ Lera: comment verification unavailable');return evidence;}
+ const byId=new Map<string,any>();
+ for(const row of comments||[])if(!byId.has(row.client_id))byId.set(row.client_id,row);
+ for(const [key,id] of matched){const rec=byId.get(id);if(rec)evidence.set(key,rec);}
+ return evidence;
+}
+// Historical comparison is informational. Reducing debt never proves that
+// a payment was received; that requires payment-register reconciliation.
+async function previousDebts(reportDate:string){
+ const {data:dayRows,error:e1}=await db.from('client_debt_history_v1')
+  .select('report_date').lt('report_date',reportDate)
+  .order('report_date',{ascending:false}).limit(1);
+ if(e1||!dayRows?.length)return null;
+ const previous=String(dayRows[0].report_date);
+ const {data:rows,error:e2}=await db.from('client_debt_history_v1')
+  .select('client_name,manager_name,debt_overdue,debt_overdue_days,report_date')
+  .eq('report_date',previous).gt('debt_overdue',0).limit(2000);
+ if(e2)return null;
+ return (rows||[]) as DebtRow[];
+}
 Deno.serve(async(req)=>{
  try{
   const stored=await runtimeGet('dispatch_secret');
@@ -124,6 +167,12 @@ Deno.serve(async(req)=>{
     if(!legalMap.has(k))legalMap.set(k,x);
   }
 
+  const evidence=await verifiedComments(debts);
+  const previousRows=await previousDebts(reportDate);
+  const {data:managerProfilesRaw,error:mpError}=await db.from('users')
+   .select('id,name,email,role,region,access_scope').eq('role','manager').limit(500);
+  if(mpError)throw mpError;
+  const managerProfiles=(managerProfilesRaw||[]) as any[];
   const group=await runtimeGet('pdz_group_chat');
   const groupChatId=group?.active&&group?.chat_id?group.chat_id:null;
   let groupSent=false;
@@ -152,40 +201,40 @@ Deno.serve(async(req)=>{
   }
 
   const {data:bindings,error:be}=await db.from('crm_telegram_bindings')
-   .select('user_id,chat_id,active').eq('active',true);
+   .select('user_id,chat_id,active,telegram_first_name').eq('active',true);
   if(be)throw be;
   const ids=[...new Set((bindings||[]).map((x:any)=>String(x.user_id)))];
   if(!ids.length)return json({ok:errors.length===0,reason:'NO_BINDINGS',group_sent:groupSent,errors});
 
-  const {data:users,error:ue}=await db.from('users').select('id,name,email,role').in('id',ids);
+  const {data:users,error:ue}=await db.from('users').select('id,name,email,role,region,access_scope').in('id',ids);
   if(ue)throw ue;
   const userMap=new Map((users||[]).map((x:any)=>[String(x.id),x]));
   const bindMap=new Map((bindings||[]).map((x:any)=>[String(x.user_id),x]));
 
-  let sentUsers=0;
+  let sentUsers=0,leadersSent=0;
   for(const uid of ids){
    const u:any=userMap.get(uid),b:any=bindMap.get(uid);if(!u||!b)continue;
-   const isLeader=LEADER_EMAILS.has(String(u.email||'').toLowerCase());
-
-   // Leaders never receive the full PDZ register in the bot's private chat.
-   // Their common digest is sent only to the dedicated PDZ control group.
-   // Until that group is configured, leadership delivery is intentionally skipped.
-   if(isLeader)continue;
-
-   const rows=debts.filter(d=>belongs(String(d.manager_name||''),String(u.name||'')));
-   const sentKey=`pdz_daily_sent:${today}:${uid}`;
+   if(!['boss','manager'].includes(String(u.role||'')))continue;
+   // Unknown directors cannot receive a network-wide view by default.
+   if(u.role==='boss'&&String(u.email||'').toLowerCase()!=='payushin_ar@resanta.ru'&&!u.region)continue;
+   // Scope is defined by CRM role and region, never Telegram screen names.
+   const rows=chooseRecipientRows(u,debts,managerProfiles);
+   const prior=previousRows===null?null:chooseRecipientRows(u,previousRows,managerProfiles);
+   const sentKey='pdz_daily_sent:'+today+':'+uid;
    if(await runtimeGet(sentKey))continue;
-   if(!rows.length){
-    await runtimeSet(sentKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:0});
-    continue;
-   }
-
-   const title=isLeader?'Все менеджеры':'Менеджер: <b>'+esc(u.name)+'</b>';
-   const header=summaryHeader(rows,reportDate,title,legalMap);
+   const digest=u.role==='boss'?
+    leaderBrief({user:u,rows,previousRows:prior,reportDate,today,evidence,managerUsers:managerProfiles}):
+    managerBrief({user:u,binding:b,rows,previousRows:prior,reportDate,today,
+      evidence,legalAction:(row:DebtRow)=>actionText(row,legalMap)});
    try{
-    for(const part of chunks(linesFor(rows,isLeader,legalMap),header)){await tg(part,b.chat_id);sentMessages++;}
-    await runtimeSet(sentKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:rows.length,total:rows.reduce((s,d)=>s+Number(d.debt_overdue||0),0)});
+    for(const part of chunks(digest.lines,digest.header)){await tg(part,b.chat_id);sentMessages++;}
+    await runtimeSet(sentKey,{
+      sent_at:new Date().toISOString(),report_date:reportDate,rows:rows.length,total:digest.total,
+      format:'lera-pdz-personal-v1',role:u.role,contacts_missing:digest.counts.no_record,
+      promises_overdue:digest.counts.promise_overdue
+    });
     sentUsers++;
+    if(u.role==='boss')leadersSent++;
    }catch(e){
     errors.push({user:u.name,error:e instanceof Error?e.message:String(e)});
    }
@@ -193,7 +242,7 @@ Deno.serve(async(req)=>{
 
   return json({
     ok:errors.length===0,report_date:reportDate,group_configured:!!groupChatId,group_sent:groupSent,
-    sent_users:sentUsers,sent_messages:sentMessages,errors
+    sent_users:sentUsers,leaders_sent:leadersSent,sent_messages:sentMessages,errors
   });
  }catch(e){
   console.error(e);
