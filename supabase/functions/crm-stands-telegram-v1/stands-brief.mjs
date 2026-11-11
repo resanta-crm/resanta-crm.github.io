@@ -3,7 +3,17 @@ export const norm=x=>String(x??'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е'
 export const surname=x=>norm(x).split(' ')[0]||'';
 export const ruMoney=x=>Number(x||0).toLocaleString('ru-RU',{maximumFractionDigits:0});
 export const monthStart=(date,offset=0)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+offset);return d.toISOString().slice(0,10);};
-export const greet=user=>({'руднев':'Саня','ачинович':'Катюшка','шкуран':'Танюшка','паюшин':'родной','сидарович':'Кирюшка'})[surname(user?.name)]||String(user?.name||'коллега').trim().split(' ')[0];
+export const greet=user=>{
+ const byId={
+  '544fb1e2-ef70-44de-bc62-e0e1596a4bfc':'родной',
+  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Саня',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка'
+ };
+ if(byId[String(user?.id||'')])return byId[String(user.id)];
+ const all=norm(user?.name),fallback={'руднев':'Саня','ачинович':'Катюшка','шкуран':'Танюшка','паюшин':'родной','сидорович':'Кирилл'};
+ return Object.entries(fallback).find(([k])=>all.split(' ').includes(k))?.[1]||String(user?.name||'коллега').trim().split(' ')[0];
+};
 export const registeredSku=x=>String(x??'').trim().replace(/\s+/g,'').toUpperCase();
 export function assessStand(p,items,history,today,hasRoute){
  const keys=new Set((items||[]).map(x=>registeredSku(x.sku)).filter(Boolean));
