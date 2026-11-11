@@ -185,3 +185,38 @@ end
 $func$;
 revoke all on function public.crm_stands_360_v1(integer) from public,anon;
 grant execute on function public.crm_stands_360_v1(integer) to authenticated;
+
+
+create or replace function public.crm_stands_360_skus_v1(p_placement_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to '' as $func$
+declare p public.stand_placements_v236346%rowtype;
+r text:=private.crm_stands_role_v236346();n text:=private.crm_stands_user_name_v236346();out_json jsonb;
+begin
+ if (select auth.uid()) is null or r not in ('dfs','df','manager') then raise exception 'Нет доступа';end if;
+ select * into p from public.stand_placements_v236346 where id=p_placement_id;
+ if p.id is null or (r='manager' and p.manager_name<>n) then raise exception 'Стенд недоступен';end if;
+ select coalesce(jsonb_agg(jsonb_build_object(
+   'sku',x.sku,'product',x.product_name,'last_ship_month',x.last_ship_month,
+   'ship_3m',x.ship_3m,'ship_6m',x.ship_6m,'ship_prev6m',x.ship_prev6m
+ ) order by x.ship_6m desc,x.sku),'[]'::jsonb) into out_json
+ from (
+  select i.sku,i.product_name,
+   max(h.month) as last_ship_month,
+   round(coalesce(sum(h.revenue) filter(where h.month>=date_trunc('month',current_date)::date-interval '2 months'),0),2) as ship_3m,
+   round(coalesce(sum(h.revenue) filter(where h.month>=date_trunc('month',current_date)::date-interval '5 months'),0),2) as ship_6m,
+   round(coalesce(sum(h.revenue) filter(where h.month>=date_trunc('month',current_date)::date-interval '11 months'
+     and h.month<date_trunc('month',current_date)::date-interval '5 months'),0),2) as ship_prev6m
+  from public.stand_placement_items_v236346 i
+  left join public.purchase_history h on h.client_id=p.client_id and btrim(h.sku)=btrim(i.sku)
+    and h.month>=date_trunc('month',current_date)::date-interval '11 months'
+  where i.placement_id=p.id group by i.sku,i.product_name
+  order by sum(h.revenue) filter(where h.month>=date_trunc('month',current_date)::date-interval '5 months') desc nulls last
+  limit 200
+ ) x;
+ return jsonb_build_object('placement_id',p.id,'client_id',p.client_id,
+    'data_granularity','month','origin','1C purchase_history shipments to client',
+    'rows',out_json);
+end
+$func$;
+revoke all on function public.crm_stands_360_skus_v1(uuid) from public,anon;
+grant execute on function public.crm_stands_360_skus_v1(uuid) to authenticated;
