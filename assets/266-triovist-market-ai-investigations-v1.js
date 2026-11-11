@@ -6,7 +6,7 @@
 if(window.RESANTA_TRIOVIST_MARKET_AI_V1)return;
 const VERSION='market-ai-investigations-v1';
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const N=v=>Number.isFinite(Number(v))?Number(v):null;
+const N=v=>v===null||v===undefined||v===''?null:(Number.isFinite(Number(v))?Number(v):null);
 const A=v=>Array.isArray(v)?v:[];
 const dt=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Minsk'})};
 const leaders=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
@@ -170,8 +170,15 @@ async function refresh(){
  finally{if(ticket===state.seq){state.busy=false;render()}}
 }
 function mount(){
- const el=document.querySelector('[data-tm266]');
- if(!el)return;
+ const anchor=document.querySelector('#tr14-panel [data-tm225]');
+ if(!anchor)return;
+ let el=document.querySelector('[data-tm266]');
+ if(!el){
+  el=document.createElement('section');
+  el.className='tm266';el.setAttribute('data-tm266','');
+  el.setAttribute('aria-label','Расследования позиций 21vek');
+  anchor.insertAdjacentElement('afterend',el);
+ }
  if(state.root!==el){state.root=el;state.loadedAt=0;state.focus=null;render()}
  if(!state.loadedAt&&!state.busy)refresh();
 }
