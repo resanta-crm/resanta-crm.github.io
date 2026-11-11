@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { promotionRecipients, privatePromotionChat } from './audience.mjs';
+import { personalPromotionAudience, privatePromotionChat } from './audience.mjs';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -186,7 +186,7 @@ async function handleTelegram(req: Request) {
 }
 
 type QueueRow = {
-  id:string; recipient_user_id:string|null; event_type:string; severity:string; message:string; action_url:string|null;
+  id:string; promotion_id:string|null; recipient_user_id:string|null; event_type:string; severity:string; message:string; action_url:string|null;
   scheduled_at:string; attempts:number;
 };
 type UserRow = {id:string; name:string; email:string|null; role:string|null};
@@ -199,7 +199,7 @@ async function dispatchPending(req: Request) {
 
   await db.rpc('crm_refresh_promotion_notifications_v2');
   const { data: rawRows, error } = await db.from('promotion_notification_queue')
-    .select('id,recipient_user_id,event_type,severity,message,action_url,scheduled_at,attempts')
+    .select('id,promotion_id,recipient_user_id,event_type,severity,message,action_url,scheduled_at,attempts')
     .eq('status','pending').lte('scheduled_at',new Date().toISOString()).lt('attempts',5)
     .order('severity',{ascending:true}).order('scheduled_at',{ascending:true}).limit(100);
   if (error) throw error;
@@ -210,9 +210,21 @@ async function dispatchPending(req: Request) {
   const { data: primaryUsers, error: pe } = await db.from('users').select('id,name,email,role').in('id',primaryIds);
   if (pe) throw pe;
   const primaryMap = new Map((primaryUsers||[]).map((x:any)=>[String(x.id),x as UserRow]));
-  // One CRM event -> one intended recipient. Approvals already target a DF/DFS via queue.
-  // A manager photo / accept-work / overdue reminder must never be copied to all leaders.
-  const audienceFor = (r:QueueRow):UserRow[] => promotionRecipients(r,primaryMap);
+  // The old approval_df queue is Vitebsk-specific; replace ONLY that recipient
+  // using verified CRM users/region. In an unknown/ambiguous branch, fail closed.
+  // The manager's event, DFS approval and all other queue rows remain personal.
+  const dfIds=[...new Set(rows.filter(x=>x.event_type==='approval_df').map(x=>x.promotion_id).filter(Boolean))] as string[];
+  let branchContext:null|{staff:any[];promotionManagers:Map<string,string>}=null;
+  if(dfIds.length){
+    const [promos,people]=await Promise.all([
+      db.from('promotions').select('id,manager_name').in('id',dfIds),
+      db.from('users').select('id,name,email,role,region').in('role',['boss','manager']).limit(300)
+    ]);
+    if(promos.error||people.error)throw new Error('APPROVAL_BRANCH_LOOKUP_FAILED');
+    if((people.data||[]).length===300)throw new Error('APPROVAL_BRANCH_DIRECTORY_TOO_LARGE');
+    branchContext={staff:people.data||[],promotionManagers:new Map((promos.data||[]).map((p:any)=>[String(p.id),String(p.manager_name||'')]))};
+  }
+  const audienceFor = (r:QueueRow):UserRow[] => personalPromotionAudience(r,primaryMap,branchContext);
 
   const targetIds = [...new Set(rows.flatMap(r=>audienceFor(r).map(x=>String(x.id))))];
   const { data: bindings, error: be } = targetIds.length
@@ -229,9 +241,10 @@ async function dispatchPending(req: Request) {
 
   const perRecipient = new Map<string,{user:UserRow; items:{row:QueueRow; owner:UserRow}[]} >();
   for (const r of rows) {
-    const owner = r.recipient_user_id ? primaryMap.get(String(r.recipient_user_id)) : null;
+    const targets=audienceFor(r);
+    const owner=targets[0];
     if (!owner) continue;
-    for (const target of audienceFor(r)) {
+    for (const target of targets) {
       const key = `${r.id}|${target.id}`;
       if (delivered.has(key)) continue;
       if (!bind.get(String(target.id))) continue;

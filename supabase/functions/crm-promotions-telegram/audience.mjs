@@ -12,3 +12,21 @@ export function privatePromotionChat(binding){
    typeof binding.chat_id!=='undefined' &&
    Number.isSafeInteger(Number(binding.chat_id)) && Number(binding.chat_id)>0;
 }
+
+const normalize = value => String(value||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е').replace(/\s+/g,' ');
+// The current queue historically targets the Vitebsk DF. Correct only the
+// first-approval recipient using authenticated server-side CRM staff/region facts.
+// Never fall back to the former Vitebsk approver when the branch is unknown.
+export function personalPromotionAudience(row,usersById,branchContext){
+ if(row?.event_type!=='approval_df')return promotionRecipients(row,usersById);
+ if(!row?.promotion_id||!branchContext)return[];
+ const managerName=branchContext.promotionManagers?.get(String(row.promotion_id));
+ const managerMatches=(branchContext.staff||[]).filter(p=>p?.role==='manager'&&normalize(p.name)===normalize(managerName));
+ if(managerMatches.length!==1)return[];
+ const region=normalize(managerMatches[0].region);
+ if(!region)return[];
+ const directors=(branchContext.staff||[]).filter(p=>
+   p?.role==='boss'&&normalize(p.region)===region&&
+   normalize(p.email)!=='payushin_ar@resanta.ru');
+ return directors.length===1?[directors[0]]:[];
+}
