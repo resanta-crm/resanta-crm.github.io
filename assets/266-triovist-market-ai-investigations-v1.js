@@ -191,7 +191,12 @@ async function action(body){
    state.saved=[data.case,...state.saved.filter(x=>x.id!==data.case.id)].slice(0,40);
    if(data.ai_error)state.error='Факты сохранены, но AI недоступен: '+data.ai_error;
   }
- }catch(e){state.error=String(e.message||e)}
+ }catch(e){
+  const code=String(e.message||e);
+  state.error=code==='insufficient_rank_evidence'||code==='rank_history_not_comparable'
+   ?'По этому товару пока нет двух сопоставимых подтверждённых позиций. ИИ не будет придумывать причину. Выберите другой сигнал или дождитесь нового снимка.'
+   :code;
+ }
  finally{state.busy=false;render()}
 }
 document.addEventListener('click',e=>{
