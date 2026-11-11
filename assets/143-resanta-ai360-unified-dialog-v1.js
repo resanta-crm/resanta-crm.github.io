@@ -3,6 +3,7 @@
 'use strict';
 if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-dialog-v4';
+const FINANCE_ENDPOINT='crm-ai360-budget-voice-v1';
 let history=[],memory={},pending=false,awaitingDetail=null;
 function allowed(){
  try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
@@ -81,15 +82,32 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
     :await db.auth.getSession().then(x=>x?.data?.session);
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
-   const payload={message:question,history:history.slice(-10),memory};
-   // One verified backend only. Never silently downgrade to an older AI engine.
-   const result=await db.functions.invoke(ENDPOINT,{body:payload});
+   // Budget, reserve and contextual client debt questions use a deterministic
+   // server-authenticated read; other questions keep the existing unified AI.
+   const budgetTopic=/бюджет|перерасход|зарезервир|сколько свободно|свободный остаток/i.test(question);
+   const budgetFollow=memory?.domain==='promotion_budgets'&&
+     /^(?:а\s|и\s|у него|у нее|у неё|сколько|какие|покажи|расскажи|его )/i.test(question);
+   const finance=budgetTopic||budgetFollow;
+   const payload=finance?{question,memory}:{message:question,history:history.slice(-10),memory};
+   const result=await db.functions.invoke(finance?FINANCE_ENDPOINT:ENDPOINT,{body:payload});
    if(Number(result.error?.context?.status)===404)
      throw new Error('new_core_unavailable');
    if(result.error)throw new Error(await errorCode(result.error));
    if(result.data?.error)throw new Error(String(result.data.error));
    if(!allowed())return;
    const data=result.data||{};
+   if(finance){
+     if(data.source!=='promotion_budget_truth_v1'||data.answer_verified!==true||
+        data.read_only!==true||data.mode!=='director_readonly_v4')
+       throw new Error('unverified_budget_source');
+     const fact=String(data.answer||'').trim().slice(0,1400);
+     if(!fact)throw new Error('empty_budget_answer');
+     memory=data.memory||{};
+     history.push({role:'user',content:question},{role:'assistant',content:fact.slice(0,350)});
+     history=history.slice(-10);
+     ui.answer(fact,{speechSummary:fact.slice(0,240)});
+     return;
+   }
    const brief=String(data.brief||data.answer||'').trim();
    const detail=String(data.detail||'').trim();
    const offer=String(data.followup_question||'').trim();

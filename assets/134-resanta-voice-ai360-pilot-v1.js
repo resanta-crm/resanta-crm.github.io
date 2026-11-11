@@ -11,7 +11,7 @@
   if (window.__resantaVoicePilotV1) return;
   window.__resantaVoicePilotV1 = true;
 
-  const WAKE = /(?:^|\s)привет[\s,!.\-–—]+ресанта(?:[\s,!.?]|$)/i;
+  const WAKE = /(?:^|\s)привет[\s,!.\-–—]+(?:ресанта|лера)(?:[\s,!.?]|$)/i;
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const state = { wake:false, active:false, awaiting:false, speaking:false,
     silent:false, recognition:null, localReady:false, mounted:false, timer:0, pendingRestart:0, manualRestart:0, manualSequence:0 };

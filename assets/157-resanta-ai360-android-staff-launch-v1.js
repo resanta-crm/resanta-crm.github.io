@@ -52,7 +52,7 @@
    // remain available if a particular WebView cannot use audio capture.
    for(const file of [
     '146-resanta-ai360-branch-premium-voice-v1.js?v=5',
-    '147-resanta-ai360-staff-unified-dialog-v1.js?v=4'
+    '147-resanta-ai360-staff-unified-dialog-v1.js?v=20261111-budgetvoice1'
    ]){
     if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
     try{await load(file);}
