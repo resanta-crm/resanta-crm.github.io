@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { chooseRecipientRows, managerBrief, leaderBrief, keyOf, surname } from './lera-message.mjs';
 import {shouldSendPdzSnapshot,correctionPrefix} from './snapshot-revision.mjs';
+import {pdzVoiceText,yandexAudioBytes} from './voice-brief.mjs';
 
 const SUPABASE_URL=Deno.env.get('SUPABASE_URL')||'';
 const SERVICE_ROLE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
@@ -20,6 +21,40 @@ async function tg(text:string,chatId:string|number){
  const j=await r.json().catch(()=>({}));
  if(!r.ok||!j?.ok)throw new Error('TELEGRAM_SEND_FAILED');
 }
+
+async function synthesizePdzVoice(text:string,userId:string){
+ const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
+ if(!apiKey)throw new Error('PDZ_TTS_NOT_CONFIGURED');
+ // Reuse the existing per-user Yandex monthly quota; no new unmanaged budget.
+ const claim=await db.rpc('crm_ai360_yandex_monthly_claim_v1',{p_user_id:userId,p_characters:text.length});
+ if(claim.error)throw new Error('PDZ_TTS_BUDGET_ERROR');
+ if(!claim.data?.allowed)throw new Error('PDZ_TTS_BUDGET_EXHAUSTED');
+ const headers:Record<string,string>={'Authorization':'Api-Key '+apiKey,'Content-Type':'application/json'};
+ const folderId=Deno.env.get('YANDEX_CLOUD_FOLDER_ID')||'';
+ if(folderId)headers['x-folder-id']=folderId;
+ const result=await fetch('https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis',{
+  method:'POST',headers,signal:AbortSignal.timeout(26000),
+  body:JSON.stringify({text,model:'general',hints:[{voice:'lera'},{role:'friendly'}],
+   outputAudioSpec:{containerAudio:{containerAudioType:'OGG_OPUS'}}})
+ });
+ if(!result.ok)throw new Error('PDZ_TTS_PROVIDER_'+result.status);
+ return yandexAudioBytes(await result.text());
+}
+async function tgVoice(chatId:string|number,audio:Uint8Array,reportDate:string){
+ if(!BOT_TOKEN)throw new Error('TELEGRAM_BOT_TOKEN_NOT_SET');
+ const form=new FormData();
+ form.append('chat_id',String(chatId));
+ form.append('caption','🎧 Лера · голосовой брифинг ПДЗ за '+ruDate(reportDate));
+ const blobBytes=new Uint8Array(new ArrayBuffer(audio.length));blobBytes.set(audio);
+ form.append('voice',new Blob([blobBytes],{type:'audio/ogg'}),'lera-pdz.ogg');
+ const res=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVoice`,{
+  method:'POST',body:form,signal:AbortSignal.timeout(25000)
+ });
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok||!data?.ok||!data?.result?.voice)throw new Error('TELEGRAM_VOICE_SEND_FAILED');
+ return data.result.message_id;
+}
+
 async function runtimeGet(key:string){
  const {data}=await db.from('crm_telegram_runtime').select('value').eq('key',key).maybeSingle();
  return data?.value||null;
@@ -143,6 +178,9 @@ Deno.serve(async(req)=>{
   const got=req.headers.get('x-crm-dispatch-secret')||'';
   if(!expected||got!==expected)return json({ok:false,error:'FORBIDDEN'},403);
 
+  const payload=await req.json().catch(()=>({}));
+  const voicePilot=payload?.mode==='pdz_voice_pilot_owner';
+  if(payload?.mode&&!voicePilot)return json({ok:false,error:'UNSUPPORTED_MODE'},400);
   const today=localDate();
   const {data:latestRows,error:le}=await db.from('client_debt').select('report_date,imported_at').order('report_date',{ascending:false}).order('imported_at',{ascending:false}).limit(1);
   if(le)throw le;
@@ -181,7 +219,7 @@ Deno.serve(async(req)=>{
   let sentMessages=0;
   const errors:any[]=[];
 
-  if(groupChatId && debts.length){
+  if(!voicePilot && groupChatId && debts.length){
    const groupKey=`pdz_daily_group_sent:${today}:${groupChatId}`;
    const lastGroup=await runtimeGet(groupKey);
    if(shouldSendPdzSnapshot(lastGroup,reportDate,sourceImportedAt)){
@@ -206,7 +244,10 @@ Deno.serve(async(req)=>{
   const {data:bindings,error:be}=await db.from('crm_telegram_bindings')
    .select('user_id,chat_id,active,telegram_first_name').eq('active',true);
   if(be)throw be;
-  const ids=[...new Set((bindings||[]).map((x:any)=>String(x.user_id)))];
+  const pilotOwnerId='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
+  const ids=[...new Set((bindings||[]).map((x:any)=>String(x.user_id)))].filter(id=>!voicePilot||id===pilotOwnerId);
+  if(voicePilot&&!ids.length)return json({ok:false,error:'PDZ_VOICE_PILOT_OWNER_NOT_BOUND'},409);
+  const voiceConfig=await runtimeGet('pdz_voice_config');
   if(!ids.length)return json({ok:errors.length===0,reason:'NO_BINDINGS',group_sent:groupSent,errors});
 
   const {data:users,error:ue}=await db.from('users').select('id,name,email,role,region,access_scope').in('id',ids);
@@ -214,7 +255,8 @@ Deno.serve(async(req)=>{
   const userMap=new Map((users||[]).map((x:any)=>[String(x.id),x]));
   const bindMap=new Map((bindings||[]).map((x:any)=>[String(x.user_id),x]));
 
-  let sentUsers=0,leadersSent=0;
+  let sentUsers=0,leadersSent=0,voiceSentUsers=0;
+  const voiceErrors:any[]=[];
   for(const uid of ids){
    const u:any=userMap.get(uid),b:any=bindMap.get(uid);if(!u||!b)continue;
    if(!['boss','manager'].includes(String(u.role||'')))continue;
@@ -225,28 +267,52 @@ Deno.serve(async(req)=>{
    const prior=previousRows===null?null:chooseRecipientRows(u,previousRows,managerProfiles);
    const sentKey='pdz_daily_sent:'+today+':'+uid;
    const lastSent=await runtimeGet(sentKey);
-   if(!shouldSendPdzSnapshot(lastSent,reportDate,sourceImportedAt))continue;
-   const digest=u.role==='boss'?
+   const needsText=!voicePilot&&shouldSendPdzSnapshot(lastSent,reportDate,sourceImportedAt);
+   const voiceKey='pdz_daily_voice_sent:'+today+':'+uid;
+   const voiceAllowed=voicePilot||voiceConfig?.enabled===true;
+   const lastVoice=voiceAllowed?await runtimeGet(voiceKey):null;
+   const needsVoice=voiceAllowed&&shouldSendPdzSnapshot(lastVoice,reportDate,sourceImportedAt);
+   if(!needsText&&!needsVoice)continue;
+   const digest=needsText?(u.role==='boss'?
     leaderBrief({user:u,rows,previousRows:prior,reportDate,today,evidence,managerUsers:managerProfiles}):
     managerBrief({user:u,binding:b,rows,previousRows:prior,reportDate,today,
-      evidence,legalAction:(row:DebtRow)=>actionText(row,legalMap)});
-   try{
-    for(const part of chunks(digest.lines,correctionPrefix(lastSent)+digest.header)){await tg(part,b.chat_id);sentMessages++;}
-    await runtimeSet(sentKey,{
-      sent_at:new Date().toISOString(),report_date:reportDate,source_imported_at:sourceImportedAt,rows:rows.length,total:digest.total,
-      format:'lera-pdz-personal-v1',role:u.role,contacts_missing:digest.counts.no_record,
-      promises_overdue:digest.counts.promise_overdue
-    });
-    sentUsers++;
-    if(u.role==='boss')leadersSent++;
-   }catch(e){
-    errors.push({user:u.name,error:e instanceof Error?e.message:String(e)});
+      evidence,legalAction:(row:DebtRow)=>actionText(row,legalMap)})):null;
+   if(needsText&&digest){
+    try{
+     for(const part of chunks(digest.lines,correctionPrefix(lastSent)+digest.header)){await tg(part,b.chat_id);sentMessages++;}
+     await runtimeSet(sentKey,{
+       sent_at:new Date().toISOString(),report_date:reportDate,source_imported_at:sourceImportedAt,rows:rows.length,total:digest.total,
+       format:'lera-pdz-personal-v1',role:u.role,contacts_missing:digest.counts.no_record,
+       promises_overdue:digest.counts.promise_overdue
+     });
+     sentUsers++;
+     if(u.role==='boss')leadersSent++;
+    }catch(e){
+     errors.push({user:u.name,error:e instanceof Error?e.message:String(e)});
+     continue; // Don't send audio if the textual detail wasn't safely sent.
+    }
+   }
+   if(needsVoice){
+    try{
+     const speech=pdzVoiceText({user:u,binding:b,rows,previousRows:prior,reportDate,today,evidence});
+     const audio=await synthesizePdzVoice(speech,uid);
+     const messageId=await tgVoice(b.chat_id,audio,reportDate);
+     await runtimeSet(voiceKey,{sent_at:new Date().toISOString(),report_date:reportDate,source_imported_at:sourceImportedAt,
+      format:'lera-pdz-ogg-opus-v1',chars:speech.length,telegram_message_id:messageId});
+     voiceSentUsers++;
+    }catch(e){
+     // Leave the voice revision unsent to retry at the next scheduled check.
+     // A failed voice never causes duplicate text or overwrites source 1C debt.
+     voiceErrors.push({user:u.name,error:e instanceof Error?e.message:String(e)});
+    }
    }
   }
 
   return json({
     ok:errors.length===0,report_date:reportDate,group_configured:!!groupChatId,group_sent:groupSent,
-    sent_users:sentUsers,leaders_sent:leadersSent,sent_messages:sentMessages,errors
+    sent_users:sentUsers,leaders_sent:leadersSent,sent_messages:sentMessages,
+    voice_sent_users:voiceSentUsers,voice_enabled:voiceConfig?.enabled===true,voice_pilot:voicePilot,
+    errors,voice_errors:voiceErrors
   });
  }catch(e){
   console.error(e);
