@@ -17,7 +17,7 @@ function localRole(){try{return String(currentProfile?.role||window.currentProfi
 function localEmail(){try{return String(currentProfile?.email||window.currentProfile?.email||'').toLowerCase()}catch(_){return''}}
 function localMaybeAllowed(){const r=localRole(),e=localEmail();return r==='boss'||r==='office_manager'||r==='payment_executor'||e==='payushin_ar@resanta.ru'||e==='sidarovich_kn@resanta.ru'||e==='nesterov_py@resanta.ru'}
 async function rpc(name,args={}){const d=dbx();if(!d)throw new Error('Соединение с базой ещё не готово');const {data,error}=await d.rpc(name,args);if(error)throw error;return data}
-let ctx=null,dash=null,month=new Date().toISOString().slice(0,7)+'-01',status='',search='',expenseType='',showArticleSummary=false,flight=null,installed=false,executorDefaultApplied=false,registryExpanded=null,escapeWired=false;
+let ctx=null,dash=null,month=new Date().toISOString().slice(0,7)+'-01',status='',search='',expenseType='',showArticleSummary=false,flight=null,installed=false,executorDefaultApplied=false,registryExpanded=null,escapeWired=false,historyRequest=0;
 function dateRu(v){if(!v)return'—';try{return new Date(String(v)+'T00:00:00').toLocaleDateString('ru-RU')}catch(_){return String(v)}}
 function monthLabel(v){try{return new Date(String(v)+'T00:00:00').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}catch(_){return String(v)}}
 const EXPENSE_TYPES=[
@@ -135,35 +135,37 @@ function historyView(result){
  }else{
   add(p.created_at,'Платёж создан',p.created_by_email,p.creator_comment,0);
   add(p.submitted_at,'Отправлен на согласование',p.created_by_email,'',1);
-  if(p.approved_at)add(p.approved_at,p.status==='rejected'?'Отклонён':'Решение по платежу',p.approved_by_email,p.approval_comment,2);
+  if(p.approved_at)add(p.approved_at,p.status==='rejected'?'Отклонён':'Согласован Паюшиным',p.approved_by_email,p.approval_comment,2);
  }
  if(p.paid_at&&!audit.some(x=>x.action==='mark_paid'))add(p.paid_at,'Отмечен оплаченным',p.paid_by_email,p.payment_comment,3);
- for(const a of audit)add(a.created_at,a.action==='mark_paid'?'Отметка об оплате':a.action||'Изменение',a.actor_email,
+ for(const a of audit)add(a.created_at,a.action==='mark_paid'?'Отмечен оплаченным':a.action||'Изменение',a.actor_email,
   [a.old_status&&a.new_status?historyStatus(a.old_status)+' → '+historyStatus(a.new_status):'',a.comment||''].filter(Boolean).join(' · '),4);
+ for(const f of files)add(f.created_at,'Приложен документ: '+(f.original_name||'Без названия'),f.uploaded_by_email,'',5);
  entries.sort((a,b)=>String(a.at).localeCompare(String(b.at))||a.rank-b.rank);
  const timeline=entries.length?entries.map(x=>'<div class="pr-timeline-item"><b>'+esc(x.label)+'</b><small>'+esc(dateTimeRu(x.at))+' · '+esc(x.actor||'Не указан')+'</small>'+
   (x.comment?'<div class="pr-timeline-comment">'+esc(x.comment)+'</div>':'')+'</div>').join(''):'<div class="pr-muted">Событий истории пока нет.</div>';
- return '<div class="pr-history-head"><div><h2 style="margin:0 0 4px;font-size:21px">'+esc(p.description||'История платежа')+'</h2><span class="pr-status '+statusClass(p.status)+'">'+esc(historyStatus(p.status))+'</span></div><button type="button" class="pr-btn" data-history-close>✕ Закрыть</button></div>'+
+ return '<div class="pr-history-head"><div><h2 style="margin:0 0 4px;font-size:21px">'+esc(p.description||'История платежа')+'</h2><span class="pr-status '+esc(statusClass(p.status))+'">'+esc(historyStatus(p.status))+'</span></div><button type="button" class="pr-btn" data-history-close>✕ Закрыть</button></div>'+
   '<div class="pr-history-facts"><div><small>Сумма</small><b>'+money(p.amount,p.currency||'BYN')+'</b></div><div><small>Дата документа / срок</small><b>'+esc(dateRu(p.document_date))+' / '+esc(dateRu(p.due_date))+'</b></div></div>'+
   '<h3 style="font-size:15px;margin:18px 0 10px">История действий</h3><div class="pr-timeline">'+timeline+'</div>'+
   '<h3 style="font-size:15px;margin:18px 0 10px">Документы · '+files.length+'</h3>'+
   (files.length?'<div class="pr-files">'+files.map(f=>'<button type="button" class="pr-file" data-file="'+esc(f.storage_path)+'">📎 '+esc(f.original_name)+' · '+esc(dateTimeRu(f.created_at))+'</button>').join('')+'</div>':'<p class="pr-muted">Документы не приложены.</p>');
 }
-function closeHistory(){const overlay=$('pr-history-overlay');if(overlay){overlay.hidden=true;overlay.innerHTML=''}}
+function closeHistory(){historyRequest++;const overlay=$('pr-history-overlay');if(overlay){overlay.hidden=true;overlay.innerHTML=''}}
 async function openHistory(id){
  if(!ctx?.can_view||!id)return;
  const overlay=$('pr-history-overlay');if(!overlay)return;
+ const request=++historyRequest;
  overlay.hidden=false;overlay.innerHTML='<div class="pr-history-sheet" role="dialog" aria-modal="true" aria-label="История платежа"><div class="pr-history-head"><h2>История платежа</h2><button type="button" class="pr-btn" data-history-close>✕ Закрыть</button></div><div class="pr-empty">Загружаю подтверждённую историю…</div></div>';
  overlay.querySelector('[data-history-close]').onclick=closeHistory;
  overlay.onclick=e=>{if(e.target===overlay)closeHistory()};
  try{
   const data=await rpc('payment_registry_history_v1',{p_id:id});
-  if(overlay.hidden)return;
+  if(overlay.hidden||request!==historyRequest)return;
   overlay.innerHTML='<div class="pr-history-sheet" role="dialog" aria-modal="true" aria-label="История платежа">'+historyView(data)+'</div>';
   overlay.querySelector('[data-history-close]').onclick=closeHistory;
   overlay.querySelectorAll('[data-file]').forEach(b=>b.onclick=()=>openFile(b.dataset.file));
  }catch(e){
-  if(overlay.hidden)return;
+  if(overlay.hidden||request!==historyRequest)return;
   overlay.innerHTML='<div class="pr-history-sheet" role="dialog" aria-modal="true" aria-label="История платежа"><button type="button" class="pr-btn" data-history-close>✕ Закрыть</button><p class="pr-bad">Не удалось получить историю: '+esc(e?.message||e)+'</p></div>';
   overlay.querySelector('[data-history-close]').onclick=closeHistory;
  }
