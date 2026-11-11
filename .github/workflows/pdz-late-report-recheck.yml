@@ -1,0 +1,26 @@
+name: PDZ Telegram late 1C recheck safety
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-pdz-telegram/**'
+      - 'tests/pdz-late-1c-recheck.test.mjs'
+      - 'supabase/migrations/*pdz_telegram_late*'
+      - '.github/workflows/pdz-late-report-recheck.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-pdz-telegram/**'
+      - 'tests/pdz-late-1c-recheck.test.mjs'
+      - 'supabase/migrations/*pdz_telegram_late*'
+      - '.github/workflows/pdz-late-report-recheck.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/pdz-late-1c-recheck.test.mjs tests/pdz-lera-telegram-daily.test.mjs
