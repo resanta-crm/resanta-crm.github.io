@@ -10,7 +10,7 @@ function load(path,guard){
  const p=new Promise(resolve=>{
    const s=document.createElement('script');
    // Only the 21vek status UI needs fresh assets for safe 424 recovery diagnostics; keep other CRM modules on their existing cache version.
-   const v=path==='assets/106-triovist-competitors-v236218.js'?'20261105-uni205':path==='assets/176-triovist-parser-uniai-unix-v1.js'?'20261105-uniai-unix-hourly1':path==='assets/82-triovist-group-dynamics-v236120.js'?'20261105-groups-single-121':path==='assets/104-safe-triovist-v236200.js'?'20261105-motivation-director-1':path==='assets/80-triovist-21vek-control-v236107.js'?'23.6.450':V;
+   const v=path==='assets/106-triovist-competitors-v236218.js'?'20261111-actionable-overview1':path==='assets/176-triovist-parser-uniai-unix-v1.js'?'20261105-uniai-unix-hourly1':path==='assets/82-triovist-group-dynamics-v236120.js'?'20261105-groups-single-121':path==='assets/104-safe-triovist-v236200.js'?'20261105-motivation-director-1':path==='assets/80-triovist-21vek-control-v236107.js'?'23.6.450':V;
    s.src='./'+path+'?v='+v;
    s.async=true;
    s.onload=()=>resolve(!!window[guard]);
