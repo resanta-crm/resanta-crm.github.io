@@ -109,7 +109,7 @@ test('Lera uses familiar individual names only for exactly matched manager accou
  assert.match(sh.header,/Привет, Танюшка! Это Лера/);
  const impostor={name:'Ачиновиченко',role:'manager'};
  assert.notEqual(greeting(impostor,[],{telegram_first_name:'Лена'}),'Катюшка');
- assert.match(greeting(users[1],[]),/Сидарович/);
+ assert.equal(greeting(users[1],[]),'Кирюшка');
 });
 
 
