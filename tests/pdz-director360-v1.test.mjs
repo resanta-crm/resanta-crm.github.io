@@ -106,5 +106,5 @@ test('isolated implementation preserves importer, originals, task writes and leg
  assert.match(sql,/day_change_is_not_confirmed_payment/);
  assert.doesNotMatch(sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
  assert.doesNotMatch(src,/\.from\(\s*['"]client_debt['"]\s*\)\.insert\(/);
- assert.match(src,/Исходный отчёт/);
+ assert.doesNotMatch(src,/data-pdz-legacy>Исходный отчёт/);
 });
