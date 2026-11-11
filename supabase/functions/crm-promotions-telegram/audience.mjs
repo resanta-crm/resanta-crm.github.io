@@ -13,7 +13,7 @@ export function privatePromotionChat(binding){
    Number.isSafeInteger(Number(binding.chat_id)) && Number(binding.chat_id)>0;
 }
 
-const normalize = value => String(value||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е').replace(/\\s+/g,' ');
+const normalize = value => String(value||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е').replace(/\s+/g,' ');
 // The current queue historically targets the Vitebsk DF. Correct only the
 // first-approval recipient using authenticated server-side CRM staff/region facts.
 // Never fall back to the former Vitebsk approver when the branch is unknown.
