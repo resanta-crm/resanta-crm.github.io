@@ -106,7 +106,8 @@ function mount(){
   top.addEventListener('input',e=>{if(e.target?.matches?.('[data-b360-question]'))leraDraft=String(e.target.value||'').slice(0,160)});
   top.__b360Click=true
  }
- page.classList.add('budgets360-installed');
+ // Avoid emitting a class mutation every time the UI is redrawn.
+ if(!page.classList.contains('budgets360-installed'))page.classList.add('budgets360-installed');
  return {top,bottom,page};
 }
 function kpi(label,value,detail,cls=''){
@@ -359,8 +360,16 @@ function hookNavigation(){
  // Also responds when navigation is programmatic, e.g. restoring a tab after an auth refresh.
  const page=d.getElementById('page-budgets');
  if(page&&typeof w.MutationObserver==='function'){
+  // Only respond to an actual inactive -> active route transition.
+  // Rendering itself adds a CSS class to page-budgets, so reacting to ALL
+  // class mutations feeds the render back into this observer indefinitely.
+  let previouslyActive=isActive();
   const obs=new w.MutationObserver(mutations=>{
-   if(mutations.some(m=>m.attributeName==='class')&&isActive()){schedule(80);schedule(800)}
+   if(!mutations.some(m=>m.attributeName==='class'))return;
+   const activeNow=isActive();
+   const activated=activeNow&&!previouslyActive;
+   previouslyActive=activeNow;
+   if(activated){schedule(80);schedule(800)}
   });
   obs.observe(page,{attributes:true,attributeFilter:['class']});
  }
