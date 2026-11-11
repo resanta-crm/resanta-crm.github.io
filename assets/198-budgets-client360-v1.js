@@ -25,11 +25,13 @@ function records(){
  if(!p||!a||!['boss','manager'].includes(String(p.role||'')))return null;
  const isBoss=p.role==='boss';
  // Keep the EXACT existing client membership rule: never reveal another manager's budget.
- const clientIds=new Set(a.clients.filter(c=>isBoss||c.manager_name===p.name).map(c=>String(c.id)));
+ const allowedClients=a.clients.filter(c=>isBoss||c.manager_name===p.name);
+ const clientIds=new Set(allowedClients.map(c=>String(c.id)));
+ const managerByClientId=new Map(allowedClients.map(c=>[String(c.id),c.manager_name]));
  const selection=d.getElementById('budgets-manager-filter')?.value||'all';
  const query=normalize(d.getElementById('budgets-search')?.value||'');
  const rows=a.budgets.filter(b=>clientIds.has(String(b.client_id||''))).map(b=>({
-   budget:b, manager:nameFor(b,a.clients),metrics:summaryFor(b)
+   budget:b, manager:b.manager_name||managerByClientId.get(String(b.client_id))||'Не назначен',metrics:summaryFor(b)
  })).filter(x=>x.metrics&&(selection==='all'||x.manager===selection)&&(!query||normalize(x.budget.client_name+' '+x.manager).includes(query)));
  return {rows,context:a,isBoss,selection};
 }
@@ -334,7 +336,8 @@ function render(){
  }finally{renderBusy=false}
 }
 function schedule(delay){
- const run=()=>{if(!isActive())return;install();if(wrapped)render()};
+ // install() already renders when wrapped; do not run the expensive budget view twice.
+ const run=()=>{if(!isActive())return;install()};
  if(typeof w.setTimeout==='function')w.setTimeout(run,delay||0);
  else run();
 }
