@@ -100,7 +100,7 @@ export function answerBudgetVoice(question,entries,memory={},debtRows=[]){
  }
  const name=entry.client.name,metrics=entry.metrics;
  if(debt){
-  const related=(debtRows||[]).filter(x=>fold(x.manager_name)===fold(entry.client.manager_name))
+  const related=(debtRows||[]).filter(x=>fold(x.manager_name).split(' ')[0]===fold(entry.client.manager_name).split(' ')[0])
    .filter(x=>tokens(name).some(t=>fold(x.client_name).includes(t)));
   if(!related.length)return {answer:'Для «'+name+'» подтверждённая строка просрочки в доступном отчёте 1С не найдена. Не буду угадывать сумму.',client_id:entry.client.id};
   related.sort((a,b)=>String(b.report_date||'').localeCompare(String(a.report_date||'')));
