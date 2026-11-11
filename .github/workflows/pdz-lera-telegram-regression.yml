@@ -25,7 +25,7 @@ jobs:
       - name: Lera message syntax and scope tests
         run: |
           node --check supabase/functions/crm-pdz-telegram/lera-message.mjs
-          node --test tests/pdz-lera-telegram-daily.test.mjs
+          node --test tests/pdz-lera-telegram-daily.test.mjs tests/pdz-telegram-voice.test.mjs
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
