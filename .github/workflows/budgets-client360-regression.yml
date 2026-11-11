@@ -1,0 +1,31 @@
+name: Client Budgets 360 read-only regression
+on:
+  pull_request:
+    paths:
+      - 'assets/198-budgets-client360-v1.js'
+      - 'tests/budgets-client360-v1.test.mjs'
+      - 'index.html'
+      - '.github/workflows/budgets-client360-regression.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/198-budgets-client360-v1.js'
+      - 'tests/budgets-client360-v1.test.mjs'
+      - 'index.html'
+      - '.github/workflows/budgets-client360-regression.yml'
+permissions:
+  contents: read
+jobs:
+  budgets360:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax and original budget operation integrity
+        run: |
+          node --check assets/198-budgets-client360-v1.js
+          node --test tests/budgets-client360-v1.test.mjs
+          node --check assets/01-crm-core.js
