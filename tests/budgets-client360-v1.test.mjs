@@ -110,3 +110,12 @@ test('Lera supports aggregated free balance and named manager budget questions',
  assert.match(html,/Ачинович/);
  assert.match(html,/2.000,00 BYN|2 000,00 BYN|2 000,00 BYN/);
 });
+
+
+test('budget route scheduling renders once per scheduled callback, not twice',()=>{
+ const f=fixture('boss');
+ const before=f.w.RESANTA_BUDGETS360_V1.diagnostics().renders;
+ f.listeners.click({target:{closest:selector=>selector.includes('#nav-budgets')?{id:'nav-budgets'}:null}});
+ // The route requests an early and a delayed render; each must run only once.
+ assert.equal(f.w.RESANTA_BUDGETS360_V1.diagnostics().renders,before+2);
+});
