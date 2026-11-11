@@ -2944,6 +2944,20 @@ function css(){
   .tm225-item b{font-size:12px;color:#183c62}.tm225-item p{font-size:11px;margin:4px 0;line-height:1.4;color:#486079}
   .tm225-item small,.tm225-body aside p{font-size:10px;color:#64748b}
   .tm225-item button{display:inline-block;margin-left:8px;border:1px solid #bfd8f1;border-radius:8px;padding:6px 10px;background:#f3f8ff;color:#174f84;cursor:pointer}
+  .tm225-overview{grid-template-columns:minmax(0,1.5fr) minmax(245px,.9fr);align-items:start}
+  .tm225-overview .tm225-item{padding:10px 12px;margin:6px 0}
+  .tm225-overview .tm225-item-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .tm225-overview .tm225-item-top strong{font-size:18px;color:#183c62}
+  .tm225-item-kind{font-size:10px;font-weight:750;color:#617a93;margin-top:3px}
+  .tm225-overview .tm225-item small{display:block;line-height:1.5;margin-top:4px}
+  .tm225-overview .tm225-item button{margin:9px 0 0;padding:8px 12px;font-size:11px;font-weight:750}
+  .tm225-overview-note{font-size:12px;line-height:1.5;padding:11px 13px;background:#fff;border:1px solid #dce6f2;border-radius:10px;margin:3px 0 11px}
+  .tm225-breakdown{margin:11px 0}.tm225-breakdown div{display:flex;justify-content:space-between;align-items:start;gap:10px;font-size:12px}
+  .tm225-breakdown div span{max-width:85%;overflow-wrap:anywhere}.tm225-breakdown div b{font-size:12px}
+  .tm225-breakdown>i{display:block;height:9px;background:#ebf2fa;border-radius:999px;overflow:hidden;margin-top:5px}
+  .tm225-breakdown>i>span{display:block;height:100%;background:#d56b60;border-radius:999px}
+  .tm225-overview-help,.tm225-empty{margin-top:15px;font-size:11px;line-height:1.55;padding:12px;background:#f2f7ff;border-radius:9px;color:#365572}
+  @media(max-width:900px){.tm225-overview{grid-template-columns:1fr}}
   .tm225-bar{margin:14px 0}.tm225-bar span{display:block;font-size:11px;margin-bottom:4px}
   .tm225-bar i{height:11px;border-radius:5px;background:#209a79;display:block}.tm225-bar i.down{background:#d36969}
   [data-f-scope-hint]{font-size:10px;color:#64748b}
@@ -2978,6 +2992,67 @@ function uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays){
  const node=panel.querySelector('[data-tm225]');if(!node)return;
  const scopes=Array.isArray(d.scopes)?d.scopes:[],meta=scopes.find(x=>String(x.scope_key||'')===scope)||{},stats=scope?meta:(d.summary||{});
  const fmt=v=>v==null||v===''||N(v)==null?'—':N(v).toLocaleString('ru-RU');
+ // All-category snapshot contains aggregate counts only. It has no per-SKU position history:
+ // show actionable aggregate evidence, not a fake empty movement chart.
+ if(!scope){
+  const groups=scopes.filter(x=>x&&String(x.scope_key||''));
+  const gaps=x=>Math.max(0,N(x?.confirmed_gaps??x?.gaps)||0);
+  const missing=x=>Math.max(0,N(x?.insufficient_data)||0);
+  const quantity=x=>Math.max(0,N(x?.competitors)||0);
+  const topGaps=[...groups].filter(x=>gaps(x)>0).sort((a,b)=>gaps(b)-gaps(a)||String(a.subgroup||'').localeCompare(String(b.subgroup||''),'ru'));
+  const topMissing=[...groups].filter(x=>missing(x)>0).sort((a,b)=>missing(b)-missing(a)||String(a.subgroup||'').localeCompare(String(b.subgroup||''),'ru'));
+  const seen=new Set(),picks=[];
+  const take=(x,kind)=>{
+   const key=String(x.scope_key||'');
+   if(!key||seen.has(key)||picks.length>=5)return;
+   seen.add(key);picks.push({x,kind});
+  };
+  topGaps.slice(0,3).forEach(x=>take(x,'gap'));
+  topMissing.forEach(x=>{if(picks.filter(y=>y.kind==='missing').length<2)take(x,'missing')});
+  topGaps.forEach(x=>take(x,'gap'));
+  topMissing.forEach(x=>take(x,'missing'));
+  const blocks=picks.map(({x,kind},i)=>{
+   const count=kind==='gap'?gaps(x):missing(x);
+   const title=String(x.subgroup||'Подгруппа');
+   const share=quantity(x)?Math.round(100*count/quantity(x)):null;
+   const type=kind==='gap'?'Подтверждённые пробелы':'Неполное сопоставление';
+   const why=kind==='gap'
+    ?'По текущей проверке '+fmt(count)+' из '+fmt(quantity(x))+' товаров имеют статус «подтверждённый пробел».'
+    :'По '+fmt(count)+' из '+fmt(quantity(x))+' товаров ещё нельзя подтвердить наличие или отсутствие нашего аналога.';
+   const action=kind==='gap'
+    ?'Проверить эти товары, сопоставимые SKU и ассортимент. Не считать пробел автоматически потерянной продажей.'
+    :'Уточнить характеристики и источник, затем повторить сопоставление. Не записывать это в подтверждённые пробелы.';
+   const filter=kind==='gap'?'confirmed_gap':'insufficient_data';
+   return '<article class="tm225-item '+(kind==='gap'?'bad':'warn')+'"><div class="tm225-item-top"><b>'+E(i+1)+'. '+E(title)+'</b><strong>'+E(fmt(count))+'</strong></div>'+
+     '<div class="tm225-item-kind">'+E(type)+(share===null?'':' · '+E(share)+'% товаров подгруппы')+'</div>'+
+     '<p>'+E(why)+'</p><small><b>Решение:</b> '+E(action)+'</small>'+
+     '<button type="button" data-tm225-scope="'+E(x.scope_key)+'" data-tm225-filter="'+E(filter)+'">Показать '+E(fmt(count))+' '+(kind==='gap'?'пробелов':'товаров')+' ↗</button></article>';
+  }).join('');
+  const max=Math.max(1,...topGaps.slice(0,5).map(gaps));
+  const bars=topGaps.slice(0,5).map(x=>
+   '<div class="tm225-breakdown"><div><span>'+E(x.subgroup||'Подгруппа')+'</span><b>'+E(fmt(gaps(x)))+'</b></div>'+
+   '<i><span style="width:'+Math.round(100*gaps(x)/max)+'%"></span></i></div>').join('');
+  const totals=d.summary||{};
+  const affected=topGaps.length;
+  const kpi=(name,value,desc)=>'<div class="tm225-kpi"><small>'+E(name)+'</small><strong>'+E(value)+'</strong><span>'+E(desc)+'</span></div>';
+  node.innerHTML='<div class="tm225-title"><div><h3>Конкуренты 21vek · Что делать сегодня</h3>'+
+   '<p>Приоритеты рассчитаны по подтверждённым данным. Нажми на проблему — откроются соответствующие товары.</p></div>'+
+   '<small>Снимок рынка: '+E(dt(d.last_run?.finished_at||d.last_run?.started_at))+'</small></div>'+
+   '<div class="tm225-kpis">'+
+   kpi('Товаров конкурентов',fmt(totals.products),'Последний снимок рынка')+
+   kpi('Подтверждённых пробелов',fmt(totals.confirmed_gaps??totals.gaps),'Проверить ассортимент')+
+   kpi('Недостаточно данных',fmt(totals.insufficient_data),'Сначала уточнить сопоставимость')+
+   kpi('Подгрупп с пробелами',fmt(affected),'Из '+fmt(groups.length)+' в снимке')+'</div>'+
+   '<div class="tm225-overview-note"><b>Главное:</b> подтверждённые пробелы и неполные данные — разные задачи. Нельзя считать '+E(fmt(totals.insufficient_data))+' непроверенных позиций доказанными потерями продаж.</div>'+
+   '<div class="tm225-body tm225-overview"><section><h4>С чего начать · '+E(picks.length)+' приоритетов</h4>'+
+   (blocks||'<div class="tm225-empty">В последнем снимке нет подтверждённых пробелов или товаров с недостаточными данными. Проверка закончена.</div>')+
+   '</section><aside><h4>Где больше пробелов</h4>'+
+   (bars||'<div class="tm225-empty">Подтверждённых пробелов пока нет.</div>')+
+   '<p>Сравнение подгрупп в одном снимке, а не динамика во времени. История позиций появится после выбора подгруппы, если есть сопоставимые наблюдения.</p>'+
+   '<div class="tm225-overview-help"><b>Как работать:</b> нажми «Показать товары», проверь конкретные строки, цену, наличие и наш аналог. Если данные неполные — сначала собери подтверждения.</div></aside></div>'+
+   '<div class="tm225-foot">Данные и цифры взяты из действующего снимка 21vek. Рекомендации не меняют цены, планы, задачи и ассортимент автоматически. Падение позиции не доказывает причину.</div>';
+  return;
+ }
  const cards=[];
  const add=(title,fact,action,key,product,tone)=>{if(cards.length<5)cards.push({title,fact,action,key,product,tone})};
  if(scope&&!d.__scopeLoading){
@@ -3208,6 +3283,9 @@ function render(panel,d,listing){
  panel.querySelector('[data-tm225]')?.addEventListener('click',e=>{
    const btn=e.target.closest?.('[data-tm225-scope]'),sel=panel.querySelector('[data-f-scope]');if(!btn||!sel)return;
    const scope=btn.dataset.tm225Scope||'';
+   const proofFilter=btn.dataset.tm225Filter||'';
+   const proofSelect=panel.querySelector('[data-f-analysis-state]');
+   if(proofFilter&&proofSelect)proofSelect.value=proofFilter;
    if(sel.value!==scope){
      // A priority may point outside an active category/search filter.
      const category=panel.querySelector('[data-f-category]');if(category)category.value='';
