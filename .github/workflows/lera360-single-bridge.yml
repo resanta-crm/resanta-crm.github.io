@@ -1,0 +1,28 @@
+name: Lera 360 single bridge memory and role safety
+on:
+  pull_request:
+    paths:
+      - 'assets/264-resanta-ai360-finance-voice-bridge-v1.js'
+      - 'supabase/functions/crm-ai360-budget-voice-v1/**'
+      - 'tests/lera360-single-voice-bridge.test.mjs'
+      - '.github/workflows/lera360-single-bridge.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/264-resanta-ai360-finance-voice-bridge-v1.js'
+      - 'supabase/functions/crm-ai360-budget-voice-v1/**'
+      - 'tests/lera360-single-voice-bridge.test.mjs'
+      - '.github/workflows/lera360-single-bridge.yml'
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: |
+          node --check assets/264-resanta-ai360-finance-voice-bridge-v1.js
+          node --test tests/lera360-single-voice-bridge.test.mjs
