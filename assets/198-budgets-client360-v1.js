@@ -25,11 +25,13 @@ function records(){
  if(!p||!a||!['boss','manager'].includes(String(p.role||'')))return null;
  const isBoss=p.role==='boss';
  // Keep the EXACT existing client membership rule: never reveal another manager's budget.
- const clientIds=new Set(a.clients.filter(c=>isBoss||c.manager_name===p.name).map(c=>String(c.id)));
+ const allowedClients=a.clients.filter(c=>isBoss||c.manager_name===p.name);
+ const clientIds=new Set(allowedClients.map(c=>String(c.id)));
+ const managerByClientId=new Map(allowedClients.map(c=>[String(c.id),c.manager_name]));
  const selection=d.getElementById('budgets-manager-filter')?.value||'all';
  const query=normalize(d.getElementById('budgets-search')?.value||'');
  const rows=a.budgets.filter(b=>clientIds.has(String(b.client_id||''))).map(b=>({
-   budget:b, manager:nameFor(b,a.clients),metrics:summaryFor(b)
+   budget:b, manager:b.manager_name||managerByClientId.get(String(b.client_id))||'Не назначен',metrics:summaryFor(b)
  })).filter(x=>x.metrics&&(selection==='all'||x.manager===selection)&&(!query||normalize(x.budget.client_name+' '+x.manager).includes(query)));
  return {rows,context:a,isBoss,selection};
 }
@@ -104,7 +106,8 @@ function mount(){
   top.addEventListener('input',e=>{if(e.target?.matches?.('[data-b360-question]'))leraDraft=String(e.target.value||'').slice(0,160)});
   top.__b360Click=true
  }
- page.classList.add('budgets360-installed');
+ // Avoid emitting a class mutation every time the UI is redrawn.
+ if(!page.classList.contains('budgets360-installed'))page.classList.add('budgets360-installed');
  return {top,bottom,page};
 }
 function kpi(label,value,detail,cls=''){
@@ -334,7 +337,8 @@ function render(){
  }finally{renderBusy=false}
 }
 function schedule(delay){
- const run=()=>{if(!isActive())return;install();if(wrapped)render()};
+ // install() already renders when wrapped; do not run the expensive budget view twice.
+ const run=()=>{if(!isActive())return;install()};
  if(typeof w.setTimeout==='function')w.setTimeout(run,delay||0);
  else run();
 }
@@ -356,8 +360,16 @@ function hookNavigation(){
  // Also responds when navigation is programmatic, e.g. restoring a tab after an auth refresh.
  const page=d.getElementById('page-budgets');
  if(page&&typeof w.MutationObserver==='function'){
+  // Only respond to an actual inactive -> active route transition.
+  // Rendering itself adds a CSS class to page-budgets, so reacting to ALL
+  // class mutations feeds the render back into this observer indefinitely.
+  let previouslyActive=isActive();
   const obs=new w.MutationObserver(mutations=>{
-   if(mutations.some(m=>m.attributeName==='class')&&isActive()){schedule(80);schedule(800)}
+   if(!mutations.some(m=>m.attributeName==='class'))return;
+   const activeNow=isActive();
+   const activated=activeNow&&!previouslyActive;
+   previouslyActive=activeNow;
+   if(activated){schedule(80);schedule(800)}
   });
   obs.observe(page,{attributes:true,attributeFilter:['class']});
  }

@@ -5,8 +5,8 @@ import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const code=read('assets/198-budgets-client360-v1.js');
 const index=read('index.html');
-function fixture(role='manager',initiallyActive=true){
- let active=initiallyActive;const nodes={},listeners={},cls=()=>({contains:()=>active,add(){},remove(){}});
+function fixture(role='manager',initiallyActive=true,withObserver=false){
+ let active=initiallyActive,mutationCallback=null;const nodes={},listeners={},cls=()=>({contains:()=>active,add(){},remove(){}});
  const fake=id=>({id,innerHTML:'',classList:cls(),events:{},
     addEventListener(k,fn){this.events[k]=fn},insertAdjacentElement(_pos,el){nodes[el.id]=el},appendChild(el){(this.children??=[]).push(el)},
     querySelector(){return null}});
@@ -16,6 +16,7 @@ function fixture(role='manager',initiallyActive=true){
  const document={readyState:'complete',getElementById:id=>nodes[id]||null,
    createElement:()=>fake(''),head:{appendChild(){}},addEventListener(k,fn){listeners[k]=fn}};
  const w={renderBudgetsPage(){},openBudgetDetail(){},document};
+ if(withObserver)w.MutationObserver=class {constructor(callback){mutationCallback=callback} observe(){} };
  const clients=[{id:'a',manager_name:'Руднев'},{id:'b',manager_name:'Ачинович'}];
  const budgets=[{id:'ba',client_id:'a',client_name:'Наш клиент',manager_name:'Руднев',opening_balance:1000},
                 {id:'bb',client_id:'b',client_name:'Чужой клиент',manager_name:'Ачинович',opening_balance:2000}];
@@ -26,7 +27,7 @@ function fixture(role='manager',initiallyActive=true){
   allPromotions:[],promoBudgetSummary:b=>({total:b.opening_balance,spent:b.id==='ba'?1100:0,reserved:0,free:b.id==='ba'?-100:2000,opening:b.opening_balance,
    accrued:0,adjustments:0,movements:[]}),Date,Intl,Array,Number,String,JSON,Math,Map,Set,console};
  vm.runInNewContext(code,context);
- return{nodes,w,context,listeners,setActive(value){active=!!value}};
+ return{nodes,w,context,listeners,setActive(value){active=!!value},simulateClassMutation(){mutationCallback?.([{attributeName:'class'}])}};
 }
 test('budget 360 passes JS parse and is wired after core, as an isolated view',()=>{
  assert.doesNotThrow(()=>new vm.Script(code));
@@ -109,4 +110,24 @@ test('Lera supports aggregated free balance and named manager budget questions',
  html=submitLera(f,'Какой бюджет у Ачинович?');
  assert.match(html,/Ачинович/);
  assert.match(html,/2.000,00 BYN|2 000,00 BYN|2 000,00 BYN/);
+});
+
+
+test('budget route scheduling renders once per scheduled callback, not twice',()=>{
+ const f=fixture('boss');
+ const before=f.w.RESANTA_BUDGETS360_V1.diagnostics().renders;
+ f.listeners.click({target:{closest:selector=>selector.includes('#nav-budgets')?{id:'nav-budgets'}:null}});
+ // The route requests an early and a delayed render; each must run only once.
+ assert.equal(f.w.RESANTA_BUDGETS360_V1.diagnostics().renders,before+2);
+});
+
+
+test('class changes during an active budgets render do not cause a self-reinforcing rerender loop',()=>{
+ const f=fixture('boss',true,true);
+ const before=f.w.RESANTA_BUDGETS360_V1.diagnostics().renders;
+ for(let i=0;i<15;i++)f.simulateClassMutation();
+ assert.equal(f.w.RESANTA_BUDGETS360_V1.diagnostics().renders,before,'a repeated class mutation must not redraw budgets');
+ f.setActive(false);f.simulateClassMutation();
+ f.setActive(true);f.simulateClassMutation();
+ assert.equal(f.w.RESANTA_BUDGETS360_V1.diagnostics().renders,before+2,'real route activation still schedules two fallback renders');
 });
