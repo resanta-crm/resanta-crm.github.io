@@ -51,7 +51,14 @@ async function tgVoice(chatId:string|number,audio:Uint8Array,reportDate:string){
   method:'POST',body:form,signal:AbortSignal.timeout(25000)
  });
  const data=await res.json().catch(()=>({}));
- if(!res.ok||!data?.ok||!data?.result?.voice)throw new Error('TELEGRAM_VOICE_SEND_FAILED');
+ if(!res.ok||!data?.ok){
+  // Telegram error text may contain identifiers; keep only a bounded symbolic code.
+  const description=String(data?.description||'unknown').replace(/\d{5,}/g,'#').replace(/[^a-zA-Z _:#.-]/g,'').slice(0,90);
+  throw new Error('TELEGRAM_VOICE_SEND_FAILED_'+res.status+'_'+String(data?.error_code||'')+'_'+description);
+ }
+ if(!data?.result?.voice){
+  throw new Error('TELEGRAM_RETURNED_NON_VOICE_'+(data?.result?.audio?'audio':data?.result?.document?'document':'unknown'));
+ }
  return data.result.message_id;
 }
 
