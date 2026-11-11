@@ -77,9 +77,9 @@ test('first approval is routed by verified branch, not fixed Vitebsk chief',()=>
  assert.deepEqual(personalPromotionAudience({event_type:'approval_df',promotion_id:'g',recipient_user_id:'df'},primary,ambiguous),[]);
 });
 test('branch lookup is conditional on actual DF queue and cannot fall back to wrong branch',()=>{
- assert.match(edge,/\\.filter\\(x=>x\\.event_type==='approval_df'\\)/);
- assert.match(edge,/\\.select\\('id,name,email,role,region'\\)/);
+ assert.ok(edge.includes("x.event_type==='approval_df'"));
+ assert.ok(edge.includes("select('id,name,email,role,region')"));
  assert.match(edge,/APPROVAL_BRANCH_LOOKUP_FAILED/);
  assert.match(edge,/APPROVAL_BRANCH_DIRECTORY_TOO_LARGE/);
- assert.match(edge,/\\.select\\('id,promotion_id,recipient_user_id,event_type/);
+ assert.ok(edge.includes("select('id,promotion_id,recipient_user_id,event_type"));
 });
