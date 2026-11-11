@@ -1,0 +1,64 @@
+name: Триовист 21vek — ИИ расследования позиций
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/266-triovist-market-ai-investigations-v1.js'
+      - 'supabase/functions/triovist-market-investigate-v1/**'
+      - 'tests/triovist-market-ai-investigations-v1.test.mjs'
+      - '.github/workflows/triovist-market-ai-investigations.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/266-triovist-market-ai-investigations-v1.js'
+      - 'supabase/functions/triovist-market-investigate-v1/**'
+      - 'tests/triovist-market-ai-investigations-v1.test.mjs'
+      - 'index.html'
+      - '.github/workflows/triovist-market-ai-investigations.yml'
+  schedule:
+    # 09:35 Belarus/Moscow, after the overnight parser and position scans.
+    - cron: '35 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: triovist-market-ai-investigations
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check market UI and authorization contracts
+        run: |
+          node --check assets/266-triovist-market-ai-investigations-v1.js
+          node --test tests/triovist-market-ai-investigations-v1.test.mjs
+      - name: Daily ranked investigation of existing 21vek scopes
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_KEY"
+          curl --fail-with-body --silent --show-error --max-time 150 \
+            -X POST "$SUPABASE_URL/functions/v1/triovist-market-investigate-v1" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"daily"}' > /tmp/triovist-market-ai-status.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/triovist-market-ai-status.json',encoding='utf-8'))
+          if not (d.get('ok') or d.get('already_ran')):
+              raise SystemExit('daily AI investigation reported an error: '+str(d.get('error') or 'unknown'))
+          print('Scopes checked:',d.get('scopes'),'Signals:',d.get('signals'),
+                'AI investigations:',d.get('ai_generated'),'Followups:',d.get('followups'),
+                'Already run:',bool(d.get('already_ran')))
+          PY
