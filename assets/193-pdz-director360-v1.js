@@ -126,7 +126,7 @@ function briefing(d){
  }).join('');
  if(!msg)msg='<div class="p-empty">Подтверждённых долгов в выбранной выборке нет.</div>';
  return '<div class="p-card"><div class="p-header"><h3>✦ Лера · Что требует решения</h3><span class="p-muted">Факты отдельно от рекомендаций</span></div>'+
- '<div class="p-brief">'+msg+'</div><p class="p-muted">Показаны '+top.length+' приоритетных клиентов из '+r.length+'. Полный список всех должников ниже. Лера рекомендует действия, но автоматический контроль обещаний и проверку поступлений пока нельзя считать завершёнными.</p></div>';
+ '<div class="p-brief">'+msg+'</div><p class="p-muted">Показаны '+top.length+' приоритетных клиентов из '+r.length+'. Полный список всех должников ниже. Для контроля каждого обещания фиксируйте сумму, дату и результат контакта в CRM.</p></div>';
 }
 function renderRight(){
  const target=w.document.getElementById('pdz360-detail');if(!target)return;
