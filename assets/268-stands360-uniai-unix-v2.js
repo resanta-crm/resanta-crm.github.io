@@ -188,3 +188,201 @@ async function refresh(){
  catch(e){state.error=str(e?.message||e);state.data=null}
  finally{state.loading=false;paint()}
 }
+
+function modal(title,subtitle,body,footer){
+ el('s268-overlay')?.remove();const node=document.createElement('div');
+ node.id='s268-overlay';node.className='s268-backdrop';
+ node.innerHTML='<section class="s268 s268-modal" role="dialog" aria-modal="true" aria-labelledby="s268-modal-title">'+
+ '<div class="s268-modalhead"><div><h2 id="s268-modal-title">'+esc(title)+'</h2><p>'+esc(subtitle)+'</p></div>'+
+ '<button class="s268-close" data-s268-close aria-label="Закрыть">×</button></div>'+
+ '<div id="s268-modalbody">'+body+'</div><div class="s268-buttongroup">'+(footer||'')+'</div></section>';
+ document.body.appendChild(node);return node;
+}
+function explain(p){
+ const items=evidence(p),m=stateOf(p);
+ const clientInfo=p.client_history_rows>0?'Есть история отгрузок по ID клиента.':
+  'Нет истории отгрузок 1С по этому ID. Нужно сверить юридическое лицо и торговую точку.';
+ const skuInfo=p.unresolved_skus>0?'Не определено '+p.unresolved_skus+' из '+p.registered_skus+' SKU.':
+  p.registered_skus===0?'Точный список SKU стенда пока пуст.':
+  'Сверено '+p.validated_skus+' SKU с каталогом.';
+ return '<div class="s268-ai"><h3>✦ Лера · Заключение по нашему стенду</h3>'+
+ '<p><b>'+esc(m[0])+'.</b> '+esc(m[2])+'</p>'+
+ '<p><b>Основания:</b> '+esc(clientInfo)+' '+esc(skuInfo)+'</p>'+
+ '<ul>'+items.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>'+
+ '<p class="s268-muted">Vision отвечает за наблюдения по фото; отгрузки считаются из 1С по ID и подтверждённым SKU. Директор утверждает дальнейшую судьбу оборудования, никакого автоматического возврата нет.</p></div>';
+}
+function photoHTML(p,source){
+ const pic=rows(source).slice(0,2);
+ if(!pic.length&&photo(p))pic.push({storage_path:photo(p),captured_at:p.last_control_at||p.installed_at});
+ return '<div class="s268-photos">'+pic.map((x,i)=>'<div class="s268-photo"><b>'+
+ (i?'Предыдущее фото':'Актуальное фото')+'</b><img alt="Фото стенда" data-s268-path="'+esc(x.storage_path)+'">'+
+ '<small>'+date(x.captured_at)+'</small></div>').join('')+
+ (pic.length===1?'<div class="s268-photo"><b>Сравнение до / после</b><p class="s268-muted">Для сравнения нужно новое фото. Его можно получить от продавца, без маршрута и GPS.</p></div>':'')+
+ (pic.length===0?'<div class="s268-muted">Фото пока не предоставлено.</div>':'')+'</div>';
+}
+async function detail(id){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ state.detailId=id;
+ modal('Стенд 360° · '+p.client_name,'ID '+(p.client_code||p.client_id)+' · '+(p.asset_code||'ОС не сверено')+
+ ' · '+p.manager_name,'<div class="s268-panel">Сверяю фотографии, SKU и историю 1С…</div>',
+ '<button class="s268-primary" data-s268-photo="'+esc(id)+'">📷 Новое фото</button>'+
+ '<button class="s268-secondary" data-s268-request="'+esc(id)+'">Запросить фото у продавца</button>'+
+ '<button class="s268-secondary" data-s268-close>Закрыть</button>');
+ try{
+  const [s,ph]=await Promise.all([
+   rpc('crm_stands_360_skus_v2',{p_placement_id:id}),
+   dbclient().from('stand_photos_v236346').select('storage_path,captured_at')
+    .eq('placement_id',id).order('captured_at',{ascending:false}).limit(2)
+  ]);
+  if(ph.error)throw ph.error;
+  const host=el('s268-modalbody');if(!host)return;
+  state.skuRows=rows(s?.rows);
+  const metric=[
+   ['Наше оборудование',p.asset_code||'Не сверено'],
+   ['Фото',photo(p)?p.photo_days+' дн. назад':'Нет фото'],
+   ['Подтверждённые SKU',p.validated_skus+' / '+p.registered_skus],
+   ['Отгрузки SKU · 6 мес.',dataOk(p)?money(p.ship_6m):'Не сопоставлено']];
+  const rowsHTML=state.skuRows.map((x,i)=>{
+   const isValid=x.sku_state!=='unresolved';
+   const multi=/[2-9][0-9]*\s*скю/i.test(str(x.raw_sku));
+   return '<tr><td><b>'+esc(x.raw_sku)+'</b>'+
+    (x.mapped_sku?'<div class="s268-muted">↳ '+esc(x.mapped_sku)+'</div>':'')+'</td>'+
+    '<td><span class="s268-pill '+(isValid?'good':'warn')+'">'+
+    esc(isValid?'Артикул подтверждён':multi?'Список из нескольких SKU':'SKU не определён')+'</span></td>'+
+    '<td>'+esc(x.effective_sku?money(x.ship_6m):'Неизвестно')+'</td>'+
+    '<td>'+(isValid&&x.sku_state==='exact_catalog'?'✓':
+    '<button class="s268-secondary" data-s268-match="'+i+'">'+
+    (multi?'Указать поштучно':x.sku_state==='verified_mapping'?'Изменить':'Уточнить SKU')+'</button>')+'</td></tr>';
+  }).join('');
+  host.innerHTML='<div class="s268-detailkpis">'+metric.map(x=>'<div><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>').join('')+'</div>'+
+   '<div class="s268-detailcols"><section class="s268-detailsection"><h3>📷 Наш стенд · до / после</h3>'+
+   photoHTML(p,ph.data)+
+   '<p class="s268-muted">Источник фото: '+esc(p.photo_origin==='seller'?'продавец':p.photo_origin==='manager'?'МПП':'не установлен для старых фото')+
+   '. GPS не требуется.</p>'+
+   '<details><summary style="font-size:11px;cursor:pointer;font-weight:750">Что Vision обнаружил?</summary>'+
+   '<p class="s268-muted">'+esc(p.vision_summary||'Актуальное заключение Vision отсутствует')+'</p></details></section>'+
+   '<section class="s268-detailsection"><h3>▤ Продажи и артикулы</h3>'+
+   '<div class="s268-detailkpis" style="grid-template-columns:1fr 1fr">'+
+   '<div><small>Отгрузки по SKU стенда</small><b>'+esc(dataOk(p)?money(p.ship_6m):'Не сопоставлено')+'</b></div>'+
+   '<div><small>Весь клиент · 6 мес.</small><b>'+esc(p.client_history_rows?money(p.client_ship_6m):'Нет данных по ID')+'</b></div></div>'+
+   '<p class="s268-muted">Общий оборот клиента — справочно, не является продажами со стенда.</p>'+
+   '<div class="s268-skus"><table><thead><tr><th>Запись в стенде</th><th>Достоверность</th><th>Отгрузки · 6 мес.</th><th>Действие</th></tr></thead><tbody>'+
+   rowsHTML+'</tbody></table></div></section></div>'+
+   explain(p)+
+   '<p class="s268-muted">Для движения ОС, договора и истории установки используйте меню «Учёт и документы». Существующие документы не менялись.</p>';
+  loadThumbs();
+ }catch(e){const host=el('s268-modalbody');if(host)host.innerHTML='<div class="s268-ai">Ошибка открытия: '+esc(e?.message||e)+'</div>'}
+}
+function photoForm(id){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ modal('Актуальное фото нашего стенда',p.client_name+' · '+(p.asset_code||'ОС не сверено'),
+ '<p class="s268-muted">Маршрут и GPS не обязательны. Продавец может прислать фотографию, а менеджер загрузит её с указанием источника. SKU не изменяются.</p>'+
+ '<div style="margin:12px 0"><label>Фотография целого стенда</label>'+
+ '<input class="s268-input" id="s268-file" type="file" accept="image/jpeg,image/png,image/webp"></div>'+
+ '<div style="margin:12px 0"><label>Источник</label><select class="s268-input" id="s268-origin"><option value="manager">МПП сделал фото</option><option value="seller">Прислал продавец</option></select></div>'+
+ '<div style="margin:12px 0"><label>От кого фото / комментарий</label><textarea class="s268-input" id="s268-note" rows="3" placeholder="Для продавца укажите от кого и дату получения"></textarea></div>',
+ '<button class="s268-primary" data-s268-upload="'+esc(id)+'">Сохранить и запустить Vision</button>'+
+ '<button class="s268-secondary" data-s268-close>Отмена</button>');
+}
+async function upload(id,btn){
+ const file=el('s268-file')?.files?.[0],origin=el('s268-origin')?.value,note=str(el('s268-note')?.value).trim();
+ if(!file)return alert('Выберите новое фото');
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5500000)return alert('JPEG, PNG или WEBP, до 5,5 МБ');
+ if(origin==='seller'&&note.length<5)return alert('Укажите, кто прислал фото и когда');
+ btn.disabled=true;btn.textContent='Сохраняю…';
+ try{
+  const ext=file.type==='image/png'?'png':file.type==='image/webp'?'webp':'jpg';
+  const path='control/'+id+'/'+Date.now()+'_'+Math.random().toString(36).slice(2)+'.'+ext;
+  const response=await dbclient().storage.from('stand-files').upload(path,file,{upsert:false,contentType:file.type});
+  if(response.error)throw response.error;
+  await rpc('crm_stands_photo_control_v1',{p_placement_id:id,p_photo_path:path,p_origin:origin,p_source_note:note||null});
+  btn.textContent='Vision анализирует…';
+  const vision=await dbclient().functions.invoke('crm-stands-vision-v236347',{body:{placement_id:id,force:true}});
+  el('s268-overlay')?.remove();await refresh();window.RESANTA_STANDS_V236367?.reload?.();
+  alert(vision.error||!vision.data?.ok?'Фото сохранено. Vision пока не завершён, его можно повторить. SKU не изменены.':
+   'Фото сохранено и проверено Vision. Исходные SKU остались без изменений.');
+ }catch(e){alert('Ошибка сохранения фото: '+str(e?.message||e))}
+ finally{btn.disabled=false;btn.textContent='Сохранить и запустить Vision'}
+}
+async function request(id){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ const message='Здравствуйте! Просим прислать актуальную фотографию нашего стенда '+(p.stand_brand||'РЕСАНТА')+
+ ' в вашей торговой точке. В кадре нужен стенд целиком, с видимыми товарами и фирменным оформлением. Спасибо!';
+ try{
+  await rpc('crm_stands_photo_request_v1',{p_placement_id:id,p_request_to:'seller',p_note:'Актуальное фото стенда от продавца'});
+  await refresh();
+  try{await navigator.clipboard.writeText(message);alert('Запрос зарегистрирован. Текст скопирован — отправьте продавцу в мессенджере.')}
+  catch(_){prompt('Запрос зарегистрирован. Скопируйте текст:',message)}
+ }catch(e){alert('Ошибка запроса: '+str(e?.message||e))}
+}
+function skuForm(index){
+ const p=standRows().find(x=>x.id===state.detailId),item=state.skuRows[index];
+ if(!p||!item)return;
+ if(/[2-9][0-9]*\s*скю/i.test(str(item.raw_sku))){
+  alert('В записи перечислены несколько товаров. Нужно добавить точные артикулы поштучно через «Учёт и документы → Действующие / ОС». Один артикул не заменяет несколько SKU.');
+  return;
+ }
+ state.matchRow=item;
+ modal('Уточнить артикул · '+p.client_name,'Исходная запись: '+item.raw_sku,
+ '<p class="s268-muted">Выберите точную модель из каталога. Оригинальная запись сохранится. После подтверждения обновятся отгрузки 1С.</p>'+
+ '<input id="s268-catalog-query" class="s268-input" placeholder="Поиск по модели, названию или артикулу">'+
+ '<div class="s268-buttongroup"><button class="s268-primary" data-s268-find>Поиск по каталогу</button></div>'+
+ '<div class="s268-cataloglist" id="s268-catalog-list">Введите не менее трёх символов. Если модель по фото не читается, запросите у продавца крупный план.</div>',
+ '<button class="s268-secondary" data-s268-detail="'+esc(p.id)+'">Назад к карточке</button>');
+ el('s268-catalog-query')?.focus();
+}
+async function findCatalog(){
+ const p=standRows().find(x=>x.id===state.detailId),host=el('s268-catalog-list');
+ if(!p||!host)return;
+ const term=str(el('s268-catalog-query')?.value).trim();
+ if(term.length<3){host.textContent='Введите минимум три символа.';return}
+ host.textContent='Ищу по каталогу РЕСАНТА…';
+ try{
+  const result=await rpc('crm_stands_catalog_v236350',{p_placement_id:p.id,p_category:null,p_subgroup:null,
+   p_search:term,p_brand_only:false,p_mo2_only:false,p_limit:80});
+  const candidates=rows(result?.rows).filter(x=>x.sku);
+  host.innerHTML=candidates.length?candidates.map(x=>'<div class="s268-catalogrow"><div><b>'+
+   esc(x.product_name||x.sku)+'</b><small>SKU: '+esc(x.sku)+' · '+esc(x.category||'')+'</small></div>'+
+   '<button class="s268-secondary" data-s268-apply="'+esc(x.sku)+'">Подтвердить</button></div>').join(''):
+   '<div class="s268-muted">Не найдено. Проверьте название и полноту каталога.</div>';
+ }catch(e){host.textContent='Каталог недоступен: '+str(e?.message||e)}
+}
+async function applySku(sku,btn){
+ const p=standRows().find(x=>x.id===state.detailId),item=state.matchRow;if(!p||!item)return;
+ btn.disabled=true;btn.textContent='Сверяю…';
+ try{
+  await rpc('crm_stands_sku_link_v2',{p_placement_id:p.id,p_raw_sku:item.raw_sku,p_catalog_sku:sku});
+  await refresh();await detail(p.id);
+ }catch(e){alert('Сверка не сохранена: '+str(e?.message||e));btn.disabled=false;btn.textContent='Подтвердить'}
+}
+document.addEventListener('click',e=>{
+ const close=e.target.closest?.('[data-s268-close]');if(close){el('s268-overlay')?.remove();return}
+ const view=e.target.closest?.('[data-s268-view]');if(view){state.view=view.dataset.s268View;paint();return}
+ const refreshBtn=e.target.closest?.('[data-s268-refresh]');if(refreshBtn){refresh();return}
+ const link=e.target.closest?.('[data-s268-detail]');if(link){detail(link.dataset.s268Detail);return}
+ const photoBtn=e.target.closest?.('[data-s268-photo]');if(photoBtn){photoForm(photoBtn.dataset.s268Photo);return}
+ const requestBtn=e.target.closest?.('[data-s268-request]');if(requestBtn){request(requestBtn.dataset.s268Request);return}
+ const uploadBtn=e.target.closest?.('[data-s268-upload]');if(uploadBtn){upload(uploadBtn.dataset.s268Upload,uploadBtn);return}
+ const match=e.target.closest?.('[data-s268-match]');if(match){skuForm(Number(match.dataset.s268Match));return}
+ const find=e.target.closest?.('[data-s268-find]');if(find){findCatalog();return}
+ const apply=e.target.closest?.('[data-s268-apply]');if(apply){applySku(apply.dataset.s268Apply,apply);return}
+ if(e.target.closest?.('[data-s268-search]')){state.search=str(el('s268-search')?.value);paint();return}
+},true);
+document.addEventListener('change',e=>{
+ const input=e.target.closest?.('[data-s268-select]');
+ if(input){state[input.dataset.s268Select]=input.value;paint()}
+},true);
+document.addEventListener('keydown',e=>{
+ if(e.key==='Enter'&&e.target?.id==='s268-search'){e.preventDefault();state.search=e.target.value;paint()}
+ if(e.key==='Enter'&&e.target?.id==='s268-catalog-query'){e.preventDefault();findCatalog()}
+ if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-s268-detail]')){e.preventDefault();detail(e.target.dataset.s268Detail)}
+ if(e.key==='Escape')el('s268-overlay')?.remove();
+},true);
+function render(){
+ attachCSS();if(!el('st360-root'))return;
+ if(!state.data&&!state.loading&&!state.error)refresh();else paint();
+}
+window.RESANTA_STANDS_360_V1=Object.freeze({render,refresh,version:'stands360-uni-ai-v2',
+ gpsRequired:false, skuVerified:true, originalDataUntouched:true});
+if(el('st360-root'))render();
+})();
