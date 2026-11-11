@@ -13,7 +13,7 @@ export function scopeForVoice(profile,staff,networkId){
   if(duplicates.length||!profile.name||fold(profile.region)==='триовист / 21vek.by')return null;
   return {tier:'field_manager',role:'manager',region:profile.region,managers:[profile.name],subject_manager:profile.name};
  }
- if(profile.id===networkId&&fold(profile.email)==='payushin_ar@resanta.ru')
+ if(profile.id===networkId&&String(profile.email||'').trim().toLowerCase()==='payushin_ar@resanta.ru')
   return {tier:'network_director',role:'boss',region:'Сеть',managers:null,subject_manager:null};
  if(!profile.region)return null;
  const managers=(staff||[]).filter(x=>x.role==='manager'&&fold(x.region)===fold(profile.region))
