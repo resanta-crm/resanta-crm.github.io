@@ -54,7 +54,7 @@ test('managers get a warm personalized Lera greeting and every debtor with requi
  assert.match(digest.header,/Привет, Александр! Это Лера/);
  assert.match(digest.header,/последний загруженный отчёт/);
  assert.match(digest.header,/2<\/b> · просрочено обещаний/);
- assert.match(digest.header,/−?200,00 BYN/);
+ assert.match(digest.header,/-200,00 BYN/);
  assert.equal(digest.lines.filter(x=>x.includes('<b>')&&x.includes('BYN')).length,2);
  assert.match(digest.lines[1],/Клиент &amp; Строй/);
  assert.match(digest.lines[0],/Свяжись с клиентом/);
