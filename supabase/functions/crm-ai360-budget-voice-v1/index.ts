@@ -14,10 +14,7 @@ const headers=req=>({
 const respond=(req,obj,status=200)=>new Response(JSON.stringify(obj),{status,headers:headers(req)});
 const err=(code,status)=>({code,status});
 
-async function loadFinance(svc,scope){
- const staffResult=await svc.from('users').select('id,name,email,role,region').in('role',['boss','manager']).limit(300);
- if(staffResult.error||(staffResult.data||[]).length>=300)throw err('staff_scope_unavailable',503);
- const staff=staffResult.data||[];
+async function loadFinance(svc,scope,staff){
  const clientQuery=await svc.from('clients').select('id,name,manager_name,region').limit(1500);
  if(clientQuery.error||(clientQuery.data||[]).length>=1500)throw err('client_source_incomplete',503);
  const clients=permittedBudgetClients(scope,clientQuery.data||[],staff);
@@ -73,7 +70,7 @@ Deno.serve(async req=>{
   if(question.length<3)return respond(req,{error:'question_invalid'},400);
   const prev=body?.memory&&typeof body.memory==='object'?body.memory:{};
   const memory={client_id:/^[a-f0-9-]{36}$/i.test(String(prev.client_id||''))?prev.client_id:'',domain:String(prev.domain||'').slice(0,36)};
-  const finance=await loadFinance(svc,scope);
+  const finance=await loadFinance(svc,scope,staff.data||[]);
   const debt=/пдз|просроч|долг|задолж|сколько должен|нам должен/i.test(fold(question));
   let debtRows=[];
   if(debt&&finance.entries.length){
