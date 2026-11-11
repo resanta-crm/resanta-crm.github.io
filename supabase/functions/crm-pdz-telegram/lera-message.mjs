@@ -25,8 +25,16 @@ export function chooseRecipientRows(user,debts,managerUsers){
  return list.filter(d=>owned.includes(surname(d.manager_name)));
 }
 
+// Requested familiar names for confirmed CRM manager accounts only.
+const FRIENDLY_MANAGER_NAMES=Object.freeze({
+ 'руднев':'Саня',
+ 'ачинович':'Катюшка',
+ 'шкуран':'Танюшка'
+});
 export function greeting(user,rows,binding){
  if(String(user.role)==='manager'){
+  const friendly=FRIENDLY_MANAGER_NAMES[surname(user.name)];
+  if(friendly)return html(friendly);
   const matches=(rows||[]).find(x=>matchManager(x.manager_name,user.name));
   const words=String(matches?.manager_name||'').trim().split(/\s+/);
   const first=words.length>1&&/^[А-ЯЁа-яё-]{3,}$/.test(words[1])?words[1]:'';
