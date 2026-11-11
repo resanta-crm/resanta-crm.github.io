@@ -151,7 +151,7 @@ begin
    order by ss.submitted_at desc limit 1
  )pr on true
  left join lateral(
-   select count(distinct pc.point_id)::int cnt,min(pc.point_id) only_point_id
+   select count(distinct pc.point_id)::int cnt,(array_agg(pc.point_id order by pc.point_id))[1] only_point_id
    from public.route_physical_point_clients pc where pc.client_id=p.client_id
  )points on true
  where p.status in ('active','legacy_unreconciled','return_requested')
