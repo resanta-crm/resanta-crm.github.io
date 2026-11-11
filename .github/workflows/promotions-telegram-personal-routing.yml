@@ -1,0 +1,25 @@
+name: Promotions Telegram personal routing
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-promotions-telegram/**'
+      - 'tests/promotions-telegram-personal-routing.test.mjs'
+      - '.github/workflows/promotions-telegram-personal-routing.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-promotions-telegram/**'
+      - 'tests/promotions-telegram-personal-routing.test.mjs'
+      - '.github/workflows/promotions-telegram-personal-routing.yml'
+permissions:
+  contents: read
+jobs:
+  routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/promotions-telegram-personal-routing.test.mjs

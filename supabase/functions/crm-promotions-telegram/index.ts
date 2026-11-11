@@ -1,11 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { promotionRecipients, privatePromotionChat } from './audience.mjs';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/crm-promotions-telegram`;
-const LEADER_EMAILS = ['sidarovich_kn@resanta.ru','payushin_ar@resanta.ru'];
+const LEADER_EMAILS = ['sidarovich_kn@resanta.ru','payushin_ar@resanta.ru']; // PDA group admin verification only; NOT promotion notification fan-out.
 const db = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
 const CORS = {
@@ -68,6 +69,10 @@ async function send(chatId: number | string, text: string) {
 async function handleStart(msg: any, code: string) {
   const chatId = msg?.chat?.id;
   if (!chatId) return;
+  if (msg?.chat?.type !== 'private') {
+    await send(chatId,'Для персональных уведомлений откройте личный диалог с ботом и подключите его через CRM.');
+    return;
+  }
   if (!code) {
     await send(chatId, 'Откройте Resanta CRM → Акции и нажмите «Подключить Telegram». Ссылка из CRM привяжет ваш аккаунт безопасно.');
     return;
@@ -204,26 +209,17 @@ async function dispatchPending(req: Request) {
   const primaryIds = [...new Set(rows.map(x=>x.recipient_user_id).filter(Boolean))] as string[];
   const { data: primaryUsers, error: pe } = await db.from('users').select('id,name,email,role').in('id',primaryIds);
   if (pe) throw pe;
-  const { data: leaderUsers, error: le } = await db.from('users').select('id,name,email,role').in('email',LEADER_EMAILS);
-  if (le) throw le;
   const primaryMap = new Map((primaryUsers||[]).map((x:any)=>[String(x.id),x as UserRow]));
-  const leaders = (leaderUsers||[]) as UserRow[];
-
-  const audienceFor = (r:QueueRow):UserRow[] => {
-    const primary = r.recipient_user_id ? primaryMap.get(String(r.recipient_user_id)) : null;
-    if (!primary) return [];
-    const list:UserRow[] = [primary];
-    if (String(primary.role||'') !== 'boss') list.push(...leaders);
-    const seen = new Set<string>();
-    return list.filter(x=>x?.id && !seen.has(String(x.id)) && seen.add(String(x.id)));
-  };
+  // One CRM event -> one intended recipient. Approvals already target a DF/DFS via queue.
+  // A manager photo / accept-work / overdue reminder must never be copied to all leaders.
+  const audienceFor = (r:QueueRow):UserRow[] => promotionRecipients(r,primaryMap);
 
   const targetIds = [...new Set(rows.flatMap(r=>audienceFor(r).map(x=>String(x.id))))];
   const { data: bindings, error: be } = targetIds.length
     ? await db.from('crm_telegram_bindings').select('user_id,chat_id,active').in('user_id',targetIds).eq('active',true)
     : {data:[],error:null};
   if (be) throw be;
-  const bind = new Map((bindings||[]).map((x:any)=>[String(x.user_id),x]));
+  const bind = new Map((bindings||[]).filter((x:any)=>privatePromotionChat(x)).map((x:any)=>[String(x.user_id),x]));
 
   const qids = rows.map(x=>x.id);
   const { data: oldLog, error: de } = await db.from('promotion_notification_delivery_log')
@@ -251,7 +247,7 @@ async function dispatchPending(req: Request) {
     if (!group.length) continue;
     const parts = group.map((x,i)=>{
       const msg=esc(String(x.row.message||'').replaceAll('\\n','\n'));
-      const ownerLine = String(x.owner.id)===uid ? '' : `\n👤 Менеджер: <b>${esc(x.owner.name)}</b>`;
+      const ownerLine = ''; // direct personal delivery only; no manager event copied to leaders.
       const link=x.row.action_url?`\n<a href="${String(x.row.action_url).replace(/"/g,'')}">Открыть в CRM</a>`:'';
       return `${i+1}. ${msg}${ownerLine}${link}`;
     });
