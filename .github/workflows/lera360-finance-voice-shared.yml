@@ -1,0 +1,33 @@
+name: Lera 360 shared finance voice safety
+on:
+  pull_request:
+    paths:
+      - 'assets/264-resanta-ai360-finance-voice-bridge-v1.js'
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/146-resanta-ai360-branch-premium-voice-v1.js'
+      - 'supabase/functions/crm-ai360-budget-voice-v1/**'
+      - 'tests/lera360-finance-voice-shared.test.mjs'
+      - '.github/workflows/lera360-finance-voice-shared.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/264-resanta-ai360-finance-voice-bridge-v1.js'
+      - 'supabase/functions/crm-ai360-budget-voice-v1/**'
+      - 'tests/lera360-finance-voice-shared.test.mjs'
+      - '.github/workflows/lera360-finance-voice-shared.yml'
+permissions:
+  contents: read
+jobs:
+  voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: |
+          node --check assets/264-resanta-ai360-finance-voice-bridge-v1.js
+          node --test tests/lera360-finance-voice-shared.test.mjs
