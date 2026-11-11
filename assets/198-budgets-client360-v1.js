@@ -181,8 +181,8 @@ function history(b,context){
    detail:changeSummary(x),actor:x.changed_by||'Не указан',priority:2}));
  events.sort((x,y)=>String(y.at||'').localeCompare(String(x.at||''))||x.priority-y.priority);
  const reservations=promos.map(p=>{const amount=Math.max(0,num(p.budget_reserved)-num(p.actual_spend));return amount>0?'<div>'+esc(p.title||'Акция')+' · '+esc(money(amount))+' · '+esc(p.status)+'</div>':''}).filter(Boolean);
- return '<section class="b360-history"><h3>Полная история бюджета · '+events.length+' событий</h3>'+
-  '<p class="b360-muted">Движения по датам операций, журнальные изменения — по времени фиксации. Исходная информация сохранена; отсутствие события не заменяется предположением.</p>'+
+ return '<section class="b360-history"><h3>История доступных операций · '+events.length+' событий</h3>'+
+  '<p class="b360-muted">Движения по датам операций, журнальные изменения — по времени фиксации. Показаны сохранённые движения и журнал изменений карточки. Ранее удалённые движения могут отсутствовать, поскольку отдельный неизменяемый журнал движений пока не внедрён.</p>'+
   (events.length?events.map(x=>'<div class="b360-event"><strong>'+esc(x.title)+'</strong><small>'+esc(x.dateLabel)+' · '+esc(x.actor)+'</small><div>'+esc(x.detail)+'</div></div>').join(''):'<div class="b360-muted">Исторических событий пока нет.</div>')+
   '<h3 style="margin-top:12px">Текущий резерв по акциям</h3><div class="b360-reserves">'+(reservations.join('')||'<div>Активных резервов не найдено.</div>')+'</div>'+
   '<p class="b360-muted">Резерв — текущий расчёт, а не историческое движение. Начисления, расходы и корректировки отражены выше.</p></section>';
