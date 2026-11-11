@@ -51,7 +51,7 @@ test('managers get a warm personalized Lera greeting and every debtor with requi
  const rows=chooseRecipientRows(users[3],debt,users);
  const digest=managerBrief({user:users[3],binding:{telegram_first_name:'Саша'},rows,previousRows:rows.map(x=>({...x,debt_overdue:x.debt_overdue+100})),
   reportDate,today,evidence:new Map(),legalAction:()=>''});
- assert.match(digest.header,/Привет, Александр! Это Лера/);
+ assert.match(digest.header,/Привет, Саня! Это Лера/);
  assert.match(digest.header,/последний загруженный отчёт/);
  assert.match(digest.header,/2<\/b> · просрочено обещаний/);
  assert.match(digest.header,/-200,00 BYN/);
@@ -100,4 +100,14 @@ test('original authenticated dispatch stays in place, reuses binding and dedupe 
  assert.match(source,/managerBrief/);
  assert.doesNotMatch(source,/createBot\(|registerBot\(|setWebhook\(/);
  assert.doesNotMatch(source,/\.from\('tasks'\)\.(insert|upsert|update|delete)/);
+});
+
+test('Lera uses familiar individual names only for exactly matched manager accounts',()=>{
+ const ac=managerBrief({user:users[4],binding:{telegram_first_name:'Катя'},rows:[debt[2]],previousRows:null,reportDate,today,evidence:new Map()});
+ const sh=managerBrief({user:users[5],binding:{telegram_first_name:'Таня'},rows:[debt[3]],previousRows:null,reportDate,today,evidence:new Map()});
+ assert.match(ac.header,/Привет, Катюшка! Это Лера/);
+ assert.match(sh.header,/Привет, Танюшка! Это Лера/);
+ const impostor={name:'Ачиновиченко',role:'manager'};
+ assert.notEqual(greeting(impostor,[],{telegram_first_name:'Лена'}),'Катюшка');
+ assert.match(greeting(users[1],[]),/Сидарович/);
 });
