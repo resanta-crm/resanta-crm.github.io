@@ -15,7 +15,7 @@ const S=x=>String(x??"").trim();
 const clip=(x,n=400)=>S(x).slice(0,n);
 const num=x=>x===null||x===undefined||x===""?null:(Number.isFinite(Number(x))?Number(x):null);
 const validScope=x=>/^[a-z0-9][a-z0-9_-]{2,140}$/i.test(x);
-const day=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Minsk",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+const day=()=>{const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Minsk",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const get=k=>parts.find(p=>p.type===k)?.value||"";return get("year")+"-"+get("month")+"-"+get("day");};
 const hd=req=>({ "Access-Control-Allow-Origin":ORIGINS.has(req.headers.get("Origin"))?req.headers.get("Origin"):"https://resanta-crm.by","Access-Control-Allow-Headers":"authorization,apikey,content-type,x-client-info","Access-Control-Allow-Methods":"POST,OPTIONS","Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","Vary":"Origin"});
 const output=(req,data,status=200)=>new Response(JSON.stringify(data),{status,headers:hd(req)});
 const fail=(code,status=400)=>Object.assign(new Error(code),{status});
@@ -69,9 +69,9 @@ async function feed(svc){
   page(svc,"triovist_21vek_position_metrics_v236351","manager_email,sku,product_name,movement,current_position,previous_position,price_21vek,in_stock,current_observed_at,current_error",
     q=>q.in("movement",["down","up","exited","entered"]),2500),
   page(svc,"triovist_market_own_positions_current_v1","scope_key,sku,position,current_price,observed_at",
-    q=>q.order("scope_key"),1500),
+    q=>q.order("scope_key").order("sku"),1500),
   page(svc,"triovist_market_comp_position_current_v236352","scope_key,product_key,brand,model,movement,position,previous_position,position_delta,current_price,observed_at",
-    q=>q.in("movement",["up","down","exited","entered"]).gte("observed_at",new Date(Date.now()-3*864e5).toISOString()).order("scope_key"),5000)
+    q=>q.in("movement",["up","down","exited","entered"]).gte("observed_at",new Date(Date.now()-3*864e5).toISOString()).order("scope_key").order("product_key"),5000)
  ]);
  const known=new Set(m.scopes.map(x=>S(x.scope_key)));
  const owned=new Map();
