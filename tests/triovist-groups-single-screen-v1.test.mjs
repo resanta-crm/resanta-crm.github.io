@@ -136,7 +136,7 @@ test('all detailed subgroups/SKU still use previous safe lazy RPC route',()=>{
 test('cache busting makes native group version visible after hard reload',()=>{
  assert.match(loader,/20261105-groups-single-121/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
- assert.match(index,/100-safe-upgrades-loader-v236272\.js\?v=20261105-uni205-loader1/);
+ assert.match(index,/100-safe-upgrades-loader-v236272\.js\?v=20261111-actionable-overview1-loader1/);
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
 });
 
