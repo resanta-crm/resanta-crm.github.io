@@ -1,0 +1,30 @@
+name: AI360 finance voice bridge scoped regression
+on:
+  pull_request:
+    paths:
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'tests/ai360-finance-voice-bridge.test.mjs'
+      - '.github/workflows/ai360-finance-voice-bridge.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'tests/ai360-finance-voice-bridge.test.mjs'
+      - '.github/workflows/ai360-finance-voice-bridge.yml'
+permissions:
+  contents: read
+jobs:
+  gateway-voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node --check assets/147-resanta-ai360-staff-unified-dialog-v1.js
+          node --test tests/ai360-finance-voice-bridge.test.mjs
