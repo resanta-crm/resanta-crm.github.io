@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { chooseRecipientRows, managerBrief, leaderBrief, keyOf, surname } from './lera-message.mjs';
+import {shouldSendPdzSnapshot,correctionPrefix} from './snapshot-revision.mjs';
 
 const SUPABASE_URL=Deno.env.get('SUPABASE_URL')||'';
 const SERVICE_ROLE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
@@ -143,9 +144,10 @@ Deno.serve(async(req)=>{
   if(!expected||got!==expected)return json({ok:false,error:'FORBIDDEN'},403);
 
   const today=localDate();
-  const {data:latestRows,error:le}=await db.from('client_debt').select('report_date').order('report_date',{ascending:false}).limit(1);
+  const {data:latestRows,error:le}=await db.from('client_debt').select('report_date,imported_at').order('report_date',{ascending:false}).order('imported_at',{ascending:false}).limit(1);
   if(le)throw le;
   const reportDate=String(latestRows?.[0]?.report_date||'');
+  const sourceImportedAt=String(latestRows?.[0]?.imported_at||'');
   if(!reportDate)return json({ok:true,reason:'NO_PDZ'});
 
   const {data:debtsRaw,error:de}=await db.from('client_debt')
@@ -181,18 +183,19 @@ Deno.serve(async(req)=>{
 
   if(groupChatId && debts.length){
    const groupKey=`pdz_daily_group_sent:${today}:${groupChatId}`;
-   if(!(await runtimeGet(groupKey))){
+   const lastGroup=await runtimeGet(groupKey);
+   if(shouldSendPdzSnapshot(lastGroup,reportDate,sourceImportedAt)){
     try{
       const actionRows=debts.filter(d=>Number(d.debt_overdue_days||0)>=30);
       const under30=debts.filter(d=>Number(d.debt_overdue_days||0)<30);
       const under30Total=under30.reduce((s,d)=>s+Number(d.debt_overdue||0),0);
-      const header=summaryHeader(debts,reportDate,'Контроль: <b>Паюшин + Сидарович</b>',legalMap)
+      const header=correctionPrefix(lastGroup)+summaryHeader(debts,reportDate,'Контроль: <b>Паюшин + Сидарович</b>',legalMap)
         +(under30.length?'🟡 До 30 дней: <b>'+under30.length+'</b> клиентов · <b>'+money(under30Total)+' BYN</b>\n':'');
       const actionLines=actionRows.length
         ? linesFor(actionRows,true,legalMap)
         : ['✅ Клиентов 30+ дней, требующих претензии или суда, сейчас нет.'];
       for(const part of chunks(actionLines,header)){await tg(part,groupChatId);sentMessages++;}
-      await runtimeSet(groupKey,{sent_at:new Date().toISOString(),report_date:reportDate,rows:debts.length,total:debts.reduce((s,d)=>s+Number(d.debt_overdue||0),0)});
+      await runtimeSet(groupKey,{sent_at:new Date().toISOString(),report_date:reportDate,source_imported_at:sourceImportedAt,rows:debts.length,total:debts.reduce((s,d)=>s+Number(d.debt_overdue||0),0)});
       groupSent=true;
     }catch(e){
       errors.push({group:group?.title||groupChatId,error:e instanceof Error?e.message:String(e)});
@@ -221,15 +224,16 @@ Deno.serve(async(req)=>{
    const rows=chooseRecipientRows(u,debts,managerProfiles);
    const prior=previousRows===null?null:chooseRecipientRows(u,previousRows,managerProfiles);
    const sentKey='pdz_daily_sent:'+today+':'+uid;
-   if(await runtimeGet(sentKey))continue;
+   const lastSent=await runtimeGet(sentKey);
+   if(!shouldSendPdzSnapshot(lastSent,reportDate,sourceImportedAt))continue;
    const digest=u.role==='boss'?
     leaderBrief({user:u,rows,previousRows:prior,reportDate,today,evidence,managerUsers:managerProfiles}):
     managerBrief({user:u,binding:b,rows,previousRows:prior,reportDate,today,
       evidence,legalAction:(row:DebtRow)=>actionText(row,legalMap)});
    try{
-    for(const part of chunks(digest.lines,digest.header)){await tg(part,b.chat_id);sentMessages++;}
+    for(const part of chunks(digest.lines,correctionPrefix(lastSent)+digest.header)){await tg(part,b.chat_id);sentMessages++;}
     await runtimeSet(sentKey,{
-      sent_at:new Date().toISOString(),report_date:reportDate,rows:rows.length,total:digest.total,
+      sent_at:new Date().toISOString(),report_date:reportDate,source_imported_at:sourceImportedAt,rows:rows.length,total:digest.total,
       format:'lera-pdz-personal-v1',role:u.role,contacts_missing:digest.counts.no_record,
       promises_overdue:digest.counts.promise_overdue
     });
