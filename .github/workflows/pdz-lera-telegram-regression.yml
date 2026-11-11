@@ -1,0 +1,33 @@
+name: PDZ Telegram Lera existing-bot regression
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-pdz-telegram/**'
+      - 'tests/pdz-lera-telegram-daily.test.mjs'
+      - '.github/workflows/pdz-lera-telegram-regression.yml'
+  push:
+    paths:
+      - 'supabase/functions/crm-pdz-telegram/**'
+      - 'tests/pdz-lera-telegram-daily.test.mjs'
+      - '.github/workflows/pdz-lera-telegram-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pdz-lera:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lera message syntax and scope tests
+        run: |
+          node --check supabase/functions/crm-pdz-telegram/lera-message.mjs
+          node --test tests/pdz-lera-telegram-daily.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check server dispatcher TypeScript
+        run: deno check supabase/functions/crm-pdz-telegram/index.ts
