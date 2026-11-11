@@ -188,9 +188,10 @@ function answerBudgetQuestion(raw,data){
   return clientAnswer(target,metric);
  }
  if(/у него|у нее|у неё|этого клиента/.test(q))return 'Уточни, о каком клиенте идёт речь, например: «Бюджет Бензоленд».';
+ if(!manager&&/бюджет у (?!клиент)|(?:сколько|какой|остаток|расход|резерв).{0,30} у (?!клиент)/.test(q))return 'Не нашла клиента с таким названием среди доступных тебе бюджетов. Уточни название или проверь фильтр менеджера.';
  leraLastClientId='';
  let selected=manager?rows.filter(x=>x.manager===manager):rows;
- const scope=manager?' менеджера '+esc(manager):' доступных клиентов';
+ const scope=manager?' бюджетам менеджера '+esc(manager):' бюджетам доступных клиентов';
  const totals=summaryRows(selected);
  if(bad||low){
   const filtered=selected.filter(x=>bad?num(x.metrics.free)<-0.005:num(x.metrics.free)>=0&&num(x.metrics.free)<500)
