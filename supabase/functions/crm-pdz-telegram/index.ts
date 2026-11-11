@@ -45,7 +45,8 @@ async function tgVoice(chatId:string|number,audio:Uint8Array,reportDate:string){
  const form=new FormData();
  form.append('chat_id',String(chatId));
  form.append('caption','🎧 Лера · голосовой брифинг ПДЗ за '+ruDate(reportDate));
- form.append('voice',new Blob([audio],{type:'audio/ogg'}),'lera-pdz.ogg');
+ const blobBytes=new Uint8Array(new ArrayBuffer(audio.length));blobBytes.set(audio);
+ form.append('voice',new Blob([blobBytes],{type:'audio/ogg'}),'lera-pdz.ogg');
  const res=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVoice`,{
   method:'POST',body:form,signal:AbortSignal.timeout(25000)
  });
