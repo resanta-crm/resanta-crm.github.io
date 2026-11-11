@@ -241,9 +241,10 @@ async function dispatchPending(req: Request) {
 
   const perRecipient = new Map<string,{user:UserRow; items:{row:QueueRow; owner:UserRow}[]} >();
   for (const r of rows) {
-    const owner=audienceFor(r)[0];
+    const targets=audienceFor(r);
+    const owner=targets[0];
     if (!owner) continue;
-    for (const target of audienceFor(r)) {
+    for (const target of targets) {
       const key = `${r.id}|${target.id}`;
       if (delivered.has(key)) continue;
       if (!bind.get(String(target.id))) continue;
