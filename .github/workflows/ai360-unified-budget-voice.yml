@@ -5,6 +5,8 @@ on:
       - 'supabase/functions/crm-ai360-budget-voice-v1/**'
       - 'assets/143-resanta-ai360-unified-dialog-v1.js'
       - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
       - 'tests/ai360-unified-budget-voice.test.mjs'
       - '.github/workflows/ai360-unified-budget-voice.yml'
   push:
@@ -13,6 +15,8 @@ on:
       - 'supabase/functions/crm-ai360-budget-voice-v1/**'
       - 'assets/143-resanta-ai360-unified-dialog-v1.js'
       - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
       - 'tests/ai360-unified-budget-voice.test.mjs'
       - '.github/workflows/ai360-unified-budget-voice.yml'
 permissions:
@@ -31,3 +35,6 @@ jobs:
           node --test tests/ai360-unified-budget-voice.test.mjs
           node --check assets/143-resanta-ai360-unified-dialog-v1.js
           node --check assets/147-resanta-ai360-staff-unified-dialog-v1.js
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --test tests/ai360-remembered-wake-session.test.cjs
