@@ -17,7 +17,9 @@ export const greet=user=>{
 export const registeredSku=x=>String(x??'').trim().replace(/\s+/g,'').toUpperCase();
 export function assessStand(p,items,history,today,hasRoute){
  const keys=new Set((items||[]).map(x=>registeredSku(x.sku)).filter(Boolean));
- const relevant=(history||[]).filter(x=>x.client_id===p.client_id&&keys.has(registeredSku(x.sku)));
+ const clientHistory=(history||[]).filter(x=>x.client_id===p.client_id);
+ const relevant=clientHistory.filter(x=>keys.has(registeredSku(x.sku)));
+ const historyMatchedSku=new Set(relevant.map(x=>registeredSku(x.sku)));
  const six=monthStart(today,-5),prev=monthStart(today,-11);
  const current=relevant.filter(x=>x.month>=six).reduce((a,x)=>a+Number(x.revenue||0),0);
  const prior=relevant.filter(x=>x.month>=prev&&x.month<six).reduce((a,x)=>a+Number(x.revenue||0),0);
@@ -30,11 +32,14 @@ export function assessStand(p,items,history,today,hasRoute){
  if(!p.asset_id)actions.push('Сверить ОС');
  if(needsPhoto)actions.push('Получить актуальное фото от МПП или продавца');
  if(p.vision_status==='review'||p.vision_status==='bad_photo')actions.push('Исправить замечания Vision');
- if(keys.size&&Number(p.days_installed??100)>60&&(current<=0||(prior>0&&current<prior*.75)))actions.push('Проверить слабые отгрузки SKU стенда');
+ if(!keys.size)actions.push('Уточнить точные SKU стенда');
+ else if(historyMatchedSku.size===0)actions.push(clientHistory.length?'Сверить SKU стенда с каталогом и отгрузками 1С':'Сверить ID клиента и источник отгрузок 1С');
+ else if(Number(p.days_installed??100)>60&&(current<=0||(prior>0&&current<prior*.75)))actions.push('Проверить слабые отгрузки SKU стенда');
  const action=actions.slice(0,4).join('; ');
  return {id:p.id,client_id:p.client_id,client_name:p.client_name,manager_name:p.manager_name,
   asset_id:p.asset_id,action,route_today:!!hasRoute,needs_photo:needsPhoto,photo_days:photoDays,
-  sku_count:keys.size,ship_6m:current,ship_prev_6m:prior,last_ship_month:latest};
+  sku_count:keys.size,matched_sku_count:historyMatchedSku.size,client_history_count:clientHistory.length,
+  ship_6m:current,ship_prev_6m:prior,last_ship_month:latest};
 }
 export function recipientStandRows(user,standRows,managerProfiles){
  if(user?.role==='manager'){
@@ -60,6 +65,6 @@ export function briefing(user,rows,today){
  if(voice.length>240)voice=intro;
  const lines=sorted.slice(0,8).map((x,i)=>String(i+1)+'. '+x.client_name+
   ' · ID '+x.client_id.slice(0,8)+' · '+x.action+
-  ' · отгрузки SKU за 6 мес.: '+(x.sku_count?ruMoney(x.ship_6m)+' BYN':'нет точных SKU'));
+  ' · отгрузки по SKU за 6 мес.: '+(x.matched_sku_count?ruMoney(x.ship_6m)+' BYN (сопоставлено '+x.matched_sku_count+' из '+x.sku_count+')':'не сопоставлено с 1С'));
  return {voice,lines,scope_count:sorted.length,priority_client_id:first.client_id,stand_count:rows.length};
 }

@@ -57,3 +57,25 @@ test('Telegram deployment remains isolated from PDZ, protected, deduplicated and
  assert.doesNotMatch(src,/setWebhook\(|getUpdates\(|voice_transcribe|createBot\(/);
  assert.doesNotMatch(src,/\\.from\(['"]client_debt['"]\)/);
 });
+
+test('textual stand descriptions are not labelled zero sales in Telegram',()=>{
+ const desc=[{sku:'УШМ Ресанта 1 скю'},{sku:'Шуруповёрт Вихрь 2 скю'}];
+ const hist=[{client_id:'cid1',sku:'75/12/3',month:'2026-10-01',revenue:45000}];
+ const p={id:'stand1',client_id:'cid1',client_name:'ВикингМаркетБай',manager_name:'Шкуран',
+  asset_id:'os1',last_control_at:'2026-11-10',last_control_photo_path:'photo.jpg',days_installed:300};
+ const x=assessStand(p,desc,hist,now,false);
+ assert.equal(x.matched_sku_count,0);
+ assert.equal(x.client_history_count,1);
+ assert.match(x.action,/Сверить SKU стенда с каталогом/);
+ assert.doesNotMatch(x.action,/слабые отгрузки/i);
+ const brief=briefing({id:'shk',name:'Шкуран',role:'manager'},[x],now);
+ assert.match(brief.lines.join(' '),/не сопоставлено с 1С/);
+ assert.doesNotMatch(brief.lines.join(' '),/0 BYN/);
+});
+test('absent 1C client link is different from verified missing shipments',()=>{
+ const p={id:'stand1',client_id:'cid1',client_name:'ИТ технологии',manager_name:'Руднев',
+  asset_id:'os1',last_control_at:'2026-11-10',last_control_photo_path:'photo.jpg',days_installed:300};
+ const x=assessStand(p,[{sku:'75/12/3'}],[],now,false);
+ assert.match(x.action,/Сверить ID клиента/);
+ assert.equal(x.matched_sku_count,0);
+});
