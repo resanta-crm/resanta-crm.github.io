@@ -74,11 +74,20 @@ Deno.serve(async req=>{
   const debt=/пдз|просроч|долг|задолж|сколько должен|нам должен/i.test(fold(question));
   let debtRows=[];
   if(debt&&finance.entries.length){
-   const allowedManagers=[...new Set(finance.entries.map(x=>x.client.manager_name))];
-   const debts=await svc.from('client_debt').select('client_name,manager_name,debt_overdue,report_date')
-    .in('manager_name',allowedManagers).order('report_date',{ascending:false}).limit(1000);
-   if(debts.error||(debts.data||[]).length>=1000)return respond(req,{error:'debt_source_incomplete'},503);
-   debtRows=debts.data||[];
+   // Names from 1C contain full FIO; CRM manager names are often surnames.
+   // Compare exact normalized surnames only after server-side client scope.
+   const latest=await svc.from('client_debt')
+    .select('report_date').order('report_date',{ascending:false}).limit(1);
+   if(latest.error)return respond(req,{error:'debt_source_unavailable'},503);
+   const reportDate=String(latest.data?.[0]?.report_date||'');
+   if(reportDate){
+    const debts=await svc.from('client_debt')
+     .select('client_name,manager_name,debt_overdue,report_date')
+     .eq('report_date',reportDate).gt('debt_overdue',0).limit(1000);
+    if(debts.error||(debts.data||[]).length>=1000)return respond(req,{error:'debt_source_incomplete'},503);
+    const allowed=new Set(finance.entries.map(x=>fold(x.client.manager_name).split(' ')[0]).filter(Boolean));
+    debtRows=(debts.data||[]).filter(d=>allowed.has(fold(d.manager_name).split(' ')[0]));
+   }
   }
   const result=answerBudgetVoice(question,finance.entries,memory,debtRows);
   const asOf=new Date().toISOString();
