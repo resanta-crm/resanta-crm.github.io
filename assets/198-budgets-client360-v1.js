@@ -203,7 +203,7 @@ function render(){
   renderBusy=true;
   const topHtml=buildTop(scope),bottomHtml=buildBottom(scope);
   root.top.innerHTML=topHtml;root.bottom.innerHTML=bottomHtml;
-  root.page.classList.add('budgets360-installed');
+  if(!root.page.classList.contains('budgets360-installed'))root.page.classList.add('budgets360-installed');
   lastRenderError='';renderCount++;
  }catch(e){
   lastRenderError=String(e?.message||e);
@@ -221,7 +221,7 @@ function hookNavigation(){
  // The CRM lazy feature loader can render the original budgets view after a route change.
  // Listen to actual route and filter actions rather than relying only on a global wrapper.
  d.addEventListener('click',e=>{
-  const btn=e.target.closest?.('#nav-budgets,#bn-budgets,[onclick*="goPage(\'budgets\'"]');
+  const btn=e.target.closest?.('#nav-budgets,#bn-budgets');
   if(btn){schedule(80);schedule(750)}
  },true);
  d.addEventListener('change',e=>{
