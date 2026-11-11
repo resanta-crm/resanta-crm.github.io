@@ -35,7 +35,7 @@ test('commercial notices never go to groups or unbound users',()=>{
 });
 
 test('edge integrates direct-only route but retains confidential dispatch and dedup',()=>{
- assert.match(edge,/promotionRecipients\(r,primaryMap\)/);
+ assert.match(edge,/personalPromotionAudience\(r,primaryMap,branchContext\)/);
  assert.doesNotMatch(edge,/list\.push\(\.\.\.leaders\)/);
  assert.doesNotMatch(edge,/const leaders = \(leaderUsers/);
  assert.match(edge,/x-crm-dispatch-secret/);
