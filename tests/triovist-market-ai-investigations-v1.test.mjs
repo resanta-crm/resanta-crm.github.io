@@ -94,3 +94,16 @@ test('new tables are RLS protected, inaccessible directly to public/anon/authent
  assert.match(sql,/revoke all on public\.triovist_market_ai_daily_runs_v1 from public,anon,authenticated/);
  assert.doesNotMatch(sql,/alter table public\.(?!triovist_market_ai_)/i);
 });
+
+test('AI investigation rejects missing, unchanged and incomparable rank history before charging budget',()=>{
+ assert.match(edge,/if\(before===null\|\|after===null\|\|Math\.abs\(before-after\)<\(kind==="own"\?7:12\)\)/);
+ assert.match(edge,/throw fail\("insufficient_rank_evidence",422\)/);
+ assert.match(edge,/observations\.length<2/);
+ assert.match(edge,/throw fail\("rank_history_not_comparable",422\)/);
+ const proof=edge.indexOf('const evidence=await itemEvidence(svc,scope,kind,key);');
+ const claim=edge.indexOf('const ai=await llm(svc,actor.id');
+ assert.ok(proof>=0 && claim>proof,'the server must verify evidence before calling AI');
+ assert.match(edge,/triovist_market_own_position_snapshots_v1/);
+ assert.match(edge,/history=new Map\(\)/);
+ assert.match(ui,/По этому товару пока нет двух сопоставимых подтверждённых позиций/);
+});
