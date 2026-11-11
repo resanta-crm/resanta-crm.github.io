@@ -63,6 +63,11 @@ test('PDZ 360 mounts independently and calls only authenticated daily debt RPC',
  assert.match(html,/[-−]8[\s\u00a0]*933,67 BYN/);
  assert.doesNotMatch(html,/к октябрю|к 10 окт|к прошлому месяцу/i);
  assert.match(html,/В комментариях пока не зафиксировано/);
+ assert.match(html,/Без контакта в CRM/);
+ assert.doesNotMatch(html,/Структура ПДЗ по срокам/);
+ assert.doesNotMatch(html,/data-pdz-legacy>Исходный отчёт/);
+ assert.match(html,/Показаны 2 приоритетных клиентов из 2/);
+ assert.match(html,/font-weight="700" text-anchor="middle"/);
 });
 test('day selector changes visual history without changing report-date truth or requery',async()=>{
  const x=fixture();await settle();
@@ -101,5 +106,5 @@ test('isolated implementation preserves importer, originals, task writes and leg
  assert.match(sql,/day_change_is_not_confirmed_payment/);
  assert.doesNotMatch(sql,/\b(?:update|delete|insert|truncate)\s+public\./i);
  assert.doesNotMatch(src,/\.from\(\s*['"]client_debt['"]\s*\)\.insert\(/);
- assert.match(src,/Исходный отчёт/);
+ assert.doesNotMatch(src,/data-pdz-legacy>Исходный отчёт/);
 });
