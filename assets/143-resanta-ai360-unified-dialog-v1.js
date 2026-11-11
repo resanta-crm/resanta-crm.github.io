@@ -60,6 +60,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  if(!allowed())return false;
  const question=String(text||'').trim().slice(0,400);
  if(!question)return false;
+ if(window.crmAI360FinanceVoiceHandleV1?.(question,ui))return true;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
  // Navigation remains a local, explicit CRM UI operation.
  if(/^(?:открой|перейди|вернись|покажи раздел)(?:\s|$)/i.test(question)){
