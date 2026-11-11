@@ -40,7 +40,7 @@ async function synthesize(text,userId,format){
  const key=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';if(!key)throw new Error('YANDEX_NOT_CONFIGURED');
  const reserve=await sb.rpc('crm_ai360_yandex_monthly_claim_v1',{p_user_id:userId,p_characters:text.length});
  if(reserve.error||!reserve.data?.allowed)throw new Error('YANDEX_MONTHLY_BUDGET_BLOCK');
- const headers={'Authorization':'Api-Key '+key,'Content-Type':'application/json'};
+ const headers:Record<string,string>={'Authorization':'Api-Key '+key,'Content-Type':'application/json'};
  const folder=Deno.env.get('YANDEX_CLOUD_FOLDER_ID')||'';if(folder)headers['x-folder-id']=folder;
  const res=await fetch('https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis',{
   method:'POST',headers,signal:AbortSignal.timeout(26000),
