@@ -77,10 +77,49 @@ test('briefing reads existing snapshots, never guesses causes or confirmed promo
  vm.runInNewContext(code+';uniCompetitorBrief(panel,d,"",[],[],null,7);',ctx);
  assert.match(el.innerHTML,/4\s146/);
  assert.match(el.innerHTML,/Подгруппа/);
- assert.equal((el.innerHTML.match(/class="tm225-item/g)||[]).length,5);
+ assert.equal((el.innerHTML.match(/class="tm225-item (?:bad|warn)"/g)||[]).length,5);
 });
 test('no unrelated files or rights are touched by this feature',()=>{
  assert.match(src,/fullMarketAccess:true/);
  assert.match(src,/read-only/i);
  assert.match(native,/cards:\{name:'Карточки 21vek'/);
+});
+
+
+test('all-category overview gives measurable actions, not duplicate generic commands or empty dynamics',()=>{
+ const start=src.indexOf('function uniCompetitorBrief(');
+ const end=src.indexOf('function scopeSearchNorm(',start);
+ const code=src.slice(start,end);
+ const el={innerHTML:''};
+ const panel={querySelector:()=>el};
+ const ctx={
+  panel,
+  d:{
+   scopes:[
+    {scope_key:'humidifiers',subgroup:'Увлажнители воздуха',competitors:117,confirmed_gaps:67,insufficient_data:0},
+    {scope_key:'rotary',subgroup:'Перфораторы',competitors:103,confirmed_gaps:47,insufficient_data:0},
+    {scope_key:'planers',subgroup:'Рубанки',competitors:107,confirmed_gaps:24,insufficient_data:39},
+    {scope_key:'saws',subgroup:'Вибропилы',competitors:83,confirmed_gaps:7,insufficient_data:41},
+    {scope_key:'garden',subgroup:'Садовая техника',competitors:50,confirmed_gaps:5,insufficient_data:33}
+   ],
+   summary:{products:4039,confirmed_gaps:153,insufficient_data:1884},
+   last_run:{finished_at:'2026-11-11T02:37:00Z'}
+  },
+  E:x=>String(x??'').replace(/&/g,'&amp;'),
+  N:x=>x===null||x===undefined||x===''?null:Number(x),
+  dt:x=>String(x||'')
+ };
+ vm.runInNewContext(code+';uniCompetitorBrief(panel,d,"",[],[],null,7);',ctx);
+ const html=el.innerHTML;
+ assert.match(html,/Что делать сегодня/);
+ assert.match(html,/Увлажнители воздуха/);
+ assert.match(html,/67/);
+ assert.match(html,/Показать 67 пробелов/);
+ assert.match(html,/data-tm225-filter="confirmed_gap"/);
+ assert.match(html,/data-tm225-filter="insufficient_data"/);
+ assert.match(html,/Где больше пробелов/);
+ assert.doesNotMatch(html,/Динамика конкурентов/);
+ assert.doesNotMatch(html,/Открыть подгруппу и проверить её листинг/);
+ assert.match(src,/if\(proofFilter&&proofSelect\)proofSelect\.value=proofFilter/);
+ assert.equal((html.match(/class="tm225-item /g)||[]).length,5);
 });
