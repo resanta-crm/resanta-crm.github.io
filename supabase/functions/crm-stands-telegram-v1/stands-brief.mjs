@@ -15,12 +15,13 @@ export function assessStand(p,items,history,today,hasRoute){
  const lastPhoto=p.last_control_at||p.installed_at||null;
  const photoDays=lastPhoto?Math.floor((Date.parse(today+'T12:00:00Z')-Date.parse(String(lastPhoto).slice(0,10)+'T12:00:00Z'))/86400000):null;
  const needsPhoto=!p.last_control_photo_path&&!p.installation_photo_path||photoDays===null||photoDays>31;
- let action='';
- if(!p.asset_id)action='Сверить ОС нашего стенда';
- if(needsPhoto)action=action||'Получить актуальное фото стенда у продавца или сделать самому';
- if(p.vision_status==='review'||p.vision_status==='bad_photo')action=action||'Проверить состояние и использование нашего стенда';
- if(keys.size&&Number(p.days_installed||100)>60&&(current<=0||(prior>0&&current<prior*.75)))action=action||'Уточнить причину слабых отгрузок по SKU стенда';
- if(hasRoute)action=action||'На сегодняшнем визите проверить наш стенд и сделать фото';
+ const actions=[];
+ if(hasRoute)actions.push('По маршруту проверить наш стенд');
+ if(!p.asset_id)actions.push('Сверить ОС');
+ if(needsPhoto)actions.push('Получить актуальное фото от МПП или продавца');
+ if(p.vision_status==='review'||p.vision_status==='bad_photo')actions.push('Исправить замечания Vision');
+ if(keys.size&&Number(p.days_installed??100)>60&&(current<=0||(prior>0&&current<prior*.75)))actions.push('Проверить слабые отгрузки SKU стенда');
+ const action=actions.slice(0,4).join('; ');
  return {id:p.id,client_id:p.client_id,client_name:p.client_name,manager_name:p.manager_name,
   asset_id:p.asset_id,action,route_today:!!hasRoute,needs_photo:needsPhoto,photo_days:photoDays,
   sku_count:keys.size,ship_6m:current,ship_prev_6m:prior,last_ship_month:latest};
