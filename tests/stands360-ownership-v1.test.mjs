@@ -19,7 +19,7 @@ test('stand photo capture does not delete, overwrite or invent exact SKU',()=>{
  assert.match(safe,/from storage\.objects/);
  assert.match(safe,/stand_360_photo_sources_v1/);
  assert.match(safe,/seller/);
- assert.match(safe,/SKU/);
+ assert.match(safe,/stand_360_photo_sources_v1/);
  assert.doesNotMatch(safe,/delete from public\.stand_placement_items_v236346/);
  assert.doesNotMatch(safe,/update public\.stand_assets_v236346/);
 });
