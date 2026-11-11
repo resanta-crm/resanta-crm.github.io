@@ -60,7 +60,7 @@ function css(){
  '#pdz360-root .p-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}',
  '#pdz360-root .p-kpi{padding:14px;border:1px solid var(--border,#dce4ee);border-radius:12px;background:var(--card,#fff);min-width:0;display:grid;align-content:start;gap:7px}',
  '#pdz360-root .p-kpi small{color:var(--sub,#64748b);font-size:11px}#pdz360-root .p-kpi strong{font-size:23px;line-height:1.15;overflow-wrap:anywhere}',
- '#pdz360-root .p-top{display:grid;grid-template-columns:1.4fr 1fr 1.05fr;gap:10px}',
+ '#pdz360-root .p-top{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(290px,1fr);gap:10px}',
  '#pdz360-root .p-chart{width:100%;height:auto;min-width:360px;display:block}#pdz360-root .p-chart-wrap{overflow-x:auto}',
  '#pdz360-root .p-donut{width:126px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;flex:none}',
  '#pdz360-root .p-donut>span{width:86px;height:86px;border-radius:50%;background:var(--card,#fff);display:grid;place-items:center;text-align:center;font-size:12px;font-weight:800}',
@@ -78,7 +78,7 @@ function css(){
  '#pdz360-root .p-detail-metrics>div{border:1px solid var(--border,#dce4ee);padding:10px;border-radius:9px;min-width:0}',
  '#pdz360-root .p-detail-metrics b{display:block;font-size:17px}#pdz360-root .p-action{padding:12px;background:#ecf4ff;border-radius:10px;font-size:12px;display:grid;gap:9px}',
  '#pdz360-root .p-empty{padding:22px;text-align:center;color:var(--sub,#64748b);font-size:13px}',
- '@media(max-width:1180px){#pdz360-root .p-top{grid-template-columns:1fr 1fr}#pdz360-root .p-top>.p-card:last-child{grid-column:1/-1}}',
+ '@media(max-width:1180px){#pdz360-root .p-top{grid-template-columns:1fr}#pdz360-root .p-top>.p-card:last-child{grid-column:auto}}',
  '@media(max-width:900px){#pdz360-root .p-kpis{grid-template-columns:repeat(2,1fr)}#pdz360-root .p-split{grid-template-columns:1fr}#pdz360-root .p-debtors{max-height:310px}}',
  '@media(max-width:600px){#pdz360-root .p-top{grid-template-columns:1fr}#pdz360-root .p-top>.p-card:last-child{grid-column:auto}#pdz360-root .p-detail-metrics{grid-template-columns:1fr 1fr}#pdz360-root h2{font-size:20px}}'
  ].join('\n');w.document.head.appendChild(x);
@@ -90,16 +90,20 @@ function lineSeries(series,sel){
  const src=arr(series).slice(-state.days);
  if(src.length<2)return '<div class="p-empty">Недостаточно подтверждённых ежедневных срезов для графика.</div>';
  const vals=src.map(x=>state.view==='debtors'?n(x.debtors):n(x.total)),mx=Math.max(1,...vals),mn=Math.max(0,Math.min(...vals)*.9),
- W=760,H=235,l=60,t=23,pw=675,ph=165,delta=Math.max(1,mx-mn);
+ W=850,H=330,l=68,t=38,pw=745,ph=232,delta=Math.max(1,mx-mn);
  const px=i=>l+i*pw/(vals.length-1),py=v=>t+(mx-v)/delta*ph;
  const path=vals.map((v,i)=>(i?'L':'M')+px(i).toFixed(1)+' '+py(v).toFixed(1)).join(' ');
  let out='<svg class="p-chart" viewBox="0 0 '+W+' '+H+'" aria-label="Ежедневная динамика задолженности по подтверждённым датам 1С" role="img">';
  for(let i=0;i<=3;i++){const value=mn+(mx-mn)*i/3,y=py(value).toFixed(1);
-  out+='<path d="M'+l+' '+y+'H735" stroke="#dce4ee" stroke-dasharray="4 6"/><text x="51" y="'+(Number(y)+4)+'" font-size="11" text-anchor="end" fill="currentColor">'+E(state.view==='debtors'?Math.round(value):Math.round(value/1000)+' тыс.')+'</text>';
+  out+='<path d="M'+l+' '+y+'H813" stroke="#dce4ee" stroke-dasharray="4 6"/><text x="59" y="'+(Number(y)+4)+'" font-size="12" text-anchor="end" fill="currentColor">'+E(state.view==='debtors'?Math.round(value):Math.round(value/1000)+' тыс.')+'</text>';
  }
  out+='<path d="'+path+'" stroke="#2563eb" fill="none" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>';
  src.forEach((x,i)=>{const cx=px(i).toFixed(1),cy=py(vals[i]).toFixed(1);out+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(i===src.length-1?5:3)+'" fill="#2563eb"><title>'+E(date(x.report_date)+' · '+(state.view==='debtors'?Math.round(vals[i])+' должников':money(vals[i])))+'</title></circle>';
-  if(i===0||i===src.length-1||i%Math.ceil(src.length/5)===0)out+='<text x="'+cx+'" y="218" font-size="11" text-anchor="middle" fill="currentColor">'+E(day(x.report_date))+'</text>';
+  if(i===0||i===src.length-1||i%Math.ceil(src.length/6)===0){
+   out+='<text x="'+cx+'" y="315" font-size="12" text-anchor="middle" fill="currentColor">'+E(day(x.report_date))+'</text>';
+   const pointLabel=state.view==='debtors'?String(Math.round(vals[i])):Math.round(vals[i]).toLocaleString('ru-RU');
+   out+='<text x="'+cx+'" y="'+Math.max(18,Number(cy)-11)+'" font-size="12" font-weight="700" text-anchor="middle" fill="currentColor">'+E(pointLabel)+'</text>';
+  }
  });
  out+='</svg>';
  return '<div class="p-chart-wrap">'+out+'</div>';
@@ -113,7 +117,7 @@ function aging(m){
  return '<div class="p-ages"><div class="p-donut" style="background:conic-gradient('+stops.join(',')+')"><span>'+E(compact(m.amount).replace(' BYN',''))+'<small>BYN</small></span></div><div style="flex:1;min-width:170px">'+text+'</div></div>';
 }
 function briefing(d){
- const m=d.metrics||{},r=best(arr(d.rows));const top=r.slice(0,3);
+ const m=d.metrics||{},r=best(arr(d.rows));const top=r.slice(0,5);
  let msg=top.map(x=>{const amount=n(x.overdue),delta=n(x.day_change);
   const next=x.promised_date?'Проверить обещанную оплату '+date(x.promised_date):
    n(x.days_overdue)>=60?'Уточнить статус претензии и согласовать дальнейшие действия':
@@ -122,7 +126,7 @@ function briefing(d){
  }).join('');
  if(!msg)msg='<div class="p-empty">Подтверждённых долгов в выбранной выборке нет.</div>';
  return '<div class="p-card"><div class="p-header"><h3>✦ Лера · Что требует решения</h3><span class="p-muted">Факты отдельно от рекомендаций</span></div>'+
- '<div class="p-brief">'+msg+'</div><p class="p-muted">Приоритет — сумма долга, срок просрочки и изменение за день. Снижение ПДЗ не подтверждает оплату само по себе; менеджер должен проверить документы и контакт.</p></div>';
+ '<div class="p-brief">'+msg+'</div><p class="p-muted">Показаны '+top.length+' приоритетных клиентов из '+r.length+'. Полный список всех должников ниже. Лера рекомендует действия, но автоматический контроль обещаний и проверку поступлений пока нельзя считать завершёнными.</p></div>';
 }
 function renderRight(){
  const target=w.document.getElementById('pdz360-detail');if(!target)return;
@@ -166,21 +170,21 @@ function render(){
  '<div class="p-field"><label>Срок ПДЗ</label><select data-pdz-age>'+
  [['all','Все сроки'],['0_7','До 7 дней'],['8_30','8–30 дней'],['31_60','31–60 дней'],['61','61+ дней']].map(([v,t])=>'<option value="'+v+'"'+(state.age===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div>'+
  '<div class="p-field"><label>Динамика</label><div class="p-tabs">'+[7,14,30].map(v=>'<button class="p-btn'+(state.days===v?' p-active':'')+'" data-pdz-days="'+v+'">'+v+' дн.</button>').join('')+'</div></div>'+
- '<button type="button" class="p-btn" data-pdz-refresh>↻ Обновить</button><button type="button" class="p-btn" data-pdz-legacy>Исходный отчёт</button></div>';
+ '<button type="button" class="p-btn" data-pdz-refresh>↻ Обновить</button></div>';
  if(!d){root.innerHTML='<div class="p-header"><div><h2>Задолженность 360°</h2><div class="p-muted">ПДЗ · динамика день к дню · контроль возврата</div></div></div>'+
  '<div class="p-card p-empty" role="status">'+(state.error?'Не удалось прочитать подтверждённую ПДЗ: '+E(state.error):'Загружаю ежедневную историю ПДЗ из 1С…')+
- ' <button class="p-btn" data-pdz-refresh>Повторить</button> <button class="p-btn" data-pdz-legacy>Исходный отчёт</button></div>';return;}
+ ' <button class="p-btn" data-pdz-refresh>Повторить</button></div>';return;}
  const top='<div class="p-header"><div><h2>Задолженность 360°</h2><div class="p-muted">Последний отчёт 1С: '+E(date(d.report_date))+' · прошлый срез: '+E(date(d.previous_report_date))+' · по календарным датам, не по дате загрузки</div></div>'+
  '<div class="p-muted">'+(boss()?'Директор · все менеджеры':'Менеджер · только закреплённые клиенты')+'</div></div>';
  const kpi='<div class="p-kpis">'+
  card('Просрочено · всего',money(m.amount),'<span class="'+(delta>0?'p-danger':'p-good')+'">'+E(signed(delta))+E(changePct)+'</span> · '+E(changeLabel)+' · было '+E(money(d.previous_amount)),'')+
  card('Должников',String(n(m.debtors)),E('За отчёт '+date(d.report_date)))+
- card('Высокий риск',String(n(m.high_risk)),E(compact(m.high_amount))+' · 60+ дней и ≥1 000 BYN','')+
- card('Просрочка 30+ дней',money(m.over_30),'Включая более 60 дней')+
+ card('Без контакта в CRM',String(arr(d.rows).filter(x=>!x.last_contact_at).length),'Не зафиксирован подтверждённый контакт','')+
+ card('Просрочка 30+ дней',money(m.over_30),'Высокий риск: '+n(m.high_risk)+' должников · 60+ дней и ≥1 000 BYN')+
  card('Обещано на 7 дней',money(m.promised_amount),n(m.promised_clients)?n(m.promised_clients)+' подтверждённых договорённостей':'В комментариях пока не зафиксировано')+'</div>';
  const chart='<div class="p-card"><div class="p-header"><h3>Динамика ПДЗ · день к дню</h3><div class="p-tabs"><button class="p-btn'+(state.view==='amount'?' p-active':'')+'" data-pdz-view="amount">Сумма</button><button class="p-btn'+(state.view==='debtors'?' p-active':'')+'" data-pdz-view="debtors">Должники</button></div></div>'+lineSeries(d.series)+
  '<div class="p-muted">Показаны только подтверждённые даты отчётов 1С. Падение задолженности не означает подтверждённое поступление денег.</div></div>';
- const stage='<div class="p-card"><h3>Структура ПДЗ по срокам</h3>'+aging(m)+'</div>';
+ 
  const clients='<div class="p-card"><div class="p-header"><h3>Клиенты с задолженностью · '+list.length+'</h3><span class="p-muted">Фильтры по сроку и поиску</span></div>'+
  '<div class="p-controls" style="margin-top:10px"><input id="pdz360-search" data-pdz-search placeholder="Поиск клиента" value="'+E(state.query)+'" style="flex:1;min-width:160px">'+
  '<button class="p-btn p-primary" data-pdz-find>Найти</button></div>'+
@@ -188,7 +192,7 @@ function render(){
  '<span><b>'+E(r.client_name)+'</b><small>'+E(r.manager_name)+' · '+E(r.days_overdue)+' дн. · '+E(riskLabel(r.risk))+'</small></span>'+
  '<span class="p-amount">'+E(compact(r.overdue))+'<small class="p-delta '+(n(r.day_change)>0?'p-danger':n(r.day_change)<0?'p-good':'')+'">'+E(signed(r.day_change))+'</small></span></button>').join('')+
  (list.length?'':'<div class="p-empty">В текущей выборке должников нет.</div>')+'</div></div>';
- root.innerHTML=top+filters+kpi+'<div class="p-top">'+chart+stage+briefing(d)+'</div>'+
+ root.innerHTML=top+filters+kpi+'<div class="p-top">'+chart+briefing(d)+'</div>'+
  '<div class="p-split">'+clients+'<div class="p-card p-detail" id="pdz360-detail"></div></div>';
  const container=w.document.getElementById('pdz360-list');if(container)container.scrollTop=state.debtorScroll;
  renderRight();
@@ -254,6 +258,6 @@ function install(){
  w.document.addEventListener('click',e=>{const nav=e.target.closest?.('#nav-debt,#bn-debt,[data-page="debt"]');if(nav)w.setTimeout(()=>{if(safe())load(false);},70);},true);
  if(safe())void load();
 }
-w.RESANTA_PDZ360_V1=Object.freeze({version:'20261110.1',rpc:'crm_pdz360_daily_v1',readOnly:true,install,refresh:()=>load(true)});
+w.RESANTA_PDZ360_V1=Object.freeze({version:'20261111.2',rpc:'crm_pdz360_daily_v1',readOnly:true,install,refresh:()=>load(true)});
 if(w.document.readyState==='loading')w.document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(window);
