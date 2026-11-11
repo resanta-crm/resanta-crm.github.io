@@ -161,6 +161,7 @@ function header(){
  '</div>';
 }
 function tabs(){
+ if(state.tab==='overview360')return '';
  const a=[['overview360','🧱 Стенды 360°'],['placements','Действующие / ОС'],['requests','Заявки'],['history','История / архив']];
  if(isDF()||isDFS())a.push(['os','ОС / реестр'],['recommendations','ИИ · кандидаты']);
  if(isDFS())a.push(['internal','Логика ИИ · ДФС']);

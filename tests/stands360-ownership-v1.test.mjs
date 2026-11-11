@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const sql=readFileSync(new URL('../supabase/migrations/20261111143000_stands_360_ownership_photo_sales_v1.sql',import.meta.url),'utf8');
-const ui=readFileSync(new URL('../assets/267-stands360-director-ui-v1.js',import.meta.url),'utf8');
+const ui=readFileSync(new URL('../assets/268-stands360-uniai-unix-v2.js',import.meta.url),'utf8');
 const shell=readFileSync(new URL('../assets/115-stands-v236367.js',import.meta.url),'utf8');
 const loader=readFileSync(new URL('../assets/100-safe-upgrades-loader-v236272.js',import.meta.url),'utf8');
 test('authenticated per-placement scope, not name-only client or GPS',()=>{
@@ -32,11 +32,11 @@ test('1C shipment proxy stays scoped to registered exact SKU and monthly precisi
 test('existing inventory and histories remain reachable, UI has executive view and two photo sources',()=>{
  assert.match(shell,/overview360/);
  assert.match(shell,/Действующие \/ ОС/);
- assert.match(loader,/267-stands360-director-ui-v1/);
+ assert.match(loader,/268-stands360-uniai-unix-v2/);
  assert.match(ui,/Прислал продавец/);
- assert.match(ui,/Маршрут не|GPS и маршрут не нужны/);
+ assert.match(ui,/Маршрут и GPS не обязательны|GPS не нужен/);
  assert.match(ui,/crm_stands_photo_control_v1/);
- assert.match(ui,/crm_stands_360_skus_v1/);
+ assert.match(ui,/crm_stands_360_skus_v2/);
  assert.match(ui,/Решение руководителя|Возврат оборудования/);
  assert.doesNotMatch(ui,/\.from\(['"]purchase_history['"]\)/);
 });
