@@ -67,31 +67,51 @@ function signal(s){
 }
 async function feed(svc){
  const m=await meta(svc);
- const [metrics,ownPositions,market]=await Promise.all([
-  page(svc,"triovist_21vek_position_metrics_v236351","manager_email,sku,product_name,movement,current_position,previous_position,price_21vek,in_stock,current_observed_at,current_error",
-    q=>q.in("movement",["down","up","exited","entered"]),2500),
-  page(svc,"triovist_market_own_positions_current_v1","scope_key,sku,position,current_price,observed_at",
-    q=>q.order("scope_key").order("sku"),1500),
+ const [metrics,ownPositions,ownHistory,market]=await Promise.all([
+  page(svc,"triovist_21vek_position_metrics_v236351","sku,manager_email,product_name",
+    q=>q.order("sku"),3000),
+  page(svc,"triovist_market_own_positions_current_v1","scope_key,sku,product_name,position,current_price,in_stock,observed_at",
+    q=>q.order("scope_key").order("sku"),3000),
+  page(svc,"triovist_market_own_position_snapshots_v1","scope_key,sku,position,observed_at",
+    q=>q.gte("observed_at",new Date(Date.now()-5*864e5).toISOString())
+      .order("scope_key").order("sku").order("observed_at",{ascending:false}),9000),
   page(svc,"triovist_market_comp_position_current_v236352","scope_key,product_key,brand,model,movement,position,previous_position,position_delta,current_price,observed_at",
-    q=>q.in("movement",["up","down","exited","entered"]).gte("observed_at",new Date(Date.now()-3*864e5).toISOString()).order("scope_key").order("product_key"),5000)
+    q=>q.in("movement",["up","down","exited","entered"])
+      .gte("observed_at",new Date(Date.now()-3*864e5).toISOString())
+      .order("scope_key").order("product_key"),5000)
  ]);
  const known=new Set(m.scopes.map(x=>S(x.scope_key)));
- const owned=new Map();
- for(const r of ownPositions){if(known.has(r.scope_key))owned.set(S(r.sku),r)}
- const signals=[],fresh=new Date(Date.now()-5*864e5);
- for(const r of metrics){
-  const own=owned.get(S(r.sku));
-  if(!own||!r.current_observed_at||new Date(r.current_observed_at)<fresh||r.current_error)continue;
-  const s=signal({kind:"own",scope_key:own.scope_key,entity_key:r.sku,title:clip(r.product_name,110),manager_email:S(r.manager_email).toLowerCase(),
-    movement:r.movement,position:num(r.current_position),previous_position:num(r.previous_position),
-    current_price:num(r.price_21vek),in_stock:r.in_stock,observed_at:r.current_observed_at});
+ const managers=new Map(metrics.map(x=>[S(x.sku),x]));
+ const history=new Map();
+ for(const r of ownHistory){
+  if(!known.has(r.scope_key))continue;
+  const key=S(r.scope_key)+"|"+S(r.sku);
+  const records=history.get(key)||[];
+  if(records.length<2)records.push(r);
+  history.set(key,records);
+ }
+ const signals=[];
+ for(const own of ownPositions){
+  if(!known.has(own.scope_key))continue;
+  const h=history.get(S(own.scope_key)+"|"+S(own.sku))||[];
+  const latest=h[0],prior=h[1],p=num(latest?.position),before=num(prior?.position);
+  if(p===null||before===null||p!==num(own.position))continue;
+  if(Date.parse(latest.observed_at)<=Date.parse(prior.observed_at))continue;
+  const movement=p>before?"down":"up";
+  const staff=managers.get(S(own.sku))||{};
+  const s=signal({kind:"own",scope_key:own.scope_key,entity_key:own.sku,
+    title:clip(own.product_name||staff.product_name,110),
+    manager_email:S(staff.manager_email).toLowerCase(),movement,
+    position:p,previous_position:before,current_price:num(own.current_price),
+    in_stock:own.in_stock,observed_at:latest.observed_at});
   if(s)signals.push(s);
  }
  for(const r of market){
   if(!known.has(r.scope_key))continue;
   const s=signal({kind:"competitor",scope_key:r.scope_key,entity_key:r.product_key,
-    title:clip([r.brand,r.model].filter(Boolean).join(" "),110),manager_email:null,movement:r.movement,
-    position:num(r.position),previous_position:num(r.previous_position),current_price:num(r.current_price),
+    title:clip([r.brand,r.model].filter(Boolean).join(" "),110),
+    manager_email:null,movement:r.movement,position:num(r.position),
+    previous_position:num(r.previous_position),current_price:num(r.current_price),
     in_stock:null,observed_at:r.observed_at});
   if(s)signals.push(s);
  }
