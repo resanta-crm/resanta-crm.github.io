@@ -30,7 +30,7 @@ function fixture(role='manager',initiallyActive=true){
 }
 test('budget 360 passes JS parse and is wired after core, as an isolated view',()=>{
  assert.doesNotThrow(()=>new vm.Script(code));
- assert.match(index,/assets\/198-budgets-client360-v1\.js\?v=20261111-budget360-bootfix2/);
+ assert.match(index,/assets\/198-budgets-client360-v1\.js\?v=20261111-budget360-lera3/);
  assert.ok(index.indexOf('assets/01-crm-core.js')<index.indexOf('assets/198-budgets-client360-v1.js'));
  assert.match(code,/promoBudgetSummary\(b\)/);
  assert.match(code,/baseRender\.apply\(this,arguments\)/);
@@ -45,7 +45,7 @@ test('manager sees own client and overspend, never another manager budget',()=>{
  assert.match(html,/−?100,00 BYN|-100,00 BYN/);
  assert.match(html,/Перерасход/);
  assert.match(html,/Движения бюджета по месяцам/);
- assert.match(html,/Лера · Что требует внимания/);
+ assert.match(html,/Лера · Спроси про бюджет/);
 });
 test('boss gets all clients, but no automated edits or guessed historical reserves',()=>{
  const f=fixture('boss');
@@ -63,10 +63,50 @@ test('lazy budget route updates the new dashboard even when initial page is inac
  assert.equal(f.nodes['budgets360-top'],undefined,'no misleading content before entering budgets');
  f.setActive(true);
  f.listeners.click({target:{closest:selector=>selector.includes('#nav-budgets')?{id:'nav-budgets'}:null}});
- assert.match(f.nodes['budgets360-top'].innerHTML,/Лера · Что требует внимания/);
+ assert.match(f.nodes['budgets360-top'].innerHTML,/Лера · Спроси про бюджет/);
  assert.match(f.nodes['budgets360-list'].innerHTML,/Бензоленд|Наш клиент/);
  const info=f.w.RESANTA_BUDGETS360_V1.diagnostics();
  assert.equal(info.wrapped,true);
  assert.ok(info.renders>=1);
  assert.equal(info.error,'');
+});
+
+
+function submitLera(f,question){
+ const el=f.nodes['budgets360-top'];
+ assert.equal(typeof el.events.submit,'function');
+ el.events.submit({preventDefault(){},target:{
+  matches:sel=>sel==='[data-b360-ask-form]',
+  querySelector:sel=>sel==='[data-b360-question]'?{value:question}:null
+ }});
+ return f.nodes['budgets360-top'].innerHTML;
+}
+test('Lera answers exact client amounts from original budget summary, no LLM fabrication',()=>{
+ const f=fixture('boss');
+ const html=submitLera(f,'Какой бюджет у Наш клиент?');
+ assert.match(html,/Наш клиент/);
+ assert.match(html,/Общий бюджет: 1.000,00 BYN|Общий бюджет: 1 000,00 BYN|Общий бюджет: 1 000,00 BYN/);
+ assert.match(html,/Потрачено/);
+ const reserve=submitLera(f,'А сколько у него потрачено?');
+ assert.match(reserve,/Потрачено: 1.100,00 BYN|Потрачено: 1 100,00 BYN|Потрачено: 1 100,00 BYN/);
+});
+test('Lera lists client budgets within role scope only, even if asked for other staff',()=>{
+ const f=fixture('manager');
+ let html=submitLera(f,'Какие бюджеты у клиентов?');
+ assert.match(html,/Наш клиент/);
+ assert.doesNotMatch(html,/Чужой клиент/);
+ html=submitLera(f,'Какой бюджет у Чужой клиент?');
+ assert.doesNotMatch(html,/Чужой клиент<\/b> · Ачинович/);
+ assert.doesNotMatch(html,/2.000,00 BYN|2 000,00 BYN|2 000,00 BYN/);
+ html=submitLera(f,'У кого перерасход?');
+ assert.match(html,/Наш клиент/);
+ assert.doesNotMatch(html,/Чужой клиент/);
+});
+test('Lera supports aggregated free balance and named manager budget questions',()=>{
+ const f=fixture('boss');
+ let html=submitLera(f,'Сколько свободно?');
+ assert.match(html,/Свободный остаток/);
+ html=submitLera(f,'Какой бюджет у Ачинович?');
+ assert.match(html,/Ачинович/);
+ assert.match(html,/2.000,00 BYN|2 000,00 BYN|2 000,00 BYN/);
 });
