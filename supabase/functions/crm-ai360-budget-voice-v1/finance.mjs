@@ -10,7 +10,7 @@ export function scopeForVoice(profile,staff,networkId){
  if(!profile?.id||!['boss','manager'].includes(profile.role))return null;
  const duplicates=(staff||[]).filter(x=>x.id!==profile.id&&x.role==='manager'&&fold(x.name)===fold(profile.name));
  if(profile.role==='manager'){
-  if(duplicates.length||!profile.name||fold(profile.region)==='триовист / 21vek.by')return null;
+  if(duplicates.length||!profile.name||String(profile.region||'').trim().toLowerCase().startsWith('триовист'))return null;
   return {tier:'field_manager',role:'manager',region:profile.region,managers:[profile.name],subject_manager:profile.name};
  }
  if(profile.id===networkId&&String(profile.email||'').trim().toLowerCase()==='payushin_ar@resanta.ru')
