@@ -1,0 +1,24 @@
+name: AI360 finance evidence and KPI scope
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-budget-voice-v1/**'
+      - 'tests/ai360-finance-evidence-kpi.test.mjs'
+      - '.github/workflows/ai360-finance-evidence-kpi.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-budget-voice-v1/**'
+      - 'tests/ai360-finance-evidence-kpi.test.mjs'
+      - '.github/workflows/ai360-finance-evidence-kpi.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/ai360-finance-evidence-kpi.test.mjs
