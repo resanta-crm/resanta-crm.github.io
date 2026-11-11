@@ -309,20 +309,19 @@ async function daily(svc){
  }
  try{
   const data=await feed(svc);
-  const seen=new Set(),selection=[];
-  for(const candidate of data.cases.filter(x=>x.kind==="own"&&x.movement==="down"||
-     x.kind==="competitor"&&x.movement==="up").sort((a,b)=>b.priority-a.priority)){
-   if(selection.length>=MAX_CRON_AI)break;
-   if(seen.has(candidate.scope_key))continue;
-   seen.add(candidate.scope_key);
-   selection.push(candidate);
-  }
-  let generated=0;
-  for(const c of selection){
+  const seen=new Set();
+  let generated=0,attempts=0;
+  const ranked=data.cases.filter(x=>(x.kind==="own"&&x.movement==="down")||
+    (x.kind==="competitor"&&x.movement==="up")).sort((a,b)=>b.priority-a.priority);
+  // Try other scopes if a candidate cannot be backed by the latest two snapshots.
+  for(const c of ranked){
+   if(generated>=MAX_CRON_AI||attempts>=24)break;
+   if(seen.has(c.scope_key))continue;
+   attempts++;
    try{
     const out=await investigate(svc,{id:"544fb1e2-ef70-44de-bc62-e0e1596a4bfc",email:"scheduler",leader:true},c);
-    if(out.ai_available)generated++;
-   }catch(e){console.warn("AI investigation skipped",clip(e?.message,80))}
+    if(out.ai_available){generated++;seen.add(c.scope_key)}
+   }catch(e){console.warn("AI skipped unverified rank",clip(e?.message,80))}
   }
   const followups=await updateFollowups(svc);
   await svc.from(R).update({status:"completed",finished_at:new Date().toISOString(),
