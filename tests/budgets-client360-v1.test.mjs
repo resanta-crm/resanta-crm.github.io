@@ -31,7 +31,7 @@ function fixture(role='manager',initiallyActive=true,withObserver=false){
 }
 test('budget 360 passes JS parse and is wired after core, as an isolated view',()=>{
  assert.doesNotThrow(()=>new vm.Script(code));
- assert.match(index,/assets\/198-budgets-client360-v1\.js\?v=20261111-budget360-lera3/);
+ assert.match(index,/assets\/198-budgets-client360-v1\.js\?v=20261111-budget360-renderloopfix4/);
  assert.ok(index.indexOf('assets/01-crm-core.js')<index.indexOf('assets/198-budgets-client360-v1.js'));
  assert.match(code,/promoBudgetSummary\(b\)/);
  assert.match(code,/baseRender\.apply\(this,arguments\)/);
