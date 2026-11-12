@@ -286,7 +286,7 @@ document.addEventListener('input',e=>{if(e.target.id==='p360-search'){
  if(cardsContainer){const template=cards();const div=document.createElement('div');div.innerHTML=template;
  cardsContainer.innerHTML=div.querySelector('.p360-cards')?.innerHTML||'';}
  holder.focus();holder.setSelectionRange(start,start)} }
-}});
+});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')el('p360-lightbox')?.remove()});
 window.RESANTA_PROMOTIONS360_V1=Object.freeze({render,refresh,legacy,restore,version:'promotions360-uniai-v1',get enabled(){return state.enabled},get showLegacy(){return state.showLegacy}});
 })();
