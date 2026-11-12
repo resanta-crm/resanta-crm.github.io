@@ -167,5 +167,57 @@ end $$;
 revoke all on function public.crm_company_viewer_summary_v1(integer) from public,anon;
 grant execute on function public.crm_company_viewer_summary_v1(integer) to authenticated;
 
+
+-- Prevent bypassing the dedicated executive portal by directly querying
+-- legacy PostgREST tables. Existing employee rights remain unchanged.
+create or replace function public.crm_access_legacy_read_v1()
+returns boolean language sql stable security definer set search_path='' as $
+ select (select auth.uid()) is null or exists(
+  select 1 from public.users u where u.id=(select auth.uid())
+   and u.role not in ('executive_viewer','pending','disabled')
+ );
+$;
+revoke all on function public.crm_access_legacy_read_v1() from public,anon;
+grant execute on function public.crm_access_legacy_read_v1() to authenticated;
+
+-- For 12 legacy tables with RLS disabled, add RLS policies that preserve the
+-- pre-existing table ACL for old staff/anon, but explicitly deny executives.
+do $
+declare t record;is_users boolean;
+begin
+ for t in
+  select n.nspname as sch,c.relname tbl,c.relrowsecurity rls,
+   has_table_privilege('authenticated',c.oid,'SELECT') can_select,
+   has_table_privilege('authenticated',c.oid,'INSERT') can_insert,
+   has_table_privilege('authenticated',c.oid,'UPDATE') can_update,
+   has_table_privilege('authenticated',c.oid,'DELETE') can_delete,
+   has_table_privilege('anon',c.oid,'SELECT') anon_select,
+   has_table_privilege('anon',c.oid,'INSERT') anon_insert,
+   has_table_privilege('anon',c.oid,'UPDATE') anon_update,
+   has_table_privilege('anon',c.oid,'DELETE') anon_delete
+  from pg_class c join pg_namespace n on n.oid=c.relnamespace
+  where c.relkind='r' and
+  (n.nspname='public' or (n.nspname='storage' and c.relname in ('objects','buckets')))
+ loop
+  if not t.rls then
+   execute format('alter table %I.%I enable row level security',t.sch,t.tbl);
+   if t.can_select or t.can_insert or t.can_update or t.can_delete then
+    execute format('create policy crm_access_legacy_staff_nonexec_v1 on %I.%I for all to authenticated using ((select public.crm_access_legacy_read_v1())) with check ((select public.crm_access_legacy_read_v1()))',t.sch,t.tbl);
+   end if;
+   if t.anon_select or t.anon_insert or t.anon_update or t.anon_delete then
+    execute format('create policy crm_access_keep_existing_anon_v1 on %I.%I for all to anon using (true) with check (true)',t.sch,t.tbl);
+   end if;
+  end if;
+  if t.can_select then
+   execute format('drop policy if exists crm_access_viewer_read_restrict_v1 on %I.%I',t.sch,t.tbl);
+   if t.sch='public' and t.tbl='users' then
+    execute format('create policy crm_access_viewer_read_restrict_v1 on public.users as restrictive for select to authenticated using ((select public.crm_access_legacy_read_v1()) or (id=(select auth.uid()) and role=''executive_viewer''))');
+   else
+    execute format('create policy crm_access_viewer_read_restrict_v1 on %I.%I as restrictive for select to authenticated using ((select public.crm_access_legacy_read_v1()))',t.sch,t.tbl);
+   end if;
+  end if;
+ end loop;
+end $;
+
 -- Protect legacy user administration while new owner-only panel is introduced.
 -- A separate Edge endpoint checks owner identity via Auth, not by editable metadata.
