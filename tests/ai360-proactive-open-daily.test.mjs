@@ -91,9 +91,8 @@ test('AI360 proactivity remains exclusively director read-only',()=>{
  assert.match(briefJs,/crmAI360DirectorProactiveOpenV2/);
  assert.match(briefJs,/requestBrief\(ui,\{auto:true\}\)/);
  assert.doesNotMatch(briefJs,/\.from\(['"]tasks['"]\)\.insert|commit_real/);
- assert.ok(voiceJs.includes('window.crmAI360DirectorProactiveOpenV2?.({answer,textStatus})'));
- assert.ok(voiceJs.indexOf('if(root.hidden)closePanel()')<
-   voiceJs.indexOf('window.crmAI360DirectorProactiveOpenV2?.({answer,textStatus})'));
+ assert.ok(!voiceJs.includes('window.crmAI360DirectorProactiveOpenV2?.({answer,textStatus})'), 'No unsolicited briefing after greeting');
+ assert.ok(voiceJs.includes('if(hello)answer(hello.greeting)'), 'Personal greeting replaces automatic briefing');
  assert.ok(loaderJs.includes('142-resanta-ai360-director-proactive-brief-v1.js?v=3'));
- assert.ok(loaderJs.includes('134-resanta-voice-ai360-pilot-v1.js?v=18'));
+ assert.ok(loaderJs.includes('134-resanta-voice-ai360-pilot-v1.js?v=20'));
 });
