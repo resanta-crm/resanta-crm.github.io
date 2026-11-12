@@ -82,7 +82,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
     :await db.auth.getSession().then(x=>x?.data?.session);
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
-   const payload={message:question,history:history.slice(-10),memory};
+   const payload={action:'ask',question,history:history.slice(-6),memory};
    // One verified backend only. Never silently downgrade to an older AI engine.
    const result=await db.functions.invoke(ENDPOINT,{body:payload});
    if(Number(result.error?.context?.status)===404)
