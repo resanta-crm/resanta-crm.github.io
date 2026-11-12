@@ -5,6 +5,20 @@ import {CRM_AI360_ALL_DOMAINS} from './catalog.mjs';
 import {staffPermission} from './permissions.mjs';
 
 export const AGENT360_OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
+export const AGENT360_PETROVICHEV_ID='a24954b8-2fe1-4852-b629-d8f351e1bd36';
+// User-requested address forms are presentation only, never access-control inputs.
+const GREETINGS=Object.freeze({
+ [AGENT360_PETROVICHEV_ID]:'мой слуга',
+ 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Саника',
+ '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
+ '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
+ '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
+ '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
+});
+export function agentGreeting(principal){
+ return principal&&GREETINGS[principal.user_id]||'';
+}
 const normalize=x=>String(x||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replaceAll('ё','е');
 
 // These are UI/navigation capabilities, not proof that every dataset in a page is wired.
@@ -55,16 +69,29 @@ export const AGENT360_SURFACES=Object.freeze([
 
 export const AGENT360_NAV_IDS=Object.freeze(AGENT360_SURFACES.filter(x=>x.id.startsWith('nav-')).map(x=>x.id));
 
-export function agentPrincipal(userId,profile){
+export function agentPrincipal(userId,profile,authUser=null){
  if(!userId||!profile||profile.id!==userId)return null;
  // The director endpoint has its own immutable owner and role checks as well.
  if(userId===AGENT360_OWNER_ID && profile.role==='boss' &&
     normalize(profile.name)==='александр паюшин')
-  return Object.freeze({tier:'network_director',endpoint:'crm-ai360-dialog-v4',
+  return Object.freeze({user_id:userId,tier:'network_director',endpoint:'crm-ai360-dialog-v4',
     domains:CRM_AI360_ALL_DOMAINS,read_only:true});
+ // Specific executive account authenticated AND email-confirmed in Supabase Auth.
+ // Its role, region, access scope and email are verified a second time by
+ // crm-ai360-director-peer-v1; never impersonate the owner's JWT.
+ if(userId===AGENT360_PETROVICHEV_ID &&
+    authUser?.id===userId && normalize(authUser?.email)==='petrovichev@resanta.ru' &&
+    !!authUser?.email_confirmed_at &&
+    profile.role==='boss' && profile.region==='Все филиалы' &&
+    profile.access_scope==='standard' &&
+    normalize(profile.name)==='руководство компании' &&
+    normalize(profile.email)==='petrovichev@resanta.ru')
+   return Object.freeze({user_id:userId,tier:'network_director',
+     endpoint:'crm-ai360-director-peer-v1',
+     domains:CRM_AI360_ALL_DOMAINS,read_only:true});
  const staff=staffPermission(userId,profile);
  if(!staff)return null;
- return Object.freeze({tier:staff.tier,endpoint:'crm-ai360-staff-dialog-v1',
+ return Object.freeze({user_id:userId,tier:staff.tier,endpoint:'crm-ai360-staff-dialog-v1',
   domains:staff.domains,read_only:true});
 }
 
@@ -75,7 +102,7 @@ export function agentCapabilities(principal){
  const allowed=new Set(principal.domains);
  return {
   mode:'ai_agent360_foundation_v1',read_only:true,can_execute_writes:false,
-  tier:principal.tier,
+  tier:principal.tier,greeting:agentGreeting(principal),
   supported_domains:[...principal.domains],
   surfaces:AGENT360_SURFACES.map(x=>{
    const ready=x.domains.filter(d=>allowed.has(d));
