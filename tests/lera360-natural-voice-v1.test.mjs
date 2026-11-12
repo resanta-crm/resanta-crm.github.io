@@ -47,6 +47,10 @@ test('only actual local speech enters the paid recognizer when audio meter exist
  assert.match(staff,/conversationUntil>Date\.now\(\)/);
  assert.match(staff,/loops<50/);
  assert.match(staff,/document\.hidden/);
+ assert.match(staff,/root\.localStorage\?\.getItem\(key\)==='yes'/);
+ assert.match(staff,/function resumeWakeIfApproved\(\)/);
+ assert.match(staff,/if\(!allowed\(\)\|\|!wakePref\(\)\|\|wakeOn\|\|oneShot\)return false/);
+ assert.match(panel,/resumeWakeIfApproved\?\.\(\)/);
 });
 test('Yandex receives spoken corrections, never modified CRM data',()=>{
  const context={window:{}};
