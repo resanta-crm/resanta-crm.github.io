@@ -6,8 +6,8 @@ const js=fs.readFileSync('assets/143-resanta-ai360-unified-dialog-v1.js','utf8')
 const loader=fs.readFileSync('assets/137-resanta-ai360-lazy-launch-v1.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
 assert.match(js,/const ENDPOINT='crm-ai360-agent-v1'/);
-assert.match(loader,/143-resanta-ai360-unified-dialog-v1.js\?v=9/);
-assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=38/);
+assert.match(loader,/143-resanta-ai360-unified-dialog-v1.js\?v=10/);
+assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=39/);
 const calls=[],answers=[];let response='ok';
 const ctx={
  navigator:{userAgent:'Macintosh'}, currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},
