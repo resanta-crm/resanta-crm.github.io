@@ -53,7 +53,7 @@ test('feature flag and legacy approvals remain available',()=>{
  assert.match(sql,/auto_tasks_enabled boolean not null default false/);
  assert.match(core,/RESANTA_PROMOTIONS360_V1/);
  assert.match(html,/210-promotions360-uniai-v1\.js/);
- assert.match(ui,/data-p360-docs/);
+ assert.match(ui,/data-p360-operate/);
  assert.match(ui,/window\.renderPromotions/);
  assert.match(ui,/promotion-photos/);
 });
@@ -76,4 +76,15 @@ test('Telegram sends only with dispatch secret, scheduled config and never from 
  assert.match(edge,/crm_promotion_sales_truth_v236360/);
  assert.match(edge,/client_id/);
  assert.match(edge,/wouldEscalate/);
+});
+
+test("video regression: old screen is never mixed into director dashboard and return works",()=>{
+ assert.match(html,/id="promo360-css"/);
+ assert.match(ui,/view\(\)\?\.classList\.remove\(\x27p360-legacy\x27\)/);
+ assert.match(ui,/if\(r\)r\.hidden=false;draw\(\)/);
+ assert.doesNotMatch(ui,/if\(r\)r\.hidden=false;display\(\)/);
+ assert.match(ui,/data-p360-operate/);
+ assert.match(ui,/fmtDateTime\(t\.due_at\)/);
+ assert.match(ui,/stageLabel\[p\.stage\]/);
+ assert.match(ui,/selected\?detail\(\):briefing\(\)/);
 });

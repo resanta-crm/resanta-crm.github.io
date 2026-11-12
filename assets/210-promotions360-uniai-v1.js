@@ -13,6 +13,10 @@ const str=x=>String(x??'');
 const num=x=>Number.isFinite(Number(x))?Number(x):0;
 const money=x=>num(x).toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN';
 const fmtDate=x=>x?new Date(x+'T12:00:00').toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
+const stageLabel={before:'До начала',start:'Запуск',during:'В процессе',after:'После завершения'};
+const stageOrder={before:0,start:1,during:2,after:3};
+const actionStatus={open:'Открыто',working:'В работе',review:'На проверке',closed:'Завершено',escalated:'Просрочено'};
+const fmtDateTime=x=>x?new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
 const isActive=()=>document.getElementById('page-promotions')?.classList.contains('active')===true;
 const client=()=>typeof db!=='undefined'?db:window.db;
 const rpc=async (fn,args={})=>{const {data,error}=await client().rpc(fn,args);if(error)throw error;return data};
@@ -31,7 +35,7 @@ function prepare(){
 }
 function legacy(){
  state.showLegacy=true;
- const page=view();page?.classList.remove('p360-active');
+ const page=view();page?.classList.remove('p360-active');page?.classList.add('p360-legacy');
  const root=el(rootId);if(root)root.hidden=true;
  try{window.renderPromotions?.()}catch(e){console.warn('Legacy promotions',e)}
  const old=el('p360-legacy-back');old?.remove();
@@ -41,8 +45,8 @@ function legacy(){
  page?.prepend(back);
 }
 function restore(){
- state.showLegacy=false;el('p360-legacy-back')?.remove();
- const r=prepare();if(r)r.hidden=false;display();
+ state.showLegacy=false;view()?.classList.remove('p360-legacy');el('p360-legacy-back')?.remove();
+ const r=prepare();if(r)r.hidden=false;draw();
 }
 function stateText(p){
  if(p.verification==='confirmed')return {text:'1С подтверждено',cls:'good'};
@@ -119,12 +123,12 @@ function cards(){
  }).join(''):'<div class="p360-panel p360-muted">По выбранным фильтрам акций нет.</div>')+'</div>';
 }
 function formatMonths(p){
- const m=rows(p.months).filter(x=>x?.month);if(!m.length)return '<p class="p360-muted">Нет достоверной динамики по месяцам.</p>';
+ const m=rows(p.months).filter(x=>x?.month);if(!m.length)return '<p class="p360-muted">Динамика 1С ещё не подтверждена.</p>';
  const max=Math.max(1,...m.map(x=>num(x.sales)));
- return '<div class="p360-graph">'+m.map(x=>'<div class="p360-month"><div class="bar" style="height:'+
- Math.max(2,num(x.sales)/max*90)+'%" title="'+esc(x.month)+' · '+esc(money(x.sales))+'"></div>'+
- '<span>'+esc(str(x.month).slice(5,7))+'.'+esc(str(x.month).slice(2,4))+'</span></div>').join('')+'</div>'+
- '<p class="p360-muted">Месячные отгрузки 1С. Неполные границы акции могут включать продажи вне периода акции.</p>';
+ return '<div class="p360-monthly">'+m.map(x=>'<div class="p360-monthlyrow"><span>'+esc(str(x.month).slice(5,7))+'.'+esc(str(x.month).slice(2,4))+'</span>'+
+ '<div class="p360-monthlytrack"><i style="width:'+(num(x.sales)<=0?0:Math.max(3,num(x.sales)/max*100))+'%"></i></div>'+
+ '<strong>'+money(x.sales)+'</strong></div>').join('')+'</div>'+
+ '<p class="p360-muted">Справочно: помесячные отгрузки из 1С. Это не факт за точные даты акции. Точный план/факт показывается выше только после сверки клиента, SKU и периода.</p>';
 }
 function forecast(p){
  const duration=Math.max(1,Math.round((Date.parse(p.end_date+'T12:00:00Z')-Date.parse(p.start_date+'T12:00:00Z'))/86400000)+1);
@@ -134,13 +138,13 @@ function forecast(p){
 function detail(){
  const p=rows(state.data?.rows).find(x=>x.id===state.selected);if(!p)return '';
  const q=stateText(p),taskRows=rows(state.tasks);
- const actions='<div class="p360-panel"><h3>✦ Лера · Что предпринять</h3><div class="p360-info">'+
- esc(p.lera_action)+'</div>'+
+ const actions='<div class="p360-panel"><h3>✦ Лера · Причина и конкретное действие</h3><div class="p360-info">'+
+ esc(p.confirmed_1c&&num(p.verified_sales)===0&&p.elapsed_days>=7?'По подтверждённым данным 1С отгрузок нет. Менеджер должен выяснить причину, предпринять действие и зафиксировать результат.':p.lera_action||'Проверить данные и назначить следующее действие.')+'</div>'+
  (p.confirmed_1c&&num(p.verified_sales)===0&&p.elapsed_days>=7?'<p class="p360-muted">Отгрузки по точным SKU и клиенту подтверждены, но нулевые. Лера запросит причину и конкретное действие.</p>':
  '<p class="p360-muted">До оценки нулевых продаж нужно подтвердить правильность загрузки 1С, ID клиента и период акции.</p>')+
  '<div><h4>Поручения по акции</h4>'+
- (taskRows.length?taskRows.map(t=>'<div class="p360-task"><b>День '+t.milestone+'</b> · '+esc(t.status)+
- '<div class="p360-muted">Контроль: '+esc(t.due_at?.slice(0,16).replace('T',' ')||'—')+'</div>'+
+ (taskRows.length?taskRows.map(t=>'<div class="p360-task"><b>Проверка после '+t.milestone+' дней</b> · '+esc(actionStatus[t.status]||t.status)+
+ '<div class="p360-muted">Ответственный: '+esc(p.manager_name||'—')+' · ответ до '+esc(fmtDateTime(t.due_at))+'</div>'+
  (t.reason?'<div>Причина: '+esc(t.reason)+'</div>':'')+
  (t.action_plan?'<div>Действие: '+esc(t.action_plan)+'</div>':'')+
  ((t.status==='open'||t.status==='working')?'<button class="p360-btn" data-p360-action="'+esc(t.id)+'">Зафиксировать результат</button>':'')+'</div>').join(''):'<div class="p360-muted">Открытых поручений по этой акции пока нет.</div>')+'</div>'+
@@ -148,7 +152,7 @@ function detail(){
  return '<div class="p360-detail" id="p360-detail-panel"><div class="p360-detail-top"><div>'+
  '<h3 style="font-size:18px;margin:0">'+esc(p.title)+'</h3><div class="p360-muted">'+esc(p.client_name)+' · '+esc(p.manager_name)+
  ' · '+fmtDate(p.start_date)+'–'+fmtDate(p.end_date)+'</div></div>'+
- '<button class="p360-btn" data-p360-close>Закрыть ×</button></div>'+
+ '<button class="p360-btn" data-p360-close>← К списку акций</button></div>'+
  '<div class="p360-detail-kpis">'+[
  ['План акции',money(p.sales_plan)],
  ['Факт 1С',p.confirmed_1c?money(p.verified_sales):'Нужно сверить'],
@@ -162,11 +166,11 @@ function detail(){
  '<div class="p360-columns" style="margin-top:10px"><div class="p360-panel"><h3>📊 Продажи по месяцам</h3>'+formatMonths(p)+
  '<h4>Артикулы в акции · '+num(p.sku_count)+'</h4>'+
  (rows(p.items).length?rows(p.items).map(x=>'<div class="p360-brief-item"><b>'+esc(x.sku||'—')+'</b> · '+esc(x.product_name||'')+'</div>').join(''):'<div class="p360-muted">Точный каталог SKU нужно подтвердить.</div>')+
- '<h4>Фото · до / во время / после</h4><div id="p360-photoarea"><span class="p360-muted">'+
+ '<h4>📷 Фотоотчёт · этапы акции</h4><div id="p360-photoarea"><span class="p360-muted">'+
  (state.photoError?esc(state.photoError):'Нажмите «Обновить фото» для загрузки превью')+'</span></div>'+
  '<button class="p360-btn" data-p360-photos>Обновить фото</button></div>'+actions+'</div>'+
  '<div class="p360-actions" style="justify-content:flex-end;margin-top:12px">'+
- '<button class="p360-btn" data-p360-docs>Документы, согласования и управление акцией →</button></div></div>';
+ '<button class="p360-btn strong" data-p360-operate="'+esc(p.id)+'">Согласование, документы и отчёт →</button></div></div>';
 }
 function draw(){
  const root=prepare();if(!root||state.showLegacy)return;
@@ -175,7 +179,8 @@ function draw(){
  const d=state.data;if(!d){root.innerHTML='<div class="p360-panel">Загружаю сводку акций с сервера…</div>';return}
  const selected=rows(d.rows).find(x=>x.id===state.selected);
  root.innerHTML='<div class="p360-top"><div><h2>🎯 Акции 360°</h2><div class="p360-muted">РЕСАНТА CRM · единый директорский обзор · данные на '+esc(d.as_of)+'</div></div>'+
- '<div class="p360-actions"><button class="p360-btn" data-p360-refresh>↻ Обновить</button><button class="p360-btn" data-p360-docs>Учёт и документы ▾</button></div></div>'+
+ '<div class="p360-actions"><button class="p360-btn" data-p360-refresh>↻ Обновить</button><button class="p360-btn" data-p360-pending>На согласовании</button><button class="p360-btn" data-p360-budgets>Бюджеты</button>'+
+ ((typeof promoIsBoss==='function'&&!promoIsBoss())||(typeof promoIsDF==='function'&&promoIsDF())?'<button class="p360-btn strong" data-p360-create>+ Новая акция</button>':'')+'</div></div>'+
  (state.error?'<div class="p360-error">'+esc(state.error)+'</div>':'')+
  '<div class="p360-grid">'+[
  ['Действуют',num(d.active),'Акций из CRM'],
@@ -184,15 +189,14 @@ function draw(){
  ['Сверены 1С',num(d.verified_count)+' / '+num(d.total),'Только точные данные'],
  ['Поручения Леры',num(d.action_count),'Открытые действия']
  ].map(([label,val,note])=>'<div class="p360-kpi"><small>'+label+'</small><strong>'+val+'</strong><span>'+note+'</span></div>').join('')+'</div>'+
- briefing()+'<div class="p360-layout">'+graph()+confidenceChart()+'</div>'+
- cards()+detail();
+ (selected?detail():briefing()+'<div class="p360-layout">'+graph()+confidenceChart()+'</div>'+cards());
  if(selected){if(rows(state.photos).length)renderPhotos();else if(!state.photoError){loadPhotos(selected.id)}}
 }
 function renderPhotos(){
  const host=el('p360-photoarea');if(!host)return;
- host.innerHTML='<div class="p360-photogrid">'+rows(state.photos).map(p=>
- '<button class="p360-photo" data-p360-photo="'+esc(p.id)+'"><img alt="'+esc(p.stage||'Фото')+'" id="p360-photo-'+esc(p.id)+'">'+
- esc(p.stage||'Фото')+'</button>').join('')+'</div>';
+ host.innerHTML='<div class="p360-photogrid">'+rows(state.photos).slice().sort((a,b)=>(stageOrder[a.stage]??9)-(stageOrder[b.stage]??9)).map(p=>
+ '<button class="p360-photo" data-p360-photo="'+esc(p.id)+'"><img alt="'+esc(stageLabel[p.stage]||'Фото')+'" id="p360-photo-'+esc(p.id)+'">'+
+ esc(stageLabel[p.stage]||'Фото')+'</button>').join('')+'</div>';
  for(const p of rows(state.photos)){
   client().storage.from('promotion-photos').createSignedUrl(p.storage_path,180).then(({data,error})=>{
    const img=el('p360-photo-'+p.id);if(img&&data?.signedUrl&&!error)img.src=data.signedUrl
@@ -216,7 +220,7 @@ async function selectPromo(id){
  state.selected=id;state.photos=[];state.photoError='';state.tasks=[];
  draw();
  await Promise.allSettled([loadPhotos(id),loadTasks(id)]);
- el('p360-detail-panel')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+ el(rootId)?.scrollIntoView({behavior:'smooth',block:'start'});
 }
 async function refresh(){
  if(state.loading)return;
@@ -230,12 +234,12 @@ async function refresh(){
  }catch(e){state.error='Не удалось обновить сводку акций: '+str(e.message||e);
   state.enabled=null;root.hidden=false;
   view()?.classList.add('p360-active');
-  root.innerHTML='<div class="p360-error">'+esc(state.error)+'</div><button class="p360-btn" data-p360-refresh>Повторить</button> <button class="p360-btn" data-p360-docs>Открыть прежний раздел</button>';
+  root.innerHTML='<div class="p360-error">'+esc(state.error)+'</div><button class="p360-btn" data-p360-refresh>Повторить</button> <button class="p360-btn" data-p360-legacy-recovery>Восстановить старый раздел</button>';
  }finally{state.loading=false}
 }
 function render(){
  if(state.showLegacy||state.enabled===false)return false;
- if(!state.loaded&&!state.loading)refresh();else if(state.loaded)draw();
+ if(!state.loading)refresh();else if(state.loaded)draw();
  return true
 }
 async function photoViewer(id){
@@ -294,7 +298,11 @@ async function updateAction(id){
 document.addEventListener('click',e=>{
  const target=e.target.closest?.('[data-p360-detail]');if(target){selectPromo(target.dataset.p360Detail);return}
  if(e.target.closest?.('[data-p360-refresh]')){refresh();return}
- if(e.target.closest?.('[data-p360-docs]')){legacy();return}
+ if(e.target.closest?.('[data-p360-legacy-recovery]')){legacy();return}
+ if(e.target.closest?.('[data-p360-pending]')){state.mode='pending';state.selected=null;state.loaded=false;refresh();return}
+ if(e.target.closest?.('[data-p360-create]')){if(typeof openPromotionEditor==='function')openPromotionEditor();else alert('Форма создания акции недоступна');return}
+ if(e.target.closest?.('[data-p360-budgets]')){if(typeof goPage==='function')goPage('budgets','Бюджеты');return}
+ const operate=e.target.closest?.('[data-p360-operate]');if(operate){if(typeof openPromotionDetail==='function')openPromotionDetail(operate.dataset.p360Operate);else alert('Карточка согласований недоступна');return}
  if(e.target.closest?.('[data-p360-back]')){restore();return}
  if(e.target.closest?.('[data-p360-close]')){state.selected=null;state.photos=[];state.tasks=[];draw();return}
  if(e.target.closest?.('[data-p360-photos]')){loadPhotos(state.selected);return}
