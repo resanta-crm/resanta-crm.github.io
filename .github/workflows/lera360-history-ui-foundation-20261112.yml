@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'assets/217-lera360-history-ui-v1.js'
+      - 'assets/218-lera360-director-history-hook-v1.js'
       - 'index.html'
       - 'tests/lera360-history-ui-v1.test.mjs'
       - '.github/workflows/lera360-history-ui-foundation-20261112.yml'
@@ -20,5 +21,6 @@ jobs:
       - name: History UI syntax and privacy logic
         run: |
           node --check assets/217-lera360-history-ui-v1.js
+          node --check assets/218-lera360-director-history-hook-v1.js
           node --test tests/lera360-history-ui-v1.test.mjs
           node --test tests/ai360-agent360-unified-gateway-v1.test.mjs
