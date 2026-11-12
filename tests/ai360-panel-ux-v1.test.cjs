@@ -51,5 +51,14 @@ assert(capture.includes("if(document.hidden){")&&capture.includes("if(mode)void 
 assert(capture.includes("!panel.classList?.contains('rva-mini')"),'mini player must stop microphone');
 assert(capture.includes('noiseOnly(phrase)'),'skip lone noise fragments');
 assert(loader.includes('Android'),'safe lazy launch still excludes Android');
-assert(pilot.includes("currentProfile?.role === 'boss'"),'only director sees assistant');
+// Owner and confirmed director peer are checked by the shared authenticated
+// account identity helper. There is no longer an unsafe role-name-only gate.
+const greeting=fs.readFileSync('assets/215-lera360-personal-greeting-v1.js','utf8');
+assert(pilot.includes('window.crmAI360GreetingV1?.()'),'AI panel verifies current signed-in account');
+assert(pilot.includes('544fb1e2-ef70-44de-bc62-e0e1596a4bfc'),'original director UUID preserved');
+assert(pilot.includes('a24954b8-2fe1-4852-b629-d8f351e1bd36'),'authorized director peer');
+assert(greeting.includes('currentProfile.role!==p.role')&&greeting.includes('currentProfile.region!==p.region'),
+ 'account identity helper checks role and region before opening');
+assert(greeting.includes('currentProfile.access_scope!==p.scope'),
+ 'peer's access scope still verified');
 console.log('AI360 UX: director-only spacious panel, feedback, nuanced full speech, background audio and foreground mic guards PASS');
