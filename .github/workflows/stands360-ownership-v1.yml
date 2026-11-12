@@ -4,6 +4,9 @@ on:
     paths:
       - 'assets/115-stands-v236367.js'
       - 'assets/268-stands360-uniai-unix-v2.js'
+      - 'assets/269-stands360-feedback-v3.css'
+      - 'supabase/migrations/*stands360_v3*'
+      - 'tests/stands360-feedback-v3.test.mjs'
       - 'assets/268-stands360-uniai-unix-v2.css'
       - 'supabase/migrations/*stands360_uniai*'
       - 'supabase/functions/crm-stands-telegram-v1/stands-brief.mjs'
@@ -19,6 +22,9 @@ on:
     paths:
       - 'assets/115-stands-v236367.js'
       - 'assets/268-stands360-uniai-unix-v2.js'
+      - 'assets/269-stands360-feedback-v3.css'
+      - 'supabase/migrations/*stands360_v3*'
+      - 'tests/stands360-feedback-v3.test.mjs'
       - 'assets/268-stands360-uniai-unix-v2.css'
       - 'supabase/migrations/*stands360_uniai*'
       - 'supabase/functions/crm-stands-telegram-v1/stands-brief.mjs'
@@ -47,7 +53,7 @@ jobs:
           node --check assets/267-stands360-director-ui-v1.js
           node --check assets/100-safe-upgrades-loader-v236272.js
           node --check supabase/functions/crm-stands-telegram-v1/stands-brief.mjs
-          node --test tests/stands360-ownership-v1.test.mjs tests/stands360-telegram-v1.test.mjs tests/stands360-uniai-v2.test.mjs
+          node --test tests/stands360-ownership-v1.test.mjs tests/stands360-telegram-v1.test.mjs tests/stands360-uniai-v2.test.mjs tests/stands360-feedback-v3.test.mjs
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
