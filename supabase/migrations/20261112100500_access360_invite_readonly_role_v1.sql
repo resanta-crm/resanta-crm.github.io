@@ -79,6 +79,13 @@ $$;
 revoke all on function public.crm_is_active_user_v1() from public,anon;
 grant execute on function public.crm_is_active_user_v1() to authenticated;
 
+-- The dedicated executive shell must load its own profile, while existing
+-- unrestricted staff tables remain inaccessible through the legacy policy.
+drop policy if exists users_executive_self_select_v1 on public.users;
+create policy users_executive_self_select_v1 on public.users for select to authenticated
+using (id=(select auth.uid()) and role='executive_viewer');
+
+
 -- A real executive account may authenticate but must NEVER write to legacy data,
 -- including via security-definer RPCs. This guard runs before table changes,
 -- even if a RPC bypasses RLS. Existing staff and server jobs retain behavior.
