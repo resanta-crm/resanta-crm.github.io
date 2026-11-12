@@ -1,0 +1,48 @@
+name: Access 360 invite and executive security
+on:
+  pull_request:
+    paths:
+      - 'assets/01-crm-core.js'
+      - 'assets/301-access360-admin-v1.js'
+      - 'assets/302-company-viewer-v1.js'
+      - 'supabase/functions/crm-user-admin/**'
+      - 'supabase/functions/crm-access-admin-v1/**'
+      - 'supabase/migrations/*access360*'
+      - 'tests/access360-v1.test.mjs'
+      - '.github/workflows/access360-invite-security.yml'
+      - 'index.html'
+  push:
+    paths:
+      - 'assets/01-crm-core.js'
+      - 'assets/301-access360-admin-v1.js'
+      - 'assets/302-company-viewer-v1.js'
+      - 'supabase/functions/crm-user-admin/**'
+      - 'supabase/functions/crm-access-admin-v1/**'
+      - 'supabase/migrations/*access360*'
+      - 'tests/access360-v1.test.mjs'
+      - '.github/workflows/access360-invite-security.yml'
+      - 'index.html'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  access360:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Node syntax and security checks
+        run: |
+          node --check assets/01-crm-core.js
+          node --check assets/301-access360-admin-v1.js
+          node --check assets/302-company-viewer-v1.js
+          node --test tests/access360-v1.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Deno Auth admin typecheck
+        run: |
+          deno check supabase/functions/crm-access-admin-v1/index.ts

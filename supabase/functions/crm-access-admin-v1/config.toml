@@ -1,0 +1,2 @@
+[functions.crm-access-admin-v1]
+verify_jwt = true

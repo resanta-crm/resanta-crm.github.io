@@ -41,7 +41,9 @@ const APP_VERSION = '2026-11-06-release-guard-v1';
 <link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=20261105-stock-director-1&fix=20261106" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1"></script>
+<script defer src="./assets/301-access360-admin-v1.js?v=20261112-access360-v1"></script>
+<script defer src="./assets/302-company-viewer-v1.js?v=20261112-company-portal-v1"></script>
+<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=access360-invite-v1"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
 <script defer src="./assets/197-gps-map-unified-v1.js?v=20261109-map1"></script>
@@ -496,7 +498,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <button class="nav-item" id="nav-gps-control" onclick="goPage('gps-control','Контроль маршрутов')" style="display:none"><span class="icon">📡</span> GPS-контроль</button>
       <button class="nav-item" id="nav-managers" onclick="goPage('managers','Менеджеры · KPI')" style="display:none"><span class="icon">👥</span> Менеджеры</button>
       <button class="nav-item" id="nav-routes-boss" onclick="goPage('routes-boss','Маршруты · Согласование')" style="display:none"><span class="icon">📋</span> Маршруты <span class="alert-dot" id="routes-alert-dot" style="display:none"></span></button>
-      <button class="nav-item" id="nav-users" onclick="goPage('users','Пользователи')" style="display:none"><span class="icon">🔐</span> Пользователи</button>
+      <button class="nav-item" id="nav-users" onclick="goPage('users','Пользователи и роли')" style="display:none"><span class="icon">🔐</span> Пользователи</button>
     </div>
     <div class="main" id="main-content">
       <div class="page active" id="page-dashboard">
@@ -966,7 +968,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     <button class="bn-item" id="bn-gps-control" style="display:none" onclick="goPage('gps-control','Контроль маршрутов')">📡<span>GPS</span></button>
     <button class="bn-item" id="bn-managers" style="display:none" onclick="goPage('managers','Менеджеры · KPI')">👥<span>Менеджеры</span></button>
     <button class="bn-item" id="bn-routes-boss" style="display:none" onclick="goPage('routes-boss','Маршруты · Согласование')">📋<span>Маршруты</span></button>
-    <button class="bn-item" id="bn-users" style="display:none" onclick="goPage('users','Пользователи')">🔐<span>Доступы</span></button>
+    <button class="bn-item" id="bn-users" style="display:none" onclick="goPage('users','Пользователи и роли')">🔐<span>Доступы</span></button>
   </div>
 </div>
 

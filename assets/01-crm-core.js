@@ -2275,6 +2275,19 @@ async function loadProfileAndStart() {
       return;
     }
     currentProfile=profile;
+    // Company leadership gets its own server-scoped read-only portal.
+    // Never run the broad manager/boss bootstrap for this role.
+    if(String(profile.role||'').toLowerCase()==='executive_viewer'){
+      if(!window.crmCompanyViewer360?.start){
+        document.getElementById('app').style.display='none';
+        document.getElementById('login-wrap').style.display='flex';
+        const e=document.getElementById('login-error');
+        if(e){e.style.display='block';e.textContent='Руководящий режим временно недоступен. Обновите страницу.';}
+        return;
+      }
+      await window.crmCompanyViewer360.start(profile);
+      return;
+    }
     // Auditors use the NORMAL CRM login, never an independent website.
     // The warehouse shell skips sales, clients, GPS and other CRM bootstrap.
     if(['auditor','auditor_pending'].includes(String(profile.role||'').toLowerCase())){
@@ -2346,8 +2359,8 @@ async function startApp() {
     document.getElementById('nav-managers').style.display='flex';
     document.getElementById('nav-control').style.display='flex';
     document.getElementById('nav-routes-boss').style.display='flex';
-    document.getElementById('nav-users').style.display='flex';
-    ['bn-control','bn-managers','bn-routes-boss','bn-users'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
+    document.getElementById('nav-users').style.display=currentProfile?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'?'flex':'none';
+    ['bn-control','bn-managers','bn-routes-boss','bn-users'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=id==='bn-users'&&currentProfile?.id!=='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'?'none':'flex';});
     const fdb=document.getElementById('find-dupes-btn');
     if(fdb)fdb.style.display='inline-block';
     // Красный индикатор сигналов теперь включается только по фактическим
@@ -2614,6 +2627,7 @@ async function saveManagerPassword(){
 }
 
 function renderUsers() {
+  if(window.crmAccess360?.render)return window.crmAccess360.render();
   if (!allUsers.length){document.getElementById('users-list').innerHTML='<div style="color:var(--sub);font-size:14px;padding:20px;text-align:center">Пользователей пока нет</div>';return;}
   document.getElementById('users-list').innerHTML = allUsers.map(u=>'<div class="user-row"><div class="user-info"><div class="user-email-text">'+esc(u.name||'—')+'<span class="user-role-badge '+(u.role==='boss'?'role-boss':'role-manager')+'">'+(u.role==='boss'?'👑 Руководитель':u.role==='auditor'?'🔎 Ревизор':u.role==='auditor_pending'?'🔎 Ревизор (ожидает активации)':'👤 Менеджер')+'</span></div><div class="user-meta">'+esc(u.email)+' · '+esc(u.region||'—')+(u.access_scope==='triovist'?' · Триовист':'')+'</div></div><div style="display:flex;gap:4px;align-items:center"><button onclick="openSetPassword(&quot;'+escAttr(u.email)+'&quot;,&quot;'+escAttr(u.name||'')+'&quot;)" style="border:1px solid var(--border);background:#fff;color:var(--a);cursor:pointer;font-size:12px;padding:7px 10px;border-radius:7px" title="Установить новый пароль без email">🔑 Пароль</button><button onclick="deleteUserAccess(&quot;'+escAttr(u.email)+'&quot;)" style="border:none;background:none;color:var(--r);cursor:pointer;font-size:12px;padding:6px 10px" title="Полностью отключить доступ: Auth + профиль CRM">🗑</button></div></div>').join('');
 }
@@ -2890,6 +2904,7 @@ function crmRenderPage(p){
   else if(p==='my-routes')return renderMyRoutes();
 }
 function goPage(p,title) {
+  if(String(currentProfile?.role||'').toLowerCase()==='executive_viewer'&&p!=='company-viewer')return;
   if(String(currentProfile?.role||'').toLowerCase()==='auditor'&&p!=='warehouse-control')return;
   const appRoot=document.getElementById('app');
   const previousPage=appRoot?.dataset?.activePage||'';

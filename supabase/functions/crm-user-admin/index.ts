@@ -79,7 +79,8 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (profileError) throw profileError;
-    if (!callerProfile || callerProfile.role !== "boss") {
+    // Only the network director may use legacy password operations; branch bosses cannot administer Auth.
+    if (!callerProfile || callerProfile.role !== "boss" || caller.id !== "544fb1e2-ef70-44de-bc62-e0e1596a4bfc") {
       return json(req, 403, { ok: false, error: "Операция доступна только руководителю" });
     }
 
