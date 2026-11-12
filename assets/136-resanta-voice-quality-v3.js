@@ -41,6 +41,7 @@ async function playAndroidWav(blob,run){
    const source=context.createBufferSource();
    androidSource=source;
    source.buffer=decoded;
+   source.playbackRate.value=1.12;
    source.connect(context.destination);
    const finish=(error)=>{
      if(settled)return;
@@ -81,7 +82,12 @@ function approveYandex(){
 // A deliberate first wake activation also requests permission for the neural voice.
 window.crmResantaVoiceAuthorizeV3=approveYandex;
 window.crmResantaVoiceHasConsentV3=()=>approvedYandex;
-const allowed=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
+const allowed=()=>{try{
+  const p=window.crmAI360GreetingV1?.();
+  return !!p&&['544fb1e2-ef70-44de-bc62-e0e1596a4bfc',
+   'a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(p.id)&&
+   document.getElementById('app')?.style.display!=='none';
+ }catch{return false;}};
 // Only speech text is normalized. Screen figures, source dates and CRM data stay unchanged.
 const MONTH_GEN=['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const MONTH_NOM=['','январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
@@ -291,7 +297,7 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  if(output){try{output.pause();}catch(_){}output=null;}
  if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
  outputUrl=URL.createObjectURL(blob);
- output=new Audio(outputUrl);output.preload='auto';
+ output=new Audio(outputUrl);output.preload='auto';output.playbackRate=1.12;
  if(nativeAndroidDirector()){output.muted=false;output.volume=1;}
  await new Promise((resolve,reject)=>{
   let settled=false,timer=0;
