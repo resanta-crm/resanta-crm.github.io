@@ -20,7 +20,7 @@ test('Same OpenAI and Yandex provider code allows ONLY original director and exa
   assert.match(s,/pname==='александр паюшин'|name==='александр паюшин'/);
   assert.match(s,/сидарович к\.н\./);
   assert.match(s,/region==='Витебск'/);
-  assert.match(s,/!isOwner&&!isBranch/);
+  assert.match(s,/!isOwner&&!isPeer&&!isBranch/);
  }
  assert.match(stt,/crm_voice_claim_v1/);
  assert.match(stt,/crm_ai360_stt_claim_v2/);
