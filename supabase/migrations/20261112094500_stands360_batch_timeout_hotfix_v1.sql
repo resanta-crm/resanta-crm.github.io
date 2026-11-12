@@ -223,8 +223,9 @@ BEGIN
   count(*) FILTER (WHERE chosen<expected)::int
  INTO result,expected_total,selected_total,unresolved FROM raw_detail;
  WITH confirmed AS(
-  SELECT DISTINCT upper(btrim(u)) sku FROM expanded x CROSS JOIN LATERAL unnest(x.effective_skus) u
-  WHERE nullif(btrim(u),'') IS NOT NULL
+  SELECT DISTINCT upper(btrim(u.sku)) sku FROM jsonb_array_elements(coalesce(result,'[]'::jsonb)) x
+  CROSS JOIN LATERAL jsonb_array_elements_text(x->'effective_skus') u(sku)
+  WHERE nullif(btrim(u.sku),'') IS NOT NULL
  )
  SELECT coalesce(sum(h.revenue) FILTER (WHERE h.month>=date_trunc('month',current_date)::date-interval '5 months'),0),
   coalesce(sum(h.revenue) FILTER (WHERE h.month<date_trunc('month',current_date)::date-interval '5 months'),0)
