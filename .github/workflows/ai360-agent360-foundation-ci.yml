@@ -38,3 +38,12 @@ jobs:
           node --test tests/ai360-all-34-domain-coverage.test.mjs
           node --test tests/ai360-staff-scoped-roles.test.mjs
           node --test tests/ai360-core-v4-smoke.test.mjs
+      - name: Unauthenticated production gateway must reject anonymous clients
+        env:
+          AI_AGENT_URL: https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-agent-v1
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' \
+            --data '{"action":"capabilities"}' "${AI_AGENT_URL}")"
+          test "${status}" = '401'
