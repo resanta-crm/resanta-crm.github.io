@@ -70,7 +70,7 @@ test('Telegram sends only with dispatch secret, scheduled config and never from 
  assert.match(edge,/mode==='dry_run'/);
  assert.match(edge,/cfg\.telegram_enabled/);
  assert.match(edge,/cfg\.auto_tasks_enabled/);
- assert.match(edge,/promotion360_digest_v1:/);
+ assert.match(edge,/promo360_digest_v1:/);
  assert.match(edge,/crm_ai360_yandex_monthly_claim_v1/);
  assert.match(edge,/VOICE_MESSAGES_FORBIDDEN/);
  assert.match(edge,/crm_promotion_sales_truth_v236360/);
