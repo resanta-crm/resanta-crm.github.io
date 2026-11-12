@@ -104,5 +104,18 @@ test('Only branch director can use signed task commit; field managers cannot',()
  assert.match(page,/148-resanta-ai360-staff-identity-v1\.js\?v=client360-20261102/);
  assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=10/);
  assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=5/);
- assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=4/);
+ assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=5/);
+});
+
+test('All staff questions use JWT-gated Agent360 and never mistake free talk for CRM evidence',()=>{
+ const dialogue=fs.readFileSync('assets/147-resanta-ai360-staff-unified-dialog-v1.js','utf8');
+ assert.match(dialogue,/const ENDPOINT='crm-ai360-agent-v1'/);
+ assert.match(dialogue,/agent360_free_conversation_v1/);
+ assert.match(dialogue,/data\.answer_verified!==false/);
+ assert.match(dialogue,/data\.route_tier!==userRole\?\.tier/);
+ assert.match(dialogue,/data\?\.mode!=='staff_ai360_shared_core_v1'/);
+ assert.match(dialogue,/data\?\.answer_verified!==true/);
+ assert.match(dialogue,/foreign_manager_reply/);
+ assert.match(dialogue,/lastMode='chat';memory=\{\}/);
+ assert.doesNotMatch(dialogue,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
