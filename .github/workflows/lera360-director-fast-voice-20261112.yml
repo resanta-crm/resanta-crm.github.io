@@ -1,0 +1,43 @@
+name: Lera360 director personal voice and AI Agent canary
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/215-lera360-personal-greeting-v1.js'
+      - 'assets/216-lera360-silence-gate-v1.js'
+      - 'index.html'
+      - 'tests/lera360-director-greeting-fast-agent-20261112.test.mjs'
+      - '.github/workflows/lera360-director-fast-voice-20261112.yml'
+permissions:
+  contents: read
+jobs:
+  owner-and-air3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate all changed browser scripts
+        run: |
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --check assets/136-resanta-voice-quality-v3.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node --check assets/215-lera360-personal-greeting-v1.js
+          node --check assets/216-lera360-silence-gate-v1.js
+      - name: Account matching, quick speech ending, owner and AIR3 safety
+        run: |
+          node --test tests/lera360-director-greeting-fast-agent-20261112.test.mjs
+          node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
+          node --test tests/ai360-voice-platform-check.mjs
+          node tests/ai360-universal-browser-20261027.test.cjs
+          node tests/ai360-unified-dialog-v1.test.cjs
+          node tests/ai360-voice-stt-429-regression-20261027.test.cjs
+          node tests/ai360-promotions-and-active-mic-20261027.test.cjs
