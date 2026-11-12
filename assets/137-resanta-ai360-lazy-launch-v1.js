@@ -113,12 +113,14 @@ function installNativeAudioGate(){
  });
 }
 function owner(){
- try{return typeof currentUser!=='undefined'&&!!currentUser?.id &&
-  (!nativeAndroid||String(currentUser.id)==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc') &&
-  typeof currentProfile!=='undefined'&&currentProfile?.role==='boss' &&
-  String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='александр паюшин' &&
-  document.getElementById('app')?.style.display!=='none';}
- catch{return false;}
+ try{
+  const greeting=window.crmAI360GreetingV1?.();
+  return !!greeting &&
+   ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc',
+    'a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(greeting.id) &&
+   (!nativeAndroid||greeting.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc') &&
+   document.getElementById('app')?.style.display!=='none';
+ }catch{return false;}
 }
 function load(src){
  return new Promise((resolve,reject)=>{
