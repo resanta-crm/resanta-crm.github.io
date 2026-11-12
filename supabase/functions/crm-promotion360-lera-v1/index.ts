@@ -139,8 +139,10 @@ async function executeDaily(req:Request,mode:string){
    if(u.error)throw new Error('ESCALATION_FAILED');
   }
  }
- const taskRows=mode==='daily'&&cfg.auto_tasks_enabled?
-  (await sb.from('crm_promotion360_actions_v1').select('id,promotion_id,milestone,status,manager_id').in('promotion_id',ids).limit(500)).data||[]:actions;
+ const taskRows=mode==='dry_run'?[
+  ...actions,...proposed.map(p=>({promotion_id:p.promotion_id,milestone:p.milestone,status:'open',manager_id:p.manager_id}))
+ ]:(mode==='daily'&&cfg.auto_tasks_enabled?
+  (ids.length?(await sb.from('crm_promotion360_actions_v1').select('id,promotion_id,milestone,status,manager_id').in('promotion_id',ids).limit(500)).data||[]:[]):actions);
  const cases=taskRows.map(t=>{
   const p=promos.find(x=>x.id===t.promotion_id);
   return p?{...t,client_name:p.client_name,manager_name:p.manager_name,title:p.title}:null
