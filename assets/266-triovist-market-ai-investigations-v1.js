@@ -198,6 +198,7 @@ async function action(body){
  try{
   const data=await call(body);
   if(data.case){state.focus=data.case;
+   if(body.action==='answer'){state.answerDraft='';state.sourceDraft=''}
    state.saved=[data.case,...state.saved.filter(x=>x.id!==data.case.id)].slice(0,40);
    if(data.ai_error)state.error='Факты сохранены, но AI недоступен: '+data.ai_error;
   }
@@ -205,7 +206,7 @@ async function action(body){
   const code=String(e.message||e);
   state.error=code==='insufficient_rank_evidence'||code==='rank_history_not_comparable'
    ?'По этому товару пока нет двух сопоставимых подтверждённых позиций. ИИ не будет придумывать причину. Выберите другой сигнал или дождитесь нового снимка.'
-   :code;
+   :code==='answer_and_source_required'?'Введите комментарий (не менее 12 символов) и источник (не менее 4 символов). Введённый текст сохранён.':code;
  }
  finally{state.busy=false;render()}
 }
@@ -214,20 +215,28 @@ document.addEventListener('click',e=>{
  if(!e.target.closest?.('[data-tm266]'))return;
  if(e.target.closest?.('[data-tm266-refresh]')){state.loadedAt=0;refresh();return}
  if(e.target.closest?.('[data-tm266-list]')){const d=state.root?.querySelector('details');if(d){d.open=true;d.scrollIntoView?.({behavior:'smooth',block:'nearest'})}return}
+ const tab=e.target.closest?.('[data-tm266-signal]');
+ if(tab){state.signalType=tab.dataset.tm266Signal;state.displayLimit=20;render();return}
+ if(e.target.closest?.('[data-tm266-more]')){state.displayLimit+=20;render();return}
  const pick=e.target.closest?.('[data-tm266-investigate]');
- if(pick){action({action:'investigate',entity_key:pick.dataset.tm266Investigate,kind:pick.dataset.tm266Kind,scope_key:pick.dataset.tm266Scope});return}
+ if(pick){state.answerDraft='';state.sourceDraft='';action({action:'investigate',entity_key:pick.dataset.tm266Investigate,kind:pick.dataset.tm266Kind,scope_key:pick.dataset.tm266Scope});return}
  const saved=e.target.closest?.('[data-tm266-saved]');
- if(saved){state.focus=state.saved.find(x=>x.id===saved.dataset.tm266Saved)||null;render();return}
+ if(saved){state.answerDraft='';state.sourceDraft='';state.focus=state.saved.find(x=>x.id===saved.dataset.tm266Saved)||null;render();return}
  if(e.target.closest?.('[data-tm266-assign]')){action({action:'assign',case_id:state.focus?.id,manager_email:state.root?.querySelector('[data-tm266-assignee]')?.value});return}
  if(e.target.closest?.('[data-tm266-save-answer]')){
-  action({action:'answer',case_id:state.focus?.id,answer:state.root?.querySelector('[data-tm266-answer]')?.value,
-   source:state.root?.querySelector('[data-tm266-source]')?.value});return}
+  state.answerDraft=state.root?.querySelector('[data-tm266-answer]')?.value||'';
+  state.sourceDraft=state.root?.querySelector('[data-tm266-source]')?.value||'';
+  if(state.answerDraft.trim().length<12||state.sourceDraft.trim().length<4){
+   state.error='Для сохранения нужны комментарий (минимум 12 символов) и ссылка или источник подтверждения (минимум 4 символа). Введённый текст не потерян.';
+   render();return;
+  }
+  action({action:'answer',case_id:state.focus?.id,answer:state.answerDraft,source:state.sourceDraft});return}
  const approve=e.target.closest?.('[data-tm266-review]');
  if(approve){action({action:'review',case_id:state.focus?.id,status:approve.dataset.tm266Review,note:state.root?.querySelector('[data-tm266-note]')?.value});return}
 },true);
 document.addEventListener('change',e=>{
  if(!e.target.matches?.('[data-tm266-filter]'))return;
- state.scope=e.target.value||'';render();
+ state.scope=e.target.value||'';state.displayLimit=20;render();
 },true);
 if(typeof MutationObserver==='function'){
  observer=new MutationObserver(()=>{if(document.querySelector('[data-tm266]')!==state.root)mount()});
