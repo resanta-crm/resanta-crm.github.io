@@ -46,7 +46,7 @@ test('SKU is confirmed against the exact catalog and original descriptions remai
  assert.match(sql,/p\.manager_name is distinct from n/);
  assert.match(sql,/Список нескольких SKU|список нескольких SKU/i);
  assert.match(ui,/crm_stands_catalog_v236350/);
- assert.match(ui,/crm_stands_sku_link_v2/);
+ assert.match(ui,/crm_stands_multi_sku_save_v3/);
 });
 test('Vision and seller photographs stay route/GPS-independent, return is never automatic',()=>{
  assert.match(ui,/crm_stands_photo_control_v1/);
