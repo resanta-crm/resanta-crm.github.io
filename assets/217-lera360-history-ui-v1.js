@@ -21,6 +21,8 @@
    return typeof currentUser!=='undefined'?String(currentUser?.id||''):'';
   }catch{return '';}};
   const ownerId=currentId();
+  // CRM uses a global lexical 'const db' (not necessarily window.db).
+  const crm=()=>{try{return typeof db!=='undefined'?db:root.db;}catch{return root.db;}};
   const permitted=()=>{try{
    return !!ownerId&&currentId()===ownerId&&options.allowed?.()===true;
   }catch{return false;}};
@@ -65,9 +67,9 @@
    if(!permitted())throw Error('Проверь вход в CRM.');
    const session=typeof root.crmEnsureFreshSessionV236166==='function'
     ?await root.crmEnsureFreshSessionV236166(false)
-    :await root.db?.auth?.getSession?.().then(x=>x?.data?.session);
+    :await crm()?.auth?.getSession?.().then(x=>x?.data?.session);
    if(!session?.access_token)throw Error('Сессия истекла. Войди заново.');
-   const res=await root.db.functions.invoke(API,{body:{action,...data}});
+   const res=await crm().functions.invoke(API,{body:{action,...data}});
    if(res.error||res.data?.error){
     let code=String(res.data?.error||'');
     if(!code&&res.error?.context?.json){try{code=String((await res.error.context.json())?.error||'');}catch{}}
@@ -136,7 +138,7 @@
    for(const item of turns)list.appendChild(card(item));
   }
   // Clear visible confidential transcript on logout/account switch.
-  root.db?.auth?.onAuthStateChange?.((_event,session)=>{
+  crm()?.auth?.onAuthStateChange?.((_event,session)=>{
    if(session?.user?.id!==ownerId){
     list.replaceChildren();enabled=false;wrapper.open=false;
     status.textContent='Сессия изменилась. Открой CRM заново.';
