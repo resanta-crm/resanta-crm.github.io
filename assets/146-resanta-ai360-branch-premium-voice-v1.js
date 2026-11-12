@@ -50,7 +50,7 @@ async function speak(msg){
    const session=await root.crmEnsureFreshSessionV236166?.(false);
    if(!session?.access_token)throw Error('session_required');
    info('Лера озвучивает ответ через Яндекс…');
-   const res=await db.functions.invoke('crm-voice-yandex-tts-v1',{body:{voice,text:segment}});
+   const res=await db.functions.invoke('crm-voice-yandex-tts-v1',{body:{voice,text:root.crmAI360ApplySpeechAccentsV1?.(segment)||segment}});
    if(run!==playEpoch||!allowed())return;
    if(res.error){
     let status='';
