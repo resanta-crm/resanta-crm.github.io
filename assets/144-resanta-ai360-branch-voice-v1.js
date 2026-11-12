@@ -379,7 +379,12 @@ function buildPanel(){
 async function open(){
  if(!allowed())return;
  buildPanel();panel.hidden=false;
- if(verified){setStatus('Подключено · только чтение');return;}
+ if(verified){
+  setStatus('Подключено · только чтение');
+  const personal=root.crmAI360GreetingV1?.();
+  if(personal&&personal.id===role()?.id)show(personal.greeting);
+  return;
+ }
  const seq=++epoch;setStatus('Проверяю права доступа…');
  try{
   const session=typeof root.crmEnsureFreshSessionV236166==='function'?
@@ -395,7 +400,9 @@ async function open(){
    throw new Error('invalid_staff_capabilities');
   verified=true;
   setStatus('Подключено · голос OpenAI + Яндекс · поручения с подтверждением');
-  show(role()?.can_create_tasks?'Здравствуйте! Я Лера, помощник Витебского филиала. Анализирую разрешённые данные и готовлю поручения только после подтверждения.':role()?.tier==='triovist_category'?'Здравствуйте! Я Лера. Помогу анализировать ваши категории Триовиста: карточки 21vek, позиции, замечания, задачи и инфографику. Поручения не создаю.':'Здравствуйте! Я Лера, ваш помощник в CRM. Показываю только ваши продажи, клиентов, задачи, маршруты и ПДЗ. Создание поручений недоступно.',{speak:false});
+  const personal=root.crmAI360GreetingV1?.();
+  if(personal&&personal.id===role()?.id)show(personal.greeting);
+  else show('Привет! Чем помочь?',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
