@@ -308,6 +308,12 @@
  }
  async function start(newMode,automatic=false){
    if(starting)return;
+   if(mode==='wake'&&newMode==='manual'){
+     // Permanent listening already owns the foreground microphone.
+     // Do not open a second stream or interrupt the current wake session.
+     info('Постоянный режим уже слушает. Просто задай вопрос.');
+     return;
+   }
    if(automatic && (!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
    if(mode===newMode){
      // A second manual click completes a phrase and sends it; never silently
