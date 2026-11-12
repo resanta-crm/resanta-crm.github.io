@@ -564,7 +564,17 @@ document.addEventListener('click',e=>{
  const uploadBtn=e.target.closest?.('[data-s268-upload]');if(uploadBtn){upload(uploadBtn.dataset.s268Upload,uploadBtn);return}
  const match=e.target.closest?.('[data-s268-match]');if(match){skuForm(Number(match.dataset.s268Match));return}
  const find=e.target.closest?.('[data-s268-find]');if(find){findCatalog();return}
- const apply=e.target.closest?.('[data-s268-apply]');if(apply){applySku(apply.dataset.s268Apply,apply);return}
+ const full=e.target.closest?.('[data-s268-full]');if(full){openOriginalPhoto(full.dataset.s268Full);return}
+ const v=e.target.closest?.('[data-s268-vision]');if(v){rerunVision(v.dataset.s268Vision,v);return}
+ const legal=e.target.closest?.('[data-s268-client]');if(legal){clientForm(legal.dataset.s268Client);return}
+ const cf=e.target.closest?.('[data-s268-client-find]');if(cf){findClients();return}
+ const choice=e.target.closest?.('[data-s268-client-pick]');if(choice){chooseClient(choice.dataset.s268ClientPick);return}
+ if(e.target.closest?.('[data-s268-client-save]')){saveClient();return}
+ const ar=e.target.closest?.('[data-s268-asset]');if(ar){assetForm(ar.dataset.s268Asset);return}
+ const ac=e.target.closest?.('[data-s268-asset-confirm]');if(ac){assetConfirm(ac.dataset.s268AssetConfirm);return}
+ const add=e.target.closest?.('[data-s268-add]');if(add){selectCatalogSku(add.dataset.s268Add);return}
+ const drop=e.target.closest?.('[data-s268-drop]');if(drop){state.selectedSkus.delete(drop.dataset.s268Drop);renderSelectedSku();return}
+ const saveGroup=e.target.closest?.('[data-s268-save-group]');if(saveGroup){saveSkuGroup(saveGroup);return}
  if(e.target.closest?.('[data-s268-search]')){state.search=str(el('s268-search')?.value);paint();return}
 },true);
 document.addEventListener('change',e=>{
@@ -575,7 +585,8 @@ document.addEventListener('keydown',e=>{
  if(e.key==='Enter'&&e.target?.id==='s268-search'){e.preventDefault();state.search=e.target.value;paint()}
  if(e.key==='Enter'&&e.target?.id==='s268-catalog-query'){e.preventDefault();findCatalog()}
  if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-s268-detail]')){e.preventDefault();detail(e.target.dataset.s268Detail)}
- if(e.key==='Escape')el('s268-overlay')?.remove();
+ if(e.key==='Enter'&&e.target?.id==='s268-client-query'){e.preventDefault();findClients()}
+ if(e.key==='Escape'){if(el('s268-photo-overlay')){el('s268-photo-overlay').remove();e.stopImmediatePropagation();return}el('s268-overlay')?.remove();}
 },true);
 function render(){
  attachCSS();if(!el('st360-root'))return;
