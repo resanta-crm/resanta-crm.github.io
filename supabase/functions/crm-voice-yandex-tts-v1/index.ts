@@ -50,10 +50,15 @@ Deno.serve(async(req:Request)=>{
  const authRes=await supabase.auth.getUser(token).catch(()=>null);
  const user=authRes?.data?.user;
  if(!user?.id||!user.email)return json({error:'unauthorized'},401,origin);
- const {data:profile,error:profileError}=await supabase.from('users').select('id,name,role,region')
+ const {data:profile,error:profileError}=await supabase.from('users').select('id,name,role,region,access_scope,email')
    .eq('id',user.id).maybeSingle();
  const name=String(profile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
  const isOwner=user.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&profile?.role==='boss'&&name==='александр паюшин';
+ const isPeer=user.id==='a24954b8-2fe1-4852-b629-d8f351e1bd36'&&
+   String(user.email||'').toLowerCase()==='petrovichev@resanta.ru'&&!!user.email_confirmed_at&&
+   profile?.id===user.id&&profile?.role==='boss'&&profile?.region==='Все филиалы'&&
+   profile?.access_scope==='standard'&&name==='руководство компании'&&
+   String(profile?.email||'').toLowerCase()==='petrovichev@resanta.ru';
  const isBranch=user.id==='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'&&profile?.role==='boss'&&name==='сидарович к.н.'&&profile?.region==='Витебск';
 
  const FIELD_IDS=new Set(['19dd9943-99ae-47c4-a39c-4f82a11059a6',
@@ -74,7 +79,7 @@ Deno.serve(async(req:Request)=>{
    profile?.role==='manager'&&
    profile?.region==='Триовист / 21vek.by'&&
    name===TRI_USERS[user.id];
-   if(profileError||(!isOwner&&!isBranch&&!isField&&!isTriovist))return json({error:'forbidden'},403,origin);
+   if(profileError||(!isOwner&&!isPeer&&!isBranch&&!isField&&!isTriovist))return json({error:'forbidden'},403,origin);
  let payload:any;
  try{payload=await req.json();}catch{return json({error:'invalid_json'},400,origin);}
  const apiKey=Deno.env.get('YANDEX_SPEECHKIT_API_KEY')||'';
