@@ -91,8 +91,8 @@ function context(voice,options={}){
  assert(dates.includes('сентябрь две тысячи двадцать шестого года'),'ISO month should be localized');
  assert(!dates.includes('10.2026')&&!dates.includes('23.10.2026')&&!dates.includes('2026-10-27'));
  const decimals=styled.window.crmAI360SpeechChunksV4('Выполнение 30,7%, рост 12.5%, артикул 63/6/39.').join(' ');
- assert(decimals.includes('30,7%')&&decimals.includes('12.5%')&&decimals.includes('63/6/39'),
-   'percentage decimals and SKU must not be mistaken for dates');
+ assert(decimals.includes('30,7%')&&decimals.includes('12.5%')&&decimals.includes('63 дробь 6 дробь 39'),
+   'percentage decimals remain precise while SKU is pronounced as a fraction, not a date');
  assert(code.includes('options?.shortSummary'),'TTS must label a brief answer as a brief answer');
  console.log('AI360 full Lera/Dasha answers, Russian month/full dates, concise voice status and BYN formatting: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
