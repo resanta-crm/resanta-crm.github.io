@@ -379,6 +379,7 @@ function buildPanel(){
  speechNote.textContent='Речь распознаётся OpenAI, озвучка — Яндекс Лера/Даша. Ожидание «Привет, Ресанта» включается вручную и прекращается при закрытии окна. Голос передаётся внешним сервисам.';
  panel.append(heading,note,log,entry,actions,status,speechNote);
  document.body.appendChild(panel);
+ root.crmAI360HistoryV1?.attachPanel(panel); // private history, explicit click only
  root.crmAI360BranchTaskMountV1?.(panel);
  root.crmAI360BranchPremiumVoiceV1?.bind({
   panel,authorized:panelVisible,
