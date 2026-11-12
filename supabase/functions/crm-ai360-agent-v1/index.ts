@@ -37,8 +37,13 @@ Deno.serve(async req=>{
  const user=session?.data?.user;
  if(!user?.id)return fault(req,'not_authorized',401);
  // Immutable roles must match this authenticated user. Never use user_metadata.
- const profile=await svc.from('users').select('id,name,role,region,access_scope,email')
-  .eq('id',user.id).maybeSingle().catch(()=>null);
+ // PostgrestBuilder is PromiseLike (thenable), NOT a Promise: it has no .catch().
+ // Await the query first, then handle actual transport failures explicitly.
+ let profile;
+ try{
+  profile=await svc.from('users').select('id,name,role,region,access_scope,email')
+   .eq('id',user.id).maybeSingle();
+ }catch{return fault(req,'profile_unavailable',503);}
  if(!profile||profile.error)return fault(req,'profile_unavailable',503);
  const principal=agentPrincipal(user.id,profile.data,user);
  if(!principal)return fault(req,'agent_access_not_enabled',403);
