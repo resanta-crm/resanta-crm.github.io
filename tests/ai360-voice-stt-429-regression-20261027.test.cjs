@@ -20,8 +20,8 @@ assert.match(source,/if\(newMode==='manual' && activeRecorder\?\.state==='record
 assert.match(source,/activeRecorder\.stop\(\);info\('Завершаю запись/);
 assert.match(source,/silence\.observe\(rms,Date\.now\(\)-start\)/);
 assert.match(source,/const clip=await capture\(12,epoch\)/);
-assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=19/);
-assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=37/);
+assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=20/);
+assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=38/);
 const start=source.indexOf(' async function manualLoop(epoch){');
 const end=source.indexOf(' async function wakeLoop(epoch){',start);
 assert.ok(start>=0&&end>start);
