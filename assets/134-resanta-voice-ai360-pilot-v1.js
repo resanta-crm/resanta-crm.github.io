@@ -57,10 +57,10 @@
     const entries=[...historyEl.querySelectorAll('.rva-line[data-speaker="you"]')];
     return entries.length?entries[entries.length-1].querySelector('.rva-line-body')?.textContent||'':'';
   }
-  function showFeedback(response,question){
+  function showFeedback(response,question,turnId){
     const card=root?.querySelector('.rva-feedback');
     if(!card)return;
-    feedbackTarget={question:String(question||'').slice(0,300),response:String(response||'').slice(0,6000)};
+    feedbackTarget={question:String(question||'').slice(0,300),response:String(response||'').slice(0,6000),turnId:turnId||null};
     card.hidden=false;
     card.querySelector('.rva-feedback-comment').value='';
     card.querySelector('.rva-feedback-type')?.focus();
@@ -86,7 +86,8 @@
       copy.addEventListener('click',()=>void copyExplicitly(raw,'Ответ скопирован. Проверь коммерческие данные перед отправкой.'));
       const flag=document.createElement('button');flag.type='button';flag.textContent='⚑ Отметить ошибку';
       const relatedQuestion=lastUserQuestion();
-      flag.addEventListener('click',()=>showFeedback(raw,relatedQuestion));
+      const turnId=window.crmAI360LastHistoryTurnId||null;
+      flag.addEventListener('click',()=>showFeedback(raw,relatedQuestion,turnId));
       actions.append(copy,flag);
       if(raw.length>220){
         const all=document.createElement('button');all.type='button';all.textContent='▶ Прочитать полностью';
@@ -539,17 +540,18 @@
             <option value="Неудобный интерфейс">Неудобный интерфейс</option>
           </select>
           <textarea class="rva-feedback-comment" maxlength="500" placeholder="Что именно было не так? (необязательно)"></textarea>
-          <small>Отчёт не отправляется автоматически. Если в ответе есть коммерческие данные CRM, проверь текст перед тем как поделиться им.</small>
-          <div class="rva-actions"><button class="rva-btn primary rva-feedback-copy" type="button">Копировать отчёт</button><button class="rva-btn rva-feedback-close" type="button">Отмена</button></div>
+          <small>«Сохранить Лере» сохранит замечание только в твоей личной истории. Данные CRM не изменяются; «Копировать» ничего не отправляет.</small>
+          <div class="rva-actions"><button class="rva-btn primary rva-feedback-save" type="button">Сохранить Лере</button><button class="rva-btn rva-feedback-copy" type="button">Копировать отчёт</button><button class="rva-btn rva-feedback-close" type="button">Отмена</button></div>
         </div>
         <details class="rva-settings"><summary>⚙ Настройки голоса и расходы</summary>
           <div class="rva-settings-body">
             <button class="rva-btn rva-mute" type="button">🔊 Озвучка включена</button>
-            <div class="rva-note">Микрофон работает только при открытом помощнике в активной вкладке. При переходе в ChatGPT он отключается, а текущая озвучка может продолжаться. Текст диалога не сохраняется после обновления страницы.</div>
+            <div class="rva-note">Микрофон работает только при открытом помощнике в активной вкладке. При переходе в ChatGPT он отключается, а текущая озвучка может продолжаться. Текстовая история доступна до 30 дней только после включения. Аудио не сохраняется. Управление — «История Леры».</div>
           </div>
         </details>
       </div>`;
     document.body.appendChild(root);
+    window.crmAI360HistoryV1?.attachPanel(root);
     historyEl=root.querySelector('.rva-history');statusEl=root.querySelector('.rva-status');field=root.querySelector('.rva-input');
     wakeBtn=root.querySelector('.rva-wake');micBtn=root.querySelector('.rva-mic');muteBtn=root.querySelector('.rva-mute');
     trigger.addEventListener('click',()=>{
@@ -593,6 +595,18 @@
       const card=root.querySelector('.rva-feedback');
       if(card)card.hidden=true;
       feedbackTarget=null;
+    });
+    root.querySelector('.rva-feedback-save')?.addEventListener('click',async()=>{
+      if(!feedbackTarget)return;
+      const kind=root.querySelector('.rva-feedback-type')?.value||'Другое';
+      const note=(root.querySelector('.rva-feedback-comment')?.value||'').trim().slice(0,500);
+      const result=await window.crmAI360HistoryV1?.submitFeedback({
+        turnId:feedbackTarget.turnId,kind,note
+      });
+      if(result?.feedback_saved){
+        textStatus('Замечание сохранено. Лера учтёт его в следующих разговорах.');
+        root.querySelector('.rva-feedback').hidden=true;feedbackTarget=null;
+      }else textStatus(result?.error||'Включи сохранение в «История Леры».');
     });
     root.querySelector('.rva-feedback-copy')?.addEventListener('click',()=>{
       if(!feedbackTarget){textStatus('Выбери ответ Леры для замечания.');return;}
