@@ -68,18 +68,26 @@ function context(voice,options={}){
  assert(pieces.join(' ').includes('Шкуран: 43,9%'));
  assert(pieces.join(' ').endsWith('Конец ответа.'));
  assert(!pieces.join(' ').includes('**'));
+ // Speech intentionally rounds BYN to whole rubles, unlike the source CRM figures
+ // displayed on screen. Group separators may be spaces or narrow NBSP in ICU.
+ const compactMoney=s=>String(s).replace(/[\\s\\u00a0\\u202f]/g,'');
  const byn=styled.window.crmAI360SpeechChunksV4('Выручка 159000 BYN, недобор 35440.52 BYN.');
- assert.equal(byn.join(' ').includes('BYN'),false,'BYN must not be read as letters');
- assert(byn.join(' ').includes('159000 белорусских рублей'));
- assert(byn.join(' ').includes('35440 белорусских рублей 52 копейки'));
+ const bynSpeech=byn.join(' ');
+ assert.equal(bynSpeech.includes('BYN'),false,'BYN must not be read as letters');
+ assert(compactMoney(bynSpeech).includes('159000белорусскихрублей'));
+ assert(compactMoney(bynSpeech).includes('35441белорусскийрубль')||
+        compactMoney(bynSpeech).includes('35441белорусскихрублей'),
+        'Yandex voice must speak the rounded BYN amount');
+ assert(!bynSpeech.includes('копеек'),'spoken whole-ruble policy');
  const ruble=styled.window.crmAI360SpeechChunksV4('Долг 1 BYN, задолженность 2 BYN, возврат 21 BYN. Остаток 0.06 BYN.').join(' ');
  assert(ruble.includes('1 белорусский рубль'));
  assert(ruble.includes('2 белорусских рубля'));
  assert(ruble.includes('21 белорусский рубль'));
- assert(ruble.includes('0 белорусских рублей 6 копеек'));
+ assert(ruble.includes('0 белорусских рублей'));
+ assert(!ruble.includes('копеек'));
  const rubleFormatted=styled.window.crmAI360SpeechChunksV4('Факт 46 965,42 BYN, план 153 000,00 BYN.').join(' ');
- assert(rubleFormatted.includes('46 965 белорусских рублей 42 копейки'));
- assert(rubleFormatted.includes('153 000 белорусских рублей'));
+ assert(compactMoney(rubleFormatted).includes('46965белорусскихрублей'));
+ assert(compactMoney(rubleFormatted).includes('153000белорусскихрублей'));
  assert(!rubleFormatted.includes('BYN'));
 
  const dates=styled.window.crmAI360SpeechChunksV4(
@@ -91,8 +99,9 @@ function context(voice,options={}){
  assert(dates.includes('сентябрь две тысячи двадцать шестого года'),'ISO month should be localized');
  assert(!dates.includes('10.2026')&&!dates.includes('23.10.2026')&&!dates.includes('2026-10-27'));
  const decimals=styled.window.crmAI360SpeechChunksV4('Выполнение 30,7%, рост 12.5%, артикул 63/6/39.').join(' ');
- assert(decimals.includes('30,7%')&&decimals.includes('12.5%')&&decimals.includes('63/6/39'),
-   'percentage decimals and SKU must not be mistaken for dates');
+ assert(decimals.includes('30,7%')&&decimals.includes('12.5%')&&
+        decimals.includes('63 дробь 6 дробь 39'),
+   'percentage decimals and spoken SKU must not be mistaken for calendar dates');
  assert(code.includes('options?.shortSummary'),'TTS must label a brief answer as a brief answer');
  console.log('AI360 full Lera/Dasha answers, Russian month/full dates, concise voice status and BYN formatting: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
