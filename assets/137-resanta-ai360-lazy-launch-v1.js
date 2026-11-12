@@ -114,12 +114,14 @@ function installNativeAudioGate(){
 }
 function owner(){
  try{
+  const exactOwner=typeof currentUser!=='undefined'&&
+    String(currentUser?.id)==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&
+    typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
+    String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='александр паюшин';
+  if(nativeAndroid)return exactOwner; // preserve original AIR3 owner-only safety
   const greeting=window.crmAI360GreetingV1?.();
-  return !!greeting &&
-   ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc',
-    'a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(greeting.id) &&
-   (!nativeAndroid||greeting.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc') &&
-   document.getElementById('app')?.style.display!=='none';
+  const exactPeer=greeting?.id==='a24954b8-2fe1-4852-b629-d8f351e1bd36';
+  return (exactOwner||exactPeer)&&document.getElementById('app')?.style.display!=='none';
  }catch{return false;}
 }
 function load(src){
