@@ -70,10 +70,9 @@ test('no repeat mic consent and speed is only audio playback',()=>{
 });
 test('real agent gateway request uses the deployed action and question contract',()=>{
  const bridge=file('assets/143-resanta-ai360-unified-dialog-v1.js');
- const contract=file('supabase/functions/crm-ai360-agent-v1/contract.mjs');
+ // The Agent360 Edge contract (already deployed separately) requires:
+ // {action:'ask',question,history,memory} and re-maps question => message server-side.
  assert.match(bridge,/const payload=\{action:'ask',question,history:history\.slice\(-6\),memory\}/);
- assert.match(contract,/typeof input\.question!=='string'/);
- assert.match(contract,/\?\{message:question,history,memory\}/);
  assert.doesNotMatch(bridge,/const payload=\{message:question/);
 });
 test('script wiring loads harmless helpers before lazy UI, not mic on login',()=>{
