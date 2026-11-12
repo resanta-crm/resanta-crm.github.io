@@ -31,8 +31,10 @@
  }
  async function invoke(action,question){
   if(inFlight)throw new Error('agent_request_in_progress');
-  const id=userId();
-  if(!id||!client())throw new Error('agent_not_authorized');
+  inFlight=true;
+  try{
+   const id=userId();
+   if(!id||!client())throw new Error('agent_not_authorized');
   if(activeUser&&activeUser!==id)clear();
   activeUser=id;
   const s=await session();
@@ -40,8 +42,6 @@
   if(!s?.access_token)throw new Error('agent_not_authorized');
   const payload=action==='capabilities'?{action}:
    {action:'ask',question,history:history.slice(-6),memory};
-  inFlight=true;
-  try{
    const response=await client().functions.invoke(ENDPOINT,{body:payload});
    assertCurrent(id);
    if(response.error||response.data?.error)
