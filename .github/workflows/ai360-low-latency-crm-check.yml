@@ -33,8 +33,8 @@ jobs:
           assert(dialog.includes("const ENDPOINT='crm-ai360-agent-v1'"));
           assert(dialog.includes("const payload={action:'ask',question,history:history.slice(-6),memory}"));
           assert(lazy.includes('135-resanta-voice-capture-fix-v2.js?v=20'));
-          assert(lazy.includes('143-resanta-ai360-unified-dialog-v1.js?v=9'));
-          assert(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=38'));
+          assert(lazy.includes('143-resanta-ai360-unified-dialog-v1.js?v=10'));
+          assert(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=39'));
           assert(lazy.includes('const nativeAndroid=android')&&lazy.includes('__resantaAI360AndroidDirectorOptIn'));
           console.log('CRM fast voice / auth boundaries PASS');
           JS

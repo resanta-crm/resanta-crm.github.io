@@ -105,8 +105,8 @@ test('Deploy includes the right versioned modules and keeps owner launcher',()=>
  assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=10'));
  assert.ok(page.includes('145-resanta-ai360-branch-task-approval-v1.js?v=2'));
  assert.ok(page.includes('146-resanta-ai360-branch-premium-voice-v1.js?v=5'));
- assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=4'));
- assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=38'));
+ assert.ok(page.includes('147-resanta-ai360-staff-unified-dialog-v1.js?v=5'));
+ assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=39'));
  assert.match(voice,/crmAI360BranchUnifiedHandleV1\?\.\(q/);
  assert.match(voice,/crmAI360BranchTaskHandleV1\?\.\(question\)/);
  assert.match(bridge,/mode!=='staff_ai360_shared_core_v1'/);

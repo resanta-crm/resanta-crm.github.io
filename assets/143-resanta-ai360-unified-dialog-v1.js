@@ -3,7 +3,7 @@
 'use strict';
 if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-agent-v1';
-let history=[],memory={},pending=false,awaitingDetail=null;
+let history=[],memory={},pending=false,awaitingDetail=null,lastMode='';
 function allowed(){
  try{
   const p=window.crmAI360GreetingV1?.();
@@ -72,9 +72,9 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
      domain:client?'triovist':''};
    return false;
  }
- if(pending){ui.answer('Ещё проверяю предыдущий вопрос в CRM.');return true;}
+ if(pending){ui.answer('Лера ещё отвечает на предыдущий вопрос.');return true;}
  pending=true;window.__resantaAI360PendingV1=true;
- ui.textStatus('Подбираю проверенные источники CRM…');
+ ui.textStatus('Лера обдумывает вопрос…');
  (async()=>{
   try{
    const session=typeof window.crmEnsureFreshSessionV236166==='function'
@@ -91,6 +91,18 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(result.data?.error)throw new Error(String(result.data.error));
    if(!allowed())return;
    const data=result.data||{};
+   const isChat=data.mode==='agent360_free_conversation_v1';
+   if(isChat&&(data.answer_verified!==false||data.read_only!==true||
+       data.intent!=='free_conversation'||!Array.isArray(data.domains_used)||
+       data.domains_used.length>0))throw new Error('unverified_chat_response');
+   const answerMode=isChat?'chat':'crm';
+   // Avoid accidentally carrying a previous customer's CRM scope into
+   // casual talk, or treating casual claims as verified CRM evidence.
+   if(lastMode&&lastMode!==answerMode){history=[];memory={};}
+   lastMode=answerMode;
+   if(isChat){memory={};awaitingDetail=null;
+     ui.textStatus('Лера · свободный разговор');}
+   else ui.textStatus('Лера · ответы по разрешённым данным CRM');
    const brief=String(data.brief||data.answer||'').trim();
    const detail=String(data.detail||'').trim();
    const offer=String(data.followup_question||'').trim();
@@ -111,7 +123,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  })();
  return true;
 };
-window.crmAI360UnifiedDialogResetV1=function(){history=[];memory={};awaitingDetail=null;};
+window.crmAI360UnifiedDialogResetV1=function(){history=[];memory={};awaitingDetail=null;lastMode='';};
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden) { /* Keep only in-tab conversational state; no persistent storage. */ }
 });
