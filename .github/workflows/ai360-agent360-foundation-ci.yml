@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'supabase/functions/crm-ai360-director-peer-v1/**'
       - 'assets/210-resanta-agent360-single-entry-v1.js'
       - 'tests/ai360-agent360-*.test.mjs'
       - '.github/workflows/ai360-agent360-foundation-ci.yml'
@@ -29,6 +30,7 @@ jobs:
       - name: Syntax of the new gateway and browser adapter
         run: |
           node --check supabase/functions/crm-ai360-agent-v1/contract.mjs
+          node --check --input-type=module < supabase/functions/crm-ai360-director-peer-v1/index.ts
           node --check --input-type=module < supabase/functions/crm-ai360-agent-v1/index.ts
           node --check assets/210-resanta-agent360-single-entry-v1.js
       - name: Verify menu coverage, RBAC, no writes, no eager requests
