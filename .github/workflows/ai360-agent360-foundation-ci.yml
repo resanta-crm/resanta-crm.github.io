@@ -49,3 +49,11 @@ jobs:
             --request POST --header 'Content-Type: application/json' \
             --data '{"action":"capabilities"}' "${AI_AGENT_URL}")"
           test "${status}" = '401'
+      - name: Unauthenticated director peer must deny anonymous clients
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' \
+            --data '{"message":"Покажи продажи"}' \
+            'https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-director-peer-v1')"
+          test "${status}" = '401'
