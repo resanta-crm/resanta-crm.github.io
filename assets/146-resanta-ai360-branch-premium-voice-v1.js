@@ -60,7 +60,7 @@ async function speak(msg){
    if(String.fromCharCode(...header.slice(0,4))!=='RIFF'||
       String.fromCharCode(...header.slice(8,12))!=='WAVE')throw Error('invalid_yandex_wav');
    mediaUrl=URL.createObjectURL(new Blob([res.data],{type:'audio/wav'}));
-   player=new Audio(mediaUrl);
+   player=new Audio(mediaUrl);player.playbackRate=1.12;
    await new Promise((resolve,reject)=>{
     player.onended=resolve;player.onerror=()=>reject(Error('audio_playback_failed'));
     Promise.resolve(player.play()).catch(reject);
@@ -91,6 +91,7 @@ async function capture(run){
  return new Promise((resolve,reject)=>{
   let ended=false,clock=0,poll=0,audioContext=null,analyser=null,source=null;
   let lastLoud=0,heard=false;
+  const silence=root.crmAI360CreateSilenceGateV1?.({pauseMs:1900,noSpeechMs:4200});
   function release(){
    clearTimeout(clock);clearInterval(poll);
    try{source?.disconnect();}catch{}
@@ -102,9 +103,9 @@ async function capture(run){
   r.onerror=()=>{release();reject(Error('Ошибка записи'));};
   r.onstop=()=>{
    release();if(recorder===r)recorder=null;
-   resolve({blob:new Blob(parts,{type:r.mimeType||'audio/webm'}),duration:Math.min(16.4,(Date.now()-started)/1000)});
+   resolve({blob:new Blob(parts,{type:r.mimeType||'audio/webm'}),duration:Math.min(16.4,(Date.now()-started)/1000),heard});
   };
-  r.start(250);clock=setTimeout(finish,12000);
+  r.start(250);clock=setTimeout(finish,12000); // safety maximum, not a fixed wait
   // The owner's assistant also stops after a natural silence; do not force the
   // user to wait 12s for every question. Failure of this meter is nonfatal.
   try{
@@ -120,8 +121,14 @@ async function capture(run){
      let rms=0;
      for(const v of buffer){const x=(v-128)/128;rms+=x*x;}
      rms=Math.sqrt(rms/buffer.length);
-     if(rms>.003){heard=true;lastLoud=Date.now();}
-     if(heard&&Date.now()-started>1200&&Date.now()-lastLoud>1250)finish();
+     if(silence){
+      const result=silence.observe(rms,Date.now()-started);
+      if(result.heard)heard=true;
+      if(result.stop)finish();
+     }else{
+      if(rms>.003){heard=true;lastLoud=Date.now();}
+      if(heard&&Date.now()-lastLoud>1900)finish();
+     }
     },120);
    }
   }catch{release();poll=0;}
@@ -156,6 +163,7 @@ async function single(){
   info('Слушаю. Скажи вопрос…');
   const rec=await capture(run);
   if(run!==clipEpoch||!allowed())return;
+  if(!rec?.heard){info('Не расслышала вопрос. Попробуй ещё раз.');return;}
   const phrase=await transcribe(rec,run);
   if(run!==clipEpoch||!allowed())return;
   if(phrase)onQuestion?.(phrase.replace(WAKE,'').trim()||phrase);
@@ -173,7 +181,7 @@ async function hotLoop(run){
    info('Жду «Привет, Ресанта»…');
    const clip=await capture(run);
    if(!active())break;
-   if(!clip?.blob||clip.blob.size<900)continue;
+   if(!clip?.heard||!clip?.blob||clip.blob.size<900)continue;
    loops++;
    const heard=await transcribe(clip,run);
    if(!active())break;
@@ -186,7 +194,7 @@ async function hotLoop(run){
     info('Слушаю вопрос…');
     const next=await capture(run);
     if(!active())break;
-    const question=await transcribe(next,run);
+    const question=next?.heard?await transcribe(next,run):'';
     if(question)onQuestion?.(question.replace(WAKE,'').trim());
    }
    // Prevent hearing the TTS response as a new question.
