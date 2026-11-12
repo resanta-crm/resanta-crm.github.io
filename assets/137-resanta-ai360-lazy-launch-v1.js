@@ -10,7 +10,7 @@ window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
  './assets/134-resanta-voice-ai360-pilot-v1.js?v=20',
- './assets/135-resanta-voice-capture-fix-v2.js?v=19',
+ './assets/135-resanta-voice-capture-fix-v2.js?v=20',
  './assets/136-resanta-voice-quality-v3.js?v=19',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
  './assets/140-resanta-ai360-task-drafts-preview-v1.js?v=7',
@@ -33,7 +33,7 @@ const nativeTextScripts=[
 ];
 const nativeAudioScripts=[
  './assets/136-resanta-voice-quality-v3.js?v=19',
- './assets/135-resanta-voice-capture-fix-v2.js?v=19'
+ './assets/135-resanta-voice-capture-fix-v2.js?v=20'
 ];
 let androidAudioReady=false,androidAudioLoading=false;
 // Create and resume the output context synchronously within the explicit

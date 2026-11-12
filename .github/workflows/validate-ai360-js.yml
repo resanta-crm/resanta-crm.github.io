@@ -1,5 +1,15 @@
 name: Validate AI360 optional JavaScript
 on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'tests/ai360-voice-full-answer.test.cjs'
+      - 'tests/ai360-remembered-wake-session.test.cjs'
+      - 'tests/ai360-panel-ux-v1.test.cjs'
+      - '.github/workflows/validate-ai360-js.yml'
   push:
     branches: [main]
     paths:
