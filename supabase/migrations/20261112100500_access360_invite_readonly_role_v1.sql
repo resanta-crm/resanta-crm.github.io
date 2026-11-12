@@ -171,18 +171,18 @@ grant execute on function public.crm_company_viewer_summary_v1(integer) to authe
 -- Prevent bypassing the dedicated executive portal by directly querying
 -- legacy PostgREST tables. Existing employee rights remain unchanged.
 create or replace function public.crm_access_legacy_read_v1()
-returns boolean language sql stable security definer set search_path='' as $
+returns boolean language sql stable security definer set search_path='' as $$
  select (select auth.uid()) is null or exists(
   select 1 from public.users u where u.id=(select auth.uid())
    and u.role not in ('executive_viewer','pending','disabled')
  );
-$;
+$$;
 revoke all on function public.crm_access_legacy_read_v1() from public,anon;
 grant execute on function public.crm_access_legacy_read_v1() to authenticated;
 
 -- For 12 legacy tables with RLS disabled, add RLS policies that preserve the
 -- pre-existing table ACL for old staff/anon, but explicitly deny executives.
-do $
+do $$
 declare t record;is_users boolean;
 begin
  for t in
@@ -217,7 +217,7 @@ begin
    end if;
   end if;
  end loop;
-end $;
+end $$;
 
 -- Protect legacy user administration while new owner-only panel is introduced.
 -- A separate Edge endpoint checks owner identity via Auth, not by editable metadata.
