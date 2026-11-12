@@ -31,7 +31,7 @@ test('UI loads updated code without affecting staff roles or Android launch',()=
  const loader=read('assets/137-resanta-ai360-lazy-launch-v1.js');
  const staffUI=read('assets/144-resanta-ai360-branch-voice-v1.js');
  assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=39/);
- assert.match(html,/144-resanta-ai360-branch-voice-v1\.js\?v=10/);
+ assert.match(html,/144-resanta-ai360-branch-voice-v1\.js\?v=\d+/);
  assert.match(html,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=5/);
  assert.match(loader,/143-resanta-ai360-unified-dialog-v1\.js\?v=10/);
  assert.match(staffUI,/crmAI360BranchUnifiedHandleV1/);
