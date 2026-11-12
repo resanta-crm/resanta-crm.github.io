@@ -70,7 +70,7 @@ function context(voice,options={}){
  assert(!pieces.join(' ').includes('**'));
  // Speech intentionally rounds BYN to whole rubles, unlike the source CRM figures
  // displayed on screen. Group separators may be spaces or narrow NBSP in ICU.
- const compactMoney=s=>String(s).replace(/[\\s\\u00a0\\u202f]/g,'');
+ const compactMoney=s=>String(s).replace(/[\s\u00a0\u202f]/g,'');
  const byn=styled.window.crmAI360SpeechChunksV4('Выручка 159000 BYN, недобор 35440.52 BYN.');
  const bynSpeech=byn.join(' ');
  assert.equal(bynSpeech.includes('BYN'),false,'BYN must not be read as letters');
