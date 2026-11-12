@@ -119,3 +119,18 @@ test('All staff questions use JWT-gated Agent360 and never mistake free talk for
  assert.match(dialogue,/lastMode='chat';memory=\{\}/);
  assert.doesNotMatch(dialogue,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
+
+
+test('Staff history panel is a user-initiated text-only view scoped to signed-in staff',()=>{
+ const voice=fs.readFileSync('assets/144-resanta-ai360-branch-voice-v1.js','utf8');
+ const client=fs.readFileSync('assets/217-lera360-history-ui-v1.js','utf8');
+ assert.match(voice,/crmAI360HistoryUIV1\?\.mount\(historySlot,/);
+ assert.match(voice,/allowed:\(\)=>allowed\(\)&&panelVisible\(\)&&verified/);
+ assert.match(client,/history:status/);
+ assert.match(client,/history:feedback/);
+ assert.match(client,/history:clear/);
+ assert.match(client,/history:enable/);
+ assert.doesNotMatch(client,/\.innerHTML\s*=/);
+ assert.match(page,/217-lera360-history-ui-v1\.js\?v=1/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
+});
