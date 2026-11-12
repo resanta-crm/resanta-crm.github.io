@@ -394,7 +394,7 @@ function buildPanel(){
 async function open(){
  if(!allowed())return;
  buildPanel();panel.hidden=false;
- if(verified){setStatus('Подключено · только чтение');const hello=personalGreeting();if(hello)show(hello);return;}
+ if(verified){setStatus('Подключено · только чтение');const hello=personalGreeting();if(hello)show(hello);root.crmAI360BranchPremiumVoiceV1?.resumeWakeIfApproved?.();return;}
  const seq=++epoch;setStatus('Проверяю права доступа…');
  try{
   const session=typeof root.crmEnsureFreshSessionV236166==='function'?
@@ -413,6 +413,7 @@ async function open(){
   const hello=personalGreeting();
   if(hello)show(hello); // speak via existing authorised Yandex voice after capability checks
   else show('Привет! Чем помочь?',{speak:false});
+  root.crmAI360BranchPremiumVoiceV1?.resumeWakeIfApproved?.();
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
