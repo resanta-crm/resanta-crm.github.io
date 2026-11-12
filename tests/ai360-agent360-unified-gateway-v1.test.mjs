@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
- AGENT360_OWNER_ID,AGENT360_SURFACES,AGENT360_NAV_IDS,
+ AGENT360_OWNER_ID,AGENT360_PETROVICHEV_ID,AGENT360_SURFACES,AGENT360_NAV_IDS,
+ agentGreeting,
  agentPrincipal,agentCapabilities,normalizeAgentRequest
 } from '../supabase/functions/crm-ai360-agent-v1/contract.mjs';
 import {CRM_AI360_ALL_DOMAINS} from '../supabase/functions/crm-ai360-dialog-v4/catalog.mjs';
@@ -114,4 +115,72 @@ test('bundled gateway rules exactly match the reviewed source of truth',()=>{
   const original=fs.readFileSync('supabase/functions/'+file[1]+'/'+file[0],'utf8');
   assert.equal(local,original,'gateway bundling must be reviewed when '+file[0]+' changes');
  }
+});
+
+test('Petrovichev is a genuine network director peer, not a role-name bypass',()=>{
+ const profile={id:AGENT360_PETROVICHEV_ID,name:'Руководство компании',
+  role:'boss',region:'Все филиалы',access_scope:'standard',email:'petrovichev@resanta.ru'};
+ const verified={id:AGENT360_PETROVICHEV_ID,email:'petrovichev@resanta.ru',
+  email_confirmed_at:'2026-11-12T00:00:00Z'};
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,profile),null);
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,profile,
+  {...verified,email_confirmed_at:null}),null);
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,profile,
+  {...verified,email:'unknown@example.org'}),null);
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,{...profile,region:'Гомель'},verified),null);
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,{...profile,role:'manager'},verified),null);
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,{...profile,access_scope:'triovist'},verified),null);
+ assert.equal(agentPrincipal(AGENT360_PETROVICHEV_ID,
+  {...profile,email:'other@example.org'},verified),null);
+ const peer=agentPrincipal(AGENT360_PETROVICHEV_ID,profile,verified);
+ const owner=agentPrincipal(AGENT360_OWNER_ID,
+  {id:AGENT360_OWNER_ID,name:'Александр Паюшин',role:'boss',region:'Витебск'});
+ assert.deepEqual(peer.domains,owner.domains);
+ assert.equal(peer.endpoint,'crm-ai360-director-peer-v1');
+ assert.equal(peer.tier,'network_director');
+ assert.equal(peer.read_only,true);
+ assert.equal(agentGreeting(peer),'мой слуга');
+ assert.equal(agentCapabilities(peer).can_execute_writes,false);
+});
+
+test('seven personalised Lera addresses are attached only to matching verified accounts',()=>{
+ const greeting={
+  'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
+  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Саника',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
+  '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
+  '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
+ };
+ for(const [id,expected] of Object.entries(greeting)){
+  const x=STAFF_USERS[id];
+  const principal=agentPrincipal(id,{id,name:x.name,role:x.role,region:x.region});
+  assert.equal(agentGreeting(principal),expected,id);
+  assert.equal(agentCapabilities(principal).greeting,expected);
+ }
+ assert.equal(agentGreeting(null),'');
+ assert.equal(agentGreeting({user_id:'invented'}),'');
+});
+
+test('peer backend retains the exact director data logic, replacing only audited auth guard',()=>{
+ const original=fs.readFileSync('supabase/functions/crm-ai360-dialog-v4/index.ts','utf8');
+ const peer=fs.readFileSync('supabase/functions/crm-ai360-director-peer-v1/index.ts','utf8');
+ assert.match(peer,/userId !== PETROVICHEV_ID/);
+ assert.match(peer,/auth\?\.data\?\.user\?\.email_confirmed_at/);
+ assert.match(peer,/profile\.data\?\.access_scope !== 'standard'/);
+ assert.match(peer,/profile\.data\?\.region !== 'Все филиалы'/);
+ assert.match(peer,/profile\.data\?\.email/);
+ assert.doesNotMatch(peer,/userId !== OWNER_ID/);
+ assert.doesNotMatch(peer,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
+ const dependencies=['catalog.mjs','core.mjs','task-read.mjs','context.mjs',
+  'dates.mjs','client-identity.mjs','client-universal.mjs','manager-sales.mjs'];
+ for(const file of dependencies)assert.equal(
+  fs.readFileSync('supabase/functions/crm-ai360-director-peer-v1/'+file,'utf8'),
+  fs.readFileSync('supabase/functions/crm-ai360-dialog-v4/'+file,'utf8'),
+  'peer backend drift: '+file
+ );
+ assert.ok(original.includes("userId !== OWNER_ID"));
+ const newServer=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8');
+ assert.match(newServer,/agentPrincipal\(user\.id,profile\.data,user\)/);
+ assert.match(newServer,/greeting:agentGreeting\(principal\)/);
 });
