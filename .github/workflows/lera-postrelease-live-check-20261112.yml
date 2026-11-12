@@ -1,0 +1,51 @@
+name: Lera post-release audio and published-site verification
+on:
+  pull_request:
+    paths:
+      - 'tests/ai360-voice-full-answer.test.cjs'
+      - '.github/workflows/lera-postrelease-live-check-20261112.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/ai360-voice-full-answer.test.cjs'
+      - '.github/workflows/lera-postrelease-live-check-20261112.yml'
+permissions:
+  contents: read
+jobs:
+  audio-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Full Yandex speech with real director identity and existing safeguard
+        run: |
+          node --check assets/136-resanta-voice-quality-v3.js
+          node tests/ai360-voice-full-answer.test.cjs
+          node tests/ai360-panel-ux-v1.test.cjs
+  live-website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public CRM serves new personal greeting, voice and Agent360 bridge
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 2 --retry-delay 2 --max-time 25 'https://resanta-crm.by/?lera-ai360-check=20261112' -o /tmp/crm.html
+          grep -Fq '215-lera360-personal-greeting-v1.js?v=1' /tmp/crm.html
+          grep -Fq '216-lera360-silence-gate-v1.js?v=1' /tmp/crm.html
+          grep -Fq '137-resanta-ai360-lazy-launch-v1.js?v=37' /tmp/crm.html
+          curl -fsSL --retry 2 --retry-delay 2 --max-time 25 'https://resanta-crm.by/assets/143-resanta-ai360-unified-dialog-v1.js?v=9' -o /tmp/agent.js
+          grep -Fq "const ENDPOINT='crm-ai360-agent-v1'" /tmp/agent.js
+          grep -Fq "action:'ask',question" /tmp/agent.js
+          curl -fsSL --retry 2 --retry-delay 2 --max-time 25 'https://resanta-crm.by/assets/135-resanta-voice-capture-fix-v2.js?v=19' -o /tmp/voice.js
+          grep -Fq 'silence.observe(rms,Date.now()-start)' /tmp/voice.js
+      - name: Server must reject anonymous access
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' \
+            --data '{"action":"capabilities"}' \
+            'https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-agent-v1')"
+          test "${code}" = '401'
