@@ -149,7 +149,7 @@ Deno.serve(async(req:Request)=>{
    const digest=briefing(user,delivery.rows,now,delivery.mode,delivery.total);
    if(!digest)continue;
    if(dryRun){preview.push({recipient_role:user.role,recipient_name:user.name,mode:delivery.mode,
-    route_stands:delivery.rows.filter(x=>x.route_today).length,text_items:digest.lines.length,voice_mentions:digest.scope_count});continue}
+    route_stands:delivery.rows.filter((x:any)=>x.route_today).length,text_items:digest.lines.length,voice_mentions:digest.scope_count});continue}
    const textKey='stand360_route_v2_text:'+now+':'+user.id;
    const audioKey='stand360_route_v2_audio:'+now+':'+user.id;
    let textSent=await setting(textKey);
