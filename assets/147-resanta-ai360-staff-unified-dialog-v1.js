@@ -86,6 +86,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  })();
  return true;
 };
+root.crmAI360BranchUnifiedIsPendingV1=()=>pending;
 root.crmAI360BranchUnifiedResetV1=()=>{epoch++;pending=false;history=[];memory={};lastMode='';};
 root.addEventListener('pagehide',()=>root.crmAI360BranchUnifiedResetV1?.());
 })(window);
