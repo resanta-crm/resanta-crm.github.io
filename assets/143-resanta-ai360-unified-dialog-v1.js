@@ -2,14 +2,15 @@
 (function(){
 'use strict';
 if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
-const ENDPOINT='crm-ai360-dialog-v4';
+const ENDPOINT='crm-ai360-agent-v1';
 let history=[],memory={},pending=false,awaitingDetail=null;
 function allowed(){
- try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&
-  typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&
-  String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU')==='александр паюшин'&&
-  document.getElementById('app')?.style.display!=='none';}
- catch{return false;}
+ try{
+  const p=window.crmAI360GreetingV1?.();
+  return !!p&&['544fb1e2-ef70-44de-bc62-e0e1596a4bfc',
+   'a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(p.id)&&
+   document.getElementById('app')?.style.display!=='none';
+ }catch{return false;}
 }
 async function errorCode(e){
  if(e?.context?.json){try{return String((await e.context.json())?.error||'request_failed');}catch{}}
