@@ -1,0 +1,33 @@
+name: Lera360 private server history and correction isolation
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'docs/sql/lera_ai360_history_30d_20261112.sql'
+      - 'tests/lera360-private-history-backend-v1.test.mjs'
+      - '.github/workflows/lera360-private-history-backend-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-agent-v1/history.mjs'
+      - 'tests/lera360-private-history-backend-v1.test.mjs'
+permissions: { contents: read }
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate isolated server syntax
+        run: |
+          node --check supabase/functions/crm-ai360-agent-v1/history.mjs
+          node --check supabase/functions/crm-ai360-agent-v1/conversation.mjs
+          node --check --input-type=module < supabase/functions/crm-ai360-agent-v1/index.ts
+      - name: Private consent, ownership and 30-day purge
+        run: |
+          node --test tests/lera360-private-history-backend-v1.test.mjs
+          node --test tests/ai360-agent360-conversation-routing-v1.test.mjs
+          node --test tests/ai360-agent360-unified-gateway-v1.test.mjs
