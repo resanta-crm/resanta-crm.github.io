@@ -1,0 +1,68 @@
+name: Lera360 fast voice, personal greetings and live agent UX
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/136-resanta-voice-quality-v3.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/146-resanta-ai360-branch-premium-voice-v1.js'
+      - 'assets/215-lera360-personal-greeting-v1.js'
+      - 'assets/216-lera360-silence-gate-v1.js'
+      - 'supabase/functions/crm-voice-yandex-tts-v1/index.ts'
+      - 'supabase/functions/crm-voice-transcribe-v1/index.ts'
+      - 'index.html'
+      - 'tests/lera360-greeting-silence-agent-20261112.test.mjs'
+      - 'tests/ai360-voice-stt-429-regression-20261027.test.cjs'
+      - 'tests/ai360-voice-platform-check.mjs'
+      - 'tests/ai360-unified-dialog-v1.test.cjs'
+      - '.github/workflows/lera360-voice-greeting-fast-20261112.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/215-lera360-personal-greeting-v1.js'
+      - 'assets/216-lera360-silence-gate-v1.js'
+      - 'tests/lera360-greeting-silence-agent-20261112.test.mjs'
+      - '.github/workflows/lera360-voice-greeting-fast-20261112.yml'
+permissions:
+  contents: read
+jobs:
+  voice-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser module syntax
+        run: |
+          for part in 134 135 136 137 143 144 146; do
+            case "$part" in
+              134) file=134-resanta-voice-ai360-pilot-v1.js ;;
+              135) file=135-resanta-voice-capture-fix-v2.js ;;
+              136) file=136-resanta-voice-quality-v3.js ;;
+              137) file=137-resanta-ai360-lazy-launch-v1.js ;;
+              143) file=143-resanta-ai360-unified-dialog-v1.js ;;
+              144) file=144-resanta-ai360-branch-voice-v1.js ;;
+              146) file=146-resanta-ai360-branch-premium-voice-v1.js ;;
+            esac
+            node --check "assets/$file"
+          done
+          node --check assets/215-lera360-personal-greeting-v1.js
+          node --check assets/216-lera360-silence-gate-v1.js
+      - name: Personal greetings, adaptive pause and permission gates
+        run: |
+          node --test tests/lera360-greeting-silence-agent-20261112.test.mjs
+          node --test tests/ai360-voice-platform-check.mjs
+          node tests/ai360-voice-stt-429-regression-20261027.test.cjs
+          node tests/ai360-unified-dialog-v1.test.cjs
+      - name: Anonymous new Agent360 endpoint must remain protected
+        run: |
+          code="$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' \
+            --data '{"action":"capabilities"}' \
+            'https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-agent-v1')"
+          test "$code" = 401

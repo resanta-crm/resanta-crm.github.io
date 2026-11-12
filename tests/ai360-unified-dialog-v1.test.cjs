@@ -23,11 +23,11 @@ const calls=[],said=[];
 const ctx={
  navigator:{userAgent:'Macintosh'},
  document:{getElementById:()=>({style:{display:'block'}}),hidden:false,addEventListener:()=>{}},
- currentUser:{id:'dfs'},currentProfile:{role:'boss',name:'Александр Паюшин'},
+ currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},currentProfile:{role:'boss',name:'Александр Паюшин'},
  db:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},functions:{invoke:async(n,q)=>{
   calls.push({n,body:q.body});return {data:{answer:'Проверенная сводка CRM.',memory:{manager:'Руднев',month:'2026-10',domain:'sales'}}};
  }}},
- window:{addEventListener:()=>{}},Promise,setTimeout,console
+ window:{addEventListener:()=>{},crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',greeting:'Привет, родной! Чем помочь?'})},Promise,setTimeout,console
 };
 vm.runInNewContext(bridge,ctx,{filename:'unified.js'});
 const ui={answer:x=>said.push(x),textStatus:()=>{}};
@@ -36,7 +36,7 @@ const flush=()=>new Promise(r=>setTimeout(r,20));
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Какие продажи у Руднева?',ui),true);
  await flush();
  assert.equal(calls.length,1);
- assert.equal(calls[0].n,'crm-ai360-dialog-v4');
+ assert.equal(calls[0].n,'crm-ai360-agent-v1');
  assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('А какие у него забытые клиенты?',ui),true);
  await flush();
  assert.equal(calls.length,2);
