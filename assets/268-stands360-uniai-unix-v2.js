@@ -144,6 +144,21 @@ function filteredRows(){
   return true;
  }).sort((x,y)=>priority(y)-priority(x)||str(x.client_name).localeCompare(str(y.client_name),'ru'));
 }
+function quickScore(p){
+ const photoOk=p.vision_photo_evidence_path===photo(p)&&p.vision_checked_at;
+ let sum=0,available=0;
+ if(photoOk&&typeof p.vision_stand_present==='boolean'){available+=25;sum+=p.vision_stand_present?25:0}
+ if(photoOk&&p.vision_fill_pct!=null&&p.vision_own_brand_pct!=null&&p.vision_photo_quality_score!=null){
+  available+=25;sum+=25*(.35*Number(p.vision_fill_pct)+.45*Number(p.vision_own_brand_pct)+.20*Number(p.vision_photo_quality_score))/100;
+ }
+ if(dataOk(p)&&p.sku_expected>0&&p.client_history_rows>0){
+  const six=Number(p.ship_6m||0),prev=Number(p.ship_prev_6m||0);
+  available+=35;sum+=prev>0?35*Math.min(1.2,six/prev)/1.2:six>0?31:7;
+ }
+ if(photo(p)&&p.photo_days!=null){available+=15;sum+=p.photo_days<=30?15:p.photo_days<=60?9:3}
+ return {score:available>=50?Math.round(sum/available*100):null,coverage:available};
+}
+
 function table(){
  const all=standRows(),selected=filteredRows();
  const managers=[...new Set(all.map(x=>x.manager_name).filter(Boolean))].sort();
@@ -158,7 +173,7 @@ function table(){
  '<input id="s268-search" aria-label="Поиск" placeholder="Клиент, ID или ОС" value="'+esc(state.search)+'">'+
  '<button class="s268-secondary" data-s268-search>Найти</button></div></div>'+
  '<div class="s268-tablewrap"><table class="s268-table"><thead><tr><th>Клиент / ID</th><th>Наш стенд / ОС</th><th>Бренд</th><th>Установлен</th>'+
- '<th>Последнее фото</th><th>Отгрузки SKU · 6 мес.</th><th>Достоверность</th><th>Рекомендация Леры</th></tr></thead><tbody>'+
+ '<th>Последнее фото</th><th>Отгрузки SKU · 6 мес.</th><th>Оценка Леры</th><th>Достоверность</th><th>Рекомендация Леры</th></tr></thead><tbody>'+
  selected.map(p=>{
   const s=stateOf(p),valid=dataOk(p);
   return '<tr data-s268-detail="'+esc(p.id)+'" tabindex="0">'+
@@ -169,6 +184,7 @@ function table(){
   '<small>'+esc(p.photo_origin==='seller'?'От продавца':p.photo_origin==='manager'?'От МПП':'Источник не установлен')+'</small></td>'+
   '<td><b>'+(valid?esc(money(p.ship_6m)):'Не сопоставлено')+'</b>'+
   '<small>'+(valid?'Подтверждённые SKU':'Отгрузки клиента — отдельно')+'</small></td>'+
+  '<td><b>'+esc(quickScore(p).score==null?'—':quickScore(p).score+'/100')+'</b><small>'+esc(quickScore(p).coverage===100?'Данные подтверждены':'Предварительно · полнота '+quickScore(p).coverage+'%')+'</small></td>'+ 
   '<td><span class="s268-pill '+(valid?'good':'warn')+'">'+(valid?'Сверено':'Нужна проверка')+'</span></td>'+
   '<td><span class="s268-action">'+esc(s[0])+'</span></td></tr>';
  }).join('')+'</tbody></table></div>'+
