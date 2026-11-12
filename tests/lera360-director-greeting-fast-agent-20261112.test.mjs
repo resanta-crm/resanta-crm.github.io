@@ -79,7 +79,7 @@ test('script wiring loads harmless helpers before lazy UI, not mic on login',()=
  const html=file('index.html');
  assert.match(html,/215-lera360-personal-greeting-v1\.js\?v=1/);
  assert.match(html,/216-lera360-silence-gate-v1\.js\?v=1/);
- assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=38/);
+ assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=39/);
  assert.doesNotMatch(helper,/getUserMedia|functions\.invoke|MediaRecorder/);
  assert.doesNotMatch(detector,/getUserMedia|functions\.invoke|MediaRecorder/);
 });
