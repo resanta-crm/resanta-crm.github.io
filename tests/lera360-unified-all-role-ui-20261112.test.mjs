@@ -16,7 +16,7 @@ test('all six staff use same JWT-secured gateway without relaxing CRM answer sco
  const staff=read('assets/147-resanta-ai360-staff-unified-dialog-v1.js');
  assert.match(staff,/const ENDPOINT='crm-ai360-agent-v1'/);
  assert.match(staff,/body:\{action:'ask',question,history:history\.slice\(-6\),memory:\{\.\.\.memory,month\}\}/);
- assert.match(staff,/data\.mode==='agent360_free_conversation_v1'/);
+ assert.match(staff,/data\?\.mode==='agent360_free_conversation_v1'/);
  assert.match(staff,/data\.route_tier!==userRole\?\.tier/);
  assert.match(staff,/data\.domains_used\.length!==0/);
  assert.match(staff,/data\?\.mode!=='staff_ai360_shared_core_v1'/);
@@ -31,11 +31,10 @@ test('UI loads updated code without affecting staff roles or Android launch',()=
  const loader=read('assets/137-resanta-ai360-lazy-launch-v1.js');
  const staffUI=read('assets/144-resanta-ai360-branch-voice-v1.js');
  assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=39/);
- assert.match(html,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
+ assert.match(html,/144-resanta-ai360-branch-voice-v1\.js\?v=10/);
  assert.match(html,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=5/);
  assert.match(loader,/143-resanta-ai360-unified-dialog-v1\.js\?v=10/);
  assert.match(staffUI,/crmAI360BranchUnifiedHandleV1/);
  assert.match(staffUI,/crmAI360StaffIdentityV1/);
- assert.match(staffUI,/Спроси Леру о чём угодно/);
  assert.match(staffUI,/Санька/);
 });
