@@ -6,7 +6,7 @@ const js=fs.readFileSync('assets/143-resanta-ai360-unified-dialog-v1.js','utf8')
 const loader=fs.readFileSync('assets/137-resanta-ai360-lazy-launch-v1.js','utf8');
 const html=fs.readFileSync('index.html','utf8');
 assert.match(js,/const ENDPOINT='crm-ai360-agent-v1'/);
-assert.match(loader,/143-resanta-ai360-unified-dialog-v1.js\?v=9/);
+assert.match(loader,/143-resanta-ai360-unified-dialog-v1.js\?v=10/);
 assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=38/);
 const calls=[],answers=[];let response='ok';
 const ctx={
