@@ -1,0 +1,46 @@
+name: Promotions 360 · Uni AI and Lera
+on:
+  pull_request:
+    paths:
+      - 'assets/01-crm-core.js'
+      - 'assets/210-promotions360-uniai-v1.js'
+      - 'assets/211-promotions360-uniai-v1.css'
+      - 'supabase/functions/crm-promotion360-lera-v1/**'
+      - 'supabase/migrations/*promotions360_uniai*'
+      - 'tests/promotions360-uniai-lera-v1.test.mjs'
+      - '.github/workflows/promotions360-uniai-lera.yml'
+      - 'index.html'
+  push:
+    paths:
+      - 'assets/01-crm-core.js'
+      - 'assets/210-promotions360-uniai-v1.js'
+      - 'assets/211-promotions360-uniai-v1.css'
+      - 'supabase/functions/crm-promotion360-lera-v1/**'
+      - 'supabase/migrations/*promotions360_uniai*'
+      - 'tests/promotions360-uniai-lera-v1.test.mjs'
+      - '.github/workflows/promotions360-uniai-lera.yml'
+      - 'index.html'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  promotions360:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and regression suite
+        run: |
+          node --check assets/01-crm-core.js
+          node --check assets/210-promotions360-uniai-v1.js
+          node --test tests/promotions360-uniai-lera-v1.test.mjs
+          node --test tests/promotions-telegram-personal-routing.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Edge function typecheck
+        run: |
+          deno check supabase/functions/crm-promotion360-lera-v1/index.ts
