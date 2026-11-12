@@ -287,12 +287,13 @@ grant execute on function public.crm_stands_360_skus_v3(uuid) to authenticated;
 create or replace function public.crm_stands_360_v3(p_limit integer default 150)
 returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare baseline jsonb;out_rows jsonb:='[]'::jsonb;
-stand jsonb;skus jsonb;legal public.clients%rowtype;
+stand jsonb;skus jsonb;legal public.clients%rowtype;last_vision public.stand_vision_checks_v236347%rowtype;
 score int;priority text;confidence text;stat int:=0;missing int:=0;pending int:=0;
 begin
  baseline:=public.crm_stands_360_v2(p_limit);
  for stand in select value from jsonb_array_elements(baseline->'stands') loop
   skus:=public.crm_stands_360_skus_v3((stand->>'id')::uuid);
+  select * into last_vision from public.stand_vision_checks_v236347 where placement_id=(stand->>'id')::uuid order by created_at desc limit 1;
   select * into legal from public.clients where id=(skus->>'legal_client_id')::uuid;
   if (skus->>'client_history_rows')::int=0 then confidence:='client_id_unlinked';
   elsif (skus->>'unresolved_groups')::int>0 or (skus->>'sku_expected')::int=0 then confidence:='sku_unverified';
@@ -319,6 +320,8 @@ begin
    'ship_6m',(skus->>'ship_6m')::numeric,
    'ship_prev_6m',(skus->>'ship_prev_6m')::numeric,
    'legal_client_id',skus->>'legal_client_id','legal_client_name',legal.name,
+   'vision_stand_present',last_vision.stand_present,'vision_photo_quality_score',last_vision.photo_quality_score,
+   'vision_photo_evidence_path',last_vision.storage_path,
    'sales_confidence',confidence,'priority_code',priority));
   if confidence<>'verified_monthly_client_shipments' then stat:=stat+1;end if;
   if priority<>'maintain' then pending:=pending+1;end if;
