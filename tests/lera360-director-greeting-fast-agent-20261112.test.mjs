@@ -68,6 +68,14 @@ test('no repeat mic consent and speed is only audio playback',()=>{
  assert.match(audio,/output\.playbackRate=1\.12/);
  assert.match(audio,/source\.playbackRate\.value=1\.12/);
 });
+test('real agent gateway request uses the deployed action and question contract',()=>{
+ const bridge=file('assets/143-resanta-ai360-unified-dialog-v1.js');
+ const contract=file('supabase/functions/crm-ai360-agent-v1/contract.mjs');
+ assert.match(bridge,/const payload=\{action:'ask',question,history:history\.slice\(-6\),memory\}/);
+ assert.match(contract,/typeof input\.question!=='string'/);
+ assert.match(contract,/\?\{message:question,history,memory\}/);
+ assert.doesNotMatch(bridge,/const payload=\{message:question/);
+});
 test('script wiring loads harmless helpers before lazy UI, not mic on login',()=>{
  const html=file('index.html');
  assert.match(html,/215-lera360-personal-greeting-v1\.js\?v=1/);
