@@ -62,18 +62,25 @@ function context(voice,options={}){
  assert(pieces.join(' ').endsWith('Конец ответа.'));
  assert(!pieces.join(' ').includes('**'));
  const byn=styled.window.crmAI360SpeechChunksV4('Выручка 159000 BYN, недобор 35440.52 BYN.');
+ const compactMoney=x=>x.replace(/[\s\u00a0\u202f]/g,'');
  assert.equal(byn.join(' ').includes('BYN'),false,'BYN must not be read as letters');
- assert(byn.join(' ').includes('159000 белорусских рублей'));
- assert(byn.join(' ').includes('35440 белорусских рублей 52 копейки'));
- const ruble=styled.window.crmAI360SpeechChunksV4('Долг 1 BYN, задолженность 2 BYN, возврат 21 BYN. Остаток 0.06 BYN.').join(' ');
- assert(ruble.includes('1 белорусский рубль'));
- assert(ruble.includes('2 белорусских рубля'));
- assert(ruble.includes('21 белорусский рубль'));
- assert(ruble.includes('0 белорусских рублей 6 копеек'));
- const rubleFormatted=styled.window.crmAI360SpeechChunksV4('Факт 46 965,42 BYN, план 153 000,00 BYN.').join(' ');
- assert(rubleFormatted.includes('46 965 белорусских рублей 42 копейки'));
- assert(rubleFormatted.includes('153 000 белорусских рублей'));
+ assert(compactMoney(byn.join(' ')).includes('159000белорусскихрублей'),'grouping separators are acceptable');
+ assert(compactMoney(byn.join(' ')).includes('35441белорусскийрубль'),'round to whole BYN without kopecks');
+ const ruble=compactMoney(styled.window.crmAI360SpeechChunksV4(
+  'Долг 1 BYN, задолженность 2 BYN, возврат 21 BYN. Остаток 0.06 BYN.'
+ ).join(' '));
+ assert(ruble.includes('1белорусскийрубль'));
+ assert(ruble.includes('2белорусскихрубля'));
+ assert(ruble.includes('21белорусскийрубль'));
+ assert(ruble.includes('0белорусскихрублей'));
+ assert(!/копеек|копейки|копейка/.test(ruble),'do not announce kopecks');
+ const rubleFormatted=compactMoney(styled.window.crmAI360SpeechChunksV4(
+  'Факт 46 965,42 BYN, план 153 000,00 BYN.'
+ ).join(' '));
+ assert(rubleFormatted.includes('46965белорусскихрублей'));
+ assert(rubleFormatted.includes('153000белорусскихрублей'));
  assert(!rubleFormatted.includes('BYN'));
+ assert(!/копеек|копейки|копейка/.test(rubleFormatted));
 
  const dates=styled.window.crmAI360SpeechChunksV4(
   'Продажи менеджера Шкуран за 10.2026. Последняя загрузка 23.10.2026. Визит 2026-10-27. Данные за 2026-09.'
