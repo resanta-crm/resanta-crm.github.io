@@ -20,8 +20,8 @@ test('Android output is primed only after an explicit director action, not at CR
 });
 
 test('Android sound is a separate optional file; desktop retains old player path',()=>{
- assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19'"));
- assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19'"),'desktop script stays version 17');
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice'"));
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice'"),'desktop and Android retain optional Yandex module with fresh cache revision');
  assert.ok(quality.includes('const nativeAndroidDirector='));
  assert.ok(quality.includes('const context=androidContext();'));
  assert.ok(quality.includes('await playAndroidWav(blob,run);'));
