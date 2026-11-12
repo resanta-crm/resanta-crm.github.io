@@ -3,7 +3,7 @@
 // independently reviewed director/staff dialog gateways.
 // No service-role CRM reads, direct SQL, generic LLM tools, or write actions.
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
-import {agentPrincipal,agentCapabilities,normalizeAgentRequest} from './contract.mjs';
+import {agentPrincipal,agentCapabilities,normalizeAgentRequest,agentGreeting} from './contract.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
@@ -37,10 +37,10 @@ Deno.serve(async req=>{
  const user=session?.data?.user;
  if(!user?.id)return fault(req,'not_authorized',401);
  // Immutable roles must match this authenticated user. Never use user_metadata.
- const profile=await svc.from('users').select('id,name,role,region')
+ const profile=await svc.from('users').select('id,name,role,region,access_scope,email')
   .eq('id',user.id).maybeSingle().catch(()=>null);
  if(!profile||profile.error)return fault(req,'profile_unavailable',503);
- const principal=agentPrincipal(user.id,profile.data);
+ const principal=agentPrincipal(user.id,profile.data,user);
  if(!principal)return fault(req,'agent_access_not_enabled',403);
  let input;
  try{
@@ -79,6 +79,7 @@ Deno.serve(async req=>{
   agent:'resanta_ai_agent360_v1',
   route_tier:principal.tier,
   read_only:true,
+  greeting:agentGreeting(principal),
   writes_enabled:false
  });
 });
