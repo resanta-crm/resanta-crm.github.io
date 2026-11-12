@@ -1,0 +1,24 @@
+name: Lera 360 private history interface foundation
+on:
+  pull_request:
+    paths:
+      - 'assets/217-lera360-history-ui-v1.js'
+      - 'index.html'
+      - 'tests/lera360-history-ui-v1.test.mjs'
+      - '.github/workflows/lera360-history-ui-foundation-20261112.yml'
+permissions:
+  contents: read
+jobs:
+  private-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: History UI syntax and privacy logic
+        run: |
+          node --check assets/217-lera360-history-ui-v1.js
+          node --test tests/lera360-history-ui-v1.test.mjs
+          node --test tests/ai360-agent360-unified-gateway-v1.test.mjs
