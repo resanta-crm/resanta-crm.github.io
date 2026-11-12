@@ -51,5 +51,6 @@ assert(capture.includes("if(document.hidden){")&&capture.includes("if(mode)void 
 assert(capture.includes("!panel.classList?.contains('rva-mini')"),'mini player must stop microphone');
 assert(capture.includes('noiseOnly(phrase)'),'skip lone noise fragments');
 assert(loader.includes('Android'),'safe lazy launch still excludes Android');
-assert(pilot.includes("currentProfile?.role === 'boss'"),'only director sees assistant');
+assert(pilot.includes('window.crmAI360GreetingV1?.()'),'only a verified registered executive sees assistant');
+assert(pilot.includes('544fb1e2-ef70-44de-bc62-e0e1596a4bfc'),'director identity is explicit');
 console.log('AI360 UX: director-only spacious panel, feedback, nuanced full speech, background audio and foreground mic guards PASS');
