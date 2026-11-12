@@ -60,5 +60,5 @@ assert(pilot.includes('a24954b8-2fe1-4852-b629-d8f351e1bd36'),'authorized direct
 assert(greeting.includes('currentProfile.role!==p.role')&&greeting.includes('currentProfile.region!==p.region'),
  'account identity helper checks role and region before opening');
 assert(greeting.includes('currentProfile.access_scope!==p.scope'),
- 'peer's access scope still verified');
+ 'peer access scope still verified');
 console.log('AI360 UX: director-only spacious panel, feedback, nuanced full speech, background audio and foreground mic guards PASS');
