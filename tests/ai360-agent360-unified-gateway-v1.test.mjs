@@ -104,3 +104,14 @@ test('single Edge entry rechecks token, role and forwards caller JWT only',()=>{
  assert.doesNotMatch(backend,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
  assert.doesNotMatch(backend,/SELECT \*/);
 });
+
+test('bundled gateway rules exactly match the reviewed source of truth',()=>{
+ for(const file of [
+  ['catalog.mjs','crm-ai360-dialog-v4'],
+  ['permissions.mjs','crm-ai360-staff-dialog-v1']
+ ]){
+  const local=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/'+file[0],'utf8');
+  const original=fs.readFileSync('supabase/functions/'+file[1]+'/'+file[0],'utf8');
+  assert.equal(local,original,'gateway bundling must be reviewed when '+file[0]+' changes');
+ }
+});
