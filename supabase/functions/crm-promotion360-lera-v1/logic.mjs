@@ -43,7 +43,7 @@ export function voiceBrief(user,active,actions){
  }
  const pending=tasks.filter(x=>x.status!=='closed');
  if(!pending.length)return null;
- return intro+'По твоим акциям '+pending.length+' поручения. '+
+ return intro+'По твоим акциям '+(pending.length===1?'одно поручение':pending.length<5?pending.length+' поручения':pending.length+' поручений')+'. '+
   pending.slice(0,5).map((x,i)=>(i+1)+'. '+x.client_name+' — '+(x.status==='escalated'?'срок нарушен':x.milestone===14?'проверка на четырнадцатый день':'проверка после первой недели')+'.').join(' ')+
   ' Укажи причину, действие и срок. Результат фиксируй в CRM.';
 }
