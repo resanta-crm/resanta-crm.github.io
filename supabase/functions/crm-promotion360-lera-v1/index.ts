@@ -8,7 +8,6 @@ const OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const respond=(status:number,payload:unknown)=>new Response(JSON.stringify(payload),
  {status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store'}});
 const clean=(s:unknown)=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]||c));
-const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function runtime(key:string){
  const {data,error}=await sb.from('crm_telegram_runtime').select('value').eq('key',key).maybeSingle();
  if(error)throw new Error('RUNTIME_UNAVAILABLE');return data?.value||null
