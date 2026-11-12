@@ -358,10 +358,10 @@ function buildPanel(){
   root.crmAI360BranchPremiumVoiceV1?.setMuted(muted);
  });
  const wake=document.createElement('button');wake.type='button';
- wake.textContent='◉ Привет, Ресанта';
+ wake.textContent='◉ Привет, Лера';
  wake.addEventListener('click',()=>{
   const active=root.crmAI360BranchPremiumVoiceV1?.toggleWake()||false;
-  wake.textContent=active?'■ Выключить ожидание':'◉ Привет, Ресанта';
+  wake.textContent=active?'■ Выключить ожидание':'◉ Привет, Лера';
  });
  const voiceSwitch=document.createElement('button');voiceSwitch.type='button';
  voiceSwitch.textContent='Голос: Лера';
@@ -376,7 +376,7 @@ function buildPanel(){
  status.setAttribute('role','status');status.textContent='Только чтение · готова к вопросу';
  log=document.createElement('div');log.className='rsa-branch-log';log.setAttribute('role','log');
  const speechNote=document.createElement('small');
- speechNote.textContent='Речь распознаётся OpenAI, озвучка — Яндекс Лера/Даша. Ожидание «Привет, Ресанта» включается вручную и прекращается при закрытии окна. Голос передаётся внешним сервисам.';
+ speechNote.textContent='Речь распознаётся OpenAI, озвучка — Яндекс Лера/Даша. Ожидание «Привет, Лера» или «Привет, Ресанта» включается вручную и прекращается при закрытии окна. Голос передаётся внешним сервисам.';
  const historySlot=document.createElement('div');
  historySlot.className='rsa-branch-history-slot';
  panel.append(heading,note,log,entry,actions,historySlot,status,speechNote);
@@ -387,13 +387,14 @@ function buildPanel(){
  root.crmAI360BranchPremiumVoiceV1?.bind({
   panel,authorized:panelVisible,
   onTranscript:q=>{if(panelVisible()&&field){field.value=q;submit();}},
-  onStatus:setStatus
+  onStatus:setStatus,
+  onBusy:()=>busy||root.crmAI360BranchUnifiedIsPendingV1?.()===true
  });
 }
 async function open(){
  if(!allowed())return;
  buildPanel();panel.hidden=false;
- if(verified){setStatus('Подключено · только чтение');const hello=personalGreeting();if(hello)show(hello);return;}
+ if(verified){setStatus('Подключено · только чтение');const hello=personalGreeting();if(hello)show(hello);root.crmAI360BranchPremiumVoiceV1?.resumeWakeIfApproved?.();return;}
  const seq=++epoch;setStatus('Проверяю права доступа…');
  try{
   const session=typeof root.crmEnsureFreshSessionV236166==='function'?
@@ -412,6 +413,7 @@ async function open(){
   const hello=personalGreeting();
   if(hello)show(hello); // speak via existing authorised Yandex voice after capability checks
   else show('Привет! Чем помочь?',{speak:false});
+  root.crmAI360BranchPremiumVoiceV1?.resumeWakeIfApproved?.();
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){

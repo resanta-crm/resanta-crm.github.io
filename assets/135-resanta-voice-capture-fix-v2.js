@@ -21,7 +21,7 @@
  // Once explicitly accepted, keep an ephemeral conversation lease. No persistence:
  // it survives a short tab switch, never logout, minimization or explicit mic off.
  let acceptedWakeUntil=0;
- const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта)(?=$|[^а-яё])/i;
+ const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта|лера)(?=$|[^а-яё])/i;
  // "Лера" is an intentional alternative wake word ONLY inside an opted-in,
  // visible, foreground voice session. Standalone assistant wake is not background access.
  const LERA_RE=/^лера(?=$|[\s,.!?—-])/i;
@@ -29,7 +29,7 @@
    const utterance=String(phrase||'').trim();
    const matched=WAIT_RE.exec(utterance)||LERA_RE.exec(utterance);
    const separated=(!matched&&partialHelloAt>0&&now-partialHelloAt<=15000)?
-     /^(?:ресанта|резанта|рясанта|рисанта)(?=$|[\s,.!?—-])/i.exec(utterance):null;
+     /^(?:ресанта|резанта|рясанта|рисанта|лера)(?=$|[\s,.!?—-])/i.exec(utterance):null;
    const prefix=matched||separated;
    if(!prefix)return null;
    return utterance.slice(prefix.index+prefix[0].length).trim().replace(/^[\s,.!?—-]+/,'');
@@ -282,13 +282,13 @@
          // Both words are still required; a lone "Привет" never activates AI.
          if(/^привет[\s,.!?]*$/i.test(phrase)){
            partialHelloAt=Date.now();
-           info('Услышала «Привет». Скажи «Ресанта», чтобы активировать помощника.');
+           info('Услышала «Привет». Скажи «Лера» или «Ресанта», чтобы активировать помощника.');
            continue;
          }
          const rest=wakeCommand(phrase,partialHelloAt);
          partialHelloAt=0;
          if(rest===null){
-           info('Слышу речь, но жду «Привет, Ресанта» или «Лера». Распознано: '+phrase.slice(0,65));
+           info('Слышу речь, но жду «Привет, Лера», «Привет, Ресанта» или «Лера». Распознано: '+phrase.slice(0,65));
            continue;
          }
          wakeHeard=true;
