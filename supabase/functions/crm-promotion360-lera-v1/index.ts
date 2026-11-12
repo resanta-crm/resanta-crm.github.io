@@ -146,12 +146,13 @@ async function executeDaily(req:Request,mode:string){
   return p?{...t,client_name:p.client_name,manager_name:p.manager_name,title:p.title}:null
  }).filter(Boolean);
  const previews:any[]=[];
- for(const u of [owner,...people.filter(x=>x.role==='manager')].filter(Boolean)){
+ for(const u of [owner,...people.filter(x=>x.role==='manager')]){
+  if(!u)continue;
   const personalPromos=personalFor(u,promos),personalTasks=personalFor(u,cases);
-  const script=voiceBrief(u,personalPromos.map(x=>({...x,evidence_valid:x.assessment.verified})),personalTasks);
+  const script=voiceBrief(u,personalPromos.map((x:any)=>({...x,evidence_valid:x.assessment.verified})),personalTasks);
   if(!script)continue;
   previews.push({recipient:u.name,role:u.role,promotions:personalPromos.length,
-   actions:personalTasks.filter(x=>x.status!=='closed').length,voice_characters:script.length,
+   actions:personalTasks.filter((x:any)=>x.status!=='closed').length,voice_characters:script.length,
    script:mode==='dry_run'?script:undefined,user_id:u.id});
  }
  if(mode==='dry_run')return respond(200,{ok:true,mode,today,promotions:promos.length,proposed,would_escalate:wouldEscalate.length,preview:previews,emails_sent:0,text_sent:0,voice_sent:0});
@@ -173,7 +174,7 @@ async function executeDaily(req:Request,mode:string){
    sentText++;
    await savedRuntime(guard,{sent:true,text_sent:true,at:new Date().toISOString()});
    try{
-    const script=voiceBrief(people.find(x=>x.id===p.user_id),personalFor(people.find(x=>x.id===p.user_id),promos).map(x=>({...x,evidence_valid:x.assessment.verified})),personalFor(people.find(x=>x.id===p.user_id),cases));
+    const script=voiceBrief(people.find(x=>x.id===p.user_id),personalFor(people.find(x=>x.id===p.user_id),promos).map((x:any)=>({...x,evidence_valid:x.assessment.verified})),personalFor(people.find(x=>x.id===p.user_id),cases));
     if(script){await voice(binding.chat_id,p.user_id,script);sentVoice++}
    }catch(e){errors.push({recipient:p.recipient,stage:'voice',error:String(e).slice(0,80)})}
   }catch(e){errors.push({recipient:p.recipient,stage:'text',error:String(e).slice(0,80)})}
