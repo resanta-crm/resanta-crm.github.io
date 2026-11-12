@@ -5,6 +5,7 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {agentPrincipal,agentCapabilities,normalizeAgentRequest,agentGreeting} from './contract.mjs';
 import {classifyAgentQuestion,runFreeConversation} from './conversation.mjs';
+import {historyAction,historyEnabled,saveHistoryTurn,recentFreeMemory} from './history.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
@@ -54,21 +55,41 @@ Deno.serve(async req=>{
   if(body.length>8000)return fault(req,'request_too_large',413);
   input=JSON.parse(body);
  }catch{return fault(req,'invalid_request',400);}
+ // All history actions are scoped exclusively to this authenticated user.
+ // Other staff, including directors, cannot query a different user's journal.
+ if(typeof input?.action==='string'&&input.action.startsWith('history:')){
+  const h=await historyAction(svc,user.id,input.action,input);
+  if(h.error)return fault(req,h.error,h.status||400);
+  return reply(req,h);
+ }
  const parsed=normalizeAgentRequest(input,principal);
  if(parsed.error)return fault(req,parsed.error,parsed.error==='not_authorized'?403:400);
- if(parsed.action==='capabilities')return reply(req,agentCapabilities(principal));
+ if(parsed.action==='capabilities'){
+  const h=await historyEnabled(svc,user.id);
+  return reply(req,{...agentCapabilities(principal),history_enabled:h.enabled===true,
+   history_retention_days:30,history_audio_saved:false});
+ }
  // Ordinary conversation is explicitly isolated from CRM reads. Every caller is
  // still authenticated, identity-scoped and metered before contacting OpenAI.
  if(classifyAgentQuestion(input.question,{history:parsed.payload.history,
      memory:parsed.payload.memory})==='chat'){
+  // Persisted history is read for the SAME user only, and chat-mode turns
+  // cannot carry previous CRM client figures into general conversation.
+  const memory=await recentFreeMemory(svc,user.id);
   const conversation=await runFreeConversation({
-   svc,userId:user.id,question:input.question,history:parsed.payload.history,
+   svc,userId:user.id,question:input.question,
+   history:memory.history.length?memory.history:parsed.payload.history,
+   feedback:memory.feedback,
    apiKey:Deno.env.get('OPENAI_API_KEY')||''
   });
   if(conversation.error)return fault(req,conversation.error,conversation.status||503);
+  const stored=await saveHistoryTurn(svc,user.id,{mode:'chat',
+   question:input.question,answer:conversation.answer,answerVerified:false});
   return reply(req,{
    ...conversation,agent:'resanta_ai_agent360_v1',
-   route_tier:principal.tier,greeting:agentGreeting(principal),writes_enabled:false
+   route_tier:principal.tier,greeting:agentGreeting(principal),writes_enabled:false,
+   history_saved:stored.saved,history_enabled:stored.enabled===true,
+   history_turn_id:stored.turn_id||null
   });
  }
 
@@ -95,12 +116,17 @@ Deno.serve(async req=>{
  // upgrade an LLM-generated answer to a verified factual answer.
  if(!upstream.ok)return fault(req,typeof result.error==='string'?result.error.slice(0,90):
   'agent_upstream_unavailable',upstream.status>=400&&upstream.status<600?upstream.status:503);
+ const stored=await saveHistoryTurn(svc,user.id,{mode:'crm',
+  question:input.question,answer:String(result.answer||result.brief||''),
+  answerVerified:result.answer_verified===true});
  return reply(req,{
   ...result,
   agent:'resanta_ai_agent360_v1',
   route_tier:principal.tier,
   read_only:true,
   greeting:agentGreeting(principal),
-  writes_enabled:false
+  writes_enabled:false,
+  history_saved:stored.saved,history_enabled:stored.enabled===true,
+  history_turn_id:stored.turn_id||null
  });
 });
