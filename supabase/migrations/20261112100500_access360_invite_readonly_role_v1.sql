@@ -144,7 +144,7 @@ begin
   select region,round(sum(revenue),2) revenue from base
   group by region order by sum(revenue) desc
  ), months as(
-  select to_char(month,'YYYY-MM') month,round(sum(revenue),2) revenue
+  select to_char(month,'YYYY-MM') as month,round(sum(revenue),2) as revenue
   from base group by month order by month
  ), pdz as (
   select round(coalesce(sum(debt_overdue),0),2) total,
