@@ -7,9 +7,11 @@
 // Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchPremiumVoiceV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
-const WAKE=/^(?:(?:привет[\s,!.—-]+(?:ресанта|резанта))|лера)[\s,!.—-]*/i;
+const WAKE=/^(?:(?:привет[\s,!.—-]+(?:лера|ресанта|резанта|рясанта|рисанта))|лера)[\s,!.—-]*/i;
+const FOLLOWUP_WINDOW_MS=120000; // One natural conversation, not a new wake per question.
 let clipEpoch=0,playEpoch=0,stream=null,recorder=null,player=null,mediaUrl='',wakeOn=false,loops=0,oneShot=false;
-let onQuestion=null,onInfo=null,allowedNow=null,voice='lera',muted=false,activePanel=null;
+let speaking=false,conversationUntil=0;
+let onQuestion=null,onInfo=null,allowedNow=null,isBusy=()=>false,voice='lera',muted=false,activePanel=null;
 function allowed(){
  const identity=root.crmAI360StaffIdentityV1?.();
  return !!identity&&['branch_director','field_manager','triovist_category'].includes(identity.tier)&&
@@ -17,13 +19,13 @@ function allowed(){
 }
 function info(s){if(allowed())onInfo?.(String(s||'').slice(0,150));}
 function stopSpeech(){
- ++playEpoch;
+ ++playEpoch;speaking=false;
  try{player?.pause();}catch{}
  player=null;
  if(mediaUrl){try{URL.revokeObjectURL(mediaUrl);}catch{}mediaUrl='';}
 }
 function stop(){
- ++clipEpoch;wakeOn=false;oneShot=false;
+ ++clipEpoch;wakeOn=false;oneShot=false;conversationUntil=0;
  try{recorder?.state==='recording'&&recorder.stop();}catch{}
  recorder=null;
  try{stream?.getTracks().forEach(x=>x.stop());}catch{}
@@ -31,7 +33,7 @@ function stop(){
 }
 async function speak(msg){
  if(!allowed()||muted||!msg)return;
- stopSpeech();const run=playEpoch;
+ stopSpeech();const run=playEpoch;speaking=true;
  const original=String(msg).replace(/\bBYN\b/g,'белорусских рублей')
   .replace(/\s+/g,' ').trim().slice(0,1200);
  const segments=[];let remaining=original;
@@ -71,7 +73,7 @@ async function speak(msg){
    break;
   }
  }
- if(run===playEpoch)info('Готова к следующему вопросу');
+ if(run===playEpoch){speaking=false;info('Готова к следующему вопросу');}
 }
 async function getStream(){
  if(stream?.active)return stream;
@@ -102,7 +104,7 @@ async function capture(run){
   r.onerror=()=>{release();reject(Error('Ошибка записи'));};
   r.onstop=()=>{
    release();if(recorder===r)recorder=null;
-   resolve({blob:new Blob(parts,{type:r.mimeType||'audio/webm'}),duration:Math.min(16.4,(Date.now()-started)/1000)});
+   resolve({blob:new Blob(parts,{type:r.mimeType||'audio/webm'}),duration:Math.min(16.4,(Date.now()-started)/1000),loud:!analyser||heard});
   };
   r.start(250);clock=setTimeout(finish,12000);
   // The owner's assistant also stops after a natural silence; do not force the
@@ -166,45 +168,69 @@ async function single(){
   if(run===clipEpoch&&!wakeOn){try{stream?.getTracks().forEach(x=>x.stop());}catch{}stream=null;}
  }
 }
+async function waitForReply(run){
+ // The text request and Yandex TTS have separate asynchronous lifetimes.
+ // Keep the foreground mic off until BOTH have finished, never record Lera's own voice.
+ const deadline=Date.now()+120000;
+ const started=Date.now();
+ let observedBusy=false;
+ await Promise.resolve();
+ while(run===clipEpoch&&wakeOn&&allowed()&&Date.now()<deadline){
+  let pending=false;
+  try{pending=isBusy?.()===true;}catch{}
+  const activeAudio=speaking||(player&&!player.paused&&!player.ended);
+  if(pending||activeAudio){observedBusy=true;await new Promise(r=>setTimeout(r,140));continue;}
+  if(observedBusy||Date.now()-started>=650)break;
+  await new Promise(r=>setTimeout(r,100));
+ }
+}
 async function hotLoop(run){
  try{
-  const active=()=>run===clipEpoch&&wakeOn&&allowed()&&loops<30;
+  const active=()=>run===clipEpoch&&wakeOn&&allowed()&&loops<50;
   while(active()){
-   info('Жду «Привет, Ресанта»…');
+   if(speaking||isBusy?.())await waitForReply(run);
+   if(!active())break;
+   info(conversationUntil>Date.now()?'Слушаю следующий вопрос…':'Жду «Привет, Лера» или «Привет, Ресанта»…');
    const clip=await capture(run);
    if(!active())break;
-   if(!clip?.blob||clip.blob.size<900)continue;
+   // Do not spend a paid STT call on an actually silent local segment.
+   if(!clip?.blob||clip.blob.size<900||clip.loud===false)continue;
    loops++;
    const heard=await transcribe(clip,run);
    if(!active())break;
    if(!heard)continue;
    const hit=WAKE.exec(heard);
-   if(!hit){info('Жду фразу «Привет, Ресанта»');continue;}
-   const rest=heard.slice(hit[0].length).trim();
-   if(rest)onQuestion?.(rest);
-   else {
-    info('Слушаю вопрос…');
+   if(!hit&&conversationUntil<=Date.now()){
+    info('Жду «Привет, Лера», «Лера» или «Привет, Ресанта»');
+    continue;
+   }
+   let question=hit?heard.slice(hit[0].length).trim():heard.trim();
+   if(!question){
+    conversationUntil=Date.now()+FOLLOWUP_WINDOW_MS;
+    info('Лера слушает твой вопрос…');
     const next=await capture(run);
     if(!active())break;
-    const question=await transcribe(next,run);
-    if(question)onQuestion?.(question.replace(WAKE,'').trim());
+    if(!next?.blob||next.blob.size<900||next.loud===false)continue;
+    question=String(await transcribe(next,run)||'').replace(WAKE,'').trim();
+    if(!active())break;
    }
-   // Prevent hearing the TTS response as a new question.
-   await new Promise(r=>setTimeout(r,500));
-   while(active()&&player&&!player.paused&&!player.ended){
-    await new Promise(r=>setTimeout(r,250));
-   }
+   if(!question)continue;
+   conversationUntil=Date.now()+FOLLOWUP_WINDOW_MS;
+   onQuestion?.(question);
+   await waitForReply(run);
+   if(active())conversationUntil=Date.now()+FOLLOWUP_WINDOW_MS;
   }
+  if(run===clipEpoch&&loops>=50)info('Пауза голосового сеанса: 50 фрагментов. Включи Леру снова.');
  }catch(e){if(allowed())info('Микрофон: '+String(e?.message||e).slice(0,100));}
  finally{
   if(run===clipEpoch){
-   wakeOn=false;try{stream?.getTracks().forEach(x=>x.stop());}catch{}stream=null;
+   wakeOn=false;conversationUntil=0;try{stream?.getTracks().forEach(x=>x.stop());}catch{}stream=null;
    info('Фраза активации выключена');
   }
  }
 }
-function bind({panel,authorized,onTranscript,onStatus}){
- activePanel=panel;allowedNow=authorized;onQuestion=onTranscript;onInfo=onStatus;
+function bind({panel,authorized,onTranscript,onStatus,onBusy}){
+ activePanel=panel;allowedNow=authorized;onQuestion=onTranscript;onInfo=onStatus;isBusy=typeof onBusy==='function'?onBusy:()=>false;
 }
 function listen(){
  if(!allowed()||oneShot||wakeOn)return;
