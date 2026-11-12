@@ -229,6 +229,9 @@
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
     if (!query) { answer('Слушаю. Чем помочь?'); return; }
+    // Explicit tasks/CONNECT enter the signed human-confirmed action bridge.
+    // Existing free conversation and CRM analysis remain on their working backend.
+    if(window.crmAI360ActionHandleV1?.(query,{answer,textStatus}))return;
     if(window.crmLprV1?.voice(query,{answer}))return;
     if(/^(?:(?:лера|ресанта)\s+)?(?:остановись|останови\s+(?:речь|озвучку)|хватит\s+говорить|замолчи)$/.test(query)){
       window.crmResantaVoiceStopV3?.();
