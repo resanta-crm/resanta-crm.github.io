@@ -1,0 +1,26 @@
+/* Stand 360 · manager feedback v3 | private photo viewer, progress and decision tools */
+.s268-photo img{cursor:zoom-in;transition:filter .15s}.s268-photo img:hover{filter:brightness(.93)}
+.s268-reviewtools{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0 12px}
+.s268-reviewtools button{flex:1;min-width:135px}
+.s268-assetnote{font-size:11px;background:#f8fafc;padding:9px;border-radius:8px;line-height:1.5;margin:12px 0}
+.s268-sku-selected{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.s268-sku-tag{display:inline-flex;gap:6px;align-items:center;border:1px solid #f7c6ca;background:#fff3f4;border-radius:999px;font-size:11px;padding:6px 9px}
+.s268-sku-tag button{cursor:pointer;background:none;border:0;font-weight:900;color:#b91c2e;font-size:15px;min-width:20px}
+.s268-verify-row{background:#f7f9fb;padding:10px;border-radius:9px;font-size:11px;color:#475569;margin:9px 0}
+.s268-score{background:#fff8f9;border:1px solid #efc9cf;border-radius:14px;padding:14px;margin-top:13px}
+.s268-scoremain{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.s268-scorenum{font-size:30px;font-weight:850;color:#b6182b}
+.s268-scorestatus{font-size:11px;color:#667085}
+.s268-scoregrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.s268-scorefactor{background:white;border:1px solid #f3e4e7;padding:9px;border-radius:9px}
+.s268-scorefactor span{display:block;font-size:10px;color:#64748b}
+.s268-scorefactor b{font-size:13px}
+.s268-photo-overlay{position:fixed;inset:0;z-index:16000;display:flex;flex-direction:column;background:#0d1019ed;color:white}
+.s268-photo-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#111827}
+.s268-photo-toolbar button{cursor:pointer;background:#2b3648;color:white;border:1px solid #475569;padding:8px 12px;border-radius:9px;font-size:12px}
+.s268-photo-toolbar small{color:#e2e8f0}
+.s268-photo-stage{position:relative;flex:1;overflow:hidden;display:grid;place-items:center;touch-action:none;cursor:grab}
+.s268-photo-stage.dragging{cursor:grabbing}
+.s268-photo-stage img{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;user-select:none;pointer-events:none;transform-origin:center center;will-change:transform}
+.s268-photo-help{padding:8px 14px;text-align:center;background:#111827;color:#cbd5e1;font-size:11px}
+@media(max-width:700px){.s268-photo-toolbar button{padding:10px}.s268-scoregrid{grid-template-columns:1fr}.s268-reviewtools button{min-width:100%}}
