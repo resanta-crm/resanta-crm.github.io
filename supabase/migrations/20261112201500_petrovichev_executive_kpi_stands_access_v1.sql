@@ -33,6 +33,11 @@ BEGIN
     IF v_source IS NULL THEN
       RAISE EXCEPTION 'Missing KPI RPC: %',v_name;
     END IF;
+    -- Idempotent across database environments: never duplicate a previously patched guard.
+    IF position('actor.id=''a24954b8-2fe1-4852-b629-d8f351e1bd36''::uuid' IN v_source)>0
+       AND position('actor.access_scope=''standard''' IN v_source)>0 THEN
+      CONTINUE;
+    END IF;
     v_target_count := (length(v_source)-length(replace(v_source,v_marker,''))) / length(v_marker);
     IF v_target_count<>1 OR position('actor.role' IN v_source)=0 THEN
       RAISE EXCEPTION 'Unexpected KPI function guard for % (matches: %)',v_name,v_target_count;
