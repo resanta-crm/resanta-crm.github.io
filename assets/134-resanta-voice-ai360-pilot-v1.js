@@ -37,11 +37,11 @@
 
     function allowed() {
     try {
-      return typeof currentUser !== 'undefined' && !!currentUser?.id &&
-        typeof currentProfile !== 'undefined' && currentProfile?.role === 'boss' &&
-        String(currentProfile?.name || '').trim().replace(/\s+/g, ' ').toLowerCase() === 'александр паюшин' &&
-        document.getElementById('app')?.style.display !== 'none';
-    } catch (_) { return false; }
+      const greeting=window.crmAI360GreetingV1?.();
+      return !!greeting&&['544fb1e2-ef70-44de-bc62-e0e1596a4bfc',
+        'a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(greeting.id)&&
+        document.getElementById('app')?.style.display!=='none';
+    }catch(_){return false;}
   }
   function visible() { return allowed() && !!root && !root.hidden && !document.hidden; }
   function textStatus(message) { if(statusEl){statusEl.textContent=message;statusEl.title=String(message||'');} }
@@ -228,7 +228,7 @@
     addLine('Вы', input);
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
     let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
-    if (!query) { answer('Привет! Слушаю тебя. Чем могу помочь?'); return; }
+    if (!query) { answer('Слушаю. Чем помочь?'); return; }
     if(window.crmLprV1?.voice(query,{answer}))return;
     if(/^(?:(?:лера|ресанта)\s+)?(?:остановись|останови\s+(?:речь|озвучку)|хватит\s+говорить|замолчи)$/.test(query)){
       window.crmResantaVoiceStopV3?.();
@@ -558,11 +558,10 @@
       root.hidden=!root.hidden;trigger.setAttribute('aria-expanded',String(!root.hidden));
       if(root.hidden)closePanel();
       else {
-        if(!historyEl.children.length)answer('Привет! Я РЕСАНТА AI 360°. Могу проверить продажи, клиентов, долги и маршруты.');
-        // Runs only after the explicit director click opening the Lera panel.
-        // Authenticated service returns verified CRM data, no task writes.
-        try{window.crmAI360DirectorProactiveOpenV2?.({answer,textStatus});}
-        catch(e){console.warn('AI360 proactive daily brief unavailable:',e);}
+        // One short greeting per deliberate opening, without unsolicited reports.
+        const hello=window.crmAI360GreetingV1?.();
+        if(hello)answer(hello.greeting);
+        textStatus('Лера готова к вопросу. Говори или напиши.');
       }
     });
     root.querySelector('.rva-close').addEventListener('click',closePanel);
@@ -624,7 +623,7 @@
     const submit=()=>{const q=field.value.trim(); if(!q)return;field.value=''; handleCommand(q);};
     root.querySelector('.rva-send').addEventListener('click',submit);
     field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit();}});
-    addLine('РЕСАНТА AI','Готов к проверке. Примеры: «Что сегодня важного?», «Сколько просроченных задач?», «Открой продажи».');
+    // Avoid unsolicited transcript lines at panel mount.
     updateButtons();
   }
   function reconcile() {
