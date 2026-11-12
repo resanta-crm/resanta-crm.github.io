@@ -51,15 +51,15 @@
    // Premium audio and shared conversation are optional. Text-only questions
    // remain available if a particular WebView cannot use audio capture.
    for(const file of [
-    '146-resanta-ai360-branch-premium-voice-v1.js?v=5',
-    '147-resanta-ai360-staff-unified-dialog-v1.js?v=4'
+    '146-resanta-ai360-branch-premium-voice-v1.js?v=5&lera=20261112-naturalvoice',
+    '147-resanta-ai360-staff-unified-dialog-v1.js?v=5&lera=20261112-naturalvoice'
    ]){
     if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
     try{await load(file);}
     catch(e){console.warn('Optional staff voice component:',e);}
    }
    if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
-   await load('144-resanta-ai360-branch-voice-v1.js?v=9');
+   await load('144-resanta-ai360-branch-voice-v1.js?v=11&lera=20261112-naturalvoice');
    if(!root.crmAI360BranchVoicePilotV1?.allowed())throw Error('Нет доступа к помощнику сотрудника');
    ready=true;
    button.textContent='🎙 Лера';
