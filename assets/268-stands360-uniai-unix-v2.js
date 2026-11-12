@@ -280,6 +280,169 @@ async function detail(id){
   loadThumbs();
  }catch(e){const host=el('s268-modalbody');if(host)host.innerHTML='<div class="s268-ai">Ошибка открытия: '+esc(e?.message||e)+'</div>'}
 }
+
+function scoreCard(p,v){
+ const usable=!!v&&v.storage_path===photo(p)&&Boolean(p.vision_checked_at);
+ const metrics=[];
+ let total=0,available=0;
+ const add=(name,weight,earned,why)=>{
+  if(earned==null||!Number.isFinite(Number(earned)))metrics.push({name,weight,earned:null,why});
+  else{const e=Math.max(0,Math.min(weight,Number(earned)));available+=weight;total+=e;metrics.push({name,weight,earned:Math.round(e),why})}
+ };
+ add('Наличие нашего стенда',25,usable&&typeof v.stand_present==='boolean'?(v.stand_present?25:0):null,'По последнему подтверждённому Vision');
+ const fill=Number(v?.fill_pct),own=Number(v?.own_brand_share_pct),quality=Number(v?.photo_quality_score);
+ const photoCondition=usable&&v.fill_pct!=null&&v.own_brand_share_pct!=null&&v.photo_quality_score!=null?
+  25*(.35*fill+.45*own+.20*quality)/100:null;
+ add('Состояние и бренд',25,photoCondition,'Заполненность, доля целевого бренда, качество фото');
+ const current=Number(p.ship_6m),previous=Number(p.ship_prev_6m);
+ let sales=null;
+ if(dataOk(p)&&Number(p.sku_expected)>0&&Number(p.client_history_rows)>0){
+  sales=previous>0?35*Math.min(1.2,current/previous)/1.2:current>0?31:7;
+ }
+ add('Отгрузки SKU · 1С',35,sales,'Косвенный коммерческий сигнал, не розничные продажи со стенда');
+ const days=Number(p.photo_days);
+ add('Актуальность контроля',15,photo(p)&&p.photo_days!=null?(days<=30?15:days<=60?9:3):null,'Дата последнего контрольного снимка');
+ const coverage=available;
+ const score=available>=50?Math.round(total/available*100):null;
+ const stateLabel=coverage===100?'Оценка по доступным подтверждённым данным':coverage<50?'Недостаточно данных для оценки':'Предварительная оценка · не все данные подтверждены';
+ return '<section class="s268-score"><div class="s268-scoremain"><b>✦ Лера · Эффективность стенда</b>'+
+ '<strong class="s268-scorenum">'+(score==null?'—':score)+'/100</strong>'+
+ '<span class="s268-scorestatus">'+stateLabel+' · полнота '+coverage+'%</span></div>'+
+ '<div class="s268-scoregrid">'+metrics.map(x=>'<div class="s268-scorefactor"><span>'+esc(x.name)+'</span><b>'+
+ (x.earned==null?'Нужны данные':x.earned+' / '+x.weight+' баллов')+'</b><span>'+esc(x.why)+'</span></div>').join('')+'</div>'+
+ '<p class="s268-muted">Весовые категории: наличие 25, состояние 25, отгрузки 35, контроль 15. Отсутствующие данные не получают ноль; балл предварительный при неполной доказательной базе. Предыдущая оценка CRM: '+esc(p.ai_score??'—')+' (архивный расчёт).</p></section>';
+}
+async function rerunVision(id,btn){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ if(!photo(p))return alert('Нет фото. Сначала загрузите или получите фотографию от продавца.');
+ if(btn){btn.disabled=true;btn.textContent='Vision анализирует фото…'}
+ try{
+  const {data,error}=await dbclient().functions.invoke('crm-stands-vision-v236347',{body:{placement_id:id,force:true}});
+  if(error||data?.ok!==true)throw error||new Error(data?.message||data?.error||'Vision не завершился');
+  await refresh();await detail(id);
+  alert('Vision завершён. Заключение Леры и оценка обновлены с учётом актуальных доказательств.');
+ }catch(e){alert('Vision: '+str(e?.message||e))}
+ finally{if(btn?.isConnected){btn.disabled=false;btn.textContent='✦ Проверить фото с ИИ'}}
+}
+async function openOriginalPhoto(path){
+ if(!path)return;
+ let paths=state.photoPaths.filter(Boolean);if(!paths.includes(path))paths=[path,...paths];
+ el('s268-photo-overlay')?.remove();
+ const node=document.createElement('div');node.id='s268-photo-overlay';node.className='s268-photo-overlay';
+ node.innerHTML='<div class="s268-photo-toolbar"><small id="s268-photo-count">Фотография стенда · оригинал</small>'+
+ '<div class="s268-buttongroup"><button data-s268-photo-prev>← До</button><button data-s268-photo-next>После →</button>'+
+ '<button data-s268-zoom-out>−</button><button data-s268-zoom-reset>100%</button>'+
+ '<button data-s268-zoom-in>+</button><button data-s268-photo-close>Закрыть ×</button></div></div>'+
+ '<div class="s268-photo-stage" id="s268-photo-stage"><img alt="Оригинал фотографии стенда" id="s268-original" draggable="false"></div>'+
+ '<div class="s268-photo-help">Колесо мыши / кнопки + − / движение пальцами для увеличения. Фотографии доступны только с учётной записью CRM.</div>';
+ document.body.appendChild(node);
+ const img=el('s268-original'),stage=el('s268-photo-stage'),pointers=new Map();
+ let index=paths.indexOf(path),scale=1,offsetX=0,offsetY=0,lastDist=0,lastPoint=null;
+ const update=()=>img.style.transform='translate('+offsetX+'px,'+offsetY+'px) scale('+scale+')';
+ const resize=delta=>{const next=Math.min(8,Math.max(1,scale*delta));scale=next;if(scale===1){offsetX=0;offsetY=0}update()};
+ const show=async()=>{
+  const current=paths[index];scale=1;offsetX=0;offsetY=0;update();img.removeAttribute('src');
+  el('s268-photo-count').textContent='Фото '+(index+1)+' из '+paths.length+' · оригинал';
+  const signed=await dbclient().storage.from('stand-files').createSignedUrl(current,600);
+  if(signed.error||!signed.data?.signedUrl){el('s268-photo-count').textContent='Ошибка доступа к оригиналу';return}
+  if(node.isConnected)img.src=signed.data.signedUrl;
+ };
+ node.querySelector('[data-s268-photo-close]').onclick=()=>node.remove();
+ node.querySelector('[data-s268-photo-prev]').onclick=()=>{index=(index+paths.length-1)%paths.length;show()};
+ node.querySelector('[data-s268-photo-next]').onclick=()=>{index=(index+1)%paths.length;show()};
+ node.querySelector('[data-s268-zoom-in]').onclick=()=>resize(1.35);
+ node.querySelector('[data-s268-zoom-out]').onclick=()=>resize(1/1.35);
+ node.querySelector('[data-s268-zoom-reset]').onclick=()=>{scale=1;offsetX=0;offsetY=0;update()};
+ stage.addEventListener('wheel',e=>{e.preventDefault();resize(e.deltaY<0?1.2:1/1.2)},{passive:false});
+ stage.addEventListener('pointerdown',e=>{stage.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});lastDist=0;lastPoint=null;stage.classList.add('dragging')});
+ stage.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;
+  const before=pointers.get(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2){
+   const v=[...pointers.values()],dist=Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y);
+   if(lastDist>0)resize(dist/lastDist);
+   lastDist=dist;lastPoint=null;
+  }else if(scale>1&&before){offsetX+=e.clientX-before.x;offsetY+=e.clientY-before.y;update()}
+ });
+ for(const ev of ['pointerup','pointercancel','lostpointercapture'])stage.addEventListener(ev,e=>{
+  pointers.delete(e.pointerId);lastDist=0;lastPoint=null;if(!pointers.size)stage.classList.remove('dragging');
+ });
+ show();
+}
+async function assetForm(id){
+ const p=standRows().find(x=>x.id===id);if(!p||!['dfs','df'].includes(state.data?.actor_role))return;
+ modal('Сверка имущества · '+p.client_name,'Не влияет на коммерческую оценку стенда',
+ '<p class="s268-muted">Выбирайте только ОС, уже закреплённые в учёте за этим клиентом, типом стенда и менеджером. Свободное имущество и чужие ОС нельзя назначить автоматически.</p>'+
+ '<div id="s268-asset-results">Ищу подходящие ОС…</div>',
+ '<button class="s268-secondary" data-s268-detail="'+esc(id)+'">Назад к стенду</button>');
+ try{
+  const candidates=rows(await rpc('crm_stands_assets_find_v3',{p_placement_id:id}));
+  const host=el('s268-asset-results');if(!host)return;
+  host.innerHTML=candidates.length?candidates.map(x=>'<div class="s268-catalogrow"><b>'+esc(x.asset_code)+'</b>'+
+   '<button class="s268-secondary" data-s268-asset-confirm="'+esc(x.id)+'">Привязать ОС</button></div>').join(''):
+   '<p class="s268-verify-row">По реестру нет свободной подходящей записи, уже числящейся установленной у этого клиента. Требуется ручная инвентаризация руководителем — автоматически подменять имущество нельзя.</p>';
+ }catch(e){el('s268-asset-results').textContent=e.message||String(e)}
+}
+async function assetConfirm(assetId){
+ const id=state.detailId,p=standRows().find(x=>x.id===id);
+ if(!p||!confirm('Подтвердить связь ОС с этим стендом?'))return;
+ try{
+  const saved=await rpc('crm_stands_asset_confirm_v3',{p_placement_id:id,p_asset_id:assetId});
+  await refresh();await detail(id);alert('ОС '+saved.asset_code+' подтверждена. Запись внесена в аудит.');
+ }catch(e){alert('Не удалось сверить ОС: '+str(e.message||e))}
+}
+function clientForm(id){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ state.clientCandidate=null;
+ modal('Юридическое лицо 1С · '+p.client_name,'Выбор из базы CRM · связь с физической ТТ',
+ '<p class="s268-verify-row">Исходный ID торговой точки не меняем. Выбираем юрлицо только для корректного сопоставления отгрузок 1С. Связи не создаются автоматически.</p>'+
+ '<p class="s268-muted">Сейчас привязано: '+esc(p.legal_client_name||'не подтверждено')+'</p>'+
+ '<div class="s268-field"><label>Найти юрлицо по названию или коду</label>'+
+ '<input class="s268-input" id="s268-client-query" placeholder="Введите от трёх символов"></div>'+
+ '<div class="s268-buttongroup"><button class="s268-secondary" data-s268-client-find>Найти в клиентах</button></div>'+
+ '<div id="s268-client-results" class="s268-cataloglist"></div>'+
+ '<div id="s268-client-selected"></div>',
+ '<button class="s268-primary" data-s268-client-save>Подтвердить связь</button>'+
+ '<button class="s268-secondary" data-s268-detail="'+esc(id)+'">Назад</button>');
+ el('s268-client-query')?.focus();
+}
+async function findClients(){
+ const p=standRows().find(x=>x.id===state.detailId),host=el('s268-client-results');
+ if(!p||!host)return;
+ const q=str(el('s268-client-query')?.value).trim();
+ if(q.length<3){host.textContent='Введите минимум три символа.';return}
+ host.textContent='Проверяю базу клиентов…';
+ try{
+  const clients=rows(await rpc('crm_stands_client_find_v3',{p_placement_id:p.id,p_query:q}));
+  host.innerHTML=clients.length?clients.map(x=>'<div class="s268-catalogrow"><div><b>'+esc(x.name)+'</b><small>'+
+   esc(x.code||x.id)+' · '+esc(x.manager_name||'')+' · история 1С: '+esc(x.history_rows)+' строк</small></div>'+
+   '<button class="s268-secondary" data-s268-client-pick="'+esc(x.id)+'">Выбрать</button></div>').join(''):'<p class="s268-muted">Совпадений для вашей роли не найдено.</p>';
+  state.clientOptions=clients;
+ }catch(e){host.textContent='Поиск клиента: '+str(e.message||e)}
+}
+async function chooseClient(id){
+ const p=standRows().find(x=>x.id===state.detailId);
+ const c=rows(state.clientOptions).find(x=>x.id===id);
+ if(!p||!c)return;
+ state.clientCandidate=c;
+ const host=el('s268-client-selected');host.innerHTML='<p class="s268-verify-row"><b>Выбрано юрлицо:</b> '+esc(c.name)+'</p>'+
+ '<label>Торговая точка (если есть подтверждённая связь)</label><select class="s268-input" id="s268-point-select"><option value="">ТТ не подтверждена — оставить пустой</option></select>';
+ try{
+  const points=rows(await rpc('crm_stands_points_find_v3',{p_placement_id:p.id,p_legal_client_id:c.id}));
+  const sel=el('s268-point-select');if(sel)sel.innerHTML+=[...points].map(x=>
+   '<option value="'+esc(x.id)+'">'+esc([x.city,x.address].filter(Boolean).join(', '))+'</option>').join('');
+ }catch(e){host.innerHTML+='<p class="s268-muted">Точки недоступны: '+esc(e.message||e)+'</p>'}
+}
+async function saveClient(){
+ const p=standRows().find(x=>x.id===state.detailId),c=state.clientCandidate;
+ if(!p||!c)return alert('Сначала выберите юридическое лицо из базы клиентов.');
+ if(!confirm('Подтвердить связь стенда с юридическим лицом «'+c.name+'» для анализа 1С?'))return;
+ try{
+  await rpc('crm_stands_client_bind_v3',{p_placement_id:p.id,p_legal_client_id:c.id,p_point_id:el('s268-point-select')?.value||null});
+  await refresh();await detail(p.id);alert('Связь подтверждена. Исходный клиент и история стенда сохранены.');
+ }catch(e){alert('Ошибка привязки: '+str(e.message||e))}
+}
+
 function photoForm(id){
  const p=standRows().find(x=>x.id===id);if(!p)return;
  modal('Актуальное фото нашего стенда',p.client_name+' · '+(p.asset_code||'ОС не сверено'),
