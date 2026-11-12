@@ -52,7 +52,7 @@ test('voice brief is short and is a summary, not a command or fabricated payment
 });
 test('Telegram deployment remains isolated from PDZ, protected, deduplicated and gated',()=>{
  for(const str of ['x-crm-dispatch-secret','stand360_telegram_config','stand360_text_sent:',
- 'stand360_audio_sent:','crm_ai360_yandex_monthly_claim_v1','VOICE_MESSAGES_FORBIDDEN','sendAudio','sendVoice'])
+ 'stand360_route_v2_audio:','crm_ai360_yandex_monthly_claim_v1','VOICE_MESSAGES_FORBIDDEN','sendAudio','sendVoice'])
   assert.ok(src.includes(str),str);
  assert.doesNotMatch(src,/setWebhook\(|getUpdates\(|voice_transcribe|createBot\(/);
  assert.doesNotMatch(src,/\\.from\(['"]client_debt['"]\)/);
