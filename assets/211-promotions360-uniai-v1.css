@@ -89,3 +89,31 @@
 #promotions360-root .p360-photo{width:140px;min-width:140px}
 #promotions360-root .p360-photo img{height:120px}
 @media(max-width:650px){.p360-monthlyrow{grid-template-columns:42px minmax(0,1fr) 92px}.p360-monthlyrow strong{font-size:10px}}
+
+/* Promotions 360: audited exact plan/fact and clearly labelled 1C monthly sums */
+.p360-sales-panel{margin-top:12px}
+.p360-sales-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.p360-sales-title .p360-muted{margin:0 0 8px}
+.p360-sales-comparison{display:grid;gap:13px;margin:15px 0 12px}
+.p360-sales-line{display:grid;grid-template-columns:72px minmax(0,1fr) 145px;gap:12px;align-items:center;font-size:12px}
+.p360-sales-line>span{font-weight:750}
+.p360-sales-line>strong{text-align:right;font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.p360-sales-track{height:25px;background:var(--surface,#eef2f8);border-radius:8px;overflow:hidden}
+.p360-sales-track.unverified{border:1px dashed #dba048;background:#fff9ee}
+.p360-sales-fill{height:100%;border-radius:8px;min-width:0}
+.p360-sales-fill.plan{background:#387fde}
+.p360-sales-fill.fact{background:#16a078}
+.p360-sales-footer{margin:0 0 7px;font-size:12px;line-height:1.5}
+.p360-month-total{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:11px 12px;background:var(--surface,#f7f9fc);border-radius:10px}
+.p360-month-total span{font-size:11px;color:var(--sub,#64748b)}
+.p360-month-total strong{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.p360-month-total small{font-size:10px;color:var(--sub,#64748b)}
+.p360-monthlyrow{grid-template-columns:72px minmax(0,1fr) 120px}
+.p360-monthlytrack i.negative{background:#c55b55}
+.p360-barline{grid-template-columns:100px minmax(0,1fr) 135px}
+@media(max-width:650px){
+ .p360-sales-line{grid-template-columns:55px minmax(0,1fr) 105px;gap:6px}
+ .p360-sales-line>strong{font-size:11px}
+ .p360-monthlyrow{grid-template-columns:64px minmax(0,1fr) 100px}
+ .p360-barline{grid-template-columns:70px minmax(0,1fr) 112px}
+}

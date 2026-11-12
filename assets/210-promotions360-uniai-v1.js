@@ -85,12 +85,12 @@ function graph(){
   if(r.confirmed_1c){v.fact+=num(r.verified_sales);v.confirmed++}
   groups.set(k,v);
  }
- const v=[...groups.values()].sort((a,b)=>b.plan-a.plan),max=Math.max(1,...v.map(x=>x.plan));
- return '<div class="p360-panel"><h3>📊 План акций по менеджерам</h3><div class="p360-muted">Планы из CRM; подтверждённый факт показываем только по сверенным акциям.</div>'+
+ const v=[...groups.values()].sort((a,b)=>b.plan-a.plan),max=Math.max(1,...v.map(x=>Math.max(x.plan,x.fact)));
+ return '<div class="p360-panel"><h3>📊 План / факт по менеджерам</h3><div class="p360-muted">Планы из CRM; подтверждённый факт показываем только по сверенным акциям.</div>'+
  '<div class="p360-bars">'+v.map(x=>
   '<div class="p360-barline"><b>'+esc(x.name)+'</b><div><div class="p360-track"><div style="width:'+Math.max(1,x.plan/max*100)+'%"></div></div>'+
   '<div class="p360-track" style="height:6px;margin-top:3px"><div class="confirmed" style="width:'+Math.min(100,x.fact/max*100)+'%"></div></div></div>'+
-  '<span class="p360-chartlabel">'+esc(money(x.plan))+'<span style="display:block;font-size:9px;color:var(--sub)">Факт: '+x.confirmed+'/'+x.total+'</span></span></div>').join('')+
+  '<span class="p360-chartlabel">'+esc(money(x.plan))+'<span style="display:block;font-size:10px;color:#16976d">'+(x.confirmed?esc(money(x.fact)):'Факт —')+'</span><span style="display:block;font-size:9px;color:var(--sub)">Сверено '+x.confirmed+'/'+x.total+'</span></span></div>').join('')+
  '</div><div class="p360-legend"><span><i></i>Планы</span><span><i class="verified"></i>Подтверждённый факт (частичный охват)</span></div></div>';
 }
 function confidenceChart(){
@@ -122,13 +122,42 @@ function cards(){
   '<span class="p360-muted">'+esc(p.photo_count)+' фото · открыть →</span></div></button>';
  }).join(''):'<div class="p360-panel p360-muted">По выбранным фильтрам акций нет.</div>')+'</div>';
 }
+
+function salesPlanChart(p){
+ const plan=Math.max(0,num(p.sales_plan)),verified=p.confirmed_1c===true;
+ const fact=verified?num(p.verified_sales):null,positiveFact=verified?Math.max(0,fact):0;
+ const scale=Math.max(1,plan,positiveFact),pct=verified&&plan>0?Math.round(fact/plan*1000)/10:null;
+ const difference=verified&&plan>0?fact-plan:null;
+ const bar=(amount,kind)=>'<div class="p360-sales-track"><div class="p360-sales-fill '+kind+'" style="width:'+
+ Math.min(100,Math.max(0,amount)/scale*100)+'%"></div></div>';
+ return '<section class="p360-panel p360-sales-panel"><div class="p360-sales-title"><div><h3>📊 План и факт продаж по акции</h3>'+
+ '<p class="p360-muted">Отгрузки клиенту по SKU акции, период '+fmtDate(p.start_date)+' — '+fmtDate(p.end_date)+'.</p></div>'+
+ '<span class="p360-chip '+(verified?'good':'warn')+'">'+(verified?'1С подтверждено':'Нужна сверка 1С')+'</span></div>'+
+ '<div class="p360-sales-comparison">'+
+ '<div class="p360-sales-line"><span>План</span>'+bar(plan,'plan')+'<strong>'+money(plan)+'</strong></div>'+
+ '<div class="p360-sales-line"><span>Факт 1С</span>'+(verified?bar(positiveFact,'fact'):'<div class="p360-sales-track unverified"></div>')+
+ '<strong>'+(verified?money(fact):'Не подтверждён')+'</strong></div></div>'+
+ '<div class="p360-sales-footer">'+
+ (verified?(plan>0?'<b>Выполнение: '+esc(pct)+'%</b> · '+(difference>=0?'Сверх плана: ':'До плана: ')+money(Math.abs(difference)):
+ '<b>Факт подтверждён, план не задан</b>'):
+ '<b>План/факт пока нельзя оценивать: необходима сверка 1С.</b>')+
+ '</div><div class="p360-muted">Это отгрузки клиенту по данным 1С, а не розничные продажи в магазине. Месячный оборот ниже может отличаться от факта за точные даты акции.</div></section>';
+}
 function formatMonths(p){
- const m=rows(p.months).filter(x=>x?.month);if(!m.length)return '<p class="p360-muted">Динамика 1С ещё не подтверждена.</p>';
- const max=Math.max(1,...m.map(x=>num(x.sales)));
- return '<div class="p360-monthly">'+m.map(x=>'<div class="p360-monthlyrow"><span>'+esc(str(x.month).slice(5,7))+'.'+esc(str(x.month).slice(2,4))+'</span>'+
- '<div class="p360-monthlytrack"><i style="width:'+(num(x.sales)<=0?0:Math.max(3,num(x.sales)/max*100))+'%"></i></div>'+
+ const months=rows(p.months).filter(x=>x&&/^\d{4}-\d{2}/.test(str(x.month))&&x.sales!==null&&x.sales!==undefined&&x.sales!==''&&Number.isFinite(Number(x.sales)))
+  .sort((a,b)=>str(a.month).localeCompare(str(b.month)));
+ if(!months.length)return '<p class="p360-muted">Месячные суммы 1С пока не загружены. Отсутствующие значения не считаем нулевыми продажами.</p>';
+ const total=months.reduce((sum,x)=>sum+num(x.sales),0),max=Math.max(1,...months.map(x=>Math.abs(num(x.sales))));
+ const label=x=>new Date(str(x.month).slice(0,7)+'-15T12:00:00Z').toLocaleDateString('ru-RU',{month:'short',year:'numeric',timeZone:'UTC'});
+ return '<div class="p360-month-total"><span>Сумма показанных месяцев</span><strong>'+money(total)+'</strong>'+
+ '<small>'+months.length+' '+(months.length===1?'месяц':'мес.')+' в отчёте</small></div>'+
+ '<div class="p360-monthly" role="img" aria-label="График помесячных отгрузок 1С с суммами BYN">'+
+ months.map(x=>'<div class="p360-monthlyrow"><span>'+esc(label(x))+'</span>'+
+ '<div class="p360-monthlytrack"><i class="'+(num(x.sales)<0?'negative':'')+'" style="width:'+
+ Math.min(100,Math.abs(num(x.sales))/max*100)+'%"></i></div>'+
  '<strong>'+money(x.sales)+'</strong></div>').join('')+'</div>'+
- '<p class="p360-muted">Справочно: помесячные отгрузки из 1С. Это не факт за точные даты акции. Точный план/факт показывается выше только после сверки клиента, SKU и периода.</p>';
+ (months.length===1?'<p class="p360-muted">Есть только один месяц: сравнение динамики с другими месяцами пока недоступно.</p>':'')+
+ '<p class="p360-muted">Справочно: отгрузки 1С за календарные месяцы. Могут включать отгрузки до или после акции. <b>Сумма месяцев не равна подтверждённому факту акции</b> выше.</p>';
 }
 function forecast(p){
  const duration=Math.max(1,Math.round((Date.parse(p.end_date+'T12:00:00Z')-Date.parse(p.start_date+'T12:00:00Z'))/86400000)+1);
@@ -163,7 +192,7 @@ function detail(){
  '<p class="p360-muted">Прогноз по текущему темпу отгрузок — сценарий, а не гарантированный результат. При неполных данных прогноз скрыт.</p><div class="p360-info">'+esc(p.sales_label||q.text)+
  (p.confirmed_1c?' · Источник: 1С по подтверждённому client_id и SKU.':' · До сверки расчёт предварительный.')+
  '</div>'+
- '<div class="p360-columns" style="margin-top:10px"><div class="p360-panel"><h3>📊 Продажи по месяцам</h3>'+formatMonths(p)+
+ salesPlanChart(p)+'<div class="p360-columns" style="margin-top:10px"><div class="p360-panel"><h3>📈 Динамика отгрузок по месяцам</h3>'+formatMonths(p)+
  '<h4>Артикулы в акции · '+num(p.sku_count)+'</h4>'+
  (rows(p.items).length?rows(p.items).map(x=>'<div class="p360-brief-item"><b>'+esc(x.sku||'—')+'</b> · '+esc(x.product_name||'')+'</div>').join(''):'<div class="p360-muted">Точный каталог SKU нужно подтвердить.</div>')+
  '<h4>📷 Фотоотчёт · этапы акции</h4><div id="p360-photoarea"><span class="p360-muted">'+

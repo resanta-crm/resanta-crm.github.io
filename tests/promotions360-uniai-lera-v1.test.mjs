@@ -42,7 +42,7 @@ test('overview is sourced from a single scoped server RPC not client 1C history'
  assert.match(sql,/verified_sales_total/);
  assert.match(sql,/financial_roi_available',false/);
  assert.match(sql,/p\.manager_name=actor\.name/);
- assert.match(ui,/План акций по менеджерам/);
+ assert.match(ui,/План \/ факт по менеджерам/);
  assert.match(ui,/Лера · Утренний брифинг/);
  assert.match(ui,/План акции/);
  assert.match(ui,/Открытые действия/);
@@ -87,4 +87,15 @@ test("video regression: old screen is never mixed into director dashboard and re
  assert.match(ui,/fmtDateTime\(t\.due_at\)/);
  assert.match(ui,/stageLabel\[p\.stage\]/);
  assert.match(ui,/selected\?detail\(\):briefing\(\)/);
+});
+
+test('Sales charts show verified plan/fact, numeric BYN labels and separate monthly context',()=>{
+ assert.match(ui,/function salesPlanChart\(p\)/);
+ assert.match(ui,/Нужна сверка 1С/);
+ assert.match(ui,/Сумма показанных месяцев/);
+ assert.match(ui,/Сумма месяцев не равна подтверждённому факту акции/);
+ assert.match(ui,/months\.length===1/);
+ assert.match(ui,/salesPlanChart\(p\)\+'/);
+ assert.match(ui,/Math\.max\(x\.plan,x\.fact\)/);
+ assert.match(html,/20261112-sales-chart3/);
 });
