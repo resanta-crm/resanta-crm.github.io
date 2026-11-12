@@ -21,7 +21,7 @@
  // Once explicitly accepted, keep an ephemeral conversation lease. No persistence:
  // it survives a short tab switch, never logout, minimization or explicit mic off.
  let acceptedWakeUntil=0;
- const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта)(?=$|[^а-яё])/i;
+ const WAIT_RE=/(?:^|[^а-яё])привет[\s,!.?—-]+(?:ресанта|резанта|рясанта|рисанта|лера)(?=$|[^а-яё])/i;
  // "Лера" is an intentional alternative wake word ONLY inside an opted-in,
  // visible, foreground voice session. Standalone assistant wake is not background access.
  const LERA_RE=/^лера(?=$|[\s,.!?—-])/i;
