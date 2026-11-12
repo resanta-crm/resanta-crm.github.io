@@ -123,7 +123,7 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  assert(p.includes("await waitForAssistant(epoch,'manual')"));
  assert(p.includes('window.__resantaAI360PendingV1'));
  const pilot=fs.readFileSync('assets/134-resanta-voice-ai360-pilot-v1.js','utf8');
- assert(pilot.includes('Привет! Слушаю тебя. Чем могу помочь?'));
+ assert(pilot.includes('if(hello)answer(hello.greeting)'), 'open with one personalised brief greeting');
  assert(!pilot.includes('Пока это пилот голосового управления.'),'do not read obsolete pilot fallback');
  assert(pilot.includes("спасибо")&&pilot.includes('Пожалуйста! Обращайся'),'natural gratitude');
  assert(pilot.includes('lastDetailedResponse')&&pilot.includes('briefVoiceText')&&pilot.includes('Озвучиваю предыдущий ответ полностью.'),'short voice and on-demand full replay');
