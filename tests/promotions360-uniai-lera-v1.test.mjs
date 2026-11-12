@@ -88,3 +88,14 @@ test("video regression: old screen is never mixed into director dashboard and re
  assert.match(ui,/stageLabel\[p\.stage\]/);
  assert.match(ui,/selected\?detail\(\):briefing\(\)/);
 });
+
+test('Sales charts show verified plan/fact, numeric BYN labels and separate monthly context',()=>{
+ assert.match(ui,/function salesPlanChart\(p\)/);
+ assert.match(ui,/Нужна сверка 1С/);
+ assert.match(ui,/Сумма показанных месяцев/);
+ assert.match(ui,/Сумма месяцев не равна подтверждённому факту акции/);
+ assert.match(ui,/months\.length===1/);
+ assert.match(ui,/salesPlanChart\(p\)\+'/);
+ assert.match(ui,/Math\.max\(x\.plan,x\.fact\)/);
+ assert.match(html,/20261112-sales-chart3/);
+});
