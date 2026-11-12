@@ -138,6 +138,6 @@ export function normalizeAgentRequest(input,principal){
  // Each existing backend reauthorizes all names, months, domains, entities and scopes.
  const payload=principal.tier==='network_director'
   ?{message:question,history,memory}
-  :{question,history,memory};
+  :{question,history,memory,month:memory.month||null};
  return {action:'ask',endpoint:principal.endpoint,payload};
 }
