@@ -291,7 +291,7 @@ async function detail(id){
    '<p class="s268-muted">Общий оборот юрлица — справочно, не является розничными продажами со стенда. Привязка: '+esc(p.legal_client_name||'не подтверждена')+'. <button class="s268-secondary" data-s268-client="'+esc(id)+'">Изменить</button></p>'+
    '<div class="s268-skus"><table><thead><tr><th>Запись в стенде</th><th>Достоверность</th><th>Отгрузки · 6 мес.</th><th>Действие</th></tr></thead><tbody>'+
    rowsHTML+'</tbody></table></div></section></div>'+
-   scoreCard(p,vr?.data)+explain(p)+
+   scoreCard(p,vr?.data||{stand_present:p.vision_stand_present,fill_pct:p.vision_fill_pct,own_brand_share_pct:p.vision_own_brand_pct,photo_quality_score:p.vision_photo_quality_score,storage_path:p.vision_photo_evidence_path})+explain(p)+
    '<p class="s268-muted">Учёт ОС и договоров — отдельно от коммерческой оценки. Сверка оборудования доступна руководителю через «Учёт ОС».</p>';
   loadThumbs();
  }catch(e){const host=el('s268-modalbody');if(host)host.innerHTML='<div class="s268-ai">Ошибка открытия: '+esc(e?.message||e)+'</div>'}
