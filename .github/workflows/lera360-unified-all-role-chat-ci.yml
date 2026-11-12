@@ -1,0 +1,33 @@
+name: Lera 360 all-role natural chat and protected CRM
+on:
+  pull_request:
+    paths:
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/147-resanta-ai360-staff-unified-dialog-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'index.html'
+      - 'tests/lera360-unified-all-role-ui-20261112.test.mjs'
+      - '.github/workflows/lera360-unified-all-role-chat-ci.yml'
+permissions:
+  contents: read
+jobs:
+  verify-all-roles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax of shared dialogue layers
+        run: |
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node --check assets/144-resanta-ai360-branch-voice-v1.js
+          node --check assets/147-resanta-ai360-staff-unified-dialog-v1.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+      - name: CRM scope and universal chat response segregation
+        run: |
+          node --test tests/lera360-unified-all-role-ui-20261112.test.mjs
+          node tests/ai360-unified-dialog-v1.test.cjs
+          node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
