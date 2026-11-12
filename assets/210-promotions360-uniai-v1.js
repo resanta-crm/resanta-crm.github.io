@@ -126,6 +126,11 @@ function formatMonths(p){
  '<span>'+esc(str(x.month).slice(5,7))+'.'+esc(str(x.month).slice(2,4))+'</span></div>').join('')+'</div>'+
  '<p class="p360-muted">Месячные отгрузки 1С. Неполные границы акции могут включать продажи вне периода акции.</p>';
 }
+function forecast(p){
+ const duration=Math.max(1,Math.round((Date.parse(p.end_date+'T12:00:00Z')-Date.parse(p.start_date+'T12:00:00Z'))/86400000)+1);
+ if(!p.confirmed_1c||Number(p.elapsed_days)<3)return null;
+ return Math.max(0,Math.round(num(p.verified_sales)*duration/Math.max(1,Number(p.elapsed_days))));
+}
 function detail(){
  const p=rows(state.data?.rows).find(x=>x.id===state.selected);if(!p)return '';
  const q=stateText(p),taskRows=rows(state.tasks);
@@ -148,9 +153,10 @@ function detail(){
  ['План акции',money(p.sales_plan)],
  ['Факт 1С',p.confirmed_1c?money(p.verified_sales):'Нужно сверить'],
  ['Выполнение',p.confirmed_1c&&p.completion_pct!=null?num(p.completion_pct)+'%':'—'],
- ['Запрошен бюджет',money(p.requested_budget)]
+ ['Запрошен бюджет',money(p.requested_budget)],
+ ['Прогноз по текущему темпу',forecast(p)==null?'Не рассчитан':money(forecast(p))]
  ].map(([k,v])=>'<div class="p360-mini"><span>'+k+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>'+
- '<div class="p360-info">'+esc(p.sales_label||q.text)+
+ '<p class="p360-muted">Прогноз по текущему темпу отгрузок — сценарий, а не гарантированный результат. При неполных данных прогноз скрыт.</p><div class="p360-info">'+esc(p.sales_label||q.text)+
  (p.confirmed_1c?' · Источник: 1С по подтверждённому client_id и SKU.':' · До сверки расчёт предварительный.')+
  '</div>'+
  '<div class="p360-columns" style="margin-top:10px"><div class="p360-panel"><h3>📊 Продажи по месяцам</h3>'+formatMonths(p)+
@@ -255,13 +261,35 @@ async function photoViewer(id){
 }
 async function updateAction(id){
  const task=rows(state.tasks).find(x=>x.id===id);if(!task)return;
- const reason=prompt('Лера · Причина отсутствия результата (например, нет товара, цена, выкладка):',task.reason||'');
- if(reason===null)return;
- const plan=prompt('Какое конкретное действие предпримете и как проверим результат через 48 часов?',task.action_plan||'');
- if(plan===null)return;
- try{await rpc('crm_promotion360_action_update_v1',{p_action_id:id,p_reason:reason,p_plan:plan,p_comment:null});
- await loadTasks(state.selected);alert('Действие зафиксировано. Лера проверит статус через 48 часов.')}
- catch(e){alert('Не удалось сохранить: '+str(e.message||e))}
+ el('p360-edit-shade')?.remove();
+ const cover=document.createElement('div');cover.id='p360-edit-shade';cover.className='p360-edit-shade';
+ cover.innerHTML='<form id="p360-edit-form" class="p360-edit" autocomplete="off">'+
+ '<h3>✦ Лера · Результат поручения</h3>'+
+ '<p class="p360-muted">Опиши реальную причину и конкретное действие. Лера вернётся к проверке через 48 часов.</p>'+
+ '<label>Причина отклонения</label><select class="p360-field" id="p360-reason" required>'+
+ ['','Нет товара в ТТ','Неверная цена','Продавцы не информированы','Нет выкладки','Нет заказа клиента','Нет подтверждённых данных 1С','Другая причина'].map(x=>'<option>'+esc(x||'Выберите причину')+'</option>').join('')+'</select>'+
+ '<label>Что конкретно сделали или сделаете?</label>'+
+ '<textarea id="p360-action-plan" class="p360-field" rows="4" placeholder="Например: согласовал заказ, срок и ответственного; запросил фото выкладки" required></textarea>'+
+ '<label>Комментарий или доказательство</label>'+
+ '<textarea id="p360-action-note" class="p360-field" rows="2" placeholder="Результат звонка, подтверждение клиента…"></textarea>'+
+ '<div class="p360-actions" style="justify-content:flex-end"><button type="button" class="p360-btn" data-p360-edit-close>Отмена</button>'+
+ '<button type="submit" class="p360-btn strong" id="p360-edit-submit">Сохранить и проверить через 48 ч</button></div>'+
+ '<p class="p360-error" id="p360-edit-error" hidden></p></form>';
+ document.body.appendChild(cover);
+ const reasons=el('p360-reason');
+ if(task.reason&&[...reasons.options].some(x=>x.value===task.reason))reasons.value=task.reason;
+ el('p360-action-plan').value=task.action_plan||'';
+ cover.addEventListener('click',e=>{if(e.target===cover||e.target.closest?.('[data-p360-edit-close]'))cover.remove()});
+ el('p360-edit-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const reason=el('p360-reason').value,plan=el('p360-action-plan').value.trim(),note=el('p360-action-note').value.trim();
+  if(reason==='Выберите причину'||plan.length<8){const err=el('p360-edit-error');err.hidden=false;err.textContent='Выберите причину и опишите конкретное действие.';return}
+  const save=el('p360-edit-submit');save.disabled=true;save.textContent='Сохраняю…';
+  try{await rpc('crm_promotion360_action_update_v1',{p_action_id:id,p_reason:reason,p_plan:plan,p_comment:note});
+   cover.remove();await loadTasks(state.selected);alert('Действие сохранено. Повторная проверка через 48 часов.')}
+  catch(err){const item=el('p360-edit-error');item.hidden=false;item.textContent=str(err.message||err)}
+  finally{save.disabled=false;save.textContent='Сохранить и проверить через 48 ч'}
+ });
 }
 document.addEventListener('click',e=>{
  const target=e.target.closest?.('[data-p360-detail]');if(target){selectPromo(target.dataset.p360Detail);return}
