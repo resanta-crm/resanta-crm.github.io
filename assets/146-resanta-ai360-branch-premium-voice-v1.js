@@ -7,7 +7,7 @@
 // Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchPremiumVoiceV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
-const WAKE=/^(?:(?:привет[\s,!.—-]+(?:ресанта|резанта))|лера)[\s,!.—-]*/i;
+const WAKE=/^(?:(?:привет[\s,!.—-]+(?:ресанта|резанта|лера))|лера)[\s,!.—-]*/i;
 let clipEpoch=0,playEpoch=0,stream=null,recorder=null,player=null,mediaUrl='',wakeOn=false,loops=0,oneShot=false;
 let onQuestion=null,onInfo=null,allowedNow=null,voice='lera',muted=false,activePanel=null;
 function allowed(){
@@ -121,7 +121,7 @@ async function capture(run){
      for(const v of buffer){const x=(v-128)/128;rms+=x*x;}
      rms=Math.sqrt(rms/buffer.length);
      if(rms>.003){heard=true;lastLoud=Date.now();}
-     if(heard&&Date.now()-started>1200&&Date.now()-lastLoud>1250)finish();
+     if(heard&&Date.now()-started>1200&&Date.now()-lastLoud>1900)finish();
     },120);
    }
   }catch{release();poll=0;}
