@@ -13,7 +13,7 @@ const action=get('.github/workflows/triovist-market-ai-investigations.yml');
 test('new UI and isolated Edge source parse; no direct mutations to competitor parser',()=>{
  assert.doesNotThrow(()=>new vm.Script(ui));
  assert.doesNotThrow(()=>new vm.Script(edge.replace(/^import .*;$/m,'')));
- assert.match(index,/266-triovist-market-ai-investigations-v1\.js\?v=20261111-ai-investigations-v1/);
+ assert.match(index,/266-triovist-market-ai-investigations-v1\.js\?v=20261112-ai-all-groups-v2/);
  assert.match(ui,/insertAdjacentElement\('afterend',el\)/);
  assert.match(ui,/#tr14-panel \[data-tm225\]/);
  assert.doesNotMatch(ui,/\b(?:delete from|alter table|update public\.triovist_market|insert into public\.triovist_market)/i);
@@ -106,4 +106,28 @@ test('AI investigation rejects missing, unchanged and incomparable rank history 
  assert.match(edge,/triovist_market_own_position_snapshots_v1/);
  assert.match(edge,/history=new Map\(\)/);
  assert.match(ui,/По этому товару пока нет двух сопоставимых подтверждённых позиций/);
+});
+
+test('45 active categories retain every qualified signal without three-item or global cap',()=>{
+ assert.match(edge,/picked\.push\(\.\.\.a\);/);
+ assert.match(edge,/return \{groups,cases:picked,signals_total:signals\.length/);
+ assert.doesNotMatch(edge,/picked\.push\(\.\.\.a\.slice\(0,3\)\)/);
+ assert.doesNotMatch(edge,/cases:picked\.slice\(0,100\)/);
+ assert.match(ui,/data-tm266-more/);
+ assert.match(ui,/data-tm266-signal/);
+ assert.match(ui,/state\.signalType==='own'/);
+});
+test('SKU-specific ranking evidence compares own and competitor items in matching scope',()=>{
+ assert.match(edge,/competitors_near_rank:peers\.map/);
+ assert.match(edge,/same_group_own:ownPeers\.map/);
+ assert.match(edge,/\.eq\("scope_key",scope\)/);
+ assert.match(edge,/Соседняя позиция не доказывает аналогичность товара/);
+ assert.match(ui,/Ближайшие конкуренты в группе/);
+});
+test('manager response has helpful validation and survives failed submission',()=>{
+ assert.match(ui,/state\.answerDraft\.trim\(\)\.length<12/);
+ assert.match(ui,/state\.sourceDraft\.trim\(\)\.length<4/);
+ assert.match(ui,/E\(state\.answerDraft\|\|c\.manager_answer\|\|''\)/);
+ assert.match(ui,/code==='answer_and_source_required'/);
+ assert.match(edge,/if\(answer\.length<12\|\|source\.length<4\)/);
 });

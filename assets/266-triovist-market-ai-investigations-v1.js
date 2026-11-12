@@ -10,7 +10,7 @@ const N=v=>v===null||v===undefined||v===''?null:(Number.isFinite(Number(v))?Numb
 const A=v=>Array.isArray(v)?v:[];
 const dt=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Minsk'})};
 const leaders=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
-let state={root:null,feed:null,saved:[],scope:'',focus:null,busy:false,error:'',loadedAt:0,seq:0};
+let state={root:null,feed:null,saved:[],scope:'',signalType:'own',displayLimit:20,focus:null,busy:false,error:'',answerDraft:'',sourceDraft:'',loadedAt:0,seq:0};
 let observer=null;
 function leader(){
  let mail='';
@@ -57,6 +57,7 @@ function css(){
  '.tm266 label{font-size:11px;font-weight:750;display:block;margin-top:8px}',
  '.tm266 details{border:1px solid #e1eaf3;border-radius:9px;padding:9px;margin:10px 0}.tm266 summary{cursor:pointer;font-size:12px;font-weight:750}',
  '.tm266 .tm266-error{background:#fff1f0;color:#a83e38;padding:9px;border-radius:9px;font-size:12px}',
+ '.tm266 .tm266-toggle.active{background:#185b94;color:#fff;border-color:#185b94}',
  '@media(max-width:980px){.tm266 .tm266-layout{grid-template-columns:1fr}.tm266 .tm266-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}',
  '@media(max-width:620px){.tm266{padding:11px}.tm266 .tm266-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.tm266 button,.tm266 select,.tm266 textarea{font-size:16px}}'
  ].join('\n');document.head.appendChild(s);
@@ -102,7 +103,9 @@ function caseDetail(c){
  }
  html+='<details><summary>Показать факты и источники</summary><div class="note">Источник: '+E(o.source||'Supabase')+
   '. История позиций: '+E(A(o.history).map(r=>dt(r.date)+' '+(r.position==null?'>120':'№'+r.position)).join(' · '))+
-  '. Сведения по конкурентам: '+E(A(o.competitors_rising).length)+' позиций. Сведения о рекламе конкурентов недоступны.</div></details>';
+  '. Ближайшие конкуренты в группе: '+E(A(o.competitors_near_rank||o.competitors_rising).map(r=>String(r.brand||'')+' '+String(r.model||'')+' №'+r.position+' / '+(r.price??'?')+' BYN').join(' · ')||'нет данных')+
+  '. Наши товары в группе: '+E(A(o.same_group_own).map(r=>String(r.sku||'')+' №'+r.position+' / '+(r.price??'?')+' BYN').join(' · ')||'нет данных')+
+  '. Совпадение группы не доказывает сопоставимость моделей или причину изменений.</div></details>';
  if(c.manager_email)html+='<p class="note"><b>Ответственный:</b> '+E(c.manager_email)+'</p>';
  if(leader()){
   html+='<div class="tm266-actions"><select data-tm266-assignee aria-label="Назначить менеджеру">'+
@@ -115,8 +118,8 @@ function caseDetail(c){
   '<small>Источник: '+E(c.manager_source||'не указан')+' · '+E(dt(c.manager_answer_at))+'</small></div>';
  }
  if(c.manager_email||leader()){
-  html+='<label>Ответ менеджера и источник доказательства</label><textarea data-tm266-answer maxlength="1600" placeholder="Что реально проверено, какие изменения подтверждены?"></textarea>'+
-  '<input data-tm266-source placeholder="Ссылка/отчёт/дата подтверждения" maxlength="350" style="width:100%"/>'+
+  html+='<label>Ответ менеджера и источник доказательства</label><textarea data-tm266-answer maxlength="1600" placeholder="Что реально проверено, какие изменения подтверждены? (не менее 12 символов)">'+E(state.answerDraft||c.manager_answer||'')+'</textarea>'+
+  '<input data-tm266-source placeholder="Ссылка или отчёт и дата (обязательно)" maxlength="350" value="'+E(state.sourceDraft||c.manager_source||'')+'" style="width:100%"/>'+
   '<div class="tm266-actions"><button type="button" data-tm266-save-answer>Отправить на проверку</button></div>';
  }
  if(leader()){
@@ -134,7 +137,9 @@ function render(){
  css();
  const f=state.feed||{},groups=A(f.groups),cases=A(f.cases);
  const selected=state.scope?cases.filter(x=>x.scope_key===state.scope):cases;
- const visible=selected.slice(0,14);
+ const filtered=selected.filter(x=>state.signalType==='all'||x.kind===state.signalType);
+ const visible=filtered.slice(0,state.displayLimit);
+ const selectedGroup=groups.find(x=>x.scope_key===state.scope);
  const record=state.focus;
  root.innerHTML='<header><div><h3>✦ ИИ · Мозговой штурм 21vek</h3>'+
  '<div class="note">Все действующие группы · факты → гипотезы → ответ менеджера → решение → контроль 3/7 дней</div></div>'+
@@ -148,8 +153,13 @@ function render(){
  '</select><button type="button" data-tm266-list>Мои расследования / контроль</button><small>Снимок '+E(dt(f.source_at))+'</small></div>'+
  (state.error?'<div class="tm266-error">'+E(state.error)+'</div>':'')+
  (state.busy?'<div class="note">Проверяю факты и историю…</div>':'')+
- '<div class="tm266-layout"><section class="tm266-panel"><h4>Приоритетные изменения</h4>'+
- (visible.length?visible.map(caseItem).join(''):'<div class="note">'+(state.feed?'В этой подгруппе пока нет значимых подтверждённых перемещений. Выберите другую.':'Загрузка подтверждённых сигналов…')+'</div>')+
+ '<div class="tm266-layout"><section class="tm266-panel"><h4>Приоритетные изменения · '+E(filtered.length)+' из '+E(selected.length)+' сигналов</h4>'+
+ '<div class="tm266-tools">'+[['own','Наши SKU'],['competitor','Конкуренты'],['all','Все']].map(x=>
+ '<button type="button" data-tm266-signal="'+x[0]+'" class="tm266-toggle'+(state.signalType===x[0]?' active':'')+'">'+x[1]+'</button>').join('')+'</div>'+
+ (visible.length?visible.map(caseItem).join(''):'<div class="note">'+(state.feed?
+ (state.signalType==='own'&&selectedGroup?.own_tracked?'Под наблюдением '+selectedGroup.own_tracked+' наших SKU; значимых подтверждённых изменений пока нет. Смотрите соседнюю вкладку конкурентов.':'Для этого фильтра подтверждённых изменений нет.')
+ :'Загрузка подтверждённых сигналов…')+'</div>')+
+ (filtered.length>visible.length?'<button type="button" data-tm266-more>Показать ещё ('+E(filtered.length-visible.length)+')</button>':'')+
  '<details><summary>Сохранённые расследования ('+E(state.saved.length)+')</summary>'+
  A(state.saved).map(c=>'<div class="tm266-case"><b>'+E(c.title)+'</b><p>'+E(c.status)+' · '+E(dt(c.created_at))+
  '</p><button type="button" data-tm266-saved="'+E(c.id)+'">Открыть вывод и ответы</button></div>').join('')+
@@ -188,6 +198,7 @@ async function action(body){
  try{
   const data=await call(body);
   if(data.case){state.focus=data.case;
+   if(body.action==='answer'){state.answerDraft='';state.sourceDraft=''}
    state.saved=[data.case,...state.saved.filter(x=>x.id!==data.case.id)].slice(0,40);
    if(data.ai_error)state.error='Факты сохранены, но AI недоступен: '+data.ai_error;
   }
@@ -195,7 +206,7 @@ async function action(body){
   const code=String(e.message||e);
   state.error=code==='insufficient_rank_evidence'||code==='rank_history_not_comparable'
    ?'По этому товару пока нет двух сопоставимых подтверждённых позиций. ИИ не будет придумывать причину. Выберите другой сигнал или дождитесь нового снимка.'
-   :code;
+   :code==='answer_and_source_required'?'Введите комментарий (не менее 12 символов) и источник (не менее 4 символов). Введённый текст сохранён.':code;
  }
  finally{state.busy=false;render()}
 }
@@ -204,20 +215,28 @@ document.addEventListener('click',e=>{
  if(!e.target.closest?.('[data-tm266]'))return;
  if(e.target.closest?.('[data-tm266-refresh]')){state.loadedAt=0;refresh();return}
  if(e.target.closest?.('[data-tm266-list]')){const d=state.root?.querySelector('details');if(d){d.open=true;d.scrollIntoView?.({behavior:'smooth',block:'nearest'})}return}
+ const tab=e.target.closest?.('[data-tm266-signal]');
+ if(tab){state.signalType=tab.dataset.tm266Signal;state.displayLimit=20;render();return}
+ if(e.target.closest?.('[data-tm266-more]')){state.displayLimit+=20;render();return}
  const pick=e.target.closest?.('[data-tm266-investigate]');
- if(pick){action({action:'investigate',entity_key:pick.dataset.tm266Investigate,kind:pick.dataset.tm266Kind,scope_key:pick.dataset.tm266Scope});return}
+ if(pick){state.answerDraft='';state.sourceDraft='';action({action:'investigate',entity_key:pick.dataset.tm266Investigate,kind:pick.dataset.tm266Kind,scope_key:pick.dataset.tm266Scope});return}
  const saved=e.target.closest?.('[data-tm266-saved]');
- if(saved){state.focus=state.saved.find(x=>x.id===saved.dataset.tm266Saved)||null;render();return}
+ if(saved){state.answerDraft='';state.sourceDraft='';state.focus=state.saved.find(x=>x.id===saved.dataset.tm266Saved)||null;render();return}
  if(e.target.closest?.('[data-tm266-assign]')){action({action:'assign',case_id:state.focus?.id,manager_email:state.root?.querySelector('[data-tm266-assignee]')?.value});return}
  if(e.target.closest?.('[data-tm266-save-answer]')){
-  action({action:'answer',case_id:state.focus?.id,answer:state.root?.querySelector('[data-tm266-answer]')?.value,
-   source:state.root?.querySelector('[data-tm266-source]')?.value});return}
+  state.answerDraft=state.root?.querySelector('[data-tm266-answer]')?.value||'';
+  state.sourceDraft=state.root?.querySelector('[data-tm266-source]')?.value||'';
+  if(state.answerDraft.trim().length<12||state.sourceDraft.trim().length<4){
+   state.error='Для сохранения нужны комментарий (минимум 12 символов) и ссылка или источник подтверждения (минимум 4 символа). Введённый текст не потерян.';
+   render();return;
+  }
+  action({action:'answer',case_id:state.focus?.id,answer:state.answerDraft,source:state.sourceDraft});return}
  const approve=e.target.closest?.('[data-tm266-review]');
  if(approve){action({action:'review',case_id:state.focus?.id,status:approve.dataset.tm266Review,note:state.root?.querySelector('[data-tm266-note]')?.value});return}
 },true);
 document.addEventListener('change',e=>{
  if(!e.target.matches?.('[data-tm266-filter]'))return;
- state.scope=e.target.value||'';render();
+ state.scope=e.target.value||'';state.displayLimit=20;render();
 },true);
 if(typeof MutationObserver==='function'){
  observer=new MutationObserver(()=>{if(document.querySelector('[data-tm266]')!==state.root)mount()});
