@@ -23,7 +23,7 @@ function fakeDb({enabled=true,rows=[]}={}){
        return resolve({error:null,data:{enabled}});
       }
       if(s.mode==='insert')return resolve({data:{id:turnId},error:null});
-      if(s.mode==='update')return resolve({data:{id:turnId},error:null});
+      if(s.mode==='update')return resolve({data:s.filters.id===turnId?{id:turnId}:null,error:null});
       if(s.mode==='delete')return resolve({data:null,error:null});
       if(s.mode==='read')return resolve({data:rows,error:null});
       return resolve({error:'unknown_db_operation'});
@@ -70,7 +70,7 @@ test('correction is user-scoped and cannot be written to a foreign turn',async()
  const denied=await historyAction(db,CURRENT,'history:feedback',{
   turn_id:OTHER,feedback_type:'Неверные данные',feedback_note:''
  });
- assert.equal(denied.error,'invalid_history_turn');
+ assert.equal(denied.error,'history_turn_not_found');
 });
 test('no opt-in means no transcript saved',async()=>{
  const db=fakeDb({enabled:false});
