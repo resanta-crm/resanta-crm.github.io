@@ -10,7 +10,7 @@ export const AGENT360_PETROVICHEV_ID='a24954b8-2fe1-4852-b629-d8f351e1bd36';
 const GREETINGS=Object.freeze({
  [AGENT360_PETROVICHEV_ID]:'мой слуга',
  'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
- '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Саника',
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
  '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
  '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
