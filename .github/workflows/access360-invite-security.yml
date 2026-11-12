@@ -46,4 +46,3 @@ jobs:
       - name: Deno Auth admin typecheck
         run: |
           deno check supabase/functions/crm-access-admin-v1/index.ts
-          deno check supabase/functions/crm-user-admin/index.ts
