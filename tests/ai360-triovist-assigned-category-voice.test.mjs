@@ -102,7 +102,7 @@ test('Triovist sessions use same paid OpenAI and Yandex voice, without field/bra
    assert.ok(code.includes(u.id));
    assert.match(code,/isTriovist/);
    assert.match(code,/region==='Триовист \/ 21vek.by'/);
-   assert.match(code,/!isOwner&&!isBranch&&!isField&&!isTriovist/);
+   assert.match(code,/!isOwner&&!isPeer&&!isBranch&&!isField&&!isTriovist/);
   }
  }
  assert.match(web,/148-resanta-ai360-staff-identity-v1\.js\?v=[A-Za-z0-9._-]+/); // Accept cache-busted deployment revisions, require the actual module.
