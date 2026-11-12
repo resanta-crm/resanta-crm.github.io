@@ -1,0 +1,40 @@
+name: AI Agent 360 isolated foundation tests
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'assets/210-resanta-agent360-single-entry-v1.js'
+      - 'tests/ai360-agent360-*.test.mjs'
+      - '.github/workflows/ai360-agent360-foundation-ci.yml'
+      - 'index.html'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'assets/210-resanta-agent360-single-entry-v1.js'
+      - 'tests/ai360-agent360-*.test.mjs'
+      - '.github/workflows/ai360-agent360-foundation-ci.yml'
+      - 'index.html'
+permissions:
+  contents: read
+jobs:
+  isolation-and-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax of the new gateway and browser adapter
+        run: |
+          node --check supabase/functions/crm-ai360-agent-v1/contract.mjs
+          node --check --input-type=module < supabase/functions/crm-ai360-agent-v1/index.ts
+          node --check assets/210-resanta-agent360-single-entry-v1.js
+      - name: Verify menu coverage, RBAC, no writes, no eager requests
+        run: node --test tests/ai360-agent360-*.test.mjs
+      - name: Verify old 34-domain and staff-scope contracts
+        run: |
+          node --test tests/ai360-all-34-domain-coverage.test.mjs
+          node --test tests/ai360-staff-scoped-roles.test.mjs
+          node --test tests/ai360-core-v4-smoke.test.mjs
