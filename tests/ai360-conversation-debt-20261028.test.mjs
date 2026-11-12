@@ -56,9 +56,9 @@ const events=[],requests=[];
 let response={brief:'Отчёт: 111 тысяч. Хочешь подробности?',detail:'Проверенный полный разбор по отчёту от 27 октября.',followup_question:'Хочешь подробнее?',memory:{domain:'debt',month:'2026-10',manager:''}};
 const ctx={
  navigator:{userAgent:'Macintosh'},
- currentUser:{id:'director'}, currentProfile:{role:'boss',name:'Александр Паюшин'},
+ currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'}, currentProfile:{role:'boss',name:'Александр Паюшин'},
  document:{getElementById:()=>({style:{display:'block'}}),addEventListener:()=>{}},
- window:{addEventListener:()=>{}},
+ window:{addEventListener:()=>{},crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'})},
  db:{auth:{getSession:async()=>({data:{session:{access_token:'stub'}}})},
   functions:{invoke:async (name,{body})=>{requests.push({name,body});return {data:response};}}},
  Promise,console,setTimeout
@@ -69,7 +69,9 @@ const delay=()=>new Promise(res=>setTimeout(res,35));
 assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('Сколько просроченной ПДЗ?',ui),true);
 await delay();
 assert.equal(requests.length,1);
-assert.equal(requests[0].name,'crm-ai360-dialog-v4');
+assert.equal(requests[0].name,'crm-ai360-agent-v1');
+assert.equal(requests[0].body.action,'ask');
+assert.equal(requests[0].body.question,'Сколько просроченной ПДЗ?');
 assert.equal(events[0].text,response.brief);
 assert.equal(events[0].options.speechSummary,response.brief,'short verified reply should be one fast voice segment');
 assert.equal(ctx.window.crmAI360UnifiedDialogHandleV1('да',ui),true);
