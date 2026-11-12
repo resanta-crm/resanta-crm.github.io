@@ -1,5 +1,5 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
-import {assessStand,recipientStandRows,briefing,monthStart,surname} from './stands-brief.mjs';
+import {assessStand,recipientStandRows,briefing,monthStart,surname,routeMatchesStand,selectDelivery} from './stands-brief.mjs';
 
 const sb=createClient(Deno.env.get('SUPABASE_URL')||'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'',{auth:{persistSession:false}});
 const token=Deno.env.get('TELEGRAM_BOT_TOKEN')||'';
@@ -105,13 +105,16 @@ async function loadRows(today:string){
   if(i===19)throw new Error('HISTORY_TRUNCATED');
  }
  const {data:routes,error:re}=await sb.from('route_plans')
-  .select('client_id,manager_name,approved,review_status,published_at,removed,visit_date')
+  .select('client_id,linked_client_ids,physical_point_id,manager_name,approved,removed,is_office_day,visit_date')
   .eq('visit_date',today).limit(1000);
  if(re)throw new Error('ROUTES_READ_FAILED');
  if((routes||[]).length>=1000)throw new Error('ROUTES_TRUNCATED');
+ const points=[...new Set((routes||[]).map(x=>x.physical_point_id).filter(Boolean))];
+ const {data:links,error:le}=points.length?await sb.from('route_physical_point_clients').select('point_id,client_id').in('point_id',points).limit(3000):{data:[],error:null};
+ if(le)throw new Error('ROUTE_POINT_LINKS_FAILED');
+ if((links||[]).length>=3000)throw new Error('ROUTE_POINT_LINKS_TRUNCATED');
  return stands.map(p=>{
-  const route=(routes||[]).some(r=>r.client_id===p.client_id&&surname(r.manager_name)===surname(p.manager_name)&&
-    r.removed!==true&&(r.approved===true||r.review_status==='approved'||r.published_at));
+  const route=(routes||[]).some(r=>routeMatchesStand(r,p,links||[]));
   const dayCount=Math.max(0,Math.floor((Date.parse(today+'T12:00:00Z')-Date.parse(String(p.installed_at||today).slice(0,10)+'T12:00:00Z'))/86400000));
   return assessStand({...p,days_installed:dayCount},(items||[]).filter(x=>x.placement_id===p.id),history,today,route);
  });
@@ -122,10 +125,10 @@ Deno.serve(async(req:Request)=>{
   const secret=await setting('dispatch_secret');
   if(!secret?.secret||req.headers.get('x-crm-dispatch-secret')!==secret.secret)return reply({ok:false,error:'FORBIDDEN'},403);
   const payload=await req.json().catch(()=>({}));
-  const pilot=payload?.mode==='pilot_owner';
-  if(payload?.mode&&!pilot)return reply({ok:false,error:'UNKNOWN_MODE'},400);
+  const pilot=payload?.mode==='pilot_owner',dryRun=payload?.mode==='dry_run';
+  if(payload?.mode&&!pilot&&!dryRun)return reply({ok:false,error:'UNKNOWN_MODE'},400);
   const config=await setting('stand360_telegram_config');
-  if(!pilot&&config?.enabled!==true)return reply({ok:true,enabled:false,reason:'FEATURE_DISABLED'});
+  if(!pilot&&!dryRun&&config?.enabled!==true)return reply({ok:true,enabled:false,reason:'FEATURE_DISABLED'});
   const now=today(),all=await loadRows(now);
   const {data:bindings,error:be}=await sb.from('crm_telegram_bindings').select('user_id,chat_id,active').eq('active',true);
   if(be)throw new Error('BINDINGS_UNAVAILABLE');
@@ -134,22 +137,27 @@ Deno.serve(async(req:Request)=>{
   if(ue)throw new Error('USERS_UNAVAILABLE');
   const {data:managers,error:me}=await sb.from('users').select('id,name,role,region,email,access_scope').eq('role','manager').limit(300);
   if(me)throw new Error('MANAGERS_UNAVAILABLE');
-  let sentText=0,sentVoice=0;const errors:any[]=[];
+  let sentText=0,sentVoice=0;const errors:any[]=[],preview:any[]=[];
   for(const b of bindings||[]){
    const user=(users||[]).find(u=>u.id===b.user_id);
    if(!user||!['boss','manager'].includes(user.role))continue;
    if(user.role==='boss'&&user.email!=='payushin_ar@resanta.ru'&&!user.region)continue;
    if(pilot&&user.id!=='544fb1e2-ef70-44de-bc62-e0e1596a4bfc')continue;
    const own=recipientStandRows(user,all,managers);
-   const digest=briefing(user,own,now);
+   const delivery=selectDelivery(user,own,now);
+   if(delivery.mode==='skip')continue;
+   const digest=briefing(user,delivery.rows,now,delivery.mode,delivery.total);
    if(!digest)continue;
-   const textKey='stand360_text_sent:'+now+':'+user.id;
-   const audioKey='stand360_audio_sent:'+now+':'+user.id;
+   if(dryRun){preview.push({recipient_role:user.role,recipient_name:user.name,mode:delivery.mode,
+    route_stands:delivery.rows.filter((x:any)=>x.route_today).length,text_items:digest.lines.length,voice_mentions:digest.scope_count});continue}
+   const textKey='stand360_route_v2_text:'+now+':'+user.id;
+   const audioKey='stand360_route_v2_audio:'+now+':'+user.id;
    let textSent=await setting(textKey);
    if(!textSent){
     try{
-     const body='🧱 <b>Лера · Стенды 360°</b>\n'+'Стендов на контроле: <b>'+own.length+
-      '</b> · требуют внимания: <b>'+digest.scope_count+'</b>\n\n'+
+     const label=delivery.mode==='route'?'Сегодня · стенды в утверждённом маршруте':delivery.mode==='weekly'?'Еженедельный контроль вне маршрута':'Директорский обзор всей сети';
+     const body='🧱 <b>Лера · Стенды 360°</b>\n'+esc(label)+'\n'+'Стендов на учёте: <b>'+own.length+
+      '</b> · в сообщении: <b>'+digest.scope_count+'</b>\n\n'+
       digest.lines.map(x=>esc(x)).join('\n')+
       '\n\n📌 Проверить оборудование, фото и отгрузки по SKU в CRM. Отсутствие отгрузок не подтверждает отсутствие розничных продаж.';
      await sendText(b.chat_id,body.slice(0,3800));
@@ -166,7 +174,7 @@ Deno.serve(async(req:Request)=>{
    }
   }
   return reply({ok:errors.length===0,enabled:config?.enabled===true,pilot,date:now,stands:all.length,
-    text_sent:sentText,voice_sent:sentVoice,errors});
+    text_sent:sentText,voice_sent:sentVoice,errors,preview:dryRun?preview:undefined});
  }catch(e){console.error('STAND360_TELEGRAM_FAILED',e instanceof Error?e.message:'unknown');
   return reply({ok:false,error:e instanceof Error?e.message:'unknown'},500)}
 });

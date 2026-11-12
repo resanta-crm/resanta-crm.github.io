@@ -53,18 +53,49 @@ export function recipientStandRows(user,standRows,managerProfiles){
  }
  return [];
 }
-export function briefing(user,rows,today){
- const relevant=(rows||[]).filter(x=>x.action);
+// Approved, non-removed visit in today's route. Never match by a possibly duplicated client name.
+export function routeMatchesStand(route,stand,pointLinks=[]){
+ if(!route||!stand||!route.approved||route.removed===true||route.is_office_day===true)return false;
+ if(surname(route.manager_name)!==surname(stand.manager_name))return false;
+ const client=String(stand.client_id||'');
+ if(!client)return false;
+ if(String(route.client_id||'')===client)return true;
+ if(Array.isArray(route.linked_client_ids)&&route.linked_client_ids.some(id=>String(id)===client))return true;
+ return !!route.physical_point_id&&(pointLinks||[]).some(x=>String(x.point_id)===String(route.physical_point_id)&&String(x.client_id)===client);
+}
+// Daily MPP alerts are strictly today's approved route; other cases are a
+// separate, max-three-item Monday check-in, not an endless daily backlog.
+export function selectDelivery(user,owned,today){
+ if(user?.role==='boss')return {mode:'director',rows:owned||[],total:owned?.length||0};
+ const route=(owned||[]).filter(x=>x.route_today);
+ if(route.length)return {mode:'route',rows:route,total:owned.length};
+ const monday=new Date(today+'T12:00:00Z').getUTCDay()===1;
+ const exceptions=(owned||[]).filter(x=>!x.route_today&&(x.needs_photo||!x.asset_id||x.client_history_count===0||x.matched_sku_count===0));
+ return {mode:monday&&exceptions.length?'weekly':'skip',rows:monday?exceptions.slice(0,3):[],total:owned?.length||0};
+}
+export function briefing(user,selected,today,mode='director',total=selected.length){
+ const all=(selected||[]),relevant=all.filter(x=>x.action);
  if(!relevant.length)return null;
- const sorted=[...relevant].sort((a,b)=>Number(b.route_today)-Number(a.route_today)||Number(b.needs_photo)-Number(a.needs_photo));
- const hello=greet(user),isLeader=user.role==='boss';
- const intro='Привет, '+hello+'. Это Лера. У '+(isLeader?'команды':'тебя')+' '+sorted.length+' стендов требуют внимания.';
- const first=sorted[0];
- let voice=intro+' '+(first.route_today?'Сегодня маршрут к клиенту ':'Проверь стенд у клиента ')+first.client_name+'. '+first.action+'.';
- if(voice.length>240)voice=intro+' В первую очередь проверь '+first.client_name+'.';
- if(voice.length>240)voice=intro;
- const lines=sorted.slice(0,8).map((x,i)=>String(i+1)+'. '+x.client_name+
-  ' · ID '+x.client_id.slice(0,8)+' · '+x.action+
+ const sorted=[...relevant].sort((a,b)=>Number(b.route_today)-Number(a.route_today)||Number(b.needs_photo)-Number(a.needs_photo)||String(a.client_name).localeCompare(String(b.client_name),'ru'));
+ const intro='Привет, '+greet(user)+'. Это Лера. ';
+ const isLeader=mode==='director';
+ const nameLine=x=>x.client_name+' — '+(x.needs_photo?'обновить фото':x.matched_sku_count===0?'сверить артикулы и данные 1С':!x.asset_id?'сверить имущество':x.vision_status==='review'?'проверить выкладку':'проверить стенд');
+ const enumerated=sorted.map((x,i)=>(i+1)+'. '+nameLine(x)+'.').join(' ');
+ let voice;
+ if(isLeader){
+  const routed=all.filter(x=>x.route_today).length;
+  voice=intro+'В сети '+total+' стендов. В утверждённых маршрутах сегодня '+routed+'. Перечисляю все '+sorted.length+' стендов по порядку. '+enumerated;
+ }else if(mode==='route'){
+  voice=intro+'Сегодня в твоём утверждённом маршруте '+sorted.length+' клиента со стендами. '+enumerated;
+ }else{
+  voice=intro+'Маршрутных стендов сегодня нет. Это отдельная еженедельная проверка: '+sorted.length+' клиента вне маршрута. '+enumerated;
+ }
+ // Never claim to cover all 10 if audio lists only the first. Limit inputs
+ // via capped business population rather than silently truncating enumerations.
+ if(voice.length>3400)voice=intro+'Полный перечень '+sorted.length+' стендов отправлен текстом. Голосовой обзор ограничен длиной. Обязательно открой список.';
+ const lines=sorted.map((x,i)=>String(i+1)+'. '+x.client_name+
+  ' · ID '+String(x.client_id).slice(0,8)+' · '+x.action+
   ' · отгрузки по SKU за 6 мес.: '+(x.matched_sku_count?ruMoney(x.ship_6m)+' BYN (сопоставлено '+x.matched_sku_count+' из '+x.sku_count+')':'не сопоставлено с 1С'));
- return {voice,lines,scope_count:sorted.length,priority_client_id:first.client_id,stand_count:rows.length};
+ return {voice,lines,scope_count:sorted.length,priority_client_id:sorted[0]?.client_id,
+  stand_count:total,mode,route_count:all.filter(x=>x.route_today).length};
 }

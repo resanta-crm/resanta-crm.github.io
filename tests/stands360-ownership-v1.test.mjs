@@ -36,7 +36,7 @@ test('existing inventory and histories remain reachable, UI has executive view a
  assert.match(ui,/Прислал продавец/);
  assert.match(ui,/Маршрут и GPS не обязательны|GPS не нужен/);
  assert.match(ui,/crm_stands_photo_control_v1/);
- assert.match(ui,/crm_stands_360_skus_v2/);
+ assert.match(ui,/crm_stands_360_skus_v3/);
  assert.match(ui,/Решение руководителя|Возврат оборудования/);
  assert.doesNotMatch(ui,/\.from\(['"]purchase_history['"]\)/);
 });

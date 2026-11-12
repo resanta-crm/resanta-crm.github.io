@@ -5,7 +5,7 @@
 'use strict';
 if(window.RESANTA_STANDS_360_V1)return;
 const state={data:null,loading:false,error:'',view:'overview',filter:'all',manager:'all',brand:'all',
- search:'',photos:new Map(),detailId:null,skuRows:[],matchRow:null};
+ search:'',photos:new Map(),detailId:null,skuRows:[],matchRow:null,selectedSkus:new Set(),clientCandidate:null,photoPaths:[]};
 function dbclient(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
 const el=id=>document.getElementById(id);
 const str=x=>String(x??'');
@@ -18,7 +18,7 @@ const photo=p=>p.last_control_photo_path||p.installation_photo_path||'';
 const dataOk=p=>p.sales_confidence==='verified_monthly_client_shipments';
 const standRows=()=>rows(state.data?.stands);
 const messages={
- asset_check:['Сверить ОС','bad','Подтвердить инвентарный номер стенда и принадлежность оборудования.'],
+ asset_check:['Учёт имущества','warn','Инвентарный номер не привязан. Ответственный руководитель может сверить оборудование с реестром ОС.'], 
  photo_missing:['Получить фото','warn','Попросить актуальное фото у продавца или сделать при визите — GPS не нужен.'],
  client_id_check:['Сверить ID клиента','warn','По ID торговой точки не найдены данные 1С. Сверить связь с юридическим лицом.'],
  sku_check:['Уточнить SKU','warn','Есть неподтверждённые артикулы. Сверить их с каталогом, затем пересчитать отгрузки.'],
@@ -34,6 +34,7 @@ function attachCSS(){
  const l=document.createElement('link');l.id='s268-css-link';l.rel='stylesheet';
  l.href='./assets/268-stands360-uniai-unix-v2.css?v=20261111-uni-v2';
  document.head.appendChild(l);
+ const extra=document.createElement('link');extra.rel='stylesheet';extra.href='./assets/269-stands360-feedback-v3.css?v=20261112-v3';document.head.appendChild(extra);
 }
 async function rpc(fn,args){
  const d=dbclient();if(!d)throw new Error('Нет подключения к CRM');
@@ -70,7 +71,7 @@ function pipeline(){
 }
 function evidence(p){
  const found=[];
- if(!p.asset_id)found.push('Не сверено с ОС');
+ // ОС учитывается отдельно — не смешиваем имущество и эффективность торговой выкладки.
  if(!photo(p))found.push('Нет фотографии стенда');else if(p.photo_days>45)found.push('Фото требует обновления');
  if(p.client_history_rows===0)found.push('Отгрузки 1С не связаны с ID клиента');
  else if(p.unresolved_skus>0)found.push('Не сопоставлено '+p.unresolved_skus+' из '+p.registered_skus+' SKU');
@@ -82,7 +83,7 @@ function evidence(p){
 }
 function priority(p){
  let n=0;
- if(!p.asset_id)n+=40;
+ if(!p.asset_id)n+=5;
  if(p.client_history_rows===0)n+=35;
  if(p.unresolved_skus>0)n+=30;
  if(!photo(p))n+=25;else if(p.photo_days>45)n+=12;
@@ -143,6 +144,21 @@ function filteredRows(){
   return true;
  }).sort((x,y)=>priority(y)-priority(x)||str(x.client_name).localeCompare(str(y.client_name),'ru'));
 }
+function quickScore(p){
+ const photoOk=p.vision_photo_evidence_path===photo(p)&&p.vision_checked_at;
+ let sum=0,available=0;
+ if(photoOk&&typeof p.vision_stand_present==='boolean'){available+=25;sum+=p.vision_stand_present?25:0}
+ if(photoOk&&p.vision_fill_pct!=null&&p.vision_own_brand_pct!=null&&p.vision_photo_quality_score!=null){
+  available+=25;sum+=25*(.35*Number(p.vision_fill_pct)+.45*Number(p.vision_own_brand_pct)+.20*Number(p.vision_photo_quality_score))/100;
+ }
+ if(dataOk(p)&&p.sku_expected>0&&p.client_history_rows>0){
+  const six=Number(p.ship_6m||0),prev=Number(p.ship_prev_6m||0);
+  available+=35;sum+=prev>0?35*Math.min(1.2,six/prev)/1.2:six>0?31:7;
+ }
+ if(photo(p)&&p.photo_days!=null){available+=15;sum+=p.photo_days<=30?15:p.photo_days<=60?9:3}
+ return {score:available>=50?Math.round(sum/available*100):null,coverage:available};
+}
+
 function table(){
  const all=standRows(),selected=filteredRows();
  const managers=[...new Set(all.map(x=>x.manager_name).filter(Boolean))].sort();
@@ -157,7 +173,7 @@ function table(){
  '<input id="s268-search" aria-label="Поиск" placeholder="Клиент, ID или ОС" value="'+esc(state.search)+'">'+
  '<button class="s268-secondary" data-s268-search>Найти</button></div></div>'+
  '<div class="s268-tablewrap"><table class="s268-table"><thead><tr><th>Клиент / ID</th><th>Наш стенд / ОС</th><th>Бренд</th><th>Установлен</th>'+
- '<th>Последнее фото</th><th>Отгрузки SKU · 6 мес.</th><th>Достоверность</th><th>Рекомендация Леры</th></tr></thead><tbody>'+
+ '<th>Последнее фото</th><th>Отгрузки SKU · 6 мес.</th><th>Оценка Леры</th><th>Достоверность</th><th>Рекомендация Леры</th></tr></thead><tbody>'+
  selected.map(p=>{
   const s=stateOf(p),valid=dataOk(p);
   return '<tr data-s268-detail="'+esc(p.id)+'" tabindex="0">'+
@@ -168,6 +184,7 @@ function table(){
   '<small>'+esc(p.photo_origin==='seller'?'От продавца':p.photo_origin==='manager'?'От МПП':'Источник не установлен')+'</small></td>'+
   '<td><b>'+(valid?esc(money(p.ship_6m)):'Не сопоставлено')+'</b>'+
   '<small>'+(valid?'Подтверждённые SKU':'Отгрузки клиента — отдельно')+'</small></td>'+
+  '<td><b>'+esc(quickScore(p).score==null?'—':quickScore(p).score+'/100')+'</b><small>'+esc(quickScore(p).coverage===100?'Данные подтверждены':'Предварительно · полнота '+quickScore(p).coverage+'%')+'</small></td>'+ 
   '<td><span class="s268-pill '+(valid?'good':'warn')+'">'+(valid?'Сверено':'Нужна проверка')+'</span></td>'+
   '<td><span class="s268-action">'+esc(s[0])+'</span></td></tr>';
  }).join('')+'</tbody></table></div>'+
@@ -184,7 +201,7 @@ function paint(){
 }
 async function refresh(){
  if(state.loading)return;state.loading=true;paint();
- try{state.data=await rpc('crm_stands_360_v2',{p_limit:150});state.error=''}
+ try{state.data=await rpc('crm_stands_360_v3',{p_limit:150});state.error=''}
  catch(e){state.error=str(e?.message||e);state.data=null}
  finally{state.loading=false;paint()}
 }
@@ -214,9 +231,10 @@ function explain(p){
 function photoHTML(p,source){
  const pic=rows(source).slice(0,2);
  if(!pic.length&&photo(p))pic.push({storage_path:photo(p),captured_at:p.last_control_at||p.installed_at});
+ state.photoPaths=pic.map(x=>x.storage_path).filter(Boolean);
  return '<div class="s268-photos">'+pic.map((x,i)=>'<div class="s268-photo"><b>'+
- (i?'Предыдущее фото':'Актуальное фото')+'</b><img alt="Фото стенда" data-s268-path="'+esc(x.storage_path)+'">'+
- '<small>'+date(x.captured_at)+'</small></div>').join('')+
+ (i?'Предыдущее фото':'Актуальное фото')+'</b><img alt="Фото стенда" data-s268-path="'+esc(x.storage_path)+'" data-s268-full="'+esc(x.storage_path)+'" title="Нажмите для увеличения">'+
+ '<button class="s268-secondary" data-s268-full="'+esc(x.storage_path)+'">⛶ Увеличить</button><small>'+date(x.captured_at)+'</small></div>').join('')+
  (pic.length===1?'<div class="s268-photo"><b>Сравнение до / после</b><p class="s268-muted">Для сравнения нужно новое фото. Его можно получить от продавца, без маршрута и GPS.</p></div>':'')+
  (pic.length===0?'<div class="s268-muted">Фото пока не предоставлено.</div>':'')+'</div>';
 }
@@ -226,13 +244,17 @@ async function detail(id){
  modal('Стенд 360° · '+p.client_name,'ID '+(p.client_code||p.client_id)+' · '+(p.asset_code||'ОС не сверено')+
  ' · '+p.manager_name,'<div class="s268-panel">Сверяю фотографии, SKU и историю 1С…</div>',
  '<button class="s268-primary" data-s268-photo="'+esc(id)+'">📷 Новое фото</button>'+
- '<button class="s268-secondary" data-s268-request="'+esc(id)+'">Запросить фото у продавца</button>'+
+ '<button class="s268-secondary" data-s268-request="'+esc(id)+'">Запросить фото у продавца</button>'+ 
+ '<button class="s268-secondary" data-s268-vision="'+esc(id)+'">✦ Проверить фото с ИИ</button>'+ 
+ '<button class="s268-secondary" data-s268-client="'+esc(id)+'">Юрлицо / торговая точка</button>'+ 
+ (['dfs','df'].includes(state.data?.actor_role)?'<button class="s268-secondary" data-s268-asset="'+esc(id)+'">Учёт ОС</button>':'')+
  '<button class="s268-secondary" data-s268-close>Закрыть</button>');
  try{
-  const [s,ph]=await Promise.all([
-   rpc('crm_stands_360_skus_v2',{p_placement_id:id}),
+  const [s,ph,vr]=await Promise.all([
+   rpc('crm_stands_360_skus_v3',{p_placement_id:id}),
    dbclient().from('stand_photos_v236346').select('storage_path,captured_at')
-    .eq('placement_id',id).order('captured_at',{ascending:false}).limit(2)
+    .eq('placement_id',id).order('captured_at',{ascending:false}).limit(2),
+   dbclient().from('stand_vision_checks_v236347').select('stand_present,fill_pct,own_brand_share_pct,photo_quality_score,summary,created_at,storage_path').eq('placement_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle()
   ]);
   if(ph.error)throw ph.error;
   const host=el('s268-modalbody');if(!host)return;
@@ -240,23 +262,24 @@ async function detail(id){
   const metric=[
    ['Наше оборудование',p.asset_code||'Не сверено'],
    ['Фото',photo(p)?p.photo_days+' дн. назад':'Нет фото'],
-   ['Подтверждённые SKU',p.validated_skus+' / '+p.registered_skus],
+   ['Подтверждённые SKU',p.sku_selected+' / '+p.sku_expected],
    ['Отгрузки SKU · 6 мес.',dataOk(p)?money(p.ship_6m):'Не сопоставлено']];
   const rowsHTML=state.skuRows.map((x,i)=>{
-   const isValid=x.sku_state!=='unresolved';
+   const isValid=!['unresolved','partial'].includes(x.sku_state);
    const multi=/[2-9][0-9]*\s*скю/i.test(str(x.raw_sku));
-   return '<tr><td><b>'+esc(x.raw_sku)+'</b>'+
-    (x.mapped_sku?'<div class="s268-muted">↳ '+esc(x.mapped_sku)+'</div>':'')+'</td>'+
+   return '<tr><td><b>'+esc(x.raw_sku)+'</b>'+(x.chosen?'<div class="s268-muted">'+esc(x.chosen)+' из '+esc(x.expected)+' подтверждено</div>':'')+
+    (rows(x.multi_skus).length?'<div class="s268-muted">'+esc(x.multi_skus.join(', '))+'</div>':'')+'</td>'+
     '<td><span class="s268-pill '+(isValid?'good':'warn')+'">'+
-    esc(isValid?'Артикул подтверждён':multi?'Список из нескольких SKU':'SKU не определён')+'</span></td>'+
-    '<td>'+esc(x.effective_sku?money(x.ship_6m):'Неизвестно')+'</td>'+
+    esc(isValid?'Артикулы подтверждены':x.sku_state==='partial'?'Сверка не завершена':multi?'Несколько SKU':'SKU не определён')+'</span></td>'+
+    '<td>'+esc(x.chosen?money(x.ship_6m):'Неизвестно')+'</td>'+
     '<td>'+(isValid&&x.sku_state==='exact_catalog'?'✓':
     '<button class="s268-secondary" data-s268-match="'+i+'">'+
-    (multi?'Указать поштучно':x.sku_state==='verified_mapping'?'Изменить':'Уточнить SKU')+'</button>')+'</td></tr>';
+    (multi?'Выбрать несколько':x.sku_state==='verified_multi'?'Изменить состав':'Уточнить SKU')+'</button>')+'</td></tr>';
   }).join('');
   host.innerHTML='<div class="s268-detailkpis">'+metric.map(x=>'<div><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>').join('')+'</div>'+
    '<div class="s268-detailcols"><section class="s268-detailsection"><h3>📷 Наш стенд · до / после</h3>'+
    photoHTML(p,ph.data)+
+   '<div class="s268-reviewtools"><button class="s268-secondary" data-s268-vision="'+esc(p.id)+'">✦ Проверить фото с ИИ</button><button class="s268-secondary" data-s268-photo="'+esc(p.id)+'">Добавить фото</button></div>'+
    '<p class="s268-muted">Источник фото: '+esc(p.photo_origin==='seller'?'продавец':p.photo_origin==='manager'?'МПП':'не установлен для старых фото')+
    '. GPS не требуется.</p>'+
    '<details><summary style="font-size:11px;cursor:pointer;font-weight:750">Что Vision обнаружил?</summary>'+
@@ -265,14 +288,177 @@ async function detail(id){
    '<div class="s268-detailkpis" style="grid-template-columns:1fr 1fr">'+
    '<div><small>Отгрузки по SKU стенда</small><b>'+esc(dataOk(p)?money(p.ship_6m):'Не сопоставлено')+'</b></div>'+
    '<div><small>Весь клиент · 6 мес.</small><b>'+esc(p.client_history_rows?money(p.client_ship_6m):'Нет данных по ID')+'</b></div></div>'+
-   '<p class="s268-muted">Общий оборот клиента — справочно, не является продажами со стенда.</p>'+
+   '<p class="s268-muted">Общий оборот юрлица — справочно, не является розничными продажами со стенда. Привязка: '+esc(p.legal_client_name||'не подтверждена')+'. <button class="s268-secondary" data-s268-client="'+esc(id)+'">Изменить</button></p>'+
    '<div class="s268-skus"><table><thead><tr><th>Запись в стенде</th><th>Достоверность</th><th>Отгрузки · 6 мес.</th><th>Действие</th></tr></thead><tbody>'+
    rowsHTML+'</tbody></table></div></section></div>'+
-   explain(p)+
-   '<p class="s268-muted">Для движения ОС, договора и истории установки используйте меню «Учёт и документы». Существующие документы не менялись.</p>';
+   scoreCard(p,vr?.data||{stand_present:p.vision_stand_present,fill_pct:p.vision_fill_pct,own_brand_share_pct:p.vision_own_brand_pct,photo_quality_score:p.vision_photo_quality_score,storage_path:p.vision_photo_evidence_path})+explain(p)+
+   '<p class="s268-muted">Учёт ОС и договоров — отдельно от коммерческой оценки. Сверка оборудования доступна руководителю через «Учёт ОС».</p>';
   loadThumbs();
  }catch(e){const host=el('s268-modalbody');if(host)host.innerHTML='<div class="s268-ai">Ошибка открытия: '+esc(e?.message||e)+'</div>'}
 }
+
+function scoreCard(p,v){
+ const usable=!!v&&v.storage_path===photo(p)&&Boolean(p.vision_checked_at);
+ const metrics=[];
+ let total=0,available=0;
+ const add=(name,weight,earned,why)=>{
+  if(earned==null||!Number.isFinite(Number(earned)))metrics.push({name,weight,earned:null,why});
+  else{const e=Math.max(0,Math.min(weight,Number(earned)));available+=weight;total+=e;metrics.push({name,weight,earned:Math.round(e),why})}
+ };
+ add('Наличие нашего стенда',25,usable&&typeof v.stand_present==='boolean'?(v.stand_present?25:0):null,'По последнему подтверждённому Vision');
+ const fill=Number(v?.fill_pct),own=Number(v?.own_brand_share_pct),quality=Number(v?.photo_quality_score);
+ const photoCondition=usable&&v.fill_pct!=null&&v.own_brand_share_pct!=null&&v.photo_quality_score!=null?
+  25*(.35*fill+.45*own+.20*quality)/100:null;
+ add('Состояние и бренд',25,photoCondition,'Заполненность, доля целевого бренда, качество фото');
+ const current=Number(p.ship_6m),previous=Number(p.ship_prev_6m);
+ let sales=null;
+ if(dataOk(p)&&Number(p.sku_expected)>0&&Number(p.client_history_rows)>0){
+  sales=previous>0?35*Math.min(1.2,current/previous)/1.2:current>0?31:7;
+ }
+ add('Отгрузки SKU · 1С',35,sales,'Косвенный коммерческий сигнал, не розничные продажи со стенда');
+ const days=Number(p.photo_days);
+ add('Актуальность контроля',15,photo(p)&&p.photo_days!=null?(days<=30?15:days<=60?9:3):null,'Дата последнего контрольного снимка');
+ const coverage=available;
+ const score=available>=50?Math.round(total/available*100):null;
+ const stateLabel=coverage===100?'Оценка по доступным подтверждённым данным':coverage<50?'Недостаточно данных для оценки':'Предварительная оценка · не все данные подтверждены';
+ return '<section class="s268-score"><div class="s268-scoremain"><b>✦ Лера · Эффективность стенда</b>'+
+ '<strong class="s268-scorenum">'+(score==null?'—':score)+'/100</strong>'+
+ '<span class="s268-scorestatus">'+stateLabel+' · полнота '+coverage+'%</span></div>'+
+ '<div class="s268-scoregrid">'+metrics.map(x=>'<div class="s268-scorefactor"><span>'+esc(x.name)+'</span><b>'+
+ (x.earned==null?'Нужны данные':x.earned+' / '+x.weight+' баллов')+'</b><span>'+esc(x.why)+'</span></div>').join('')+'</div>'+
+ '<p class="s268-muted">Весовые категории: наличие 25, состояние 25, отгрузки 35, контроль 15. Отсутствующие данные не получают ноль; балл предварительный при неполной доказательной базе. Предыдущая оценка CRM: '+esc(p.ai_score??'—')+' (архивный расчёт).</p></section>';
+}
+async function rerunVision(id,btn){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ if(!photo(p))return alert('Нет фото. Сначала загрузите или получите фотографию от продавца.');
+ if(btn){btn.disabled=true;btn.textContent='Vision анализирует фото…'}
+ try{
+  const {data,error}=await dbclient().functions.invoke('crm-stands-vision-v236347',{body:{placement_id:id,force:true}});
+  if(error||data?.ok!==true)throw error||new Error(data?.message||data?.error||'Vision не завершился');
+  await refresh();await detail(id);
+  alert('Vision завершён. Заключение Леры и оценка обновлены с учётом актуальных доказательств.');
+ }catch(e){alert('Vision: '+str(e?.message||e))}
+ finally{if(btn?.isConnected){btn.disabled=false;btn.textContent='✦ Проверить фото с ИИ'}}
+}
+async function openOriginalPhoto(path){
+ if(!path)return;
+ let paths=state.photoPaths.filter(Boolean);if(!paths.includes(path))paths=[path,...paths];
+ el('s268-photo-overlay')?.remove();
+ const node=document.createElement('div');node.id='s268-photo-overlay';node.className='s268-photo-overlay';
+ node.innerHTML='<div class="s268-photo-toolbar"><small id="s268-photo-count">Фотография стенда · оригинал</small>'+
+ '<div class="s268-buttongroup"><button data-s268-photo-prev>← До</button><button data-s268-photo-next>После →</button>'+
+ '<button data-s268-zoom-out>−</button><button data-s268-zoom-reset>100%</button>'+
+ '<button data-s268-zoom-in>+</button><button data-s268-photo-close>Закрыть ×</button></div></div>'+
+ '<div class="s268-photo-stage" id="s268-photo-stage"><img alt="Оригинал фотографии стенда" id="s268-original" draggable="false"></div>'+
+ '<div class="s268-photo-help">Колесо мыши / кнопки + − / движение пальцами для увеличения. Фотографии доступны только с учётной записью CRM.</div>';
+ document.body.appendChild(node);
+ const img=el('s268-original'),stage=el('s268-photo-stage'),pointers=new Map();
+ let index=paths.indexOf(path),scale=1,offsetX=0,offsetY=0,lastDist=0,lastPoint=null;
+ const update=()=>img.style.transform='translate('+offsetX+'px,'+offsetY+'px) scale('+scale+')';
+ const resize=delta=>{const next=Math.min(8,Math.max(1,scale*delta));scale=next;if(scale===1){offsetX=0;offsetY=0}update()};
+ const show=async()=>{
+  const current=paths[index];scale=1;offsetX=0;offsetY=0;update();img.removeAttribute('src');
+  el('s268-photo-count').textContent='Фото '+(index+1)+' из '+paths.length+' · оригинал';
+  const signed=await dbclient().storage.from('stand-files').createSignedUrl(current,600);
+  if(signed.error||!signed.data?.signedUrl){el('s268-photo-count').textContent='Ошибка доступа к оригиналу';return}
+  if(node.isConnected)img.src=signed.data.signedUrl;
+ };
+ node.querySelector('[data-s268-photo-close]').onclick=()=>node.remove();
+ node.querySelector('[data-s268-photo-prev]').onclick=()=>{index=(index+paths.length-1)%paths.length;show()};
+ node.querySelector('[data-s268-photo-next]').onclick=()=>{index=(index+1)%paths.length;show()};
+ node.querySelector('[data-s268-zoom-in]').onclick=()=>resize(1.35);
+ node.querySelector('[data-s268-zoom-out]').onclick=()=>resize(1/1.35);
+ node.querySelector('[data-s268-zoom-reset]').onclick=()=>{scale=1;offsetX=0;offsetY=0;update()};
+ stage.addEventListener('wheel',e=>{e.preventDefault();resize(e.deltaY<0?1.2:1/1.2)},{passive:false});
+ stage.addEventListener('pointerdown',e=>{stage.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});lastDist=0;lastPoint=null;stage.classList.add('dragging')});
+ stage.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;
+  const before=pointers.get(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2){
+   const v=[...pointers.values()],dist=Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y);
+   if(lastDist>0)resize(dist/lastDist);
+   lastDist=dist;lastPoint=null;
+  }else if(scale>1&&before){offsetX+=e.clientX-before.x;offsetY+=e.clientY-before.y;update()}
+ });
+ for(const ev of ['pointerup','pointercancel','lostpointercapture'])stage.addEventListener(ev,e=>{
+  pointers.delete(e.pointerId);lastDist=0;lastPoint=null;if(!pointers.size)stage.classList.remove('dragging');
+ });
+ show();
+}
+async function assetForm(id){
+ const p=standRows().find(x=>x.id===id);if(!p||!['dfs','df'].includes(state.data?.actor_role))return;
+ modal('Сверка имущества · '+p.client_name,'Не влияет на коммерческую оценку стенда',
+ '<p class="s268-muted">Выбирайте только ОС, уже закреплённые в учёте за этим клиентом, типом стенда и менеджером. Свободное имущество и чужие ОС нельзя назначить автоматически.</p>'+
+ '<div id="s268-asset-results">Ищу подходящие ОС…</div>',
+ '<button class="s268-secondary" data-s268-detail="'+esc(id)+'">Назад к стенду</button>');
+ try{
+  const candidates=rows(await rpc('crm_stands_assets_find_v3',{p_placement_id:id}));
+  const host=el('s268-asset-results');if(!host)return;
+  host.innerHTML=candidates.length?candidates.map(x=>'<div class="s268-catalogrow"><b>'+esc(x.asset_code)+'</b>'+
+   '<button class="s268-secondary" data-s268-asset-confirm="'+esc(x.id)+'">Привязать ОС</button></div>').join(''):
+   '<p class="s268-verify-row">По реестру нет свободной подходящей записи, уже числящейся установленной у этого клиента. Требуется ручная инвентаризация руководителем — автоматически подменять имущество нельзя.</p>';
+ }catch(e){el('s268-asset-results').textContent=e.message||String(e)}
+}
+async function assetConfirm(assetId){
+ const id=state.detailId,p=standRows().find(x=>x.id===id);
+ if(!p||!confirm('Подтвердить связь ОС с этим стендом?'))return;
+ try{
+  const saved=await rpc('crm_stands_asset_confirm_v3',{p_placement_id:id,p_asset_id:assetId});
+  await refresh();await detail(id);alert('ОС '+saved.asset_code+' подтверждена. Запись внесена в аудит.');
+ }catch(e){alert('Не удалось сверить ОС: '+str(e.message||e))}
+}
+function clientForm(id){
+ const p=standRows().find(x=>x.id===id);if(!p)return;
+ state.clientCandidate=null;
+ modal('Юридическое лицо 1С · '+p.client_name,'Выбор из базы CRM · связь с физической ТТ',
+ '<p class="s268-verify-row">Исходный ID торговой точки не меняем. Выбираем юрлицо только для корректного сопоставления отгрузок 1С. Связи не создаются автоматически.</p>'+
+ '<p class="s268-muted">Сейчас привязано: '+esc(p.legal_client_name||'не подтверждено')+'</p>'+
+ '<div class="s268-field"><label>Найти юрлицо по названию или коду</label>'+
+ '<input class="s268-input" id="s268-client-query" placeholder="Введите от трёх символов"></div>'+
+ '<div class="s268-buttongroup"><button class="s268-secondary" data-s268-client-find>Найти в клиентах</button></div>'+
+ '<div id="s268-client-results" class="s268-cataloglist"></div>'+
+ '<div id="s268-client-selected"></div>',
+ '<button class="s268-primary" data-s268-client-save>Подтвердить связь</button>'+
+ '<button class="s268-secondary" data-s268-detail="'+esc(id)+'">Назад</button>');
+ el('s268-client-query')?.focus();
+}
+async function findClients(){
+ const p=standRows().find(x=>x.id===state.detailId),host=el('s268-client-results');
+ if(!p||!host)return;
+ const q=str(el('s268-client-query')?.value).trim();
+ if(q.length<3){host.textContent='Введите минимум три символа.';return}
+ host.textContent='Проверяю базу клиентов…';
+ try{
+  const clients=rows(await rpc('crm_stands_client_find_v3',{p_placement_id:p.id,p_query:q}));
+  host.innerHTML=clients.length?clients.map(x=>'<div class="s268-catalogrow"><div><b>'+esc(x.name)+'</b><small>'+
+   esc(x.code||x.id)+' · '+esc(x.manager_name||'')+' · история 1С: '+esc(x.history_rows)+' строк</small></div>'+
+   '<button class="s268-secondary" data-s268-client-pick="'+esc(x.id)+'">Выбрать</button></div>').join(''):'<p class="s268-muted">Совпадений для вашей роли не найдено.</p>';
+  state.clientOptions=clients;
+ }catch(e){host.textContent='Поиск клиента: '+str(e.message||e)}
+}
+async function chooseClient(id){
+ const p=standRows().find(x=>x.id===state.detailId);
+ const c=rows(state.clientOptions).find(x=>x.id===id);
+ if(!p||!c)return;
+ state.clientCandidate=c;
+ const host=el('s268-client-selected');host.innerHTML='<p class="s268-verify-row"><b>Выбрано юрлицо:</b> '+esc(c.name)+'</p>'+
+ '<label>Торговая точка (если есть подтверждённая связь)</label><select class="s268-input" id="s268-point-select"><option value="">ТТ не подтверждена — оставить пустой</option></select>';
+ try{
+  const points=rows(await rpc('crm_stands_points_find_v3',{p_placement_id:p.id,p_legal_client_id:c.id}));
+  const sel=el('s268-point-select');if(sel)sel.innerHTML+=[...points].map(x=>
+   '<option value="'+esc(x.id)+'">'+esc([x.city,x.address].filter(Boolean).join(', '))+'</option>').join('');
+ }catch(e){host.innerHTML+='<p class="s268-muted">Точки недоступны: '+esc(e.message||e)+'</p>'}
+}
+async function saveClient(){
+ const p=standRows().find(x=>x.id===state.detailId),c=state.clientCandidate;
+ if(!p||!c)return alert('Сначала выберите юридическое лицо из базы клиентов.');
+ if(!confirm('Подтвердить связь стенда с юридическим лицом «'+c.name+'» для анализа 1С?'))return;
+ try{
+  await rpc('crm_stands_client_bind_v3',{p_placement_id:p.id,p_legal_client_id:c.id,p_point_id:el('s268-point-select')?.value||null});
+  await refresh();await detail(p.id);alert('Связь подтверждена. Исходный клиент и история стенда сохранены.');
+ }catch(e){alert('Ошибка привязки: '+str(e.message||e))}
+}
+
 function photoForm(id){
  const p=standRows().find(x=>x.id===id);if(!p)return;
  modal('Актуальное фото нашего стенда',p.client_name+' · '+(p.asset_code||'ОС не сверено'),
@@ -318,43 +504,72 @@ async function request(id){
 function skuForm(index){
  const p=standRows().find(x=>x.id===state.detailId),item=state.skuRows[index];
  if(!p||!item)return;
- if(/[2-9][0-9]*\s*скю/i.test(str(item.raw_sku))){
-  alert('В записи перечислены несколько товаров. Нужно добавить точные артикулы поштучно через «Учёт и документы → Действующие / ОС». Один артикул не заменяет несколько SKU.');
-  return;
- }
  state.matchRow=item;
- modal('Уточнить артикул · '+p.client_name,'Исходная запись: '+item.raw_sku,
- '<p class="s268-muted">Выберите точную модель из каталога. Оригинальная запись сохранится. После подтверждения обновятся отгрузки 1С.</p>'+
- '<input id="s268-catalog-query" class="s268-input" placeholder="Поиск по модели, названию или артикулу">'+
- '<div class="s268-buttongroup"><button class="s268-primary" data-s268-find>Поиск по каталогу</button></div>'+
- '<div class="s268-cataloglist" id="s268-catalog-list">Введите не менее трёх символов. Если модель по фото не читается, запросите у продавца крупный план.</div>',
- '<button class="s268-secondary" data-s268-detail="'+esc(p.id)+'">Назад к карточке</button>');
+ state.selectedSkus=new Map(rows(item.effective_skus).filter(Boolean).map(s=>[str(s),str(s)]));
+ const expected=Number(item.expected)||1;
+ modal('Артикулы стенда · '+p.client_name,'Исходная запись: '+item.raw_sku,
+ '<p class="s268-verify-row">Добавляйте несколько точных SKU прямо здесь — без перехода в старый раздел. Исходная запись сохраняется, все изменения фиксируются в истории.</p>'+
+ '<div id="s268-selected-summary"></div>'+
+ '<label>Найти артикул или модель в каталоге</label>'+
+ '<input id="s268-catalog-query" class="s268-input" placeholder="Например: УШМ, ВИХРЬ, 73/12…">'+
+ '<div class="s268-buttongroup"><button class="s268-secondary" data-s268-find>Найти в каталоге</button></div>'+
+ '<div id="s268-catalog-list" class="s268-cataloglist">Введите название, модель или артикул. Можно искать повторно — выбранные позиции останутся в списке.</div>',
+ '<button class="s268-primary" data-s268-save-group>Сохранить выбранные SKU</button>'+
+ '<button class="s268-secondary" data-s268-detail="'+esc(p.id)+'">Назад</button>');
+ renderSelectedSku();
  el('s268-catalog-query')?.focus();
+}
+function renderSelectedSku(){
+ const host=el('s268-selected-summary');if(!host)return;
+ const expected=Math.max(1,Number(state.matchRow?.expected)||1),got=state.selectedSkus.size;
+ host.innerHTML='<div class="s268-verify-row"><b>Выбрано '+got+' из '+expected+
+ ' заявленных SKU.</b> '+(got<expected?'Можно сохранить частично, но оценка продаж останется предварительной до полной сверки.':'Группа готова к подтверждению.')+'</div>'+
+ '<div class="s268-sku-selected">'+[...state.selectedSkus.keys()].map(s=>
+ '<span class="s268-sku-tag">'+esc(s)+' <button data-s268-drop="'+esc(s)+'" aria-label="Удалить SKU">×</button></span>').join('')+'</div>';
 }
 async function findCatalog(){
  const p=standRows().find(x=>x.id===state.detailId),host=el('s268-catalog-list');
  if(!p||!host)return;
- const term=str(el('s268-catalog-query')?.value).trim();
- if(term.length<3){host.textContent='Введите минимум три символа.';return}
- host.textContent='Ищу по каталогу РЕСАНТА…';
+ const q=str(el('s268-catalog-query')?.value).trim();
+ if(q.length<3){host.textContent='Введите минимум три символа.';return}
+ host.textContent='Ищу точные позиции в каталоге…';
  try{
-  const result=await rpc('crm_stands_catalog_v236350',{p_placement_id:p.id,p_category:null,p_subgroup:null,
-   p_search:term,p_brand_only:false,p_mo2_only:false,p_limit:80});
-  const candidates=rows(result?.rows).filter(x=>x.sku);
-  host.innerHTML=candidates.length?candidates.map(x=>'<div class="s268-catalogrow"><div><b>'+
-   esc(x.product_name||x.sku)+'</b><small>SKU: '+esc(x.sku)+' · '+esc(x.category||'')+'</small></div>'+
-   '<button class="s268-secondary" data-s268-apply="'+esc(x.sku)+'">Подтвердить</button></div>').join(''):
-   '<div class="s268-muted">Не найдено. Проверьте название и полноту каталога.</div>';
- }catch(e){host.textContent='Каталог недоступен: '+str(e?.message||e)}
+  const result=await rpc('crm_stands_catalog_v236350',{p_placement_id:p.id,p_category:null,
+   p_subgroup:null,p_search:q,p_brand_only:false,p_mo2_only:false,p_limit:80});
+  const options=rows(result?.rows).filter(x=>x.sku);
+  state.catalogOptions=options;
+  host.innerHTML=options.length?options.map(x=>'<div class="s268-catalogrow"><div><b>'+
+   esc(x.product_name||x.sku)+'</b><small>Артикул: '+esc(x.sku)+' · '+esc(x.category||'')+'</small></div>'+
+   '<button class="s268-secondary" data-s268-add="'+esc(x.sku)+'">'+
+   (state.selectedSkus.has(x.sku)?'Добавлено ✓':'Добавить +')+'</button></div>').join(''):
+   '<p class="s268-muted">Ничего не найдено. Уточните модель по фото или у продавца.</p>';
+ }catch(e){host.textContent='Каталог: '+str(e.message||e)}
 }
-async function applySku(sku,btn){
- const p=standRows().find(x=>x.id===state.detailId),item=state.matchRow;if(!p||!item)return;
- btn.disabled=true;btn.textContent='Сверяю…';
+function selectCatalogSku(sku){
+ const row=rows(state.catalogOptions).find(x=>str(x.sku)===sku);
+ if(!row)return;
+ if(state.selectedSkus.size>=100&&!state.selectedSkus.has(sku))return alert('За один раз можно сверить не более 100 SKU.');
+ state.selectedSkus.set(sku,row.product_name||sku);
+ renderSelectedSku();
+ const button=[...document.querySelectorAll('[data-s268-add]')].find(x=>x.dataset.s268Add===sku);
+ if(button)button.textContent='Добавлено ✓';
+}
+async function saveSkuGroup(btn){
+ const p=standRows().find(x=>x.id===state.detailId),item=state.matchRow;
+ if(!p||!item)return;
+ const values=[...state.selectedSkus.keys()];
+ if(!values.length)return alert('Выберите хотя бы один артикул из каталога.');
+ const target=Number(item.expected)||1;
+ if(values.length<target&&!confirm('Сверено '+values.length+' из '+target+' позиций. Сохранить как частичную сверку?'))return;
+ btn.disabled=true;btn.textContent='Проверяю артикулы…';
  try{
-  await rpc('crm_stands_sku_link_v2',{p_placement_id:p.id,p_raw_sku:item.raw_sku,p_catalog_sku:sku});
+  const out=await rpc('crm_stands_multi_sku_save_v3',{p_placement_id:p.id,p_raw_sku:item.raw_sku,p_catalog_skus:values});
   await refresh();await detail(p.id);
- }catch(e){alert('Сверка не сохранена: '+str(e?.message||e));btn.disabled=false;btn.textContent='Подтвердить'}
+  alert('Сохранено '+out.selected+' SKU. Исходная запись осталась в истории. '+
+   (out.complete?'Сверка группы завершена.':'Остальные SKU ещё нужно уточнить.'));
+ }catch(e){alert('Не удалось сохранить SKU: '+str(e.message||e));btn.disabled=false;btn.textContent='Сохранить выбранные SKU'}
 }
+
 document.addEventListener('click',e=>{
  const close=e.target.closest?.('[data-s268-close]');if(close){el('s268-overlay')?.remove();return}
  const view=e.target.closest?.('[data-s268-view]');if(view){state.view=view.dataset.s268View;paint();return}
@@ -365,7 +580,17 @@ document.addEventListener('click',e=>{
  const uploadBtn=e.target.closest?.('[data-s268-upload]');if(uploadBtn){upload(uploadBtn.dataset.s268Upload,uploadBtn);return}
  const match=e.target.closest?.('[data-s268-match]');if(match){skuForm(Number(match.dataset.s268Match));return}
  const find=e.target.closest?.('[data-s268-find]');if(find){findCatalog();return}
- const apply=e.target.closest?.('[data-s268-apply]');if(apply){applySku(apply.dataset.s268Apply,apply);return}
+ const full=e.target.closest?.('[data-s268-full]');if(full){openOriginalPhoto(full.dataset.s268Full);return}
+ const v=e.target.closest?.('[data-s268-vision]');if(v){rerunVision(v.dataset.s268Vision,v);return}
+ const legal=e.target.closest?.('[data-s268-client]');if(legal){clientForm(legal.dataset.s268Client);return}
+ const cf=e.target.closest?.('[data-s268-client-find]');if(cf){findClients();return}
+ const choice=e.target.closest?.('[data-s268-client-pick]');if(choice){chooseClient(choice.dataset.s268ClientPick);return}
+ if(e.target.closest?.('[data-s268-client-save]')){saveClient();return}
+ const ar=e.target.closest?.('[data-s268-asset]');if(ar){assetForm(ar.dataset.s268Asset);return}
+ const ac=e.target.closest?.('[data-s268-asset-confirm]');if(ac){assetConfirm(ac.dataset.s268AssetConfirm);return}
+ const add=e.target.closest?.('[data-s268-add]');if(add){selectCatalogSku(add.dataset.s268Add);return}
+ const drop=e.target.closest?.('[data-s268-drop]');if(drop){state.selectedSkus.delete(drop.dataset.s268Drop);renderSelectedSku();return}
+ const saveGroup=e.target.closest?.('[data-s268-save-group]');if(saveGroup){saveSkuGroup(saveGroup);return}
  if(e.target.closest?.('[data-s268-search]')){state.search=str(el('s268-search')?.value);paint();return}
 },true);
 document.addEventListener('change',e=>{
@@ -376,13 +601,14 @@ document.addEventListener('keydown',e=>{
  if(e.key==='Enter'&&e.target?.id==='s268-search'){e.preventDefault();state.search=e.target.value;paint()}
  if(e.key==='Enter'&&e.target?.id==='s268-catalog-query'){e.preventDefault();findCatalog()}
  if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-s268-detail]')){e.preventDefault();detail(e.target.dataset.s268Detail)}
- if(e.key==='Escape')el('s268-overlay')?.remove();
+ if(e.key==='Enter'&&e.target?.id==='s268-client-query'){e.preventDefault();findClients()}
+ if(e.key==='Escape'){if(el('s268-photo-overlay')){el('s268-photo-overlay').remove();e.stopImmediatePropagation();return}el('s268-overlay')?.remove();}
 },true);
 function render(){
  attachCSS();if(!el('st360-root'))return;
  if(!state.data&&!state.loading&&!state.error)refresh();else paint();
 }
-window.RESANTA_STANDS_360_V1=Object.freeze({render,refresh,version:'stands360-uni-ai-v2',
+window.RESANTA_STANDS_360_V1=Object.freeze({render,refresh,version:'stands360-feedback-v3',
  gpsRequired:false, skuVerified:true, originalDataUntouched:true});
 if(el('st360-root'))render();
 })();

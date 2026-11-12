@@ -24,7 +24,7 @@ test('one director screen and a separate collapsible legacy document section',()
  assert.match(ui,/s268-table/);
  assert.match(shell,/if\(state\.tab==='overview360'\)return ''/);
  assert.match(loader,/268-stands360-uniai-unix-v2\.js/);
- assert.match(index,/20261111-stands360-uniai-v2/);
+ assert.match(index,/20261112-stands360-feedback-v3/);
  assert.match(css,/s268-pipeline/);
 });
 test('unverified stock descriptions cannot be labelled zero sales and source 1C remains protected',()=>{
@@ -46,7 +46,7 @@ test('SKU is confirmed against the exact catalog and original descriptions remai
  assert.match(sql,/p\.manager_name is distinct from n/);
  assert.match(sql,/Список нескольких SKU|список нескольких SKU/i);
  assert.match(ui,/crm_stands_catalog_v236350/);
- assert.match(ui,/crm_stands_sku_link_v2/);
+ assert.match(ui,/crm_stands_multi_sku_save_v3/);
 });
 test('Vision and seller photographs stay route/GPS-independent, return is never automatic',()=>{
  assert.match(ui,/crm_stands_photo_control_v1/);
