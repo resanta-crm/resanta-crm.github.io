@@ -1,0 +1,32 @@
+name: Lera director private text history frontend
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/143-resanta-ai360-unified-dialog-v1.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/217-lera360-history-v1.js'
+      - 'index.html'
+      - 'tests/lera360-director-history-ui-v1.test.mjs'
+      - '.github/workflows/lera360-director-history-ui-ci.yml'
+permissions: { contents: read }
+jobs:
+  director:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify safe history script and existing voice syntax
+        run: |
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node --check assets/137-resanta-ai360-lazy-launch-v1.js
+          node --check assets/217-lera360-history-v1.js
+      - name: No cross-user history or CRM write regressions
+        run: |
+          node --test tests/lera360-director-history-ui-v1.test.mjs
+          node tests/ai360-unified-dialog-v1.test.cjs
+          node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
