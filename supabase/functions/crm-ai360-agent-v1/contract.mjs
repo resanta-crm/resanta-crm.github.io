@@ -1,8 +1,8 @@
 // RESANTA AI Agent 360 - phase 1 contract. NOT an authorization mechanism on the client.
 // Exact role / user checks are inherited from the existing server-side AI360 pilots.
 // No generic database tools or CRM write operations are exposed here.
-import {CRM_AI360_ALL_DOMAINS} from '../crm-ai360-dialog-v4/catalog.mjs';
-import {staffPermission} from '../crm-ai360-staff-dialog-v1/permissions.mjs';
+import {CRM_AI360_ALL_DOMAINS} from './catalog.mjs';
+import {staffPermission} from './permissions.mjs';
 
 export const AGENT360_OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const normalize=x=>String(x||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU').replaceAll('ё','е');
