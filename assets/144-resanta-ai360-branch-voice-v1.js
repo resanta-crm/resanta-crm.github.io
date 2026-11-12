@@ -249,7 +249,7 @@ async function read(q){
   return;
  }
  if(!parsed.domain){
-  show('Уточни раздел: продажи, ПДЗ, задачи, маршруты, визиты, GPS, остатки или клиенты.');
+  show('Не распознала нужный раздел CRM. Спроси о продажах, задачах или просто поговори со мной.');
   return;
  }
  if(parsed.domain==='client_detail'&&!parsed.client_name){
@@ -346,7 +346,7 @@ function buildPanel(){
  note.textContent=role()?.can_create_tasks?'Директор филиала · данные Витебска · поручения после подтверждения':role()?.tier==='triovist_category'?'Триовист · только закреплённые категории 21vek · без создания поручений':'Менеджер · только мои клиенты и задачи · без создания поручений';
  const entry=document.createElement('div');entry.style.cssText='display:flex;gap:8px;';
  field=document.createElement('input');field.type='text';field.maxLength=350;
- field.placeholder='Например: продажи Руднева или ПДЗ филиала';
+ field.placeholder='Спроси Леру о чём угодно или о своей CRM…';
  field.setAttribute('aria-label','Вопрос Лере');
  field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit();}});
  send=document.createElement('button');send.type='button';send.textContent='➤';send.addEventListener('click',submit);
