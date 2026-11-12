@@ -38,7 +38,7 @@ test('Read the named CRM section before generating model answer',async()=>{
 });
 test('Never silently downgrade to the legacy AI dialog',()=>{
  const s=source('assets/143-resanta-ai360-unified-dialog-v1.js');
- assert.ok(s.includes("const ENDPOINT='crm-ai360-dialog-v4'"));
+ assert.ok(s.includes("const ENDPOINT='crm-ai360-agent-v1'"));
  assert.ok(!s.includes('crm-ai360-dialog-v3'));
  assert.ok(!s.includes('pilotFallback'));
 });
