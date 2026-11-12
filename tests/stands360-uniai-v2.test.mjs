@@ -24,7 +24,7 @@ test('one director screen and a separate collapsible legacy document section',()
  assert.match(ui,/s268-table/);
  assert.match(shell,/if\(state\.tab==='overview360'\)return ''/);
  assert.match(loader,/268-stands360-uniai-unix-v2\.js/);
- assert.match(index,/20261111-stands360-uniai-v2/);
+ assert.match(index,/20261112-stands360-feedback-v3/);
  assert.match(css,/s268-pipeline/);
 });
 test('unverified stock descriptions cannot be labelled zero sales and source 1C remains protected',()=>{
