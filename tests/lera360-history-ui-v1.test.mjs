@@ -32,7 +32,7 @@ function context(){
    if(body.action==='history:enable'){settings.history_enabled=body.enabled;return {data:settings};}
    return {error:{message:'invalid_action'}};
   }}}};
- const ctx={window:win,document:{createElement:make},console,setTimeout,Date,Promise};
+ const ctx={window:win,currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},document:{createElement:make},console,setTimeout,Date,Promise};
  vm.runInNewContext(js,ctx,{filename:file});
  return {win,invoked,elements,make};
 }
@@ -59,7 +59,7 @@ test('printed stored user text is textContent, never executable innerHTML',()=>{
 test('per-user auth gate is checked before every history action',()=>{
  assert.match(js,/options\.allowed\?\.\(\)===true/);
  assert.match(js,/session\?\.access_token/);
- assert.match(js,/db\.functions\.invoke\(API,\{body:\{action,\.\.\.data\}\}\)/);
+ assert.match(js,/crm\(\)\.functions\.invoke\(API,\{body:\{action,\.\.\.data\}\}\)/);
  assert.doesNotMatch(js,/SUPABASE_SERVICE_ROLE_KEY|service_role|localStorage|sessionStorage/);
 });
 test('user can clear history, disable history and correct one answer',()=>{
@@ -74,8 +74,29 @@ test('user can clear history, disable history and correct one answer',()=>{
 });
 test('HTML script wiring loads history UI before lazy director and staff modules',()=>{
  const html=fs.readFileSync('index.html','utf8');
- const a=html.indexOf('217-lera360-history-ui-v1.js?v=1');
+ const a=html.indexOf('217-lera360-history-ui-v1.js?v=2');
  const b=html.indexOf('137-resanta-ai360-lazy-launch-v1.js?v=39');
  const c=html.indexOf('144-resanta-ai360-branch-voice-v1.js?v=');
  assert.ok(a>0&&a<b&&a<c);
+});
+
+
+test('history UI binds the visible transcript to the original signed-in identity',()=>{
+ assert.match(js,/ownerId=currentId\(\)/);
+ assert.match(js,/currentId\(\)===ownerId/);
+ assert.match(js,/onAuthStateChange/);
+ assert.match(js,/list\.replaceChildren\(\);enabled=false;wrapper\.open=false/);
+ assert.match(js,/typeof db!=='undefined'\?db:root\.db/);
+});
+test('director-only history hook never touches mic and only runs after a panel click',()=>{
+ const hook=fs.readFileSync('assets/218-lera360-director-history-hook-v1.js','utf8');
+ const html=fs.readFileSync('index.html','utf8');
+ assert.match(hook,/rva-launch/);
+ assert.match(hook,/crmAI360GreetingV1/);
+ assert.match(hook,/DIRECTORS\.has\(p\.id\)/);
+ assert.match(hook,/crmAI360HistoryUIV1\?\.mount\(slot/);
+ assert.doesNotMatch(hook,/getUserMedia|MediaRecorder|speechSynthesis|innerHTML/);
+ const h=html.indexOf('218-lera360-director-history-hook-v1.js?v=1');
+ const lazy=html.indexOf('137-resanta-ai360-lazy-launch-v1.js?v=39');
+ assert.ok(h>0&&h<lazy);
 });

@@ -15,7 +15,17 @@
  function mount(host,options={}){
   if(!host||typeof host.appendChild!=='function')return null;
   if(host.querySelector?.('[data-lera-history-ui="v1"]'))return null;
-  const permitted=()=>{try{return options.allowed?.()===true;}catch{return false;}};
+  // An in-place account switch must never reuse a previous person's DOM
+  // history. Bind this mount to the exact authenticated CRM identity.
+  const currentId=()=>{try{
+   return typeof currentUser!=='undefined'?String(currentUser?.id||''):'';
+  }catch{return '';}};
+  const ownerId=currentId();
+  // CRM uses a global lexical 'const db' (not necessarily window.db).
+  const crm=()=>{try{return typeof db!=='undefined'?db:root.db;}catch{return root.db;}};
+  const permitted=()=>{try{
+   return !!ownerId&&currentId()===ownerId&&options.allowed?.()===true;
+  }catch{return false;}};
   const wrapper=element('details',undefined,
    'font-size:12px;color:#31577c;border:1px solid #d3e2f1;border-radius:10px;padding:8px;background:#f8fbff;min-width:190px;max-height:290px;overflow:auto');
   wrapper.setAttribute('data-lera-history-ui','v1');
@@ -57,9 +67,9 @@
    if(!permitted())throw Error('Проверь вход в CRM.');
    const session=typeof root.crmEnsureFreshSessionV236166==='function'
     ?await root.crmEnsureFreshSessionV236166(false)
-    :await root.db?.auth?.getSession?.().then(x=>x?.data?.session);
+    :await crm()?.auth?.getSession?.().then(x=>x?.data?.session);
    if(!session?.access_token)throw Error('Сессия истекла. Войди заново.');
-   const res=await root.db.functions.invoke(API,{body:{action,...data}});
+   const res=await crm().functions.invoke(API,{body:{action,...data}});
    if(res.error||res.data?.error){
     let code=String(res.data?.error||'');
     if(!code&&res.error?.context?.json){try{code=String((await res.error.context.json())?.error||'');}catch{}}
@@ -127,6 +137,13 @@
     'Личная память включена. Новые вопросы появятся здесь после ответа Леры.';
    for(const item of turns)list.appendChild(card(item));
   }
+  // Clear visible confidential transcript on logout/account switch.
+  crm()?.auth?.onAuthStateChange?.((_event,session)=>{
+   if(session?.user?.id!==ownerId){
+    list.replaceChildren();enabled=false;wrapper.open=false;
+    status.textContent='Сессия изменилась. Открой CRM заново.';
+   }
+  });
   wrapper.addEventListener('toggle',()=>{if(wrapper.open)void busyCall(render);});
   body.append(note,toolbar,status,list);wrapper.append(summary,body);
   host.appendChild(wrapper);

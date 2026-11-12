@@ -131,6 +131,6 @@ test('Staff history panel is a user-initiated text-only view scoped to signed-in
  assert.match(client,/history:clear/);
  assert.match(client,/history:enable/);
  assert.doesNotMatch(client,/\.innerHTML\s*=/);
- assert.match(page,/217-lera360-history-ui-v1\.js\?v=1/);
+ assert.match(page,/217-lera360-history-ui-v1\.js\?v=\d+/);
  assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
 });
