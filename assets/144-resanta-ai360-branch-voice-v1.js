@@ -305,6 +305,8 @@ function submit(){
  field.value='';const line=document.createElement('div');line.textContent='Вы: '+question;
  line.style.cssText='padding:8px 4px;font-size:12px;color:#445b77;';
  log.appendChild(line);log.scrollTop=log.scrollHeight;
+ // One shared signed agent bridge; existing task pilot remains as fallback.
+ if(root.crmAI360ActionHandleV1?.(question,{show,setStatus,authorized:panelVisible}))return;
  // Voice task commands are handled before ordinary read-only analytic questions.
  if(root.crmAI360BranchTaskHandleV1?.(question))return;
  if(root.crmLprV1?.voice(question,{answer:show}))return;
@@ -388,7 +390,7 @@ function buildPanel(){
   panel,authorized:panelVisible,
   onTranscript:q=>{if(panelVisible()&&field){field.value=q;submit();}},
   onStatus:setStatus,
-  onBusy:()=>busy||root.crmAI360BranchUnifiedIsPendingV1?.()===true
+  onBusy:()=>busy||root.crmAI360BranchUnifiedIsPendingV1?.()===true||root.crmAI360ActionBusyV1?.()===true
  });
 }
 async function open(){

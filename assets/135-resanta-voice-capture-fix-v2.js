@@ -214,7 +214,7 @@
    // Keep the microphone inactive until speech actually ends or is stopped.
    const until=Date.now()+120000;
    while(epoch===listenEpoch && mode===expectedMode && isOwner() && panel && !panel.hidden && !document.hidden &&
-         Date.now()<until && (window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1 ||
+         Date.now()<until && (window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1 || window.__resantaAI360ActionBusyV1 ||
                               window.speechSynthesis?.speaking)){
      await new Promise(r=>setTimeout(r,120));
    }
@@ -257,7 +257,7 @@
          await stopAll('Сеанс записи завершён. Включи фразу снова.');break;
        }
        if(clipCount>=50){await stopAll('Завершил сеанс для ограничения расходов на распознавание.');break;}
-       if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1){await new Promise(r=>setTimeout(r,350));continue;}
+       if(window.speechSynthesis?.speaking || window.__resantaVoiceOutputBusy || window.__resantaAI360PendingV1 || window.__resantaAI360ActionBusyV1){await new Promise(r=>setTimeout(r,350));continue;}
        if(!stream?.active){await stopAll('Микрофон отключился. Проверь устройство ввода Яндекс Браузера.');break;}
        const clip=await capture(12,epoch);
        if(epoch!==listenEpoch||mode!=='wake')break;
