@@ -1,0 +1,60 @@
+name: AI Agent 360 isolated foundation tests
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'supabase/functions/crm-ai360-director-peer-v1/**'
+      - 'assets/210-resanta-agent360-single-entry-v1.js'
+      - 'tests/ai360-agent360-*.test.mjs'
+      - '.github/workflows/ai360-agent360-foundation-ci.yml'
+      - 'index.html'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'assets/210-resanta-agent360-single-entry-v1.js'
+      - 'tests/ai360-agent360-*.test.mjs'
+      - '.github/workflows/ai360-agent360-foundation-ci.yml'
+      - 'index.html'
+permissions:
+  contents: read
+jobs:
+  isolation-and-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax of the new gateway and browser adapter
+        run: |
+          node --check supabase/functions/crm-ai360-agent-v1/contract.mjs
+          node --check supabase/functions/crm-ai360-agent-v1/conversation.mjs
+          node --check --input-type=module < supabase/functions/crm-ai360-director-peer-v1/index.ts
+          node --check --input-type=module < supabase/functions/crm-ai360-agent-v1/index.ts
+          node --check assets/210-resanta-agent360-single-entry-v1.js
+      - name: Verify menu coverage, RBAC, no writes, no eager requests
+        run: node --test tests/ai360-agent360-*.test.mjs
+      - name: Verify old 34-domain and staff-scope contracts
+        run: |
+          node --test tests/ai360-all-34-domain-coverage.test.mjs
+          node --test tests/ai360-staff-scoped-roles.test.mjs
+          node --test tests/ai360-core-v4-smoke.test.mjs
+      - name: Unauthenticated production gateway must reject anonymous clients
+        env:
+          AI_AGENT_URL: https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-agent-v1
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' \
+            --data '{"action":"capabilities"}' "${AI_AGENT_URL}")"
+          test "${status}" = '401'
+      - name: Unauthenticated director peer must deny anonymous clients
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --max-time 20 --output /dev/null --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' \
+            --data '{"message":"Покажи продажи"}' \
+            'https://baqchjtvtmcfzwjjluhs.supabase.co/functions/v1/crm-ai360-director-peer-v1')"
+          test "${status}" = '401'
