@@ -19,7 +19,8 @@ function context(voice,options={}){
   addEventListener:()=>{},crmEnsureFreshSessionV236166:async()=>({access_token:'test'})};
  const sandbox={
   window,document,navigator:{userAgent:'Mozilla/5.0 (Windows NT 10.0)'},
-  currentUser:{id:'test'},currentProfile:{role:'boss',name:'Александр Паюшин'},
+  currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},
+  currentProfile:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',role:'boss',name:'Александр Паюшин',region:'Витебск'},
   URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{}},
   db:{functions:{invoke:async(name,{body})=>{
     assert.equal(name,'crm-voice-yandex-tts-v1');
@@ -32,6 +33,12 @@ function context(voice,options={}){
   Audio:FakeAudio,Blob,Uint8Array,console,setTimeout,clearTimeout,
   speechSynthesis:synthesis
  };
+ // Use the real UI identity resolver rather than bypassing the production
+ // account guard. Previously this test used a fake director ID, so it falsely
+ // failed after correct role-bound voice authorization was introduced.
+ vm.runInNewContext(fs.readFileSync('assets/215-lera360-personal-greeting-v1.js','utf8'),
+   sandbox,{filename:'personal-greeting-v1.js'});
+ assert.equal(window.crmAI360GreetingV1()?.greeting,'Привет, родной! Чем помочь?');
  vm.runInNewContext(code,sandbox,{filename:'voice-quality-v3.js'});
  assert(typeof window.crmAI360SpeechChunksV4==='function');
  return {window,document,invoked,consents};
