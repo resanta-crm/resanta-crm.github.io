@@ -1,0 +1,21 @@
+name: Lera verified Petrovichev TTS and STT scope
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/crm-voice-yandex-tts-v1/index.ts'
+      - 'supabase/functions/crm-voice-transcribe-v1/index.ts'
+      - 'tests/lera-petrovichev-voice-scope-20261112.test.mjs'
+      - '.github/workflows/lera-petrovichev-speech-scope-20261112.yml'
+permissions:
+  contents: read
+jobs:
+  exact-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check account binding and usage counters
+        run: node --test tests/lera-petrovichev-voice-scope-20261112.test.mjs

@@ -86,7 +86,7 @@ test('Shared premium speech and OpenAI text backend rechecks exact user profiles
   for(const id of Object.values(USER_IDS))assert.ok(s.includes(id),id);
   assert.match(s,/FIELD_IDS\.has\(user\.id\)/);
   assert.match(s,/region==='Витебск'/);
-  assert.match(s,/!isOwner&&!isBranch&&!isField&&!isTriovist/);
+  assert.match(s,/!isOwner&&!isPeer&&!isBranch&&!isField&&!isTriovist/);
  }
  assert.match(server,/staffPermission\(userId,prof\.data\)/);
  assert.match(server,/permission\.tier==='branch_director'\?NAMES:\[permission\.name\]/);
