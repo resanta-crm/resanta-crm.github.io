@@ -129,7 +129,7 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  assert(pilot.includes('lastDetailedResponse')&&pilot.includes('briefVoiceText')&&pilot.includes('Озвучиваю предыдущий ответ полностью.'),'short voice and on-demand full replay');
  assert(pilot.includes('rva-stop-audio')&&pilot.includes('crmResantaVoiceStopV3'),'visible stop-speech action is wired');
  assert(pilot.includes('options.speechSummary'),'server summary is used for short audio');
- assert(p.includes('partialHelloAt')&&p.includes('Date.now()-partialHelloAt<=15000'),'split greeting recover');
+ assert(p.includes('partialHelloAt')&&p.includes('now-partialHelloAt<=15000'),'split greeting recover');
  assert(p.includes("Услышала «Привет»."),'single hello must request second wake word');
  console.log('Manager scope continuity, greeting, Russian customer references, concise voice and gratitude: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
