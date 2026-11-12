@@ -264,8 +264,8 @@ function localSpeak(msg,run){
 }
 async function cloudSpeak(msg,voice,run,provider='openai'){
  const isYandex=provider==='yandex';
- const voiceText=msg;
- if(isYandex && msg.length>240)throw new Error('voice_chunk_too_long');
+ const voiceText=isYandex&&typeof window.crmAI360ApplySpeechAccentsV1==='function'?window.crmAI360ApplySpeechAccentsV1(msg):msg;
+ if(isYandex && voiceText.length>240)throw new Error('voice_chunk_too_long');
  const session=await window.crmEnsureFreshSessionV236166?.(false).catch(()=>null);
  if(!session?.access_token)throw new Error('no_session');
  if(!isYandex)setStatus('Готовлю естественный голос…'); // keep per-part progress visible for Lera/Dasha
