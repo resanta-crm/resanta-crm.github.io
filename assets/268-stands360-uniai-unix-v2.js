@@ -488,43 +488,72 @@ async function request(id){
 function skuForm(index){
  const p=standRows().find(x=>x.id===state.detailId),item=state.skuRows[index];
  if(!p||!item)return;
- if(/[2-9][0-9]*\s*скю/i.test(str(item.raw_sku))){
-  alert('В записи перечислены несколько товаров. Нужно добавить точные артикулы поштучно через «Учёт и документы → Действующие / ОС». Один артикул не заменяет несколько SKU.');
-  return;
- }
  state.matchRow=item;
- modal('Уточнить артикул · '+p.client_name,'Исходная запись: '+item.raw_sku,
- '<p class="s268-muted">Выберите точную модель из каталога. Оригинальная запись сохранится. После подтверждения обновятся отгрузки 1С.</p>'+
- '<input id="s268-catalog-query" class="s268-input" placeholder="Поиск по модели, названию или артикулу">'+
- '<div class="s268-buttongroup"><button class="s268-primary" data-s268-find>Поиск по каталогу</button></div>'+
- '<div class="s268-cataloglist" id="s268-catalog-list">Введите не менее трёх символов. Если модель по фото не читается, запросите у продавца крупный план.</div>',
- '<button class="s268-secondary" data-s268-detail="'+esc(p.id)+'">Назад к карточке</button>');
+ state.selectedSkus=new Map(rows(item.effective_skus).filter(Boolean).map(s=>[str(s),str(s)]));
+ const expected=Number(item.expected)||1;
+ modal('Артикулы стенда · '+p.client_name,'Исходная запись: '+item.raw_sku,
+ '<p class="s268-verify-row">Добавляйте несколько точных SKU прямо здесь — без перехода в старый раздел. Исходная запись сохраняется, все изменения фиксируются в истории.</p>'+
+ '<div id="s268-selected-summary"></div>'+
+ '<label>Найти артикул или модель в каталоге</label>'+
+ '<input id="s268-catalog-query" class="s268-input" placeholder="Например: УШМ, ВИХРЬ, 73/12…">'+
+ '<div class="s268-buttongroup"><button class="s268-secondary" data-s268-find>Найти в каталоге</button></div>'+
+ '<div id="s268-catalog-list" class="s268-cataloglist">Введите название, модель или артикул. Можно искать повторно — выбранные позиции останутся в списке.</div>',
+ '<button class="s268-primary" data-s268-save-group>Сохранить выбранные SKU</button>'+
+ '<button class="s268-secondary" data-s268-detail="'+esc(p.id)+'">Назад</button>');
+ renderSelectedSku();
  el('s268-catalog-query')?.focus();
+}
+function renderSelectedSku(){
+ const host=el('s268-selected-summary');if(!host)return;
+ const expected=Math.max(1,Number(state.matchRow?.expected)||1),got=state.selectedSkus.size;
+ host.innerHTML='<div class="s268-verify-row"><b>Выбрано '+got+' из '+expected+
+ ' заявленных SKU.</b> '+(got<expected?'Можно сохранить частично, но оценка продаж останется предварительной до полной сверки.':'Группа готова к подтверждению.')+'</div>'+
+ '<div class="s268-sku-selected">'+[...state.selectedSkus.keys()].map(s=>
+ '<span class="s268-sku-tag">'+esc(s)+' <button data-s268-drop="'+esc(s)+'" aria-label="Удалить SKU">×</button></span>').join('')+'</div>';
 }
 async function findCatalog(){
  const p=standRows().find(x=>x.id===state.detailId),host=el('s268-catalog-list');
  if(!p||!host)return;
- const term=str(el('s268-catalog-query')?.value).trim();
- if(term.length<3){host.textContent='Введите минимум три символа.';return}
- host.textContent='Ищу по каталогу РЕСАНТА…';
+ const q=str(el('s268-catalog-query')?.value).trim();
+ if(q.length<3){host.textContent='Введите минимум три символа.';return}
+ host.textContent='Ищу точные позиции в каталоге…';
  try{
-  const result=await rpc('crm_stands_catalog_v236350',{p_placement_id:p.id,p_category:null,p_subgroup:null,
-   p_search:term,p_brand_only:false,p_mo2_only:false,p_limit:80});
-  const candidates=rows(result?.rows).filter(x=>x.sku);
-  host.innerHTML=candidates.length?candidates.map(x=>'<div class="s268-catalogrow"><div><b>'+
-   esc(x.product_name||x.sku)+'</b><small>SKU: '+esc(x.sku)+' · '+esc(x.category||'')+'</small></div>'+
-   '<button class="s268-secondary" data-s268-apply="'+esc(x.sku)+'">Подтвердить</button></div>').join(''):
-   '<div class="s268-muted">Не найдено. Проверьте название и полноту каталога.</div>';
- }catch(e){host.textContent='Каталог недоступен: '+str(e?.message||e)}
+  const result=await rpc('crm_stands_catalog_v236350',{p_placement_id:p.id,p_category:null,
+   p_subgroup:null,p_search:q,p_brand_only:false,p_mo2_only:false,p_limit:80});
+  const options=rows(result?.rows).filter(x=>x.sku);
+  state.catalogOptions=options;
+  host.innerHTML=options.length?options.map(x=>'<div class="s268-catalogrow"><div><b>'+
+   esc(x.product_name||x.sku)+'</b><small>Артикул: '+esc(x.sku)+' · '+esc(x.category||'')+'</small></div>'+
+   '<button class="s268-secondary" data-s268-add="'+esc(x.sku)+'">'+
+   (state.selectedSkus.has(x.sku)?'Добавлено ✓':'Добавить +')+'</button></div>').join(''):
+   '<p class="s268-muted">Ничего не найдено. Уточните модель по фото или у продавца.</p>';
+ }catch(e){host.textContent='Каталог: '+str(e.message||e)}
 }
-async function applySku(sku,btn){
- const p=standRows().find(x=>x.id===state.detailId),item=state.matchRow;if(!p||!item)return;
- btn.disabled=true;btn.textContent='Сверяю…';
+function selectCatalogSku(sku){
+ const row=rows(state.catalogOptions).find(x=>str(x.sku)===sku);
+ if(!row)return;
+ if(state.selectedSkus.size>=100&&!state.selectedSkus.has(sku))return alert('За один раз можно сверить не более 100 SKU.');
+ state.selectedSkus.set(sku,row.product_name||sku);
+ renderSelectedSku();
+ const button=[...document.querySelectorAll('[data-s268-add]')].find(x=>x.dataset.s268Add===sku);
+ if(button)button.textContent='Добавлено ✓';
+}
+async function saveSkuGroup(btn){
+ const p=standRows().find(x=>x.id===state.detailId),item=state.matchRow;
+ if(!p||!item)return;
+ const values=[...state.selectedSkus.keys()];
+ if(!values.length)return alert('Выберите хотя бы один артикул из каталога.');
+ const target=Number(item.expected)||1;
+ if(values.length<target&&!confirm('Сверено '+values.length+' из '+target+' позиций. Сохранить как частичную сверку?'))return;
+ btn.disabled=true;btn.textContent='Проверяю артикулы…';
  try{
-  await rpc('crm_stands_sku_link_v2',{p_placement_id:p.id,p_raw_sku:item.raw_sku,p_catalog_sku:sku});
+  const out=await rpc('crm_stands_multi_sku_save_v3',{p_placement_id:p.id,p_raw_sku:item.raw_sku,p_catalog_skus:values});
   await refresh();await detail(p.id);
- }catch(e){alert('Сверка не сохранена: '+str(e?.message||e));btn.disabled=false;btn.textContent='Подтвердить'}
+  alert('Сохранено '+out.selected+' SKU. Исходная запись осталась в истории. '+
+   (out.complete?'Сверка группы завершена.':'Остальные SKU ещё нужно уточнить.'));
+ }catch(e){alert('Не удалось сохранить SKU: '+str(e.message||e));btn.disabled=false;btn.textContent='Сохранить выбранные SKU'}
 }
+
 document.addEventListener('click',e=>{
  const close=e.target.closest?.('[data-s268-close]');if(close){el('s268-overlay')?.remove();return}
  const view=e.target.closest?.('[data-s268-view]');if(view){state.view=view.dataset.s268View;paint();return}
