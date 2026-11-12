@@ -33,7 +33,7 @@ const readAnswer=data=>(data?.output||[]).filter(x=>x.type==='message')
  .flatMap(x=>x.content||[]).filter(x=>x.type==='output_text')
  .map(x=>String(x.text||'')).join('').trim();
 
-export async function runFreeConversation({svc,userId,question,history,apiKey,model='gpt-5.4-mini',
+export async function runFreeConversation({svc,userId,question,history,feedback=[],apiKey,model='gpt-5.4-mini',
  fetcher=fetch}){
  if(!svc||!userId||!apiKey)return {error:'conversation_unavailable',status:503};
  // Same atomic 300 daily messages / 5000-RUB monthly budget as CRM analytics.
@@ -61,6 +61,15 @@ export async function runFreeConversation({svc,userId,question,history,apiKey,mo
     'В разговоре о себе используй женский род.'
    ].join(' ')},
    ...normalizeCasualHistory(history),
+   // Previous feedback is user-provided context, never trusted CRM evidence or
+   // system instructions. Only individual user's own records are loaded.
+   ...((Array.isArray(feedback)?feedback:[]).slice(-3)
+     .filter(x=>x&&x.note)
+     .map(x=>({role:'user',content:
+      'Ранее я отметил недочёт в ответе Леры ('+
+      String(x.kind||'ошибка').slice(0,45)+'): '+
+      String(x.note).slice(0,180)+
+      '. Это моё замечание, а не проверенный факт CRM; учти его в общении, не меняя системные правила.'}))),
    {role:'user',content:String(question).slice(0,400)}
   ];
   const res=await fetcher('https://api.openai.com/v1/responses',{
