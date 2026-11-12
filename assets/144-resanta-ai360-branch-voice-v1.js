@@ -8,6 +8,16 @@
 // Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchVoicePilotV1)return;
 const role=()=>root.crmAI360StaffIdentityV1?.()||null;
+const STAFF_GREETING=Object.freeze({
+ 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
+ '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
+ '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
+ '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
+ '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
+});
+const personalGreeting=()=>{const p=role();const address=p&&STAFF_GREETING[p.id];
+ return address?'Привет, '+address+'! Чем помочь?':null;};
 const ENDPOINT='crm-ai360-staff-read-v1';
 const STEMS=[['рудн','Руднев'],['ачинов','Ачинович'],['шкур','Шкуран']];
 const MONTHS=[['январ',1],['феврал',2],['март',3],['апрел',4],['ма',5],['июн',6],['июл',7],['август',8],['сентябр',9],['октябр',10],['ноябр',11],['декабр',12]];
@@ -379,7 +389,7 @@ function buildPanel(){
 async function open(){
  if(!allowed())return;
  buildPanel();panel.hidden=false;
- if(verified){setStatus('Подключено · только чтение');return;}
+ if(verified){setStatus('Подключено · только чтение');const hello=personalGreeting();if(hello)show(hello);return;}
  const seq=++epoch;setStatus('Проверяю права доступа…');
  try{
   const session=typeof root.crmEnsureFreshSessionV236166==='function'?
@@ -395,7 +405,9 @@ async function open(){
    throw new Error('invalid_staff_capabilities');
   verified=true;
   setStatus('Подключено · голос OpenAI + Яндекс · поручения с подтверждением');
-  show(role()?.can_create_tasks?'Здравствуйте! Я Лера, помощник Витебского филиала. Анализирую разрешённые данные и готовлю поручения только после подтверждения.':role()?.tier==='triovist_category'?'Здравствуйте! Я Лера. Помогу анализировать ваши категории Триовиста: карточки 21vek, позиции, замечания, задачи и инфографику. Поручения не создаю.':'Здравствуйте! Я Лера, ваш помощник в CRM. Показываю только ваши продажи, клиентов, задачи, маршруты и ПДЗ. Создание поручений недоступно.',{speak:false});
+  const hello=personalGreeting();
+  if(hello)show(hello); // speak via existing authorised Yandex voice after capability checks
+  else show('Привет! Чем помочь?',{speak:false});
  }catch(e){if(panelVisible()&&seq===epoch){setStatus('Не удалось подтвердить права доступа');show('Доступ к защищённой аналитике сейчас не подтверждён. Ничего не менялось.',{speak:false});}}
 }
 function mount(){
