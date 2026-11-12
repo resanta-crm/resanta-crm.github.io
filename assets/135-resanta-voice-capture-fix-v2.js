@@ -36,10 +36,12 @@
  }
  // Persist only explicit consent. Never auto-open the voice panel, never
  // start a microphone on the CRM login screen or when the tab is hidden.
+ const MIC_CONSENT_KEY='resanta-ai360-microphone-optin-v1';
  const AUTO_WAKE_KEY='resanta-ai360-wake-window-optin-v1';
  let autoWakeWanted=false,autoAttemptedThisOpen=false,lastOpen=false,autoWakeBlocked=false;
  try{autoWakeWanted=window.localStorage?.getItem(AUTO_WAKE_KEY)==='yes';}catch(_){}
- if(autoWakeWanted)userOptIn=true;
+ try{userOptIn=autoWakeWanted||window.localStorage?.getItem(MIC_CONSENT_KEY)==='yes';}
+ catch(_){userOptIn=autoWakeWanted;}
  function saveAutoWake(v){
    autoWakeWanted=!!v;
    try{
@@ -324,6 +326,7 @@
      const yes=window.confirm('РЕСАНТА AI: включить режим «Привет, Ресанта» и запомнить разрешение на этом компьютере? Микрофон будет работать ТОЛЬКО в открытом окне помощника и активной вкладке CRM. Звуковые фразы отправляются для распознавания через защищённый сервер CRM (до 60 фраз в сутки); записи в CRM не сохраняются. Режим выключается при закрытии окна или скрытии вкладки, и его можно отключить вручную. Разрешить?');
      if(!yes)return;
      userOptIn=true;
+     try{window.localStorage?.setItem(MIC_CONSENT_KEY,'yes');}catch(_){} // only AFTER explicit consent
    }
    if(newMode==='wake'){
      // No background consent dialogs on auto-reopen; if saved neural consent
