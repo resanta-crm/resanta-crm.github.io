@@ -16,10 +16,10 @@ function context(voice,options={}){
  const synthesis={cancel:()=>{},getVoices:()=>[]};
  const document={hidden:false,querySelector:()=>null,getElementById:()=>({style:{display:'block'}}),addEventListener:()=>{}};
  const window={localStorage:storage,speechSynthesis:synthesis,setInterval:()=>1,setTimeout:setTimeout,
-  addEventListener:()=>{},crmEnsureFreshSessionV236166:async()=>({access_token:'test'})};
+  addEventListener:()=>{},crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'}),crmEnsureFreshSessionV236166:async()=>({access_token:'test'})};
  const sandbox={
   window,document,navigator:{userAgent:'Mozilla/5.0 (Windows NT 10.0)'},
-  currentUser:{id:'test'},currentProfile:{role:'boss',name:'Александр Паюшин'},
+  currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},currentProfile:{role:'boss',name:'Александр Паюшин'},
   URL:{createObjectURL:()=> 'blob:test',revokeObjectURL:()=>{}},
   db:{functions:{invoke:async(name,{body})=>{
     assert.equal(name,'crm-voice-yandex-tts-v1');
