@@ -17,6 +17,10 @@ function allowed(){
  return !!identity&&['branch_director','field_manager','triovist_category'].includes(identity.tier)&&
   !document.hidden&&activePanel&&!activePanel.hidden&&allowedNow?.();
 }
+const WAKE_PREF='resanta-lera-wake-foregound-v1:';
+function prefKey(){const id=root.crmAI360StaffIdentityV1?.()?.id;return id?WAKE_PREF+id:'';}
+function wakePref(){try{const key=prefKey();return !!key&&root.localStorage?.getItem(key)==='yes';}catch{return false;}}
+function saveWakePref(value){try{const key=prefKey();if(!key)return; if(value)root.localStorage?.setItem(key,'yes');else root.localStorage?.removeItem(key);}catch{}}
 function info(s){if(allowed())onInfo?.(String(s||'').slice(0,150));}
 function stopSpeech(){
  ++playEpoch;speaking=false;
@@ -237,9 +241,16 @@ function listen(){
  void single();
 }
 function toggleWake(){
- if(wakeOn){stop();info('Ожидание фразы выключено');return false;}
+ if(wakeOn){saveWakePref(false);stop();info('Ожидание фразы выключено');return false;}
  if(!allowed())return false;
- stopSpeech();wakeOn=true;loops=0;
+ stopSpeech();wakeOn=true;loops=0;saveWakePref(true);
+ const run=++clipEpoch;void hotLoop(run);return true;
+}
+function resumeWakeIfApproved(){
+ // After one explicit activation, the already-authorized employee can reopen
+ // Lera without another microphone button. Never start at login or in background.
+ if(!allowed()||!wakePref()||wakeOn||oneShot)return false;
+ wakeOn=true;loops=0;
  const run=++clipEpoch;void hotLoop(run);return true;
 }
 function setVoice(next){
@@ -247,8 +258,8 @@ function setVoice(next){
  voice=next;stopSpeech();return true;
 }
 function setMuted(next){muted=Boolean(next);if(muted)stopSpeech();}
-root.crmAI360BranchPremiumVoiceV1={bind,listen,toggleWake,speak,stop,setVoice,setMuted,
+root.crmAI360BranchPremiumVoiceV1={bind,listen,toggleWake,resumeWakeIfApproved,speak,stop,setVoice,setMuted,
  get wakeOn(){return wakeOn;}};
 root.addEventListener('pagehide',stop);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else resumeWakeIfApproved();});
 })(window);
