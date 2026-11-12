@@ -59,7 +59,7 @@ test('printed stored user text is textContent, never executable innerHTML',()=>{
 test('per-user auth gate is checked before every history action',()=>{
  assert.match(js,/options\.allowed\?\.\(\)===true/);
  assert.match(js,/session\?\.access_token/);
- assert.match(js,/db\.functions\.invoke\(API,\{body:\{action,\.\.\.data\}\}\)/);
+ assert.match(js,/crm\(\)\.functions\.invoke\(API,\{body:\{action,\.\.\.data\}\}\)/);
  assert.doesNotMatch(js,/SUPABASE_SERVICE_ROLE_KEY|service_role|localStorage|sessionStorage/);
 });
 test('user can clear history, disable history and correct one answer',()=>{
