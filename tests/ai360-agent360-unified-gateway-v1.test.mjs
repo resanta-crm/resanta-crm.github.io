@@ -184,3 +184,16 @@ test('peer backend retains the exact director data logic, replacing only audited
  assert.match(newServer,/agentPrincipal\(user\.id,profile\.data,user\)/);
  assert.match(newServer,/greeting:agentGreeting\(principal\)/);
 });
+
+
+test('production regression: profile lookup awaits PostgREST thenable (no .catch method)',()=>{
+ const code=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8');
+ assert.doesNotMatch(code,/\.maybeSingle\(\)\.catch\(/);
+ assert.match(code,/profile=await svc\.from\('users'\)\.select\('id,name,role,region,access_scope,email'\)/);
+ assert.match(code,/\.eq\('id',user\.id\)\.maybeSingle\(\);/);
+ assert.match(code,/if\(!profile\|\|profile\.error\)return fault\(req,'profile_unavailable',503\)/);
+ // Query builders implement PromiseLike.then, not Promise.catch.
+ const thenable={then(resolve){resolve({data:{id:'verified'},error:null});}};
+ assert.equal(typeof thenable.catch,'undefined');
+ return Promise.resolve(thenable).then(value=>assert.equal(value.data.id,'verified'));
+});
