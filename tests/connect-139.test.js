@@ -143,7 +143,7 @@ function videoRuntime(){
    '156-resanta-connect-android-push-v1.js?v=2',
    '144-resanta-ai360-branch-voice-v1.js?v=10',
    '146-resanta-ai360-branch-premium-voice-v1.js?v=5',
-   '147-resanta-ai360-staff-unified-dialog-v1.js?v=4',
+   '147-resanta-ai360-staff-unified-dialog-v1.js?v=5',
    '157-resanta-ai360-android-staff-launch-v1.js?v=2'])assert.ok(html.includes(version),version);
   for(const p of [
    'assets/151-resanta-connect-v1.js',

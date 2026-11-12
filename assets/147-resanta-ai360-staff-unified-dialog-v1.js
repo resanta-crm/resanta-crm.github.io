@@ -7,8 +7,8 @@
 // Android/WebView is blocked unless a signed-in employee explicitly activates the opt-in launcher.
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchUnifiedHandleV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
-const ENDPOINT='crm-ai360-staff-dialog-v1';
-let history=[],memory={},pending=false,epoch=0;
+const ENDPOINT='crm-ai360-agent-v1';
+let history=[],memory={},pending=false,epoch=0,lastMode='';
 const allowed=()=>{
  const p=root.crmAI360StaffIdentityV1?.();
  return !!p&&['branch_director','field_manager','triovist_category'].includes(p.tier);
@@ -28,10 +28,10 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  const question=String(q||'').trim().slice(0,350);
  if(!question)return false;
  // Keep cheap, exact, server-paginated continuation in the local read-only path.
- if(/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
- if(pending){ui.show('Лера ещё проверяет предыдущий вопрос в CRM.');return true;}
+ if(memory?.domain&&/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
+ if(pending){ui.show('Лера ещё отвечает на предыдущий вопрос.');return true;}
  pending=true;const run=++epoch;
- ui.setStatus?.('Лера сопоставляет подтверждённые данные филиала через OpenAI…');
+ ui.setStatus?.('Лера обдумывает вопрос…');
  void (async()=>{
   try{
    const session=typeof root.crmEnsureFreshSessionV236166==='function'?
@@ -40,7 +40,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    if(!session?.access_token)throw Error('not_authorized');
    const month=localMonth(question)||memory.month||null;
    const result=await db.functions.invoke(ENDPOINT,{
-    body:{question,month,history:history.slice(-6),memory}
+    body:{action:'ask',question,history:history.slice(-6),memory:{...memory,month}}
    });
    if(result.error){
     let code='';
@@ -49,11 +49,28 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    }
    if(!allowed()||!ui.authorized()||run!==epoch)return;
    const data=result.data;
+   const userRole=root.crmAI360StaffIdentityV1?.();
+   if(data?.mode==='agent360_free_conversation_v1'){
+    if(data.answer_verified!==false||data.read_only!==true||
+       data.intent!=='free_conversation'||data.route_tier!==userRole?.tier||
+       !Array.isArray(data.domains_used)||data.domains_used.length!==0||
+       typeof data.answer!=='string'||!data.answer.trim())
+      throw Error('unverified_chat_response');
+    if(lastMode&&lastMode!=='chat')history=[];
+    lastMode='chat';memory={};
+    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,320)});
+    history=history.slice(-6);
+    ui.setStatus?.('Лера · свободный разговор');
+    ui.show(data.answer);
+    return;
+   }
    if(data?.mode!=='staff_ai360_shared_core_v1'||data?.answer_verified!==true||
     data?.read_only!==true||data?.scope!==(root.crmAI360StaffIdentityV1?.()?.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск')||data?.role!==root.crmAI360StaffIdentityV1?.()?.tier||typeof data?.answer!=='string'||
     !Array.isArray(data?.domains_used))
     throw Error('unverified_branch_dialog');
    if(['field_manager','triovist_category'].includes(root.crmAI360StaffIdentityV1?.()?.tier)&&data?.subject_manager!==root.crmAI360StaffIdentityV1?.()?.name)throw Error('foreign_manager_reply');
+   if(lastMode&&lastMode!=='crm')history=[];
+   lastMode='crm';
    memory=data.memory||{};
    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,320)});
    history=history.slice(-6);
@@ -69,6 +86,6 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  })();
  return true;
 };
-root.crmAI360BranchUnifiedResetV1=()=>{epoch++;pending=false;history=[];memory={};};
+root.crmAI360BranchUnifiedResetV1=()=>{epoch++;pending=false;history=[];memory={};lastMode='';};
 root.addEventListener('pagehide',()=>root.crmAI360BranchUnifiedResetV1?.());
 })(window);
