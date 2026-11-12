@@ -97,7 +97,7 @@ test('no write operations, arbitrary tools, domains, or tables can be requested'
 test('single Edge entry rechecks token, role and forwards caller JWT only',()=>{
  const backend=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8');
  assert.match(backend,/svc\.auth\.getUser\(token\)/);
- assert.match(backend,/agentPrincipal\(user\.id,profile\.data\)/);
+ assert.match(backend,/agentPrincipal\(user\.id,profile\.data,user\)/);
  assert.match(backend,/'Authorization':'Bearer '\+token/);
  assert.match(backend,/normalizeAgentRequest\(input,principal\)/);
  assert.match(backend,/answer_verified:false/);
