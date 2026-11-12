@@ -42,7 +42,7 @@ test('overview is sourced from a single scoped server RPC not client 1C history'
  assert.match(sql,/verified_sales_total/);
  assert.match(sql,/financial_roi_available',false/);
  assert.match(sql,/p\.manager_name=actor\.name/);
- assert.match(ui,/План акций по менеджерам/);
+ assert.match(ui,/План \/ факт по менеджерам/);
  assert.match(ui,/Лера · Утренний брифинг/);
  assert.match(ui,/План акции/);
  assert.match(ui,/Открытые действия/);
