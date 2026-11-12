@@ -85,7 +85,27 @@ function matchOne(name,people){
  });
  return found.length===1?found[0]:null;
 }
-async function callModel(openai,question,names,now){
+async function callModel(openai,question,names,now,svc,userId){
+ // The same atomic per-user daily quota and monthly RUB budget as Lera's chat.
+ const claim=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:userId,p_reserve_rub:3});
+ if(claim.error||claim.data?.allowed!==true)throw Error('agent_action_budget_unavailable');
+ const claimId=String(claim.data.claim_id||'');
+ let status='failed',inputTokens=0,outputTokens=0,received=null;
+ try{
+   received=await callModelClaimed(openai,question,names,now);
+   inputTokens=received.inputTokens;outputTokens=received.outputTokens;
+   status='ok';
+ }finally{
+   const rub=Math.min(3,(inputTokens*0.75+outputTokens*4.5)*100/1000000);
+   const finish=await svc.rpc('crm_ai360_core_finish_v2',{
+     p_claim_id:claimId,p_actual_rub:Number(rub.toFixed(4)),
+     p_input_tokens:inputTokens,p_output_tokens:outputTokens,p_rounds:1,p_status:status
+   });
+   if(finish.error||finish.data?.ok!==true)throw Error('agent_action_budget_settlement_failed');
+ }
+ return received.result;
+}
+async function callModelClaimed(openai,question,names,now){
  const schema={type:'object',additionalProperties:false,properties:{
    action:{type:'string',enum:['task','chat','none']},
    assignee:{type:'string'},title:{type:'string'},details:{type:'string'},
@@ -114,7 +134,7 @@ async function callModel(openai,question,names,now){
  const raw=(data.output||[]).filter(x=>x.type==='message').flatMap(x=>x.content||[])
    .filter(x=>x.type==='output_text').map(x=>String(x.text||'')).join('');
  let result;try{result=JSON.parse(raw);}catch{throw Error('draft_not_structured');}
- return result;
+ return {result,inputTokens:Math.max(0,Math.floor(Number(data.usage?.input_tokens)||0)),outputTokens:Math.max(0,Math.floor(Number(data.usage?.output_tokens)||0))};
 }
 async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
  const now=localDate();
@@ -128,7 +148,7 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
  }catch{}
  const names=[...new Set([...staff,...directory].map(x=>String(x.name||'')))].slice(0,70);
  let model;
- try{model=await callModel(openai,question,names,now);}
+ try{model=await callModel(openai,question,names,now,svc,actor.id);}
  catch{return fail(req,'action_understanding_unavailable',503);}
  if(model.action==='none')return respond(req,{mode:'not_an_action',read_only:true,created:0});
  if(model.action==='task'){
