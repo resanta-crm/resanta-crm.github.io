@@ -20,8 +20,8 @@ test('Android output is primed only after an explicit director action, not at CR
 });
 
 test('Android sound is a separate optional file; desktop retains old player path',()=>{
- assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=18'"));
- assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=17'"),'desktop script stays version 17');
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19'"));
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19'"),'desktop script stays version 17');
  assert.ok(quality.includes('const nativeAndroidDirector='));
  assert.ok(quality.includes('const context=androidContext();'));
  assert.ok(quality.includes('await playAndroidWav(blob,run);'));
@@ -47,7 +47,7 @@ test('AudioBufferSource plays Yandex WAV and ends cleanly on INMO',async()=>{
  const statuses=[];
  const context={state:'running',destination:{},
  decodeAudioData:async()=>({duration:0.5}),
- createBufferSource:()=>({
+ createBufferSource:()=>({playbackRate:{value:1},
   connect(){connected++;},disconnect(){disconnected++;},
   start(){started++;queueMicrotask(()=>this.onended?.());}
  })

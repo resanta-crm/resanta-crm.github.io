@@ -45,5 +45,5 @@ test('clients show precise budget errors without changing rights',()=>{
  assert.match(browser,/daily_dialog_limit:/);
  assert.match(browser,/openai_provider_rate_limit:/);
  assert.match(browser,/window\.crmAI360UnifiedDialogHandleV1/);
- assert.match(browser,/const ENDPOINT='crm-ai360-dialog-v4'/);
+ assert.match(browser,/const ENDPOINT='crm-ai360-agent-v1'/);
 });

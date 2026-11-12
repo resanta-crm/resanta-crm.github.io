@@ -36,10 +36,12 @@
  }
  // Persist only explicit consent. Never auto-open the voice panel, never
  // start a microphone on the CRM login screen or when the tab is hidden.
+ const MIC_CONSENT_KEY='resanta-ai360-microphone-optin-v1';
  const AUTO_WAKE_KEY='resanta-ai360-wake-window-optin-v1';
  let autoWakeWanted=false,autoAttemptedThisOpen=false,lastOpen=false,autoWakeBlocked=false;
  try{autoWakeWanted=window.localStorage?.getItem(AUTO_WAKE_KEY)==='yes';}catch(_){}
- if(autoWakeWanted)userOptIn=true;
+ try{userOptIn=autoWakeWanted||window.localStorage?.getItem(MIC_CONSENT_KEY)==='yes';}
+ catch(_){userOptIn=autoWakeWanted;}
  function saveAutoWake(v){
    autoWakeWanted=!!v;
    try{
@@ -50,7 +52,14 @@
  function visiblePanel(){return isOwner()&&panel&&!panel.hidden&&!panel.classList?.contains('rva-mini')&&panel.isConnected&&!document.hidden;}
  function noiseOnly(t){return /^(?:а|э|эм|мм|м|ну|ээ|эээ|угу)[.!?,\s]*$/i.test(String(t||'').trim());}
 
- const isOwner=()=>{try{return typeof currentUser!=='undefined'&&!!currentUser?.id&&typeof currentProfile!=='undefined'&&currentProfile?.role==='boss'&&String(currentProfile?.name||'').trim().replace(/\s+/g,' ').toLowerCase()==='александр паюшин'&&document.getElementById('app')?.style.display!=='none';}catch{return false;}};
+ const isOwner=()=>{
+  try{
+   const p=window.crmAI360GreetingV1?.();
+   return !!p&&['544fb1e2-ef70-44de-bc62-e0e1596a4bfc',
+    'a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(p.id)&&
+    document.getElementById('app')?.style.display!=='none';
+  }catch{return false;}
+ };
  function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status){status.textContent=t;status.title=String(t||'');}}
  function controls(){
    if(wake){
@@ -62,7 +71,7 @@
    }
    if(mic){
      mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
-     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Ручная запись: до 12 секунд. Повторное нажатие завершит фразу.';
+     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Лера отправляет фразу после примерно двух секунд тишины. Повторное нажатие завершит запись.';
    }
  }
  function reason(e){
@@ -125,6 +134,7 @@
    return new Promise((resolve,reject)=>{
      if(!stream?.active||epoch!==listenEpoch){resolve(null);return;}
      let rec,parts=[],timer=0,poll=0,lastLoud=0,loud=false,peak=0,start=Date.now(),stopped=false;
+     const silence=window.crmAI360CreateSilenceGateV1?.({pauseMs:1900,noSpeechMs:4200});
      try{const m=codec();rec=new MediaRecorder(stream,m?{mimeType:m}:undefined);activeRecorder=rec;}
      catch(e){reject(e);return;}
      const end=()=>{if(stopped)return;stopped=true;clearTimeout(timer);clearInterval(poll);try{rec.state==='recording'&&rec.stop();}catch(e){reject(e);}};
@@ -141,12 +151,18 @@
      poll=window.setInterval(()=>{
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
-       if(rms>.0020){loud=true;lastLoud=Date.now();}
-       // Faster pause detection, still allowing natural compound director questions.
-       if(loud && Date.now()-start>1200 && Date.now()-lastLoud>(mode==='wake'?1450:1250))end();
+       if(silence){
+         const result=silence.observe(rms,Date.now()-start);
+         if(result.heard)loud=true;
+         if(result.stop)end(); // 1.9 seconds after the final spoken syllable
+       }else{
+         // Graceful fallback if the optional local pause detector is unavailable.
+         if(rms>.0020){loud=true;lastLoud=Date.now();}
+         if(loud&&Date.now()-lastLoud>1900)end();
+       }
        if(epoch!==listenEpoch || !mode)end();
      },110);
-     timer=window.setTimeout(end,sec*1000);
+     timer=window.setTimeout(end,Math.min(sec,analyser?12:7)*1000); // safety cap, not a fixed wait
    });
  }
  function cloudError(error){
@@ -310,6 +326,7 @@
      const yes=window.confirm('РЕСАНТА AI: включить режим «Привет, Ресанта» и запомнить разрешение на этом компьютере? Микрофон будет работать ТОЛЬКО в открытом окне помощника и активной вкладке CRM. Звуковые фразы отправляются для распознавания через защищённый сервер CRM (до 60 фраз в сутки); записи в CRM не сохраняются. Режим выключается при закрытии окна или скрытии вкладки, и его можно отключить вручную. Разрешить?');
      if(!yes)return;
      userOptIn=true;
+     try{window.localStorage?.setItem(MIC_CONSENT_KEY,'yes');}catch(_){} // only AFTER explicit consent
    }
    if(newMode==='wake'){
      // No background consent dialogs on auto-reopen; if saved neural consent
@@ -338,7 +355,7 @@
    if(newMode==='wake'&&!automatic)saveAutoWake(true);
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
-     if(newMode==='manual'){info('Слушаю вопрос (до 12 секунд). Нажми кнопку повторно, чтобы закончить раньше.');manualLoop(epoch);}
+     if(newMode==='manual'){info('Слушаю вопрос. После двух секунд тишины сразу отправлю его.');manualLoop(epoch);}
      else{
        if(continueConversation){resumeConversationUntil=0;info('Продолжаем разговор. Можешь задать вопрос без нового приветствия.');}
        else info('Микрофон включён: ожидаю «Привет, Ресанта»');
@@ -360,7 +377,7 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Два способа: «Спросить голосом» — один вопрос (до 12 секунд); «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 300 распознаваний в день; записи в CRM не сохраняются.';
+   if(note)note.textContent='Два способа: «Спросить голосом» — вопрос автоматически отправляется после двух секунд тишины; «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 300 распознаваний в день; записи в CRM не сохраняются.';
    mic.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
      // The manual button must work even if wake mode was enabled.
