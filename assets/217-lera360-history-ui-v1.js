@@ -15,7 +15,15 @@
  function mount(host,options={}){
   if(!host||typeof host.appendChild!=='function')return null;
   if(host.querySelector?.('[data-lera-history-ui="v1"]'))return null;
-  const permitted=()=>{try{return options.allowed?.()===true;}catch{return false;}};
+  // An in-place account switch must never reuse a previous person's DOM
+  // history. Bind this mount to the exact authenticated CRM identity.
+  const currentId=()=>{try{
+   return typeof currentUser!=='undefined'?String(currentUser?.id||''):'';
+  }catch{return '';}};
+  const ownerId=currentId();
+  const permitted=()=>{try{
+   return !!ownerId&&currentId()===ownerId&&options.allowed?.()===true;
+  }catch{return false;}};
   const wrapper=element('details',undefined,
    'font-size:12px;color:#31577c;border:1px solid #d3e2f1;border-radius:10px;padding:8px;background:#f8fbff;min-width:190px;max-height:290px;overflow:auto');
   wrapper.setAttribute('data-lera-history-ui','v1');
@@ -127,6 +135,13 @@
     'Личная память включена. Новые вопросы появятся здесь после ответа Леры.';
    for(const item of turns)list.appendChild(card(item));
   }
+  // Clear visible confidential transcript on logout/account switch.
+  root.db?.auth?.onAuthStateChange?.((_event,session)=>{
+   if(session?.user?.id!==ownerId){
+    list.replaceChildren();enabled=false;wrapper.open=false;
+    status.textContent='Сессия изменилась. Открой CRM заново.';
+   }
+  });
   wrapper.addEventListener('toggle',()=>{if(wrapper.open)void busyCall(render);});
   body.append(note,toolbar,status,list);wrapper.append(summary,body);
   host.appendChild(wrapper);
