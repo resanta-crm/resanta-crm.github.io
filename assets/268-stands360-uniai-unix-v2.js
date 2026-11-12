@@ -215,9 +215,10 @@ function explain(p){
 function photoHTML(p,source){
  const pic=rows(source).slice(0,2);
  if(!pic.length&&photo(p))pic.push({storage_path:photo(p),captured_at:p.last_control_at||p.installed_at});
+ state.photoPaths=pic.map(x=>x.storage_path).filter(Boolean);
  return '<div class="s268-photos">'+pic.map((x,i)=>'<div class="s268-photo"><b>'+
- (i?'Предыдущее фото':'Актуальное фото')+'</b><img alt="Фото стенда" data-s268-path="'+esc(x.storage_path)+'">'+
- '<small>'+date(x.captured_at)+'</small></div>').join('')+
+ (i?'Предыдущее фото':'Актуальное фото')+'</b><img alt="Фото стенда" data-s268-path="'+esc(x.storage_path)+'" data-s268-full="'+esc(x.storage_path)+'" title="Нажмите для увеличения">'+
+ '<button class="s268-secondary" data-s268-full="'+esc(x.storage_path)+'">⛶ Увеличить</button><small>'+date(x.captured_at)+'</small></div>').join('')+
  (pic.length===1?'<div class="s268-photo"><b>Сравнение до / после</b><p class="s268-muted">Для сравнения нужно новое фото. Его можно получить от продавца, без маршрута и GPS.</p></div>':'')+
  (pic.length===0?'<div class="s268-muted">Фото пока не предоставлено.</div>':'')+'</div>';
 }
@@ -233,10 +234,11 @@ async function detail(id){
  (['dfs','df'].includes(state.data?.actor_role)?'<button class="s268-secondary" data-s268-asset="'+esc(id)+'">Учёт ОС</button>':'')+
  '<button class="s268-secondary" data-s268-close>Закрыть</button>');
  try{
-  const [s,ph]=await Promise.all([
+  const [s,ph,vr]=await Promise.all([
    rpc('crm_stands_360_skus_v3',{p_placement_id:id}),
    dbclient().from('stand_photos_v236346').select('storage_path,captured_at')
-    .eq('placement_id',id).order('captured_at',{ascending:false}).limit(2)
+    .eq('placement_id',id).order('captured_at',{ascending:false}).limit(2),
+   dbclient().from('stand_vision_checks_v236347').select('stand_present,fill_pct,own_brand_share_pct,photo_quality_score,summary,created_at,storage_path').eq('placement_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle()
   ]);
   if(ph.error)throw ph.error;
   const host=el('s268-modalbody');if(!host)return;
@@ -273,8 +275,8 @@ async function detail(id){
    '<p class="s268-muted">Общий оборот юрлица — справочно, не является розничными продажами со стенда. Привязка: '+esc(p.legal_client_name||'не подтверждена')+'. <button class="s268-secondary" data-s268-client="'+esc(id)+'">Изменить</button></p>'+
    '<div class="s268-skus"><table><thead><tr><th>Запись в стенде</th><th>Достоверность</th><th>Отгрузки · 6 мес.</th><th>Действие</th></tr></thead><tbody>'+
    rowsHTML+'</tbody></table></div></section></div>'+
-   explain(p)+
-   '<p class="s268-muted">Для движения ОС, договора и истории установки используйте меню «Учёт и документы». Существующие документы не менялись.</p>';
+   scoreCard(p,vr?.data)+explain(p)+
+   '<p class="s268-muted">Учёт ОС и договоров — отдельно от коммерческой оценки. Сверка оборудования доступна руководителю через «Учёт ОС».</p>';
   loadThumbs();
  }catch(e){const host=el('s268-modalbody');if(host)host.innerHTML='<div class="s268-ai">Ошибка открытия: '+esc(e?.message||e)+'</div>'}
 }
