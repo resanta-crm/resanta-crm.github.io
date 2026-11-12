@@ -377,8 +377,12 @@ function buildPanel(){
  log=document.createElement('div');log.className='rsa-branch-log';log.setAttribute('role','log');
  const speechNote=document.createElement('small');
  speechNote.textContent='Речь распознаётся OpenAI, озвучка — Яндекс Лера/Даша. Ожидание «Привет, Ресанта» включается вручную и прекращается при закрытии окна. Голос передаётся внешним сервисам.';
- panel.append(heading,note,log,entry,actions,status,speechNote);
+ const historySlot=document.createElement('div');
+ historySlot.className='rsa-branch-history-slot';
+ panel.append(heading,note,log,entry,actions,historySlot,status,speechNote);
  document.body.appendChild(panel);
+ // No network or microphone activity until the employee opens History.
+ root.crmAI360HistoryUIV1?.mount(historySlot,{allowed:()=>allowed()&&panelVisible()&&verified});
  root.crmAI360BranchTaskMountV1?.(panel);
  root.crmAI360BranchPremiumVoiceV1?.bind({
   panel,authorized:panelVisible,

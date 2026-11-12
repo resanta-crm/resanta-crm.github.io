@@ -102,7 +102,7 @@ test('Only branch director can use signed task commit; field managers cannot',()
  assert.match(task,/if\(!await verify\(secret,userId/);
  assert.ok(!ui.includes("crm-ai360-branch-task-approval-v1"));
  assert.match(page,/148-resanta-ai360-staff-identity-v1\.js\?v=client360-20261102/);
- assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=10/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
  assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=5/);
  assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=5/);
 });
@@ -118,4 +118,19 @@ test('All staff questions use JWT-gated Agent360 and never mistake free talk for
  assert.match(dialogue,/foreign_manager_reply/);
  assert.match(dialogue,/lastMode='chat';memory=\{\}/);
  assert.doesNotMatch(dialogue,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
+});
+
+
+test('Staff history panel is a user-initiated text-only view scoped to signed-in staff',()=>{
+ const voice=fs.readFileSync('assets/144-resanta-ai360-branch-voice-v1.js','utf8');
+ const client=fs.readFileSync('assets/217-lera360-history-ui-v1.js','utf8');
+ assert.match(voice,/crmAI360HistoryUIV1\?\.mount\(historySlot,/);
+ assert.match(voice,/allowed:\(\)=>allowed\(\)&&panelVisible\(\)&&verified/);
+ assert.match(client,/history:status/);
+ assert.match(client,/history:feedback/);
+ assert.match(client,/history:clear/);
+ assert.match(client,/history:enable/);
+ assert.doesNotMatch(client,/\.innerHTML\s*=/);
+ assert.match(page,/217-lera360-history-ui-v1\.js\?v=1/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
 });
