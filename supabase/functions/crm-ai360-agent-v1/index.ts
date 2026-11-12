@@ -4,6 +4,7 @@
 // No service-role CRM reads, direct SQL, generic LLM tools, or write actions.
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {agentPrincipal,agentCapabilities,normalizeAgentRequest,agentGreeting} from './contract.mjs';
+import {classifyAgentQuestion,runFreeConversation} from './conversation.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
@@ -56,6 +57,21 @@ Deno.serve(async req=>{
  const parsed=normalizeAgentRequest(input,principal);
  if(parsed.error)return fault(req,parsed.error,parsed.error==='not_authorized'?403:400);
  if(parsed.action==='capabilities')return reply(req,agentCapabilities(principal));
+ // Ordinary conversation is explicitly isolated from CRM reads. Every caller is
+ // still authenticated, identity-scoped and metered before contacting OpenAI.
+ if(classifyAgentQuestion(input.question,{history:parsed.payload.history,
+     memory:parsed.payload.memory})==='chat'){
+  const conversation=await runFreeConversation({
+   svc,userId:user.id,question:input.question,history:parsed.payload.history,
+   apiKey:Deno.env.get('OPENAI_API_KEY')||''
+  });
+  if(conversation.error)return fault(req,conversation.error,conversation.status||503);
+  return reply(req,{
+   ...conversation,agent:'resanta_ai_agent360_v1',
+   route_tier:principal.tier,greeting:agentGreeting(principal),writes_enabled:false
+  });
+ }
+
  // The existing gateways own their rate limits, cost claims, query guards, and
  // policy enforcement. Never call them with service-role credentials.
  let upstream;
