@@ -49,13 +49,14 @@ function harness(saved=false,yandex=true){
    setInterval(fn,ms){intervals.push({fn,ms});return intervals.length;},
    clearInterval(){},setTimeout(){return 100;},clearTimeout(){},
    addEventListener(){},
-   crmEnsureFreshSessionV236166:async()=>({access_token:'approved'})
+   crmEnsureFreshSessionV236166:async()=>({access_token:'approved'}),
+   crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'})
  };
  const navigator={userAgent:'Windows NT 10',mediaDevices:{
    getUserMedia:async()=>{counts.microphone++;return stream();}
  }};
  const globals={window,document,navigator,MediaRecorder,console,
-   currentUser:{id:'director'},
+   currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},
    currentProfile:{role:'boss',name:'Александр Паюшин'},
    setTimeout,clearTimeout,clearInterval(){},Blob,Uint8Array,FormData};
  vm.runInNewContext(code,globals,{filename:'voice-capture.js'});
@@ -139,8 +140,8 @@ function harness(saved=false,yandex=true){
  assert(code.includes("if(clipCount>=50)"),'wake mode must keep transcription cap');
  assert(code.includes("document.hidden")&&code.includes("panel.hidden"),'wake must stop on hidden tab or closed panel');
  assert(code.includes("getUserMedia"),'native mic permission still required');
- assert(code.includes("const clip=await capture(5,epoch)"),'manual command has five second capture limit');
- assert(code.includes("const second=await capture(5,epoch)"),'one-shot follow-up also five seconds');
- assert(code.includes("const clip=await capture(9,epoch)"),'continuous mode retains nine seconds for long commands');
+ assert(code.includes('const clip=await capture(12,epoch)'),'manual speech uses a hard safety cap, but ends after natural 1.9s silence');
+ assert(code.includes('const second=await capture(12,epoch)'),'follow-up ends on silence before the hard cap');
+ assert(code.includes('silence.observe(rms,Date.now()-start)'),'continuous mode uses adaptive local silence detection');
  console.log('AI360 remembered foreground voice activation, opt-in, no login mic, session stop and optional preview: OK');
 })().catch(e=>{console.error(e);process.exit(1);});
