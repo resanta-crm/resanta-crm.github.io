@@ -5,7 +5,7 @@
 'use strict';
 if(window.RESANTA_STANDS_360_V1)return;
 const state={data:null,loading:false,error:'',view:'overview',filter:'all',manager:'all',brand:'all',
- search:'',photos:new Map(),detailId:null,skuRows:[],matchRow:null};
+ search:'',photos:new Map(),detailId:null,skuRows:[],matchRow:null,selectedSkus:new Set(),clientCandidate:null,photoPaths:[]};
 function dbclient(){try{return typeof db!=='undefined'?db:window.db}catch(_){return window.db}}
 const el=id=>document.getElementById(id);
 const str=x=>String(x??'');
@@ -18,7 +18,7 @@ const photo=p=>p.last_control_photo_path||p.installation_photo_path||'';
 const dataOk=p=>p.sales_confidence==='verified_monthly_client_shipments';
 const standRows=()=>rows(state.data?.stands);
 const messages={
- asset_check:['Сверить ОС','bad','Подтвердить инвентарный номер стенда и принадлежность оборудования.'],
+ asset_check:['Учёт имущества','warn','Инвентарный номер не привязан. Ответственный руководитель может сверить оборудование с реестром ОС.'], 
  photo_missing:['Получить фото','warn','Попросить актуальное фото у продавца или сделать при визите — GPS не нужен.'],
  client_id_check:['Сверить ID клиента','warn','По ID торговой точки не найдены данные 1С. Сверить связь с юридическим лицом.'],
  sku_check:['Уточнить SKU','warn','Есть неподтверждённые артикулы. Сверить их с каталогом, затем пересчитать отгрузки.'],
@@ -34,6 +34,7 @@ function attachCSS(){
  const l=document.createElement('link');l.id='s268-css-link';l.rel='stylesheet';
  l.href='./assets/268-stands360-uniai-unix-v2.css?v=20261111-uni-v2';
  document.head.appendChild(l);
+ const extra=document.createElement('link');extra.rel='stylesheet';extra.href='./assets/269-stands360-feedback-v3.css?v=20261112-v3';document.head.appendChild(extra);
 }
 async function rpc(fn,args){
  const d=dbclient();if(!d)throw new Error('Нет подключения к CRM');
@@ -70,7 +71,7 @@ function pipeline(){
 }
 function evidence(p){
  const found=[];
- if(!p.asset_id)found.push('Не сверено с ОС');
+ // ОС учитывается отдельно — не смешиваем имущество и эффективность торговой выкладки.
  if(!photo(p))found.push('Нет фотографии стенда');else if(p.photo_days>45)found.push('Фото требует обновления');
  if(p.client_history_rows===0)found.push('Отгрузки 1С не связаны с ID клиента');
  else if(p.unresolved_skus>0)found.push('Не сопоставлено '+p.unresolved_skus+' из '+p.registered_skus+' SKU');
@@ -82,7 +83,7 @@ function evidence(p){
 }
 function priority(p){
  let n=0;
- if(!p.asset_id)n+=40;
+ if(!p.asset_id)n+=5;
  if(p.client_history_rows===0)n+=35;
  if(p.unresolved_skus>0)n+=30;
  if(!photo(p))n+=25;else if(p.photo_days>45)n+=12;
@@ -184,7 +185,7 @@ function paint(){
 }
 async function refresh(){
  if(state.loading)return;state.loading=true;paint();
- try{state.data=await rpc('crm_stands_360_v2',{p_limit:150});state.error=''}
+ try{state.data=await rpc('crm_stands_360_v3',{p_limit:150});state.error=''}
  catch(e){state.error=str(e?.message||e);state.data=null}
  finally{state.loading=false;paint()}
 }
@@ -226,11 +227,14 @@ async function detail(id){
  modal('Стенд 360° · '+p.client_name,'ID '+(p.client_code||p.client_id)+' · '+(p.asset_code||'ОС не сверено')+
  ' · '+p.manager_name,'<div class="s268-panel">Сверяю фотографии, SKU и историю 1С…</div>',
  '<button class="s268-primary" data-s268-photo="'+esc(id)+'">📷 Новое фото</button>'+
- '<button class="s268-secondary" data-s268-request="'+esc(id)+'">Запросить фото у продавца</button>'+
+ '<button class="s268-secondary" data-s268-request="'+esc(id)+'">Запросить фото у продавца</button>'+ 
+ '<button class="s268-secondary" data-s268-vision="'+esc(id)+'">✦ Проверить фото с ИИ</button>'+ 
+ '<button class="s268-secondary" data-s268-client="'+esc(id)+'">Юрлицо / торговая точка</button>'+ 
+ (['dfs','df'].includes(state.data?.actor_role)?'<button class="s268-secondary" data-s268-asset="'+esc(id)+'">Учёт ОС</button>':'')+
  '<button class="s268-secondary" data-s268-close>Закрыть</button>');
  try{
   const [s,ph]=await Promise.all([
-   rpc('crm_stands_360_skus_v2',{p_placement_id:id}),
+   rpc('crm_stands_360_skus_v3',{p_placement_id:id}),
    dbclient().from('stand_photos_v236346').select('storage_path,captured_at')
     .eq('placement_id',id).order('captured_at',{ascending:false}).limit(2)
   ]);
@@ -240,23 +244,24 @@ async function detail(id){
   const metric=[
    ['Наше оборудование',p.asset_code||'Не сверено'],
    ['Фото',photo(p)?p.photo_days+' дн. назад':'Нет фото'],
-   ['Подтверждённые SKU',p.validated_skus+' / '+p.registered_skus],
+   ['Подтверждённые SKU',p.sku_selected+' / '+p.sku_expected],
    ['Отгрузки SKU · 6 мес.',dataOk(p)?money(p.ship_6m):'Не сопоставлено']];
   const rowsHTML=state.skuRows.map((x,i)=>{
-   const isValid=x.sku_state!=='unresolved';
+   const isValid=!['unresolved','partial'].includes(x.sku_state);
    const multi=/[2-9][0-9]*\s*скю/i.test(str(x.raw_sku));
-   return '<tr><td><b>'+esc(x.raw_sku)+'</b>'+
-    (x.mapped_sku?'<div class="s268-muted">↳ '+esc(x.mapped_sku)+'</div>':'')+'</td>'+
+   return '<tr><td><b>'+esc(x.raw_sku)+'</b>'+(x.chosen?'<div class="s268-muted">'+esc(x.chosen)+' из '+esc(x.expected)+' подтверждено</div>':'')+
+    (rows(x.multi_skus).length?'<div class="s268-muted">'+esc(x.multi_skus.join(', '))+'</div>':'')+'</td>'+
     '<td><span class="s268-pill '+(isValid?'good':'warn')+'">'+
-    esc(isValid?'Артикул подтверждён':multi?'Список из нескольких SKU':'SKU не определён')+'</span></td>'+
-    '<td>'+esc(x.effective_sku?money(x.ship_6m):'Неизвестно')+'</td>'+
+    esc(isValid?'Артикулы подтверждены':x.sku_state==='partial'?'Сверка не завершена':multi?'Несколько SKU':'SKU не определён')+'</span></td>'+
+    '<td>'+esc(x.chosen?money(x.ship_6m):'Неизвестно')+'</td>'+
     '<td>'+(isValid&&x.sku_state==='exact_catalog'?'✓':
     '<button class="s268-secondary" data-s268-match="'+i+'">'+
-    (multi?'Указать поштучно':x.sku_state==='verified_mapping'?'Изменить':'Уточнить SKU')+'</button>')+'</td></tr>';
+    (multi?'Выбрать несколько':x.sku_state==='verified_multi'?'Изменить состав':'Уточнить SKU')+'</button>')+'</td></tr>';
   }).join('');
   host.innerHTML='<div class="s268-detailkpis">'+metric.map(x=>'<div><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>').join('')+'</div>'+
    '<div class="s268-detailcols"><section class="s268-detailsection"><h3>📷 Наш стенд · до / после</h3>'+
    photoHTML(p,ph.data)+
+   '<div class="s268-reviewtools"><button class="s268-secondary" data-s268-vision="'+esc(p.id)+'">✦ Проверить фото с ИИ</button><button class="s268-secondary" data-s268-photo="'+esc(p.id)+'">Добавить фото</button></div>'+
    '<p class="s268-muted">Источник фото: '+esc(p.photo_origin==='seller'?'продавец':p.photo_origin==='manager'?'МПП':'не установлен для старых фото')+
    '. GPS не требуется.</p>'+
    '<details><summary style="font-size:11px;cursor:pointer;font-weight:750">Что Vision обнаружил?</summary>'+
@@ -265,7 +270,7 @@ async function detail(id){
    '<div class="s268-detailkpis" style="grid-template-columns:1fr 1fr">'+
    '<div><small>Отгрузки по SKU стенда</small><b>'+esc(dataOk(p)?money(p.ship_6m):'Не сопоставлено')+'</b></div>'+
    '<div><small>Весь клиент · 6 мес.</small><b>'+esc(p.client_history_rows?money(p.client_ship_6m):'Нет данных по ID')+'</b></div></div>'+
-   '<p class="s268-muted">Общий оборот клиента — справочно, не является продажами со стенда.</p>'+
+   '<p class="s268-muted">Общий оборот юрлица — справочно, не является розничными продажами со стенда. Привязка: '+esc(p.legal_client_name||'не подтверждена')+'. <button class="s268-secondary" data-s268-client="'+esc(id)+'">Изменить</button></p>'+
    '<div class="s268-skus"><table><thead><tr><th>Запись в стенде</th><th>Достоверность</th><th>Отгрузки · 6 мес.</th><th>Действие</th></tr></thead><tbody>'+
    rowsHTML+'</tbody></table></div></section></div>'+
    explain(p)+
@@ -382,7 +387,7 @@ function render(){
  attachCSS();if(!el('st360-root'))return;
  if(!state.data&&!state.loading&&!state.error)refresh();else paint();
 }
-window.RESANTA_STANDS_360_V1=Object.freeze({render,refresh,version:'stands360-uni-ai-v2',
+window.RESANTA_STANDS_360_V1=Object.freeze({render,refresh,version:'stands360-feedback-v3',
  gpsRequired:false, skuVerified:true, originalDataUntouched:true});
 if(el('st360-root'))render();
 })();
