@@ -28,6 +28,7 @@ const dateLabel=x=>/^\d{4}-\d\d-\d\d$/.test(String(x))?x.slice(8)+'.'+x.slice(5,
 const monthLabel=x=>new Date(x+'-01T12:00:00').toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
 let state={actor:'',month:monthNow(),slots:{},legacy:false,coreRequested:false},installed=false,actions=new Map(),legacyBuild=null,nativeActor='',renderQueued=false;
 let operationCache=null;
+let checks={status:'idle',snapshot:null,error:'',run:0};
 const memoryCache=new Map(),painted=new Map();
 const slots=()=>state.slots;
 const cacheKey=()=>actor()+'|'+state.month;
@@ -45,7 +46,39 @@ function persist(){
  const safe={};for(const key of ['sales','triovist','pdz','receipts'])if(slots()[key]?.data&&(key!=='triovist'||triAllowed()))safe[key]={data:slots()[key].data,at:slots()[key].at};
  try{const encoded=JSON.stringify({version:2,actor:actor(),month:state.month,savedAt:Date.now(),slots:safe});if(encoded.length<32000)w.sessionStorage?.setItem('crm_control_center_v2:'+user().id,encoded);}catch(_){}
 }
-function resetActor(){if(state.actor===actor())return;state={actor:actor(),month:monthNow(),slots:{},legacy:false,coreRequested:false};actions=new Map();operationCache=null;painted.clear();restore();}
+function resetActor(){if(state.actor===actor())return;state={actor:actor(),month:monthNow(),slots:{},legacy:false,coreRequested:false};checks={status:'idle',snapshot:null,error:'',run:checks.run+1};actions=new Map();operationCache=null;painted.clear();restore();}
+async function loadChecks(){
+ if(!active()||checks.status==='loading')return;resetActor();
+ const owner=actor(),run=++checks.run;checks.status='loading';checks.error='';scheduleRender();
+ let timer;
+ try{
+  if(typeof w.crmControlCenterChecksV1!=='function')throw Error('unavailable');
+  const result=await Promise.race([w.crmControlCenterChecksV1(),new Promise((_,reject)=>{timer=w.setTimeout(()=>reject(Error('timeout')),22000);})]);
+  if(owner!==actor()||run!==checks.run)return;
+  checks.snapshot=result;checks.status='ready';
+ }catch(_){if(owner!==actor()||run!==checks.run)return;checks.status='error';checks.error='Не удалось проверить дополнительные источники. Повторите проверку.';}
+ finally{w.clearTimeout(timer);if(owner===actor()&&run===checks.run)scheduleRender();}
+}
+function checksBlock(){
+ const snap=checks.snapshot,truth=snap?.truth;
+ const ready=keys=>keys.every(k=>snap?.sources?.[k]?.status==='ready');
+ const groups=[
+  {label:'Падение продаж ВИП',keys:['vip','sales'],rows:arr(truth?.vipDrops),page:'vip',row:x=>({title:x.matched?.name||x.client_name,note:[x.period_cur,'к '+x.period_prev,'изменение '+x.growth_pct+'%'].filter(Boolean).join(' · '),client:x.matched?.id})},
+  {label:'Отклонения по акциям',keys:['promotions','photos','sales'],rows:arr(truth?.promotionIssues),page:'promotions',row:x=>({title:x.promotion?.name||x.promotion?.client_name||'Акция',note:x.metric?.reason,client:x.promotion?.client_id})},
+  {label:'Частично выполненные задачи',keys:['partial'],rows:arr(truth?.partialReviews),page:'tasks',row:x=>({title:x.manager_name||'Задача',note:[x.fact_result,x.reason].filter(Boolean).join(' · '),review:x.id})},
+  {label:'Качество данных',keys:[],rows:[...arr(truth?.unassigned).map(x=>({...x,checkNote:'Клиент с оборотом не закреплён за менеджером'})),...arr(truth?.noMaster).map(x=>({...x,checkNote:'Строки маст-листа не сопоставились; требуется проверить 1С'}))],page:'clients',row:x=>({title:x.name,note:x.checkNote,client:x.id})}
+ ];
+ const header='<div class="cc-panel-head"><h4>Дополнительные проверки</h4><button type="button" class="cc-btn" data-cc-checks'+(checks.status==='loading'?' disabled':'')+'>'+(checks.status==='loading'?'Проверяю…':snap?'Повторить проверку':'Проверить ВИП, акции и разборы')+'</button></div>';
+ const notice=checks.status==='error'?checks.error:checks.status==='loading'?'Проверяю источники. Это не мешает работе с главной.':snap?'Проверено '+stamp(snap.at)+'. Текущие обязательства; ВИП — за последний закрытый месяц.':'Проверки из прежнего раздела «Сигналы». Загружаются по кнопке, отдельно от главной.';
+ const html=groups.map(g=>{
+  const checked=Boolean(snap)&&ready(g.keys),confirmed=checked&&(g.page!=='clients'||snap.historyChecked),rows=checked?g.rows:[],limit=checks.limits?.[g.page]||10;
+  const count=!snap?'Не проверено':confirmed?String(rows.length):'Проверено частично';
+  const items=rows.slice(0,limit).map(x=>{const r=g.row(x);return '<div class="cc-check-row"><div><strong>'+esc(r.title)+'</strong><p class="cc-muted">'+esc(r.note)+'</p></div>'+action(r.review&&boss()?'Разобрать задачу':'Открыть',g.page,{...r,review:boss()?r.review:null})+'</div>';}).join('');
+  return '<details class="cc-check-group"'+(limit>10?' open':'')+'><summary>'+esc(g.label)+' <span>'+esc(count)+'</span></summary>'+(items||'<p class="cc-muted">'+esc(!snap?'Нажмите «Проверить».':confirmed?'По проверенным источникам отклонений не найдено.':'Источник недоступен. Отсутствие замечаний не подтверждено.')+'</p>')+(rows.length>limit?'<button type="button" class="cc-btn" data-cc-more="'+g.page+'">Показать ещё · '+limit+' из '+rows.length+'</button>':'')+(snap?action('Открыть раздел',g.page):'')+'</details>';
+ }).join('');
+ return '<div class="cc-checks" id="cc-extra-checks">'+header+'<p class="cc-muted" role="status">'+esc(notice)+'</p>'+html+'<p class="cc-muted">Качество данных — не оценка менеджера. '+(snap&&!snap.historyChecked?'Сопоставление маст-листа не проверено: история продаж не загружена. ':'')+'Просроченные задачи и маршруты уже показаны выше и повторно не добавляются.</p></div>';
+}
+function syncSignalsNav(){for(const id of ['nav-alerts','bn-alerts'])d.getElementById(id)?.classList.toggle('cc-merged-signals',allowed());}
 function scheduleRender(){if(renderQueued)return;renderQueued=true;const run=()=>{renderQueued=false;if(active())render();};if(typeof w.requestAnimationFrame==='function')w.requestAnimationFrame(run);else Promise.resolve().then(run);}
 function coreStatus(name){return w.crmCoreResourceStatusV1?.(name)||{status:'idle',error:''};}
 function coreReady(names){return names.every(k=>{const s=coreStatus(k);return s.status==='ready'&&!s.error;});}
@@ -113,7 +146,7 @@ function load(force=false){
  scheduleRender();
 }
 function slotMessage(name){const s=slots()[name];return s?.error?'Данные недоступны · повторите загрузку':s?.loading?'Загружаю данные…':'Данные пока не загружены';}
-function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'']));actions.set(key,{page,...extra});return key;}
+function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'',extra.review||'']));actions.set(key,{page,...extra});return key;}
 function action(label,page,extra={}){return '<button type="button" class="cc-btn" data-cc-action="'+actionId(label,page,extra)+'">'+esc(label)+'</button>';}
 function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+actionId(label,page)+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
 function planChart(rows){
@@ -202,7 +235,7 @@ function render(){
  '<div class="cc-metrics">'+metrics+'</div>'+routeBlock(data)+'<section class="cc-brief"><strong>✦ Брифинг Леры</strong><p>'+esc(brief.join(' '))+'</p>'+action('Открыть разбор','dashboard',{scroll:'cc-issues'})+'<span class="cc-muted">Сводка по данным CRM · без автоматических действий</span></section>'+
  '<div class="cc-columns"><section class="cc-panel"><div class="cc-panel-head"><h3>План и факт продаж</h3><span class="cc-muted">'+esc(monthLabel(state.month))+'</span></div>'+planChart(rows)+salesTable+'<p class="cc-muted">План месяца, не дневной. '+esc(kpi?.latest_sales_month&&state.month>kpi.latest_sales_month?'Продажи команды за выбранный месяц ещё не загружены.':'Действующая методика KPI 360°. При отсутствии плана процент не рассчитывается.')+'</p>'+action('Открыть продажи','sales')+'</section>'+
  '<section class="cc-panel"><div class="cc-panel-head"><h3>Просроченная задолженность</h3><span class="cc-muted">Последние 30 отчётных дней</span></div>'+debtChart(pdz)+action('Открыть задолженность','debt')+'</section></div>'+
- '<section class="cc-panel" id="cc-issues"><div class="cc-panel-head"><h3>Требует решения</h3><span class="cc-muted">'+issues.length+' вопросов · текущие обязательства и выбранный месяц</span></div>'+issuesHTML+'</section>'+
+ '<section class="cc-panel" id="cc-issues"><div class="cc-panel-head"><h3>Требует решения</h3><span class="cc-muted">'+issues.length+' вопросов · текущие обязательства и выбранный месяц</span></div>'+issuesHTML+checksBlock()+'</section>'+
  '<section class="cc-panel"><div class="cc-panel-head"><h3>'+(boss()?'Команда':'Мои результаты')+'</h3>'+action('Открыть KPI','managers')+'</div>'+teamHTML+'</section>'+sourceNotes()+'<div class="cc-bottom"><button type="button" class="cc-link" data-cc-legacy>Исходная сводка и подробные списки</button><span class="cc-muted">Центр управления · v1</span></div>';
  paint(root,html);let notice=d.getElementById('cc-refresh-status');if(!notice){notice=d.createElement('div');notice.id='cc-refresh-status';notice.addEventListener('click',onClick);root.insertAdjacentElement?.('beforebegin',notice);}notice.hidden=false;notice.innerHTML=refreshNotice();
  const tt=d.getElementById('topbar-title');if(tt)tt.textContent='Центр управления';
@@ -216,13 +249,18 @@ function mount(){
 function onClick(e){
  const b=e.target.closest?.('button');if(!b||!active())return;
  if(b.hasAttribute('data-cc-refresh')){load(true);return;}
+ if(b.hasAttribute('data-cc-checks')){void loadChecks();return;}
+ if(b.hasAttribute('data-cc-more')){const key=b.dataset.ccMore;if(!['vip','promotions','tasks','clients'].includes(key))return;checks.limits=checks.limits||{};checks.limits[key]=(checks.limits[key]||10)+10;scheduleRender();return;}
  if(b.hasAttribute('data-cc-legacy')){state.legacy=!state.legacy;painted.clear();if(state.legacy)legacyBuild?.();render();return;}
  if(!b.hasAttribute('data-cc-action'))return;
  const a=actions.get(b.dataset.ccAction);if(!a)return;
  if(a.scroll){d.getElementById(a.scroll)?.scrollIntoView({behavior:'smooth',block:'start'});return;}
  if(a.page==='tasks'&&a.filter==='overdue'&&typeof w.goToTasksFiltered==='function'){w.goToTasksFiltered('overdue');return;}
+ if(a.review&&boss()&&typeof w.acknowledgePartialReview==='function'){
+  void Promise.resolve(w.acknowledgePartialReview(a.review)).then(()=>loadChecks()).catch(()=>loadChecks());return;
+ }
  // All destinations pass through existing authorization/navigation wrappers.
- const titles={sales:'Продажи',payments:'Поступления 1С',debt:'Задолженность',tasks:'Задачи',managers:'KPI менеджеров',triovist:'Триовист / 21vek.by','routes-boss':'Согласование маршрутов','my-routes':'Мои маршруты'};
+ const titles={clients:'Клиенты',vip:'ВИП клиенты',promotions:'Акции',sales:'Продажи',payments:'Поступления 1С',debt:'Задолженность',tasks:'Задачи',managers:'KPI менеджеров',triovist:'Триовист / 21vek.by','routes-boss':'Согласование маршрутов','my-routes':'Мои маршруты'};
  if(a.page==='triovist'&&!triAllowed())return;
  w.goPage?.(a.page,titles[a.page]||a.page);
 }
@@ -245,10 +283,20 @@ function prepareAgentRequest(question,memory={}){
 }
 function install(){
  if(installed)return;installed=true;
+ syncSignalsNav();
+ const navigate=w.goPage;
+ if(typeof navigate==='function'){w.goPage=function(page,title){
+  syncSignalsNav();if(page!=='alerts'||!allowed())return navigate.apply(this,arguments);
+  state.legacy=false;const out=navigate.call(this,'dashboard','Центр управления');
+  Promise.resolve(out).then(()=>{if(!active())return;resetActor();render();
+   d.getElementById('cc-extra-checks')?.scrollIntoView({behavior:'smooth',block:'start'});
+   if(checks.status==='idle')void loadChecks();
+  });return out;
+ };}
  const base=w.buildDashboard;
  legacyBuild=typeof base==='function'?()=>base.call(w):null;
  if(typeof base==='function'){
-  const fn=function(){if(!allowed()){d.getElementById('page-dashboard')?.classList.remove('cc-installed');return base.apply(this,arguments);}resetActor();
+  const fn=function(){syncSignalsNav();if(!allowed()){d.getElementById('page-dashboard')?.classList.remove('cc-installed');return base.apply(this,arguments);}resetActor();
    if(nativeActor!==actor()){nativeActor=actor();w.crmDashboardNativeHooksV1?.();}
    operationCache=null;w.crmSingleRenderMarkPageV227327?.('dashboard');
    if(state.legacy)return base.apply(this,arguments);
@@ -261,7 +309,8 @@ function install(){
  const page=d.getElementById('page-dashboard');
  if(page&&typeof w.MutationObserver==='function'){let was=Boolean(active());const observer=new w.MutationObserver(()=>{const now=Boolean(active());if(now&&!was){resetActor();render();load();}was=now;});observer.observe(page,{attributes:true,attributeFilter:['class']});}
  if(active()){resetActor();render();load();}
+ if(allowed()&&d.getElementById('page-alerts')?.classList.contains('active'))w.goPage?.('alerts','Сигналы');
 }
-w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261113.2',readOnly:true,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
+w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261113.3',readOnly:true,signalsMerged:allowed,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(window,document);

@@ -48,27 +48,29 @@ function navigation(text,ui){
  const found=route.find(([regexp])=>regexp.test(subject));
  if(!found)return false;
  const [,pageId,title]=found;
+ const merged=pageId==='alerts'&&root.RESANTA_CONTROL_CENTER_V1?.signalsMerged?.()===true;
+ const destination=merged?'dashboard':pageId,label=merged?'Центр управления':title;
  const profile=root.crmAI360GreetingV1?.()||root.crmAI360StaffIdentityV1?.();
  const auth=typeof currentUser!=='undefined'&&!!profile&&profile.id===currentUser?.id;
- const page=doc.getElementById('page-'+pageId);
- const nav=doc.getElementById('nav-'+pageId);
- const mobile=doc.getElementById('bn-'+pageId);
+ const page=doc.getElementById('page-'+destination);
+ const nav=doc.getElementById('nav-'+destination);
+ const mobile=doc.getElementById('bn-'+destination);
  const visible=x=>!!x&&x.style.display!=='none'&&
   (typeof getComputedStyle!=='function'||getComputedStyle(x).display!=='none');
  const permitted=visible(nav)||visible(mobile);
  if(!auth||!page||!permitted||typeof root.goPage!=='function'){
-  talk(ui,'Раздел «'+title+'» сейчас недоступен для этой учётной записи. Ничего не изменено.');
+  talk(ui,'Раздел «'+label+'» сейчас недоступен для этой учётной записи. Ничего не изменено.');
   return true;
  }
  try{
   root.goPage(pageId,title);
   const active=page.classList?.contains('active')||page.style.display==='block';
   if(!active){
-   talk(ui,'Переход к разделу «'+title+'» не подтвердился. Попробуй открыть его через меню.');
+   talk(ui,'Переход к разделу «'+label+'» не подтвердился. Попробуй открыть его через меню.');
    return true;
   }
-  talk(ui,'Открыла раздел «'+title+'».');
- }catch(_){talk(ui,'Не удалось открыть раздел «'+title+'». Попробуй через меню CRM.');}
+  talk(ui,'Открыла раздел «'+label+'».');
+ }catch(_){talk(ui,'Не удалось открыть раздел «'+label+'». Попробуй через меню CRM.');}
  return true;
 }
 root.crmAI360NavigateV1=navigation;

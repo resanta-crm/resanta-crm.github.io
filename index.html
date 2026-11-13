@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-control-center-v2';
+const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-control-center-v3';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -76,7 +76,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-control-center-v2';
 <script defer src="./assets/73-route-coverage-v23674.js?v=23.6.75"></script>
 <script defer src="./assets/04-business-analytics.js?v=23.6.202"></script>
 <script defer src="./assets/05-performance-core.js?v=23.7.13-control-center-v1"></script>
-<script defer src="./assets/06-root-fixes.js?v=23.0.0"></script>
+<script defer src="./assets/06-root-fixes.js?signalsMerge=20261113-v1&v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
 <script defer src="./assets/66-performance-root-v23657.js?v=20261106-manager-feedback&abcOrder=20261109-2"></script>
 <script defer src="./assets/75-service-manager-markdown-only-v23690.js?v=23.6.90"></script>
@@ -1815,7 +1815,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- One existing Lera, signed two-phase task/CONNECT actions; no login requests. -->
 <script defer src="./assets/219-lera360-agent-actions-v1.js?v=20261113b&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3"></script>
 <script defer src="./assets/220-lera360-turn-taking-v1.js?v=20261113a&leraRelease=20261113-stable-dialog2&videoRelease=20261113-v3"></script>
-<script defer src="./assets/221-lera360-voice-navigation-v1.js?v=20261113-calendar-nav-pilot1&dialogueRelease=20261113-v2&controlRelease=20261113-v2"></script>
+<script defer src="./assets/221-lera360-voice-navigation-v1.js?signalsMerge=20261113-v1&v=20261113-calendar-nav-pilot1&dialogueRelease=20261113-v2&controlRelease=20261113-v2"></script>
 <script defer src="./assets/270-calendar-meetings-pilot-v1.js?v=20261113-pilot1&release=coverage-gps-1"></script>
 <script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2"></script>
 <!-- Isolated branch-director pilot: no login requests, no Android and no director AI changes. -->
@@ -1872,7 +1872,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Budgets 360 · read-only presentation and scoped existing budget audit/history. -->
 <script defer src="./assets/198-budgets-client360-v1.js?v=20261111-budget360-renderloopfix4"></script>
 <!-- Approved home only: authenticated reads, unchanged route/task engines. -->
-<link rel="stylesheet" href="./assets/283-control-center-v1.css?v=20261113-2">
-<script defer src="./assets/283-control-center-v1.js?v=20261113-2"></script>
+<link rel="stylesheet" href="./assets/283-control-center-v1.css?v=20261113-3">
+<script defer src="./assets/283-control-center-v1.js?v=20261113-3"></script>
 </body>
 </html>

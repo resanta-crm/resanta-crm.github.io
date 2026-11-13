@@ -15,7 +15,7 @@ test('CRM release guard script is wired to the active index',()=>{
 
 test('new build detection is bound to the real APP_VERSION marker',()=>{
   const version=index.match(matchVersion)?.[1];
-  assert.equal(version,'2026-11-13-lera-approved-rollout-v4-control-center-v2');
+  assert.equal(version,'2026-11-13-lera-approved-rollout-v4-control-center-v3');
   assert.match(script,/source\.match\(\/const\\s\+APP_VERSION/);
   assert.match(script,/cache:'no-store'/);
   assert.match(script,/crm_release_probe/);
