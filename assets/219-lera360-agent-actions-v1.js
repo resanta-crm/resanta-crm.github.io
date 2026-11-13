@@ -143,11 +143,15 @@ function handle(q,ui){
  if(proposal){
   if(NO.test(n)){clearProposal();say(ui,'Хорошо, ничего не создаю.');return true;}
   if(YES.test(n)){void commit(ui);return true;}
-  if(FIX.test(n)){const original=proposal.draft?.action==='task'?'Создать задачу: ':'Создать чат: ';
-    const context=proposal.draft?.action==='task'?
-     [proposal.draft.assignee_name,proposal.draft.title,proposal.draft.details,proposal.draft.due_date,proposal.draft.due_time].join('; '):
-     [proposal.draft.participant_names?.join(', '),proposal.draft.room_title].join('; ');
-    void prepare(original+context+'. Исправление пользователя: '+text,ui);return true;}
+  if(FIX.test(n)){
+    const act=proposal.draft?.action;
+    const original=act==='task'?'Создать задачу: ':act==='chat'?'Создать чат: ':act==='visit'?'Запланировать визит: ':'Назначить встречу: ';
+    const context=act==='task'?
+      [proposal.draft.assignee_name,proposal.draft.title,proposal.draft.details,proposal.draft.due_date,proposal.draft.due_time].join('; '):
+      act==='chat'?[proposal.draft.participant_names?.join(', '),proposal.draft.room_title].join('; '):
+      [proposal.draft.client_name,proposal.draft.title,proposal.draft.details,proposal.draft.due_date,proposal.draft.due_time,proposal.draft.location].join('; ');
+    void prepare(original+context+'. Исправление пользователя: '+text,ui);return true;
+   }
   // A different question cancels the draft, avoiding accidental future "yes".
   clearProposal();
   if(!ACTION.test(n))return false;
