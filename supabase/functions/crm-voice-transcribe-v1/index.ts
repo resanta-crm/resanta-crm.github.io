@@ -74,6 +74,10 @@ Deno.serve(async(req:Request)=>{
  form.append('model','gpt-transcribe');
  form.append('languages[]','ru');
  form.append('keywords[]','Ресанта');
+ form.append('keywords[]','Лера');
+ form.append('keywords[]','Уценка');
+ form.append('keywords[]','визит');
+ form.append('keywords[]','встреча');
  form.append('keywords[]','Триовист');
  form.append('keywords[]','Витебск');
  form.append('keywords[]','Гомель');
@@ -85,7 +89,7 @@ Deno.serve(async(req:Request)=>{
   .filter((name:string)=>/^[А-Яа-яЁё\s-]{4,70}$/.test(name))
   .slice(0,25);
  for(const name of managerNames)form.append('keywords[]',name);
- form.append('prompt','Русская речь в CRM группы компаний РЕСАНТА. Названия: Ресанта, Huter, Вихрь, Triovist, Триовист, 21vek. Фамилии сотрудников из проверенного справочника: '+managerNames.join(', ')+'. Типичные вопросы руководителя: «как быть по продажам», «какие задачи поставить», «чтобы эти клиенты купили», «сколько белорусских рублей», «дебиторская задолженность», «поручения менеджеру». Сохраняй произнесённые слова и фамилии максимально точно; не додумывай неразборчивые слова.');
+ form.append('prompt','Русская речь в CRM группы компаний РЕСАНТА. Голосовой помощник по имени Лера: пользователь часто начинает с «Лера», «Привет, Лера» или «Привет, Ресанта». Названия: Ресанта, Huter, Вихрь, Triovist, Триовист, 21vek, Уценка, плановый визит, встреча, календарь. Фамилии сотрудников из проверенного справочника: '+managerNames.join(', ')+'. Типичные вопросы руководителя: «как быть по продажам», «какие задачи поставить», «чтобы эти клиенты купили», «сколько белорусских рублей», «дебиторская задолженность», «поручения менеджеру». Сохраняй произнесённые слова и фамилии максимально точно; не додумывай неразборчивые слова.');
  form.append('file',clip,clip.name||'speech.webm');
  let upstream:Response;
  try{upstream=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+apiKey},body:form,signal:AbortSignal.timeout(28000)});}
