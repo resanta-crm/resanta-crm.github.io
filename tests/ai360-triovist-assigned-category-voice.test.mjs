@@ -106,9 +106,10 @@ test('Triovist sessions use same paid OpenAI and Yandex voice, without field/bra
   }
  }
  assert.match(web,/148-resanta-ai360-staff-identity-v1\.js\?v=[A-Za-z0-9._-]+/); // Accept cache-busted deployment revisions, require the actual module.
- assert.match(web,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
- assert.match(web,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=5/);
- assert.match(web,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=5/);
+ // Version numbers advance with verified releases; check the actual modules, not stale v=11/v=5.
+ assert.match(web,/144-resanta-ai360-branch-voice-v1\.js\?v=\d+(?:&[A-Za-z0-9_-]+=[A-Za-z0-9._-]+)*\"/);
+ assert.match(web,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=\d+(?:&[A-Za-z0-9_-]+=[A-Za-z0-9._-]+)*\"/);
+ assert.match(web,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=\d+(?:&[A-Za-z0-9_-]+=[A-Za-z0-9._-]+)*\"/);
  assert.match(voice,/triovist_category/);
 });
 test('Shared launcher recognizes the two Triovist logins without network on page load',()=>{
