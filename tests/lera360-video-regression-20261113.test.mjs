@@ -17,6 +17,8 @@ const page=read('index.html');
 test('long interrupted meeting request waits for continuation, then composes all speech',()=>{
  const c={window:{}};vm.runInNewContext(turn,c);const t=c.window.crmAI360TurnTakingV1;
  assert.equal(t.pauseMs>=3000,true);
+ assert.ok(t.maxSegments>=8,'long voice utterances need more than three clips');
+ assert.equal(t.merge('а'.repeat(700),'б'.repeat(700)).length,1401,'joining long speech must not truncate at 900 characters');
  for(const question of ['Лера, у меня завтра встреча с','Я хотел рассказать, что','Посмотри продажи, и','Подожди','Я ещё не закончил']){
   assert.equal(t.detect(question),'more',question);
  }
