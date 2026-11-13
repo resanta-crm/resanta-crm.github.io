@@ -25,9 +25,9 @@ test('pilot reuses confirmed owner-RLS meetings and five-source briefing and nev
  assert.match(calendar,/\.eq\('owner_id',OWNER\)/);
  assert.match(calendar,/const ENDPOINT='crm-ai360-director-briefing-v1'/);
  assert.match(calendar,/d\?\.items_count!==5/);
- assert.match(calendar,/Пока не подключён к брифингу/);
+ assert.match(calendar,/Частично: выборка без полной аналитики/);
  assert.match(calendar,/Не удалось прочитать календарь/);
- assert.match(calendar,/Ничего не создаётся и никому не отправляется автоматически/);
+ assert.match(calendar,/Решения и поручения создаются только после подтверждения/);
  assert.doesNotMatch(calendar,/\.(insert|update|upsert)\(/);
  assert.doesNotMatch(calendar,/\.from\([^)]*\)\.delete\(/); // Set.delete() only edits local agenda draft
  assert.doesNotMatch(calendar,/setInterval|MediaRecorder|SpeechRecognition|speechSynthesis/);
