@@ -104,7 +104,33 @@ function voiceHandle(text,ui){
  if(typeof goPage==='function')goPage('gps-control','GPS-контроль');
  if(typeof w.crmSchedulePageHook==='function')w.crmSchedulePageHook('gps-control',open,300);
  else setTimeout(open,350);
- ui?.answer?.('Открываю GPS-проверку первой торговой точки за три месяца. Подтверждённые GPS-факты и дни, требующие сверки, показаны отдельно.');
+ // Answer only from confirmed RPC rows; never turn missing GPS into zero lateness.
+ void (async()=>{
+  const wasPending=w.__resantaAI360PendingV1===true;
+  if(!wasPending)w.__resantaAI360PendingV1=true;
+  try{
+   const ok=state.rows?true:await refresh();
+   if(!ok||!owner()||!state.rows){
+     ui?.answer?.('Открыла GPS-контроль, но достоверный расчёт пока недоступен. Цифры опозданий не придумываю.');
+     return;
+   }
+   const lower=String(text||'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
+   const month=/сентябр/.test(lower)?'2026-09':/октябр/.test(lower)?'2026-10':/ноябр/.test(lower)?'2026-11':null;
+   const manager=/руднев|александр.*руднев/.test(lower)?'Руднев':
+    /шкуран|татьяна/.test(lower)?'Шкуран':
+    /ачинович|коченович|екатерина/.test(lower)?'Ачинович':null;
+   const scoped=state.rows.filter(x=>(!month||String(x.work_date).startsWith(month))&&
+     (!manager||x.manager_name===manager));
+   const summaries=aggregate(scoped);
+   if(!summaries.length){ui?.answer?.('На выбранный период нет утверждённых первых визитов для расчёта.');return;}
+   const where=month===null?'за сентябрь, октябрь и ноябрь':month==='2026-09'?'за сентябрь':month==='2026-10'?'за октябрь':'за ноябрь';
+   const chunks=summaries.map(m=>m.name+': '+m.late+' GPS-подтверждённых прибытия позже плана, '+duration(m.total)+
+       ', ещё '+m.review+' дней требуют проверки');
+   ui?.answer?.('По первым торговым точкам '+where+'. '+chunks.join('; ')+
+     '. Эти показатели предварительные до сверки согласованных переносов, а не основание для штрафа.');
+  }catch{ui?.answer?.('Сейчас не могу подтвердить GPS-цифры. Открыла раздел для проверки.');}
+  finally{if(!wasPending)w.__resantaAI360PendingV1=false;}
+ })();
  return true;
 }
 d.addEventListener('click',e=>{
