@@ -74,5 +74,5 @@ test('existing CRM startup and other module scripts remain unchanged',()=>{
  assert.match(index,/61-triovist-task-month-safe-v23651\.js\?v=20261109-decisions360-fact1/);
  assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261109-decisions360-motivation1/);
  assert.match(index,/182-triovist-shares360-v1\.js\?v=20261109-decisions360-evidence1/);
- assert.match(index,/2026-11-13-lera-agent-stability-v2/);
+ assert.match(index,/2026-11-13-lera-professional-names-v1/);
 });
