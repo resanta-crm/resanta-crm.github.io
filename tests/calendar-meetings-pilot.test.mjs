@@ -57,3 +57,42 @@ test('evidence dates, roles and agenda drafts are explicit',()=>{
  assert.match(css,/#page-meeting-planner \.cmp-kpis/);
  assert.match(css,/@media\(max-width:620px\)/);
 });
+
+test('an unauthorized boss cannot view the pilot or trigger its data sources',()=>{
+ const root={innerHTML:'',textContent:''},app={style:{display:'flex'}}, calls=[];
+ const doc={addEventListener(){},getElementById:(id)=>id==='cmp-root'?root:id==='app'?app:null};
+ const fakeWindow={db:{auth:{getUser(){calls.push('getUser');return Promise.resolve({})}}}};
+ vm.runInNewContext(calendar,{window:fakeWindow,document:doc,Intl,Date,Set,Array,String,Object,Number,Promise,
+   currentUser:{id:'another-boss'},currentProfile:{id:'another-boss',role:'boss',email:'someone@resanta.ru'}});
+ fakeWindow.crmMeetingPlannerPilotV1.render();
+ assert.match(root.textContent,/только в персональном пилоте/);
+ assert.deepEqual(calls,[]);
+});
+test('the verified director renders the calendar and reads only his own meetings',async()=>{
+ const root={innerHTML:'',textContent:''},app={style:{display:'flex'}}, calls=[];
+ const dbMock={
+   auth:{getUser(){calls.push('auth');return Promise.resolve({data:{user:{id:OWNER}},error:null})}},
+   from(table){
+     calls.push('table:'+table);
+     return {select(cols){calls.push('select:'+cols);return this},eq(col,value){
+       calls.push('filter:'+col+':'+value);return this},
+       gte(){return this},lt(){return this},order(){return this},
+       limit(){return Promise.resolve({data:[],error:null})}};
+   }
+ };
+ const doc={
+   addEventListener(){},
+   getElementById:(id)=>id==='cmp-root'?root:id==='app'?app:null,
+   querySelectorAll(){return []}
+ };
+ const fakeWindow={db:dbMock};
+ vm.runInNewContext(calendar,{window:fakeWindow,document:doc,Intl,Date,Set,Array,String,Object,Number,Promise,
+   currentUser:{id:OWNER},currentProfile:{id:OWNER,role:'boss',email:'payushin_ar@resanta.ru'}});
+ fakeWindow.crmMeetingPlannerPilotV1.render();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(root.innerHTML,/Календарь и совещания/);
+ assert.match(root.innerHTML,/нет запланированных встреч/);
+ assert.ok(calls.includes('table:crm_ai360_meetings_v1'));
+ assert.ok(calls.includes('filter:owner_id:'+OWNER));
+ assert.equal(calls.some(x=>x.includes('insert')||x.includes('delete')),false);
+});
