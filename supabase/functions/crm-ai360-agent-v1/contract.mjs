@@ -8,6 +8,7 @@ export const AGENT360_OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 export const AGENT360_PETROVICHEV_ID='a24954b8-2fe1-4852-b629-d8f351e1bd36';
 // User-requested address forms are presentation only, never access-control inputs.
 const GREETINGS=Object.freeze({
+ [AGENT360_OWNER_ID]:'родной',
  [AGENT360_PETROVICHEV_ID]:'мой слуга',
  'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
