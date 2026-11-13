@@ -154,7 +154,15 @@ function moment(date,time){
 async function resolveClient(svc,actor,clientName){
  const name=esc(clientName).slice(0,180);
  if(!name)return {client:null};
- const escaped=name.replace(/[\%_]/g,'\\async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){');
+ // Legal-form prefixes are not guaranteed to appear in the same order in CRM.
+ // Keep a narrow, deterministic lookup; ambiguous matches remain unselectable.
+ const core=name.replace(/[«»"']/g,' ')
+  .replace(/^\s*(?:ооо|оао|зао|ао|чуп|ип|уп)\s+/iu,'')
+  .replace(/\s+(?:ооо|оао|зао|ао|чуп|ип|уп)\s*$/iu,'')
+  .trim();
+ const wanted=core.length>=3?core:name;
+ // Escape LIKE wildcard metacharacters instead of interpolating them into a pattern.
+ const escaped=wanted.replace(/[%_\\]/g,'\\$&');
  let q=svc.from('clients').select('id,name,manager_name,address,city,region,is_archived,to_delete')
   .ilike('name','%'+escaped+'%').limit(5);
  const names=actor.tier==='employee'?[actor.name]:
