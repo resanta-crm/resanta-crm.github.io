@@ -134,7 +134,7 @@ async function commit(ui){
  }finally{if(run===seq)setBusy(false);}
 }
 const AGENDA=/(?:какие|покажи|назови|список|расписание|что\s+у\s+меня).{0,110}(?:встреч|совещан|календар|расписани)|^(?:мой|мои)\s+(?:встречи|календарь|расписание)$/i;
-const REMINDER=/^(?:напомни|напоминай|напоминание)\b/i;
+const REMINDER=/^(?:напомни|напоминай|напоминание)(?=$|[\s,.!?])/i;
 async function agenda(ui,period){
  if(working||!allowed())return;
  const run=++seq,user=currentId();setBusy(true);
