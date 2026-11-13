@@ -6,8 +6,10 @@
 if(window.crmMeetingPlannerPilotV1)return;
 const OWNER='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const ENDPOINT='crm-ai360-director-briefing-v1';
+const COVERAGE_ENDPOINT='crm-ai360-meeting-coverage-v1';
 const state={focus:'',mode:'week',meetings:[],loaded:false,loadError:'',loading:false,range:null,
- briefing:null,briefError:'',briefLoading:false,selected:new Set(),actor:'',meetingSeq:0,briefSeq:0,notice:''};
+ briefing:null,briefError:'',briefLoading:false,coverage:null,coverageError:'',coverageBusy:false,coverageSeq:0,
+ selected:new Set(),actor:'',meetingSeq:0,briefSeq:0,notice:''};
 const $=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const trim=(x,len=480)=>String(x??'').trim().slice(0,len);
@@ -31,8 +33,9 @@ const dayOf=x=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'nu
 const modeLabel={day:'День',week:'Неделя',month:'Месяц'};
 const statusTag={sales:'Продажи',debt:'Задолженность',tasks:'Задачи',routes:'Маршруты',triovist:'Триовист'};
 const pageFor={sales:'sales',debt:'debt',tasks:'tasks',routes:'routes-boss',triovist:'vip'};
-function clear(){state.meetingSeq++;state.briefSeq++;state.meetings=[];state.loaded=false;state.loadError='';state.loading=false;
- state.briefing=null;state.briefError='';state.briefLoading=false;state.selected.clear();state.range=null;state.notice='';}
+function clear(){state.meetingSeq++;state.briefSeq++;state.coverageSeq++;state.meetings=[];state.loaded=false;state.loadError='';state.loading=false;
+ state.briefing=null;state.briefError='';state.briefLoading=false;state.coverage=null;state.coverageError='';state.coverageBusy=false;
+ state.selected.clear();state.range=null;state.notice='';}
 function periodDates(){
  const base=utc(state.focus),dow=(base.getUTCDay()+6)%7;
  if(state.mode==='day')return [state.focus];
@@ -65,47 +68,89 @@ function meetingCards(){
  (Array.isArray(m.participants)&&m.participants.length?'<small>Указаны участники: '+safe(m.participants.join(', '))+' · приглашения не подтверждены</small>':'')+
  '</div></div>').join('');
 }
+function combinedCards(){
+ const five=Array.isArray(state.briefing?.cards)?state.briefing.cards.map(c=>({...c,scope:'existing_verified_brief'})):[];
+ const more=Array.isArray(state.coverage?.signals)?state.coverage.signals.map(c=>({
+  id:c.id,title:c.title,fact:c.fact,action:c.action,source:c.source||c.domain,
+  as_of:c.as_of||state.coverage.as_of,level:c.priority||'medium',domain:c.domain,
+  scope:'limited_sample'})):[];
+ return [...five,...more];
+}
 function briefCards(){
- if(state.briefLoading)return '<p class="cmp-muted">Лера проверяет пять существующих источников CRM…</p>';
- if(state.briefError)return '<p class="cmp-error">Брифинг недоступен: '+safe(state.briefError)+'. Данные не подменяются догадками.</p>';
- if(!state.briefing)return '<div class="cmp-empty"><b>Повестка пока не подготовлена</b><p>Нажмите «Лера · Подготовить совещание». Используем существующий защищённый брифинг без новых запросов к тяжёлым отчётам.</p></div>';
- const data=state.briefing;
- return '<div class="cmp-source-note">Проверено '+safe(data.as_of)+' · '+data.cards.length+
- ' направлений · другие разделы пока не входят в этот брифинг</div>'+
- data.cards.map(c=>{
- const chosen=state.selected.has(c.id),importance=c.level==='high'?'Высокий приоритет':c.level==='medium'?'Требует внимания':'Информация';
- return '<article class="cmp-topic"><div class="cmp-topic-top"><span class="cmp-tag '+safe(c.level)+'">'+importance+'</span>'+
- '<span class="cmp-muted">'+safe(statusTag[c.id]||c.id)+'</span></div>'+
+ if(state.briefLoading&&!state.briefing)return '<p class="cmp-muted">Лера собирает подтверждённую сводку пяти направлений…</p>';
+ if(state.briefError&&!state.briefing)return '<p class="cmp-error">Брифинг пяти направлений недоступен: '+safe(state.briefError)+'. Остальные источники проверяются отдельно.</p>';
+ const cards=combinedCards();
+ if(!cards.length)return '<div class="cmp-empty"><b>Повестка пока не подготовлена</b><p>Нажмите «Лера · Подготовить совещание». Полный анализ не подменяется общим списком источников.</p></div>';
+ return '<div class="cmp-source-note">'+safe(state.briefing?.as_of||state.coverage?.as_of||dateMinsk())+
+ ' · '+cards.length+' предметных сигналов и вопросов. '+(state.coverage?'Дополнительно проверен каталог источников, только ограниченные выборки.':'Проверка остальных источников ещё не выполнена.')+'</div>'+
+ cards.map(c=>{
+ const chosen=state.selected.has(c.id),importance=c.scope==='limited_sample'?'Предварительный сигнал по выборке':
+ c.level==='high'?'Высокий приоритет':c.level==='medium'?'Требует внимания':'Информация';
+ const topicPage=pageFor[c.domain||c.id]||'dashboard';
+ return '<article class="cmp-topic"><div class="cmp-topic-top"><span class="cmp-tag '+safe(c.level)+'">'+safe(importance)+'</span>'+
+ '<span class="cmp-muted">'+safe(statusTag[c.domain||c.id]||c.domain||c.id)+'</span></div>'+
  '<h4>'+safe(trim(c.title,180))+'</h4><p><b>Факт:</b> '+safe(trim(c.fact,650))+'</p>'+
  '<p><b>Предлагаю:</b> '+safe(trim(c.action,450))+'</p>'+
- '<div class="cmp-muted cmp-source">Источник: '+safe(trim(c.source,190))+' · '+safe(trim(c.as_of,40))+'</div>'+
+ '<div class="cmp-muted cmp-source">Источник: '+safe(trim(c.source,190))+' · '+safe(trim(c.as_of,40))+
+ (c.scope==='limited_sample'?' · Неполная выборка, нужно подтверждение в разделе':'')+'</div>'+
  '<div class="cmp-row cmp-actions"><button data-cmp-topic="'+safe(c.id)+'" class="cmp-btn'+(chosen?' strong':'')+'">'+
  (chosen?'✓ В повестке':'+ В повестку')+'</button>'+
- '<button class="cmp-btn" data-cmp-open="'+safe(pageFor[c.id]||'dashboard')+'">Открыть раздел</button></div></article>';
+ '<button class="cmp-btn" data-cmp-open="'+safe(topicPage)+'">Открыть раздел</button></div></article>';
  }).join('');
 }
 function audit(){
+ const coverage=new Map((state.coverage?.entries||[]).map(x=>[x.id,x]));
+ const navMap={
+  'nav-dashboard':['sales','operations'],'nav-alerts':['tasks','clients'],
+  'nav-clients':['clients','client_detail'],'nav-client360':['clients','client_detail'],
+  'nav-connect':[],'nav-tasks':['tasks'],'nav-markdown':['markdown'],
+  'nav-visits':['visits'],'nav-vip':['vip','vip_actions'],'nav-promotions':['promotions','promotion_budgets'],
+  'nav-stands':['stands'],'nav-vip-actions':['vip_actions'],'nav-budgets':['promotion_budgets'],
+  'nav-debt':['debt'],'nav-sales':['sales'],'nav-abc':['clients','sales'],
+  'nav-my-routes':['routes'],'nav-route':['routes'],'nav-workday':['visits','routes'],
+  'nav-control':['operations','tasks','gps'],'nav-gps-control':['gps'],
+  'nav-managers':['motivation','sales'],'nav-routes-boss':['routes'],'nav-users':[]
+ };
  const navs=[...document.querySelectorAll('.sidebar .nav-item[id^="nav-"]')].filter(x=>
   x.id!=='nav-meeting-planner'&&x.style.display!=='none'&&
   (typeof window.getComputedStyle!=='function'||window.getComputedStyle(x).display!=='none'));
- const map={'nav-sales':'sales','nav-debt':'debt','nav-tasks':'tasks',
-   'nav-routes-boss':'routes','nav-vip':'triovist'};
  const seen=new Set();
- const list=navs.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true;});
- return '<div class="cmp-audit-grid">'+list.map(n=>{
- const id=n.id.slice(4),key=map[n.id],checked=!!state.briefing?.cards?.some(c=>c.id===key);
- return '<div class="cmp-audit-item"><span class="cmp-audit-dot '+(checked?'checked':'pending')+'"></span>'+
- '<span>'+safe(n.textContent.replace(/[\n ]+/g,' ').trim())+'</span>'+
- '<small>'+(checked?'Есть проверенный брифинг':'Пока не подключён к брифингу')+'</small>'+
- '<button data-cmp-open="'+safe(id)+'" title="Открыть исходный раздел">↗</button></div>';
- }).join('')+'</div><p class="cmp-muted">Показываются доступные пункты меню. Отметка «Проверен» означает проверку в текущем брифинге, а не полный аудит всех показателей модуля. Неподключённые разделы не считаются проверенными.</p>';
+ const visible=navs.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true;});
+ const list=visible.map(n=>{
+  const ids=navMap[n.id]||[],items=ids.map(x=>coverage.get(x)).filter(Boolean);
+  const backed=ids.some(id=>state.briefing?.cards?.some(c=>c.id===id));
+  const partial=items.some(x=>x.status==='partial'),missing=items.some(x=>x.status==='unavailable');
+  const phase=partial||backed?'partial':missing?'unavailable':'pending';
+  const desc=partial?'Частично: выборка без полной аналитики':backed?'Частично: подтверждённый узкий брифинг':
+     missing?'Источник не ответил':'Полная аналитика не подключена';
+  return '<div class="cmp-audit-item"><span class="cmp-audit-dot '+phase+'"></span>'+
+   '<span>'+safe(n.textContent.replace(/[\n ]+/g,' ').trim())+'</span><small>'+safe(desc)+'</small>'+
+   '<button data-cmp-open="'+safe(n.id.slice(4))+'" title="Открыть раздел">↗</button></div>';
+ });
+ const entries=state.coverage?.entries||[];
+ return '<div class="cmp-audit-grid">'+list.join('')+'</div>'+
+ (state.coverageBusy?'<p class="cmp-muted">Проверяю 34 зарегистрированных источника CRM небольшими пакетами…</p>':'')+
+ (state.coverageError?'<p class="cmp-error">Каталог источников недоступен: '+safe(state.coverageError)+'</p>':'')+
+ (state.coverage?'<div class="cmp-source-note">Каталог: '+safe(state.coverage.registered)+
+  ' направлений · доступны ограниченные выборки: '+safe(state.coverage.sample_sources)+
+  ' · недоступно: '+safe(state.coverage.unavailable)+
+  ' · отдельные профильные расчёты требуются: '+safe(state.coverage.managed_pending)+
+  '. Это не значит, что все разделы проверены полностью.</div>'+
+ '<details class="cmp-coverage-details"><summary>Подробная проверка '+safe(entries.length)+' источников и причин неполного охвата</summary>'+
+ '<div class="cmp-audit-grid">'+entries.map(x=>'<div class="cmp-audit-item">'+
+ '<span class="cmp-audit-dot '+(x.status==='partial'?'partial':x.status==='unavailable'?'unavailable':'pending')+'"></span>'+
+ '<span>'+safe(x.label||x.id)+'</span><small>'+safe(x.reason||'')+
+ (x.as_of?' · '+safe(x.as_of):'')+'</small></div>').join('')+'</div></details>':'')+
+ '<p class="cmp-muted">Зелёный статус полной проверки не присваивается за несколько строк данных. Модуль признаётся полностью проверенным только после профильных расчётов, сверки свежести и достоверности.</p>';
 }
 function agendaText(){
- if(!state.briefing)return '';
- const items=state.briefing.cards.filter(c=>state.selected.has(c.id));
+ const items=combinedCards().filter(c=>state.selected.has(c.id));
+ if(!items.length)return '';
  return 'Черновик повестки на '+dateMinsk()+' (не сохранён в CRM)\n'+
- items.map((c,i)=>(i+1)+'. '+c.title+'\nФакт: '+c.fact+'\nПредлагаю: '+c.action+'\nИсточник: '+c.source).join('\n\n')+
- '\n\nРешения и поручения оформляются после подтверждения руководителя. Полные разговоры не записываются.';
+ items.map((c,i)=>(i+1)+'. '+c.title+'\nФакт: '+c.fact+
+ (c.scope==='limited_sample'?'\nОграничение: только часть данных, требуется сверка.':'')+
+ '\nПредлагаю: '+c.action+'\nИсточник: '+c.source).join('\n\n')+
+ '\n\nРешения и поручения создаются только после подтверждения руководителем.';
 }
 function draw(){
  const root=$('cmp-root');if(!root)return;
@@ -115,7 +160,7 @@ function draw(){
  '<button class="cmp-btn strong" data-cmp-voice>Лера · Открыть агента</button></div></div>'+
  (state.notice?'<div class="cmp-notice" role="status">'+safe(state.notice)+'</div>':'')+
  '<div class="cmp-kpis"><div><small>Встреч в выбранный день</small><strong>'+(state.loaded?meetingList(state.focus).length:'—')+'</strong></div>'+
- '<div><small>Проверено направлений</small><strong>'+(state.briefing?state.briefing.cards.length:'—')+'</strong></div>'+
+ '<div><small>Частично проверено источников</small><strong>'+(state.coverage?state.coverage.sample_sources:(state.briefing?state.briefing.cards.length:'—'))+'</strong></div>'+
  '<div><small>Вопросов в повестке</small><strong>'+state.selected.size+'</strong></div></div>'+
  '<div class="cmp-columns"><section class="cmp-panel"><div class="cmp-panel-title"><h3>Мой календарь</h3>'+
  '<div class="cmp-modes">'+Object.entries(modeLabel).map(([k,v])=>'<button type="button" data-cmp-mode="'+k+'" aria-pressed="'+(state.mode===k)+'"'+(state.mode===k?' class="active"':'')+'>'+v+'</button>').join('')+'</div></div>'+
@@ -127,12 +172,13 @@ function draw(){
  '<p class="cmp-muted">CONNECT открывает рабочие чаты. Видеозвонок начинается из выбранного чата; автоматическая отправка приглашений и напоминаний пока не включена.</p></section>'+
  '<section class="cmp-panel"><div class="cmp-panel-title"><h3>Лера · Повестка совещания</h3>'+
  '<button class="cmp-btn strong" data-cmp-brief '+(state.briefLoading?'disabled':'')+'>✦ Подготовить совещание</button></div>'+
- '<p class="cmp-muted">Анализ существующего директорского брифинга по пяти направлениям. Ничего не создаётся и никому не отправляется автоматически.</p>'+
+ '<p class="cmp-muted">5 подтверждённых управленческих сигналов + проверка остальных источников AI Agent 360°. Выборки по новым модулям неполные, их рекомендации предварительные.</p>'+
  briefCards()+'<div class="cmp-row cmp-actions"><button class="cmp-btn" data-cmp-copy '+(!state.selected.size?'disabled':'')+'>Скопировать повестку</button>'+
  '<button class="cmp-btn" data-cmp-connect>К видеосовещанию · CONNECT</button>'+ 
  '<button class="cmp-btn" data-cmp-gps>GPS · Опоздания на первую ТТ</button></div>'+
  '<p class="cmp-muted">Это черновик. Итоги и поручения оформляются отдельно с подтверждением. Полная история диалога не сохраняется.</p></section></div>'+
- '<section class="cmp-panel cmp-audit"><div class="cmp-panel-title"><h3>Что проверено в CRM</h3><span>Охват источников · без ложных отметок</span></div>'+
+ '<section class="cmp-panel cmp-audit"><div class="cmp-panel-title"><h3>Что проверено в CRM</h3><span>Охват источников · без ложных отметок</span>'+ 
+ '<button class="cmp-btn" data-cmp-coverage '+(state.coverageBusy?'disabled':'')+'>↻ Проверить источники</button></div>'+
  audit()+'</section>';
 }
 async function meetingsRefresh(){
@@ -153,9 +199,28 @@ async function meetingsRefresh(){
  }catch(e){if(seq===state.meetingSeq&&actor===userId()){state.loaded=false;state.loadError=trim(e?.message||e,180);}}
  finally{if(seq===state.meetingSeq){state.loading=false;if(authorized())draw();}}
 }
+async function coverageRefresh(){
+ if(!authorized()||state.coverageBusy)return;
+ const actor=userId(),seq=++state.coverageSeq;
+ state.coverageBusy=true;state.coverageError='';draw();
+ try{
+  const c=one(),auth=await c.auth.getUser();
+  if(auth.error||auth.data?.user?.id!==OWNER)throw Error('Нет подтверждённой сессии');
+  const r=await c.functions.invoke(COVERAGE_ENDPOINT,{body:{kind:'meeting_coverage'}});
+  if(r.error)throw r.error;
+  const data=r.data;
+  if(data?.kind!=='meeting_coverage'||data?.mode!=='readonly'||
+     data.registered!==34||!Array.isArray(data.entries)||data.entries.length!==34)
+   throw Error('Неверный ответ каталога');
+  if(seq!==state.coverageSeq||actor!==userId()||!authorized())return;
+  state.coverage=data;
+ }catch(e){if(seq===state.coverageSeq&&actor===userId())state.coverageError=trim(e?.message||e,150);}
+ finally{if(seq===state.coverageSeq){state.coverageBusy=false;if(authorized())draw();}}
+}
 async function briefRefresh(){
  if(!authorized()||state.briefLoading)return;
- const actor=userId(),seq=++state.briefSeq;state.briefLoading=true;state.briefError='';draw();
+ const actor=userId(),seq=++state.briefSeq;state.briefLoading=true;state.briefError='';
+ void coverageRefresh();draw();
  try{
   const c=one(),a=await c.auth.getUser();
   if(a.error||a.data?.user?.id!==OWNER)throw Error('Нет подтверждённой сессии директора');
@@ -167,7 +232,7 @@ async function briefRefresh(){
    d.cards.some(x=>!x.id||!x.title||!x.fact||!x.action||!x.source))throw Error('Некорректный ответ аналитики');
   if(seq!==state.briefSeq||actor!==userId()||!authorized())return;
   state.briefing=d;state.selected=new Set(d.cards.filter(x=>x.attention).map(x=>x.id));
-  state.notice='Проверено пять направлений. Остальные разделы требуют подключения к общему аналитическому обзору.';
+  state.notice='Пять подтверждённых управленческих вопросов готовы. Остальные источники проверяются отдельно с явной отметкой ограничений.';
  }catch(e){if(seq===state.briefSeq&&actor===userId()){state.briefError=trim(e?.message||e,180);state.notice='';}}
  finally{if(seq===state.briefSeq){state.briefLoading=false;if(authorized())draw();}}
 }
@@ -181,7 +246,7 @@ function render(){
  if(!state.loaded&&!state.loading)void meetingsRefresh();
 }
 function onClick(e){
- const target=e.target.closest?.('#page-meeting-planner [data-cmp-date], #page-meeting-planner [data-cmp-shift], #page-meeting-planner [data-cmp-today], #page-meeting-planner [data-cmp-mode], #page-meeting-planner [data-cmp-brief], #page-meeting-planner [data-cmp-topic], #page-meeting-planner [data-cmp-open], #page-meeting-planner [data-cmp-copy], #page-meeting-planner [data-cmp-connect], #page-meeting-planner [data-cmp-voice], #page-meeting-planner [data-cmp-refresh], #page-meeting-planner [data-cmp-gps]');
+ const target=e.target.closest?.('#page-meeting-planner [data-cmp-date], #page-meeting-planner [data-cmp-shift], #page-meeting-planner [data-cmp-today], #page-meeting-planner [data-cmp-mode], #page-meeting-planner [data-cmp-brief], #page-meeting-planner [data-cmp-topic], #page-meeting-planner [data-cmp-open], #page-meeting-planner [data-cmp-copy], #page-meeting-planner [data-cmp-connect], #page-meeting-planner [data-cmp-voice], #page-meeting-planner [data-cmp-refresh], #page-meeting-planner [data-cmp-gps], #page-meeting-planner [data-cmp-coverage]');
  if(!target)return;
  if(!authorized())return;
  if(target.hasAttribute('data-cmp-date'))state.focus=target.dataset.cmpDate;
@@ -193,6 +258,7 @@ function onClick(e){
  }
  else if(target.hasAttribute('data-cmp-refresh')){void meetingsRefresh();return;}
  else if(target.hasAttribute('data-cmp-brief')){void briefRefresh();return;}
+ else if(target.hasAttribute('data-cmp-coverage')){void coverageRefresh();return;}
  else if(target.hasAttribute('data-cmp-topic')){
    const id=target.dataset.cmpTopic;if(state.selected.has(id))state.selected.delete(id);else state.selected.add(id);
  }
@@ -233,5 +299,5 @@ function onClick(e){
  if(!state.loaded&&!state.loading)void meetingsRefresh();
 }
 document.addEventListener('click',onClick);
-window.crmMeetingPlannerPilotV1=Object.freeze({render,refresh:meetingsRefresh,brief:briefRefresh,version:'payushin-pilot-v1'});
+window.crmMeetingPlannerPilotV1=Object.freeze({render,refresh:meetingsRefresh,brief:briefRefresh,version:'payushin-coverage-gps-v2'});
 })(window,document);
