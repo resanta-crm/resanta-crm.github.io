@@ -32,7 +32,7 @@ test('director voice enumerates all ten, not only first client',()=>{
  const u={id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',name:'Александр Паюшин',role:'boss'};
  const data=Array.from({length:10},(_,i)=>({...stand,client_name:'Клиент '+(i+1),action:'Проверить фото',needs_photo:i%2===0,matched_sku_count:0,sku_count:3,route_today:false}));
  const b=briefing(u,data,'2026-11-12','director',10);
- assert.match(b.voice,/Привет, родной/);
+ assert.match(b.voice,/Привет, Александр/);
  for(let i=1;i<=10;i++)assert.ok(b.voice.includes('Клиент '+i+' —'),String(i));
  assert.equal(b.lines.length,10);assert.equal(b.stand_count,10);
 });

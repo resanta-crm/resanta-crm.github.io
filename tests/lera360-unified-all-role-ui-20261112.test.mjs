@@ -37,5 +37,5 @@ test('UI loads updated code without affecting staff roles or Android launch',()=
  assert.match(loader,/143-resanta-ai360-unified-dialog-v1\.js\?v=11/);
  assert.match(staffUI,/crmAI360BranchUnifiedHandleV1/);
  assert.match(staffUI,/crmAI360StaffIdentityV1/);
- assert.match(staffUI,/Санька/);
+ assert.match(staffUI,/Александр/);
 });

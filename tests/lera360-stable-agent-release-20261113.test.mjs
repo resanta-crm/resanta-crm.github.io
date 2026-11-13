@@ -45,11 +45,11 @@ test('signed-in client and server have consistent personalized greetings',()=>{
  const agent=read('supabase/functions/crm-ai360-agent-v1/contract.mjs');
  const front=read('assets/215-lera360-personal-greeting-v1.js');
  const staff=read('assets/144-resanta-ai360-branch-voice-v1.js');
- for(const address of ['родной','Кирюшка','Санька','Катюшка','Танюшка','мой господин','моя госпожа','мой слуга']){
+ for(const address of ['Александр','Кирилл','Александр','Екатерина','Татьяна','Александр','Наталья','Виталий']){
   assert.ok(agent.includes("'"+address+"'"),address);
   assert.ok(front.includes("address:'"+address+"'"),address);
  }
- for(const address of ['Кирюшка','Санька','Катюшка','Танюшка','мой господин','моя госпожа'])
+ for(const address of ['Кирилл','Александр','Екатерина','Татьяна','Александр','Наталья'])
   assert.ok(staff.includes(":'"+address+"'"),address);
  assert.match(front,/greeting:'Привет, '\+p\.address\+', чем помочь\?'/);
 });
@@ -65,7 +65,7 @@ test('stale session retry cannot cross actors and happens only on 401',()=>{
 
 test('release URLs are versioned consistently while data rights remain unchanged',()=>{
  const page=read('index.html'), launcher=read('assets/137-resanta-ai360-lazy-launch-v1.js');
- assert.match(page,/2026-11-13-lera-agent-stability-v2/);
+ assert.match(page,/2026-11-13-lera-professional-names-v1/);
  assert.equal((page.match(/leraRelease=20261113-stable-dialog2/g)||[]).length,7);
  assert.ok((launcher.match(/leraRelease=20261113-stable-dialog2/g)||[]).length>=3);
  const actions=read('assets/219-lera360-agent-actions-v1.js');

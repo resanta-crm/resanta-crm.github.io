@@ -39,13 +39,13 @@ test('user IDs and exact manager surname scope avoid leaks',()=>{
  assert.equal(recipientStandRows({...manager,id:'forged'},rows,others).length,0);
  assert.equal(recipientStandRows({role:'boss',email:'payushin_ar@resanta.ru',name:'Паюшин'},rows,others).length,2);
  assert.equal(recipientStandRows({role:'boss',email:'other@resanta.ru',name:'Branch',region:'Другая'},rows,others).length,0);
- assert.equal(greet(manager),'Саня');
- assert.equal(greet({name:'Ачинович'}),'Катюшка');
+ assert.equal(greet(manager),'Александр');
+ assert.equal(greet({name:'Ачинович'}),'Екатерина');
 });
 test('voice brief is short and is a summary, not a command or fabricated payment',()=>{
  const b=briefing(manager,[assessStand(p,[],[],now,true)],now);
  assert.ok(b.voice.length<=240);
- assert.match(b.voice,/Привет, Саня/);
+ assert.match(b.voice,/Привет, Александр/);
  assert.match(b.lines.join(' '),/ID cid1/);
  assert.doesNotMatch(b.voice,/клиент оплатил|поступили деньги/);
  assert.equal(monthStart(now,-5),'2026-06-01');

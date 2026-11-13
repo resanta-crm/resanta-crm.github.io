@@ -12,7 +12,7 @@ const rows=[
 const user={id:'ach',name:'Ачинович',role:'manager',access_scope:'standard'};
 test('audio is a compact, personal, data-backed brief with no false cash receipt claims',()=>{
  const text=pdzVoiceText({user,binding:{},rows,previousRows:rows.map(r=>({...r,debt_overdue:r.debt_overdue+100})),reportDate,today,evidence:new Map()});
- assert.match(text,/Катюшка/);
+ assert.match(text,/Екатерина/);
  assert.match(text,/16\s?701/);
  assert.match(text,/снизился/);
  assert.doesNotMatch(text,/получили оплату|деньги поступили/);
