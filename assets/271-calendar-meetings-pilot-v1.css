@@ -72,3 +72,10 @@
 #page-meeting-planner .cmp-daygrid.is-day{grid-template-columns:1fr}
 #page-meeting-planner .cmp-daygrid.is-day .cmp-day{min-height:50px;flex-direction:row;justify-content:center;gap:10px}
 #page-meeting-planner .cmp-day-caption{padding:10px 12px;background:#f5f8fb;text-transform:capitalize;text-align:center;color:#51738e;font-size:12px;font-weight:700}
+
+#page-meeting-planner .cmp-audit-dot.partial{background:#d9a747}
+#page-meeting-planner .cmp-audit-dot.unavailable{background:#c85b5b}
+#page-meeting-planner .cmp-coverage-details{margin-top:12px;padding:11px;background:#f7fafc;border:1px solid #e1eaf2;border-radius:10px}
+#page-meeting-planner .cmp-coverage-details summary{font-size:12px;font-weight:750;color:#245e8d;cursor:pointer;margin-bottom:8px}
+#page-meeting-planner .cmp-coverage-details .cmp-audit-item{align-items:start}
+#page-meeting-planner .cmp-coverage-details .cmp-audit-item small{line-height:1.35;grid-column:2/4}
