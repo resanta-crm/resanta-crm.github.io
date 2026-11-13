@@ -107,22 +107,30 @@ async function callModel(openai,question,names,now,svc,userId){
 }
 async function callModelClaimed(openai,question,names,now){
  const schema={type:'object',additionalProperties:false,properties:{
-   action:{type:'string',enum:['task','chat','none']},
+   action:{type:'string',enum:['task','chat','meeting','visit','none']},
    assignee:{type:'string'},title:{type:'string'},details:{type:'string'},
    due_date:{type:'string'},due_time:{type:'string'},
    room_kind:{type:'string',enum:['direct','group']},room_title:{type:'string'},
-   participants:{type:'array',items:{type:'string'}}
- },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants']};
+   participants:{type:'array',items:{type:'string'}},
+   client_name:{type:'string'},location:{type:'string'},
+   event_format:{type:'string',enum:['in_person','remote','internal']},duration_minutes:{type:'integer'}
+ },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants','client_name','location','event_format','duration_minutes']};
  const body={model:'gpt-5.4-mini',store:false,max_output_tokens:500,reasoning:{effort:'low'},
   input:[{role:'system',content:[
-    'Извлеки намерение создать задачу/поручение или чат CONNECT из естественной русской речи.',
+    'Извлеки намерение СОЗДАТЬ задачу, чат CONNECT, встречу или плановый визит из естественной русской речи.',
+    'Фраза «у меня встреча» НЕ команда на создание: action=none. «Подготовь меня к встрече» тоже action=none.',
+    'Встреча — action=meeting; физический маршрутный визит МПП — action=visit.',
+    'Никогда не превращай плановую встречу в фактическое GPS-посещение.',
     'Это только черновик, ничего не создавай. Не выдумывай сотрудников, даты, время, участников и их имена.',
     'Сегодня в часовом поясе Минска '+now.date+', время '+now.time+'. Завтра означает следующий календарный день.',
+    'Дата и время обязательны для встречи и визита; не выдумывай их.',
+    'client_name — клиент только если произнесён явно. location — место только если произнесено.',
+    'event_format — in_person, remote или internal; duration_minutes по умолчанию 60, если не указана.',
     'Если дата не указана, due_date пустая строка. Если время не указано, due_time пустая строка.',
     'Исполнитель и участники должны соответствовать названиям из списка, либо оставь пустым.',
     'Для задачи: title — короткое действие минимум 8 символов; details — чёткая цель минимум 12 символов.',
     'Для личного чата room_kind=direct и один участник. Для группового — group и название от 3 символов.',
-    'Не трактуй просьбу рассказать о задачах или чатах как создание.',
+    'Не трактуй просьбу рассказать о задачах, чатах, визитах, встречах как создание.',
     'Доступные сотрудники: '+names.join('; ')
   ].join(' ')},{role:'user',content:question}],
   text:{format:{type:'json_schema',name:'lera360_action_draft_v1',strict:true,schema}}};
