@@ -28,7 +28,7 @@ function merge(...parts){
   const sep=/[,;:—-]\s*$/.test(out)?' ':' ';
   out+=sep+s;
  }
- return out.slice(0,900);
+ return out.slice(0,1800);
 }
 function removeWake(s){
  return norm(s).replace(/^(?:(?:привет[\s,!.?—-]+)?(?:лера|ресанта|резанта|рясанта|рисанта))(?=$|[\s,.!?—-])[\s,.!?—-]*/i,'');
@@ -37,5 +37,5 @@ function isolatedWake(s){
  return /^(?:(?:привет[\s,!.?—-]+)?(?:лера|ресанта|резанта|рясанта|рисанта)|али|алё|алло)[\s,.!?—-]*$/i.test(norm(s));
 }
 root.crmAI360TurnTakingV1=Object.freeze({detect,merge,removeWake,isolatedWake,
- pauseMs:3300,maxSegments:3});
+ pauseMs:3300,maxSegments:8});
 })(window);
