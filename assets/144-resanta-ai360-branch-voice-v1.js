@@ -9,15 +9,15 @@
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchVoicePilotV1)return;
 const role=()=>root.crmAI360StaffIdentityV1?.()||null;
 const STAFF_GREETING=Object.freeze({
- 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирилл',
- '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Александр',
- '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Екатерина',
- '4fd79fa0-232d-4768-8099-25f47923cc4f':'Татьяна',
- '6efa656e-45c6-473b-a853-89eccb9ee43a':'Александр',
- '9076ccde-a8cc-47e3-b71e-c31170b693ff':'Наталья'
+ 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
+ '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
+ '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
+ '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
+ '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
 });
 const personalGreeting=()=>{const p=role();const address=p&&STAFF_GREETING[p.id];
- return address?'Здравствуйте, '+address+'. Чем могу помочь?':null;};
+ return address?'Привет, '+address+', чем помочь?':null;};
 const ENDPOINT='crm-ai360-staff-read-v1';
 const STEMS=[['рудн','Руднев'],['ачинов','Ачинович'],['шкур','Шкуран']];
 const MONTHS=[['январ',1],['феврал',2],['март',3],['апрел',4],['ма',5],['июн',6],['июл',7],['август',8],['сентябр',9],['октябр',10],['ноябр',11],['декабр',12]];
@@ -352,7 +352,7 @@ function buildPanel(){
  const note=document.createElement('small');
  note.textContent=role()?.can_create_tasks?'Директор филиала · данные Витебска · поручения после подтверждения':role()?.tier==='triovist_category'?'Триовист · только закреплённые категории 21vek · без создания поручений':'Менеджер · только мои клиенты и задачи · без создания поручений';
  const entry=document.createElement('div');entry.style.cssText='display:flex;gap:8px;';
- field=document.createElement('input');field.type='text';field.maxLength=350;
+ field=document.createElement('input');field.type='text';field.maxLength=2400;
  field.placeholder='Например: продажи Руднева или ПДЗ филиала';
  field.setAttribute('aria-label','Вопрос Лере');
  field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit();}});
