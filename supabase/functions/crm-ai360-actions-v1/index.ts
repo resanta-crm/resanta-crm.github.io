@@ -350,6 +350,43 @@ async function execute(req,body,actor,svc,caller,secret){
      title:draft.title,due_date:draft.due_date,due_time:draft.due_time,
      note:'Встреча сохранена в личном календаре CRM. Приглашения и push-напоминания не отправлялись; GPS-визит не отмечен.'});
  }
+ if(draft.action==='visit'){
+   if(actor.tier!=='employee'||!FIELD_MANAGERS.has(actor.name)||
+     actor.id!==draft.assignee_id||actor.name!==draft.assignee_name||
+     !uuid(draft.client_id)||moment(draft.due_date,draft.due_time)!==draft.starts_at||
+     typeof draft.details!=='string'||draft.details.length<8||draft.details.length>500)
+     return fail(req,'visit_scope_or_parameters_changed',403);
+   const client=await svc.from('clients').select('id,name,manager_name,is_archived,to_delete')
+     .eq('id',draft.client_id).maybeSingle();
+   if(client.error||!client.data||client.data.manager_name!==actor.name||
+     client.data.name!==draft.client_name||client.data.is_archived||client.data.to_delete)
+     return fail(req,'visit_client_no_longer_assigned',403);
+   const store=await resolveStore(svc,client.data,draft.point_id?draft.location||'':'');
+   if(store.error||store.point_id!==draft.point_id)
+     return fail(req,'visit_point_unverified',403);
+   // The protected RPC rechecks auth.uid(), manager, point and route duplicates.
+   // It creates only an unapproved plan; never a completed GPS visit.
+   const created=await caller.rpc('client360_create_route_v1',{
+     p_client_id:draft.client_id,p_point_id:draft.point_id,
+     p_visit_date:draft.due_date
+   });
+   if(created.error||created.data?.ok!==true||!uuid(created.data.route_id))
+     return fail(req,'route_create_failed',503);
+   const id=created.data.route_id;
+   const planned=await caller.from('route_plans').update({planned_start:draft.due_time})
+     .eq('id',id).eq('manager_name',actor.name).eq('approved',false)
+     .select('id,planned_start').maybeSingle();
+   const timeSaved=!planned.error&&planned.data?.id===id;
+   const row=await caller.from('route_plans').select('id,client_id,manager_name,visit_date,visited,approved')
+     .eq('id',id).maybeSingle();
+   if(row.error||row.data?.id!==id||row.data.client_id!==draft.client_id||
+      row.data.manager_name!==actor.name||row.data.visited===true)
+     return fail(req,'route_write_verification_failed',503);
+   return respond(req,{mode:'created_visit',created:1,route_id:id,
+     client_name:draft.client_name,date:draft.due_date,time_saved:timeSaved,
+     note:timeSaved?'Плановый визит создан в маршруте, время указано; фактическое посещение не отмечено.':
+       'Визит создан в маршруте на указанную дату, но время не удалось сохранить. Фактическое посещение не отмечено.'});
+ }
  if(draft.action==='chat'){
    const perms=await caller.from('connect_permissions_v1').select('chat_enabled').eq('user_id',actor.id).maybeSingle();
    if(perms.error||perms.data?.chat_enabled!==true)return fail(req,'connect_chat_not_authorized',403);
