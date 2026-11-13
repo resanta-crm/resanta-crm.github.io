@@ -129,7 +129,8 @@ function draw(){
  '<button class="cmp-btn strong" data-cmp-brief '+(state.briefLoading?'disabled':'')+'>✦ Подготовить совещание</button></div>'+
  '<p class="cmp-muted">Анализ существующего директорского брифинга по пяти направлениям. Ничего не создаётся и никому не отправляется автоматически.</p>'+
  briefCards()+'<div class="cmp-row cmp-actions"><button class="cmp-btn" data-cmp-copy '+(!state.selected.size?'disabled':'')+'>Скопировать повестку</button>'+
- '<button class="cmp-btn" data-cmp-connect>К видеосовещанию · CONNECT</button></div>'+
+ '<button class="cmp-btn" data-cmp-connect>К видеосовещанию · CONNECT</button>'+ 
+ '<button class="cmp-btn" data-cmp-gps>GPS · Опоздания на первую ТТ</button></div>'+
  '<p class="cmp-muted">Это черновик. Итоги и поручения оформляются отдельно с подтверждением. Полная история диалога не сохраняется.</p></section></div>'+
  '<section class="cmp-panel cmp-audit"><div class="cmp-panel-title"><h3>Что проверено в CRM</h3><span>Охват источников · без ложных отметок</span></div>'+
  audit()+'</section>';
@@ -180,7 +181,7 @@ function render(){
  if(!state.loaded&&!state.loading)void meetingsRefresh();
 }
 function onClick(e){
- const target=e.target.closest?.('#page-meeting-planner [data-cmp-date], #page-meeting-planner [data-cmp-shift], #page-meeting-planner [data-cmp-today], #page-meeting-planner [data-cmp-mode], #page-meeting-planner [data-cmp-brief], #page-meeting-planner [data-cmp-topic], #page-meeting-planner [data-cmp-open], #page-meeting-planner [data-cmp-copy], #page-meeting-planner [data-cmp-connect], #page-meeting-planner [data-cmp-voice], #page-meeting-planner [data-cmp-refresh]');
+ const target=e.target.closest?.('#page-meeting-planner [data-cmp-date], #page-meeting-planner [data-cmp-shift], #page-meeting-planner [data-cmp-today], #page-meeting-planner [data-cmp-mode], #page-meeting-planner [data-cmp-brief], #page-meeting-planner [data-cmp-topic], #page-meeting-planner [data-cmp-open], #page-meeting-planner [data-cmp-copy], #page-meeting-planner [data-cmp-connect], #page-meeting-planner [data-cmp-voice], #page-meeting-planner [data-cmp-refresh], #page-meeting-planner [data-cmp-gps]');
  if(!target)return;
  if(!authorized())return;
  if(target.hasAttribute('data-cmp-date'))state.focus=target.dataset.cmpDate;
@@ -203,6 +204,12 @@ function onClick(e){
  else if(target.hasAttribute('data-cmp-connect')){
    if(typeof window.crmConnectOpen126==='function'){Promise.resolve(window.crmConnectOpen126()).catch(()=>{});return;}
    state.notice='CONNECT недоступен. Видеозвонок не запущен.';
+ }
+ else if(target.hasAttribute('data-cmp-gps')){
+   if(typeof goPage==='function'){goPage('gps-control','GPS-контроль');
+     if(typeof window.crmSchedulePageHook==='function')window.crmSchedulePageHook('gps-control',()=>window.crmGPSFirstTTv1?.open(),300);
+     else setTimeout(()=>window.crmGPSFirstTTv1?.open(),350);
+   }else state.notice='GPS-контроль пока недоступен.';return;
  }
  else if(target.hasAttribute('data-cmp-voice')){
    const launch=document.querySelector('.rva-launch:not([hidden]), .rva-ai360-safe-launch:not([hidden])');
