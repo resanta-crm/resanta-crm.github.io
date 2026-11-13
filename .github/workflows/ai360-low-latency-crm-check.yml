@@ -31,7 +31,7 @@ jobs:
           assert(cap.includes("crmEnsureFreshSessionV236166"));
           assert(dialog.includes('shortVoice?{speechSummary:shortVoice}:{fullVoice:true}'));
           assert(dialog.includes("const ENDPOINT='crm-ai360-agent-v1'"));
-          assert(dialog.includes("const payload={action:'ask',question,history:history.slice(-6),memory}"));
+          assert(dialog.includes("const payload={action:'ask',question,history:history.slice(-12),memory}"));
           assert(lazy.includes('135-resanta-voice-capture-fix-v2.js?v=21'));
           assert(lazy.includes('143-resanta-ai360-unified-dialog-v1.js?v=11'));
           assert(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=40'));

@@ -65,7 +65,7 @@ test('stale session retry cannot cross actors and happens only on 401',()=>{
 
 test('release URLs are versioned consistently while data rights remain unchanged',()=>{
  const page=read('index.html'), launcher=read('assets/137-resanta-ai360-lazy-launch-v1.js');
- assert.match(page,/2026-11-13-lera-professional-names-v1/);
+ assert.match(page,/2026-11-13-lera-unified-dialogue-v2/);
  assert.equal((page.match(/leraRelease=20261113-stable-dialog2/g)||[]).length,7);
  assert.ok((launcher.match(/leraRelease=20261113-stable-dialog2/g)||[]).length>=3);
  const actions=read('assets/219-lera360-agent-actions-v1.js');

@@ -52,7 +52,7 @@ Deno.serve(async req=>{
  let input;
  try{
   const body=await req.text();
-  if(body.length>8000)return fault(req,'request_too_large',413);
+  if(body.length>24000)return fault(req,'request_too_large',413);
   input=JSON.parse(body);
  }catch{return fault(req,'invalid_request',400);}
  // All history actions are scoped exclusively to this authenticated user.
@@ -71,7 +71,7 @@ Deno.serve(async req=>{
  }
  // Ordinary conversation is explicitly isolated from CRM reads. Every caller is
  // still authenticated, identity-scoped and metered before contacting OpenAI.
- if(classifyAgentQuestion(input.question,{history:parsed.payload.history,
+ if(input.protocol!=='lera_dialogue_v2'&&classifyAgentQuestion(input.question,{history:parsed.payload.history,
      memory:parsed.payload.memory})==='chat'){
   // Persisted history is read for the SAME user only, and chat-mode turns
   // cannot carry previous CRM client figures into general conversation.
@@ -121,6 +121,7 @@ Deno.serve(async req=>{
   answerVerified:result.answer_verified===true});
  return reply(req,{
   ...result,
+  ...(input.protocol==='lera_dialogue_v2'?{protocol:'lera_dialogue_v2'}:{}),
   agent:'resanta_ai_agent360_v1',
   route_tier:principal.tier,
   read_only:true,

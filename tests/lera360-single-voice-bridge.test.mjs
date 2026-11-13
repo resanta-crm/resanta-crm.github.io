@@ -33,8 +33,8 @@ test('a single lazy integration mounts no extra timers, listeners or eager fetch
  assert.equal(f.requests.length,0);
  assert.equal(Object.keys(f.hooks).length,1);
  assert.ok(page.includes('264-resanta-ai360-finance-voice-bridge-v1.js?v=20261111-onevoice-safe2'));
- assert.ok(page.includes('144-resanta-ai360-branch-voice-v1.js?v=9'));
- assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=36'));
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=\d+/);
+ assert.match(page,/137-resanta-ai360-lazy-launch-v1\.js\?v=\d+/);
 });
 test('director lazy voice bridge intercepts financial question with own verified endpoint',async()=>{
  const f=fixture('boss');

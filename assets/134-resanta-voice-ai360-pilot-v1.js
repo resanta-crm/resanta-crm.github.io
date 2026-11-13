@@ -251,6 +251,11 @@
       answer('Пожалуйста! Обращайся, если понадобится ещё что-нибудь.');
       return;
     }
+    // The pilot uses one conversational core before legacy keyword handlers.
+    // Pending signed actions, stop commands and explicit navigation above keep
+    // their existing behavior; no generic model path can commit a write.
+    if(window.__resantaLeraDialogueV2===true&&
+       window.crmAI360UnifiedDialogHandleV1?.(query,{answer,textStatus}))return;
     // The latest question «Хочешь подробнее?» belongs to the unified dialogue.
     // Handle yes/no/screen before legacy «read full answer» text patterns.
     if(typeof window.crmAI360UnifiedDialogFollowupV3==='function'){

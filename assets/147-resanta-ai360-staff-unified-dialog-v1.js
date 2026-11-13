@@ -8,7 +8,8 @@
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchUnifiedHandleV1)return;
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-agent-v1';
-let history=[],memory={},pending=false,epoch=0,lastMode='';
+let history=[],memory={},pending=false,epoch=0,lastMode='',activeActor='';
+// Wider staff rollout follows the director's MacBook pilot; legacy requests stay compatible.
 const allowed=()=>{
  const p=root.crmAI360StaffIdentityV1?.();
  return !!p&&['branch_director','field_manager','triovist_category'].includes(p.tier);
@@ -25,12 +26,15 @@ function localMonth(q){
 }
 root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  if(!allowed()||!ui?.authorized?.())return false;
+ const currentActor=root.crmAI360StaffIdentityV1?.()?.id;
+ if(activeActor&&activeActor!==currentActor)root.crmAI360BranchUnifiedResetV1?.();
+ activeActor=currentActor;
  const question=String(q||'').trim().slice(0,2400);
  if(!question)return false;
  // Keep cheap, exact, server-paginated continuation in the local read-only path.
  if(memory?.domain&&/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
  if(pending){ui.show('Лера ещё отвечает на предыдущий вопрос.');return true;}
- pending=true;const run=++epoch;
+ pending=true;const run=++epoch,actor=root.crmAI360StaffIdentityV1?.()?.id;
  ui.setStatus?.('Лера обдумывает вопрос…');
  void (async()=>{
   try{
@@ -39,7 +43,8 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
     await db.auth.getSession().then(x=>x.data?.session);
    if(!session?.access_token)throw Error('not_authorized');
    const month=localMonth(question)||memory.month||null;
-   const payload={action:'ask',question,history:history.slice(-6),memory:{...memory,month}};
+   const payload={action:'ask',question,history:history.slice(-12),memory:{...memory,month}};
+   if(root.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    let result=await db.functions.invoke(ENDPOINT,{body:payload});
    if(Number(result.error?.context?.status)===401&&typeof db.auth?.refreshSession==='function'){
      const actor=typeof currentUser!=='undefined'?currentUser?.id:null;
@@ -52,37 +57,43 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
     try{code=String((await result.error.context?.json?.())?.error||'');}catch{}
     throw Error(code||result.error.message||'dialog_unavailable');
    }
-   if(!allowed()||!ui.authorized()||run!==epoch)return;
+   if(!allowed()||!ui.authorized()||run!==epoch||actor!==root.crmAI360StaffIdentityV1?.()?.id)return;
    const data=result.data;
    const userRole=root.crmAI360StaffIdentityV1?.();
+   if(data?.mode==='agent360_action_request_v2'){
+    if(data.protocol!=='lera_dialogue_v2'||data.route_tier!==userRole?.tier||data.requires_confirmation!==true||data.created!==0||data.read_only!==true||
+      !root.crmAI360ActionPrepareV2?.(data.action_question,ui))throw Error('action_prepare_unavailable');
+    history.push({role:'user',content:question},{role:'assistant',content:'Подготовка предложения; действие ещё не выполнено.'});
+    history=history.slice(-12);return;
+   }
    if(data?.mode==='agent360_free_conversation_v1'){
     if(data.answer_verified!==false||data.read_only!==true||
        data.intent!=='free_conversation'||data.route_tier!==userRole?.tier||
        !Array.isArray(data.domains_used)||data.domains_used.length!==0||
        typeof data.answer!=='string'||!data.answer.trim())
       throw Error('unverified_chat_response');
-    if(lastMode&&lastMode!=='chat')history=[];
-    lastMode='chat';memory={};
-    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,320)});
-    history=history.slice(-6);
+    
+    lastMode='chat';
+    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,800)});
+    history=history.slice(-12);
     ui.setStatus?.('Лера · свободный разговор');
     ui.show(data.answer);
     return;
    }
-   if(data?.mode!=='staff_ai360_shared_core_v1'||data?.answer_verified!==true||
+   if(data?.mode!=='staff_ai360_shared_core_v1'||(data?.protocol!=='lera_dialogue_v2'&&data?.answer_verified!==true)||
     data?.read_only!==true||data?.scope!==(root.crmAI360StaffIdentityV1?.()?.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск')||data?.role!==root.crmAI360StaffIdentityV1?.()?.tier||typeof data?.answer!=='string'||
     !Array.isArray(data?.domains_used))
     throw Error('unverified_branch_dialog');
    if(['field_manager','triovist_category'].includes(root.crmAI360StaffIdentityV1?.()?.tier)&&data?.subject_manager!==root.crmAI360StaffIdentityV1?.()?.name)throw Error('foreign_manager_reply');
-   if(lastMode&&lastMode!=='crm')history=[];
+   
    lastMode='crm';
    memory=data.memory||{};
-   history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,320)});
-   history=history.slice(-6);
+   history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,800)});
+   history=history.slice(-12);
    ui.setStatus?.('Проверено через CRM · '+String(data.as_of||'')+' · филиал Витебск');
    ui.show(data.answer);
   }catch(e){
-   if(allowed()&&ui.authorized()&&run===epoch){
+   if(allowed()&&ui.authorized()&&run===epoch&&actor===root.crmAI360StaffIdentityV1?.()?.id){
     ui.setStatus?.('Защищённая аналитика временно недоступна');
     ui.show('Не удалось получить проверенный ответ через общее ядро Леры ('+
       String(e?.message||'ошибка').slice(0,90)+'). Данные не придумываю.',{speak:false});

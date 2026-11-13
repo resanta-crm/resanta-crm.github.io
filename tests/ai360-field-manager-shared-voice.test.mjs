@@ -116,7 +116,8 @@ test('All staff questions use JWT-gated Agent360 and never mistake free talk for
  assert.match(dialogue,/data\?\.mode!=='staff_ai360_shared_core_v1'/);
  assert.match(dialogue,/data\?\.answer_verified!==true/);
  assert.match(dialogue,/foreign_manager_reply/);
- assert.match(dialogue,/lastMode='chat';memory=\{\}/);
+ assert.doesNotMatch(dialogue,/lastMode='chat';memory=\{\}/);
+ assert.match(dialogue,/activeActor&&activeActor!==currentActor/);
  assert.doesNotMatch(dialogue,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
 

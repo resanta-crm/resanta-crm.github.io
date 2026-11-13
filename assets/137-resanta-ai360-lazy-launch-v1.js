@@ -9,7 +9,7 @@ if((android&&!nativeAndroid)||window.__resantaAI360LazyLaunchV1)return;
 window.__resantaAI360LazyLaunchV1=true;
 let button=null,loading=false,ready=false;
 const scripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=21&lera=20261113&release=continuous-gps-1&leraRelease=20261113-stable-dialog2',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=21&lera=20261113&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2',
  './assets/135-resanta-voice-capture-fix-v2.js?v=21&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2',
  './assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
@@ -18,18 +18,18 @@ const scripts=[
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
  './assets/191-sales360-recovery-lera-v1.js?v=20261110-1',
  './assets/194-pdz360-lera-v1.js?v=20261110-1',
- './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2'
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2'
 ];
 // Android director: text and authenticated navigation first. Audio is optional
 // and must never start automatically just because the AI panel was opened.
 const nativeTextScripts=[
- './assets/134-resanta-voice-ai360-pilot-v1.js?v=21&lera=20261113&release=continuous-gps-1&leraRelease=20261113-stable-dialog2',
+ './assets/134-resanta-voice-ai360-pilot-v1.js?v=21&lera=20261113&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2',
  './assets/139-resanta-ai360-staff-resolver-v1.js?v=1',
  './assets/142-resanta-ai360-director-proactive-brief-v1.js?v=4',
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
  './assets/191-sales360-recovery-lera-v1.js?v=20261110-1',
  './assets/194-pdz360-lera-v1.js?v=20261110-1',
- './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2'
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2'
 ];
 const nativeAudioScripts=[
  './assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice',

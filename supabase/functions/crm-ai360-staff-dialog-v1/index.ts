@@ -1,3 +1,4 @@
+import {dialogueName} from './dialogue-core.mjs';
 // Same AI360 tool-orchestrator as director v4, but every data read is reauthorized
 // through the existing staff-scoped Edge gateway under the caller's own JWT.
 // No write APIs, no service-role data returned to LLM without a branch-scope check.
@@ -52,6 +53,7 @@ Deno.serve(async req=>{
  const domains=permission.domains.filter(d=>DOMAINS.includes(d));
  let body;
  try{body=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
+ const dialogue=body?.protocol==='lera_dialogue_v2';
  const question=typeof body?.question==='string'?body.question.trim().slice(0,2400):'';
  if(!question)return reply(req,{error:'empty_question'},400);
  const day=today(),currentMonth=day.slice(0,7);
@@ -70,20 +72,20 @@ Deno.serve(async req=>{
  const subject=permission.tier!=='branch_director'?permission.name:
    directMatches[0]||(contextFollowup?priorManager:null);
  const memory={
-  manager:subject||'',month,domain:'',
+  manager:subject||'',month,domain:domains.includes(body.memory?.domain)?body.memory.domain:'',
   client:typeof body.memory?.client==='string'?body.memory.client.slice(0,120):'',
   group:typeof body.memory?.group==='string'?body.memory.group.slice(0,100):'',
   subgroup:typeof body.memory?.subgroup==='string'?body.memory.subgroup.slice(0,100):'',
   level:['groups','subgroups','sku'].includes(body.memory?.level)?body.memory.level:'',
   offset:Number.isSafeInteger(body.memory?.offset)?Math.max(0,Math.min(200,body.memory.offset)):0
  };
- const history=Array.isArray(body?.history)?body.history.slice(-6).map(x=>({
+ const history=Array.isArray(body?.history)?body.history.slice(dialogue?-12:-6).map(x=>({
   role:x?.role==='assistant'?'assistant':'user',
-  content:String(x?.content||'').slice(0,250)
+  content:String(x?.content||'').slice(0,dialogue?800:250)
  })):[];
  // Numeric KPI answers use the verified dashboard fields without LLM scaling or reinterpretation.
  const metric=permission.tier!=='triovist_category'?kpiMetric(question):null;
- if(metric){
+ if(!dialogue&&metric){
   let evidence=null;
   try{
    const res=await fetch(url+'/functions/v1/crm-ai360-staff-read-v1',{
@@ -102,7 +104,7 @@ Deno.serve(async req=>{
  }
  // A precise question about one's personal sales plan needs one verified CRM number,
  // not an OpenAI essay. Authorization is checked above and again by the staff read gateway.
- if(permission.tier==='field_manager'&&isPersonalPlanQuestion(question)){
+ if(!dialogue&&permission.tier==='field_manager'&&isPersonalPlanQuestion(question)){
   let verified=null;
   try{
    const res=await fetch(url+'/functions/v1/crm-ai360-staff-read-v1',{
@@ -187,7 +189,7 @@ Deno.serve(async req=>{
      'Только личные категории Триовиста и 21vek. Смотри свежесть импорта, карточки, позиции, ошибки, инфографику и свои задачи. Не выдумывай данные конкурентов; если они запрещены — скажи об этом. Создание поручений строго запрещено.':
      permission.tier==='field_manager'?'Только собственные клиенты и показатели. Создание поручений строго запрещено.':
      'Только Витебск. Поручения создавать только через отдельное подтверждение директора филиала.'},
-  domains,readTool,request,preferredDomain:null
+  domains,readTool,request,preferredDomain:null,dialogue,address:dialogueName(userId)
  });
  const cost=Math.min(8,(inputTokens*.75+outputTokens*4.5)*100/1000000);
  const settle=await svc.rpc('crm_ai360_core_finish_v2',{
@@ -196,10 +198,20 @@ Deno.serve(async req=>{
   p_rounds:rounds,p_status:output?.pair?'ok':'failed'
  });
  if(settle.error||settle.data?.ok!==true)return reply(req,{error:'budget_settlement_unavailable'},503);
+ if(dialogue&&output.pair&&output.kind==='action')return reply(req,{
+  mode:'agent360_action_request_v2',protocol:'lera_dialogue_v2',intent:'prepare_action',
+  action_question:output.actionQuestion,answer:output.pair.brief,
+  read_only:true,answer_verified:false,requires_confirmation:true,created:0
+ });
+ if(dialogue&&output.pair&&['chat','clarification'].includes(output.kind))return reply(req,{
+  mode:'agent360_free_conversation_v1',protocol:'lera_dialogue_v2',intent:'free_conversation',
+  answer:output.pair.brief,read_only:true,answer_verified:false,domains_used:[],memory
+ });
  if(!output?.pair)return reply(req,{error:'verified_dialog_unavailable',answer_verified:false},503);
  const pair=output.pair;
  const answer=[pair.brief,pair.detail,pair.offer].map(x=>String(x||'').trim()).filter(Boolean).join('\n');
- return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:true,read_only:true,
+ return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:!dialogue,read_only:true,
+  ...(dialogue?{protocol:'lera_dialogue_v2'}:{}),
   model:CORE_MODEL,scope:permission.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск',role:permission.tier,subject_manager:subject,month,
   answer:answer.slice(0,4000),speech_summary:pair.brief.slice(0,400),offer:pair.offer,
   domains_used:output.used,as_of:day,

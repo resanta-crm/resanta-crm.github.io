@@ -61,7 +61,7 @@ test('Failed or stale snapshots are not presented as verified',()=>{
 });
 test('Backend routes manager sales before open-ended model calls',()=>{
  const src=readFileSync('supabase/functions/crm-ai360-dialog-v4/index.ts','utf8');
- assert.ok(src.indexOf("if(isManagerSalesQuestion(question")>0);
- assert.ok(src.indexOf("if(isManagerSalesQuestion(question")<src.indexOf('const output = await runToolCore('));
+ assert.ok(src.indexOf("if(!dialogue&&isManagerSalesQuestion(question")>0);
+ assert.ok(src.indexOf("if(!dialogue&&isManagerSalesQuestion(question")<src.indexOf('const output = await runToolCore('));
  assert.match(src,/intent:'verified_manager_sales'/);
 });
