@@ -40,6 +40,16 @@
  // start a microphone on the CRM login screen or when the tab is hidden.
  const MIC_CONSENT_KEY='resanta-ai360-microphone-optin-v1';
  const AUTO_WAKE_KEY='resanta-ai360-wake-window-optin-v1';
+ // A user-initiated foreground dialogue may skip the wake phrase while the
+ // window is visible. The preference is saved ONLY after an explicit click.
+ const DIRECT_DIALOG_KEY='resanta-ai360-continuous-dialog-optin-v1';
+ let directDialogWanted=false;
+ try{directDialogWanted=window.localStorage?.getItem(DIRECT_DIALOG_KEY)==='yes';}catch(_){}
+ function saveDirectDialog(v){
+   directDialogWanted=!!v;
+   try{if(v)window.localStorage?.setItem(DIRECT_DIALOG_KEY,'yes');
+       else window.localStorage?.removeItem(DIRECT_DIALOG_KEY);}catch(_){}
+ }
  let autoWakeWanted=false,autoAttemptedThisOpen=false,lastOpen=false,autoWakeBlocked=false;
  try{autoWakeWanted=window.localStorage?.getItem(AUTO_WAKE_KEY)==='yes';}catch(_){}
  try{userOptIn=autoWakeWanted||window.localStorage?.getItem(MIC_CONSENT_KEY)==='yes';}
@@ -65,15 +75,15 @@
  function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status){status.textContent=t;status.title=String(t||'');}}
  function controls(){
    if(wake){
-     wake.textContent=mode==='wake'?'■ Выключить «Привет, Ресанта»':
+     wake.textContent=mode==='wake'?'■ Завершить разговор':
        autoWakeWanted?'◉ Включить постоянный режим':'◉ Включить «Привет, Ресанта»';
      wake.setAttribute('aria-pressed',String(mode==='wake'));
      wake.title=autoWakeWanted?'Автоматически включать при открытии окна помощника (можно выключить)':
        'После разрешения запомнить режим на этом компьютере';
    }
    if(mic){
-     mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
-     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Лера ждёт естественного завершения речи; паузы и незаконченные фразы объединяются. Повторное нажатие завершит запись.';
+     mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Начать разговор';
+     mic.title=mode==='wake'?'Лера уже слушает. Для выключения используйте «Завершить разговор».':'Один раз нажмите и разговаривайте без повторных нажатий. Микрофон активен только в открытом окне, видимой вкладке и при согласии пользователя.';
    }
  }
  function reason(e){
@@ -348,8 +358,10 @@
      }
    }catch(e){if(epoch===listenEpoch)await stopAll(reason(e));}
  }
- async function start(newMode,automatic=false){
+ async function start(newMode,automatic=false,directDialogue=false){
    if(starting)return;
+   // Prevent accidental mic re-click from terminating a continuous session.
+   if(mode==='wake'&&directDialogue){info('Постоянный режим уже слушает. Просто задай следующий вопрос.');return;}
    if(mode==='wake'&&newMode==='manual'){
      // Permanent listening already owns the foreground microphone.
      // Do not open a second stream or interrupt the current wake session.
@@ -399,14 +411,14 @@
    await stopAll();
    starting=true;
    mode=newMode;listenEpoch++;const epoch=listenEpoch;wakeStart=Date.now();clipCount=0;
-   wakeHeard=!!continueConversation;controls();
-   if(newMode==='wake'&&!automatic)saveAutoWake(true);
+   wakeHeard=!!continueConversation||(newMode==='wake'&&(directDialogue||(automatic&&directDialogWanted)));controls();
+   if(newMode==='wake'&&!automatic){saveAutoWake(true);saveDirectDialog(!!directDialogue);}
    window.speechSynthesis?.cancel();
    try{await permission();if(epoch!==listenEpoch)return;starting=false;
-     if(newMode==='manual'){info('Слушаю вопрос. После двух секунд тишины сразу отправлю его.');manualLoop(epoch);}
+     if(newMode==='manual'){info('Слушаю вопрос и ожидаю естественного завершения речи.');manualLoop(epoch);}
      else{
        if(continueConversation){resumeConversationUntil=0;info('Продолжаем разговор. Можешь задать вопрос без нового приветствия.');}
-       else info('Микрофон включён: ожидаю «Привет, Ресанта»');
+       else info(wakeHeard?'Непрерывный диалог активен. Задайте вопрос без кнопки и приветствия.':'Микрофон включён: ожидаю «Привет, Ресанта»');
        wakeLoop(epoch);
      }
    }catch(e){
@@ -425,16 +437,18 @@
    send=panel.querySelector('.rva-send');
    if(!mic||!wake||!status||!field||!send)return false;
    const note=panel.querySelector('.rva-note');
-   if(note)note.textContent='Два способа: «Спросить голосом» — вопрос автоматически отправляется после двух секунд тишины; «Привет, Ресанта» — постоянный режим для длинных вопросов. Если постоянный режим включён, не нажимай вторую кнопку микрофона: Лера уже слушает. После активации можно обращаться «Лера». При переключении вкладки микрофон отключается, разговор можно продолжить после возврата в течение 3 минут. До 300 распознаваний в день; записи в CRM не сохраняются.';
+   if(note)note.textContent='«Начать разговор» — один раз разрешите микрофон, дальше Лера слушает последовательные вопросы без новых нажатий и без повторного приветствия. «Привет, Ресанта» — альтернативный режим с пробуждением по фразе. «Завершить разговор» выключает микрофон. При закрытии окна, сворачивании или скрытии вкладки запись прекращается. Расходы и лимиты распознавания остаются действующими; аудиозаписи в CRM не сохраняются.';
    mic.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
-     // The manual button must work even if wake mode was enabled.
-     void start('manual');
+     // One explicit click starts a foreground *continuous* conversation.
+     // A second click ends it. It never opens a second recorder.
+     autoWakeBlocked=false;
+     void start('wake',false,true);
    },true);
    wake.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
      autoWakeBlocked=false;
-     void start('wake');
+     void start('wake',false,false);
    },true);
    panel.querySelector('.rva-close')?.addEventListener('click',()=>{resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();},true);
    controls();return true;

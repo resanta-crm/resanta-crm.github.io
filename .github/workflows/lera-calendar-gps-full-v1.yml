@@ -1,0 +1,40 @@
+name: Lera Calendar GPS full pilot safety
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/181-gps-director360-v1.js'
+      - 'assets/270-calendar-meetings-pilot-v1.js'
+      - 'assets/272-gps-first-tt-lateness-v1.js'
+      - 'supabase/functions/crm-ai360-meeting-coverage-v1/**'
+      - 'supabase/migrations/20261113093000_crm_gps_first_tt_lateness_v1.sql'
+      - 'tests/lera-calendar-coverage-gps-continuous-v1.test.mjs'
+      - 'index.html'
+  workflow_dispatch:
+jobs:
+  isolated-calendar-gps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser JS syntax
+        run: |
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --check assets/181-gps-director360-v1.js
+          node --check assets/270-calendar-meetings-pilot-v1.js
+          node --check assets/272-gps-first-tt-lateness-v1.js
+      - name: Isolated functional and existing voice tests
+        run: |
+          node --test tests/lera-calendar-coverage-gps-continuous-v1.test.mjs
+          node --test tests/calendar-meetings-pilot.test.mjs
+          node --test tests/lera360-video-regression-20261113.test.mjs
+          node --test tests/ai360-agent360-unified-gateway-v1.test.mjs
+          node --test tests/ai360-triovist-assigned-category-voice.test.mjs
