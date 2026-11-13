@@ -152,7 +152,7 @@ async function transcribe(record,run){
   try{reason=String((await result.error.context?.json?.())?.error||reason);}catch{}
   throw Error(reason);
  }
- return String(result.data?.text||'').trim().slice(0,350);
+ return String(result.data?.text||'').trim().slice(0,1200);
 }
 // Semantic sentence continuation after the recorder's safety cutoff.
 // Avoid sending «у меня встреча... хочу...» to the model as two unrelated asks.
