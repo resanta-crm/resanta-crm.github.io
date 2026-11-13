@@ -133,6 +133,25 @@ async function commit(ui){
   }
  }finally{if(run===seq)setBusy(false);}
 }
+const AGENDA=/(?:какие|покажи|назови|список|расписание|что\s+у\s+меня).{0,110}(?:встреч|совещан|календар|расписани)|^(?:мой|мои)\s+(?:встречи|календарь|расписание)$/i;
+const REMINDER=/^(?:напомни|напоминай|напоминание)\b/i;
+async function agenda(ui,period){
+ if(working||!allowed())return;
+ const run=++seq,user=currentId();setBusy(true);
+ status(ui,'Проверяю мой календарь CRM…');
+ try{
+  const result=await invoke('agenda',{period});
+  if(run!==seq||user!==currentId()||!allowed())return;
+  if(result.mode!=='agenda'||!Array.isArray(result.items))throw Error('agenda_response_invalid');
+  if(!result.items.length){say(ui,'На выбранный период в личном календаре CRM нет запланированных встреч.');return;}
+  const list=result.items.map(x=>x.when+' — '+x.title+
+   (x.client_name?' · '+x.client_name:'')).join('\n');
+  say(ui,'Запланированные встречи:\n'+list+(result.has_more?'\nПоказаны первые 25 записей.':''));
+  status(ui,'Проверено через личный календарь CRM');
+ }catch(e){
+  if(run===seq&&user===currentId()&&allowed())say(ui,'Не удалось прочитать календарь CRM. '+String(e?.message||'').slice(0,65),false);
+ }finally{if(run===seq)setBusy(false);}
+}
 function handle(q,ui){
  if(!allowed())return false;
  const actor=currentId();
@@ -161,7 +180,13 @@ function handle(q,ui){
   if(NO.test(n)){say(ui,'Хорошо, отменяю создание.');return true;}
   if(!ACTION.test(n)){void prepare(old+'. Уточнение пользователя: '+text,ui);return true;}
  }
- if(!ACTION.test(n))return false;
+ if(!ACTION.test(n)){
+  if(REMINDER.test(n)){say(ui,'Автоматические уведомления о встречах пока не настроены. Могу создать встречу в личном календаре CRM или поставить задачу с датой.');return true;}
+  if(AGENDA.test(n)){
+   void agenda(ui,/\bзавтра\b/.test(n)?'tomorrow':/\bсегодня\b/.test(n)?'today':'next7');return true;
+  }
+  return false;
+ }
  void prepare(text,ui);return true;
 }
 root.crmAI360ActionHandleV1=handle;
