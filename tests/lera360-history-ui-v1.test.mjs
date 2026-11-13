@@ -75,7 +75,7 @@ test('user can clear history, disable history and correct one answer',()=>{
 test('HTML script wiring loads history UI before lazy director and staff modules',()=>{
  const html=fs.readFileSync('index.html','utf8');
  const a=html.indexOf('217-lera360-history-ui-v1.js?v=1');
- const b=html.indexOf('137-resanta-ai360-lazy-launch-v1.js?v=39');
+ const b=html.indexOf('137-resanta-ai360-lazy-launch-v1.js?v=40');
  const c=html.indexOf('144-resanta-ai360-branch-voice-v1.js?v=');
  assert.ok(a>0&&a<b&&a<c);
 });
