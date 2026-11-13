@@ -227,8 +227,14 @@
     if (!input) return;
     addLine('Вы', input);
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
-    let query = normalized.replace(/(?:^|\s)привет\s+(?:ресанта|резанта|рясанта|рисанта)\s*/i, ' ').trim();
-    if (!query) { answer('Слушаю. Чем помочь?'); return; }
+    let query = normalized.replace(/^(?:привет\s+)?(?:лера|ресанта|резанта|рясанта|рисанта)(?=\s|$)\s*/i, ' ').trim();
+    // Short STT hypotheses like «Али» or «Алё» are treated as a wake query,
+    // not sent to the general LLM. No fuzzy matching in arbitrary sentences.
+    if (/^(?:али|алё|алло)$/.test(query))query='';
+    if (!query) {
+      const first=window.crmAI360GreetingV1?.()?.address||'';
+      answer(first?'Да, '+first+', слушаю.':'Да, слушаю.');return;
+    }
     // Explicit tasks/CONNECT enter the signed human-confirmed action bridge.
     // Existing free conversation and CRM analysis remain on their working backend.
     if(window.crmAI360ActionHandleV1?.(query,{answer,textStatus}))return;
@@ -293,7 +299,12 @@
       answer('Не удалось открыть защищённый брифинг директора. Перезагрузи окно Леры. Данные CRM не менялись.');
       return;
     }
-    if (window.__resantaAI360AndroidDirectorOptIn===true && navigateByVoice(query)) return;
+    // Mac and Android use the SAME authenticated visible CRM navigation.
+    // Voice must open a real page, not discuss the requested action.
+    if (navigateByVoice(query)) return;
+    if (/^нет\s+(?:не\s+оценк[иа]\s*(?:а\s+)?)?уценк[ауеи]?\s*$/.test(query)) {
+      answer(openPage('markdown','Уценка')?'Открываю раздел «Уценка».':'Раздел «Уценка» сейчас недоступен.');return;
+    }
     if (typeof window.crmAI360UnifiedDialogHandleV1 === 'function') {
       try { if (window.crmAI360UnifiedDialogHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('AI360 unified conversation unavailable',e); }
