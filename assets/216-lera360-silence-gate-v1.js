@@ -1,11 +1,11 @@
-/* Adaptive, budget-free local speech-end detector; 1.9 s silence, never microphone access.
+/* Adaptive, budget-free local speech-end detector; configurable 1.5–4.2 s silence, never microphone access.
  * Only amplitude data from an already user-authorized foreground stream is inspected.
  */
 (function(root){
  'use strict';
  if(root.crmAI360CreateSilenceGateV1)return;
  root.crmAI360CreateSilenceGateV1=function(options={}){
-  const pauseMs=Math.max(1500,Math.min(2600,Number(options.pauseMs)||1900));
+  const pauseMs=Math.max(1500,Math.min(4200,Number(options.pauseMs)||3300));
   const noSpeechMs=Math.max(2500,Math.min(7000,Number(options.noSpeechMs)||4200));
   let floor=Infinity,peak=0,peakAt=0,lastVoiceAt=0,heard=false;
   function observe(rms,elapsedMs){
