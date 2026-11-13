@@ -9,15 +9,15 @@
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchVoicePilotV1)return;
 const role=()=>root.crmAI360StaffIdentityV1?.()||null;
 const STAFF_GREETING=Object.freeze({
- 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
- '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
- '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
- '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
- '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
- '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
+ 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирилл',
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Александр',
+ '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Екатерина',
+ '4fd79fa0-232d-4768-8099-25f47923cc4f':'Татьяна',
+ '6efa656e-45c6-473b-a853-89eccb9ee43a':'Александр',
+ '9076ccde-a8cc-47e3-b71e-c31170b693ff':'Наталья'
 });
 const personalGreeting=()=>{const p=role();const address=p&&STAFF_GREETING[p.id];
- return address?'Привет, '+address+'! Чем помочь?':null;};
+ return address?'Здравствуйте, '+address+'. Чем могу помочь?':null;};
 const ENDPOINT='crm-ai360-staff-read-v1';
 const STEMS=[['рудн','Руднев'],['ачинов','Ачинович'],['шкур','Шкуран']];
 const MONTHS=[['январ',1],['феврал',2],['март',3],['апрел',4],['ма',5],['июн',6],['июл',7],['август',8],['сентябр',9],['октябр',10],['ноябр',11],['декабр',12]];
@@ -306,7 +306,12 @@ function submit(){
  line.style.cssText='padding:8px 4px;font-size:12px;color:#445b77;';
  log.appendChild(line);log.scrollTop=log.scrollHeight;
  // One shared signed agent bridge; existing task pilot remains as fallback.
+ if(/^(?:(?:привет\s+)?(?:лера|ресанта|резанта)|али|алё|алло)[\s,!.?]*$/i.test(question)){
+   const address=STAFF_GREETING[role()?.id]||'';
+   show(address?'Да, '+address+', слушаю.':'Да, слушаю.');return;
+ }
  if(root.crmAI360ActionHandleV1?.(question,{show,setStatus,authorized:panelVisible}))return;
+ if(root.crmAI360NavigateV1?.(question,{show,setStatus}))return;
  // Voice task commands are handled before ordinary read-only analytic questions.
  if(root.crmAI360BranchTaskHandleV1?.(question))return;
  if(root.crmLprV1?.voice(question,{answer:show}))return;

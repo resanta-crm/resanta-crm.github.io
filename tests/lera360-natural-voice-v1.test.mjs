@@ -63,12 +63,12 @@ test('Yandex receives spoken corrections, never modified CRM data',()=>{
  assert.ok(page.indexOf('218-lera360-speech-accents-v1.js')<page.indexOf('137-resanta-ai360-lazy-launch-v1.js'));
 });
 test('publishing safely refreshes cached voice modules without changing login gates',()=>{
- assert.match(loader,/135-resanta-voice-capture-fix-v2\.js\?v=20&lera=20261112-naturalvoice/);
- for(const id of ['144-resanta-ai360-branch-voice-v1','146-resanta-ai360-branch-premium-voice-v1','147-resanta-ai360-staff-unified-dialog-v1']){
+ assert.match(loader,/135-resanta-voice-capture-fix-v2\.js\?v=21&lera=20261113-turntaking/);
+ for(const id of ['144-resanta-ai360-branch-voice-v1','146-resanta-ai360-branch-premium-voice-v1']){
   assert.ok(page.includes(id+'.js?v='));
-  assert.ok(page.includes(id+'.js?v=') && page.includes('&lera=20261112-naturalvoice'));
+  assert.ok(page.includes(id+'.js?v=') && page.includes('&lera=20261113-turntaking'));
  }
- assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=39&lera=20261112-naturalvoice'));
+ assert.ok(page.includes('137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking'));
  assert.match(staff,/activePanel&&!activePanel\.hidden/);
  assert.match(staff,/root\.addEventListener\('pagehide',stop\)/);
  assert.match(director,/const MIC_CONSENT_KEY/);

@@ -118,7 +118,7 @@ const wait=()=>new Promise(r=>setTimeout(r,30));
  assert(migration.includes('revoke all on function public.crm_ai360_operations_snapshot_v1'));
  assert(migration.includes('grant execute on function public.crm_ai360_operations_snapshot_v1(text,date) to service_role'));
  const p=fs.readFileSync('assets/135-resanta-voice-capture-fix-v2.js','utf8');
- assert(p.includes("submit('Привет, Ресанта')"));
+ assert(p.includes("submit('Привет, Лера')"));
  assert(p.includes("await waitForAssistant(epoch,'wake')"));
  assert(p.includes("await waitForAssistant(epoch,'manual')"));
  assert(p.includes('window.__resantaAI360PendingV1'));

@@ -102,8 +102,8 @@ test('Only branch director can use signed task commit; field managers cannot',()
  assert.match(task,/if\(!await verify\(secret,userId/);
  assert.ok(!ui.includes("crm-ai360-branch-task-approval-v1"));
  assert.match(page,/148-resanta-ai360-staff-identity-v1\.js\?v=client360-20261102/);
- assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
- assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=5/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=12/);
+ assert.match(page,/146-resanta-ai360-branch-premium-voice-v1\.js\?v=6/);
  assert.match(page,/147-resanta-ai360-staff-unified-dialog-v1\.js\?v=5/);
 });
 
@@ -132,5 +132,5 @@ test('Staff history panel is a user-initiated text-only view scoped to signed-in
  assert.match(client,/history:enable/);
  assert.doesNotMatch(client,/\.innerHTML\s*=/);
  assert.match(page,/217-lera360-history-ui-v1\.js\?v=1/);
- assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=11/);
+ assert.match(page,/144-resanta-ai360-branch-voice-v1\.js\?v=12/);
 });

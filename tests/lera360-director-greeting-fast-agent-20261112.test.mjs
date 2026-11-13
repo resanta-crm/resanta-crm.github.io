@@ -11,20 +11,20 @@ function greeting(profile,user){
  vm.runInNewContext(helper,ctx);return ctx.window.crmAI360GreetingV1();
 }
 const roster=[
- ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','Александр Паюшин','boss','Витебск','родной'],
- ['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','Сидарович К.Н.','boss','Витебск','Кирюшка'],
- ['19dd9943-99ae-47c4-a39c-4f82a11059a6','Руднев','manager','Витебск','Санька'],
- ['3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','Ачинович','manager','Витебск','Катюшка'],
- ['4fd79fa0-232d-4768-8099-25f47923cc4f','Шкуран','manager','Витебск','Танюшка'],
- ['6efa656e-45c6-473b-a853-89eccb9ee43a','Александренко','manager','Триовист / 21vek.by','мой господин'],
- ['9076ccde-a8cc-47e3-b71e-c31170b693ff','Кришталь','manager','Триовист / 21vek.by','моя госпожа'],
- ['a24954b8-2fe1-4852-b629-d8f351e1bd36','Руководство компании','boss','Все филиалы','мой слуга']
+ ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','Александр Паюшин','boss','Витебск','Александр'],
+ ['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','Сидарович К.Н.','boss','Витебск','Кирилл'],
+ ['19dd9943-99ae-47c4-a39c-4f82a11059a6','Руднев','manager','Витебск','Александр'],
+ ['3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','Ачинович','manager','Витебск','Екатерина'],
+ ['4fd79fa0-232d-4768-8099-25f47923cc4f','Шкуран','manager','Витебск','Татьяна'],
+ ['6efa656e-45c6-473b-a853-89eccb9ee43a','Александренко','manager','Триовист / 21vek.by','Александр'],
+ ['9076ccde-a8cc-47e3-b71e-c31170b693ff','Кришталь','manager','Триовист / 21vek.by','Наталья'],
+ ['a24954b8-2fe1-4852-b629-d8f351e1bd36','Руководство компании','boss','Все филиалы','Виталий']
 ];
-test('eight exact greeting identities, including Санька, do not modify rights',()=>{
+test('eight exact greeting identities, with professional names, do not modify rights',()=>{
  for(const [id,name,role,region,address]of roster){
   const profile={id,name,role,region,email:'petrovichev@resanta.ru',access_scope:'standard'};
   assert.equal(greeting(profile,{id,email:'petrovichev@resanta.ru'})?.greeting,
-   'Привет, '+address+'! Чем помочь?');
+   'Здравствуйте, '+address+'. Чем могу помочь?');
   assert.equal(greeting({...profile,name:'Другой'}, {id,email:'petrovichev@resanta.ru'}),null);
  }
  assert.doesNotMatch(helper,/Саника/);
@@ -77,9 +77,9 @@ test('real agent gateway request uses the deployed action and question contract'
 });
 test('script wiring loads harmless helpers before lazy UI, not mic on login',()=>{
  const html=file('index.html');
- assert.match(html,/215-lera360-personal-greeting-v1\.js\?v=1/);
- assert.match(html,/216-lera360-silence-gate-v1\.js\?v=1/);
- assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=39/);
+ assert.match(html,/215-lera360-personal-greeting-v1\.js\?v=20261113-formal/);
+ assert.match(html,/216-lera360-silence-gate-v1\.js\?v=2/);
+ assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js\?v=40/);
  assert.doesNotMatch(helper,/getUserMedia|functions\.invoke|MediaRecorder/);
  assert.doesNotMatch(detector,/getUserMedia|functions\.invoke|MediaRecorder/);
 });

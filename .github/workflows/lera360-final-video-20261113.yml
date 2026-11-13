@@ -1,0 +1,51 @@
+name: Lera 360 final video regression 2026-11-13
+on:
+  pull_request:
+    paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
+      - 'assets/135-resanta-voice-capture-fix-v2.js'
+      - 'assets/137-resanta-ai360-lazy-launch-v1.js'
+      - 'assets/144-resanta-ai360-branch-voice-v1.js'
+      - 'assets/146-resanta-ai360-branch-premium-voice-v1.js'
+      - 'assets/157-resanta-ai360-android-staff-launch-v1.js'
+      - 'assets/215-lera360-personal-greeting-v1.js'
+      - 'assets/219-lera360-agent-actions-v1.js'
+      - 'assets/220-lera360-turn-taking-v1.js'
+      - 'assets/221-lera360-voice-navigation-v1.js'
+      - 'supabase/functions/crm-ai360-actions-v1/**'
+      - 'supabase/functions/crm-voice-transcribe-v1/**'
+      - 'supabase/migrations/*lera_ai360*'
+      - 'tests/lera360-video-regression-20261113.test.mjs'
+      - 'index.html'
+  push:
+    branches: [main]
+permissions: { contents: read }
+jobs:
+  voice-agent:
+    name: One Lera full voice and actions safe release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Check changed JavaScript and edge syntax
+        run: |
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
+          node --check assets/135-resanta-voice-capture-fix-v2.js
+          node --check assets/144-resanta-ai360-branch-voice-v1.js
+          node --check assets/146-resanta-ai360-branch-premium-voice-v1.js
+          node --check assets/215-lera360-personal-greeting-v1.js
+          node --check assets/219-lera360-agent-actions-v1.js
+          node --check assets/220-lera360-turn-taking-v1.js
+          node --check assets/221-lera360-voice-navigation-v1.js
+          node --input-type=module --check < supabase/functions/crm-ai360-actions-v1/index.ts
+      - name: Video-specific scenarios
+        run: node --test tests/lera360-video-regression-20261113.test.mjs
+      - name: Old action, natural wake, staff and director regression
+        run: |
+          node --test tests/lera360-agent-actions-v1.test.mjs
+          node --test tests/lera360-natural-voice-v1.test.mjs
+          node --test tests/ai360-remembered-wake-session.test.cjs
+          node --test tests/ai360-field-manager-shared-voice.test.mjs
+          node --test tests/ai360-branch-premium-parity.test.mjs

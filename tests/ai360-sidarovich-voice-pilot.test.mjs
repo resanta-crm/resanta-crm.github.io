@@ -124,8 +124,8 @@ test('Real user click obtains server capabilities before a scoped read',async()=
  assert.equal(x.calls.length,2);
 });
 test('Server read-only endpoint and no cross-user state in browser',()=>{
- assert.ok(html.includes('144-resanta-ai360-branch-voice-v1.js?v=11'));
- assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=39'));
+ assert.ok(html.includes('144-resanta-ai360-branch-voice-v1.js?v=12'));
+ assert.ok(html.includes('137-resanta-ai360-lazy-launch-v1.js?v=40'));
  assert.ok(source.includes("const ENDPOINT='crm-ai360-staff-read-v1'"));
  assert.ok(staffIdentity.includes("'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'"));
  assert.ok(source.includes("data?.real_task_creation_enabled!==role()?.can_create_tasks"));
@@ -138,7 +138,7 @@ test('Server read-only endpoint and no cross-user state in browser',()=>{
 });
 
 test('Staff Lera says one short personalised welcome after server permissions, without unsolicited reports',()=>{
- const names=['Кирюшка','Санька','Катюшка','Танюшка','мой господин','моя госпожа'];
+ const names=['Кирилл','Александр','Екатерина','Татьяна','Александр','Наталья'];
  for(const name of names)assert.ok(source.includes("'"+name+"'"),name);
  assert.ok(source.includes('personalGreeting()'));
  assert.ok(source.includes('if(hello)show(hello)'));

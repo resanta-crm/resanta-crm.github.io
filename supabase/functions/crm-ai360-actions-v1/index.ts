@@ -77,7 +77,7 @@ async function targetStaff(svc,actor){
 function matchOne(name,people){
  const search=norm(name).replace(/\s*к\.?\s*н\.?$/i,'').trim();
  if(!search)return null;
- const alias=search==='сидорович'?'сидарович':search;
+ const alias=({сидорович:'сидарович',кирилл:'сидарович',таня:'шкуран',татьяна:'шкуран',катя:'ачинович',екатерина:'ачинович',наталья:'кришталь',виталий:'руководство компании'})[search]||search;
  const found=people.filter(p=>{
    const nm=norm(p.name);
    return nm===alias||nm.split(' ')[0]===alias||
@@ -107,22 +107,30 @@ async function callModel(openai,question,names,now,svc,userId){
 }
 async function callModelClaimed(openai,question,names,now){
  const schema={type:'object',additionalProperties:false,properties:{
-   action:{type:'string',enum:['task','chat','none']},
+   action:{type:'string',enum:['task','chat','meeting','visit','none']},
    assignee:{type:'string'},title:{type:'string'},details:{type:'string'},
    due_date:{type:'string'},due_time:{type:'string'},
    room_kind:{type:'string',enum:['direct','group']},room_title:{type:'string'},
-   participants:{type:'array',items:{type:'string'}}
- },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants']};
+   participants:{type:'array',items:{type:'string'}},
+   client_name:{type:'string'},location:{type:'string'},
+   event_format:{type:'string',enum:['in_person','remote','internal']},duration_minutes:{type:'integer'}
+ },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants','client_name','location','event_format','duration_minutes']};
  const body={model:'gpt-5.4-mini',store:false,max_output_tokens:500,reasoning:{effort:'low'},
   input:[{role:'system',content:[
-    'Извлеки намерение создать задачу/поручение или чат CONNECT из естественной русской речи.',
+    'Извлеки намерение СОЗДАТЬ задачу, чат CONNECT, встречу или плановый визит из естественной русской речи.',
+    'Фраза «у меня встреча» НЕ команда на создание: action=none. «Подготовь меня к встрече» тоже action=none.',
+    'Встреча — action=meeting; физический маршрутный визит МПП — action=visit.',
+    'Никогда не превращай плановую встречу в фактическое GPS-посещение.',
     'Это только черновик, ничего не создавай. Не выдумывай сотрудников, даты, время, участников и их имена.',
     'Сегодня в часовом поясе Минска '+now.date+', время '+now.time+'. Завтра означает следующий календарный день.',
+    'Дата и время обязательны для встречи и визита; не выдумывай их.',
+    'client_name — клиент только если произнесён явно. location — место только если произнесено.',
+    'event_format — in_person, remote или internal; duration_minutes по умолчанию 60, если не указана.',
     'Если дата не указана, due_date пустая строка. Если время не указано, due_time пустая строка.',
     'Исполнитель и участники должны соответствовать названиям из списка, либо оставь пустым.',
     'Для задачи: title — короткое действие минимум 8 символов; details — чёткая цель минимум 12 символов.',
     'Для личного чата room_kind=direct и один участник. Для группового — group и название от 3 символов.',
-    'Не трактуй просьбу рассказать о задачах или чатах как создание.',
+    'Не трактуй просьбу рассказать о задачах, чатах, визитах, встречах как создание.',
     'Доступные сотрудники: '+names.join('; ')
   ].join(' ')},{role:'user',content:question}],
   text:{format:{type:'json_schema',name:'lera360_action_draft_v1',strict:true,schema}}};
@@ -136,6 +144,44 @@ async function callModelClaimed(openai,question,names,now){
  let result;try{result=JSON.parse(raw);}catch{throw Error('draft_not_structured');}
  return {result,inputTokens:Math.max(0,Math.floor(Number(data.usage?.input_tokens)||0)),outputTokens:Math.max(0,Math.floor(Number(data.usage?.output_tokens)||0))};
 }
+
+const FIELD_MANAGERS=new Set(['Руднев','Ачинович','Шкуран']);
+function moment(date,time){
+ if(!dateIsValid(date,time,localDate())||!time)return null;
+ const at=new Date(date+'T'+time+':00+03:00');
+ return Number.isFinite(at.valueOf())?at.toISOString():null;
+}
+async function resolveClient(svc,actor,clientName){
+ const name=esc(clientName).slice(0,180);
+ if(!name)return {client:null};
+ const escaped=name.replace(/[\%_]/g,'\\async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){');
+ let q=svc.from('clients').select('id,name,manager_name,address,city,region,is_archived,to_delete')
+  .ilike('name','%'+escaped+'%').limit(5);
+ const names=actor.tier==='employee'?[actor.name]:
+   actor.tier==='branch_director'?['Руднев','Ачинович','Шкуран']:null;
+ if(names)q=q.in('manager_name',names);
+ const r=await q;
+ if(r.error)throw Error('client_directory_unavailable');
+ const found=(r.data||[]).filter(x=>!x.is_archived&&!x.to_delete);
+ if(found.length!==1)return {error:found.length?'client_ambiguous':'client_not_found_or_not_allowed'};
+ return {client:found[0]};
+}
+async function resolveStore(svc,client,location){
+ const link=await svc.from('route_physical_point_clients').select('point_id').eq('client_id',client.id).limit(30);
+ if(link.error)throw Error('client_stores_unavailable');
+ const ids=[...new Set((link.data||[]).map(x=>x.point_id).filter(uuid))];
+ if(!ids.length)return {point_id:null};
+ const p=await svc.from('route_physical_points').select('id,address,city,active').in('id',ids).eq('active',true).limit(30);
+ if(p.error)throw Error('client_stores_unavailable');
+ const candidates=p.data||[];
+ if(candidates.length===1)return {point_id:candidates[0].id};
+ const wanted=norm(location);
+ const matching=wanted?candidates.filter(x=>norm(x.address)===wanted||
+   norm((x.city||'')+' '+(x.address||''))===wanted):[];
+ if(matching.length===1)return {point_id:matching[0].id};
+ return {error:'store_ambiguous',variants:candidates.slice(0,4).map(x=>[x.city,x.address].filter(Boolean).join(', '))};
+}
+
 async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
  const now=localDate();
  if(kind!=='prepare'||typeof question!=='string'||question.length<5||question.length>500)
@@ -164,6 +210,44 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
    const proof=await prepareToken(secret,actor.id,draft);
    const summary='Поручение для '+who.name+': '+title+'. Срок '+date+(time?' в '+time+' (Минск)':'')+'. '+details;
    return respond(req,{mode:'prepared',draft,summary,approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
+ }
+ if(model.action==='meeting'){
+  const day=esc(model.due_date),time=esc(model.due_time);
+  const start=moment(day,time);
+  if(!start)return respond(req,{mode:'needs_details',question:'Уточни дату и время встречи по минскому времени.',created:0});
+  const resolved=await resolveClient(svc,actor,model.client_name);
+  if(resolved.error)return respond(req,{mode:'needs_details',question:'Уточни название клиента в CRM.',created:0});
+  const title=esc(model.title).slice(0,160),details=esc(model.details).slice(0,800);
+  if(title.length<8||details.length<8)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
+  const dur=Number.isInteger(model.duration_minutes)&&model.duration_minutes>=15&&model.duration_minutes<=240?model.duration_minutes:60;
+  const picked=(Array.isArray(model.participants)?model.participants:[]).slice(0,12).map(name=>matchOne(name,directory));
+  if(picked.some(x=>!x)||new Set(picked.map(x=>x.id)).size!==picked.length)
+    return respond(req,{mode:'needs_details',question:'Назови точных сотрудников-участников встречи.',created:0});
+  const draft={action:'meeting',owner_id:actor.id,client_id:resolved.client?.id||null,client_name:resolved.client?.name||'',
+    title,details,due_date:day,due_time:time,starts_at:start,duration_minutes:dur,
+    format:model.event_format,location:esc(model.location).slice(0,250),participant_names:picked.map(x=>x.name),source:SOURCE};
+  const proof=await prepareToken(secret,actor.id,draft);
+  return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'» на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
+    approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
+ }
+ if(model.action==='visit'){
+   const date=esc(model.due_date),time=esc(model.due_time),at=moment(date,time);
+   if(!at)return respond(req,{mode:'needs_details',question:'Назови будущую дату и время визита.',created:0});
+   if(actor.tier!=='employee'||!FIELD_MANAGERS.has(actor.name))
+     return respond(req,{mode:'needs_details',question:'Маршрут может изменить только закреплённый полевой менеджер. Свою встречу с клиентом можно запланировать в календаре — попроси создать встречу.',created:0});
+   const res=await resolveClient(svc,actor,model.client_name);
+   if(res.error||!res.client)return respond(req,{mode:'needs_details',question:'Назови точное название своего закреплённого клиента.',created:0});
+   const store=await resolveStore(svc,res.client,model.location);
+   if(store.error)return respond(req,{mode:'needs_details',question:'У клиента несколько торговых точек. Назови адрес: '+(store.variants||[]).join(' / '),created:0});
+   const details=esc(model.details).slice(0,500);
+   if(details.length<8)return respond(req,{mode:'needs_details',question:'Назови цель планового визита.',created:0});
+   const draft={action:'visit',client_id:res.client.id,client_name:res.client.name,
+     point_id:store.point_id,assignee_id:actor.id,assignee_name:actor.name,
+     details,due_date:date,due_time:time,starts_at:at,source:SOURCE};
+   const proof=await prepareToken(secret,actor.id,draft);
+   return respond(req,{mode:'prepared',draft,
+     summary:'Плановый визит к '+res.client.name+' на '+date+' в '+time+' по Минску. Это маршрут, не состоявшееся GPS-посещение.',
+     approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
  }
  if(model.action==='chat'){
    const kind=model.room_kind==='group'?'group':'direct';
@@ -225,6 +309,87 @@ async function execute(req,body,actor,svc,caller,secret){
    return respond(req,{mode:'created_task',created:1,task_id:id,assigned_to:target.name,
     note:draft.due_time?'Время указано в тексте задачи. Отдельное автоматическое напоминание не настроено.':''});
  }
+ if(draft.action==='meeting'){
+   if(draft.owner_id!==actor.id||!dateIsValid(draft.due_date,draft.due_time,localDate())||
+     moment(draft.due_date,draft.due_time)!==draft.starts_at||
+     typeof draft.title!=='string'||draft.title.length<8||draft.title.length>160||
+     typeof draft.details!=='string'||draft.details.length<8||draft.details.length>800||
+     !['in_person','remote','internal'].includes(draft.format)||
+     !Number.isInteger(draft.duration_minutes)||draft.duration_minutes<15||draft.duration_minutes>240||
+     typeof draft.location!=='string'||draft.location.length>250)
+     return fail(req,'meeting_parameters_changed',403);
+   const client=await resolveClient(svc,actor,draft.client_name);
+   if(client.error||client.client?.id!==(draft.client_id||undefined)&&!!draft.client_id)
+     return fail(req,'meeting_client_scope_changed',403);
+   const at=Date.parse(draft.starts_at),until=at+draft.duration_minutes*60000;
+   const nearby=await caller.from('crm_ai360_meetings_v1').select('id,title,starts_at,duration_minutes')
+     .eq('owner_id',actor.id)
+     .gte('starts_at',new Date(at-4*3600000).toISOString())
+     .lt('starts_at',new Date(until).toISOString()).limit(20);
+   if(nearby.error)return fail(req,'meeting_calendar_read_unavailable',503);
+   for(const old of nearby.data||[]){
+     const oldStart=Date.parse(old.starts_at);
+     if(old.title===draft.title&&oldStart===at)
+       return respond(req,{mode:'already_exists',created:0,meeting_id:old.id});
+     if(oldStart<until&&oldStart+Number(old.duration_minutes||60)*60000>at)
+       return respond(req,{mode:'conflict_meeting',created:0,
+         note:'В это время уже есть другая встреча. Уточни расписание.'});
+   }
+   const row={owner_id:actor.id,kind:draft.client_id?'client_meeting':'meeting',
+     format:draft.format,title:draft.title,purpose:draft.details,
+     client_id:draft.client_id||null,client_name:draft.client_name||null,
+     starts_at:draft.starts_at,duration_minutes:draft.duration_minutes,
+     location:draft.location,participants:draft.participant_names||[],source:SOURCE};
+   const inserted=await caller.from('crm_ai360_meetings_v1').insert(row)
+     .select('id,owner_id,starts_at,source').single();
+   if(inserted.error){
+     if(inserted.error.code==='23505')return respond(req,{mode:'already_exists',created:0});
+     return fail(req,'meeting_create_failed',503);
+   }
+   if(!uuid(inserted.data?.id)||inserted.data?.owner_id!==actor.id||
+      Date.parse(inserted.data?.starts_at)!==Date.parse(draft.starts_at)||inserted.data?.source!==SOURCE)
+     return fail(req,'meeting_verification_failed',503);
+   return respond(req,{mode:'created_meeting',created:1,meeting_id:inserted.data.id,
+     title:draft.title,due_date:draft.due_date,due_time:draft.due_time,
+     note:'Встреча сохранена в личном календаре CRM. Приглашения и push-напоминания не отправлялись; GPS-визит не отмечен.'});
+ }
+ if(draft.action==='visit'){
+   if(actor.tier!=='employee'||!FIELD_MANAGERS.has(actor.name)||
+     actor.id!==draft.assignee_id||actor.name!==draft.assignee_name||
+     !uuid(draft.client_id)||moment(draft.due_date,draft.due_time)!==draft.starts_at||
+     typeof draft.details!=='string'||draft.details.length<8||draft.details.length>500)
+     return fail(req,'visit_scope_or_parameters_changed',403);
+   const client=await svc.from('clients').select('id,name,manager_name,is_archived,to_delete')
+     .eq('id',draft.client_id).maybeSingle();
+   if(client.error||!client.data||client.data.manager_name!==actor.name||
+     client.data.name!==draft.client_name||client.data.is_archived||client.data.to_delete)
+     return fail(req,'visit_client_no_longer_assigned',403);
+   const store=await resolveStore(svc,client.data,draft.point_id?draft.location||'':'');
+   if(store.error||store.point_id!==draft.point_id)
+     return fail(req,'visit_point_unverified',403);
+   // The protected RPC rechecks auth.uid(), manager, point and route duplicates.
+   // It creates only an unapproved plan; never a completed GPS visit.
+   const created=await caller.rpc('client360_create_route_v1',{
+     p_client_id:draft.client_id,p_point_id:draft.point_id,
+     p_visit_date:draft.due_date
+   });
+   if(created.error||created.data?.ok!==true||!uuid(created.data.route_id))
+     return fail(req,'route_create_failed',503);
+   const id=created.data.route_id;
+   const planned=await caller.from('route_plans').update({planned_start:draft.due_time})
+     .eq('id',id).eq('manager_name',actor.name).eq('approved',false)
+     .select('id,planned_start').maybeSingle();
+   const timeSaved=!planned.error&&planned.data?.id===id;
+   const row=await caller.from('route_plans').select('id,client_id,manager_name,visit_date,visited,approved')
+     .eq('id',id).maybeSingle();
+   if(row.error||row.data?.id!==id||row.data.client_id!==draft.client_id||
+      row.data.manager_name!==actor.name||row.data.visited===true)
+     return fail(req,'route_write_verification_failed',503);
+   return respond(req,{mode:'created_visit',created:1,route_id:id,
+     client_name:draft.client_name,date:draft.due_date,time_saved:timeSaved,
+     note:timeSaved?'Плановый визит создан в маршруте, время указано; фактическое посещение не отмечено.':
+       'Визит создан в маршруте на указанную дату, но время не удалось сохранить. Фактическое посещение не отмечено.'});
+ }
  if(draft.action==='chat'){
    const perms=await caller.from('connect_permissions_v1').select('chat_enabled').eq('user_id',actor.id).maybeSingle();
    if(perms.error||perms.data?.chat_enabled!==true)return fail(req,'connect_chat_not_authorized',403);
@@ -276,6 +441,25 @@ Deno.serve(async req=>{
  if(body?.kind==='capabilities')return respond(req,{mode:'lera_action_v1',
    task:true,chat:true,confirmation_required:true,no_automatic_writes:true});
  try{
+   if(body?.kind==='agenda'){
+     const now=localDate(),days=body.period==='today'?1:body.period==='tomorrow'?1:7;
+     const base=Date.parse(now.date+'T00:00:00+03:00');
+     const from=base+(body.period==='tomorrow'?86400000:0);
+     const to=from+days*86400000;
+     const rows=await caller.from('crm_ai360_meetings_v1')
+       .select('id,title,client_name,starts_at,duration_minutes,format,location')
+       .eq('owner_id',actor.id).gte('starts_at',new Date(from).toISOString())
+       .lt('starts_at',new Date(to).toISOString())
+       .order('starts_at',{ascending:true}).limit(25);
+     if(rows.error)return fail(req,'agenda_not_available',503);
+     const fmt=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',
+       month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+     return respond(req,{mode:'agenda',items:(rows.data||[]).map(x=>({
+       id:x.id,title:x.title,client_name:x.client_name,
+       when:fmt.format(new Date(x.starts_at)),minutes:x.duration_minutes,
+       location:x.location
+     })),count:(rows.data||[]).length,has_more:(rows.data||[]).length===25});
+   }
    if(body?.kind==='prepare')return await makeDraft({req,kind:'prepare',
      question:body.question,actor,svc,caller,secret,openai});
    if(body?.kind==='commit')return await execute(req,body,actor,svc,caller,secret);

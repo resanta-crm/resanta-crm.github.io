@@ -103,6 +103,6 @@ test('One Lera: director and staff voice both route to signed action bridge',()=
  assert.match(staff,/crmAI360ActionHandleV1\?\.\(question,\{show,setStatus,authorized:panelVisible\}\)/);
  assert.match(capture,/__resantaAI360ActionBusyV1/);
  assert.match(staff,/crmAI360ActionBusyV1\?\.\(\)/);
- assert.match(loader,/219-lera360-agent-actions-v1\.js\?v=20261112a/);
+ assert.match(loader,/219-lera360-agent-actions-v1\.js\?v=20261113b/);
  assert.ok(loader.indexOf('219-lera360-agent-actions-v1.js')<loader.indexOf('137-resanta-ai360-lazy-launch-v1.js'));
 });
