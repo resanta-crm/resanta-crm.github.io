@@ -28,7 +28,8 @@ test('pilot reuses confirmed owner-RLS meetings and five-source briefing and nev
  assert.match(calendar,/Пока не подключён к брифингу/);
  assert.match(calendar,/Не удалось прочитать календарь/);
  assert.match(calendar,/Ничего не создаётся и никому не отправляется автоматически/);
- assert.doesNotMatch(calendar,/\.(insert|update|delete|upsert)\(/);
+ assert.doesNotMatch(calendar,/\.(insert|update|upsert)\(/);
+ assert.doesNotMatch(calendar,/\.from\([^)]*\)\.delete\(/); // Set.delete() only edits local agenda draft
  assert.doesNotMatch(calendar,/setInterval|MediaRecorder|SpeechRecognition|speechSynthesis/);
 });
 test('only a direct user gesture launches existing Lera or CONNECT',()=>{
