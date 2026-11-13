@@ -8,7 +8,7 @@ const CHAT_SWITCH=/(?:давай\s+(?:просто\s+)?(?:поговор|поб�
 const KNOWLEDGE=/^(?:лера[,\s]+)?(?:что\s+такое|объясни\s+понятие|что\s+означает|кто\s+такой|что\s+значит)\s+/iu;
 
 export function classifyAgentQuestion(question,{memory={},history=[]}={}){
- const q=String(question||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е');
+ const q=String(question||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е').replace(/^(?:(?:привет|здравствуй)[\\s,!.?—-]+)?(?:лера|ресанта|резанта)[\\s,!.?—-]+/iu,'');
  if(!q)return 'chat';
  if(CHAT_SWITCH.test(q))return 'chat';
  // General definitions do not imply access to the company's own records.
