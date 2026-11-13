@@ -25,16 +25,19 @@ export function chooseRecipientRows(user,debts,managerUsers){
  return list.filter(d=>owned.includes(surname(d.manager_name)));
 }
 
-// Requested familiar names for confirmed CRM manager accounts only.
+// Professional first names for confirmed CRM accounts only.
 const FRIENDLY_MANAGER_NAMES=Object.freeze({
- 'руднев':'Саня',
- 'ачинович':'Катюшка',
- 'шкуран':'Танюшка'
+ 'руднев':'Александр',
+ 'ачинович':'Екатерина',
+ 'шкуран':'Татьяна',
+ 'александренко':'Александр',
+ 'кришталь':'Наталья'
 });
 // Personal leader greetings apply only to verified boss CRM accounts.
 const FRIENDLY_LEADER_NAMES=Object.freeze({
- 'payushin_ar@resanta.ru':'родной',
- 'sidarovich_kn@resanta.ru':'Кирюшка'
+ 'payushin_ar@resanta.ru':'Александр',
+ 'sidarovich_kn@resanta.ru':'Кирилл',
+ 'petrovichev@resanta.ru':'Виталий'
 });
 const friendlyLeader = user=>String(user?.role||'')==='boss'
  ? FRIENDLY_LEADER_NAMES[String(user?.email||'').trim().toLowerCase()]||''

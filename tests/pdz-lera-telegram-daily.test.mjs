@@ -51,7 +51,7 @@ test('managers get a warm personalized Lera greeting and every debtor with requi
  const rows=chooseRecipientRows(users[3],debt,users);
  const digest=managerBrief({user:users[3],binding:{telegram_first_name:'Саша'},rows,previousRows:rows.map(x=>({...x,debt_overdue:x.debt_overdue+100})),
   reportDate,today,evidence:new Map(),legalAction:()=>''});
- assert.match(digest.header,/Привет, Саня! Это Лера/);
+ assert.match(digest.header,/Привет, Александр! Это Лера/);
  assert.match(digest.header,/последний загруженный отчёт/);
  assert.match(digest.header,/2<\/b> · просрочено обещаний/);
  assert.match(digest.header,/-200,00 BYN/);
@@ -75,7 +75,7 @@ test('known payment promises stop first-contact reminders but past promises requ
 test('leadership digest covers each scoped manager, unresolved contacts and customer priorities',()=>{
  const rows=chooseRecipientRows(users[1],debt,users);
  const digest=leaderBrief({user:users[1],rows,previousRows:null,reportDate,today,evidence:new Map(),managerUsers:users});
- assert.match(digest.header,/Привет, Кирюшка! Это Лера/);
+ assert.match(digest.header,/Привет, Кирилл! Это Лера/);
  assert.equal(digest.debtors,4);
  assert.equal(digest.counts.no_record,4);
  assert.match(digest.lines.join('\n'),/Руднев/);
@@ -105,11 +105,11 @@ test('original authenticated dispatch stays in place, reuses binding and dedupe 
 test('Lera uses familiar individual names only for exactly matched manager accounts',()=>{
  const ac=managerBrief({user:users[4],binding:{telegram_first_name:'Катя'},rows:[debt[2]],previousRows:null,reportDate,today,evidence:new Map()});
  const sh=managerBrief({user:users[5],binding:{telegram_first_name:'Таня'},rows:[debt[3]],previousRows:null,reportDate,today,evidence:new Map()});
- assert.match(ac.header,/Привет, Катюшка! Это Лера/);
- assert.match(sh.header,/Привет, Танюшка! Это Лера/);
+ assert.match(ac.header,/Привет, Екатерина! Это Лера/);
+ assert.match(sh.header,/Привет, Татьяна! Это Лера/);
  const impostor={name:'Ачиновиченко',role:'manager'};
- assert.notEqual(greeting(impostor,[],{telegram_first_name:'Лена'}),'Катюшка');
- assert.equal(greeting(users[1],[]),'Кирюшка');
+ assert.notEqual(greeting(impostor,[],{telegram_first_name:'Лена'}),'Екатерина');
+ assert.equal(greeting(users[1],[]),'Кирилл');
 });
 
 
@@ -118,8 +118,8 @@ test('leader greetings stay personal and cannot leak to other CRM accounts',()=>
  const dfs=leaderBrief({...opts,user:users[0]});
  const df=leaderBrief({...opts,user:users[1]});
  const gomel=leaderBrief({...opts,user:users[2]});
- assert.match(dfs.header,/Привет, родной! Это Лера/);
- assert.match(df.header,/Привет, Кирюшка! Это Лера/);
+ assert.match(dfs.header,/Привет, Александр! Это Лера/);
+ assert.match(df.header,/Привет, Кирилл! Это Лера/);
  assert.match(gomel.header,/Доброе утро, Самойлов Д\. С\.! Это Лера/);
  assert.equal(greeting({...users[0],email:'other@example.com'},[]),'Александр Паюшин');
  assert.equal(greeting({...users[0],role:'manager'},[]),'Александр Паюшин');

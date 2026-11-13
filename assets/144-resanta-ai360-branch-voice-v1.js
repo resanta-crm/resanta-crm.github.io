@@ -9,12 +9,12 @@
 if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOptIn)||root.crmAI360BranchVoicePilotV1)return;
 const role=()=>root.crmAI360StaffIdentityV1?.()||null;
 const STAFF_GREETING=Object.freeze({
- 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
- '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
- '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
- '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
- '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
- '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
+ 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирилл',
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Александр',
+ '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Екатерина',
+ '4fd79fa0-232d-4768-8099-25f47923cc4f':'Татьяна',
+ '6efa656e-45c6-473b-a853-89eccb9ee43a':'Александр',
+ '9076ccde-a8cc-47e3-b71e-c31170b693ff':'Наталья'
 });
 const personalGreeting=()=>{const p=role();const address=p&&STAFF_GREETING[p.id];
  return address?'Привет, '+address+', чем помочь?':null;};

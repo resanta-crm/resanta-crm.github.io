@@ -139,18 +139,18 @@ test('Petrovichev is a genuine network director peer, not a role-name bypass',()
  assert.equal(peer.endpoint,'crm-ai360-director-peer-v1');
  assert.equal(peer.tier,'network_director');
  assert.equal(peer.read_only,true);
- assert.equal(agentGreeting(peer),'мой слуга');
+ assert.equal(agentGreeting(peer),'Виталий');
  assert.equal(agentCapabilities(peer).can_execute_writes,false);
 });
 
 test('seven personalised Lera addresses are attached only to matching verified accounts',()=>{
  const greeting={
-  'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
-  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
-  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Катюшка',
-  '4fd79fa0-232d-4768-8099-25f47923cc4f':'Танюшка',
-  '6efa656e-45c6-473b-a853-89eccb9ee43a':'мой господин',
-  '9076ccde-a8cc-47e3-b71e-c31170b693ff':'моя госпожа'
+  'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирилл',
+  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Александр',
+  '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':'Екатерина',
+  '4fd79fa0-232d-4768-8099-25f47923cc4f':'Татьяна',
+  '6efa656e-45c6-473b-a853-89eccb9ee43a':'Александр',
+  '9076ccde-a8cc-47e3-b71e-c31170b693ff':'Наталья'
  };
  for(const [id,expected] of Object.entries(greeting)){
   const x=STAFF_USERS[id];

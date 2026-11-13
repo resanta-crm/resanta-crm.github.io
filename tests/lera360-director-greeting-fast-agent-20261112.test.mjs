@@ -11,14 +11,14 @@ function greeting(profile,user){
  vm.runInNewContext(helper,ctx);return ctx.window.crmAI360GreetingV1();
 }
 const roster=[
- ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','Александр Паюшин','boss','Витебск','родной'],
- ['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','Сидарович К.Н.','boss','Витебск','Кирюшка'],
- ['19dd9943-99ae-47c4-a39c-4f82a11059a6','Руднев','manager','Витебск','Санька'],
- ['3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','Ачинович','manager','Витебск','Катюшка'],
- ['4fd79fa0-232d-4768-8099-25f47923cc4f','Шкуран','manager','Витебск','Танюшка'],
- ['6efa656e-45c6-473b-a853-89eccb9ee43a','Александренко','manager','Триовист / 21vek.by','мой господин'],
- ['9076ccde-a8cc-47e3-b71e-c31170b693ff','Кришталь','manager','Триовист / 21vek.by','моя госпожа'],
- ['a24954b8-2fe1-4852-b629-d8f351e1bd36','Руководство компании','boss','Все филиалы','мой слуга']
+ ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','Александр Паюшин','boss','Витебск','Александр'],
+ ['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','Сидарович К.Н.','boss','Витебск','Кирилл'],
+ ['19dd9943-99ae-47c4-a39c-4f82a11059a6','Руднев','manager','Витебск','Александр'],
+ ['3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','Ачинович','manager','Витебск','Екатерина'],
+ ['4fd79fa0-232d-4768-8099-25f47923cc4f','Шкуран','manager','Витебск','Татьяна'],
+ ['6efa656e-45c6-473b-a853-89eccb9ee43a','Александренко','manager','Триовист / 21vek.by','Александр'],
+ ['9076ccde-a8cc-47e3-b71e-c31170b693ff','Кришталь','manager','Триовист / 21vek.by','Наталья'],
+ ['a24954b8-2fe1-4852-b629-d8f351e1bd36','Руководство компании','boss','Все филиалы','Виталий']
 ];
 test('eight exact approved personal greetings, without modifying rights',()=>{
  for(const [id,name,role,region,address]of roster){

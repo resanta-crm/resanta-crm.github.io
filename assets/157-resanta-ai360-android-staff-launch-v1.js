@@ -59,7 +59,7 @@
     catch(e){console.warn('Optional staff voice component:',e);}
    }
    if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
-   await load('144-resanta-ai360-branch-voice-v1.js?v=12&lera=20261113-turntaking');
+   await load('144-resanta-ai360-branch-voice-v1.js?v=12&lera=20261113-turntaking&namesRelease=20261113-formal1');
    if(!root.crmAI360BranchVoicePilotV1?.allowed())throw Error('Нет доступа к помощнику сотрудника');
    ready=true;
    button.textContent='🎙 Лера';

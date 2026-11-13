@@ -138,7 +138,7 @@ test('Server read-only endpoint and no cross-user state in browser',()=>{
 });
 
 test('Staff Lera says one short personalised welcome after server permissions, without unsolicited reports',()=>{
- const names=['Кирюшка','Санька','Катюшка','Танюшка','мой господин','моя госпожа'];
+ const names=['Кирилл','Александр','Екатерина','Татьяна','Александр','Наталья'];
  for(const name of names)assert.ok(source.includes("'"+name+"'"),name);
  assert.ok(source.includes('personalGreeting()'));
  assert.ok(source.includes('if(hello)show(hello)'));

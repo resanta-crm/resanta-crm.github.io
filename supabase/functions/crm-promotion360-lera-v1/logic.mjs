@@ -21,10 +21,11 @@ export function evaluate(p,truth,sourceAt,today){
 }
 export function greeting(user){
  const id=String(user?.id||''),n=String(user?.name||'').toLowerCase();
- if(id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc')return 'родной';
- if(n.includes('шкуран'))return 'Танюшка';
- if(n.includes('ру́днев')||n.includes('руднев'))return 'Саня';
- if(n.includes('ачинович'))return 'Катюшка';
+ const names={"544fb1e2-ef70-44de-bc62-e0e1596a4bfc":"Александр","a24954b8-2fe1-4852-b629-d8f351e1bd36":"Виталий","ba55dfe5-7e48-4f1f-b40e-674c7752fe1a":"Кирилл","19dd9943-99ae-47c4-a39c-4f82a11059a6":"Александр","3d935a76-c6fe-44b6-b248-fcbe58c6bf1c":"Екатерина","4fd79fa0-232d-4768-8099-25f47923cc4f":"Татьяна","6efa656e-45c6-473b-a853-89eccb9ee43a":"Александр","9076ccde-a8cc-47e3-b71e-c31170b693ff":"Наталья"};
+ if(names[id])return names[id];
+ if(n.includes('шкуран'))return 'Татьяна';
+ if(n.includes('ру́днев')||n.includes('руднев'))return 'Александр';
+ if(n.includes('ачинович'))return 'Екатерина';
  return String(user?.name||'коллега').split(' ')[0];
 }
 export function personalFor(user,rows){

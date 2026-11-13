@@ -9,12 +9,12 @@ const css=read('assets/268-stands360-uniai-unix-v2.css');
 const shell=read('assets/115-stands-v236367.js');
 const loader=read('assets/100-safe-upgrades-loader-v236272.js');
 const index=read('index.html');
-test('Lera calls director «родной» by user ID even if name starts with Александр',()=>{
- assert.equal(greet({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',name:'Александр Паюшин'}),'родной');
- assert.equal(greet({name:'Александр Паюшин'}),'родной');
- assert.equal(greet({id:'19dd9943-99ae-47c4-a39c-4f82a11059a6',name:'Руднев'}),'Саня');
- assert.equal(greet({id:'3d935a76-c6fe-44b6-b248-fcbe58c6bf1c',name:'Ачинович'}),'Катюшка');
- assert.equal(greet({id:'4fd79fa0-232d-4768-8099-25f47923cc4f',name:'Шкуран'}),'Танюшка');
+test('Lera calls director «Александр» by user ID even if name starts with Александр',()=>{
+ assert.equal(greet({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',name:'Александр Паюшин'}),'Александр');
+ assert.equal(greet({name:'Александр Паюшин'}),'Александр');
+ assert.equal(greet({id:'19dd9943-99ae-47c4-a39c-4f82a11059a6',name:'Руднев'}),'Александр');
+ assert.equal(greet({id:'3d935a76-c6fe-44b6-b248-fcbe58c6bf1c',name:'Ачинович'}),'Екатерина');
+ assert.equal(greet({id:'4fd79fa0-232d-4768-8099-25f47923cc4f',name:'Шкуран'}),'Татьяна');
 });
 test('one director screen and a separate collapsible legacy document section',()=>{
  for(const term of ['Обзор','Все стенды','Решения','Учёт и документы','Заявки','История','ОС'])

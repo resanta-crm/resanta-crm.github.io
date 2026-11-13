@@ -24,13 +24,13 @@ test('greetings and ownership match only correct manager; director gets all',()=
  const owner={id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',name:'Александр Паюшин',role:'boss'};
  const shk={id:'4fd79fa0-232d-4768-8099-25f47923cc4f',name:'Шкуран',role:'manager'};
  const rud={name:'Руднев',role:'manager'},ach={name:'Ачинович',role:'manager'};
- assert.equal(greeting(owner),'родной');assert.equal(greeting(shk),'Танюшка');
- assert.equal(greeting(rud),'Саня');assert.equal(greeting(ach),'Катюшка');
+ assert.equal(greeting(owner),'Александр');assert.equal(greeting(shk),'Татьяна');
+ assert.equal(greeting(rud),'Александр');assert.equal(greeting(ach),'Екатерина');
  const data=[{manager_name:'Шкуран',client_name:'Руд Буд'},{manager_name:'Руднев',client_name:'ИТ технологии'},{manager_name:'Ачинович',client_name:'Бахус'}];
  assert.equal(personalFor(owner,data).length,3);
  assert.deepEqual(personalFor(shk,data).map(x=>x.client_name),['Руд Буд']);
  assert.equal(voiceBrief(shk,data,[]),null);
- assert.match(voiceBrief(shk,data,[{...data[0],status:'open',milestone:7}]),/Привет, Танюшка/);
+ assert.match(voiceBrief(shk,data,[{...data[0],status:'open',milestone:7}]),/Привет, Татьяна/);
  assert.doesNotMatch(voiceBrief(shk,data,[{...data[0],status:'open',milestone:7}]),/ИТ технологии/);
 });
 test('overview is sourced from a single scoped server RPC not client 1C history',()=>{
