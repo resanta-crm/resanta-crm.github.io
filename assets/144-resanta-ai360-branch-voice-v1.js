@@ -301,7 +301,7 @@ async function read(q){
 }
 function submit(){
  if(!field||busy||!panelVisible())return;
- const question=field.value.trim().slice(0,350);if(!question)return;
+ const question=field.value.trim().slice(0,2400);if(!question)return;
  field.value='';const line=document.createElement('div');line.textContent='Вы: '+question;
  line.style.cssText='padding:8px 4px;font-size:12px;color:#445b77;';
  log.appendChild(line);log.scrollTop=log.scrollHeight;
