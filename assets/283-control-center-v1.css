@@ -1,5 +1,9 @@
 /* Scoped home presentation. No global selectors or other page styles. */
-#page-dashboard.cc-installed>:not(#control-center-v1):not(#manager-workday-card):not(.crm-core-page-loader-v22733){display:none!important}
+#page-dashboard.cc-installed>:not(#control-center-v1):not(#cc-refresh-status):not(#manager-workday-card):not(.crm-core-page-loader-v22733){display:none!important}
+#page-dashboard #cc-refresh-status:empty,#page-dashboard #cc-refresh-status[hidden]{display:none}
+#page-dashboard #cc-refresh-status{color:var(--text);font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px}
+#page-dashboard #cc-refresh-status .cc-refresh-note{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#page-dashboard #cc-refresh-status button{font:inherit;background:var(--card);color:var(--a);border:1px solid var(--border);border-radius:7px;padding:8px 12px;cursor:pointer}
 #control-center-v1{--cc-brand:#315cb6;--cc-tint:color-mix(in srgb,var(--a,#315cb6) 10%,var(--card,#fff));display:grid;gap:16px;color:var(--text);font:inherit;min-width:0}
 #control-center-v1 *{box-sizing:border-box}
 #control-center-v1 h2,#control-center-v1 h3,#control-center-v1 h4,#control-center-v1 p{margin:0}

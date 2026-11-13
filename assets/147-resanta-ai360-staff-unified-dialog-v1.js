@@ -45,6 +45,8 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    if(!session?.access_token)throw Error('not_authorized');
    const month=localMonth(question)||memory.month||null;
    const payload={action:'ask',question,history:history.slice(-12),memory:{...memory,month}};
+   const screen=root.RESANTA_CONTROL_CENTER_V1?.prepareAgentRequest?.(question,memory);
+   if(screen){payload.question=screen.question;payload.memory={...screen.memory,month:localMonth(question)||screen.memory.month||null};}
    if(root.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    let result=await db.functions.invoke(ENDPOINT,{body:payload});
    if(Number(result.error?.context?.status)===401&&typeof db.auth?.refreshSession==='function'){
