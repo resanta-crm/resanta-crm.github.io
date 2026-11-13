@@ -77,7 +77,7 @@ async function targetStaff(svc,actor){
 function matchOne(name,people){
  const search=norm(name).replace(/\s*к\.?\s*н\.?$/i,'').trim();
  if(!search)return null;
- const alias=search==='сидорович'?'сидарович':search;
+ const alias=({сидорович:'сидарович',кирилл:'сидарович',таня:'шкуран',татьяна:'шкуран',катя:'ачинович',екатерина:'ачинович',наталья:'кришталь',виталий:'руководство компании'})[search]||search;
  const found=people.filter(p=>{
    const nm=norm(p.name);
    return nm===alias||nm.split(' ')[0]===alias||
@@ -220,9 +220,12 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
   const title=esc(model.title).slice(0,160),details=esc(model.details).slice(0,800);
   if(title.length<8||details.length<8)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
   const dur=Number.isInteger(model.duration_minutes)&&model.duration_minutes>=15&&model.duration_minutes<=240?model.duration_minutes:60;
+  const picked=(Array.isArray(model.participants)?model.participants:[]).slice(0,12).map(name=>matchOne(name,directory));
+  if(picked.some(x=>!x)||new Set(picked.map(x=>x.id)).size!==picked.length)
+    return respond(req,{mode:'needs_details',question:'Назови точных сотрудников-участников встречи.',created:0});
   const draft={action:'meeting',owner_id:actor.id,client_id:resolved.client?.id||null,client_name:resolved.client?.name||'',
     title,details,due_date:day,due_time:time,starts_at:start,duration_minutes:dur,
-    format:model.event_format,location:esc(model.location).slice(0,250),participant_names:[],source:SOURCE};
+    format:model.event_format,location:esc(model.location).slice(0,250),participant_names:picked.map(x=>x.name),source:SOURCE};
   const proof=await prepareToken(secret,actor.id,draft);
   return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'» на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
     approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
@@ -336,7 +339,7 @@ async function execute(req,body,actor,svc,caller,secret){
      format:draft.format,title:draft.title,purpose:draft.details,
      client_id:draft.client_id||null,client_name:draft.client_name||null,
      starts_at:draft.starts_at,duration_minutes:draft.duration_minutes,
-     location:draft.location,participants:[],source:SOURCE};
+     location:draft.location,participants:draft.participant_names||[],source:SOURCE};
    const inserted=await caller.from('crm_ai360_meetings_v1').insert(row)
      .select('id,owner_id,starts_at,source').single();
    if(inserted.error){
@@ -344,7 +347,7 @@ async function execute(req,body,actor,svc,caller,secret){
      return fail(req,'meeting_create_failed',503);
    }
    if(!uuid(inserted.data?.id)||inserted.data?.owner_id!==actor.id||
-      inserted.data?.starts_at!==draft.starts_at||inserted.data?.source!==SOURCE)
+      Date.parse(inserted.data?.starts_at)!==Date.parse(draft.starts_at)||inserted.data?.source!==SOURCE)
      return fail(req,'meeting_verification_failed',503);
    return respond(req,{mode:'created_meeting',created:1,meeting_id:inserted.data.id,
      title:draft.title,due_date:draft.due_date,due_time:draft.due_time,
