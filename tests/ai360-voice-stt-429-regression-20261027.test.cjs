@@ -21,7 +21,7 @@ assert.match(source,/activeRecorder\.stop\(\);info\('Завершаю запис
 assert.match(source,/silence\.observe\(rms,Date\.now\(\)-start\)/);
 assert.match(source,/const clip=await capture\(12,epoch\)/);
 assert.match(launcher,/135-resanta-voice-capture-fix-v2.js\?v=21/);
-assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=39/);
+assert.match(html,/137-resanta-ai360-lazy-launch-v1.js\?v=40/);
 const start=source.indexOf(' async function manualLoop(epoch){');
 const end=source.indexOf(' async function wakeLoop(epoch){',start);
 assert.ok(start>=0&&end>start);
