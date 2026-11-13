@@ -179,7 +179,7 @@ async function resolveStore(svc,client,location){
  const matching=wanted?candidates.filter(x=>norm(x.address)===wanted||
    norm((x.city||'')+' '+(x.address||''))===wanted):[];
  if(matching.length===1)return {point_id:matching[0].id};
- return {error:'store_ambiguous',variants:candidates.slice(0,4).map(x=>[x.city,x.address].filter(Boolean).join(', ')};
+ return {error:'store_ambiguous',variants:candidates.slice(0,4).map(x=>[x.city,x.address].filter(Boolean).join(', '))};
 }
 
 async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
