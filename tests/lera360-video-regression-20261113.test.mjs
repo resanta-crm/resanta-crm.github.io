@@ -5,6 +5,7 @@ import vm from 'node:vm';
 const read=p=>fs.readFileSync(p,'utf8');
 const turn=read('assets/220-lera360-turn-taking-v1.js');
 const voice=read('assets/135-resanta-voice-capture-fix-v2.js');
+const gate=read('assets/216-lera360-silence-gate-v1.js');
 const staff=read('assets/146-resanta-ai360-branch-premium-voice-v1.js');
 const nav=read('assets/221-lera360-voice-navigation-v1.js');
 const owner=read('assets/215-lera360-personal-greeting-v1.js');
@@ -25,6 +26,16 @@ test('long interrupted meeting request waits for continuation, then composes all
  assert.equal(t.merge('Завтра встреча с клиентом,','хочу обсудить продажи'),'Завтра встреча с клиентом, хочу обсудить продажи');
  assert.ok(t.isolatedWake('Али'));
  assert.equal(t.isolatedWake('Али, мы с ним говорили'),false);
+});
+test('speech silence gate respects the requested 3300ms instead of clipping at 2600ms',()=>{
+ const context={window:{}};
+ vm.runInNewContext(gate,context);
+ const detector=context.window.crmAI360CreateSilenceGateV1({pauseMs:3300,noSpeechMs:5400});
+ detector.observe(.008,400);
+ assert.equal(detector.observe(.0001,2800).stop,false);
+ assert.equal(detector.observe(.0001,3450).stop,false);
+ assert.equal(detector.observe(.0001,3890).stop,true);
+ assert.ok(page.includes('216-lera360-silence-gate-v1.js?v=2&lera=20261113-turntaking'));
 });
 test('Mac and staff now listen longer and join not-final fragments',()=>{
  assert.match(voice,/pauseMs=window\.crmAI360TurnTakingV1\?\.pauseMs\|\|3300/);
