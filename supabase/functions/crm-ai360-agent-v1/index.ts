@@ -62,12 +62,15 @@ Deno.serve(async req=>{
   if(h.error)return fault(req,h.error,h.status||400);
   return reply(req,h);
  }
+ // Server-side rollout cannot silently depend on an old browser bundle or URL.
+ if(principal.user_id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&input?.action!=='capabilities')
+  input={...input,protocol:'lera_dialogue_v2'};
  const parsed=normalizeAgentRequest(input,principal);
  if(parsed.error)return fault(req,parsed.error,parsed.error==='not_authorized'?403:400);
  if(parsed.action==='capabilities'){
   const h=await historyEnabled(svc,user.id);
   return reply(req,{...agentCapabilities(principal),history_enabled:h.enabled===true,
-   history_retention_days:30,history_audio_saved:false});
+   history_retention_days:30,history_audio_saved:false,dialogue_protocol:'lera_dialogue_v2'});
  }
  // Ordinary conversation is explicitly isolated from CRM reads. Every caller is
  // still authenticated, identity-scoped and metered before contacting OpenAI.

@@ -60,7 +60,7 @@ const ctx={
  document:{getElementById:()=>({style:{display:'block'}}),addEventListener:()=>{}},
  window:{addEventListener:()=>{},crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'})},
  db:{auth:{getSession:async()=>({data:{session:{access_token:'stub'}}})},
-  functions:{invoke:async (name,{body})=>{requests.push({name,body});return {data:response};}}},
+  functions:{invoke:async (name,{body})=>{requests.push({name,body});return {data:{protocol:'lera_dialogue_v2',...response}};}}},
  Promise,console,setTimeout
 };
 vm.runInNewContext(bridge,ctx);

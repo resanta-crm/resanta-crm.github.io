@@ -18,17 +18,22 @@ export const dialogueName=id=>({
  '9076ccde-a8cc-47e3-b71e-c31170b693ff':'Наталья'
 })[id]||'';
 const PREPARE={type:'function',name:'prepare_action',strict:true,
- description:'Подготовить запрос создать поручение, встречу, чат или плановый визит. Только по просьбе пользователя; ничего не записывается. Подготовка К совещанию означает анализ CRM, а не создание встречи.',
+ description:'Подготовить запрос создать поручение, встречу, чат, личное напоминание или плановый визит. Только по просьбе пользователя; ничего не записывается. Подготовка К совещанию означает анализ CRM, а не создание встречи.',
  parameters:{type:'object',additionalProperties:false,properties:{question:{type:'string',
  description:'Полный запрос с исполнителем, предметом, клиентом и сроком из разговора. Не выдумывай недостающие сведения.'}},required:['question']}};
 const schema={type:'object',additionalProperties:false,properties:{
  kind:{type:'string',enum:['chat','clarification','crm']},brief:{type:'string'},
  detail:{type:'string'},offer:{type:'string'}},required:['kind','brief','detail','offer']};
+export const humanizeDialogueText=value=>String(value||'')
+ .replace(/\bpartial\s*[:=]\s*false\b/gi,'список выбранного источника полный')
+ .replace(/\bpartial\s*[:=]\s*true\b/gi,'показана часть данных')
+ .replace(/\bhas_more\s*[:=]\s*true\b/gi,'есть продолжение списка')
+ .replace(/\bhas_more\s*[:=]\s*false\b/gi,'это последняя страница списка');
 const pairOf=response=>{
  const text=(response?.output||[]).filter(x=>x.type==='message').flatMap(x=>x.content||[])
   .filter(x=>x.type==='output_text').map(x=>String(x.text||'')).join('');
  try{const p=JSON.parse(text);return ['chat','clarification','crm'].includes(p.kind)&&
-  ['brief','detail','offer'].every(k=>typeof p[k]==='string')&&p.brief.trim()?p:null;}catch{return null;}
+  ['brief','detail','offer'].every(k=>typeof p[k]==='string')&&p.brief.trim()?{...p,brief:humanizeDialogueText(p.brief),detail:humanizeDialogueText(p.detail),offer:humanizeDialogueText(p.offer)}:null;}catch{return null;}
 };
 export async function runDialogueCore({question,history=[],memory={},domains=[],readTool,
  request,readDefinition,model,address=''}){
@@ -36,7 +41,11 @@ export async function runDialogueCore({question,history=[],memory={},domains=[],
   'Ты Лера, русскоязычный помощник РЕСАНТА. Говори о себе в женском роде. Обращайся уважительно, только по подтверждённому имени: '+address+'.',
   'Общение, анализ CRM и подготовка поручений — один разговор. Пользователь не выбирает режимы.',
   'Общие вопросы обсуждай естественно: kind=chat. Для сведений о компании обязательно читай нужные источники через crm_read, затем kind=crm.',
-  'Подготовь меня к совещанию — рабочий анализ: проверь operations, sales, clients и debt там, где они доступны. Не создавай встречу без просьбы.',
+  'Подготовь меня к совещанию — сначала собери рабочий обзор operations, sales, clients и debt там, где они доступны: проблемы, ответственные и конкретные следующие действия. Не требуй дату и участников для аналитической подготовки; они нужны только для создания календарной встречи.',
+  'Вопрос о полевых менеджерах, менеджерах во множественном числе или ответ по сети означает весь разрешённый срез, а не сотрудника из прошлой реплики. Для такого чтения manager=null. В финансовом ответе укажи период, план, факт, процент и валюту; не смешивай методики.',
+  'Первый GPS-сигнал и начало GPS-сеанса не доказывают выход на работу. Следуй interpretation источника; физическое прибытие подтверждается только специальными доказательствами.',
+  'Служебные поля partial, has_more, answer_verified и JSON никогда не произноси. Говори: показана часть списка, есть продолжение, либо список выбранного источника полный. Полнота списка не означает выполненность или достоверность всех выводов.',
+  'Запросы можешь создать чат и поставь мне напоминание являются просьбой подготовить действие. Выбирай prepare_action, затем существующий механизм запросит подтверждение. Для напоминания сохраняй дату и время, не предлагай вместо него текст заметки.',
   'Сравни с сентябрём, а по этим клиентам, пусть он займётся этим — продолжения темы. Восстанови предмет и период из истории. Короткая беседа не стирает рабочую тему.',
   'Если ссылка на клиента, сотрудника или действие неоднозначна, kind=clarification и короткий вопрос. Не выбирай случайного человека.',
   'Для явной просьбы выполнить действие используй prepare_action. Это только подготовка: отдельный механизм проверит параметры и запросит подтверждение. У тебя нет инструмента записи, commit или отправки сообщений.',

@@ -111,7 +111,7 @@ async function readStaff(svc,permission,managers,domain,body,day,userEmail,profi
    total_count_known:true,scope:'authorized_managers'}};
  }
  if(domain==='visits')return scopedTable(svc,'visits',['manager_name','date','goal','result','goal_achieved'],'date',managers,{offset});
- if(domain==='gps')return scopedTable(svc,'gps_workday_aggregates',['manager_name','work_date','physical_stops','planned_count','visited_count','missed_count','aggregation_status'],'work_date',managers,{offset});
+ if(domain==='gps')return scopedTable(svc,'gps_workday_aggregates',['manager_name','work_date','planned_count','visited_count','missed_count','aggregation_status'],'work_date',managers,{offset});
  if(domain==='triovist_tasks')return scopedTable(svc,'triovist_ai_tasks',['manager_name','title','status','priority_score','due_date'],'updated_at',managers,{offset});
  if(domain==='stock'){
   const q=await svc.from('stock_balances').select('sku,product,warehouse,qty_avail,report_date')

@@ -1,3 +1,4 @@
+import {readGpsEvidence,gpsStartAnswer} from './gps-evidence.mjs';
 import {dialogueName} from './dialogue-core.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoiceDomain, getVoiceCapabilities } from './catalog.mjs';
@@ -45,7 +46,8 @@ async function resolveManager(svc, name) {
   if (matches.length !== 1) throw new Error('manager_not_unique');
   return String(matches[0].name);
 }
-async function managedRead(svc, domain, manager, month, day) {
+async function managedRead(svc, domain, manager, month, day, question='',firstTT=null) {
+  if(domain==='gps')return readGpsEvidence(svc,{manager,month,day,question,firstTT});
   if (domain === 'sales') {
     const r = await svc.rpc('crm_ai360_sales_kpi_snapshot_v1', { p_month: month + '-01' });
     if (r.error || !r.data) throw new Error('sales_unavailable');
@@ -171,7 +173,7 @@ Deno.serve(async req => {
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
-    const target=effectiveManager(domain,dialogue?{...subject,manager:args.manager||null}:subject);
+    const target=effectiveManager(domain,dialogue?{...subject,manager:subject.network?null:args.manager||null}:subject);
     if(target.error)return {domain,error:target.error,message:'Requested manager-specific breakdown is not available in this source. Do not use client totals instead.'};
     let manager;
     try {
@@ -284,7 +286,8 @@ Deno.serve(async req => {
         const t={domain,source:'crm_ai360_stock_snapshot_v41',...stock.data,largest_onhand_skus:(stock.data.largest_onhand_skus||[]).slice(0,5),partial:true};
         evidence.push(t);return t;
       }
-      const managed=await managedRead(svc,domain,manager,month,day);
+      const managed=await managedRead(svc,domain,manager,month,day,question,
+        userId==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'?date=>createClient(url,Deno.env.get('SUPABASE_ANON_KEY')||'',{auth:{persistSession:false},global:{headers:{Authorization:'Bearer '+token}}}).rpc('crm_gps_first_tt_lateness_v1',{p_from:date,p_to:date}):null);
       if(managed){evidence.push(managed);return managed;}
       const tool = getTool(domain);
       if (!tool) return { domain, error: 'unknown_domain' };
@@ -496,7 +499,7 @@ Deno.serve(async req => {
     answer:output.pair.brief,brief:output.pair.brief,detail:output.pair.detail,
     followup_question:output.pair.offer,read_only:true,answer_verified:false,domains_used:[],memory
   });
-  const pair=evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null;
+  const pair=gpsStartAnswer(evidence,{question})||(evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
   if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
     answer_verified: false,

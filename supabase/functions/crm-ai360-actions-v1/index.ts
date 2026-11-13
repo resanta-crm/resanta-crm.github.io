@@ -1,3 +1,5 @@
+import {reminderDraft,commitReminder} from './reminders.mjs';
+import {directoryAlias,displayPerson,canonicalMeetingClient} from './identity-aliases.mjs';
 /* RESANTA Lera 360 agent actions v1.
    User-authenticated two-step task and CONNECT chat operations.
    The LLM only proposes a structured draft; it never writes to the database.
@@ -75,6 +77,7 @@ async function targetStaff(svc,actor){
  )).slice(0,60);
 }
 function matchOne(name,people){
+ const aliasPerson=directoryAlias(name,people);if(aliasPerson)return aliasPerson;
  const search=norm(name).replace(/\s*к\.?\s*н\.?$/i,'').trim();
  if(!search)return null;
  const alias=({сидорович:'сидарович',кирилл:'сидарович',таня:'шкуран',татьяна:'шкуран',катя:'ачинович',екатерина:'ачинович',наталья:'кришталь',виталий:'руководство компании'})[search]||search;
@@ -107,7 +110,7 @@ async function callModel(openai,question,names,now,svc,userId){
 }
 async function callModelClaimed(openai,question,names,now){
  const schema={type:'object',additionalProperties:false,properties:{
-   action:{type:'string',enum:['task','chat','meeting','visit','none']},
+   action:{type:'string',enum:['task','chat','meeting','visit','reminder','none']},
    assignee:{type:'string'},title:{type:'string'},details:{type:'string'},
    due_date:{type:'string'},due_time:{type:'string'},
    room_kind:{type:'string',enum:['direct','group']},room_title:{type:'string'},
@@ -117,8 +120,9 @@ async function callModelClaimed(openai,question,names,now){
  },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants','client_name','location','event_format','duration_minutes']};
  const body={model:'gpt-5.4-mini',store:false,max_output_tokens:500,reasoning:{effort:'low'},
   input:[{role:'system',content:[
-    'Извлеки намерение СОЗДАТЬ задачу, чат CONNECT, встречу или плановый визит из естественной русской речи.',
+    'Извлеки намерение СОЗДАТЬ задачу, чат CONNECT, встречу, личное напоминание (action=reminder) или плановый визит из естественной русской речи.',
     'Фраза «у меня встреча» НЕ команда на создание: action=none. «Подготовь меня к встрече» тоже action=none.',
+    'Напомни мне — личное напоминание с датой и временем. «Можешь создать чат с Петровичем» — поручение создать чат с Виталием Петровичевым, если он есть в доступном списке.',
     'Встреча — action=meeting; физический маршрутный визит МПП — action=visit.',
     'Никогда не превращай плановую встречу в фактическое GPS-посещение.',
     'Это только черновик, ничего не создавай. Не выдумывай сотрудников, даты, время, участников и их имена.',
@@ -151,8 +155,8 @@ function moment(date,time){
  const at=new Date(date+'T'+time+':00+03:00');
  return Number.isFinite(at.valueOf())?at.toISOString():null;
 }
-async function resolveClient(svc,actor,clientName){
- const name=esc(clientName).slice(0,180);
+async function resolveClient(svc,actor,clientName,allowExternal=false){
+ const name=esc(canonicalMeetingClient(clientName)).slice(0,180);
  if(!name)return {client:null};
  // Legal-form prefixes are not guaranteed to appear in the same order in CRM.
  // Keep a narrow, deterministic lookup; ambiguous matches remain unselectable.
@@ -171,7 +175,10 @@ async function resolveClient(svc,actor,clientName){
  const r=await q;
  if(r.error)throw Error('client_directory_unavailable');
  const found=(r.data||[]).filter(x=>!x.is_archived&&!x.to_delete);
- if(found.length!==1)return {error:found.length?'client_ambiguous':'client_not_found_or_not_allowed'};
+ if(found.length!==1){
+  if(!found.length&&allowExternal)return {client:null,external_name:name};
+  return {error:found.length?'client_ambiguous':'client_not_found_or_not_allowed'};
+ }
  return {client:found[0]};
 }
 async function resolveStore(svc,client,location){
@@ -200,11 +207,17 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
    const r=await caller.rpc('connect_directory_v1');
    if(!r.error&&Array.isArray(r.data))directory=r.data.filter(x=>uuid(x.id)&&x.id!==actor.id).slice(0,80);
  }catch{}
- const names=[...new Set([...staff,...directory].map(x=>String(x.name||'')))].slice(0,70);
+ const names=[...new Set([...staff,...directory].map(x=>String(x.name||'')+(displayPerson(x)!==x.name?' ('+displayPerson(x)+')':'')))].slice(0,70);
  let model;
  try{model=await callModel(openai,question,names,now,svc,actor.id);}
  catch{return fail(req,'action_understanding_unavailable',503);}
  if(model.action==='none')return respond(req,{mode:'not_an_action',read_only:true,created:0});
+ if(model.action==='reminder'){
+  const runtime=await svc.from('crm_telegram_runtime').select('value').eq('key','dispatch_secret').maybeSingle();
+  if(!Deno.env.get('TELEGRAM_BOT_TOKEN')||runtime.error||String(runtime.data?.value?.secret||'').length<24)
+    return fail(req,'reminder_delivery_not_configured',503);
+  return respond(req,await reminderDraft({svc,actor,model,startsAt:moment(model.due_date,model.due_time),proof:draft=>prepareToken(secret,actor.id,draft)}));
+ }
  if(model.action==='task'){
    const who=matchOne(model.assignee,staff);
    if(!who)return respond(req,{mode:'needs_details',question:'Кому именно поставить задачу? Назови сотрудника.',created:0});
@@ -223,7 +236,7 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
   const day=esc(model.due_date),time=esc(model.due_time);
   const start=moment(day,time);
   if(!start)return respond(req,{mode:'needs_details',question:'Уточни дату и время встречи по минскому времени.',created:0});
-  const resolved=await resolveClient(svc,actor,model.client_name);
+  const resolved=await resolveClient(svc,actor,model.client_name,true);
   if(resolved.error)return respond(req,{mode:'needs_details',question:'Уточни название клиента в CRM.',created:0});
   const title=esc(model.title).slice(0,160),details=esc(model.details).slice(0,800);
   if(title.length<8||details.length<8)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
@@ -231,11 +244,11 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
   const picked=(Array.isArray(model.participants)?model.participants:[]).slice(0,12).map(name=>matchOne(name,directory));
   if(picked.some(x=>!x)||new Set(picked.map(x=>x.id)).size!==picked.length)
     return respond(req,{mode:'needs_details',question:'Назови точных сотрудников-участников встречи.',created:0});
-  const draft={action:'meeting',owner_id:actor.id,client_id:resolved.client?.id||null,client_name:resolved.client?.name||'',
+  const draft={action:'meeting',owner_id:actor.id,client_id:resolved.client?.id||null,client_name:resolved.client?.name||resolved.external_name||'',
     title,details,due_date:day,due_time:time,starts_at:start,duration_minutes:dur,
     format:model.event_format,location:esc(model.location).slice(0,250),participant_names:picked.map(x=>x.name),source:SOURCE};
   const proof=await prepareToken(secret,actor.id,draft);
-  return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'» на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
+  return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'»'+(draft.client_name?' с клиентом '+draft.client_name:'')+' на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
     approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
  }
  if(model.action==='visit'){
@@ -270,7 +283,7 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
    const draft={action:'chat',room_kind:kind,room_title,
      participant_ids:people.map(x=>x.id),participant_names:people.map(x=>x.name),source:SOURCE};
    const proof=await prepareToken(secret,actor.id,draft);
-   return respond(req,{mode:'prepared',draft,summary:(kind==='direct'?'Личный чат с ':'Групповой чат «'+room_title+'» с ')+people.map(x=>x.name).join(', ')+'.',approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
+   return respond(req,{mode:'prepared',draft,summary:(kind==='direct'?'Личный чат с ':'Групповой чат «'+room_title+'» с ')+people.map(displayPerson).join(', ')+'.',approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
  }
  return fail(req,'action_not_available',400);
 }
@@ -287,6 +300,17 @@ async function execute(req,body,actor,svc,caller,secret){
  if(!draft||typeof draft!=='object'||draft.source!==SOURCE||!await verifyToken(secret,actor.id,draft,token))
    return fail(req,'approval_invalid_or_expired',403);
  if(body?.confirmation!=='подтверждаю')return fail(req,'explicit_confirmation_required',403);
+ if(draft.action==='reminder'){
+  const result=await commitReminder({svc,caller,actor,draft,validMoment:moment});
+  return respond(req,result,result.status||200);
+ }
+ if(draft.action==='cancel_reminder'){
+  if(draft.owner_id!==actor.id||!uuid(draft.reminder_id))return fail(req,'reminder_parameters_invalid');
+  const r=await caller.from('crm_ai360_reminders_v1').update({status:'cancelled'}).eq('id',draft.reminder_id)
+   .eq('owner_id',actor.id).in('status',['pending','failed']).select('id,status').maybeSingle();
+  if(r.error||r.data?.status!=='cancelled')return fail(req,'reminder_cancel_not_confirmed',409);
+  return respond(req,{mode:'cancelled_reminder',cancelled:1,reminder_id:r.data.id});
+ }
  if(draft.action==='task'){
    const staff=await targetStaff(svc,actor),target=staff.find(x=>x.id===draft.assignee_id);
    if(!target||target.name!==draft.assignee_name||!dateIsValid(draft.due_date,draft.due_time,localDate())||
@@ -326,7 +350,7 @@ async function execute(req,body,actor,svc,caller,secret){
      !Number.isInteger(draft.duration_minutes)||draft.duration_minutes<15||draft.duration_minutes>240||
      typeof draft.location!=='string'||draft.location.length>250)
      return fail(req,'meeting_parameters_changed',403);
-   const client=await resolveClient(svc,actor,draft.client_name);
+   const client=await resolveClient(svc,actor,draft.client_name,!draft.client_id);
    if(client.error||client.client?.id!==(draft.client_id||undefined)&&!!draft.client_id)
      return fail(req,'meeting_client_scope_changed',403);
    const at=Date.parse(draft.starts_at),until=at+draft.duration_minutes*60000;
@@ -447,8 +471,23 @@ Deno.serve(async req=>{
    global:{headers:{Authorization:'Bearer '+jwt}}});
  let body;try{body=await req.json();}catch{return fail(req,'bad_json');}
  if(body?.kind==='capabilities')return respond(req,{mode:'lera_action_v1',
-   task:true,chat:true,confirmation_required:true,no_automatic_writes:true});
+   task:true,chat:true,reminder:true,confirmation_required:true,no_automatic_writes:true});
  try{
+   if(body?.kind==='reminders'){
+    const r=await caller.from('crm_ai360_reminders_v1').select('id,title,due_at,status').eq('owner_id',actor.id)
+      .neq('status','cancelled').order('due_at',{ascending:false}).limit(20);
+    if(r.error)return fail(req,'reminders_unavailable',503);
+    const fmt=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return respond(req,{mode:'reminders',items:(r.data||[]).map(x=>({...x,when:fmt.format(new Date(x.due_at))})),has_more:(r.data||[]).length===20});
+   }
+   if(body?.kind==='prepare_cancel_reminder'){
+    if(!uuid(body.reminder_id))return fail(req,'invalid_reminder');
+    const r=await caller.from('crm_ai360_reminders_v1').select('id,title,status').eq('id',body.reminder_id).eq('owner_id',actor.id).maybeSingle();
+    if(r.error||!r.data||!['pending','failed'].includes(r.data.status))return fail(req,'reminder_cannot_cancel',409);
+    const draft={action:'cancel_reminder',owner_id:actor.id,reminder_id:r.data.id,source:SOURCE};
+    const proof=await prepareToken(secret,actor.id,draft);
+    return respond(req,{mode:'prepared',draft,summary:'Отменить напоминание «'+r.data.title+'».',approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
+   }
    if(body?.kind==='agenda'){
      const now=localDate(),days=body.period==='today'?1:body.period==='tomorrow'?1:7;
      const base=Date.parse(now.date+'T00:00:00+03:00');

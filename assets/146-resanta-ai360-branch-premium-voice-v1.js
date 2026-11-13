@@ -40,7 +40,7 @@ async function speak(msg){
  stopSpeech();const run=playEpoch;speaking=true;
  const original=String(msg).replace(/\bBYN\b/g,'белорусских рублей')
   .replace(/\s+/g,' ').trim().slice(0,1200);
- const segments=[];let remaining=original;
+ const segments=[];let remaining=root.crmAI360PrepareSpeechTextV3?.(original)||original;
  while(remaining&&segments.length<6){
   if(remaining.length<=220){segments.push(remaining);break;}
   let cut=remaining.lastIndexOf(' ',220);
@@ -87,7 +87,7 @@ async function getStream(){
  });
  return stream;
 }
-async function capture(run){
+async function capture(run,options={}){
  const media=await getStream();
  if(run!==clipEpoch||!allowed())return null;
  const formats=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
@@ -127,6 +127,7 @@ async function capture(run){
      for(const v of buffer){const x=(v-128)/128;rms+=x*x;}
      rms=Math.sqrt(rms/buffer.length);
      if(rms>.003){heard=true;lastLoud=Date.now();}
+     if(!heard&&options.idleMs&&Date.now()-started>=options.idleMs&&options.canStopIdle?.()!==false)finish();
      if(heard&&Date.now()-started>1200&&Date.now()-lastLoud>(root.crmAI360TurnTakingV1?.pauseMs||3300))finish();
     },120);
    }
@@ -154,31 +155,13 @@ async function transcribe(record,run){
  }
  return String(result.data?.text||'').trim().slice(0,1200);
 }
-// Semantic sentence continuation after the recorder's safety cutoff.
-// Avoid sending «у меня встреча... хочу...» to the model as two unrelated asks.
-async function completeTurn(first,run,startedDuration){
- const policy=root.crmAI360TurnTakingV1;if(!policy)return first;
- let text=String(first||'').trim(),duration=Number(startedDuration)||0;
- for(let part=1;part<policy.maxSegments;part++){
-  if(run!==clipEpoch||!allowed())return null;
-  const state=policy.detect(text);
-  if(state==='cancel'||state==='done')return '';
-  if(state!=='more'&&duration<11.4)break;
-  info('Слушаю продолжение вопроса. Не перебиваю…');
-  const nextClip=await capture(run);
-  if(run!==clipEpoch||!allowed())return null;
-  if(!nextClip?.blob||nextClip.loud===false)break;
-  if(++loops>50)throw Error('Лимит речевых фрагментов в сеансе');
-  const next=await transcribe(nextClip,run);
-  if(next===null)return null;
-  const command=policy.detect(next);
-  if(command==='cancel')return '';
-  if(command==='done')break;
-  if(command==='more'&&/^(?:подожди|я\s+ещ[её]\s+не\s+закончил|слушай\s+дальше)/i.test(next)){duration=12;continue;}
-  text=policy.merge(text,next);
-  duration=nextClip.duration||0;
- }
- return text;
+async function recognizeTurn(record,run){
+ const policy=root.crmAI360TurnTakingV1;
+ if(!policy?.collect)return transcribe(record,run);
+ return policy.collect(record,{
+  isCurrent:()=>run===clipEpoch&&allowed(),capture:options=>capture(run,options),onStatus:info,
+  transcribe:clip=>{if(clip!==record&&++loops>50)throw Error('Лимит речевых фрагментов в сеансе');return transcribe(clip,run);}
+ });
 }
 async function single(){
  if(!allowed())return;
@@ -188,9 +171,8 @@ async function single(){
   info('Слушаю. Скажи вопрос…');
   const rec=await capture(run);
   if(run!==clipEpoch||!allowed())return;
-  let phrase=await transcribe(rec,run);
+  let phrase=await recognizeTurn(rec,run);
   if(run!==clipEpoch||!allowed())return;
-  if(phrase)phrase=await completeTurn(phrase,run,rec?.duration);
   if(run!==clipEpoch||!allowed())return;
   if(phrase)onQuestion?.(phrase.replace(WAKE,'').trim()||phrase);
   else info('Фраза не распознана. Попробуй ещё раз.');
@@ -228,7 +210,7 @@ async function hotLoop(run){
    // Do not spend a paid STT call on an actually silent local segment.
    if(!clip?.blob||clip.blob.size<900||clip.loud===false)continue;
    loops++;
-   const heard=await transcribe(clip,run);
+   const heard=await recognizeTurn(clip,run);
    if(!active())break;
    if(!heard)continue;
    const hit=WAKE.exec(heard) || (root.crmAI360TurnTakingV1?.isolatedWake(heard)&&/^(?:али|алё|алло)/i.test(heard)?[heard]:null);
@@ -246,12 +228,9 @@ async function hotLoop(run){
     const next=await capture(run);
     if(!active())break;
     if(!next?.blob||next.blob.size<900||next.loud===false)continue;
-    question=String(await transcribe(next,run)||'').replace(WAKE,'').trim();
+    question=String(await recognizeTurn(next,run)||'').replace(WAKE,'').trim();
     if(!active())break;
-    question=await completeTurn(question,run,next?.duration);
    }
-   if(question&&root.crmAI360TurnTakingV1&&!!hit&&heard.slice(hit[0].length).trim())question=await completeTurn(question,run,clip?.duration);
-   if(question&&root.crmAI360TurnTakingV1&&!hit)question=await completeTurn(question,run,clip?.duration);
    if(!active())break;
    if(!question)continue;
    conversationUntil=Date.now()+FOLLOWUP_WINDOW_MS;

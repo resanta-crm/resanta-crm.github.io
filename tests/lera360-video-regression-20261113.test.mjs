@@ -41,12 +41,13 @@ test('speech silence gate respects the requested 3300ms instead of clipping at 2
 });
 test('Mac and staff now listen longer and join not-final fragments',()=>{
  assert.match(voice,/pauseMs=window\.crmAI360TurnTakingV1\?\.pauseMs\|\|3300/);
- assert.match(voice,/async function completeTurn\(/);
- assert.match(voice,/const full=await completeTurn\(rest,epoch,'wake'/);
- assert.match(voice,/const full=await completeTurn\(phrase,epoch,'manual'/);
+ assert.match(voice,/async function recognizeTurn\(/);
+ assert.match(voice,/await recognizeTurn\(clip,epoch,mode\)/);
+ assert.match(voice,/await recognizeTurn\(second,epoch,'manual'\)/);
+ assert.ok(!voice.includes('completeTurn('),'do not recapture speech after the continuous collector');
  assert.match(staff,/lastLoud>\(root\.crmAI360TurnTakingV1\?\.pauseMs\|\|3300\)/);
- assert.match(staff,/async function completeTurn\(/);
- assert.match(staff,/await completeTurn\(question,run/);
+ assert.match(staff,/async function recognizeTurn\(/);
+ assert.match(staff,/await recognizeTurn\(next,run/);
  assert.match(staff,/onQuestion\?\.\('Лера'\)/);
  assert.ok(!voice.includes('после примерно двух секунд тишины'));
 });

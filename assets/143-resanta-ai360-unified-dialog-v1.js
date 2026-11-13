@@ -4,8 +4,8 @@
 if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-agent-v1';
 let history=[],memory={},pending=false,awaitingDetail=null,lastMode='',epoch=0,activeActor='';
-const pilotRequested=/(?:^|[?&])leraPilot=dialogue2(?:&|$)/.test(window.location?.search||'');
-window.__resantaLeraDialogueV2=pilotRequested&&window.crmAI360GreetingV1?.()?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
+// The verified owner always enters one agent; a URL parameter is not a rollout gate.
+window.__resantaLeraDialogueV2=window.crmAI360GreetingV1?.()?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 function allowed(){
  try{
   const p=window.crmAI360GreetingV1?.();
@@ -34,6 +34,7 @@ function pretty(code){
   openai_provider_timeout:'OpenAI не ответил вовремя. Попробуй повторить короткий вопрос.',
   analysis_unavailable:'Ядро AI 360° не смогло подтвердить результат. Данные CRM не изменены. Попробуй уточнить вопрос.',
   ai_quota_exhausted:'Достигнуто ограничение обращений к OpenAI. Это не лимит микрофона.',
+  agent_protocol_unavailable:'Единый агент сейчас недоступен. Обнови окно Леры и повтори запрос.',
   new_core_unavailable:'Единое ядро Леры временно недоступно. На старую аналитику не переключаюсь, чтобы не перепутать данные клиента.'
  };
  return messages[code]||'Не получилось получить проверенные данные CRM. Повтори вопрос позднее. Ничего не изменено.';
@@ -64,7 +65,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  const currentActor=window.crmAI360GreetingV1?.()?.id;
  if(activeActor&&activeActor!==currentActor)window.crmAI360UnifiedDialogResetV1?.();
  activeActor=currentActor;
- window.__resantaLeraDialogueV2=pilotRequested&&currentActor==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
+ window.__resantaLeraDialogueV2=currentActor==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
  const question=String(text||'').trim().slice(0,2400);
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
@@ -80,7 +81,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  }
  if(pending){ui.answer('Лера ещё отвечает на предыдущий вопрос.');return true;}
  pending=true;const run=++epoch,actor=window.crmAI360GreetingV1?.()?.id;window.__resantaAI360PendingV1=true;
- ui.textStatus('Лера обдумывает вопрос…');
+ ui.textStatus(window.__resantaLeraDialogueV2===true?'Лера · единый агент · проверяю запрос…':'Лера обдумывает вопрос…');
  (async()=>{
   try{
    const session=typeof window.crmEnsureFreshSessionV236166==='function'
@@ -106,6 +107,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(result.data?.error)throw new Error(String(result.data.error));
    if(!allowed()||run!==epoch||actor!==window.crmAI360GreetingV1?.()?.id)return;
    const data=result.data||{};
+   if(window.__resantaLeraDialogueV2===true&&data.protocol!=='lera_dialogue_v2')throw Error('agent_protocol_unavailable');
    if(data.mode==='agent360_action_request_v2'){
     if(data.protocol!=='lera_dialogue_v2'||data.requires_confirmation!==true||data.created!==0||data.read_only!==true||
        !window.crmAI360ActionPrepareV2?.(data.action_question,ui))throw Error('action_prepare_unavailable');
@@ -122,8 +124,8 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    // One in-tab conversation spans casual talk and CRM. Only tool results are evidence.
    lastMode=answerMode;
    if(isChat){awaitingDetail=null;
-     ui.textStatus('Лера · свободный разговор');}
-   else ui.textStatus('Лера · ответы по разрешённым данным CRM');
+     ui.textStatus('Лера · единый агент · разговор');}
+   else ui.textStatus('Лера · единый агент · данные CRM');
    const brief=String(data.brief||data.answer||'').trim();
    const detail=String(data.detail||'').trim();
    const offer=String(data.followup_question||'').trim();
