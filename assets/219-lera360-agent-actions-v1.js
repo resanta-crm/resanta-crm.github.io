@@ -187,9 +187,19 @@ function handle(q,ui){
   }
   return false;
  }
+ // New requests retain full dialogue context in the semantic gateway. Pending
+ // signed drafts and their explicit confirmations above remain local.
+ if(root.__resantaLeraDialogueV2===true)return false;
  void prepare(text,ui);return true;
 }
 root.crmAI360ActionHandleV1=handle;
+// Semantic dialogue can propose the same prepare flow without depending on a
+// command regex. prepare() still checks the visible panel, actor and session;
+// commit() remains a separate, explicit human confirmation of a signed draft.
+root.crmAI360ActionPrepareV2=(question,ui)=>{
+ if(!allowed()||working||typeof question!=='string'||question.length>2400)return false;
+ void prepare(question,ui);return true;
+};
 root.crmAI360ActionBusyV1=()=>working;
 root.crmAI360ActionResetV1=reset;
 document.addEventListener('visibilitychange',()=>{if(document.hidden)reset();});

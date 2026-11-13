@@ -125,9 +125,10 @@ export function normalizeAgentRequest(input,principal){
  if(typeof input.question!=='string'||input.question.trim().length<2||
     input.question.length>2400)return {error:'question_invalid'};
  const question=text(input.question,2400);
- const history=(Array.isArray(input.history)?input.history:[]).slice(-6)
+ const unified=input.protocol==='lera_dialogue_v2';
+ const history=(Array.isArray(input.history)?input.history:[]).slice(unified?-12:-6)
   .filter(x=>x&&typeof x==='object'&&['user','assistant'].includes(x.role))
-  .map(x=>({role:x.role,content:text(x.content,250)}));
+  .map(x=>({role:x.role,content:text(x.content,unified?800:250)}));
  const raw=input.memory&&typeof input.memory==='object'&&!Array.isArray(input.memory)?input.memory:{};
  const memory={
   manager:text(raw.manager,90),month:text(raw.month,7),client:text(raw.client,160),

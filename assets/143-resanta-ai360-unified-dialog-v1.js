@@ -3,7 +3,8 @@
 'use strict';
 if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-agent-v1';
-let history=[],memory={},pending=false,awaitingDetail=null,lastMode='';
+let history=[],memory={},pending=false,awaitingDetail=null,lastMode='',epoch=0,activeActor='';
+window.__resantaLeraDialogueV2=true;
 function allowed(){
  try{
   const p=window.crmAI360GreetingV1?.();
@@ -54,11 +55,14 @@ window.crmAI360UnifiedDialogFollowupV3=function(input,ui){
  else ui.answer(item.detail,{fullVoice:true});
  history.push({role:'user',content:String(input).slice(0,100)},
   {role:'assistant',content:item.detail.slice(0,350)});
- history=history.slice(-10);
+ history=history.slice(-12);
  return true;
 };
 window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  if(!allowed())return false;
+ const currentActor=window.crmAI360GreetingV1?.()?.id;
+ if(activeActor&&activeActor!==currentActor)window.crmAI360UnifiedDialogResetV1?.();
+ activeActor=currentActor;
  const question=String(text||'').trim().slice(0,2400);
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
@@ -73,7 +77,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    return false;
  }
  if(pending){ui.answer('Лера ещё отвечает на предыдущий вопрос.');return true;}
- pending=true;window.__resantaAI360PendingV1=true;
+ pending=true;const run=++epoch,actor=window.crmAI360GreetingV1?.()?.id;window.__resantaAI360PendingV1=true;
  ui.textStatus('Лера обдумывает вопрос…');
  (async()=>{
   try{
@@ -82,7 +86,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
     :await db.auth.getSession().then(x=>x?.data?.session);
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
-   const payload={action:'ask',question,history:history.slice(-6),memory};
+   const payload={action:'ask',protocol:'lera_dialogue_v2',question,history:history.slice(-12),memory};
    // One verified backend only. Never silently downgrade to an older AI engine.
    let result=await db.functions.invoke(ENDPOINT,{body:payload});
    // A stale browser JWT must not strand an otherwise valid conversation.
@@ -97,8 +101,14 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
      throw new Error('new_core_unavailable');
    if(result.error)throw new Error(await errorCode(result.error));
    if(result.data?.error)throw new Error(String(result.data.error));
-   if(!allowed())return;
+   if(!allowed()||run!==epoch||actor!==window.crmAI360GreetingV1?.()?.id)return;
    const data=result.data||{};
+   if(data.mode==='agent360_action_request_v2'){
+    if(data.protocol!=='lera_dialogue_v2'||data.requires_confirmation!==true||data.created!==0||data.read_only!==true||
+       !window.crmAI360ActionPrepareV2?.(data.action_question,ui))throw Error('action_prepare_unavailable');
+    history.push({role:'user',content:question},{role:'assistant',content:'Подготовка предложения; действие ещё не выполнено.'});
+    history=history.slice(-12);return;
+   }
    const isChat=data.mode==='agent360_free_conversation_v1';
    if(isChat&&(data.answer_verified!==false||data.read_only!==true||
        data.intent!=='free_conversation'||!Array.isArray(data.domains_used)||
@@ -106,9 +116,9 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    const answerMode=isChat?'chat':'crm';
    // Avoid accidentally carrying a previous customer's CRM scope into
    // casual talk, or treating casual claims as verified CRM evidence.
-   if(lastMode&&lastMode!==answerMode){history=[];memory={};}
+   // One in-tab conversation spans casual talk and CRM. Only tool results are evidence.
    lastMode=answerMode;
-   if(isChat){memory={};awaitingDetail=null;
+   if(isChat){awaitingDetail=null;
      ui.textStatus('Лера · свободный разговор');}
    else ui.textStatus('Лера · ответы по разрешённым данным CRM');
    const brief=String(data.brief||data.answer||'').trim();
@@ -121,17 +131,17 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(detail&&detail!==brief)awaitingDetail={detail,at:Date.now()};
    if(data.memory&&typeof data.memory==='object')memory=data.memory;
    history.push({role:'user',content:question},{role:'assistant',content:withOffer});
-   history=history.slice(-10);
+   history=history.slice(-12);
    // Prefer one short verified voice segment for the common quick questions.
    // Full answer and offer remain readable in the CRM dialogue panel.
    const shortVoice=withOffer.length<=205?withOffer:(brief.length<=205?brief:'');
    ui.answer(withOffer,shortVoice?{speechSummary:shortVoice}:{fullVoice:true});
-  }catch(e){if(allowed())ui.answer(pretty(String(e?.message||e)));}
-  finally{pending=false;window.__resantaAI360PendingV1=false;}
+  }catch(e){if(allowed()&&run===epoch&&actor===window.crmAI360GreetingV1?.()?.id)ui.answer(pretty(String(e?.message||e)));}
+  finally{if(run===epoch){pending=false;window.__resantaAI360PendingV1=false;}}
  })();
  return true;
 };
-window.crmAI360UnifiedDialogResetV1=function(){history=[];memory={};awaitingDetail=null;lastMode='';};
+window.crmAI360UnifiedDialogResetV1=function(){epoch++;pending=false;window.__resantaAI360PendingV1=false;history=[];memory={};awaitingDetail=null;lastMode='';};
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden) { /* Keep only in-tab conversational state; no persistent storage. */ }
 });

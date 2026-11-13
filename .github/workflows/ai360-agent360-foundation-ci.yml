@@ -31,6 +31,7 @@ jobs:
         run: |
           node --check supabase/functions/crm-ai360-agent-v1/contract.mjs
           node --check supabase/functions/crm-ai360-agent-v1/conversation.mjs
+          node --check supabase/functions/crm-ai360-agent-v1/dialogue.mjs
           node --check --input-type=module < supabase/functions/crm-ai360-director-peer-v1/index.ts
           node --check --input-type=module < supabase/functions/crm-ai360-agent-v1/index.ts
           node --check assets/210-resanta-agent360-single-entry-v1.js

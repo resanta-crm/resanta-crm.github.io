@@ -41,7 +41,7 @@
   assertCurrent(id);
   if(!s?.access_token)throw new Error('agent_not_authorized');
   const payload=action==='capabilities'?{action}:
-   {action:'ask',question,history:history.slice(-6),memory};
+   {action:'ask',protocol:'lera_dialogue_v2',question,history:history.slice(-12),memory};
    let response=await client().functions.invoke(ENDPOINT,{body:payload});
    if(Number(response.error?.context?.status)===401&&typeof client().auth?.refreshSession==='function'){
      const fresh=await client().auth.refreshSession();
@@ -56,8 +56,8 @@
     const answer=clean(response.data.answer||response.data.brief);
     if(!answer)throw new Error('agent_empty_answer');
     history.push({role:'user',content:question.slice(0,1000)},
-     {role:'assistant',content:answer.slice(0,250)});
-    history=history.slice(-6);
+     {role:'assistant',content:answer.slice(0,800)});
+    history=history.slice(-12);
     if(response.data.memory&&typeof response.data.memory==='object')
      memory={...response.data.memory};
    }
