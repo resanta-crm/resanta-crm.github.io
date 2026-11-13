@@ -25,7 +25,7 @@ function localMonth(q){
 }
 root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  if(!allowed()||!ui?.authorized?.())return false;
- const question=String(q||'').trim().slice(0,350);
+ const question=String(q||'').trim().slice(0,2400);
  if(!question)return false;
  // Keep cheap, exact, server-paginated continuation in the local read-only path.
  if(memory?.domain&&/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
