@@ -2337,6 +2337,10 @@ async function startApp() {
   document.getElementById('app').style.display='flex';
   document.getElementById('user-name').textContent = currentProfile?.name||currentUser?.email||'...';
   document.getElementById('topbar-title').textContent = 'CRM · '+(currentProfile?.region||'');
+  // Isolated calendar pilot: show ONLY to the verified network director, not all bosses.
+  const calendarPilotNav=document.getElementById('nav-meeting-planner');
+  if(calendarPilotNav)calendarPilotNav.style.display=(currentUser?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc' &&
+    currentProfile?.id===currentUser.id && currentProfile?.role==='boss')?'flex':'none';
   // Мобильное меню каждый вход настраивается заново по роли.
   const bossBottomIds=['bn-control','bn-managers','bn-routes-boss','bn-users'];
   bossBottomIds.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
@@ -2885,6 +2889,7 @@ function crmSchedulePageHook(page,fn,delay=0){
 }
 window.crmSchedulePageHook=crmSchedulePageHook;
 function crmRenderPage(p){
+  if(p==='meeting-planner')return window.crmMeetingPlannerPilotV1?.render();
   if(p==='dashboard')return buildDashboard();
   else if(p==='clients')return renderClients();
   else if(p==='tasks')return renderTasks();
@@ -2904,6 +2909,8 @@ function crmRenderPage(p){
   else if(p==='my-routes')return renderMyRoutes();
 }
 function goPage(p,title) {
+  if(p==='meeting-planner' && !(currentUser?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc' &&
+     currentProfile?.id===currentUser.id && currentProfile?.role==='boss'))return;
   if(String(currentProfile?.role||'').toLowerCase()==='executive_viewer'&&p!=='company-viewer')return;
   if(String(currentProfile?.role||'').toLowerCase()==='auditor'&&p!=='warehouse-control')return;
   const appRoot=document.getElementById('app');

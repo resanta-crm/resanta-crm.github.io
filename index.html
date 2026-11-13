@@ -44,6 +44,7 @@ const APP_VERSION = '2026-11-06-release-guard-v1';
 <script defer src="./assets/301-access360-admin-v1.js?v=20261112-access360-v1"></script>
 <script defer src="./assets/302-company-viewer-v1.js?v=20261112-company-portal-v1"></script>
 <link id="promo360-css" rel="stylesheet" href="./assets/211-promotions360-uniai-v1.css?v=20261112-sales-chart3">
+<link rel="stylesheet" href="./assets/271-calendar-meetings-pilot-v1.css?v=20261113-pilot1">
 <script defer src="./assets/210-promotions360-uniai-v1.js?v=20261112-sales-chart3"></script>
 <script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=access360-invite-v1"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258"></script>
@@ -481,6 +482,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <div class="nav-section">Работа</div>
       <button class="nav-item" id="nav-clients" onclick="goPage('clients','Клиенты')"><span class="icon">🏢</span> Клиенты</button>
       <button class="nav-item" id="nav-connect" onclick="window.crmConnectOpen126&&window.crmConnectOpen126()"><span class="icon">💬</span> Чаты</button>
+      <button class="nav-item" id="nav-meeting-planner" style="display:none" onclick="goPage('meeting-planner','Календарь и совещания')"><span class="icon">📅</span> Календарь и совещания</button>
       <button class="nav-item" id="nav-tasks" onclick="goPage('tasks','Задачи')"><span class="icon">✅</span> Задачи <span class="alert-dot" id="tasks-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-markdown" onclick="goPage('markdown','Уценка')"><span class="icon">🏷️</span> Уценка <span class="alert-dot" id="markdown-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')"><span class="icon">📝</span> Визиты</button>
@@ -517,6 +519,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
           <div id="dash-no-visit"></div>
         </div>
       </div>
+      <div class="page" id="page-meeting-planner"><div id="cmp-root"></div></div>
       <div class="page" id="page-connect">
         <div class="c126">
           <div class="c126-top">
@@ -1810,7 +1813,8 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- One existing Lera, signed two-phase task/CONNECT actions; no login requests. -->
 <script defer src="./assets/219-lera360-agent-actions-v1.js?v=20261113b"></script>
 <script defer src="./assets/220-lera360-turn-taking-v1.js?v=20261113a"></script>
-<script defer src="./assets/221-lera360-voice-navigation-v1.js?v=20261113a"></script>
+<script defer src="./assets/221-lera360-voice-navigation-v1.js?v=20261113-calendar-nav-pilot1"></script>
+<script defer src="./assets/270-calendar-meetings-pilot-v1.js?v=20261113-pilot1"></script>
 <script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking"></script>
 <!-- Isolated branch-director pilot: no login requests, no Android and no director AI changes. -->
 <!-- Shared staff role UI; each AI service rechecks the permissions on server. -->

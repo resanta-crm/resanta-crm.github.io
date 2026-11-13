@@ -31,7 +31,7 @@ test('all active CRM menu entries have explicit AI360 coverage entries',()=>{
  const source=fs.readFileSync('index.html','utf8');
  const nav=[...new Set([...source.matchAll(/id=["'](nav-[\w-]+)["']/g)].map(x=>x[1]))]
   .filter(x=>x!=='nav-section-boss');
- assert.equal(nav.length,23);
+ assert.equal(nav.length,24);
  assert.deepEqual([...nav].sort(),[...AGENT360_NAV_IDS].sort());
  assert.equal(new Set(AGENT360_SURFACES.map(x=>x.id)).size,AGENT360_SURFACES.length);
  const known=new Set([...CRM_AI360_ALL_DOMAINS,...Object.values(STAFF_DOMAINS).flat()]);

@@ -1,0 +1,34 @@
+name: Calendar and meetings Payushin pilot safety
+on:
+  pull_request:
+    paths:
+      - 'assets/270-calendar-meetings-pilot-v1.js'
+      - 'assets/271-calendar-meetings-pilot-v1.css'
+      - 'assets/221-lera360-voice-navigation-v1.js'
+      - 'assets/01-crm-core.js'
+      - 'index.html'
+      - 'tests/calendar-meetings-pilot.test.mjs'
+      - 'tests/ai360-triovist-assigned-category-voice.test.mjs'
+      - '.github/workflows/calendar-meetings-pilot.yml'
+  workflow_dispatch:
+jobs:
+  calendar-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check - preserve existing AI Agent files
+        run: |
+          node --check assets/270-calendar-meetings-pilot-v1.js
+          node --check assets/221-lera360-voice-navigation-v1.js
+          node --check assets/01-crm-core.js
+      - name: Calendar pilot and Triovist voice-scope regressions
+        run: |
+          node --test tests/calendar-meetings-pilot.test.mjs
+          node --test tests/ai360-triovist-assigned-category-voice.test.mjs
+          node --test tests/lera360-video-regression-20261113.test.mjs
