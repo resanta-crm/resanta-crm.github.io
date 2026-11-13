@@ -96,6 +96,6 @@ Deno.serve(async(req:Request)=>{
  catch{return out({error:'speech_provider_unavailable'},502,origin);}
  if(!upstream.ok){console.warn('Voice transcription upstream status:',upstream.status);return out({error:upstream.status===429?'speech_provider_rate_limit':'speech_provider_failed'},upstream.status===429?429:502,origin);}
  const payload=await upstream.json().catch(()=>null);
- const transcript=String(payload?.text||'').trim().slice(0,350);
+ const transcript=String(payload?.text||'').trim().slice(0,1200);
  return out({text:transcript,empty:!transcript},200,origin);
 });
