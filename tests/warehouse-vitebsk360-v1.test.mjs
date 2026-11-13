@@ -23,7 +23,7 @@ test('existing warehouse dashboard calls separate director stock truth, preserve
  assert.match(dash,/crmWarehouseVitebsk360V1\?\.attachOrderRows/);
  assert.match(compact,/crmWarehouseVitebsk360V1\?\.attachOrderRows/);
  assert.match(crm,/195-warehouse-vitebsk360-v1\.js\?v=20261109-vitebsk360-1/);
- assert.match(crm,/APP_VERSION = '2026-11-13-lera-unified-dialogue-v2'/);
+ assert.match(crm,/APP_VERSION = '2026-11-13-lera-video-fixes-v3'/);
 });
 test('physical Vitebsk is separate from cost and Chekhov and missing stock is never fabricated as zero',()=>{
  assert.match(truth,/WHERE warehouse='Витебск' AND report_date=v_stock_date/);
