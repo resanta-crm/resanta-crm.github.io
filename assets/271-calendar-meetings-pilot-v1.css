@@ -1,0 +1,70 @@
+/* Calendar & meetings: isolated director pilot. Styles scoped to page only. */
+#page-meeting-planner{color:#182c48}
+#page-meeting-planner .cmp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:22px 25px;background:linear-gradient(120deg,#f2f7ff,#fff 65%);border:1px solid #dce7f4;border-radius:18px;margin-bottom:14px}
+#page-meeting-planner .cmp-head h2{margin:4px 0 6px;font-size:25px;line-height:1.16;font-weight:830}
+#page-meeting-planner .cmp-head p{font-size:13px;color:#56718b;max-width:730px;margin:0}
+#page-meeting-planner .cmp-overline{text-transform:uppercase;letter-spacing:.11em;font-size:10px;color:#21659e;font-weight:850}
+#page-meeting-planner .cmp-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#page-meeting-planner .cmp-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+#page-meeting-planner .cmp-kpis>div{background:#fff;border:1px solid #e0e7f1;border-radius:14px;padding:15px 18px;min-height:83px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+#page-meeting-planner .cmp-kpis small{font-size:11px;color:#657d96;font-weight:650}
+#page-meeting-planner .cmp-kpis strong{font-size:28px;color:#163d68;line-height:1.1;font-weight:850}
+#page-meeting-planner .cmp-columns{display:grid;grid-template-columns:minmax(325px,1fr) minmax(375px,1.13fr);gap:14px;align-items:start}
+#page-meeting-planner .cmp-panel{background:#fff;border:1px solid #dde6f0;border-radius:16px;padding:17px 18px;box-shadow:0 3px 15px #172c4508;min-width:0}
+#page-meeting-planner .cmp-panel-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+#page-meeting-planner .cmp-panel h3{font-size:16px;line-height:1.3;font-weight:780;margin:0}
+#page-meeting-planner .cmp-panel h4{font-size:14px;font-weight:780;margin:16px 0 10px}
+#page-meeting-planner .cmp-panel-title>span{font-size:11px;color:#60748a}
+#page-meeting-planner .cmp-muted{font-size:11px;line-height:1.6;color:#718195;margin:6px 0}
+#page-meeting-planner .cmp-error{font-size:12px;border:1px solid #f4c9c5;border-radius:10px;background:#fff3f2;color:#a03535;padding:11px;line-height:1.5}
+#page-meeting-planner .cmp-notice{border:1px solid #c8def5;background:#eef6ff;color:#225c91;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:12px}
+#page-meeting-planner .cmp-btn{border:1px solid #d4dfe9;background:#fff;color:#214b70;border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.25;font-weight:740;cursor:pointer}
+#page-meeting-planner .cmp-btn:hover{background:#f4f8fc}
+#page-meeting-planner .cmp-btn.strong{background:#1e5b92;border-color:#1e5b92;color:#fff}
+#page-meeting-planner .cmp-btn.strong:hover{background:#194d7c}
+#page-meeting-planner .cmp-btn:disabled{opacity:.45;cursor:not-allowed}
+#page-meeting-planner .cmp-modes{display:flex;gap:2px;background:#eef2f8;border-radius:9px;padding:3px}
+#page-meeting-planner .cmp-modes button{border:0;background:transparent;color:#5d7086;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:730;cursor:pointer}
+#page-meeting-planner .cmp-modes button.active{color:#1c5788;background:#fff;box-shadow:0 2px 5px #193f6120}
+#page-meeting-planner .cmp-date-nav{justify-content:center;margin-bottom:12px}
+#page-meeting-planner .cmp-date-nav>b{font-size:13px;min-width:140px;text-align:center;text-transform:capitalize}
+#page-meeting-planner .cmp-date-nav>button{border:1px solid #dce6ef;border-radius:7px;background:#fff;color:#23577d;font-weight:750;padding:6px 11px;cursor:pointer}
+#page-meeting-planner .cmp-calendar{border:1px solid #e0e7f0;border-radius:12px;overflow:hidden}
+#page-meeting-planner .cmp-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#f5f8fb}
+#page-meeting-planner .cmp-weekdays span{text-align:center;padding:8px 2px;font-size:10px;font-weight:730;color:#8090a2}
+#page-meeting-planner .cmp-daygrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:#e6edf4}
+#page-meeting-planner .cmp-day{min-width:0;min-height:77px;text-align:left;border:0;padding:9px 4px 7px;background:#fff;color:#263950;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+#page-meeting-planner .cmp-day strong{font-size:15px}
+#page-meeting-planner .cmp-day small{font-size:9px;color:#9aa6b6}
+#page-meeting-planner .cmp-day b{font-size:9px;color:#195f97;text-align:center;white-space:normal;line-height:1.1}
+#page-meeting-planner .cmp-day.other{color:#9caabc;background:#fafbfc}
+#page-meeting-planner .cmp-day.today strong{background:#dceeff;border-radius:50%;padding:3px 6px}
+#page-meeting-planner .cmp-day.selected{outline:2px solid #267abd;outline-offset:-2px;background:#ecf6ff;color:#115b93}
+#page-meeting-planner .cmp-daygrid.is-month .cmp-day{min-height:51px;padding:6px 2px}
+#page-meeting-planner .cmp-daygrid.is-month .cmp-day small{display:none}
+#page-meeting-planner .cmp-meeting{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;border-bottom:1px solid #ebeff4;padding:11px 2px;line-height:1.5}
+#page-meeting-planner .cmp-meeting b{font-size:13px}
+#page-meeting-planner .cmp-meeting-time{font-size:13px;font-weight:800;color:#2478b5;font-variant-numeric:tabular-nums}
+#page-meeting-planner .cmp-meeting small{display:block;font-size:10px;color:#6f8196}
+#page-meeting-planner .cmp-actions{margin-top:14px}
+#page-meeting-planner .cmp-source-note{background:#f1f7ff;border-radius:8px;padding:8px 10px;margin-bottom:8px;color:#235a86;font-size:11px}
+#page-meeting-planner .cmp-empty{background:#f6f9fc;border:1px dashed #cfdce9;border-radius:12px;padding:18px 15px}
+#page-meeting-planner .cmp-empty b{font-size:14px}
+#page-meeting-planner .cmp-empty p{font-size:12px;color:#62788c;line-height:1.5}
+#page-meeting-planner .cmp-topic{border:1px solid #e5edf3;border-radius:12px;padding:13px 14px;margin:9px 0;background:#fff}
+#page-meeting-planner .cmp-topic-top{display:flex;align-items:center;justify-content:space-between}
+#page-meeting-planner .cmp-topic h4{margin:10px 0 7px;font-size:14px}
+#page-meeting-planner .cmp-topic p{font-size:12px;line-height:1.55;margin:7px 0}
+#page-meeting-planner .cmp-tag{font-weight:790;border-radius:20px;font-size:10px;padding:4px 8px;background:#e9f3ff;color:#14588b}
+#page-meeting-planner .cmp-tag.high{background:#fff1e8;color:#aa4b26}
+#page-meeting-planner .cmp-tag.medium{background:#fff9de;color:#927313}
+#page-meeting-planner .cmp-source{margin-top:9px;overflow-wrap:anywhere}
+#page-meeting-planner .cmp-audit{margin-top:14px}
+#page-meeting-planner .cmp-audit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#page-meeting-planner .cmp-audit-item{display:grid;grid-template-columns:9px minmax(0,1fr) auto;gap:7px;align-items:center;background:#f8fafc;border:1px solid #e7edf3;border-radius:10px;padding:8px;font-size:11px}
+#page-meeting-planner .cmp-audit-item small{grid-column:2;color:#7d8ea1;font-size:9px}
+#page-meeting-planner .cmp-audit-item button{grid-column:3;grid-row:1/3;border:0;border-radius:6px;background:#e6f0fa;color:#21639a;padding:5px 7px;cursor:pointer}
+#page-meeting-planner .cmp-audit-dot{height:8px;width:8px;border-radius:50%;background:#b5c1ce}
+#page-meeting-planner .cmp-audit-dot.checked{background:#13986c}
+@media(max-width:1050px){#page-meeting-planner .cmp-columns{grid-template-columns:1fr}#page-meeting-planner .cmp-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){#page-meeting-planner .cmp-head{padding:16px}#page-meeting-planner .cmp-head h2{font-size:20px}#page-meeting-planner .cmp-kpis{gap:6px}#page-meeting-planner .cmp-kpis>div{padding:11px}#page-meeting-planner .cmp-kpis strong{font-size:23px}#page-meeting-planner .cmp-panel{padding:13px}#page-meeting-planner .cmp-audit-grid{grid-template-columns:1fr}}
