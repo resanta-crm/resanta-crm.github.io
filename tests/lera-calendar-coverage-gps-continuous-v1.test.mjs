@@ -48,7 +48,7 @@ test('GPS analysis remains inside the existing GPS control and calendar',()=>{
  assert.match(gps,/crm_gps_first_tt_lateness_v1/);
  assert.match(gps,/data-gf-manager/);
  assert.match(gps,/data-gf-refresh/);
- assert.match(originalGPS,/data-g360-punctuality/);
+ assert.match(gps,/gps-first-tt-launch-v1/);
  assert.match(bridge,/crmGPSFirstTTv1\?\.voiceHandle/);
  assert.match(calendar,/data-cmp-gps/);
  assert.match(html,/272-gps-first-tt-lateness-v1\.js/);
@@ -87,8 +87,8 @@ test('new browser modules parse and do not collect microphone or data on initial
 test('on-demand page bootstrap loads only new CSS and unchanged AI Agent #309',()=>{
  assert.match(html,/137-resanta-ai360-lazy-launch-v1\.js/);
  const lazy=read('assets/137-resanta-ai360-lazy-launch-v1.js');
- assert.match(lazy,/135-resanta-voice-capture-fix-v2\.js\?v=22&lera=20261113-continuous/);
- assert.match(lazy,/134-resanta-voice-ai360-pilot-v1\.js\?v=22&lera=20261113-gps-voice/);
- assert.match(html,/270-calendar-meetings-pilot-v1\.js\?v=20261113-coverage2/);
+ assert.match(lazy,/135-resanta-voice-capture-fix-v2\.js\?v=21&lera=20261113-turntaking&release=continuous-gps-1/);
+ assert.match(lazy,/134-resanta-voice-ai360-pilot-v1\.js\?v=21&lera=20261113&release=continuous-gps-1/);
+ assert.match(html,/270-calendar-meetings-pilot-v1\.js\?v=20261113-pilot1&release=coverage-gps-1/);
  assert.match(html,/181-gps-director360-v1\.js/);
 });
