@@ -238,6 +238,8 @@
     // Explicit tasks/CONNECT enter the signed human-confirmed action bridge.
     // Existing free conversation and CRM analysis remain on their working backend.
     if(window.crmAI360ActionHandleV1?.(query,{answer,textStatus}))return;
+    // Evidence-only GPS punctuality opens the existing GPS control, not a new CRM section.
+    if(window.crmGPSFirstTTv1?.voiceHandle(query,{answer,textStatus}))return;
     if(window.crmAI360NavigateV1?.(query,{answer}))return;
     if(window.crmLprV1?.voice(query,{answer}))return;
     if(/^(?:(?:лера|ресанта)\s+)?(?:остановись|останови\s+(?:речь|озвучку)|хватит\s+говорить|замолчи)$/.test(query)){
