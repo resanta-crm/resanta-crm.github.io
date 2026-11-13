@@ -17,7 +17,7 @@ test('one-click foreground dialogue uses existing continuous capture, not one-sh
  assert.match(voice,/wakeHeard=!!continueConversation\|\|\(newMode==='wake'/);
  assert.match(voice,/DIRECT_DIALOG_KEY/);
  assert.match(voice,/saveDirectDialog\(\!\!directDialogue\)/);
- assert.match(voice,/mode==='wake'\?'■ Завершить разговор'/);
+ assert.match(voice,/wake\.textContent=mode==='wake'\?'■ Завершить разговор'/);
  assert.match(voice,/void start\('wake',true\)/);
  assert.match(voice,/stopAll\('Микрофон выключен: вкладка скрыта/);
  assert.match(voice,/stopAll\('Микрофон остановлен: помощник свёрнут/);
