@@ -43,8 +43,8 @@ function periodDates(){
 function meetingList(day){return state.meetings.filter(m=>dayOf(m.starts_at)===day).sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at)));}
 function calendar(){
  const days=periodDates(),weekdays=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
- return '<div class="cmp-calendar"><div class="cmp-weekdays">'+weekdays.map(x=>'<span>'+x+'</span>').join('')+'</div>'+
- '<div class="cmp-daygrid '+(state.mode==='month'?'is-month':'')+'">'+days.map(day=>{
+ return '<div class="cmp-calendar">'+(state.mode==='day'?'<div class="cmp-day-caption">'+safe(weekday(state.focus))+' · '+safe(shortDate(state.focus))+'</div>':'<div class="cmp-weekdays">'+weekdays.map(x=>'<span>'+x+'</span>').join('')+'</div>')+
+ '<div class="cmp-daygrid '+(state.mode==='month'?'is-month':state.mode==='day'?'is-day':'')+'">'+days.map(day=>{
  const count=meetingList(day).length,other=state.mode==='month'&&day.slice(0,7)!==state.focus.slice(0,7);
  return '<button type="button" data-cmp-date="'+day+'" class="cmp-day'+(day===state.focus?' selected':'')+
  (day===dateMinsk()?' today':'')+(other?' other':'')+'" aria-label="'+safe(day)+', встреч: '+count+
@@ -148,6 +148,7 @@ async function meetingsRefresh(){
   if(result.error)throw result.error;
   if(seq!==state.meetingSeq||actor!==userId()||!authorized())return;
   state.meetings=Array.isArray(result.data)?result.data:[];state.loaded=true;state.range={from,to};
+  if(state.meetings.length===200)state.notice='Показаны первые 200 встреч за период. Для полного списка сузьте диапазон календаря.';
  }catch(e){if(seq===state.meetingSeq&&actor===userId()){state.loaded=false;state.loadError=trim(e?.message||e,180);}}
  finally{if(seq===state.meetingSeq){state.loading=false;if(authorized())draw();}}
 }
