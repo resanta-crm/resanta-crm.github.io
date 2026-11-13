@@ -32,7 +32,7 @@ const time=x=>new Date(x).toLocaleTimeString('ru-RU',{timeZone:'Europe/Minsk',ho
 const dayOf=x=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(x));
 const modeLabel={day:'День',week:'Неделя',month:'Месяц'};
 const statusTag={sales:'Продажи',debt:'Задолженность',tasks:'Задачи',routes:'Маршруты',triovist:'Триовист'};
-const pageFor={sales:'sales',debt:'debt',tasks:'tasks',routes:'routes-boss',triovist:'vip'};
+const pageFor={sales:'sales',debt:'debt',tasks:'tasks',routes:'routes-boss',triovist:'vip',gps:'gps-control',parser:'vip',cards_21vek:'vip',triovist_tasks:'vip'};
 function clear(){state.meetingSeq++;state.briefSeq++;state.coverageSeq++;state.meetings=[];state.loaded=false;state.loadError='';state.loading=false;
  state.briefing=null;state.briefError='';state.briefLoading=false;state.coverage=null;state.coverageError='';state.coverageBusy=false;
  state.selected.clear();state.range=null;state.notice='';}
