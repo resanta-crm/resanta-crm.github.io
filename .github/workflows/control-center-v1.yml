@@ -1,0 +1,22 @@
+name: Control center home isolation
+on:
+  pull_request:
+    paths: ['index.html', 'assets/283-control-center-v1.*', 'assets/05-performance-core.js', 'tests/control-center-v1.test.mjs', '.github/workflows/control-center-v1.yml']
+  push:
+    branches: [main]
+    paths: ['index.html', 'assets/283-control-center-v1.*', 'assets/05-performance-core.js', 'tests/control-center-v1.test.mjs', '.github/workflows/control-center-v1.yml']
+permissions: {contents: read}
+jobs:
+  home-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Home and resource status syntax
+        run: |
+          node --check assets/283-control-center-v1.js
+          node --check assets/05-performance-core.js
+      - name: Home, adjacent sections and navigation regression
+        run: node --test tests/control-center-v1.test.mjs tests/crm-release-guard-v1.test.mjs tests/crm-view-resume-v1.test.mjs tests/sales-director360-v1.test.mjs tests/pdz-director360-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs tests/warehouse-vitebsk360-v1.test.mjs

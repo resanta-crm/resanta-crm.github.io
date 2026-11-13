@@ -317,6 +317,12 @@ async function ensurePage(page,epoch){
   try{window.renderAbsenceDecorationsV22732?.();}catch(_){}
 }
 window.crmEnsurePageDataV22733=ensurePage;
+// Read-only readiness for the home screen. Never infer an empty resource from
+// the initial global [] or from fetchFresh's deliberately cached fallback.
+window.crmCoreResourceStatusV1=function(name){
+  const s=states.get(String(name));
+  return s?{status:s.status,loadedAt:s.loadedAt,refreshing:s.refreshing,error:s.error?String(s.error.message||s.error):''}:{status:'idle',loadedAt:0,refreshing:false,error:''};
+};
 
 async function bootstrap(force=false){
   if(String(currentProfile?.access_scope||'').toLowerCase()==='triovist')return await legacyFullLoad.apply(this,arguments);
