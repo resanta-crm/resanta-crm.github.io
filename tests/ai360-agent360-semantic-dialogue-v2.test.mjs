@@ -20,7 +20,10 @@ test('CRM tool execution stays inside one counted core and preserves partial evi
  assert.equal(f.reads.length,1);assert.equal(result.kind,'crm');assert.deepEqual(result.used,['sales']);
  assert.equal(JSON.parse(f.requests[1].input.find(x=>x.type==='function_call_output').output).partial,true);
  assert.equal(f.requests[0].store,false);
- assert.doesNotMatch(fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8'),/runUnifiedDialogue|p_reserve_rub/);
+ const gateway=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8');
+ assert.doesNotMatch(gateway,/runUnifiedDialogue/);
+ // Model-backed requests still have exactly one claim in their downstream core.
+ assert.doesNotMatch(gateway.slice(gateway.indexOf('let upstream;')),/p_reserve_rub/);
  assert.doesNotMatch(fs.readFileSync('supabase/functions/_shared/lera-dialogue-core-v2.mjs','utf8'),/\.rpc\(|\.from\(|fetch\(/);
 });
 test('comparison retains context after casual turns without a keyword mode switch',async()=>{
