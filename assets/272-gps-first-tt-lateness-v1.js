@@ -109,8 +109,13 @@ function voiceHandle(text,ui){
   const wasPending=w.__resantaAI360PendingV1===true;
   if(!wasPending)w.__resantaAI360PendingV1=true;
   try{
-   const ok=state.rows?true:await refresh();
-   if(!ok||!owner()||!state.rows){
+   // Navigation/own GPS panel mounts asynchronously. Never race the on-demand RPC.
+   await new Promise(resolve=>setTimeout(resolve,420));
+   if(!owner())return;
+   if(!state.rows&&!state.busy)await refresh();
+   for(let attempts=0;attempts<100&&state.busy&&owner();attempts++)
+     await new Promise(resolve=>setTimeout(resolve,150));
+   if(!owner()||!state.rows){
      ui?.answer?.('Открыла GPS-контроль, но достоверный расчёт пока недоступен. Цифры опозданий не придумываю.');
      return;
    }
