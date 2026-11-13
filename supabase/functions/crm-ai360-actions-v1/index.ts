@@ -306,6 +306,50 @@ async function execute(req,body,actor,svc,caller,secret){
    return respond(req,{mode:'created_task',created:1,task_id:id,assigned_to:target.name,
     note:draft.due_time?'Время указано в тексте задачи. Отдельное автоматическое напоминание не настроено.':''});
  }
+ if(draft.action==='meeting'){
+   if(draft.owner_id!==actor.id||!dateIsValid(draft.due_date,draft.due_time,localDate())||
+     moment(draft.due_date,draft.due_time)!==draft.starts_at||
+     typeof draft.title!=='string'||draft.title.length<8||draft.title.length>160||
+     typeof draft.details!=='string'||draft.details.length<8||draft.details.length>800||
+     !['in_person','remote','internal'].includes(draft.format)||
+     !Number.isInteger(draft.duration_minutes)||draft.duration_minutes<15||draft.duration_minutes>240||
+     typeof draft.location!=='string'||draft.location.length>250)
+     return fail(req,'meeting_parameters_changed',403);
+   const client=await resolveClient(svc,actor,draft.client_name);
+   if(client.error||client.client?.id!==(draft.client_id||undefined)&&!!draft.client_id)
+     return fail(req,'meeting_client_scope_changed',403);
+   const at=Date.parse(draft.starts_at),until=at+draft.duration_minutes*60000;
+   const nearby=await caller.from('crm_ai360_meetings_v1').select('id,title,starts_at,duration_minutes')
+     .eq('owner_id',actor.id)
+     .gte('starts_at',new Date(at-4*3600000).toISOString())
+     .lt('starts_at',new Date(until).toISOString()).limit(20);
+   if(nearby.error)return fail(req,'meeting_calendar_read_unavailable',503);
+   for(const old of nearby.data||[]){
+     const oldStart=Date.parse(old.starts_at);
+     if(old.title===draft.title&&oldStart===at)
+       return respond(req,{mode:'already_exists',created:0,meeting_id:old.id});
+     if(oldStart<until&&oldStart+Number(old.duration_minutes||60)*60000>at)
+       return respond(req,{mode:'conflict_meeting',created:0,
+         note:'В это время уже есть другая встреча. Уточни расписание.'});
+   }
+   const row={owner_id:actor.id,kind:draft.client_id?'client_meeting':'meeting',
+     format:draft.format,title:draft.title,purpose:draft.details,
+     client_id:draft.client_id||null,client_name:draft.client_name||null,
+     starts_at:draft.starts_at,duration_minutes:draft.duration_minutes,
+     location:draft.location,participants:[],source:SOURCE};
+   const inserted=await caller.from('crm_ai360_meetings_v1').insert(row)
+     .select('id,owner_id,starts_at,source').single();
+   if(inserted.error){
+     if(inserted.error.code==='23505')return respond(req,{mode:'already_exists',created:0});
+     return fail(req,'meeting_create_failed',503);
+   }
+   if(!uuid(inserted.data?.id)||inserted.data?.owner_id!==actor.id||
+      inserted.data?.starts_at!==draft.starts_at||inserted.data?.source!==SOURCE)
+     return fail(req,'meeting_verification_failed',503);
+   return respond(req,{mode:'created_meeting',created:1,meeting_id:inserted.data.id,
+     title:draft.title,due_date:draft.due_date,due_time:draft.due_time,
+     note:'Встреча сохранена в личном календаре CRM. Приглашения и push-напоминания не отправлялись; GPS-визит не отмечен.'});
+ }
  if(draft.action==='chat'){
    const perms=await caller.from('connect_permissions_v1').select('chat_enabled').eq('user_id',actor.id).maybeSingle();
    if(perms.error||perms.data?.chat_enabled!==true)return fail(req,'connect_chat_not_authorized',403);
