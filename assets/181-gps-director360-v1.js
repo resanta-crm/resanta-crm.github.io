@@ -196,8 +196,7 @@ function render(){
  '<button type="button" data-g360-export>Excel</button></div></div>'+
  '<div class="g-nav"><button type="button" data-g360-top>Сводка</button>'+
  '<button type="button" data-g360-legacy="meeting">✦ ИИ-повестка</button>'+
- '<button type="button" data-g360-legacy="time">⏱ Время</button>'+ 
- '<button type="button" data-g360-punctuality>⏱ Опоздания на первую ТТ</button>'+
+ '<button type="button" data-g360-legacy="time">⏱ Время</button>'+
  '<button type="button" data-g360-details="visits">Спорные ТТ</button>'+
  '<button type="button" data-g360-details="stops">Стоянки и решения</button></div>';
  if(notice)html+='<div class="'+(notice.startsWith('✓')?'g-brief':'g-warn')+'" role="status">'+esc(notice)+'</div>';
@@ -344,7 +343,6 @@ d.addEventListener('click',e=>{
  const t=e.target;
  if(t.closest('[data-g360-load]')){clearTimeout(refreshTimer);load(true);return}
  if(t.closest('[data-g360-export]')){sync();w.RESANTA_GPS_DIRECTOR_REPORT_V236427?.downloadExcel?.();return}
- if(t.closest('[data-g360-punctuality]')){w.crmGPSFirstTTv1?.open();return}
  const mt=t.closest('[data-g360-metric]');if(mt){metric=mt.dataset.g360Metric;render();return}
  const man=t.closest('[data-g360-manager]');if(man){showDetails('visits',man.dataset.g360Manager);return}
  const dt=t.closest('[data-g360-details]');if(dt){showDetails(dt.dataset.g360Details,'all');return}
