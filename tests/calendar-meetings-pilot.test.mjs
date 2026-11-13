@@ -24,7 +24,7 @@ test('pilot reuses confirmed owner-RLS meetings and five-source briefing and nev
  assert.match(calendar,/from\('crm_ai360_meetings_v1'\)/);
  assert.match(calendar,/\.eq\('owner_id',OWNER\)/);
  assert.match(calendar,/const ENDPOINT='crm-ai360-director-briefing-v1'/);
- assert.match(calendar,/d\.items_count!==5/);
+ assert.match(calendar,/d\?\.items_count!==5/);
  assert.match(calendar,/Пока не подключён к брифингу/);
  assert.match(calendar,/Не удалось прочитать календарь/);
  assert.match(calendar,/Ничего не создаётся и никому не отправляется автоматически/);
