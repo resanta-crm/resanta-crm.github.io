@@ -75,15 +75,15 @@
  function info(t){if(window.__resantaVoiceOutputBusy && /(?:слушаю|жду вопрос|микрофон включен|ожидаю)/i.test(String(t||'')))return; if(status){status.textContent=t;status.title=String(t||'');}}
  function controls(){
    if(wake){
-     wake.textContent=mode==='wake'?'■ Выключить «Привет, Ресанта»':
+     wake.textContent=mode==='wake'?'■ Завершить разговор':
        autoWakeWanted?'◉ Включить постоянный режим':'◉ Включить «Привет, Ресанта»';
      wake.setAttribute('aria-pressed',String(mode==='wake'));
      wake.title=autoWakeWanted?'Автоматически включать при открытии окна помощника (можно выключить)':
        'После разрешения запомнить режим на этом компьютере';
    }
    if(mic){
-     mic.textContent=mode==='wake'?'■ Завершить разговор':mode==='manual'?'■ Остановить запись':'🎤 Начать разговор';
-     mic.title=mode==='wake'?'Нажмите, чтобы выключить микрофон и завершить разрешённый сеанс.':'Один раз нажмите и разговаривайте без повторных нажатий. Микрофон активен только в открытом окне, видимой вкладке и при согласии пользователя.';
+     mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Начать разговор';
+     mic.title=mode==='wake'?'Лера уже слушает. Для выключения используйте «Завершить разговор».':'Один раз нажмите и разговаривайте без повторных нажатий. Микрофон активен только в открытом окне, видимой вкладке и при согласии пользователя.';
    }
  }
  function reason(e){
@@ -360,6 +360,8 @@
  }
  async function start(newMode,automatic=false,directDialogue=false){
    if(starting)return;
+   // Prevent accidental mic re-click from terminating a continuous session.
+   if(mode==='wake'&&directDialogue){info('Постоянный режим уже слушает. Просто задай следующий вопрос.');return;}
    if(mode==='wake'&&newMode==='manual'){
      // Permanent listening already owns the foreground microphone.
      // Do not open a second stream or interrupt the current wake session.
