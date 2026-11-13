@@ -6,6 +6,7 @@ import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {agentPrincipal,agentCapabilities,normalizeAgentRequest,agentGreeting} from './contract.mjs';
 import {classifyAgentQuestion,runFreeConversation} from './conversation.mjs';
 import {historyAction,historyEnabled,saveHistoryTurn,recentFreeMemory} from './history.mjs';
+import {controlCenterPlanRequest,readControlCenterPlan} from './control-center.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
@@ -96,6 +97,28 @@ Deno.serve(async req=>{
   });
  }
 
+ // This one deterministic UI-card explanation uses the caller's JWT and the
+ // exact same existing RPCs as the screen. No service-role financial reads.
+ const card=controlCenterPlanRequest(input,principal,profile.data);
+ if(card){
+  const claim=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:user.id,p_reserve_rub:0.01});
+  if(claim.error)return fault(req,'budget_meter_unavailable',503);
+  if(claim.data?.allowed!==true)return fault(req,'budget_limit_reached',429);
+  const caller=createClient(url,anon,{global:{headers:{Authorization:auth}},
+   auth:{persistSession:false,autoRefreshToken:false}});
+  const result=await readControlCenterPlan(caller,card);
+  const finish=await svc.rpc('crm_ai360_core_finish_v2',{p_claim_id:claim.data.claim_id,
+   p_actual_rub:0,p_input_tokens:0,p_output_tokens:0,p_rounds:0,p_status:result.error?'failed':'ok'});
+  if(finish.error||finish.data?.ok!==true)return fault(req,'budget_settlement_unavailable',503);
+  if(result.error)return fault(req,result.error,result.status||503);
+  const stored=await saveHistoryTurn(svc,user.id,{mode:'crm',question:card.question,
+   answer:result.answer,answerVerified:true});
+  return reply(req,{...result,agent:'resanta_ai_agent360_v1',route_tier:principal.tier,
+   mode:principal.tier==='network_director'?'ai360_shared_core_v1':'staff_ai360_shared_core_v1',
+   scope:'Витебск',role:principal.tier,subject_manager:card.field?profile.data.name:'',
+   memory:{...parsed.payload.memory,month:card.month},greeting:agentGreeting(principal),writes_enabled:false,
+   history_saved:stored.saved,history_enabled:stored.enabled===true,history_turn_id:stored.turn_id||null});
+ }
  // The existing gateways own their rate limits, cost claims, query guards, and
  // policy enforcement. Never call them with service-role credentials.
  let upstream;

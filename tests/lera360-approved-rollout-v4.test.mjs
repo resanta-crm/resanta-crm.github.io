@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import * as contract from '../supabase/functions/crm-ai360-agent-v1/contract.mjs';
+import * as controlCenter from '../supabase/functions/crm-ai360-agent-v1/control-center.mjs';
 import {routeWindow,readRouteWindow,readClientRisk,branchScope,routeEvidenceAnswer,riskEvidenceAnswer} from '../supabase/functions/_shared/lera-scoped-planning-v4.mjs';
 const day='2026-11-13',read=p=>fs.readFileSync(p,'utf8');
 const profiles=[
@@ -19,7 +20,7 @@ for(const p of profiles)test('approved identity routes ordinary URL to semantic 
  let handler,forwarded;const user={id:p.id,email:p.email,email_confirmed_at:'2026-11-01'};
  const svc={auth:{getUser:async()=>({data:{user}})},from:()=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:p})};return q;}};
  const code=read('supabase/functions/crm-ai360-agent-v1/index.ts').replace(/^import .*;\r?\n/gm,'');
- vm.runInNewContext(code,{...contract,createClient:()=>svc,historyEnabled:async()=>({enabled:false}),saveHistoryTurn:async()=>({saved:false}),Deno:{env:{get:()=> 'fixture-setting'},serve:f=>handler=f},Response,Request,AbortSignal,fetch:async(url,init)=>{forwarded={url,body:JSON.parse(init.body),auth:init.headers.Authorization};return new Response(JSON.stringify({answer:'fixture',read_only:true,answer_verified:false}));}});
+ vm.runInNewContext(code,{...contract,...controlCenter,createClient:()=>svc,historyEnabled:async()=>({enabled:false}),saveHistoryTurn:async()=>({saved:false}),Deno:{env:{get:()=> 'fixture-setting'},serve:f=>handler=f},Response,Request,AbortSignal,fetch:async(url,init)=>{forwarded={url,body:JSON.parse(init.body),auth:init.headers.Authorization};return new Response(JSON.stringify({answer:'fixture',read_only:true,answer_verified:false}));}});
  const res=await handler(new Request('https://fixture/agent',{method:'POST',headers:{Authorization:'Bearer test-own-user-fixture'},body:JSON.stringify({question:'Какие у меня продажи?'})}));
  assert.equal(res.status,200);assert.equal(forwarded.body.protocol,'lera_dialogue_v2');assert.equal(forwarded.auth,'Bearer test-own-user-fixture');
  assert.ok(forwarded.url.endsWith(contract.agentPrincipal(p.id,p,user).endpoint));assert.equal((await res.json()).route_tier,contract.agentPrincipal(p.id,p,user).tier);
