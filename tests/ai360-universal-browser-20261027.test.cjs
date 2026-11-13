@@ -19,7 +19,7 @@ const ctx={
   calls.push({name,body});
   if(response==='404'&&name==='crm-ai360-agent-v1')return {error:{context:{status:404},message:'not found'}};
   if(response==='503')return {error:{context:{status:503},message:'overloaded'}};
-  return {data:{answer:'Данные CRM проверены.',memory:{manager:'Руднев',month:'2026-10',domain:'routes'}}};
+  return {data:{protocol:'lera_dialogue_v2',answer:'Данные CRM проверены.',memory:{manager:'Руднев',month:'2026-10',domain:'routes'}}};
  }}},setTimeout,Promise,console
 };
 vm.runInNewContext(js,ctx);

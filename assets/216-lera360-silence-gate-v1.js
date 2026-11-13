@@ -6,7 +6,7 @@
  if(root.crmAI360CreateSilenceGateV1)return;
  root.crmAI360CreateSilenceGateV1=function(options={}){
   const pauseMs=Math.max(1500,Math.min(4200,Number(options.pauseMs)||3300));
-  const noSpeechMs=Math.max(2500,Math.min(7000,Number(options.noSpeechMs)||4200));
+  const noSpeechMs=Math.max(700,Math.min(7000,Number(options.noSpeechMs)||4200));
   let floor=Infinity,peak=0,peakAt=0,lastVoiceAt=0,heard=false;
   function observe(rms,elapsedMs){
    if(!Number.isFinite(rms)||rms<0||!Number.isFinite(elapsedMs))
@@ -18,7 +18,8 @@
    const hasSpeech=peak>=Math.max(0.0030,baseline*1.75);
    if(hasSpeech){
     if(!heard){heard=true;lastVoiceAt=peakAt;}
-    const active=Math.max(0.0028,baseline*1.3,peak*0.65);
+    // A loud syllable must not make the quieter end of the sentence "silence".
+    const active=Math.max(0.0018,baseline*1.6,Math.min(0.008,peak*0.22));
     if(level>=active)lastVoiceAt=elapsedMs;
     if(elapsedMs>=550&&elapsedMs-lastVoiceAt>=pauseMs)
      return {heard:true,stop:true,reason:'end_of_speech'};

@@ -159,7 +159,7 @@ function cleanSpeech(t){
 // SpeechKit v3: a standard utterance must stay within 250 characters and 24 seconds.
 // 205 characters also leaves a duration margin for slower Russian narration.
 function speechChunks(t,max=205){
- const remaining=cleanSpeech(t), result=[];
+ const remaining=window.crmAI360PrepareSpeechTextV3?.(cleanSpeech(t))||cleanSpeech(t), result=[];
  let rest=remaining;
  while(rest.length>max){
   const candidate=rest.slice(0,max);

@@ -1,3 +1,4 @@
+import {prepareLeraSpeech} from './speech-text.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 
 const ORIGINS = new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -91,7 +92,7 @@ Deno.serve(async(req:Request)=>{
  }
  if(!apiKey)return json({error:'yandex_credentials_required'},503,origin);
  const voice=String(payload?.voice||'');
- const text=String(payload?.text||'').trim();
+ const text=prepareLeraSpeech(String(payload?.text||'').trim());
  if(!VOICES.has(voice))return json({error:'invalid_voice'},400,origin);
  if(text.length<1||text.length>240)return json({error:'text_length_240'},400,origin);
  // Atomic monthly RUB reservation. Each request here is <=240 chars and

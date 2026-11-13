@@ -15,7 +15,7 @@ export function namedManager(question,managers){
  return hits.length===1?hits[0]:null;
 }
 export function isNetworkQuestion(question){
- return /(?:по всей сети|по всем менеджерам|все менеджеры|всех менеджеров|в целом по сети|в целом по филиалу|общие продажи|всего по филиалу)/i.test(String(question||''));
+ return /(?:по всей сети|по всем менеджерам|все менеджеры|всех менеджеров|в целом по сети|в целом по филиалу|общие продажи|всего по филиалу|полев(?:ые|ых|ым|ыми)\s+менеджер|менеджеры|^по\s+сети$)/i.test(String(question||''));
 }
 export function clientTopic(question){
  return /(?:триовист|триовист[ауеом]?|триовиста|тривист|21\s*век|21vek)/i.test(norm(question));

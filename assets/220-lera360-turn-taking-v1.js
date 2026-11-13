@@ -36,6 +36,32 @@ function removeWake(s){
 function isolatedWake(s){
  return /^(?:(?:привет[\s,!.?—-]+)?(?:лера|ресанта|резанта|рясанта|рисанта)|али|алё|алло)[\s,.!?—-]*$/i.test(norm(s));
 }
-root.crmAI360TurnTakingV1=Object.freeze({detect,merge,removeWake,isolatedWake,
+// Start capturing the continuation BEFORE awaiting the preceding STT request.
+// Injected callbacks retain ownership/consent in the existing voice engine.
+async function collect(first,{capture,transcribe,isCurrent=()=>true,onStatus=()=>{},maxSegments=8}){
+ let clip=first,result='';
+ for(let n=0;n<maxSegments;n++){
+  if(!isCurrent())return null;
+  let recognized=false;
+  const tail=Promise.resolve(capture({idleMs:1200,canStopIdle:()=>recognized})).then(clip=>({clip}),error=>({error}));
+  let text,recognitionError;
+  try{text=await transcribe(clip);}catch(error){recognitionError=error;}finally{recognized=true;}
+  const captured=await tail;
+  if(recognitionError)throw recognitionError;
+  if(captured.error)throw captured.error;
+  const next=captured.clip;
+  if(!isCurrent()||text===null)return null;
+  const decision=detect(text);
+  if(decision==='cancel')return '';
+  if(decision==='done')return result;
+  if(text&&decision!=='more')result=merge(result,text);
+  else if(text&&!MORE_COMMAND.test(norm(text)))result=merge(result,text);
+  if(!next?.loud)return result;
+  if(n===maxSegments-1){onStatus('Фраза длинная. Продолжение не отправлено: повтори вопрос короче.');return null;}
+  onStatus('Слушаю продолжение фразы…');clip=next;
+ }
+ return result;
+}
+root.crmAI360TurnTakingV1=Object.freeze({detect,merge,removeWake,isolatedWake,collect,
  pauseMs:3300,maxSegments:8});
 })(window);

@@ -25,7 +25,7 @@ const ctx={
  document:{getElementById:()=>({style:{display:'block'}}),hidden:false,addEventListener:()=>{}},
  currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},currentProfile:{role:'boss',name:'Александр Паюшин'},
  db:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},functions:{invoke:async(n,q)=>{
-  calls.push({n,body:q.body});return {data:{answer:'Проверенная сводка CRM.',memory:{manager:'Руднев',month:'2026-10',domain:'sales'}}};
+  calls.push({n,body:q.body});return {data:{protocol:'lera_dialogue_v2',answer:'Проверенная сводка CRM.',memory:{manager:'Руднев',month:'2026-10',domain:'sales'}}};
  }}},
  window:{addEventListener:()=>{},crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',greeting:'Привет, Александр! Чем помочь?'})},Promise,setTimeout,console
 };

@@ -1,0 +1,2 @@
+# Internal dispatcher authenticates x-crm-dispatch-secret against the existing protected runtime.
+verify_jwt = false

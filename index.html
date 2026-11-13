@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-13-lera-unified-dialogue-v2';
+const APP_VERSION = '2026-11-13-lera-video-fixes-v3';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -1803,21 +1803,21 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- РЕЕСТР 360: история и действия только для авторизованных участников; сервер проверяет права. -->
 <script defer src="./assets/38-payment-registry-v23623.js?v=20261111-history360-1"></script>
 <!-- emergency stability v23.7.14: Android WebView compatibility investigation; optional voice module paused: 134-resanta-voice-ai360-pilot-v1.js?v=4&dialogueRelease=20261113-v2 -->
-<!-- emergency stability v23.7.14: Android WebView compatibility investigation; optional voice module paused: 135-resanta-voice-capture-fix-v2.js?v=4 -->
-<!-- emergency stability v23.7.14: Android WebView compatibility investigation; optional voice module paused: 136-resanta-voice-quality-v3.js?v=6 -->
+<!-- emergency stability v23.7.14: Android WebView compatibility investigation; optional voice module paused: 135-resanta-voice-capture-fix-v2.js?v=4&videoRelease=20261113-v3 -->
+<!-- emergency stability v23.7.14: Android WebView compatibility investigation; optional voice module paused: 136-resanta-voice-quality-v3.js?v=6&videoRelease=20261113-v3 -->
 <!-- Lera Yandex pronunciation: safe, pure function; never starts microphone or network. -->
-<script defer src="./assets/218-lera360-speech-accents-v1.js?v=20261112a"></script>
+<script defer src="./assets/218-lera360-speech-accents-v1.js?v=20261112a&videoRelease=20261113-v3"></script>
 <!-- Director-only manual launcher. Voice modules remain paused at login and on Android. -->
 <script defer src="./assets/215-lera360-personal-greeting-v1.js?v=20261113-formal&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2"></script>
-<script defer src="./assets/216-lera360-silence-gate-v1.js?v=2&lera=20261113-turntaking"></script>
+<script defer src="./assets/216-lera360-silence-gate-v1.js?v=2&lera=20261113-turntaking&videoRelease=20261113-v3"></script>
 <!-- Personal 30-day Lera history: no requests until the user opens its panel. -->
 <script defer src="./assets/217-lera360-history-ui-v1.js?v=1"></script>
 <!-- One existing Lera, signed two-phase task/CONNECT actions; no login requests. -->
-<script defer src="./assets/219-lera360-agent-actions-v1.js?v=20261113b&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2"></script>
-<script defer src="./assets/220-lera360-turn-taking-v1.js?v=20261113a&leraRelease=20261113-stable-dialog2"></script>
+<script defer src="./assets/219-lera360-agent-actions-v1.js?v=20261113b&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3"></script>
+<script defer src="./assets/220-lera360-turn-taking-v1.js?v=20261113a&leraRelease=20261113-stable-dialog2&videoRelease=20261113-v3"></script>
 <script defer src="./assets/221-lera360-voice-navigation-v1.js?v=20261113-calendar-nav-pilot1&dialogueRelease=20261113-v2"></script>
 <script defer src="./assets/270-calendar-meetings-pilot-v1.js?v=20261113-pilot1&release=coverage-gps-1"></script>
-<script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2"></script>
+<script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3"></script>
 <!-- Isolated branch-director pilot: no login requests, no Android and no director AI changes. -->
 <!-- Shared staff role UI; each AI service rechecks the permissions on server. -->
 <script defer src="./assets/148-resanta-ai360-staff-identity-v1.js?v=client360-20261102"></script>
@@ -1825,7 +1825,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Exact Sidarovich-only task approval; requires a separate signed server confirmation. -->
 <script defer src="./assets/145-resanta-ai360-branch-task-approval-v1.js?v=2"></script>
 <!-- Director-grade OpenAI/Yandex providers and shared model tool core; only upon authenticated open. -->
-<script defer src="./assets/146-resanta-ai360-branch-premium-voice-v1.js?v=6&lera=20261113-turntaking&leraRelease=20261113-stable-dialog2"></script>
+<script defer src="./assets/146-resanta-ai360-branch-premium-voice-v1.js?v=6&lera=20261113-turntaking&leraRelease=20261113-stable-dialog2&videoRelease=20261113-v3"></script>
 <script defer src="./assets/147-resanta-ai360-staff-unified-dialog-v1.js?v=5&lera=20261112-naturalvoice&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2"></script>
 <!-- Лера 360°: общий голосовой финансовый маршрут, только по явному вопросу, без UI циклов. -->
 <script defer src="./assets/264-resanta-ai360-finance-voice-bridge-v1.js?v=20261111-onevoice-safe2"></script>

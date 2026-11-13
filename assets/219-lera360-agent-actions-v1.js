@@ -9,13 +9,13 @@ const ACTION=/(?:поставь|создай|назначь|добавь|офо�
 const YES=/^(?:да|давай|подтверждаю|подтверждаю создание|согласен|согласна|согласовано|утверждаю|создавай|создай|выполняй|выполни|да подтверждаю|да создавай|да создай|да давай создай|давай создавай|да создай пожалуйста|да конечно создай)$/i;
 const NO=/^(?:нет|отмена|отменить|не надо|не создавай|стоп|отбой|отмени|нет не нужно|нет спасибо)$/i;
 const FIX=/^(?:исправь|измени|поменяй|переделай|лучше|не так|добавь|замени|на\s)/i;
-let proposal=null,missing=null,working=false,seq=0,buttonBox=null,ownerId='';
+let proposal=null,missing=null,working=false,seq=0,buttonBox=null,ownerId='',reminders=[];
 function currentId(){try{return String(currentUser?.id||'');}catch{return '';}}
 function panel(){return document.querySelector('.rva-window:not([hidden]):not(.rva-mini), .rsa-branch-panel:not([hidden])');}
 function allowed(){return !!currentId()&&!document.hidden&&
  document.getElementById('app')?.style.display!=='none'&&!!panel();}
 function reset(){
- seq++;proposal=null;missing=null;working=false;ownerId='';
+ seq++;proposal=null;missing=null;working=false;ownerId='';reminders=[];
  root.__resantaAI360ActionBusyV1=false;
  if(buttonBox){buttonBox.remove();buttonBox=null;}
 }
@@ -44,7 +44,7 @@ function makeButtons(ui,proposalCopy){
  row.style.cssText='display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid #9ab7d5;background:#edf5fc;border-radius:9px;margin:6px 0;font-size:12px';
  const lead=document.createElement('strong');lead.textContent='Проверенное предложение Леры · действие не выполнено';
  lead.style.cssText='flex:1 1 100%;font-size:12px;color:#24527f';
- const yes=document.createElement('button');yes.type='button';yes.textContent='✓ Подтвердить и создать';
+ const yes=document.createElement('button');yes.type='button';yes.textContent=proposalCopy.draft?.action==='cancel_reminder'?'✓ Подтвердить отмену':'✓ Подтвердить и создать';
  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Отмена';
  yes.style.cssText='padding:8px;border-radius:8px;background:#1768a9;color:white;border:0;';
  cancel.style.cssText='padding:8px;border-radius:8px;background:white;border:1px solid #a9b8c9;';
@@ -121,8 +121,12 @@ async function commit(ui){
       '. '+String(data.note||''));
   }else if(data.mode==='created_chat'&&data.created===1){
    say(ui,'Чат CONNECT создан и проверен. Открой раздел «Чаты», чтобы начать разговор.');
+  }else if(data.mode==='created_reminder'&&data.created===1){
+   say(ui,String(data.note||'Личное напоминание сохранено.')+' '+String(data.due_date||'')+' в '+String(data.due_time||'')+'.');
+  }else if(data.mode==='cancelled_reminder'&&data.cancelled===1){
+   reminders=[];say(ui,'Напоминание отменено.');
   }else if(data.mode==='already_exists'){
-   say(ui,'Такое поручение уже существует. Повторно создавать не стала.');
+   say(ui,String(data.note||'Такая запись уже существует. Повторно создавать не стала.'));
   }else throw Error('server_did_not_confirm_write');
   status(ui,'Сервер подтвердил результат');
  }catch(e){
@@ -152,6 +156,25 @@ async function agenda(ui,period){
   if(run===seq&&user===currentId()&&allowed())say(ui,'Не удалось прочитать календарь CRM. '+String(e?.message||'').slice(0,65),false);
  }finally{if(run===seq)setBusy(false);}
 }
+async function reminderCommand(ui,index){
+ if(working||!allowed())return;
+ const run=++seq,user=currentId();ownerId=user;setBusy(true);
+ try{
+  const data=index===null?await invoke('reminders',{}):await invoke('prepare_cancel_reminder',{reminder_id:reminders[index]?.id});
+  if(run!==seq||user!==currentId()||!allowed())return;
+  if(index===null){
+   if(data.mode!=='reminders'||!Array.isArray(data.items))throw Error('invalid_reminders');
+   reminders=data.items;
+   const labels={pending:'запланировано',sending:'отправляется',sent:'отправлено',failed:'ошибка доставки',delivery_unknown:'доставка не подтверждена'};
+   say(ui,reminders.length?'Личные напоминания:\n'+reminders.map((x,i)=>(i+1)+'. '+x.when+' — '+x.title+' · '+(labels[x.status]||'статус не установлен')).join('\n')+(data.has_more?'\nПоказаны последние 20 записей.':''):'Личных напоминаний нет.');
+  }else{
+   if(data.mode!=='prepared'||data.requires_confirmation!==true||!data.draft||typeof data.approval_token!=='string')throw Error('invalid_proposal');
+   proposal={draft:data.draft,approval_token:data.approval_token,expires_at:data.expires_at,owner:user};
+   say(ui,data.summary+' Подтвердить отмену?');makeButtons(ui,proposal);
+  }
+ }catch{if(run===seq&&user===currentId()&&allowed())say(ui,'Не удалось проверить напоминания. Операция не подтверждена.',false);}
+ finally{if(run===seq)setBusy(false);}
+}
 function handle(q,ui){
  if(!allowed())return false;
  const actor=currentId();
@@ -180,8 +203,16 @@ function handle(q,ui){
   if(NO.test(n)){say(ui,'Хорошо, отменяю создание.');return true;}
   if(!ACTION.test(n)){void prepare(old+'. Уточнение пользователя: '+text,ui);return true;}
  }
+ if(/^(?:покажи|какие|список|мои).{0,45}напоминан/.test(n)||/^мои напоминания$/.test(n)){void reminderCommand(ui,null);return true;}
+ const cancelReminder=/^(?:отмени|удали)\s+напоминание(?:\s+(?:номер\s+)?(\d+))?$/.exec(n);
+ if(cancelReminder){
+  const index=Number(cancelReminder[1]||1)-1;
+  if(!reminders[index])say(ui,'Сначала попроси показать напоминания, затем назови номер для отмены.');
+  else void reminderCommand(ui,index);
+  return true;
+ }
  if(!ACTION.test(n)){
-  if(REMINDER.test(n)){say(ui,'Автоматические уведомления о встречах пока не настроены. Могу создать встречу в личном календаре CRM или поставить задачу с датой.');return true;}
+  if(REMINDER.test(n)&&root.__resantaLeraDialogueV2!==true){say(ui,'Автоматические уведомления о встречах пока не настроены. Могу создать встречу в личном календаре CRM или поставить задачу с датой.');return true;}
   if(AGENDA.test(n)){
    void agenda(ui,/\bзавтра\b/.test(n)?'tomorrow':/\bсегодня\b/.test(n)?'today':'next7');return true;
   }

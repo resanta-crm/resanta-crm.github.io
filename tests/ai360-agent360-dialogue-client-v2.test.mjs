@@ -12,7 +12,7 @@ function director(invoke,search='?leraPilot=dialogue2'){
  const context={window:w,currentUser:user,navigator:{userAgent:'Mac'},
   document:{getElementById:()=>({style:{display:'block'}}),addEventListener(){}},
   db:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},
-   functions:{invoke:async(name,{body})=>{calls.push(body);return {data:await invoke(body)};}}},
+   functions:{invoke:async(name,{body})=>{calls.push(body);return {data:{protocol:'lera_dialogue_v2',...await invoke(body)}};}}},
   console,Date};
  vm.runInNewContext(fs.readFileSync('assets/143-resanta-ai360-unified-dialog-v1.js','utf8'),context);
  return {w,user,calls,answers,prepared,ui:{answer:text=>answers.push(text),textStatus(){}}};
@@ -48,9 +48,9 @@ test('an old reply and conversation never cross into a different signed-in accou
  assert.equal(f.calls[1].history.length,0);assert.equal(f.calls[1].memory.client,undefined);
  release(chat);await tick();assert.equal(f.answers.length,1);
 });
-test('normal CRM remains on its compatible protocol until the owner opens the pilot link',async()=>{
+test('owner uses unified dialogue on the ordinary CRM URL',async()=>{
  const f=director(async()=>chat,'');f.w.crmAI360UnifiedDialogHandleV1('Привет',f.ui);await tick();
- assert.equal(f.calls[0].protocol,undefined);assert.equal(f.w.__resantaLeraDialogueV2,false);
+ assert.equal(f.calls[0].protocol,'lera_dialogue_v2');assert.equal(f.w.__resantaLeraDialogueV2,true);
 });
 test('pilot query parameter cannot activate a different director account',async()=>{
  const f=director(async()=>chat);f.user.id=PEER;
@@ -69,3 +69,5 @@ test('pilot analytical show requests reach the agent instead of being consumed a
  assert.ok(pilot>voice.indexOf('crmAI360ActionHandleV1?.'));
  assert.ok(pilot<voice.indexOf("typeof window.crmAI360TaskDraftsHandleV1"));
 });
+
+test('owner refuses a silent downgrade to the legacy chat',async()=>{const f=director(async()=>({protocol:'legacy',answer:'WRONG'}),'');f.w.crmAI360UnifiedDialogHandleV1('Продажи',f.ui);await tick();assert.equal(f.answers.includes('WRONG'),false);assert.match(f.answers[0],/Единый агент/);});

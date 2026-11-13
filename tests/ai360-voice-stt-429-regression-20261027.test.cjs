@@ -30,7 +30,7 @@ const messages=[];
 const ctx={
  listenEpoch:1,mode:'manual',transcriptFailure:'Лимит распознавания на сегодня исчерпан (300 фраз).',
  capture:async()=>({blob:{size:12000},loud:true}),
- transcribe:async()=>null,
+ recognizeTurn:async()=>null,
  stopAll:async message=>messages.push(message),
  info:()=>{},submit:()=>{},noiseOnly:()=>false,greetingOnly:()=>false,
  waitForAssistant:async()=>{},reason:e=>String(e)
