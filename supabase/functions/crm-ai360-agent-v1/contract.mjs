@@ -131,7 +131,7 @@ export function normalizeAgentRequest(input,principal){
   .map(x=>({role:x.role,content:text(x.content,unified?800:250)}));
  const raw=input.memory&&typeof input.memory==='object'&&!Array.isArray(input.memory)?input.memory:{};
  const memory={
-  manager:text(raw.manager,90),month:text(raw.month,7),client:text(raw.client,160),
+  branch:raw.branch==='Витебск'?'Витебск':null,manager:text(raw.manager,90),month:text(raw.month,7),client:text(raw.client,160),
   group:text(raw.group,120),subgroup:text(raw.subgroup,120),
   level:['groups','subgroups','sku'].includes(raw.level)?raw.level:'',
   offset:Number.isSafeInteger(raw.offset)?Math.max(0,Math.min(200,raw.offset)):0,

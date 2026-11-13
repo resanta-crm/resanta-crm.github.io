@@ -41,13 +41,13 @@ function say(message){
  // No robotic browser fallback in this branch pilot.
  void root.crmAI360BranchPremiumVoiceV1?.speak(String(message||'').slice(0,1200));
 }
-function show(message,{speak=true}={}){
+function show(message,{speak=true,speechSummary=null}={}){
  if(!panelVisible()||!log)return;
  const p=document.createElement('div');p.className='rsa-staff-answer';
  p.style.cssText='white-space:pre-wrap;padding:10px 12px;background:#f2f7ff;border:1px solid #d6e6fb;border-radius:10px;margin-top:10px;font-size:13px;line-height:1.5;';
  p.textContent=String(message||'').slice(0,MAX_ANSWER);
  log.appendChild(p);log.scrollTop=log.scrollHeight;
- if(speak)say(String(message||'').slice(0,1100));
+ if(speak)say(String(speechSummary||message||'').slice(0,1100));
 }
 function setStatus(message){if(status)status.textContent=text(message);}
 function managerFrom(q){
@@ -312,6 +312,7 @@ function submit(){
  }
  if(root.crmAI360ActionHandleV1?.(question,{show,setStatus,authorized:panelVisible}))return;
  if(root.crmAI360NavigateV1?.(question,{show,setStatus}))return;
+ if(root.__resantaLeraDialogueV2===true&&root.crmAI360BranchUnifiedHandleV1?.(question,{show,setStatus,authorized:panelVisible}))return;
  // Voice task commands are handled before ordinary read-only analytic questions.
  if(root.crmAI360BranchTaskHandleV1?.(question))return;
  if(root.crmLprV1?.voice(question,{answer:show}))return;

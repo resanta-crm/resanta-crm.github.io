@@ -49,7 +49,7 @@ jobs:
           node --check assets/221-lera360-voice-navigation-v1.js
           node --input-type=module --check < supabase/functions/crm-ai360-actions-v1/index.ts
       - name: Video-specific scenarios
-        run: node --test tests/lera360-video-regression-20261113.test.mjs tests/lera360-video-fixes-v3.test.mjs
+        run: node --test tests/lera360-video-regression-20261113.test.mjs tests/lera360-video-fixes-v3.test.mjs tests/lera360-approved-rollout-v4.test.mjs
       - name: Stable free conversation, version and authentication regression
         run: |
           node --test tests/lera360-stable-agent-release-20261113.test.mjs

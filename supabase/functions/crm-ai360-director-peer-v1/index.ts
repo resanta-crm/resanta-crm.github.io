@@ -1,3 +1,4 @@
+import {readRouteWindow,readClientRisk,branchScope,routeEvidenceAnswer,riskEvidenceAnswer} from './scoped-planning.mjs';
 import {readGpsEvidence,gpsStartAnswer} from './gps-evidence.mjs';
 import {dialogueName} from './dialogue-core.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
@@ -151,6 +152,7 @@ Deno.serve(async req => {
     role: x?.role === 'assistant' ? 'assistant' : 'user', text: String(x?.content || x?.text || '').slice(0, dialogue?800:350)
   })) : [];
   const memory = body?.memory && typeof body.memory === 'object' ? {
+    branch:body.memory.branch==='Витебск'?'Витебск':null,
     manager: String(body.memory.manager || '').slice(0, 90),
     month: String(body.memory.month || '').slice(0, 7),
     domain: String(body.memory.domain || '').slice(0, 30),
@@ -176,6 +178,8 @@ Deno.serve(async req => {
   if(directory.error)return respond(req,{error:'staff_directory_unavailable',answer_verified:false},503);
   const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
   const subject=requestContext(question,memory,managerNames);
+  const branch=branchScope(question,memory);
+  if(branch==='Витебск'&&!subject.explicitManager&&/витебск|по\s+филиалу/i.test(question)){subject.manager=null;subject.network=true;subject.subject='network';}
   const invalidSources=[], evidence=[];
   let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='',lastGroup='',lastSubgroup='',lastLevel='',lastNextOffset=0;
   const readTool = async args => {
@@ -282,11 +286,17 @@ Deno.serve(async req => {
         const t=await readTasks(svc,manager,question,history,day);
         evidence.push(t);return t;
       }
+      if(domain==='routes'){
+        let routeManagers=manager?[manager]:null;
+        if(!manager&&branch==='Витебск'){
+          const r=await svc.from('users').select('name').eq('role','manager').eq('region',branch).limit(20);
+          if(r.error||!r.data?.length)return {domain,error:'branch_directory_unavailable'};
+          routeManagers=r.data.map(x=>x.name);
+        }
+        const t=await readRouteWindow(svc,{managers:routeManagers,question,today:day,offset:args.offset||0});evidence.push(t);return t;
+      }
       if(domain==='clients'){
-        const risk=await svc.rpc('crm_ai360_client_risk_v41',{p_manager:manager,p_month:month+'-01'});
-        if(risk.error||!risk.data)throw new Error('client_analytics_unavailable');
-        const t={domain,source:'crm_ai360_client_risk_v41',...risk.data,clients:(risk.data.clients||[]).slice(0,5),partial:(risk.data.matched_risky_clients||0)>5};
-        evidence.push(t);return t;
+        const t=await readClientRisk(svc,{manager,branch,month});evidence.push(t);return t;
       }
       if(domain==='stock'){
         const stock=await svc.rpc('crm_ai360_stock_snapshot_v41',{p_warehouse:'Витебск'});
@@ -507,7 +517,7 @@ Deno.serve(async req => {
     answer:output.pair.brief,brief:output.pair.brief,detail:output.pair.detail,
     followup_question:output.pair.offer,read_only:true,answer_verified:false,domains_used:[],memory
   });
-  const pair=gpsStartAnswer(evidence,{question})||(evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
+  const pair=routeEvidenceAnswer(evidence)||riskEvidenceAnswer(evidence)||gpsStartAnswer(evidence,{question})||(evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
   if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
     answer_verified: false,
@@ -526,7 +536,7 @@ Deno.serve(async req => {
     sources:output.used,failed_domains:invalidSources,partial_sources:evidence.filter(x=>x.partial).map(x=>x.domain),
     auto_corrected:!!pair.corrected,month:lastMonth,manager:subject.manager||null,
     mode:'director_readonly_v41',engine:'gpt-5.4-mini',
-    memory:{...memory,month:lastMonth,manager:subject.manager||'',
+    memory:{...memory,branch,month:lastMonth,manager:subject.manager||'',
       client:lastClientName||(subject.subject==='client'?memory.client||'':''),
       group:lastGroup||((subject.subject==='client'&&!lastClientName)?memory.group||'':''),
       subgroup:lastSubgroup||((subject.subject==='client'&&!lastClientName)?memory.subgroup||'':''),

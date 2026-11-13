@@ -51,7 +51,7 @@ test('server source contracts include scope and full analytics RPCs',()=>{
  const model=fs.readFileSync('supabase/functions/crm-ai360-dialog-v4/core.mjs','utf8');
  const client=fs.readFileSync('assets/143-resanta-ai360-unified-dialog-v1.js','utf8');
  assert.match(server,/scope:'client_all'/);
- assert.match(server,/crm_ai360_client_risk_v41/);
+ assert.match(fs.readFileSync('supabase/functions/crm-ai360-dialog-v4/scoped-planning.mjs','utf8'),/crm_ai360_client_risk_v41/);
  assert.match(server,/crm_ai360_stock_snapshot_v41/);
  assert.match(server,/guardVoicePair/);
  assert.match(server,/requestContext/);

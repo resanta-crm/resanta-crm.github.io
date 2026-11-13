@@ -9,11 +9,12 @@ if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOp
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-agent-v1';
 let history=[],memory={},pending=false,epoch=0,lastMode='',activeActor='';
-// Wider staff rollout follows the director's MacBook pilot; legacy requests stay compatible.
+// Approved role identities use the same semantic dialogue; server rechecks access.
 const allowed=()=>{
  const p=root.crmAI360StaffIdentityV1?.();
  return !!p&&['branch_director','field_manager','triovist_category'].includes(p.tier);
 };
+root.__resantaLeraDialogueV2=allowed();
 function localMonth(q){
  const iso=String(q||'').match(/\b(20\d{2})-(0[1-9]|1[0-2])\b/);
  if(iso)return iso[1]+'-'+iso[2];
@@ -28,11 +29,11 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  if(!allowed()||!ui?.authorized?.())return false;
  const currentActor=root.crmAI360StaffIdentityV1?.()?.id;
  if(activeActor&&activeActor!==currentActor)root.crmAI360BranchUnifiedResetV1?.();
- activeActor=currentActor;
+ activeActor=currentActor;root.__resantaLeraDialogueV2=true;
  const question=String(q||'').trim().slice(0,2400);
  if(!question)return false;
  // Keep cheap, exact, server-paginated continuation in the local read-only path.
- if(memory?.domain&&/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
+ if(root.__resantaLeraDialogueV2!==true&&memory?.domain&&/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
  if(pending){ui.show('Лера ещё отвечает на предыдущий вопрос.');return true;}
  pending=true;const run=++epoch,actor=root.crmAI360StaffIdentityV1?.()?.id;
  ui.setStatus?.('Лера обдумывает вопрос…');
@@ -59,6 +60,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    }
    if(!allowed()||!ui.authorized()||run!==epoch||actor!==root.crmAI360StaffIdentityV1?.()?.id)return;
    const data=result.data;
+   if(data?.protocol!=='lera_dialogue_v2')throw Error('agent_protocol_unavailable');
    const userRole=root.crmAI360StaffIdentityV1?.();
    if(data?.mode==='agent360_action_request_v2'){
     if(data.protocol!=='lera_dialogue_v2'||data.route_tier!==userRole?.tier||data.requires_confirmation!==true||data.created!==0||data.read_only!==true||
@@ -91,7 +93,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    history.push({role:'user',content:question},{role:'assistant',content:data.answer.slice(0,800)});
    history=history.slice(-12);
    ui.setStatus?.('Проверено через CRM · '+String(data.as_of||'')+' · филиал Витебск');
-   ui.show(data.answer);
+   ui.show(data.answer,{speechSummary:data.speech_summary});
   }catch(e){
    if(allowed()&&ui.authorized()&&run===epoch&&actor===root.crmAI360StaffIdentityV1?.()?.id){
     ui.setStatus?.('Защищённая аналитика временно недоступна');

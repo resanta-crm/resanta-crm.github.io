@@ -1,3 +1,4 @@
+import {routeEvidenceAnswer,riskEvidenceAnswer} from './scoped-planning.mjs';
 import {dialogueName} from './dialogue-core.mjs';
 // Same AI360 tool-orchestrator as director v4, but every data read is reauthorized
 // through the existing staff-scoped Edge gateway under the caller's own JWT.
@@ -69,7 +70,8 @@ Deno.serve(async req=>{
  // question is not an authorization; reject before any LLM or CRM source reads.
  if(permission.tier!=='branch_director'&&directMatches.some(x=>x!==permission.name))
   return reply(req,{error:'manager_outside_own_portfolio'},403);
- const subject=permission.tier!=='branch_director'?permission.name:
+ const branchWide=/по\s+(?:всей\s+)?сети|все[хм]?\s+менеджер|полев[а-я]*\s+менеджер|тр[её]х\s+менеджер|по\s+менеджерам|менеджеры/i.test(question);
+ const subject=permission.tier!=='branch_director'?permission.name:branchWide?null:
    directMatches[0]||(contextFollowup?priorManager:null);
  const memory={
   manager:subject||'',month,domain:domains.includes(body.memory?.domain)?body.memory.domain:'',
@@ -147,18 +149,19 @@ Deno.serve(async req=>{
   return result;
  };
  // Server rescopes tool arguments, regardless of what an LLM proposes.
+ const factualEvidence=[];
  const readTool=async args=>{
   const domain=typeof args.domain==='string'?args.domain:'';
   if(!domains.includes(domain))return {domain,error:'not_authorized_domain'};
   const proposed=typeof args.manager==='string'?args.manager.slice(0,90):null;
-  const selected=subject||proposed;
+  const selected=branchWide?null:subject||proposed;
   if(selected&&!permitted.some(x=>norm(x)===norm(selected)))
    return {domain,error:'outside_branch_scope'};
   const outgoing={
    kind:'read',domain,manager:permission.tier!=='branch_director'?permission.name:subject||selected||null,month,
    offset:Number.isSafeInteger(args.offset)?Math.min(200,Math.max(0,args.offset)):0,
    client_name:typeof args.client==='string'?args.client.slice(0,150):null,
-   level:args.level||'groups',group:args.group||null,subgroup:args.subgroup||null,
+   question,level:args.level||'groups',group:args.group||null,subgroup:args.subgroup||null,
    when:domain==='routes'&&/сегодня|на сегодня/i.test(question)?'today':null
   };
   let response;
@@ -178,9 +181,10 @@ Deno.serve(async req=>{
      (subject&&evidence.scope.managers.some(x=>x!==subject)))
     return {domain,error:'source_scope_invalid'};
   // Evidence is the staff gateway's already-minimized, verified payload.
-  return {domain,source:evidence.data?.source||'crm_staff_read',
+  const result={domain,source:evidence.data?.source||'crm_staff_read',
    scope:'authorized_vitebsk',managers:evidence.scope.managers,
    as_of:evidence.as_of,...evidence.data};
+  factualEvidence.push(result);return result;
  };
  const output=await runToolCore({
   question,history,memory:{...memory,today:day,
@@ -208,8 +212,8 @@ Deno.serve(async req=>{
   answer:output.pair.brief,read_only:true,answer_verified:false,domains_used:[],memory
  });
  if(!output?.pair)return reply(req,{error:'verified_dialog_unavailable',answer_verified:false},503);
- const pair=output.pair;
- const answer=[pair.brief,pair.detail,pair.offer].map(x=>String(x||'').trim()).filter(Boolean).join('\n');
+ const pair=routeEvidenceAnswer(factualEvidence)||riskEvidenceAnswer(factualEvidence)||output.pair;
+ const answer=[pair.detail?.startsWith(pair.brief)?'':pair.brief,pair.detail,pair.offer].map(x=>String(x||'').trim()).filter(Boolean).join('\n');
  return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:!dialogue,read_only:true,
   ...(dialogue?{protocol:'lera_dialogue_v2'}:{}),
   model:CORE_MODEL,scope:permission.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск',role:permission.tier,subject_manager:subject,month,
