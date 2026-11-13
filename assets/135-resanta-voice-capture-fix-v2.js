@@ -28,6 +28,8 @@
  function wakeCommand(phrase,partialHelloAt,now=Date.now()){
    const utterance=String(phrase||'').trim();
    const matched=WAIT_RE.exec(utterance)||LERA_RE.exec(utterance);
+   const uncertainWake=/^(?:али|алё|алло)[\s,.!?—-]*$/i.test(utterance);
+   if(!matched&&uncertainWake)return '';
    const separated=(!matched&&partialHelloAt>0&&now-partialHelloAt<=15000)?
      /^(?:ресанта|резанта|рясанта|рисанта|лера)(?=$|[\s,.!?—-])/i.exec(utterance):null;
    const prefix=matched||separated;
@@ -71,7 +73,7 @@
    }
    if(mic){
      mic.textContent=mode==='wake'?'🎤 Слушаю постоянно':mode==='manual'?'■ Остановить запись':'🎤 Спросить голосом';
-     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Лера отправляет фразу после примерно двух секунд тишины. Повторное нажатие завершит запись.';
+     mic.title=mode==='wake'?'Постоянный режим уже слушает. Говори после ответа Леры.':'Лера ждёт естественного завершения речи; паузы и незаконченные фразы объединяются. Повторное нажатие завершит запись.';
    }
  }
  function reason(e){
@@ -134,7 +136,8 @@
    return new Promise((resolve,reject)=>{
      if(!stream?.active||epoch!==listenEpoch){resolve(null);return;}
      let rec,parts=[],timer=0,poll=0,lastLoud=0,loud=false,peak=0,start=Date.now(),stopped=false;
-     const silence=window.crmAI360CreateSilenceGateV1?.({pauseMs:1900,noSpeechMs:4200});
+     const pauseMs=window.crmAI360TurnTakingV1?.pauseMs||3300;
+     const silence=window.crmAI360CreateSilenceGateV1?.({pauseMs,noSpeechMs:5400});
      try{const m=codec();rec=new MediaRecorder(stream,m?{mimeType:m}:undefined);activeRecorder=rec;}
      catch(e){reject(e);return;}
      const end=()=>{if(stopped)return;stopped=true;clearTimeout(timer);clearInterval(poll);try{rec.state==='recording'&&rec.stop();}catch(e){reject(e);}};
@@ -154,11 +157,11 @@
        if(silence){
          const result=silence.observe(rms,Date.now()-start);
          if(result.heard)loud=true;
-         if(result.stop)end(); // 1.9 seconds after the final spoken syllable
+         if(result.stop)end(); // Later STT segments join if the phrase is incomplete
        }else{
          // Graceful fallback if the optional local pause detector is unavailable.
          if(rms>.0020){loud=true;lastLoud=Date.now();}
-         if(loud&&Date.now()-lastLoud>1900)end();
+         if(loud&&Date.now()-lastLoud>pauseMs)end();
        }
        if(epoch!==listenEpoch || !mode)end();
      },110);
@@ -205,7 +208,8 @@
  function greetingOnly(text){
    const phrase=String(text||'').trim();
    const match=WAIT_RE.exec(phrase)||LERA_RE.exec(phrase);
-   return !!match&&!phrase.slice(match.index+match[0].length).replace(/[\s,.!?—-]+/g,'');
+   return (!!match&&!phrase.slice(match.index+match[0].length).replace(/[\s,.!?—-]+/g,''))||
+     /^(?:али|алё|алло)[\s,.!?—-]*$/i.test(phrase);
  }
  async function waitForAssistant(epoch,expectedMode){
    // UI dispatch queues the neural voice on the next microtask.
@@ -219,6 +223,35 @@
      await new Promise(r=>setTimeout(r,120));
    }
  }
+ // The STT clip boundary is not the end of a user's thought.
+ async function completeTurn(first,epoch,expectedMode,duration=0){
+   const policy=window.crmAI360TurnTakingV1;
+   if(!policy)return String(first||'').trim();
+   let result=String(first||'').trim(),lastDuration=Number(duration)||0;
+   for(let n=1;n<policy.maxSegments;n++){
+     if(epoch!==listenEpoch||mode!==expectedMode)return null;
+     const decision=policy.detect(result);
+     if(decision==='cancel')return '';
+     if(decision==='done')return '';
+     if(decision!=='more'&&lastDuration<11.3)break;
+     info('Пауза. Слушаю продолжение — незаконченный вопрос не отправляю…');
+     const rec=await capture(12,epoch);
+     if(epoch!==listenEpoch||mode!==expectedMode)return null;
+     if(!rec?.loud)break;
+     if(expectedMode==='wake'&&++clipCount>50){await stopAll('Лимит фрагментов голосового сеанса.');return null;}
+     const next=await transcribe(rec,epoch);
+     if(next===null)return null;
+     const command=policy.detect(next);
+     if(command==='cancel')return '';
+     if(command==='done')break;
+     if(command==='more'&&/^(?:подожди|я\s+ещ[её]\s+не\s+закончил[а]?|слушай\s+дальше|дай\s+договорить|не\s+перебивай)/i.test(next)){
+       lastDuration=12;continue;
+     }
+     result=policy.merge(result,next);
+     lastDuration=rec.duration||0;
+   }
+   return result;
+ }
  async function manualLoop(epoch){
    try{
      const clip=await capture(12,epoch);
@@ -230,19 +263,24 @@
      if(phrase && greetingOnly(phrase)){
        // Manual mode: after 'Привет, Ресанта' reply, listen for exactly ONE follow-up
        // without converting an explicit manual session into persistent hot-mic mode.
-       submit('Привет, Ресанта');
+       submit('Привет, Лера');
        await waitForAssistant(epoch,'manual');
        if(epoch!==listenEpoch||mode!=='manual')return;
        info('Слушаю вопрос после приветствия…');
        const second=await capture(12,epoch);
        if(epoch!==listenEpoch||mode!=='manual')return;
-       const question=await transcribe(second,epoch);
+       let question=await transcribe(second,epoch);
        if(epoch!==listenEpoch||mode!=='manual')return;
+       if(question!==null)question=await completeTurn(question,epoch,'manual',second?.duration);
        if(question===null){await stopAll(transcriptFailure||'Сервис распознавания недоступен.');return;}
        await stopAll();
        if(question)submit(question);
        else info('Вопрос не расслышала. Нажми микрофон ещё раз.');
-     }else if(phrase && !noiseOnly(phrase)){await stopAll();submit(phrase);}
+     }else if(phrase && !noiseOnly(phrase)){
+       const full=await completeTurn(phrase,epoch,'manual',clip?.duration);
+       if(epoch!==listenEpoch||mode!=='manual')return;
+       await stopAll();if(full)submit(full);
+     }
      else {await stopAll();info('Не получила слова из записи. Проверь, какой микрофон выбран в Яндекс Браузере.');}
    }catch(e){await stopAll(reason(e));}
  }
@@ -271,10 +309,12 @@
        if(wakeHeard){
          // Speaker may use "Лера," again during an active conversation.
          const addressed=LERA_RE.exec(phrase);
-         const question=addressed?phrase.slice(addressed[0].length).trim().replace(/^[\s,.!?—-]+/,''):phrase;
+         let question=addressed?phrase.slice(addressed[0].length).trim().replace(/^[\s,.!?—-]+/,''):phrase;
+         if(question)question=await completeTurn(question,epoch,'wake',clip?.duration);
+         if(epoch!==listenEpoch||mode!=='wake')break;
          acceptedWakeUntil=Date.now()+RESUME_WINDOW_MS;
          if(question)submit(question);
-         else submit('Привет, Ресанта');
+         else submit('Привет, Лера');
          await waitForAssistant(epoch,'wake');
          if(epoch===listenEpoch&&mode==='wake')info('Слушаю следующий вопрос…');
        }else{
@@ -294,11 +334,13 @@
          wakeHeard=true;
          acceptedWakeUntil=Date.now()+RESUME_WINDOW_MS;
          if(rest){
-           submit(rest);
+           const full=await completeTurn(rest,epoch,'wake',clip?.duration);
+           if(epoch!==listenEpoch||mode!=='wake')break;
+           if(full)submit(full);
            await waitForAssistant(epoch,'wake');
            if(epoch===listenEpoch&&mode==='wake')info('Слушаю следующий вопрос…');
          }else{
-           submit('Привет, Ресанта'); // local greeting, not a paid LLM request
+           submit('Привет, Лера'); // local first-name greeting, not a paid LLM request
            await waitForAssistant(epoch,'wake');
            if(epoch===listenEpoch&&mode==='wake')info('Слушаю твой вопрос…');
          }
