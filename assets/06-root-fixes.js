@@ -316,6 +316,20 @@ function statusBanner(){
 
 window.crmSignalVipSummaryV227329=signalVipSummary;
 window.crmSignalPromoMetricV227329=signalPromoMetric;
+// Read-only bridge for the merged home checks. Reuse the same scoped loaders
+// and truth rules, but never reuse a pending load from a different login.
+window.crmControlCenterChecksV1=async function(){
+  const identity=()=>[currentUser?.id,currentProfile?.id,currentProfile?.role,currentProfile?.name,currentProfile?.region,currentProfile?.access_scope].join('|');
+  const owner=identity();
+  if(!currentUser?.id||currentProfile?.id!==currentUser.id)throw Error('not_authorized');
+  if(state.promise)await state.promise;
+  if(owner!==identity())throw Error('actor_changed');
+  await loadSignals(true);
+  if(owner!==identity())throw Error('actor_changed');
+  window.crmInvalidateSignalsFast227328?.();
+  return {at:state.loadedAt,sources:Object.fromEntries(Object.entries(state.sources).map(([key,value])=>[key,{status:value.status}])),
+    truth:buildSignalTruth(true),historyChecked:!window.RESANTA_MASTERLIST_REFRESH_PENDING&&Array.isArray(allPurchaseHistory)&&allPurchaseHistory.length>0};
+};
 window.crmSignalsRefreshV227329=async function(){
   state.loadedAt=0;state.status='idle';
   const ok=await loadSignals(true);

@@ -72,3 +72,15 @@
 #control-center-v1 .cc-bottom{padding:3px 0 12px}
 @media(max-width:1050px){#control-center-v1 .cc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#control-center-v1 .cc-columns{grid-template-columns:1fr}}
 @media(max-width:560px){#control-center-v1 h2{font-size:23px}#control-center-v1 .cc-panel{padding:14px}#control-center-v1 .cc-stat{padding:13px 11px}#control-center-v1 .cc-stat strong{font-size:23px}#control-center-v1 .cc-issue{grid-template-columns:18px minmax(0,1fr);gap:8px}#control-center-v1 .cc-issue>div:last-child{grid-column:2;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap}#control-center-v1 .cc-bar-row{grid-template-columns:78px 1fr}#control-center-v1 .cc-bar-row>span:last-child{grid-column:2;text-align:left}#control-center-v1 .cc-controls{width:100%}#control-center-v1 .cc-controls label{flex:1}#control-center-v1 button,#control-center-v1 select,#control-center-v1 summary{min-height:44px}#control-center-v1 select{font-size:16px}#control-center-v1 .cc-brief>p{flex-basis:100%}}
+
+/* Only audiences with the new home lose the redundant navigation entry. */
+#nav-alerts.cc-merged-signals,#bn-alerts.cc-merged-signals{display:none!important}
+#control-center-v1 .cc-checks{margin-top:20px;padding-top:18px;border-top:1px solid var(--border);display:grid;gap:12px}
+#control-center-v1 .cc-check-group{border:1px solid var(--border);border-radius:10px;padding:12px}
+#control-center-v1 .cc-check-group summary{cursor:pointer;font-size:13px;font-weight:600}
+#control-center-v1 .cc-check-group summary span{float:right;font-weight:400;color:var(--sub);margin-left:8px}
+#control-center-v1 .cc-check-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);font-size:13px}
+#control-center-v1 .cc-check-row>div{min-width:0;overflow-wrap:anywhere}
+#control-center-v1 .cc-check-row .cc-btn{flex-shrink:0}
+#control-center-v1 .cc-check-group>.cc-muted{margin:10px 0}
+#control-center-v1 .cc-checks button:disabled{cursor:wait;opacity:.65}

@@ -19,7 +19,7 @@ function node(id=''){
  return {id,innerHTML:'',textContent:'',dataset:{},style:{},events:{},attrs:{},classList:{contains:k=>classes.has(k),add:k=>classes.add(k),remove:k=>classes.delete(k),toggle:(k,on)=>on?classes.add(k):classes.delete(k)},setAttribute(k,v){this.attrs[k]=v},addEventListener(k,v){this.events[k]=v},querySelector:()=>null,prepend(){},scrollIntoView(){this.scrolled=true}};
 }
 function fixture(options={}){
- const nodes=new Map(['page-dashboard','topbar-title','nav-dashboard','app'].map(id=>[id,node(id)]));
+ const nodes=new Map(['page-dashboard','page-alerts','topbar-title','nav-dashboard','nav-alerts','bn-alerts','app'].map(id=>[id,node(id)]));
  const page=nodes.get('page-dashboard');page.classList.add('active');page.prepend=x=>nodes.set(x.id,x);
  const calls=[],navigate=[],coreCalls=[];let baseCalls=0,routeCalls=0,nativeCalls=0;
  const profile={id:'owner',role:'boss',name:'Александр Паюшин',email:'payushin_ar@resanta.ru',region:'Витебск',access_scope:'standard',...options.profile};
@@ -34,6 +34,7 @@ function fixture(options={}){
   routeTruthMetrics:()=>{routeCalls++;return {verifiedDue:Array(140).fill({}),duePlans:Array(148).fill({}),wb:{start:'2026-11-09',end:'2026-11-15'},offRouteWeek:[],markedOnlyWeek:[],overdue:Array(218).fill({})};},
   crmDashboardNativeHooksV1:()=>nativeCalls++,
   crmCoreResourceStatusV1:k=>statuses[k],crmEnsurePageDataV22733:async()=>{coreCalls.push('ensure')},crmCoreRefreshV22733:async()=>{coreCalls.push('refresh')},
+  crmControlCenterChecksV1:options.checks,acknowledgePartialReview:options.review,openClient:options.openClient,openPromotionDetail:options.openPromotion,
   RESANTA_TRIOVIST:{fullAccessEmails:['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']},
   db:{rpc:async(name,args)=>{calls.push({name,args});if(options.rpc)return options.rpc(name,args);if(options.fail===name)return{error:{message:'fixture denied'}};return{data:data[name]};},
     from:table=>{assert.equal(table,'cash_receipts_1c');let start=0,end=999;const filters=[];const q={select:()=>q,gte:()=>q,lt:()=>q,order:()=>q,range:(a,b)=>{start=a;end=b;return q},eq:(k,v)=>{filters.push([k,v]);return q},then:resolve=>{calls.push({table,start,end,filters});return Promise.resolve({data:(options.receipts||[{id:'r1',amount:1234,document_at:'2026-11-12T12:00:00+03:00',imported_at:'2026-11-13T10:00:00Z'}]).slice(start,end+1)}).then(resolve)}};return q;}}
@@ -50,10 +51,95 @@ function fixture(options={}){
  }
  return {context,root,nodes,page,calls,navigate,statuses,coreCalls,click,baseCalls:()=>baseCalls,routeCalls:()=>routeCalls,nativeCalls:()=>nativeCalls};
 }
+const checksSnapshot=()=>({at:Date.now(),historyChecked:true,sources:Object.fromEntries(['vip','sales','promotions','photos','partial'].map(k=>[k,{status:'ready'}])),truth:{
+ vipDrops:[{matched:{id:'vip1',name:'ВИП <script>'},period_cur:'2026-10',period_prev:'2025-10',growth_pct:-35}],
+ promotionIssues:[{promotion:{id:'promo1',name:'Акция 1'},metric:{reason:'Нет итогового отчёта'}}],
+ partialReviews:[{id:'review1',manager_name:'Руднев',fact_result:'Часть работы',reason:'Причина 1'},{id:'review2',manager_name:'Шкуран',reason:'Причина 2'}],
+ unassigned:[{id:'unassigned1',name:'Без ответственного'}],noMaster:[]}});
+function controlClick(f,attribute,dataset={}){f.root().events.click({target:{closest:()=>({hasAttribute:k=>k===attribute,dataset})}});}
+test('merged checks are lazy, hide redundant desktop/mobile entries and preserve old route',async()=>{
+ let loads=0;const f=fixture({checks:async()=>{loads++;return checksSnapshot();}});await flush();
+ assert.equal(loads,0);assert.match(f.root().innerHTML,/Не проверено/);
+ assert.ok(f.nodes.get('nav-alerts').classList.contains('cc-merged-signals'));
+ assert.ok(f.nodes.get('bn-alerts').classList.contains('cc-merged-signals'));
+ f.context.goPage('alerts','Сигналы');await flush();
+ assert.equal(loads,1);assert.equal(f.navigate.at(-1).page,'dashboard');
+ assert.match(f.root().innerHTML,/Падение продаж ВИП/);assert.match(f.root().innerHTML,/Нет итогового отчёта/);
+ assert.match(f.root().innerHTML,/Часть работы/);assert.match(f.root().innerHTML,/Без ответственного/);
+ assert.doesNotMatch(f.root().innerHTML,/<script>/);
+ f.context.goPage('sales','Продажи');assert.equal(f.navigate.at(-1).page,'sales');
+});
+test('existing specialist audiences retain original signals routing and navigation',()=>{
+ const f=fixture({profile:{role:'manager',name:'Кришталь',access_scope:'triovist'}});
+ assert.equal(f.nodes.get('nav-alerts').classList.contains('cc-merged-signals'),false);
+ f.context.goPage('alerts','Сигналы');assert.equal(f.navigate.at(-1).page,'alerts');
+});
+test('failed and partial checks never claim a healthy empty category',async()=>{
+ const snap=checksSnapshot();snap.sources.photos.status='error';snap.historyChecked=false;
+ const f=fixture({checks:async()=>snap});controlClick(f,'data-cc-checks');await flush();
+ assert.match(f.root().innerHTML,/Проверено частично/);assert.match(f.root().innerHTML,/Источник недоступен/);
+ assert.doesNotMatch(f.root().innerHTML,/Нет итогового отчёта/);
+ assert.match(f.root().innerHTML,/Сопоставление маст-листа не проверено/);
+ const g=fixture({checks:async()=>{throw Error('timeout')}});controlClick(g,'data-cc-checks');await flush();
+ assert.match(g.root().innerHTML,/Не удалось проверить дополнительные источники/);
+ assert.match(g.root().innerHTML,/Не проверено/);
+});
+test('late checks cannot cross a login boundary',async()=>{
+ let done;const f=fixture({checks:()=>new Promise(resolve=>{done=resolve})});
+ controlClick(f,'data-cc-checks');await flush();
+ f.context.currentUser={id:'new'};f.context.currentProfile={...f.context.currentProfile,id:'new',name:'Руднев',role:'manager'};
+ f.context.buildDashboard();done(checksSnapshot());await flush();
+ assert.doesNotMatch(f.root().innerHTML,/Часть работы|Без ответственного|ВИП &lt;script/);
+ assert.match(f.root().innerHTML,/Не проверено/);
+});
+test('partial reviews retain unique IDs and invoke only the existing explicit review handler',async()=>{
+ const reviewed=[],f=fixture({checks:async()=>checksSnapshot(),review:async id=>reviewed.push(id)});
+ controlClick(f,'data-cc-checks');await flush();assert.equal(reviewed.length,0);
+ const matches=[...f.root().innerHTML.matchAll(/data-cc-action="([^"]+)"[^>]*>Разобрать задачу/g)];
+ assert.equal(matches.length,2);assert.notEqual(matches[0][1],matches[1][1]);
+ controlClick(f,'data-cc-action',{ccAction:matches[0][1]});await flush();assert.deepEqual(reviewed,['review1']);
+});
+test('promotion and data-quality rows retain direct existing detail actions',async()=>{
+ const opened=[],f=fixture({checks:async()=>checksSnapshot(),openClient:id=>opened.push(['client',id]),openPromotion:id=>opened.push(['promotion',id])});
+ controlClick(f,'data-cc-checks');await flush();
+ const keys=[...f.root().innerHTML.matchAll(/data-cc-action="([^"]+)"/g)].map(x=>x[1]);
+ const promo=keys.find(x=>JSON.parse(decodeURIComponent(x))[6]==='promo1');
+ const client=keys.find(x=>{const a=JSON.parse(decodeURIComponent(x));return a[0]==='clients'&&a[2]==='unassigned1'});
+ assert.ok(promo);assert.ok(client);assert.equal(opened.length,0);
+ controlClick(f,'data-cc-action',{ccAction:promo});controlClick(f,'data-cc-action',{ccAction:client});
+ assert.deepEqual(opened,[['promotion','promo1'],['client','unassigned1']]);
+});
+test('all additional findings remain reachable after the first ten',async()=>{
+ const snap=checksSnapshot();snap.truth.partialReviews=Array.from({length:12},(_,i)=>({id:'r'+i,manager_name:'Руднев',reason:'Задача '+i}));
+ const f=fixture({checks:async()=>snap});controlClick(f,'data-cc-checks');await flush();
+ assert.match(f.root().innerHTML,/Показать ещё · 10 из 12/);assert.doesNotMatch(f.root().innerHTML,/Задача 11/);
+ controlClick(f,'data-cc-more',{ccMore:'tasks'});await flush();assert.match(f.root().innerHTML,/Задача 11/);
+});
+test('Lera voice command opens the merged checks despite the hidden old menu',async()=>{
+ const f=fixture({checks:async()=>checksSnapshot()}),spoken=[];
+ f.context.crmAI360GreetingV1=()=>({id:f.context.currentUser.id});
+ f.context.getComputedStyle=el=>({display:el.classList.contains('cc-merged-signals')?'none':'block'});
+ vm.runInContext(read('assets/221-lera360-voice-navigation-v1.js'),f.context);
+ assert.equal(f.context.crmAI360NavigateV1('Открой сигналы',{answer:x=>spoken.push(x)}),true);
+ await flush();assert.equal(f.navigate.at(-1).page,'dashboard');
+ assert.match(spoken.at(-1),/Открыла раздел «Центр управления»/);
+ assert.match(f.root().innerHTML,/Часть работы/);
+});
+test('read-only source bridge rejects a switched login and does not serve pending old data',async()=>{
+ const full=read('assets/06-root-fixes.js');
+ const bridge=full.slice(full.indexOf('window.crmControlCenterChecksV1=async function(){'),full.indexOf('window.crmSignalsRefreshV227329=async function(){'));
+ let loads=0,resolveOld;const state={promise:new Promise(resolve=>{resolveOld=resolve}),sources:{sales:{status:'ready'}},loadedAt:123};
+ const c={state,currentUser:{id:'one'},currentProfile:{id:'one',role:'boss'},allPurchaseHistory:[],buildSignalTruth:()=>({vipDrops:[]}),loadSignals:async()=>{loads++}};
+ c.window=c;vm.createContext(c);vm.runInContext(bridge,c);
+ const pending=c.crmControlCenterChecksV1();c.currentUser={id:'two'};c.currentProfile={id:'two',role:'boss'};resolveOld();
+ await assert.rejects(pending,/actor_changed/);assert.equal(loads,0);
+ state.promise=null;const result=await c.crmControlCenterChecksV1();assert.equal(loads,1);
+ assert.equal(result.sources.sales.status,'ready');assert.equal(result.historyChecked,false);
+});
 test('home entry is last, versioned, and unrelated sections have no new CSS selectors',()=>{
  const index=read('index.html');
  assert.ok(index.indexOf('assets/283-control-center-v1.js')>index.indexOf('assets/198-budgets-client360-v1.js'));
- assert.match(index,/283-control-center-v1.css\?v=20261113-2/);
+ assert.match(index,/283-control-center-v1.css\?v=20261113-3/);
  assert.match(index,/05-performance-core.js\?v=23.7.13-control-center-v1/);
  assert.doesNotThrow(()=>new Function(source));
  assert.doesNotMatch(css,/#page-(?:clients|tasks|sales|triovist|debt)\b/);
