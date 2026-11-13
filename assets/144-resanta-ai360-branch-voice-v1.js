@@ -306,7 +306,12 @@ function submit(){
  line.style.cssText='padding:8px 4px;font-size:12px;color:#445b77;';
  log.appendChild(line);log.scrollTop=log.scrollHeight;
  // One shared signed agent bridge; existing task pilot remains as fallback.
+ if(/^(?:(?:привет\s+)?(?:лера|ресанта|резанта)|али|алё|алло)[\s,!.?]*$/i.test(question)){
+   const address=STAFF_GREETING[role()?.id]||'';
+   show(address?'Да, '+address+', слушаю.':'Да, слушаю.');return;
+ }
  if(root.crmAI360ActionHandleV1?.(question,{show,setStatus,authorized:panelVisible}))return;
+ if(root.crmAI360NavigateV1?.(question,{show,setStatus}))return;
  // Voice task commands are handled before ordinary read-only analytic questions.
  if(root.crmAI360BranchTaskHandleV1?.(question))return;
  if(root.crmLprV1?.voice(question,{answer:show}))return;
