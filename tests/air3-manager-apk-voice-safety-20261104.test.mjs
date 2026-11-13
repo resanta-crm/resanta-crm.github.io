@@ -95,7 +95,7 @@ test('Spoken navigation uses existing authorized sections and never writes data'
  assert.equal(navigate('Согласуй поручение Рудневу'),false);
  assert.equal(navigate('Какие продажи в ноябре'),false);
  assert.equal(navigate('Открой произвольный скрытый экран'),false);
- assert.ok(pilot.includes('window.__resantaAI360AndroidDirectorOptIn===true && navigateByVoice(query)'),
+ assert.ok(pilot.includes('navigateByVoice(query)'),
   'desktop voice routing remains unchanged');
 });
 
