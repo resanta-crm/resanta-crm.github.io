@@ -211,6 +211,22 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
    const summary='Поручение для '+who.name+': '+title+'. Срок '+date+(time?' в '+time+' (Минск)':'')+'. '+details;
    return respond(req,{mode:'prepared',draft,summary,approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
  }
+ if(model.action==='meeting'){
+  const day=esc(model.due_date),time=esc(model.due_time);
+  const start=moment(day,time);
+  if(!start)return respond(req,{mode:'needs_details',question:'Уточни дату и время встречи по минскому времени.',created:0});
+  const resolved=await resolveClient(svc,actor,model.client_name);
+  if(resolved.error)return respond(req,{mode:'needs_details',question:'Уточни название клиента в CRM.',created:0});
+  const title=esc(model.title).slice(0,160),details=esc(model.details).slice(0,800);
+  if(title.length<8||details.length<8)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
+  const dur=Number.isInteger(model.duration_minutes)&&model.duration_minutes>=15&&model.duration_minutes<=240?model.duration_minutes:60;
+  const draft={action:'meeting',owner_id:actor.id,client_id:resolved.client?.id||null,client_name:resolved.client?.name||'',
+    title,details,due_date:day,due_time:time,starts_at:start,duration_minutes:dur,
+    format:model.event_format,location:esc(model.location).slice(0,250),participant_names:[],source:SOURCE};
+  const proof=await prepareToken(secret,actor.id,draft);
+  return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'» на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
+    approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
+ }
  if(model.action==='chat'){
    const kind=model.room_kind==='group'?'group':'direct';
    const named=Array.isArray(model.participants)?model.participants.slice(0,12):[];
