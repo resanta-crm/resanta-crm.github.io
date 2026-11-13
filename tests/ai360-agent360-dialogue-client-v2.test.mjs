@@ -52,10 +52,10 @@ test('owner uses unified dialogue on the ordinary CRM URL',async()=>{
  const f=director(async()=>chat,'');f.w.crmAI360UnifiedDialogHandleV1('Привет',f.ui);await tick();
  assert.equal(f.calls[0].protocol,'lera_dialogue_v2');assert.equal(f.w.__resantaLeraDialogueV2,true);
 });
-test('pilot query parameter cannot activate a different director account',async()=>{
+test('approved executive uses unified dialogue without impersonating owner',async()=>{
  const f=director(async()=>chat);f.user.id=PEER;
  f.w.crmAI360UnifiedDialogHandleV1('Привет',f.ui);await tick();
- assert.equal(f.calls[0].protocol,undefined);assert.equal(f.w.__resantaLeraDialogueV2,false);
+ assert.equal(f.calls[0].protocol,'lera_dialogue_v2');assert.equal(f.w.__resantaLeraDialogueV2,true);
 });
 test('pilot analytical show requests reach the agent instead of being consumed as navigation',()=>{
  const calls=[],root={__resantaLeraDialogueV2:true};

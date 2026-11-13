@@ -52,14 +52,14 @@
    // remain available if a particular WebView cannot use audio capture.
    for(const file of [
     '146-resanta-ai360-branch-premium-voice-v1.js?v=6&lera=20261113-turntaking&videoRelease=20261113-v3',
-    '147-resanta-ai360-staff-unified-dialog-v1.js?v=5&lera=20261112-naturalvoice&dialogueRelease=20261113-v2'
+    '147-resanta-ai360-staff-unified-dialog-v1.js?v=5&lera=20261112-naturalvoice&dialogueRelease=20261113-v2&rolloutRelease=20261113-v4'
    ]){
     if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
     try{await load(file);}
     catch(e){console.warn('Optional staff voice component:',e);}
    }
    if(!permitted()||identity()?.id!==expected)throw Error('Сессия CRM изменилась');
-   await load('144-resanta-ai360-branch-voice-v1.js?v=12&lera=20261113-turntaking&dialogueRelease=20261113-v2');
+   await load('144-resanta-ai360-branch-voice-v1.js?v=12&lera=20261113-turntaking&dialogueRelease=20261113-v2&rolloutRelease=20261113-v4');
    if(!root.crmAI360BranchVoicePilotV1?.allowed())throw Error('Нет доступа к помощнику сотрудника');
    ready=true;
    button.textContent='🎙 Лера';

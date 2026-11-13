@@ -1,3 +1,4 @@
+import {readRouteWindow,readClientRisk} from './scoped-planning.mjs';
 // Separate AI360 staff read-only gateway. Never import director v4 or its service-key source reads.
 // Promotion to staff voice requires independent STT/TTS grants and end-to-end validation.
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
@@ -84,8 +85,10 @@ async function readStaff(svc,permission,managers,domain,body,day,userEmail,profi
     delta_byn:it.delta_byn,previous_byn:it.previous_byn,current_byn:it.current_byn
    }))};
  }
+ if(domain==='clients'&&/падающ|падени|снижени|риск|спад/i.test(body.question||''))return readClientRisk(svc,{manager:managers.length===1?managers[0]:null,branch:'Витебск',month:safeMonth(body.month,day),authorizedManagers:managers});
  if(domain==='clients')return scopedTable(svc,'clients',['name','manager_name','client_status','sku_count'],'created_at',managers,{offset,filter:'not_archived'});
  if(domain==='tasks')return scopedTable(svc,'tasks',['title','manager_name','priority','due_date','review_status'],'due_date',managers,{offset,filter:'active',ascending:true});
+ if(domain==='routes'&&typeof body.question==='string')return readRouteWindow(svc,{managers,question:body.question.slice(0,2400),today:day,offset});
  if(domain==='routes'){
   const date=body.when==='today'?day:null;
   const page=await scopedTable(svc,'route_plans',

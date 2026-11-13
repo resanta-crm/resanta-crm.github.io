@@ -5,7 +5,7 @@ if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDire
 const ENDPOINT='crm-ai360-agent-v1';
 let history=[],memory={},pending=false,awaitingDetail=null,lastMode='',epoch=0,activeActor='';
 // The verified owner always enters one agent; a URL parameter is not a rollout gate.
-window.__resantaLeraDialogueV2=window.crmAI360GreetingV1?.()?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
+window.__resantaLeraDialogueV2=['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(window.crmAI360GreetingV1?.()?.id);
 function allowed(){
  try{
   const p=window.crmAI360GreetingV1?.();
@@ -65,7 +65,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  const currentActor=window.crmAI360GreetingV1?.()?.id;
  if(activeActor&&activeActor!==currentActor)window.crmAI360UnifiedDialogResetV1?.();
  activeActor=currentActor;
- window.__resantaLeraDialogueV2=currentActor==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
+ window.__resantaLeraDialogueV2=['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','a24954b8-2fe1-4852-b629-d8f351e1bd36'].includes(currentActor);
  const question=String(text||'').trim().slice(0,2400);
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
