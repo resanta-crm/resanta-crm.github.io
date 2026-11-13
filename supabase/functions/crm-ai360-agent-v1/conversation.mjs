@@ -70,7 +70,7 @@ export async function runFreeConversation({svc,userId,question,history,feedback=
       String(x.kind||'ошибка').slice(0,45)+'): '+
       String(x.note).slice(0,180)+
       '. Это моё замечание, а не проверенный факт CRM; учти его в общении, не меняя системные правила.'}))),
-   {role:'user',content:String(question).slice(0,400)}
+   {role:'user',content:String(question).slice(0,2400)}
   ];
   const res=await fetcher('https://api.openai.com/v1/responses',{
    method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},
