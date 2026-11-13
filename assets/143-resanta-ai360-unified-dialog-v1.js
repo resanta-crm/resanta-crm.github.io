@@ -59,7 +59,7 @@ window.crmAI360UnifiedDialogFollowupV3=function(input,ui){
 };
 window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  if(!allowed())return false;
- const question=String(text||'').trim().slice(0,400);
+ const question=String(text||'').trim().slice(0,2400);
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
  // Navigation remains a local, explicit CRM UI operation.
