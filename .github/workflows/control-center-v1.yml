@@ -1,10 +1,10 @@
 name: Control center home isolation
 on:
   pull_request:
-    paths: ['index.html', 'assets/283-control-center-v1.*', 'assets/05-performance-core.js', 'tests/control-center-v1.test.mjs', '.github/workflows/control-center-v1.yml']
+    paths: ['index.html', 'assets/283-control-center-v1.*', 'assets/05-performance-core.js', 'assets/02-mobile-gps-base.js', 'assets/143-resanta-ai360-unified-dialog-v1.js', 'assets/147-resanta-ai360-staff-unified-dialog-v1.js', 'assets/210-resanta-agent360-single-entry-v1.js', 'assets/221-lera360-voice-navigation-v1.js', 'tests/control-center-v1.test.mjs', '.github/workflows/control-center-v1.yml']
   push:
     branches: [main]
-    paths: ['index.html', 'assets/283-control-center-v1.*', 'assets/05-performance-core.js', 'tests/control-center-v1.test.mjs', '.github/workflows/control-center-v1.yml']
+    paths: ['index.html', 'assets/283-control-center-v1.*', 'assets/05-performance-core.js', 'assets/02-mobile-gps-base.js', 'assets/143-resanta-ai360-unified-dialog-v1.js', 'assets/147-resanta-ai360-staff-unified-dialog-v1.js', 'assets/210-resanta-agent360-single-entry-v1.js', 'assets/221-lera360-voice-navigation-v1.js', 'tests/control-center-v1.test.mjs', '.github/workflows/control-center-v1.yml']
 permissions: {contents: read}
 jobs:
   home-isolation:
@@ -18,5 +18,10 @@ jobs:
         run: |
           node --check assets/283-control-center-v1.js
           node --check assets/05-performance-core.js
+          node --check assets/02-mobile-gps-base.js
+          node --check assets/143-resanta-ai360-unified-dialog-v1.js
+          node --check assets/147-resanta-ai360-staff-unified-dialog-v1.js
+          node --check assets/210-resanta-agent360-single-entry-v1.js
+          node --check assets/221-lera360-voice-navigation-v1.js
       - name: Home, adjacent sections and navigation regression
-        run: node --test tests/control-center-v1.test.mjs tests/crm-release-guard-v1.test.mjs tests/crm-view-resume-v1.test.mjs tests/sales-director360-v1.test.mjs tests/pdz-director360-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs tests/warehouse-vitebsk360-v1.test.mjs
+        run: node --test tests/control-center-v1.test.mjs tests/crm-release-guard-v1.test.mjs tests/crm-view-resume-v1.test.mjs tests/sales-director360-v1.test.mjs tests/pdz-director360-v1.test.mjs tests/triovist-motivation-director-v1.test.mjs tests/warehouse-vitebsk360-v1.test.mjs tests/gps360-complete-one-time-geo-v1.test.mjs tests/lera360-approved-rollout-v4.test.mjs tests/lera360-stable-agent-release-20261113.test.mjs tests/lera360-video-regression-20261113.test.mjs

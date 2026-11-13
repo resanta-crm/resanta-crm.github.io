@@ -40,8 +40,9 @@
   const s=await session();
   assertCurrent(id);
   if(!s?.access_token)throw new Error('agent_not_authorized');
+  const screen=action==='ask'?w.RESANTA_CONTROL_CENTER_V1?.prepareAgentRequest?.(question,memory):null;
   const payload=action==='capabilities'?{action}:
-   {action:'ask',question,history:history.slice(-12),memory};
+   {action:'ask',question:screen?.question||question,history:history.slice(-12),memory:screen?.memory||memory};
    if(action==='ask'&&w.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    let response=await client().functions.invoke(ENDPOINT,{body:payload});
    if(Number(response.error?.context?.status)===401&&typeof client().auth?.refreshSession==='function'){

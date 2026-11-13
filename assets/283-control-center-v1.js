@@ -6,7 +6,7 @@
 (function(w,d){
 'use strict';
 if(w.RESANTA_CONTROL_CENTER_V1)return;
-const ID='control-center-v1',TTL=180000,FIELD=['Ачинович','Руднев','Шкуран'];
+const ID='control-center-v1',TTL=180000,MAX_AGE=86400000,TIMEOUT=12000,FIELD=['Ачинович','Руднев','Шкуран'];
 const arr=x=>Array.isArray(x)?x:[];
 const n=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x):null;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -17,7 +17,7 @@ const day=()=>{try{return String(TODAY).slice(0,10)}catch(_){return new Date().t
 const monthNow=()=>day().slice(0,7);
 const profile=()=>{try{return currentProfile||{}}catch(_){return{}}};
 const user=()=>{try{return currentUser||{}}catch(_){return{}}};
-const actor=()=>[user().id,profile().id,profile().role,profile().name,profile().email,profile().access_scope].join('|');
+const actor=()=>[user().id,profile().id,profile().role,profile().name,profile().email,profile().access_scope,profile().region].join('|');
 const boss=()=>profile().role==='boss';
 const allowed=()=>Boolean(user().id&&profile().id===user().id&&['boss','manager'].includes(profile().role)&&!['triovist','service_manager','payment_executor'].includes(String(profile().access_scope||'').toLowerCase())&&(boss()||FIELD.includes(profile().name)));
 const triAllowed=()=>boss()&&arr(w.RESANTA_TRIOVIST?.fullAccessEmails).includes(String(profile().email||'').trim().toLowerCase());
@@ -26,19 +26,39 @@ const dbc=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}}
 const stamp=x=>{if(!x)return'дата не подтверждена';const z=new Date(x);return Number.isNaN(z.getTime())?esc(x):z.toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});};
 const dateLabel=x=>/^\d{4}-\d\d-\d\d$/.test(String(x))?x.slice(8)+'.'+x.slice(5,7)+'.'+x.slice(0,4):String(x||'—');
 const monthLabel=x=>new Date(x+'-01T12:00:00').toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
-let state={actor:'',month:monthNow(),slots:{},legacy:false,coreRequested:false},installed=false,actions=[];
+let state={actor:'',month:monthNow(),slots:{},legacy:false,coreRequested:false},installed=false,actions=new Map(),legacyBuild=null,nativeActor='',renderQueued=false;
+let operationCache=null;
+const memoryCache=new Map(),painted=new Map();
 const slots=()=>state.slots;
-function resetActor(){if(state.actor===actor())return;state={actor:actor(),month:monthNow(),slots:{},legacy:false,coreRequested:false};actions=[];}
+const cacheKey=()=>actor()+'|'+state.month;
+function restore(){
+ const hit=memoryCache.get(cacheKey());if(hit){state.slots=hit;return;}
+ try{const saved=JSON.parse(w.sessionStorage?.getItem('crm_control_center_v2:'+user().id)||'null');
+  if(saved?.version===2&&saved.actor===actor()&&saved.month===state.month&&Date.now()-saved.savedAt<MAX_AGE){
+   for(const key of ['sales','triovist','pdz','receipts']){const v=saved.slots?.[key];if(v?.data&&Number.isFinite(v.at)&&Date.now()-v.at<MAX_AGE&&(key!=='triovist'||triAllowed()))state.slots[key]={data:v.data,at:v.at,error:'',loading:false};}
+  }
+ }catch(_){}
+ memoryCache.set(cacheKey(),state.slots);
+}
+function persist(){
+ memoryCache.set(cacheKey(),slots());while(memoryCache.size>8)memoryCache.delete(memoryCache.keys().next().value);
+ const safe={};for(const key of ['sales','triovist','pdz','receipts'])if(slots()[key]?.data&&(key!=='triovist'||triAllowed()))safe[key]={data:slots()[key].data,at:slots()[key].at};
+ try{const encoded=JSON.stringify({version:2,actor:actor(),month:state.month,savedAt:Date.now(),slots:safe});if(encoded.length<32000)w.sessionStorage?.setItem('crm_control_center_v2:'+user().id,encoded);}catch(_){}
+}
+function resetActor(){if(state.actor===actor())return;state={actor:actor(),month:monthNow(),slots:{},legacy:false,coreRequested:false};actions=new Map();operationCache=null;painted.clear();restore();}
+function scheduleRender(){if(renderQueued)return;renderQueued=true;const run=()=>{renderQueued=false;if(active())render();};if(typeof w.requestAnimationFrame==='function')w.requestAnimationFrame(run);else Promise.resolve().then(run);}
 function coreStatus(name){return w.crmCoreResourceStatusV1?.(name)||{status:'idle',error:''};}
 function coreReady(names){return names.every(k=>{const s=coreStatus(k);return s.status==='ready'&&!s.error;});}
-function coreMessage(names){const error=names.some(k=>coreStatus(k).error||coreStatus(k).status==='error');return error?'Не удалось обновить данные. Повторите загрузку.':'Данные загружаются…';}
+function coreMessage(names){const error=state.coreTimedOut||names.some(k=>coreStatus(k).error||coreStatus(k).status==='error');return error?'Не удалось обновить данные. Повторите загрузку.':'Данные загружаются…';}
 function localData(){
+ const version=[actor(),day(),...['tasks','visits','routes','absences'].map(k=>{const s=coreStatus(k);return [s.status,s.loadedAt,s.error].join(':')})].join('|');
+ if(operationCache?.version===version)return operationCache.data;
  let tasks=[],routes=null;
  const tasksReady=coreReady(['tasks','absences']);
  const routesReady=coreReady(['visits','routes','absences']);
  if(tasksReady){try{tasks=boss()?canonicalActiveTasks(allTasks):canonicalTasksForManager(profile().name)}catch(_){return{tasks:[],tasksReady:false,routesReady:false,routes:null};}}
  if(routesReady){try{routes=routeTruthMetrics(visibleVisitsForCurrentUser(),routePlansForCurrentUser());}catch(_){routes=null;}}
- return {tasks,tasksReady,routesReady:routesReady&&Boolean(routes),routes};
+ const data={tasks,tasksReady,routesReady:routesReady&&Boolean(routes),routes};operationCache={version,data};return data;
 }
 function overdueTasks(data){return data.tasksReady?data.tasks.filter(t=>{try{return isTaskOverdue(t)}catch(_){return false}}):[];}
 function salesRows(kpi,tri,month,manager=''){
@@ -55,21 +75,24 @@ function totals(rows){
 }
 function loadSlot(key,job,force=false){
  const old=slots()[key];
- if(old?.loading||!force&&old&&Date.now()-old.at<TTL)return old?.promise||Promise.resolve();
+ if(old?.loading||!force&&old&&Date.now()-(old.failedAt||old.at)<TTL)return old?.promise||Promise.resolve();
  const entry={data:old?.data||null,error:'',loading:true,at:old?.at||0};slots()[key]=entry;
  const owner=actor(),month=state.month;
- entry.promise=(async()=>{try{const data=await job();if(actor()!==owner||state.month!==month||slots()[key]!==entry)return;entry.data=data;entry.at=Date.now();}
- catch(e){if(actor()!==owner||state.month!==month||slots()[key]!==entry)return;entry.data=null;entry.error=String(e?.message||e);entry.at=Date.now();}
- finally{entry.loading=false;if(actor()===owner&&state.month===month&&slots()[key]===entry&&active())render();}})();
+ const controller=typeof AbortController==='function'?new AbortController():null;let timer;
+ const deadline=new Promise((_,reject)=>{timer=w.setTimeout(()=>{controller?.abort();reject(Error('Источник не ответил за 12 секунд'));},TIMEOUT);});
+ entry.promise=(async()=>{try{const data=await Promise.race([Promise.resolve().then(()=>job(controller?.signal)),deadline]);if(actor()!==owner||state.month!==month||slots()[key]!==entry)return;entry.data=data;entry.at=Date.now();entry.failedAt=0;persist();}
+ catch(e){if(actor()!==owner||state.month!==month||slots()[key]!==entry)return;entry.error=String(e?.message||e);entry.failedAt=Date.now();if(['42501','401','403'].includes(String(e?.code||e?.status||''))||/not.authoriz|нет доступа|требуется авторизац|необходима авторизац/i.test(entry.error)){entry.data=null;entry.at=0;persist();}}
+ finally{w.clearTimeout(timer);entry.loading=false;if(actor()===owner&&state.month===month&&slots()[key]===entry&&active())scheduleRender();}})();
  return entry.promise;
 }
-async function rpc(name,args){const client=dbc();if(!client?.rpc)throw Error('Соединение с CRM недоступно');const r=await client.rpc(name,args);if(r.error)throw r.error;if(!r.data)throw Error('Источник не вернул данные');return r.data;}
-async function receipts(month){
+async function rpc(name,args,signal){const client=dbc();if(!client?.rpc)throw Error('Соединение с CRM недоступно');let query=client.rpc(name,args);if(signal&&typeof query.abortSignal==='function')query=query.abortSignal(signal);const r=await query;if(r.error)throw r.error;if(!r.data)throw Error('Источник не вернул данные');return r.data;}
+async function receipts(month,signal){
  const client=dbc(),start=month+'-01',endDate=new Date(start+'T12:00:00');endDate.setMonth(endDate.getMonth()+1);const end=endDate.getFullYear()+'-'+String(endDate.getMonth()+1).padStart(2,'0')+'-01';
  const rows=[];
  for(let offset=0;offset<50000;offset+=1000){
   let query=client.from('cash_receipts_1c').select('id,manager_name,document_at,amount,imported_at').gte('document_at',start+'T00:00:00+03:00').lt('document_at',end+'T00:00:00+03:00').order('id').range(offset,offset+999);
   if(!boss())query=query.eq('manager_name',profile().name);
+  if(signal?.aborted)throw Error('Загрузка отменена');if(signal&&typeof query.abortSignal==='function')query=query.abortSignal(signal);
   const r=await query;if(r.error)throw r.error;rows.push(...arr(r.data));if(arr(r.data).length<1000)return {amount:rows.length?rows.reduce((s,x)=>s+(n(x.amount)||0),0):null,count:rows.length,importedAt:rows.map(x=>x.imported_at).filter(Boolean).sort().at(-1),latest:rows.map(x=>x.document_at).filter(Boolean).sort().at(-1)};
  }
  throw Error('Слишком много документов для краткого обзора; откройте Поступления');
@@ -77,18 +100,22 @@ async function receipts(month){
 function load(force=false){
  if(!active())return;resetActor();const month=state.month,owner=actor();
  // Core loader is unchanged and coalesces requests already started by navigation.
- if(!state.coreRequested||force){state.coreRequested=true;const owner=actor();Promise.resolve(force?w.crmCoreRefreshV22733?.(['tasks','visits','routes','absences']):w.crmEnsurePageDataV22733?.('dashboard')).then(()=>{if(owner===actor()&&active())render();}).catch(()=>{if(owner===actor()&&active())render();});}
- const kpi=()=>loadSlot('sales',async()=>{const x=await rpc('crm_manager_kpi360_dashboard_v2',{p_month:month});if(x.version!=='kpi360-visual-v2'||x.month!==month||!Array.isArray(x.sales))throw Error('Ответ плана продаж не подтверждён');return x;},force);
- const tri=()=>triAllowed()?loadSlot('triovist',async()=>{const x=await rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month',p_start_month:null});if(x.end_month!==month||!Array.isArray(x.items)||!Array.isArray(x.available_months))throw Error('Ответ Триовиста не подтверждён');return x;},force):Promise.resolve();
+ if(!state.coreRequested||force){state.coreRequested=true;state.coreTimedOut=false;const owner=actor();
+  const timer=w.setTimeout(()=>{if(owner===actor()&&!coreReady(['tasks','visits','routes','absences'])){state.coreTimedOut=true;scheduleRender();}},TIMEOUT);
+  Promise.resolve(force?w.crmCoreRefreshV22733?.(['tasks','visits','routes','absences']):w.crmEnsurePageDataV22733?.('dashboard')).finally(()=>{w.clearTimeout(timer);if(owner===actor()&&active()){state.coreTimedOut=false;scheduleRender();}}).catch(()=>{});
+ }
+ const kpi=()=>loadSlot('sales',async signal=>{const x=await rpc('crm_manager_kpi360_dashboard_v2',{p_month:month},signal);if(x.version!=='kpi360-visual-v2'||x.month!==month||!Array.isArray(x.sales))throw Error('Ответ плана продаж не подтверждён');return {version:x.version,month:x.month,latest_sales_month:x.latest_sales_month,sales:x.sales.filter(r=>FIELD.includes(r.manager_name)&&(boss()||r.manager_name===profile().name))};},force);
+ const tri=()=>triAllowed()?loadSlot('triovist',async signal=>{const x=await rpc('triovist_get_dashboard',{p_end_month:month,p_mode:'month',p_start_month:null},signal);if(x.end_month!==month||!Array.isArray(x.items)||!Array.isArray(x.available_months))throw Error('Ответ Триовиста не подтверждён');return {end_month:x.end_month,available_months:x.available_months,selected_month_plans:x.selected_month_plans,items:[{current_revenue:x.items.reduce((s,r)=>s+(n(r.current_revenue)||0),0)}],last_import:x.last_import?{imported_at:x.last_import.imported_at,month:x.last_import.month}:null};},force):Promise.resolve();
  // Two small lanes: no background polling, no parser, stock or broad prefetch.
  const stillHere=()=>owner===actor()&&month===state.month&&active();
- void kpi().then(()=>stillHere()?loadSlot('pdz',async()=>{const x=await rpc('crm_pdz360_daily_v1',{p_manager:null,p_days:30});if(x.version!=='pdz360.daily.1'||!Array.isArray(x.rows)||!Array.isArray(x.series))throw Error('Ответ ПДЗ не подтверждён');return x;},force):null);
- void tri().then(()=>stillHere()?loadSlot('receipts',()=>receipts(month),force):null);
- render();
+ void kpi().then(()=>stillHere()?loadSlot('pdz',async signal=>{const x=await rpc('crm_pdz360_daily_v1',{p_manager:null,p_days:30},signal);if(x.version!=='pdz360.daily.1'||!Array.isArray(x.rows)||!Array.isArray(x.series))throw Error('Ответ ПДЗ не подтверждён');return {...x,rows:x.rows.slice(0,2)};},force):null);
+ void tri().then(()=>stillHere()?loadSlot('receipts',signal=>receipts(month,signal),force):null);
+ scheduleRender();
 }
 function slotMessage(name){const s=slots()[name];return s?.error?'Данные недоступны · повторите загрузку':s?.loading?'Загружаю данные…':'Данные пока не загружены';}
-function action(label,page,extra={}){const i=actions.push({page,...extra})-1;return '<button type="button" class="cc-btn" data-cc-action="'+i+'">'+esc(label)+'</button>';}
-function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+(actions.push({page})-1)+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
+function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'']));actions.set(key,{page,...extra});return key;}
+function action(label,page,extra={}){return '<button type="button" class="cc-btn" data-cc-action="'+actionId(label,page,extra)+'">'+esc(label)+'</button>';}
+function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+actionId(label,page)+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
 function planChart(rows){
  if(!rows.length)return '<p class="cc-muted">'+esc(slotMessage('sales'))+'</p>';
  const max=Math.max(1,...rows.flatMap(x=>[x.actual||0,x.plan||0]));
@@ -127,11 +154,31 @@ function problems(data,rows,pdz){
  return list;
 }
 function sourceNotes(){return '<details class="cc-sources"><summary>Источники и актуальность данных</summary>'+['sales','triovist','pdz','receipts'].filter(k=>k!=='triovist'||triAllowed()).map(k=>{const s=slots()[k],names={sales:'План продаж · KPI 360°',triovist:'Триовист · сохранённые продажи и планы',pdz:'ПДЗ · отчёты 1С',receipts:'Поступления · документы 1С'};return '<p class="cc-muted">'+names[k]+': '+esc(s?.error?'не удалось прочитать':s?.loading?'обновляется':s?.data?'прочитано '+stamp(s.at):'ожидание загрузки')+'</p>';}).join('')+'<p class="cc-muted">Продажи — по действующей методике KPI 360°. Триовист — отдельный источник, одна строка в плане. ПДЗ и маршруты всегда показывают свой текущий период независимо от выбранного месяца продаж. Дневной план не рассчитывается.</p></details>';}
+function paint(root,html){
+ // Patch only changed top-level blocks (and the two chart panels). Keep the
+ // month picker, focus and opened route details when unrelated data arrives.
+ if(!root.children?.length||state.legacy||!painted.size){root.innerHTML=html;painted.clear();if(root.children?.length)Array.from(root.children).forEach((el,i)=>painted.set(String(i),el.outerHTML));return;}
+ const next=d.createElement('div');next.innerHTML=html;
+ if(root.children.length!==next.children.length){root.innerHTML=html;painted.clear();return;}
+ Array.from(next.children).forEach((el,i)=>{const key=String(i),target=root.children[i],markup=el.outerHTML;if(painted.get(key)===markup)return;
+  if(el.classList.contains('cc-columns')&&target.children.length===el.children.length){Array.from(el.children).forEach((panel,j)=>{const pk=key+':'+j;if(painted.get(pk)!==panel.outerHTML){target.children[j].innerHTML=panel.innerHTML;painted.set(pk,panel.outerHTML);}});}
+  else target.innerHTML=el.innerHTML;
+  painted.set(key,markup);
+ });
+}
+function refreshNotice(){
+ const stale=Object.keys(slots()).filter(k=>slots()[k].data&&(slots()[k].loading||slots()[k].error||Date.now()-slots()[k].at>=TTL));
+ const errors=Object.keys(slots()).filter(k=>slots()[k].error);
+ const names={sales:'Продажи',triovist:'Триовист',pdz:'ПДЗ',receipts:'Поступления'};
+ if(!stale.length&&!errors.length&&!state.coreTimedOut)return '';
+ const at=stale.map(k=>slots()[k].at).filter(Boolean).sort((a,b)=>a-b)[0];
+ return '<div class="cc-panel cc-refresh-note" role="status">'+(stale.length?'<span>Показаны последние данные · прочитано '+esc(stamp(at))+(errors.length?'. Обновить не удалось.':'. Обновляю…')+'</span>':'')+(errors.length||state.coreTimedOut?'<span>'+esc(errors.map(k=>names[k]).concat(state.coreTimedOut?['Задачи и маршруты']:[]).join(', '))+': источник временно недоступен. </span><button type="button" class="cc-btn" data-cc-refresh>Повторить загрузку</button>':'')+'</div>';
+}
 function render(){
  if(!active())return;resetActor();const root=mount();if(!root)return;
  const page=d.getElementById('page-dashboard');page.classList.toggle('cc-installed',!state.legacy);
- if(state.legacy){root.innerHTML='<div class="cc-panel cc-panel-head"><h3>Исходная сводка</h3><button type="button" class="cc-btn" data-cc-legacy>Вернуться в Центр управления</button></div>';return;}
- actions=[];
+ if(state.legacy){const notice=d.getElementById('cc-refresh-status');if(notice)notice.hidden=true;root.innerHTML='<div class="cc-panel cc-panel-head"><h3>Исходная сводка</h3><button type="button" class="cc-btn" data-cc-legacy>Вернуться в Центр управления</button></div>';return;}
+ actions=new Map();
  const data=localData(),kpi=slots().sales?.data,tri=triAllowed()?slots().triovist?.data:null,pdz=slots().pdz?.data,receipt=slots().receipts?.data;
  const rows=salesRows(kpi,tri,state.month,boss()?'':profile().name),sum=totals(rows),allSalesReady=Boolean(kpi)&&(!triAllowed()||Boolean(tri));
  const overdue=overdueTasks(data),issues=problems(data,rows,pdz);
@@ -151,12 +198,13 @@ function render(){
  const issuesHTML=issues.length?issues.map((x,i)=>'<div class="cc-issue"><span class="cc-rank">'+String(i+1).padStart(2,'0')+'</span><div><h4>'+esc(x.title)+'</h4><p class="cc-muted">'+esc(x.note)+'</p></div><div><strong>'+esc(x.amount)+'</strong>'+action('Разобрать →',x.page,x)+'</div></div>').join(''):'<p class="cc-muted">'+esc(data.tasksReady&&kpi&&pdz&&(!triAllowed()||tri)?'Подтверждённых вопросов по доступным источникам нет.':'Проверяю доступные источники…')+'</p>';
  const team=arr(kpi?.sales).filter(x=>FIELD.includes(x.manager_name)&&(boss()||x.manager_name===profile().name));
  const teamHTML=team.length?'<div class="cc-table-wrap"><table class="cc-table"><thead><tr><th>Менеджер</th><th>План продаж</th><th>Просрочено задач</th></tr></thead><tbody>'+team.map(x=>'<tr><td>'+esc(x.manager_name)+'</td><td>'+esc(pct(rows.find(r=>r.name===x.manager_name)?.actual,x.shipment_plan))+'</td><td>'+(data.tasksReady?overdue.filter(t=>{let client;try{client=allClients.find(c=>c.id===t.client_id)}catch(_){}return (t.manager_name||client?.manager_name)===x.manager_name;}).length:'—')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="cc-muted">'+esc(slotMessage('sales'))+'</p>';
- root.innerHTML='<header class="cc-head"><div><div class="cc-kicker">Обзор работы</div><h2>Центр управления</h2><p class="cc-muted">'+esc(coverage)+'</p></div><div class="cc-controls"><label for="cc-month">Продажи и поступления<select id="cc-month" data-cc-month>'+dates.map(m=>'<option value="'+m+'"'+(m===state.month?' selected':'')+'>'+esc(monthLabel(m))+'</option>').join('')+'</select></label><button class="cc-btn" type="button" data-cc-refresh>Обновить</button></div></header>'+
+ const html='<header class="cc-head"><div><div class="cc-kicker">Обзор работы</div><h2>Центр управления</h2><p class="cc-muted">'+esc(coverage)+'</p></div><div class="cc-controls"><label for="cc-month">Продажи и поступления<select id="cc-month" data-cc-month>'+dates.map(m=>'<option value="'+m+'"'+(m===state.month?' selected':'')+'>'+esc(monthLabel(m))+'</option>').join('')+'</select></label><button class="cc-btn" type="button" data-cc-refresh>Обновить</button></div></header>'+
  '<div class="cc-metrics">'+metrics+'</div>'+routeBlock(data)+'<section class="cc-brief"><strong>✦ Брифинг Леры</strong><p>'+esc(brief.join(' '))+'</p>'+action('Открыть разбор','dashboard',{scroll:'cc-issues'})+'<span class="cc-muted">Сводка по данным CRM · без автоматических действий</span></section>'+
  '<div class="cc-columns"><section class="cc-panel"><div class="cc-panel-head"><h3>План и факт продаж</h3><span class="cc-muted">'+esc(monthLabel(state.month))+'</span></div>'+planChart(rows)+salesTable+'<p class="cc-muted">План месяца, не дневной. '+esc(kpi?.latest_sales_month&&state.month>kpi.latest_sales_month?'Продажи команды за выбранный месяц ещё не загружены.':'Действующая методика KPI 360°. При отсутствии плана процент не рассчитывается.')+'</p>'+action('Открыть продажи','sales')+'</section>'+
  '<section class="cc-panel"><div class="cc-panel-head"><h3>Просроченная задолженность</h3><span class="cc-muted">Последние 30 отчётных дней</span></div>'+debtChart(pdz)+action('Открыть задолженность','debt')+'</section></div>'+
  '<section class="cc-panel" id="cc-issues"><div class="cc-panel-head"><h3>Требует решения</h3><span class="cc-muted">'+issues.length+' вопросов · текущие обязательства и выбранный месяц</span></div>'+issuesHTML+'</section>'+
  '<section class="cc-panel"><div class="cc-panel-head"><h3>'+(boss()?'Команда':'Мои результаты')+'</h3>'+action('Открыть KPI','managers')+'</div>'+teamHTML+'</section>'+sourceNotes()+'<div class="cc-bottom"><button type="button" class="cc-link" data-cc-legacy>Исходная сводка и подробные списки</button><span class="cc-muted">Центр управления · v1</span></div>';
+ paint(root,html);let notice=d.getElementById('cc-refresh-status');if(!notice){notice=d.createElement('div');notice.id='cc-refresh-status';notice.addEventListener('click',onClick);root.insertAdjacentElement?.('beforebegin',notice);}notice.hidden=false;notice.innerHTML=refreshNotice();
  const tt=d.getElementById('topbar-title');if(tt)tt.textContent='Центр управления';
 }
 function mount(){
@@ -168,9 +216,9 @@ function mount(){
 function onClick(e){
  const b=e.target.closest?.('button');if(!b||!active())return;
  if(b.hasAttribute('data-cc-refresh')){load(true);return;}
- if(b.hasAttribute('data-cc-legacy')){state.legacy=!state.legacy;render();return;}
+ if(b.hasAttribute('data-cc-legacy')){state.legacy=!state.legacy;painted.clear();if(state.legacy)legacyBuild?.();render();return;}
  if(!b.hasAttribute('data-cc-action'))return;
- const a=actions[Number(b.dataset.ccAction)];if(!a)return;
+ const a=actions.get(b.dataset.ccAction);if(!a)return;
  if(a.scroll){d.getElementById(a.scroll)?.scrollIntoView({behavior:'smooth',block:'start'});return;}
  if(a.page==='tasks'&&a.filter==='overdue'&&typeof w.goToTasksFiltered==='function'){w.goToTasksFiltered('overdue');return;}
  // All destinations pass through existing authorization/navigation wrappers.
@@ -178,18 +226,42 @@ function onClick(e){
  if(a.page==='triovist'&&!triAllowed())return;
  w.goPage?.(a.page,titles[a.page]||a.page);
 }
-function onChange(e){if(!active()||!e.target.matches?.('[data-cc-month]'))return;const m=String(e.target.value);if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||m>monthNow())return;state.month=m;state.slots={};load();}
+function onChange(e){if(!active()||!e.target.matches?.('[data-cc-month]'))return;const m=String(e.target.value);if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||m>monthNow())return;persist();state.month=m;state.slots={};restore();load();}
+function prepareAgentRequest(question,memory={}){
+ const unchanged={question,memory};if(!active()||state.legacy||state.actor!==actor())return unchanged;
+ const q=String(question||'');
+ const months=['январ','феврал','март','апрел','мая','июн','июл','август','сентябр','октябр','ноябр','декабр'];
+ const iso=q.match(/\b(20\d{2})-(0[1-9]|1[0-2])\b/),named=months.findIndex(x=>q.toLowerCase().includes(x)),year=q.match(/\b20\d{2}\b/);
+ const month=iso?iso[0]:named>=0?(year?year[0]:state.month.slice(0,4))+'-'+String(named+1).padStart(2,'0'):state.month;
+ const next={...memory,month};
+ if(/^(?:лера[, ]+)?(?:создай|создать|поставь|назначь|отправь|удали|измени|утверди|согласуй|напомни|запланируй|открой|перейди|вернись|покажи раздел)(?:\s|$)/i.test(q))return {question,memory:next};
+ const deictic=/здесь|на этом экране|этот процент|эти цифры|центр(?:е|а)? управления|этой сводк/i.test(q);
+ if(!deictic||!/процент|цифр|план|выручк|продаж|задач|маршрут|пдз|задолж|поступлен|проблем|экран|сводк|центр(?:е|а)? управления|что\s+(?:у нас\s+)?здесь/i.test(q))return {question,memory:next};
+ // No browser-provided amounts, names of clients or claims of freshness. The
+ // existing server reauthorizes and rereads every financial/operational fact.
+ const context={screen:'Центр управления',sales_month:month,sales_scope:triAllowed()?'План команды Витебска и интернет-магазина Триовист, Триовист учтён один раз':boss()?'Команда Витебска в пределах прав доступа':'Только мои показатели',routes_period:'Текущая неделя, точки до сегодняшнего дня',debt_period:'Последний подтверждённый отчёт'};
+ const hint='\nКонтекст интерфейса, не подтверждение цифр: '+JSON.stringify(context);
+ return {question:q.length+hint.length<=2400?q+hint:q,memory:{...next,...(boss()?{branch:'Витебск',manager:'',subject:'network'}:{})}};
+}
 function install(){
  if(installed)return;installed=true;
  const base=w.buildDashboard;
+ legacyBuild=typeof base==='function'?()=>base.call(w):null;
  if(typeof base==='function'){
-  const fn=function(){const result=base.apply(this,arguments);if(allowed()&&active()){resetActor();render();load();}else d.getElementById('page-dashboard')?.classList.remove('cc-installed');return result;};
+  const fn=function(){if(!allowed()){d.getElementById('page-dashboard')?.classList.remove('cc-installed');return base.apply(this,arguments);}resetActor();
+   if(nativeActor!==actor()){nativeActor=actor();w.crmDashboardNativeHooksV1?.();}
+   operationCache=null;w.crmSingleRenderMarkPageV227327?.('dashboard');
+   if(state.legacy)return base.apply(this,arguments);
+   if(active()){render();load();}
+  };
   fn.__controlCenterV1=true;fn.__base=base;w.buildDashboard=fn;
  }
  // Only the home menu label changes; page ID and routing contracts are stable.
  const nav=d.getElementById('nav-dashboard');if(nav){const icon=nav.querySelector('.icon');nav.textContent=' Центр управления';if(icon)nav.prepend(icon);nav.setAttribute('aria-label','Центр управления');}
+ const page=d.getElementById('page-dashboard');
+ if(page&&typeof w.MutationObserver==='function'){let was=Boolean(active());const observer=new w.MutationObserver(()=>{const now=Boolean(active());if(now&&!was){resetActor();render();load();}was=now;});observer.observe(page,{attributes:true,attributeFilter:['class']});}
  if(active()){resetActor();render();load();}
 }
-w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261113.1',readOnly:true,install,salesRows,totals,refresh:()=>load(true)});
+w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261113.2',readOnly:true,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(window,document);

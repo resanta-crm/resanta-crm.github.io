@@ -1218,9 +1218,7 @@ goPage=function(p,title){
   if(p==='gps-control')crmSchedulePageHook('gps-control',()=>v19RenderGpsControl(true),0);
 };
 const _v19BuildDashboardBase=buildDashboard;
-buildDashboard=function(){
-  _v19BuildDashboardBase();
-
+function v19DashboardNativeHooks(){
   // GPS initializes INSIDE its original module only.
   // No wrapping of ULTRA FAST loadData/goPage/Data Hub is added.
   if(currentProfile?.role==='boss'){
@@ -1244,7 +1242,10 @@ buildDashboard=function(){
       }catch(_){}
     },0);
   }
-};
+}
+// Reuse these exact native hooks when the new home does not render legacy lists.
+window.crmDashboardNativeHooksV1=v19DashboardNativeHooks;
+buildDashboard=function(){_v19BuildDashboardBase();v19DashboardNativeHooks();};
 const _v19LoadDataBase=loadData;
 loadData=async function(){await _v19LoadDataBase();await Promise.all([v19LoadGpsAccess(),v19LoadMyWorkday()]);v19ApplyGpsMenus();};
 const _v19DoLogoutBase=doLogout;
