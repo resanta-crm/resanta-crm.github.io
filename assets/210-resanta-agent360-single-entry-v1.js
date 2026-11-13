@@ -42,7 +42,12 @@
   if(!s?.access_token)throw new Error('agent_not_authorized');
   const payload=action==='capabilities'?{action}:
    {action:'ask',question,history:history.slice(-6),memory};
-   const response=await client().functions.invoke(ENDPOINT,{body:payload});
+   let response=await client().functions.invoke(ENDPOINT,{body:payload});
+   if(Number(response.error?.context?.status)===401&&typeof client().auth?.refreshSession==='function'){
+     const fresh=await client().auth.refreshSession();
+     assertCurrent(id);
+     if(fresh.data?.session?.access_token)response=await client().functions.invoke(ENDPOINT,{body:payload});
+   }
    assertCurrent(id);
    if(response.error||response.data?.error)
     throw new Error(String(response.data?.error||response.error?.message||'agent_unavailable').slice(0,90));
@@ -50,7 +55,7 @@
    if(action==='ask'){
     const answer=clean(response.data.answer||response.data.brief);
     if(!answer)throw new Error('agent_empty_answer');
-    history.push({role:'user',content:question.slice(0,400)},
+    history.push({role:'user',content:question.slice(0,1000)},
      {role:'assistant',content:answer.slice(0,250)});
     history=history.slice(-6);
     if(response.data.memory&&typeof response.data.memory==='object')
@@ -63,7 +68,7 @@
   version:'1.0.0',
   // Only explicit calls invoke the network. No polling or automatic mic activation.
   ask:question=>{
-   if(typeof question!=='string'||question.trim().length<2||question.length>400)
+   if(typeof question!=='string'||question.trim().length<2||question.length>2400)
     return Promise.reject(new Error('agent_question_invalid'));
    return invoke('ask',question.trim());
   },

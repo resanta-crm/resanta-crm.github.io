@@ -75,7 +75,7 @@ test('no write operations, arbitrary tools, domains, or tables can be requested'
  }
  assert.equal(normalizeAgentRequest({action:'capabilities'},principal).action,'capabilities');
  assert.equal(normalizeAgentRequest({question:'x'},principal).error,'question_invalid');
- assert.equal(normalizeAgentRequest({question:'x'.repeat(401)},principal).error,
+ assert.equal(normalizeAgentRequest({question:'x'.repeat(2401)},principal).error,
   'question_invalid');
  const input={
   action:'ask',question:'Почему падают продажи?',table:'auth.users',domain:'secret',

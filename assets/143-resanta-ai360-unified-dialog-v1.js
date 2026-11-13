@@ -59,7 +59,7 @@ window.crmAI360UnifiedDialogFollowupV3=function(input,ui){
 };
 window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  if(!allowed())return false;
- const question=String(text||'').trim().slice(0,400);
+ const question=String(text||'').trim().slice(0,2400);
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
  // Navigation remains a local, explicit CRM UI operation.
@@ -84,7 +84,15 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    awaitingDetail=null;
    const payload={action:'ask',question,history:history.slice(-6),memory};
    // One verified backend only. Never silently downgrade to an older AI engine.
-   const result=await db.functions.invoke(ENDPOINT,{body:payload});
+   let result=await db.functions.invoke(ENDPOINT,{body:payload});
+   // A stale browser JWT must not strand an otherwise valid conversation.
+   // Retry only an explicit 401, only once, after Supabase refreshes this user's session.
+   if(Number(result.error?.context?.status)===401&&typeof db.auth?.refreshSession==='function'){
+     const actor=typeof currentUser!=='undefined'?currentUser?.id:null;
+     const fresh=await db.auth.refreshSession();
+     if(fresh.data?.session?.access_token&&actor&&currentUser?.id===actor&&allowed())
+       result=await db.functions.invoke(ENDPOINT,{body:payload});
+   }
    if(Number(result.error?.context?.status)===404)
      throw new Error('new_core_unavailable');
    if(result.error)throw new Error(await errorCode(result.error));

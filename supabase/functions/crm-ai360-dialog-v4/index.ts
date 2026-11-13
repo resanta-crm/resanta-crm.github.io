@@ -133,7 +133,7 @@ Deno.serve(async req => {
   try { body = await req.json(); } catch { return respond(req, { error: 'bad_json' }, 400); }
   if (body?.kind === 'status') return respond(req, { ready: true, mode: 'director_readonly_v4', domains: DOMAINS });
   if (body?.kind === 'capabilities') return respond(req,{ready:true,mode:'director_readonly_v5',capabilities:getVoiceCapabilities(),sections_registered:getVoiceCapabilities().length});
-  const question = String(body?.message || '').trim().slice(0, 400);
+  const question = String(body?.message || '').trim().slice(0, 2400);
   if (question.length < 2) return respond(req, { error: 'question_invalid' }, 400);
   const history = Array.isArray(body.history) ? body.history.slice(-6).map(x => ({
     role: x?.role === 'assistant' ? 'assistant' : 'user', text: String(x?.content || x?.text || '').slice(0, 350)

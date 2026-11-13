@@ -8,6 +8,7 @@ export const AGENT360_OWNER_ID='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 export const AGENT360_PETROVICHEV_ID='a24954b8-2fe1-4852-b629-d8f351e1bd36';
 // User-requested address forms are presentation only, never access-control inputs.
 const GREETINGS=Object.freeze({
+ [AGENT360_OWNER_ID]:'родной',
  [AGENT360_PETROVICHEV_ID]:'мой слуга',
  'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':'Кирюшка',
  '19dd9943-99ae-47c4-a39c-4f82a11059a6':'Санька',
@@ -122,8 +123,8 @@ export function normalizeAgentRequest(input,principal){
  // Never route "create", "update", "delete", "approve", "send", or arbitrary tools.
  if(action!=='ask')return {error:'action_not_available'};
  if(typeof input.question!=='string'||input.question.trim().length<2||
-    input.question.length>400)return {error:'question_invalid'};
- const question=text(input.question,400);
+    input.question.length>2400)return {error:'question_invalid'};
+ const question=text(input.question,2400);
  const history=(Array.isArray(input.history)?input.history:[]).slice(-6)
   .filter(x=>x&&typeof x==='object'&&['user','assistant'].includes(x.role))
   .map(x=>({role:x.role,content:text(x.content,250)}));

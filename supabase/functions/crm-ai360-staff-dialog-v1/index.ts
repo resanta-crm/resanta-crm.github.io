@@ -52,7 +52,7 @@ Deno.serve(async req=>{
  const domains=permission.domains.filter(d=>DOMAINS.includes(d));
  let body;
  try{body=await req.json();}catch{return reply(req,{error:'bad_json'},400);}
- const question=typeof body?.question==='string'?body.question.trim().slice(0,350):'';
+ const question=typeof body?.question==='string'?body.question.trim().slice(0,2400):'';
  if(!question)return reply(req,{error:'empty_question'},400);
  const day=today(),currentMonth=day.slice(0,7);
  const requestedMonth=String(body?.month||'').slice(0,7);

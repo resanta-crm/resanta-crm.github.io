@@ -25,7 +25,7 @@ function localMonth(q){
 }
 root.crmAI360BranchUnifiedHandleV1=function(q,ui){
  if(!allowed()||!ui?.authorized?.())return false;
- const question=String(q||'').trim().slice(0,350);
+ const question=String(q||'').trim().slice(0,2400);
  if(!question)return false;
  // Keep cheap, exact, server-paginated continuation in the local read-only path.
  if(memory?.domain&&/^(?:дальше|остальные|ещё|еще|продолж)/i.test(question))return false;
@@ -39,9 +39,14 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
     await db.auth.getSession().then(x=>x.data?.session);
    if(!session?.access_token)throw Error('not_authorized');
    const month=localMonth(question)||memory.month||null;
-   const result=await db.functions.invoke(ENDPOINT,{
-    body:{action:'ask',question,history:history.slice(-6),memory:{...memory,month}}
-   });
+   const payload={action:'ask',question,history:history.slice(-6),memory:{...memory,month}};
+   let result=await db.functions.invoke(ENDPOINT,{body:payload});
+   if(Number(result.error?.context?.status)===401&&typeof db.auth?.refreshSession==='function'){
+     const actor=typeof currentUser!=='undefined'?currentUser?.id:null;
+     const fresh=await db.auth.refreshSession();
+     if(fresh.data?.session?.access_token&&actor&&currentUser?.id===actor&&allowed()&&ui.authorized())
+       result=await db.functions.invoke(ENDPOINT,{body:payload});
+   }
    if(result.error){
     let code='';
     try{code=String((await result.error.context?.json?.())?.error||'');}catch{}

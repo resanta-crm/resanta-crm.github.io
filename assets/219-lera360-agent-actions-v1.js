@@ -72,7 +72,7 @@ async function prepare(text,ui){
  clearProposal();setBusy(true);ownerId=user;
  status(ui,'Лера готовит безопасное действие…');
  try{
-  const data=await invoke('prepare',{question:text.slice(0,500)});
+  const data=await invoke('prepare',{question:text.slice(0,2400)});
   if(run!==seq||user!==currentId()||!allowed())return;
   if(data.mode==='needs_details'){
    missing=text;
@@ -156,7 +156,7 @@ function handle(q,ui){
  if(!allowed())return false;
  const actor=currentId();
  if(ownerId&&ownerId!==actor)reset();
- const text=String(q||'').trim().slice(0,500),n=normalize(text);
+ const text=String(q||'').trim().slice(0,2400),n=normalize(text);
  if(!n)return false;
  if(working){say(ui,'Я ещё проверяю предыдущую команду.');return true;}
  if(proposal){

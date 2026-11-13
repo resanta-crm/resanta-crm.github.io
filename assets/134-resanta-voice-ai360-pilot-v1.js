@@ -223,7 +223,7 @@
   }
   function handleCommand(raw) {
     if (!allowed()) return;
-    const input = String(raw || '').trim().slice(0, 300);
+    const input = String(raw || '').trim().slice(0, 2400);
     if (!input) return;
     addLine('Вы', input);
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
@@ -544,7 +544,7 @@
       <div class="rva-status-bar"><span class="rva-status-dot"></span><span class="rva-status" aria-live="polite">Готова к разговору</span></div>
       <div class="rva-history" role="log" aria-live="polite"></div>
       <div class="rva-control">
-        <div class="rva-q"><input class="rva-input" type="text" maxlength="300" placeholder="Спроси о продажах, клиентах или задачах…" aria-label="Вопрос помощнику"><button class="rva-btn primary rva-send" type="button" aria-label="Отправить">➤</button></div>
+        <div class="rva-q"><input class="rva-input" type="text" maxlength="2400" placeholder="Разговаривай с Лерой свободно — любой вопрос или поручение…" aria-label="Вопрос помощнику"><button class="rva-btn primary rva-send" type="button" aria-label="Отправить">➤</button></div>
         <div class="rva-actions"><button class="rva-btn primary rva-mic" type="button">🎤 Спросить</button><button class="rva-btn rva-wake" type="button" aria-pressed="false">◉ «Привет, Ресанта»</button></div>
         <div class="rva-actions"><button class="rva-btn rva-pause-audio" type="button" aria-pressed="false">⏸ Пауза</button><button class="rva-btn rva-stop-audio" type="button">■ Стоп</button></div>
         <div class="rva-feedback" role="dialog" aria-modal="true" aria-label="Отметить ошибку" hidden>

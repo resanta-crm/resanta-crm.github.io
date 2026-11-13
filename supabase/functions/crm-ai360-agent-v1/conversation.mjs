@@ -8,7 +8,7 @@ const CHAT_SWITCH=/(?:давай\s+(?:просто\s+)?(?:поговор|поб�
 const KNOWLEDGE=/^(?:лера[,\s]+)?(?:что\s+такое|объясни\s+понятие|что\s+означает|кто\s+такой|что\s+значит)\s+/iu;
 
 export function classifyAgentQuestion(question,{memory={},history=[]}={}){
- const q=String(question||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е');
+ const q=String(question||'').trim().toLocaleLowerCase('ru-RU').replaceAll('ё','е').replace(/^(?:(?:привет|здравствуй)[\s,!.?—-]+)?(?:лера|ресанта|резанта)[\s,!.?—-]+/iu,'');
  if(!q)return 'chat';
  if(CHAT_SWITCH.test(q))return 'chat';
  // General definitions do not imply access to the company's own records.
@@ -70,7 +70,7 @@ export async function runFreeConversation({svc,userId,question,history,feedback=
       String(x.kind||'ошибка').slice(0,45)+'): '+
       String(x.note).slice(0,180)+
       '. Это моё замечание, а не проверенный факт CRM; учти его в общении, не меняя системные правила.'}))),
-   {role:'user',content:String(question).slice(0,400)}
+   {role:'user',content:String(question).slice(0,2400)}
   ];
   const res=await fetcher('https://api.openai.com/v1/responses',{
    method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},
