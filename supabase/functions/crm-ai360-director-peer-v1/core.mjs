@@ -1,3 +1,4 @@
+import {runDialogueCore} from './dialogue-core.mjs';
 // Server orchestration of model-requested, validated read-only CRM tools.
 export const CORE_LIMITS=Object.freeze({rounds:3,maxTools:4,evidenceChars:4800});
 export const CORE_MODEL='gpt-5.4-mini';
@@ -26,7 +27,9 @@ export function parseModelPair(response){
  * The AI chooses CRM reads; the server executes them and supplies evidence.
  * @param {{question:string,history:any[],memory:any,domains:string[],readTool:(a:any)=>Promise<any>,request:(payload:any)=>Promise<any>}} opts
  */
-export async function runToolCore({question,history=[],memory={},domains,readTool,request,preferredDomain=null}){
+export async function runToolCore({question,history=[],memory={},domains,readTool,request,preferredDomain=null,dialogue=false,address=''}){
+ if(dialogue)return runDialogueCore({question,history,memory,domains,readTool,request,
+  readDefinition:readToolDefinition(domains),model:CORE_MODEL,address});
  const input=[
  {role:'system',content:[
   'Ты Лера, женский корпоративный AI аналитик РЕСАНТА. Говори о себе только в женском роде.',

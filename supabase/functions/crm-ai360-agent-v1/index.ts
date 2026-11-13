@@ -6,7 +6,6 @@ import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {agentPrincipal,agentCapabilities,normalizeAgentRequest,agentGreeting} from './contract.mjs';
 import {classifyAgentQuestion,runFreeConversation} from './conversation.mjs';
 import {historyAction,historyEnabled,saveHistoryTurn,recentFreeMemory} from './history.mjs';
-import {DIALOGUE_PROTOCOL,runUnifiedDialogue} from './dialogue.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
@@ -70,46 +69,9 @@ Deno.serve(async req=>{
   return reply(req,{...agentCapabilities(principal),history_enabled:h.enabled===true,
    history_retention_days:30,history_audio_saved:false});
  }
- // Explicit protocol negotiation keeps older clients working during a staged
- // rollout. Identity and scope checks above apply to BOTH protocols.
- if(input.protocol===DIALOGUE_PROTOCOL){
-  const queryCRM=async question=>{
-   const forwarded=normalizeAgentRequest({...input,question},principal);
-   if(forwarded.error)return {error:forwarded.error,status:400};
-   try{
-    const response=await fetch(url+'/functions/v1/'+forwarded.endpoint,{
-     method:'POST',headers:{Authorization:'Bearer '+token,apikey:anon,'Content-Type':'application/json'},
-     body:JSON.stringify(forwarded.payload),signal:AbortSignal.timeout(26000)
-    });
-    const result=await response.json();
-    if(!result||typeof result!=='object'||Array.isArray(result))return {error:'agent_invalid_upstream',status:503};
-    if(!response.ok)return {error:typeof result.error==='string'?result.error:'agent_upstream_unavailable',status:response.status};
-    return result;
-   }catch{return {error:'agent_upstream_unavailable',status:503};}
-  };
-  const result=await runUnifiedDialogue({svc,userId:user.id,question:input.question,
-   history:parsed.payload.history,memory:parsed.payload.memory,
-   greeting:agentGreeting(principal),domains:principal.domains,
-   apiKey:Deno.env.get('OPENAI_API_KEY')||'',queryCRM,
-   // Only the visible client may start the existing signed prepare/confirm flow.
-   // No model-generated tool can commit or manufacture an approval token.
-   prepareAction:async question=>({mode:'agent360_action_request_v2',intent:'prepare_action',
-    action_question:question,answer:'Подготовлю предложение для подтверждения.',
-    read_only:true,answer_verified:false,requires_confirmation:true,created:0})
-  });
-  if(result.error)return fault(req,result.error,result.status||503);
-  const stored=await saveHistoryTurn(svc,user.id,{
-   mode:result.mode==='agent360_free_conversation_v1'?'chat':'crm',
-   question:input.question,answer:String(result.answer||result.brief||''),
-   answerVerified:result.answer_verified===true
-  });
-  return reply(req,{...result,agent:'resanta_ai_agent360_v1',protocol:DIALOGUE_PROTOCOL,
-   route_tier:principal.tier,greeting:agentGreeting(principal),writes_enabled:false,
-   history_saved:stored.saved,history_enabled:stored.enabled===true,history_turn_id:stored.turn_id||null});
- }
  // Ordinary conversation is explicitly isolated from CRM reads. Every caller is
  // still authenticated, identity-scoped and metered before contacting OpenAI.
- if(classifyAgentQuestion(input.question,{history:parsed.payload.history,
+ if(input.protocol!=='lera_dialogue_v2'&&classifyAgentQuestion(input.question,{history:parsed.payload.history,
      memory:parsed.payload.memory})==='chat'){
   // Persisted history is read for the SAME user only, and chat-mode turns
   // cannot carry previous CRM client figures into general conversation.
@@ -159,6 +121,7 @@ Deno.serve(async req=>{
   answerVerified:result.answer_verified===true});
  return reply(req,{
   ...result,
+  ...(input.protocol==='lera_dialogue_v2'?{protocol:'lera_dialogue_v2'}:{}),
   agent:'resanta_ai_agent360_v1',
   route_tier:principal.tier,
   read_only:true,

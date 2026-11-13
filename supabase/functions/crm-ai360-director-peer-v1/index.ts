@@ -1,3 +1,4 @@
+import {dialogueName} from './dialogue-core.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoiceDomain, getVoiceCapabilities } from './catalog.mjs';
 import { runToolCore } from './core.mjs';
@@ -143,8 +144,9 @@ Deno.serve(async req => {
   if (body?.kind === 'capabilities') return respond(req,{ready:true,mode:'director_readonly_v5',capabilities:getVoiceCapabilities(),sections_registered:getVoiceCapabilities().length});
   const question = String(body?.message || '').trim().slice(0, 2400);
   if (question.length < 2) return respond(req, { error: 'question_invalid' }, 400);
-  const history = Array.isArray(body.history) ? body.history.slice(-6).map(x => ({
-    role: x?.role === 'assistant' ? 'assistant' : 'user', text: String(x?.content || x?.text || '').slice(0, 350)
+  const dialogue=body.protocol==='lera_dialogue_v2';
+  const history = Array.isArray(body.history) ? body.history.slice(dialogue?-12:-6).map(x => ({
+    role: x?.role === 'assistant' ? 'assistant' : 'user', text: String(x?.content || x?.text || '').slice(0, dialogue?800:350)
   })) : [];
   const memory = body?.memory && typeof body.memory === 'object' ? {
     manager: String(body.memory.manager || '').slice(0, 90),
@@ -177,17 +179,20 @@ Deno.serve(async req => {
   const readTool = async args => {
     const domain = args.domain;
     if (!DOMAINS.includes(domain)) return { domain, error: 'unknown_domain' };
-    const target=effectiveManager(domain,subject);
+    const target=effectiveManager(domain,dialogue?{...subject,manager:args.manager||null}:subject);
     if(target.error)return {domain,error:target.error,message:'Requested manager-specific breakdown is not available in this source. Do not use client totals instead.'};
     let manager;
     try {
       // Subject is resolved from the CURRENT user question, not an AI-supplied name.
       manager=await resolveManager(svc,target.manager);
+      if(dialogue&&subject.explicitManager&&manager&&normalize(manager)!==normalize(subject.explicitManager))
+        return {domain,error:'manager_subject_mismatch'};
     }catch{
       return {domain,error:'manager_not_unique',message:'Specify an exact employee surname'};
     }
     const month = period(args.month, allowedMonth, day);
     lastManager = manager;
+    if(dialogue){subject.manager=manager;subject.subject=manager?'manager':'network';}
     lastMonth = month;
     lastDomain = domain;
     try {
@@ -315,9 +320,9 @@ Deno.serve(async req => {
   const customerAnalysis=/(продаж|отклонен|динамик|паден|анализ|разбор|групп|подгрупп|артикул|sku|товар)/i.test(question);
   const customerNamed=/(?:клиент|клиента|клиенту|клиентом|компани[июея]|покупател[ьяюем])\s+[а-яёa-z0-9«"]/i.test(question);
   const customerFollowup=!!memory.client&&/(подгрупп|групп|артикул|sku|товар|продолж|дальше|остальн|еще|ещё|что\s+по|паден|динамик)/i.test(question)&&!/(все\s+клиенты|всех\s+клиентов|вся\s+сеть)/i.test(question);
-  const namedWithoutPrefix=customerAnalysis&&!customerNamed&&!customerFollowup
+  const namedWithoutPrefix=!dialogue&&customerAnalysis&&!customerNamed&&!customerFollowup
     ?await resolveAnyClient(svc,{question,memoryClient:''}):null;
-  if(customerAnalysis&&(customerNamed||customerFollowup||namedWithoutPrefix?.method==='explicit_name')){
+  if(!dialogue&&customerAnalysis&&(customerNamed||customerFollowup||namedWithoutPrefix?.method==='explicit_name')){
     const resolved=namedWithoutPrefix||await resolveAnyClient(svc,{question,memoryClient:memory.client||''});
     const money=v=>Math.round(Number(v)||0).toLocaleString('ru-RU',{maximumFractionDigits:0});
     const amt=v=>money(Math.abs(Number(v)||0))+' белорусских рублей';
@@ -425,7 +430,7 @@ Deno.serve(async req => {
   // A manager's shipment KPI and the network turnover are different source
   // methodologies. For this exact question use one verified source, never
   // let the LLM mix manager facts with aggregate sales or total motivation KPI.
-  if(isManagerSalesQuestion(question,{managerNames,memory})){
+  if(!dialogue&&isManagerSalesQuestion(question,{managerNames,memory})){
     const salesMonth=resolveSalesMonth(question,allowedMonth,day);
     const snapshot=await svc.rpc('crm_ai360_sales_kpi_snapshot_v1',{p_month:salesMonth+'-01'});
     const narrative=snapshot.error||!snapshot.data?
@@ -474,7 +479,7 @@ Deno.serve(async req => {
       subject_is_client:subject.client,explicit_manager:subject.explicitManager||null,
       catalog: CRM_AI360_TOOLS.map(x => x.id + ': ' + x.label).join('; '),
       today: day, available_domains: DOMAINS },
-    domains: DOMAINS, readTool, request, preferredDomain
+    domains: DOMAINS, readTool, request, preferredDomain,dialogue,address:dialogueName(userId)
   });
   // Cost from official gpt-5.4-mini standard text token tariffs:
   // USD 0.75 / million input and USD 4.50 / million output.
@@ -489,6 +494,16 @@ Deno.serve(async req => {
   if (settlement.error || settlement.data?.ok !== true) {
     return respond(req, { error: 'budget_settlement_unavailable', answer_verified: false }, 503);
   }
+  if(dialogue&&output.pair&&output.kind==='action')return respond(req,{
+    mode:'agent360_action_request_v2',protocol:'lera_dialogue_v2',intent:'prepare_action',
+    action_question:output.actionQuestion,answer:output.pair.brief,
+    read_only:true,answer_verified:false,requires_confirmation:true,created:0
+  });
+  if(dialogue&&output.pair&&['chat','clarification'].includes(output.kind))return respond(req,{
+    mode:'agent360_free_conversation_v1',protocol:'lera_dialogue_v2',intent:'free_conversation',
+    answer:output.pair.brief,brief:output.pair.brief,detail:output.pair.detail,
+    followup_question:output.pair.offer,read_only:true,answer_verified:false,domains_used:[],memory
+  });
   const pair=evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null;
   if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',

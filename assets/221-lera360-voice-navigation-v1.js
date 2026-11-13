@@ -37,6 +37,10 @@ function talk(ui,message){
 }
 function navigation(text,ui){
  const sentence=n(text).replace(/^(?:лера|ресанта)[, ]+/,'');
+ // In the unified pilot, "покажи продажи за сентябрь" is an analytical
+ // question. Explicit "открой" / "покажи раздел" remain local navigation.
+ if(root.__resantaLeraDialogueV2===true&&/^(?:покажи|выведи)\s+/i.test(sentence)&&
+   !/^(?:покажи|выведи)\s+(?:мне\s+)?(?:раздел|вкладку|страницу)\s+/i.test(sentence))return false;
  const correction=/^(?:нет[, ]+)?(?:не\s+оценк[иа][, ]+а\s+)?уценк[ауеи]?$/.test(sentence);
  const m=sentence.match(/^(?:(?:открой|открывай|перейди|переходи|вернись|покажи|выведи)\s+(?:мне\s+)?(?:(?:в|на)\s+)?(?:(?:раздел|вкладку|страницу)\s+)?)(.+)$/);
  if(!correction&&!m)return false;

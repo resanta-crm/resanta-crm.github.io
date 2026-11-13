@@ -9,7 +9,7 @@ if((/Android/i.test(navigator.userAgent||'')&&!root.__resantaAI360AndroidStaffOp
 const SID='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a';
 const ENDPOINT='crm-ai360-agent-v1';
 let history=[],memory={},pending=false,epoch=0,lastMode='',activeActor='';
-root.__resantaLeraDialogueV2=true;
+// Wider staff rollout follows the director's MacBook pilot; legacy requests stay compatible.
 const allowed=()=>{
  const p=root.crmAI360StaffIdentityV1?.();
  return !!p&&['branch_director','field_manager','triovist_category'].includes(p.tier);
@@ -43,7 +43,8 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
     await db.auth.getSession().then(x=>x.data?.session);
    if(!session?.access_token)throw Error('not_authorized');
    const month=localMonth(question)||memory.month||null;
-   const payload={action:'ask',protocol:'lera_dialogue_v2',question,history:history.slice(-12),memory:{...memory,month}};
+   const payload={action:'ask',question,history:history.slice(-12),memory:{...memory,month}};
+   if(root.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    let result=await db.functions.invoke(ENDPOINT,{body:payload});
    if(Number(result.error?.context?.status)===401&&typeof db.auth?.refreshSession==='function'){
      const actor=typeof currentUser!=='undefined'?currentUser?.id:null;
@@ -79,7 +80,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
     ui.show(data.answer);
     return;
    }
-   if(data?.mode!=='staff_ai360_shared_core_v1'||data?.answer_verified!==true||
+   if(data?.mode!=='staff_ai360_shared_core_v1'||(data?.protocol!=='lera_dialogue_v2'&&data?.answer_verified!==true)||
     data?.read_only!==true||data?.scope!==(root.crmAI360StaffIdentityV1?.()?.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск')||data?.role!==root.crmAI360StaffIdentityV1?.()?.tier||typeof data?.answer!=='string'||
     !Array.isArray(data?.domains_used))
     throw Error('unverified_branch_dialog');

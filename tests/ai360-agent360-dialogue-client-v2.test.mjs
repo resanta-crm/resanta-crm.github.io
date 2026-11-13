@@ -5,9 +5,9 @@ import vm from 'node:vm';
 const OWNER='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const PEER='a24954b8-2fe1-4852-b629-d8f351e1bd36';
 const tick=()=>new Promise(r=>setImmediate(r));
-function director(invoke){
+function director(invoke,search='?leraPilot=dialogue2'){
  const user={id:OWNER},calls=[],answers=[],prepared=[];
- const w={addEventListener(){},crmAI360GreetingV1:()=>({id:user.id}),
+ const w={location:{search},addEventListener(){},crmAI360GreetingV1:()=>({id:user.id}),
   crmAI360ActionPrepareV2:q=>{prepared.push(q);return true;}};
  const context={window:w,currentUser:user,navigator:{userAgent:'Mac'},
   document:{getElementById:()=>({style:{display:'block'}}),addEventListener(){}},
@@ -47,4 +47,25 @@ test('an old reply and conversation never cross into a different signed-in accou
  f.w.crmAI360UnifiedDialogHandleV1('Привет',f.ui);await tick();
  assert.equal(f.calls[1].history.length,0);assert.equal(f.calls[1].memory.client,undefined);
  release(chat);await tick();assert.equal(f.answers.length,1);
+});
+test('normal CRM remains on its compatible protocol until the owner opens the pilot link',async()=>{
+ const f=director(async()=>chat,'');f.w.crmAI360UnifiedDialogHandleV1('Привет',f.ui);await tick();
+ assert.equal(f.calls[0].protocol,undefined);assert.equal(f.w.__resantaLeraDialogueV2,false);
+});
+test('pilot query parameter cannot activate a different director account',async()=>{
+ const f=director(async()=>chat);f.user.id=PEER;
+ f.w.crmAI360UnifiedDialogHandleV1('Привет',f.ui);await tick();
+ assert.equal(f.calls[0].protocol,undefined);assert.equal(f.w.__resantaLeraDialogueV2,false);
+});
+test('pilot analytical show requests reach the agent instead of being consumed as navigation',()=>{
+ const calls=[],root={__resantaLeraDialogueV2:true};
+ vm.runInNewContext(fs.readFileSync('assets/221-lera360-voice-navigation-v1.js','utf8'),{
+ window:root,document:{getElementById:()=>null},currentUser:{id:OWNER}});
+ assert.equal(root.crmAI360NavigateV1('Покажи продажи за сентябрь',{answer:x=>calls.push(x)}),false);
+ assert.equal(root.crmAI360NavigateV1('Покажи проблемных клиентов',{answer:x=>calls.push(x)}),false);
+ assert.equal(calls.length,0);
+ const voice=fs.readFileSync('assets/134-resanta-voice-ai360-pilot-v1.js','utf8');
+ const pilot=voice.indexOf('if(window.__resantaLeraDialogueV2===true&&');
+ assert.ok(pilot>voice.indexOf('crmAI360ActionHandleV1?.'));
+ assert.ok(pilot<voice.indexOf("typeof window.crmAI360TaskDraftsHandleV1"));
 });

@@ -9,14 +9,14 @@ test('director keeps read-only secure CRM gateway and handles free conversation 
  assert.match(director,/data\.answer_verified!==false/);
  assert.match(director,/data\.domains_used\.length>0/);
  assert.doesNotMatch(director,/lastMode&&lastMode!==answerMode/);
- assert.match(director,/protocol:'lera_dialogue_v2'/);
+ assert.match(director,/payload\.protocol='lera_dialogue_v2'/);
  assert.match(director,/window\.crmAI360GreetingV1/);
  assert.doesNotMatch(director,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
 });
 test('all six staff use same JWT-secured gateway without relaxing CRM answer scope',()=>{
  const staff=read('assets/147-resanta-ai360-staff-unified-dialog-v1.js');
  assert.match(staff,/const ENDPOINT='crm-ai360-agent-v1'/);
- assert.match(staff,/const payload=\{action:'ask',protocol:'lera_dialogue_v2',question,history:history\.slice\(-12\),memory:\{\.\.\.memory,month\}\}/);
+ assert.match(staff,/const payload=\{action:'ask',question,history:history\.slice\(-12\),memory:\{\.\.\.memory,month\}\}/);
  assert.match(staff,/db\.functions\.invoke\(ENDPOINT,\{body:payload\}\)/);
  assert.match(staff,/data\?\.mode==='agent360_free_conversation_v1'/);
  assert.match(staff,/data\.route_tier!==userRole\?\.tier/);

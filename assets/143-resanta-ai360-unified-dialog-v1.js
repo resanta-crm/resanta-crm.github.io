@@ -4,7 +4,8 @@
 if((/Android/i.test(navigator.userAgent||'')&&!(window.__resantaAI360AndroidDirectorOptIn===true&&window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))||window.crmAI360UnifiedDialogHandleV1)return;
 const ENDPOINT='crm-ai360-agent-v1';
 let history=[],memory={},pending=false,awaitingDetail=null,lastMode='',epoch=0,activeActor='';
-window.__resantaLeraDialogueV2=true;
+const pilotRequested=/(?:^|[?&])leraPilot=dialogue2(?:&|$)/.test(window.location?.search||'');
+window.__resantaLeraDialogueV2=pilotRequested&&window.crmAI360GreetingV1?.()?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 function allowed(){
  try{
   const p=window.crmAI360GreetingV1?.();
@@ -63,6 +64,7 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
  const currentActor=window.crmAI360GreetingV1?.()?.id;
  if(activeActor&&activeActor!==currentActor)window.crmAI360UnifiedDialogResetV1?.();
  activeActor=currentActor;
+ window.__resantaLeraDialogueV2=pilotRequested&&currentActor==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
  const question=String(text||'').trim().slice(0,2400);
  if(!question)return false;
  if(window.crmAI360UnifiedDialogFollowupV3?.(question,ui))return true;
@@ -86,7 +88,8 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
     :await db.auth.getSession().then(x=>x?.data?.session);
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
-   const payload={action:'ask',protocol:'lera_dialogue_v2',question,history:history.slice(-12),memory};
+   const payload={action:'ask',question,history:history.slice(-12),memory};
+   if(window.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    // One verified backend only. Never silently downgrade to an older AI engine.
    let result=await db.functions.invoke(ENDPOINT,{body:payload});
    // A stale browser JWT must not strand an otherwise valid conversation.

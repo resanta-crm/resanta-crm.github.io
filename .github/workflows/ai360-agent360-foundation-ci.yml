@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'supabase/functions/_shared/lera-dialogue-core-v2.mjs'
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'supabase/functions/crm-ai360-staff-dialog-v1/**'
       - 'supabase/functions/crm-ai360-director-peer-v1/**'
       - 'assets/210-resanta-agent360-single-entry-v1.js'
       - 'tests/ai360-agent360-*.test.mjs'
@@ -12,6 +15,9 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/crm-ai360-agent-v1/**'
+      - 'supabase/functions/_shared/lera-dialogue-core-v2.mjs'
+      - 'supabase/functions/crm-ai360-dialog-v4/**'
+      - 'supabase/functions/crm-ai360-staff-dialog-v1/**'
       - 'assets/210-resanta-agent360-single-entry-v1.js'
       - 'tests/ai360-agent360-*.test.mjs'
       - '.github/workflows/ai360-agent360-foundation-ci.yml'
@@ -31,7 +37,7 @@ jobs:
         run: |
           node --check supabase/functions/crm-ai360-agent-v1/contract.mjs
           node --check supabase/functions/crm-ai360-agent-v1/conversation.mjs
-          node --check supabase/functions/crm-ai360-agent-v1/dialogue.mjs
+          node --check supabase/functions/_shared/lera-dialogue-core-v2.mjs
           node --check --input-type=module < supabase/functions/crm-ai360-director-peer-v1/index.ts
           node --check --input-type=module < supabase/functions/crm-ai360-agent-v1/index.ts
           node --check assets/210-resanta-agent360-single-entry-v1.js

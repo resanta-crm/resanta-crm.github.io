@@ -142,5 +142,6 @@ export function normalizeAgentRequest(input,principal){
  const payload=principal.tier==='network_director'
   ?{message:question,history,memory}
   :{question,history,memory,month:memory.month||null};
+ if(unified)payload.protocol='lera_dialogue_v2';
  return {action:'ask',endpoint:principal.endpoint,payload};
 }

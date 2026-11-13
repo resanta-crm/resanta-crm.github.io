@@ -72,7 +72,7 @@ test('real agent gateway request uses the deployed action and question contract'
  const bridge=file('assets/143-resanta-ai360-unified-dialog-v1.js');
  // The Agent360 Edge contract (already deployed separately) requires:
  // {action:'ask',question,history,memory} and re-maps question => message server-side.
- assert.match(bridge,/const payload=\{action:'ask',protocol:'lera_dialogue_v2',question,history:history\.slice\(-12\),memory\}/);
+ assert.match(bridge,/const payload=\{action:'ask',question,history:history\.slice\(-12\),memory\}/);
  assert.doesNotMatch(bridge,/const payload=\{message:question/);
 });
 test('script wiring loads harmless helpers before lazy UI, not mic on login',()=>{
