@@ -42,7 +42,12 @@
   if(!s?.access_token)throw new Error('agent_not_authorized');
   const payload=action==='capabilities'?{action}:
    {action:'ask',question,history:history.slice(-6),memory};
-   const response=await client().functions.invoke(ENDPOINT,{body:payload});
+   let response=await client().functions.invoke(ENDPOINT,{body:payload});
+   if(Number(response.error?.context?.status)===401&&typeof client().auth?.refreshSession==='function'){
+     const fresh=await client().auth.refreshSession();
+     assertCurrent(id);
+     if(fresh.data?.session?.access_token)response=await client().functions.invoke(ENDPOINT,{body:payload});
+   }
    assertCurrent(id);
    if(response.error||response.data?.error)
     throw new Error(String(response.data?.error||response.error?.message||'agent_unavailable').slice(0,90));
