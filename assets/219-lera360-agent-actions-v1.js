@@ -5,9 +5,9 @@
 'use strict';
 if(root.crmAI360ActionHandleV1)return;
 const ENDPOINT='crm-ai360-actions-v1';
-const ACTION=/(?:поставь|создай|назначь|добавь|оформи|сделай|организуй|напомни)(?:[\s,.:–—]+[а-яёa-z0-9\s,.!?:–—-]{0,150})?(?:задач|поручен|чат|бесед|групп)|(?:задач|поручен|чат|бесед|групп)[а-яё\s,.:–—-]{0,110}(?:поставь|создай|назначь|оформи)/i;
-const YES=/^(?:да|давай|подтверждаю|подтверждаю создание|согласен|согласна|создавай|создай|выполняй|выполни|да подтверждаю|да создавай)$/i;
-const NO=/^(?:нет|отмена|отменить|не надо|не создавай|стоп|отбой)$/i;
+const ACTION=/(?:поставь|создай|назначь|добавь|оформи|сделай|организуй|запланируй|запиши)(?:[\s,.:–—]+[а-яёa-z0-9\s,.!?:–—-]{0,210})?(?:задач|поручен|чат|бесед|групп|встреч|визит|совещан)|(?:задач|поручен|чат|бесед|групп|встреч|визит|совещан)[а-яё\s,.:–—-]{0,140}(?:поставь|создай|назначь|оформи|запланируй)/i;
+const YES=/^(?:да|давай|подтверждаю|подтверждаю создание|согласен|согласна|согласовано|утверждаю|создавай|создай|выполняй|выполни|да подтверждаю|да создавай|да создай|да давай создай|давай создавай|да создай пожалуйста|да конечно создай)$/i;
+const NO=/^(?:нет|отмена|отменить|не надо|не создавай|стоп|отбой|отмени|нет не нужно|нет спасибо)$/i;
 const FIX=/^(?:исправь|измени|поменяй|переделай|лучше|не так|добавь|замени|на\s)/i;
 let proposal=null,missing=null,working=false,seq=0,buttonBox=null,ownerId='';
 function currentId(){try{return String(currentUser?.id||'');}catch{return '';}}
@@ -110,7 +110,13 @@ async function commit(ui){
     approval_token:item.approval_token,confirmation:'подтверждаю'});
   if(run!==seq||user!==currentId()||!allowed())return;
   clearProposal();
-  if(data.mode==='created_task'&&data.created===1){
+  if(data.mode==='created_meeting'&&data.created===1){
+   say(ui,'Встреча «'+String(data.title||'')+'» сохранена на '+String(data.due_date||'')+' в '+String(data.due_time||'')+'. '+String(data.note||''));
+  }else if(data.mode==='created_visit'&&data.created===1){
+   say(ui,String(data.note||'Плановый визит создан.')+' '+String(data.client_name||''));
+  }else if(data.mode==='conflict_meeting'){
+   say(ui,'Встречу не создала: '+String(data.note||'найдено пересечение в календаре.'));
+  }else if(data.mode==='created_task'&&data.created===1){
    say(ui,'Поручение действительно создано в CRM для '+String(data.assigned_to||'сотрудника')+
       '. '+String(data.note||''));
   }else if(data.mode==='created_chat'&&data.created===1){
