@@ -28,7 +28,7 @@ function merge(...parts){
   const sep=/[,;:—-]\s*$/.test(out)?' ':' ';
   out+=sep+s;
  }
- return out.slice(0,1800);
+ return out.slice(0,2400);
 }
 function removeWake(s){
  return norm(s).replace(/^(?:(?:привет[\s,!.?—-]+)?(?:лера|ресанта|резанта|рясанта|рисанта))(?=$|[\s,.!?—-])[\s,.!?—-]*/i,'');
