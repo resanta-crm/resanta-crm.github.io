@@ -7,7 +7,7 @@ if(window.crmMeetingPlannerPilotV1)return;
 const OWNER='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
 const ENDPOINT='crm-ai360-director-briefing-v1';
 const state={focus:'',mode:'week',meetings:[],loaded:false,loadError:'',loading:false,range:null,
- briefing:null,briefError:'',briefLoading:false,selected:new Set(),actor:'',seq:0,notice:''};
+ briefing:null,briefError:'',briefLoading:false,selected:new Set(),actor:'',meetingSeq:0,briefSeq:0,notice:''};
 const $=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const trim=(x,len=480)=>String(x??'').trim().slice(0,len);
@@ -31,7 +31,7 @@ const dayOf=x=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'nu
 const modeLabel={day:'День',week:'Неделя',month:'Месяц'};
 const statusTag={sales:'Продажи',debt:'Задолженность',tasks:'Задачи',routes:'Маршруты',triovist:'Триовист'};
 const pageFor={sales:'sales',debt:'debt',tasks:'tasks',routes:'routes-boss',triovist:'vip'};
-function clear(){state.seq++;state.meetings=[];state.loaded=false;state.loadError='';state.loading=false;
+function clear(){state.meetingSeq++;state.briefSeq++;state.meetings=[];state.loaded=false;state.loadError='';state.loading=false;
  state.briefing=null;state.briefError='';state.briefLoading=false;state.selected.clear();state.range=null;state.notice='';}
 function periodDates(){
  const base=utc(state.focus),dow=(base.getUTCDay()+6)%7;
@@ -136,7 +136,7 @@ function draw(){
 }
 async function meetingsRefresh(){
  if(!authorized()||state.loading)return;
- const actor=userId(),seq=++state.seq;state.loading=true;state.loadError='';draw();
+ const actor=userId(),seq=++state.meetingSeq;state.loading=true;state.loadError='';draw();
  try{
   const c=one(),auth=await c.auth.getUser();
   if(auth.error||auth.data?.user?.id!==OWNER)throw Error('Нет подтверждённой сессии директора');
@@ -146,14 +146,14 @@ async function meetingsRefresh(){
    .select('id,title,kind,format,purpose,starts_at,duration_minutes,location,participants,client_name')
    .eq('owner_id',OWNER).gte('starts_at',from).lt('starts_at',to).order('starts_at',{ascending:true}).limit(200);
   if(result.error)throw result.error;
-  if(seq!==state.seq||actor!==userId()||!authorized())return;
+  if(seq!==state.meetingSeq||actor!==userId()||!authorized())return;
   state.meetings=Array.isArray(result.data)?result.data:[];state.loaded=true;state.range={from,to};
- }catch(e){if(seq===state.seq&&actor===userId()){state.loaded=false;state.loadError=trim(e?.message||e,180);}}
- finally{if(seq===state.seq){state.loading=false;if(authorized())draw();}}
+ }catch(e){if(seq===state.meetingSeq&&actor===userId()){state.loaded=false;state.loadError=trim(e?.message||e,180);}}
+ finally{if(seq===state.meetingSeq){state.loading=false;if(authorized())draw();}}
 }
 async function briefRefresh(){
  if(!authorized()||state.briefLoading)return;
- const actor=userId(),seq=++state.seq;state.briefLoading=true;state.briefError='';draw();
+ const actor=userId(),seq=++state.briefSeq;state.briefLoading=true;state.briefError='';draw();
  try{
   const c=one(),a=await c.auth.getUser();
   if(a.error||a.data?.user?.id!==OWNER)throw Error('Нет подтверждённой сессии директора');
@@ -163,11 +163,11 @@ async function briefRefresh(){
   if(d?.mode!=='readonly'||d?.kind!=='director_daily_brief'||d?.items_count!==5||
    !Array.isArray(d.cards)||d.cards.length!==5||
    d.cards.some(x=>!x.id||!x.title||!x.fact||!x.action||!x.source))throw Error('Некорректный ответ аналитики');
-  if(seq!==state.seq||actor!==userId()||!authorized())return;
+  if(seq!==state.briefSeq||actor!==userId()||!authorized())return;
   state.briefing=d;state.selected=new Set(d.cards.filter(x=>x.attention).map(x=>x.id));
   state.notice='Проверено пять направлений. Остальные разделы требуют подключения к общему аналитическому обзору.';
- }catch(e){if(seq===state.seq&&actor===userId()){state.briefError=trim(e?.message||e,180);state.notice='';}}
- finally{if(seq===state.seq){state.briefLoading=false;if(authorized())draw();}}
+ }catch(e){if(seq===state.briefSeq&&actor===userId()){state.briefError=trim(e?.message||e,180);state.notice='';}}
+ finally{if(seq===state.briefSeq){state.briefLoading=false;if(authorized())draw();}}
 }
 function render(){
  const root=$('cmp-root');if(!root)return;
