@@ -50,7 +50,7 @@
    if(action==='ask'){
     const answer=clean(response.data.answer||response.data.brief);
     if(!answer)throw new Error('agent_empty_answer');
-    history.push({role:'user',content:question.slice(0,400)},
+    history.push({role:'user',content:question.slice(0,1000)},
      {role:'assistant',content:answer.slice(0,250)});
     history=history.slice(-6);
     if(response.data.memory&&typeof response.data.memory==='object')
@@ -63,7 +63,7 @@
   version:'1.0.0',
   // Only explicit calls invoke the network. No polling or automatic mic activation.
   ask:question=>{
-   if(typeof question!=='string'||question.trim().length<2||question.length>400)
+   if(typeof question!=='string'||question.trim().length<2||question.length>2400)
     return Promise.reject(new Error('agent_question_invalid'));
    return invoke('ask',question.trim());
   },
