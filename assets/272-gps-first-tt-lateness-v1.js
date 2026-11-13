@@ -36,12 +36,25 @@ function aggregate(rows){
   return {name,each,days:sum('days'),verified:sum('verified'),late:sum('late'),review:sum('review'),total:sum('total')};
  });
 }
+function showLauncher(){
+ if(!owner())return;
+ const host=d.getElementById('page-gps-control');if(!host)return;
+ if(d.getElementById('gps-first-tt-launch-v1'))return;
+ const btn=d.createElement('button');btn.type='button';btn.id='gps-first-tt-launch-v1';
+ btn.textContent='⏱ Опоздания на первую ТТ · сентябрь–ноябрь';
+ btn.style.cssText='padding:10px 15px;margin:12px 0;border:1px solid #a6c8e6;background:#eaf5ff;color:#155987;border-radius:10px;font-weight:800;cursor:pointer';
+ btn.addEventListener('click',()=>open());
+ const before=d.getElementById('gps-director-view-v236427');
+ if(before)before.before(btn);else host.prepend(btn);
+}
 function mount(){
  if(!owner())return null;
- const host=d.getElementById('gps-director-view-v236427');if(!host)return null;
+ const host=d.getElementById('page-gps-control');if(!host)return null;
+ showLauncher();
  let el=root();if(el)return el;
  el=d.createElement('section');el.id='gps-first-tt-v1';
  el.setAttribute('aria-label','Опоздания на первую торговую точку');
+ // Outside the legacy GPS director DOM: re-renders never hide or rearrange our report.
  host.appendChild(el);return el;
 }
 function draw(){
@@ -139,6 +152,7 @@ function voiceHandle(text,ui){
  return true;
 }
 d.addEventListener('click',e=>{
+ if(e.target.closest?.('#nav-gps-control, #gps-tab-director-v236427, #bn-gps-control'))setTimeout(showLauncher,250);
  const b=e.target.closest?.('#gps-first-tt-v1 [data-gf-refresh],#gps-first-tt-v1 [data-gf-close],#gps-first-tt-v1 [data-gf-manager]');
  if(!b||!owner())return;
  if(b.hasAttribute('data-gf-refresh'))void refresh();
