@@ -64,7 +64,7 @@ function checksBlock(){
  const ready=keys=>keys.every(k=>snap?.sources?.[k]?.status==='ready');
  const groups=[
   {label:'Падение продаж ВИП',keys:['vip','sales'],rows:arr(truth?.vipDrops),page:'vip',row:x=>({title:x.matched?.name||x.client_name,note:[x.period_cur,'к '+x.period_prev,'изменение '+x.growth_pct+'%'].filter(Boolean).join(' · '),client:x.matched?.id})},
-  {label:'Отклонения по акциям',keys:['promotions','photos','sales'],rows:arr(truth?.promotionIssues),page:'promotions',row:x=>({title:x.promotion?.name||x.promotion?.client_name||'Акция',note:x.metric?.reason,client:x.promotion?.client_id})},
+  {label:'Отклонения по акциям',keys:['promotions','photos','sales'],rows:arr(truth?.promotionIssues),page:'promotions',row:x=>({title:[x.promotion?.title||x.promotion?.name,x.promotion?.client_name].filter(Boolean).join(' — ')||'Акция',note:x.metric?.reason,client:x.promotion?.client_id,promotion:x.promotion?.id})},
   {label:'Частично выполненные задачи',keys:['partial'],rows:arr(truth?.partialReviews),page:'tasks',row:x=>({title:x.manager_name||'Задача',note:[x.fact_result,x.reason].filter(Boolean).join(' · '),review:x.id})},
   {label:'Качество данных',keys:[],rows:[...arr(truth?.unassigned).map(x=>({...x,checkNote:'Клиент с оборотом не закреплён за менеджером'})),...arr(truth?.noMaster).map(x=>({...x,checkNote:'Строки маст-листа не сопоставились; требуется проверить 1С'}))],page:'clients',row:x=>({title:x.name,note:x.checkNote,client:x.id})}
  ];
@@ -146,7 +146,7 @@ function load(force=false){
  scheduleRender();
 }
 function slotMessage(name){const s=slots()[name];return s?.error?'Данные недоступны · повторите загрузку':s?.loading?'Загружаю данные…':'Данные пока не загружены';}
-function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'',extra.review||'']));actions.set(key,{page,...extra});return key;}
+function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'',extra.review||'',extra.promotion||'']));actions.set(key,{page,...extra});return key;}
 function action(label,page,extra={}){return '<button type="button" class="cc-btn" data-cc-action="'+actionId(label,page,extra)+'">'+esc(label)+'</button>';}
 function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+actionId(label,page)+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
 function planChart(rows){
@@ -256,6 +256,8 @@ function onClick(e){
  const a=actions.get(b.dataset.ccAction);if(!a)return;
  if(a.scroll){d.getElementById(a.scroll)?.scrollIntoView({behavior:'smooth',block:'start'});return;}
  if(a.page==='tasks'&&a.filter==='overdue'&&typeof w.goToTasksFiltered==='function'){w.goToTasksFiltered('overdue');return;}
+ if(a.promotion&&a.page==='promotions'&&typeof w.openPromotionDetail==='function'){w.openPromotionDetail(a.promotion);return;}
+ if(a.client&&a.page==='clients'&&typeof w.openClient==='function'){void w.openClient(a.client);return;}
  if(a.review&&boss()&&typeof w.acknowledgePartialReview==='function'){
   void Promise.resolve(w.acknowledgePartialReview(a.review)).then(()=>loadChecks()).catch(()=>loadChecks());return;
  }

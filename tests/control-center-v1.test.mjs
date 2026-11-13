@@ -34,7 +34,7 @@ function fixture(options={}){
   routeTruthMetrics:()=>{routeCalls++;return {verifiedDue:Array(140).fill({}),duePlans:Array(148).fill({}),wb:{start:'2026-11-09',end:'2026-11-15'},offRouteWeek:[],markedOnlyWeek:[],overdue:Array(218).fill({})};},
   crmDashboardNativeHooksV1:()=>nativeCalls++,
   crmCoreResourceStatusV1:k=>statuses[k],crmEnsurePageDataV22733:async()=>{coreCalls.push('ensure')},crmCoreRefreshV22733:async()=>{coreCalls.push('refresh')},
-  crmControlCenterChecksV1:options.checks,acknowledgePartialReview:options.review,
+  crmControlCenterChecksV1:options.checks,acknowledgePartialReview:options.review,openClient:options.openClient,openPromotionDetail:options.openPromotion,
   RESANTA_TRIOVIST:{fullAccessEmails:['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']},
   db:{rpc:async(name,args)=>{calls.push({name,args});if(options.rpc)return options.rpc(name,args);if(options.fail===name)return{error:{message:'fixture denied'}};return{data:data[name]};},
     from:table=>{assert.equal(table,'cash_receipts_1c');let start=0,end=999;const filters=[];const q={select:()=>q,gte:()=>q,lt:()=>q,order:()=>q,range:(a,b)=>{start=a;end=b;return q},eq:(k,v)=>{filters.push([k,v]);return q},then:resolve=>{calls.push({table,start,end,filters});return Promise.resolve({data:(options.receipts||[{id:'r1',amount:1234,document_at:'2026-11-12T12:00:00+03:00',imported_at:'2026-11-13T10:00:00Z'}]).slice(start,end+1)}).then(resolve)}};return q;}}
@@ -98,6 +98,16 @@ test('partial reviews retain unique IDs and invoke only the existing explicit re
  const matches=[...f.root().innerHTML.matchAll(/data-cc-action="([^"]+)"[^>]*>Разобрать задачу/g)];
  assert.equal(matches.length,2);assert.notEqual(matches[0][1],matches[1][1]);
  controlClick(f,'data-cc-action',{ccAction:matches[0][1]});await flush();assert.deepEqual(reviewed,['review1']);
+});
+test('promotion and data-quality rows retain direct existing detail actions',async()=>{
+ const opened=[],f=fixture({checks:async()=>checksSnapshot(),openClient:id=>opened.push(['client',id]),openPromotion:id=>opened.push(['promotion',id])});
+ controlClick(f,'data-cc-checks');await flush();
+ const keys=[...f.root().innerHTML.matchAll(/data-cc-action="([^"]+)"/g)].map(x=>x[1]);
+ const promo=keys.find(x=>JSON.parse(decodeURIComponent(x))[6]==='promo1');
+ const client=keys.find(x=>{const a=JSON.parse(decodeURIComponent(x));return a[0]==='clients'&&a[2]==='unassigned1'});
+ assert.ok(promo);assert.ok(client);assert.equal(opened.length,0);
+ controlClick(f,'data-cc-action',{ccAction:promo});controlClick(f,'data-cc-action',{ccAction:client});
+ assert.deepEqual(opened,[['promotion','promo1'],['client','unassigned1']]);
 });
 test('all additional findings remain reachable after the first ten',async()=>{
  const snap=checksSnapshot();snap.truth.partialReviews=Array.from({length:12},(_,i)=>({id:'r'+i,manager_name:'Руднев',reason:'Задача '+i}));
