@@ -227,6 +227,25 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
   return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'» на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
     approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
  }
+ if(model.action==='visit'){
+   const date=esc(model.due_date),time=esc(model.due_time),at=moment(date,time);
+   if(!at)return respond(req,{mode:'needs_details',question:'Назови будущую дату и время визита.',created:0});
+   if(actor.tier!=='employee'||!FIELD_MANAGERS.has(actor.name))
+     return respond(req,{mode:'needs_details',question:'Маршрут может изменить только закреплённый полевой менеджер. Свою встречу с клиентом можно запланировать в календаре — попроси создать встречу.',created:0});
+   const res=await resolveClient(svc,actor,model.client_name);
+   if(res.error||!res.client)return respond(req,{mode:'needs_details',question:'Назови точное название своего закреплённого клиента.',created:0});
+   const store=await resolveStore(svc,res.client,model.location);
+   if(store.error)return respond(req,{mode:'needs_details',question:'У клиента несколько торговых точек. Назови адрес: '+(store.variants||[]).join(' / '),created:0});
+   const details=esc(model.details).slice(0,500);
+   if(details.length<8)return respond(req,{mode:'needs_details',question:'Назови цель планового визита.',created:0});
+   const draft={action:'visit',client_id:res.client.id,client_name:res.client.name,
+     point_id:store.point_id,assignee_id:actor.id,assignee_name:actor.name,
+     details,due_date:date,due_time:time,starts_at:at,source:SOURCE};
+   const proof=await prepareToken(secret,actor.id,draft);
+   return respond(req,{mode:'prepared',draft,
+     summary:'Плановый визит к '+res.client.name+' на '+date+' в '+time+' по Минску. Это маршрут, не состоявшееся GPS-посещение.',
+     approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
+ }
  if(model.action==='chat'){
    const kind=model.room_kind==='group'?'group':'direct';
    const named=Array.isArray(model.participants)?model.participants.slice(0,12):[];
