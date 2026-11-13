@@ -223,7 +223,7 @@
   }
   function handleCommand(raw) {
     if (!allowed()) return;
-    const input = String(raw || '').trim().slice(0, 300);
+    const input = String(raw || '').trim().slice(0, 2400);
     if (!input) return;
     addLine('Вы', input);
     const normalized = input.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[!?.,]/g, ' ').replace(/\s+/g,' ').trim();
