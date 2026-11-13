@@ -184,7 +184,7 @@ async function resolveStore(svc,client,location){
 
 async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
  const now=localDate();
- if(kind!=='prepare'||typeof question!=='string'||question.length<5||question.length>500)
+ if(kind!=='prepare'||typeof question!=='string'||question.length<5||question.length>2400)
   return fail(req,'invalid_question');
  const staff=await targetStaff(svc,actor);
  let directory=[];
