@@ -122,8 +122,8 @@ export function normalizeAgentRequest(input,principal){
  // Never route "create", "update", "delete", "approve", "send", or arbitrary tools.
  if(action!=='ask')return {error:'action_not_available'};
  if(typeof input.question!=='string'||input.question.trim().length<2||
-    input.question.length>400)return {error:'question_invalid'};
- const question=text(input.question,400);
+    input.question.length>2400)return {error:'question_invalid'};
+ const question=text(input.question,2400);
  const history=(Array.isArray(input.history)?input.history:[]).slice(-6)
   .filter(x=>x&&typeof x==='object'&&['user','assistant'].includes(x.role))
   .map(x=>({role:x.role,content:text(x.content,250)}));
