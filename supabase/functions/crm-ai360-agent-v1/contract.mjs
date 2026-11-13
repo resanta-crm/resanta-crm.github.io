@@ -29,6 +29,7 @@ export const AGENT360_SURFACES=Object.freeze([
  {id:'nav-alerts',name:'Сигналы',domains:['operations','clients','tasks']},
  {id:'nav-clients',name:'Клиенты 360°',domains:['clients','client_detail','client_schedule']},
  {id:'nav-connect',name:'Чаты и видеозвонки',domains:[]},
+ {id:'nav-meeting-planner',name:'Календарь и совещания (персональный пилот)',domains:[]},
  {id:'nav-tasks',name:'Задачи',domains:['tasks','triovist_tasks']},
  {id:'nav-markdown',name:'Уценка',domains:['markdown']},
  {id:'nav-visits',name:'Визиты',domains:['visits']},
