@@ -156,7 +156,7 @@ async function resolveClient(svc,actor,clientName){
  if(!name)return {client:null};
  const escaped=name.replace(/[\%_]/g,'\\async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){');
  let q=svc.from('clients').select('id,name,manager_name,address,city,region,is_archived,to_delete')
-  .ilike('name',escaped).limit(3);
+  .ilike('name','%'+escaped+'%').limit(5);
  const names=actor.tier==='employee'?[actor.name]:
    actor.tier==='branch_director'?['Руднев','Ачинович','Шкуран']:null;
  if(names)q=q.in('manager_name',names);
