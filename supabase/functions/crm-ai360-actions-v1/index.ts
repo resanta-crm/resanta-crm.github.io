@@ -144,6 +144,44 @@ async function callModelClaimed(openai,question,names,now){
  let result;try{result=JSON.parse(raw);}catch{throw Error('draft_not_structured');}
  return {result,inputTokens:Math.max(0,Math.floor(Number(data.usage?.input_tokens)||0)),outputTokens:Math.max(0,Math.floor(Number(data.usage?.output_tokens)||0))};
 }
+
+const FIELD_MANAGERS=new Set(['Руднев','Ачинович','Шкуран']);
+function moment(date,time){
+ if(!dateIsValid(date,time,localDate())||!time)return null;
+ const at=new Date(date+'T'+time+':00+03:00');
+ return Number.isFinite(at.valueOf())?at.toISOString():null;
+}
+async function resolveClient(svc,actor,clientName){
+ const name=esc(clientName).slice(0,180);
+ if(!name)return {client:null};
+ const escaped=name.replace(/[\%_]/g,'\\async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){');
+ let q=svc.from('clients').select('id,name,manager_name,address,city,region,is_archived,to_delete')
+  .ilike('name',escaped).limit(3);
+ const names=actor.tier==='employee'?[actor.name]:
+   actor.tier==='branch_director'?['Руднев','Ачинович','Шкуран']:null;
+ if(names)q=q.in('manager_name',names);
+ const r=await q;
+ if(r.error)throw Error('client_directory_unavailable');
+ const found=(r.data||[]).filter(x=>!x.is_archived&&!x.to_delete);
+ if(found.length!==1)return {error:found.length?'client_ambiguous':'client_not_found_or_not_allowed'};
+ return {client:found[0]};
+}
+async function resolveStore(svc,client,location){
+ const link=await svc.from('route_physical_point_clients').select('point_id').eq('client_id',client.id).limit(30);
+ if(link.error)throw Error('client_stores_unavailable');
+ const ids=[...new Set((link.data||[]).map(x=>x.point_id).filter(uuid))];
+ if(!ids.length)return {point_id:null};
+ const p=await svc.from('route_physical_points').select('id,address,city,active').in('id',ids).eq('active',true).limit(30);
+ if(p.error)throw Error('client_stores_unavailable');
+ const candidates=p.data||[];
+ if(candidates.length===1)return {point_id:candidates[0].id};
+ const wanted=norm(location);
+ const matching=wanted?candidates.filter(x=>norm(x.address)===wanted||
+   norm((x.city||'')+' '+(x.address||''))===wanted):[];
+ if(matching.length===1)return {point_id:matching[0].id};
+ return {error:'store_ambiguous',variants:candidates.slice(0,4).map(x=>[x.city,x.address].filter(Boolean).join(', ')};
+}
+
 async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
  const now=localDate();
  if(kind!=='prepare'||typeof question!=='string'||question.length<5||question.length>500)
