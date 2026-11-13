@@ -50,16 +50,16 @@ test('Mac and staff now listen longer and join not-final fragments',()=>{
  assert.match(staff,/onQuestion\?\.\('Лера'\)/);
  assert.ok(!voice.includes('после примерно двух секунд тишины'));
 });
-test('first names only, verified per account and not playful titles',()=>{
+test('approved personal greetings, verified per account',()=>{
  const ids=[
- ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','Александр Паюшин','boss','Витебск','Александр'],
- ['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','Сидарович К.Н.','boss','Витебск','Кирилл'],
- ['19dd9943-99ae-47c4-a39c-4f82a11059a6','Руднев','manager','Витебск','Александр'],
- ['3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','Ачинович','manager','Витебск','Екатерина'],
- ['4fd79fa0-232d-4768-8099-25f47923cc4f','Шкуран','manager','Витебск','Татьяна'],
- ['6efa656e-45c6-473b-a853-89eccb9ee43a','Александренко','manager','Триовист / 21vek.by','Александр'],
- ['9076ccde-a8cc-47e3-b71e-c31170b693ff','Кришталь','manager','Триовист / 21vek.by','Наталья'],
- ['a24954b8-2fe1-4852-b629-d8f351e1bd36','Руководство компании','boss','Все филиалы','Виталий']
+ ['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','Александр Паюшин','boss','Витебск','родной'],
+ ['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','Сидарович К.Н.','boss','Витебск','Кирюшка'],
+ ['19dd9943-99ae-47c4-a39c-4f82a11059a6','Руднев','manager','Витебск','Санька'],
+ ['3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','Ачинович','manager','Витебск','Катюшка'],
+ ['4fd79fa0-232d-4768-8099-25f47923cc4f','Шкуран','manager','Витебск','Танюшка'],
+ ['6efa656e-45c6-473b-a853-89eccb9ee43a','Александренко','manager','Триовист / 21vek.by','мой господин'],
+ ['9076ccde-a8cc-47e3-b71e-c31170b693ff','Кришталь','manager','Триовист / 21vek.by','моя госпожа'],
+ ['a24954b8-2fe1-4852-b629-d8f351e1bd36','Руководство компании','boss','Все филиалы','мой слуга']
  ];
  for(const [id,name,role,region,expected] of ids){
   const window={};
@@ -70,11 +70,10 @@ test('first names only, verified per account and not playful titles',()=>{
   vm.runInNewContext(owner,globals);
   const g=window.crmAI360GreetingV1();
   assert.equal(g?.address,expected,name);
-  assert.equal(g?.greeting,'Здравствуйте, '+expected+'. Чем могу помочь?');
+  assert.equal(g?.greeting,'Привет, '+expected+', чем помочь?');
  }
- for(const bad of ['родной','Кирюшка','Санька','Катюшка','Танюшка','мой господин','моя госпожа','мой слуга']){
-  assert.equal(owner.includes("address:'"+bad+"'"),false);
-  assert.equal(branch.includes(":'"+bad+"'"),false);
+ for(const approved of ['родной','Кирюшка','Санька','Катюшка','Танюшка','мой господин','моя госпожа','мой слуга']){
+  assert.ok(owner.includes("address:'"+approved+"'"),approved);
  }
 });
 test('real protected CRM page opens on Mac without Android gate',()=>{
