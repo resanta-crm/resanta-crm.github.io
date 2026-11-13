@@ -441,6 +441,25 @@ Deno.serve(async req=>{
  if(body?.kind==='capabilities')return respond(req,{mode:'lera_action_v1',
    task:true,chat:true,confirmation_required:true,no_automatic_writes:true});
  try{
+   if(body?.kind==='agenda'){
+     const now=localDate(),days=body.period==='today'?1:body.period==='tomorrow'?1:7;
+     const base=Date.parse(now.date+'T00:00:00+03:00');
+     const from=base+(body.period==='tomorrow'?86400000:0);
+     const to=from+days*86400000;
+     const rows=await caller.from('crm_ai360_meetings_v1')
+       .select('id,title,client_name,starts_at,duration_minutes,format,location')
+       .eq('owner_id',actor.id).gte('starts_at',new Date(from).toISOString())
+       .lt('starts_at',new Date(to).toISOString())
+       .order('starts_at',{ascending:true}).limit(25);
+     if(rows.error)return fail(req,'agenda_not_available',503);
+     const fmt=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',
+       month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+     return respond(req,{mode:'agenda',items:(rows.data||[]).map(x=>({
+       id:x.id,title:x.title,client_name:x.client_name,
+       when:fmt.format(new Date(x.starts_at)),minutes:x.duration_minutes,
+       location:x.location
+     })),count:(rows.data||[]).length,has_more:(rows.data||[]).length===25});
+   }
    if(body?.kind==='prepare')return await makeDraft({req,kind:'prepare',
      question:body.question,actor,svc,caller,secret,openai});
    if(body?.kind==='commit')return await execute(req,body,actor,svc,caller,secret);
