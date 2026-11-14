@@ -30,7 +30,8 @@ function mount(){
   page.querySelector('#c360-search').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
   page.querySelector('#c360-group')?.addEventListener('click',group);
  }
- nav.style.display=role()?'flex':'none';
+ // Legal entities and stores are managed inside the native client card.
+ nav.style.display='none';
 }
 async function load(){
  if(!role()||busy)return;
@@ -163,7 +164,7 @@ async function editStore(pointId,oldCity,oldAddress,entityId){
   await openGroup(entityId);root.dispatchEvent(new Event('resanta-client360-updated'));
  }catch(e){alert('Не удалось изменить адрес: '+(e.message||e))}
 }
-function open(){if(!role())return;mount();if(typeof goPage==='function')goPage('client360','Клиент 360°');load()}
+function open(){if(!role())return;if(typeof goPage==='function')goPage('clients','Клиенты')}
 function reconcile(){if(role())mount();else if(nav)nav.style.display='none'}
 reconcile();root.setInterval(reconcile,5000);
 root.crmClient360V1={open,load};

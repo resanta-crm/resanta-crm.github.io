@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-clients-simple-20261114-v2';
+const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-clients-simple-20261114-v3-hide360';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -1842,7 +1842,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Safe staff-only Android Lera: mic and AI loaded only by explicit tap. -->
 <script defer src="./assets/157-resanta-ai360-android-staff-launch-v1.js?v=2&lera=20261112-naturalvoice&dialogueRelease=20261113-v2&controlRelease=20261113-v2"></script>
 <script defer src="./assets/149-lpr-v1.js?v=client360-20261102"></script>
-<script defer src="./assets/158-client360-legal-stores-v1.js?v=roman-v2&fix=20261106&selection=20261114-simple1"></script>
+<script defer src="./assets/158-client360-legal-stores-v1.js?v=roman-v2&fix=20261106&selection=20261114-simple1&nav=20261114-hidden1"></script>
 <!-- KPI 360 is isolated from the existing 1C data imports. -->
 <script defer src="./assets/159-manager-kpi360-v1.js?v=20261102-2"></script>
 <!-- KPI360 visual v2: read-only dashboard; existing plan editor retained. -->
