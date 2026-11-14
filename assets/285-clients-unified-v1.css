@@ -1,0 +1,52 @@
+#nav-client360.uc-merged-nav{display:none!important}
+#unified-clients-v1{display:none}
+#page-clients.uc-installed>:not(#unified-clients-v1):not(.crm-core-page-loader-v22733){display:none!important}
+#page-clients.uc-installed #unified-clients-v1{display:grid;gap:16px;color:var(--text)}
+#unified-clients-v1 *{box-sizing:border-box}
+#unified-clients-v1 h2,#unified-clients-v1 h3,#unified-clients-v1 h4,#unified-clients-v1 p{margin:0}
+#unified-clients-v1 h2{font-size:25px;font-weight:700}#unified-clients-v1 h3{font-size:20px}#unified-clients-v1 h4{font-size:15px;margin:16px 0 10px}
+#unified-clients-v1 .uc-kicker{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--sub);margin-bottom:6px}
+#unified-clients-v1 .uc-muted,#uc-dialog .uc-muted{font-size:12px;line-height:1.6;color:var(--sub);overflow-wrap:anywhere}
+#unified-clients-v1 .uc-head,#unified-clients-v1 footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+#unified-clients-v1 .uc-actions,#uc-dialog .uc-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#unified-clients-v1 .uc-filters{display:grid;grid-template-columns:minmax(230px,2fr) repeat(3,minmax(130px,1fr));gap:12px;align-items:end}
+#unified-clients-v1 label,#uc-dialog label{display:grid;gap:6px;font-size:12px}
+#unified-clients-v1 input:not([type=checkbox]),#unified-clients-v1 select,#uc-dialog input:not([type=checkbox]),#uc-dialog select{font:inherit;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;min-width:0;width:100%}
+#unified-clients-v1 .uc-btn,#uc-dialog .uc-btn{font:inherit;font-size:12px;font-weight:500;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);cursor:pointer}
+#unified-clients-v1 .uc-btn:focus-visible,#uc-dialog .uc-btn:focus-visible{outline:3px solid var(--a);outline-offset:3px}
+#unified-clients-v1 .uc-btn[aria-selected=true],#uc-dialog .uc-primary{background:var(--a,#315cb6);color:#fff}
+#unified-clients-v1 .uc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
+#unified-clients-v1 .uc-stat{border:1px solid var(--border);border-radius:13px;background:var(--card);padding:16px;display:grid;gap:8px;min-width:0}
+#unified-clients-v1 .uc-stat span,#unified-clients-v1 .uc-stat small{font-size:12px;color:var(--sub)}
+#unified-clients-v1 .uc-stat strong{font-size:21px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#unified-clients-v1 .uc-table-wrap{overflow:auto;border:1px solid var(--border);border-radius:13px;background:var(--card)}
+#unified-clients-v1 table{width:100%;border-collapse:collapse;font-size:13px}
+#unified-clients-v1 th,#unified-clients-v1 td{padding:13px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+#unified-clients-v1 th{color:var(--sub);font-size:12px;font-weight:500}
+#unified-clients-v1 .uc-notice{font-size:12px;color:var(--sub)}
+#unified-clients-v1 .uc-selection{border:1px solid var(--a);border-radius:12px;background:var(--card);padding:14px;display:grid;gap:10px}
+#unified-clients-v1 .uc-selection>div{display:flex;gap:10px;flex-wrap:wrap}
+#unified-clients-v1 .uc-selected-item{font-size:12px;display:flex;align-items:center;gap:5px}
+#unified-clients-v1 .uc-pagination{display:flex;justify-content:center;align-items:center;gap:12px;font-size:12px}
+#unified-clients-v1 .uc-panel{border:1px solid var(--border);border-radius:14px;background:var(--card);padding:20px;margin-top:10px;scroll-margin-top:95px}
+#unified-clients-v1 .uc-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0}
+#unified-clients-v1 .uc-store{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid var(--border);font-size:13px}
+#unified-clients-v1 .uc-history{padding:12px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.6}
+#unified-clients-v1 .uc-requisites{margin-top:20px;font-size:13px}
+#unified-clients-v1 summary{cursor:pointer}
+#unified-clients-v1 .uc-bars{display:grid;gap:9px;margin:14px 0}
+#unified-clients-v1 .uc-bars>div{display:grid;grid-template-columns:70px 1fr 145px;align-items:center;gap:10px;font-size:12px}
+#unified-clients-v1 .uc-bars>div>span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+#unified-clients-v1 .uc-track{height:9px;background:var(--bg);border-radius:5px;overflow:hidden}
+#unified-clients-v1 .uc-track i{display:block;height:100%;background:var(--a,#315cb6);border-radius:5px}
+#uc-dialog{position:fixed;inset:0;z-index:99980;background:#0008;display:grid;place-items:center;padding:20px;color:var(--text);font:inherit}
+#uc-dialog form{display:grid;gap:16px;width:min(650px,100%);max-height:92dvh;overflow:auto;border-radius:15px;border:1px solid var(--border);background:var(--card);padding:22px}
+#uc-dialog header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#uc-dialog h3,#uc-dialog p{margin:0}#uc-dialog h3{font-size:18px}#uc-dialog li{margin:8px 0;font-size:13px}
+#uc-dialog .uc-form-error{color:var(--r);font-size:13px;overflow-wrap:anywhere}
+@media(max-width:900px){#unified-clients-v1 .uc-filters{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){#unified-clients-v1 .uc-head{align-items:start}#unified-clients-v1 .uc-filters{grid-template-columns:1fr}#unified-clients-v1 .uc-panel{padding:14px}#unified-clients-v1 .uc-btn,#uc-dialog .uc-btn{min-height:44px}#unified-clients-v1 input:not([type=checkbox]),#unified-clients-v1 select,#uc-dialog input:not([type=checkbox]),#uc-dialog select{font-size:16px;min-height:44px}#unified-clients-v1 .uc-bars>div{grid-template-columns:64px 1fr}#unified-clients-v1 .uc-bars>div>span:last-child{grid-column:2;text-align:left}#uc-dialog{padding:6px}#uc-dialog form{padding:15px}}
+
+#page-clients.uc-legacy #unified-clients-v1{display:block;margin-bottom:12px}
+
+#unified-clients-v1 .uc-cards{border:0;background:none;overflow:visible}#unified-clients-v1 .uc-cards table,#unified-clients-v1 .uc-cards tbody{display:block}#unified-clients-v1 .uc-cards thead{display:none}#unified-clients-v1 .uc-cards tbody{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}#unified-clients-v1 .uc-cards tr{display:grid;border:1px solid var(--border);border-radius:13px;background:var(--card);padding:10px}#unified-clients-v1 .uc-cards td{display:block;padding:7px;border:0}#unified-clients-v1 .uc-cards td[data-label]:before{content:attr(data-label) ': ';color:var(--sub);font-size:12px}

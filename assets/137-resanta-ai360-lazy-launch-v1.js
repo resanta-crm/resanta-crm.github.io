@@ -18,7 +18,7 @@ const scripts=[
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
  './assets/191-sales360-recovery-lera-v1.js?v=20261110-1',
  './assets/194-pdz360-lera-v1.js?v=20261110-1',
- './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2'
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2&clientsRelease=20261114-v1'
 ];
 // Android director: text and authenticated navigation first. Audio is optional
 // and must never start automatically just because the AI panel was opened.
@@ -29,7 +29,7 @@ const nativeTextScripts=[
  './assets/138-resanta-ai360-sales-bridge-v1.js?v=8',
  './assets/191-sales360-recovery-lera-v1.js?v=20261110-1',
  './assets/194-pdz360-lera-v1.js?v=20261110-1',
- './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2'
+ './assets/143-resanta-ai360-unified-dialog-v1.js?v=11&lera=20261113&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2&clientsRelease=20261114-v1'
 ];
 const nativeAudioScripts=[
  './assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3',

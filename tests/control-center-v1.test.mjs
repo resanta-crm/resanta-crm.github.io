@@ -139,7 +139,7 @@ test('read-only source bridge rejects a switched login and does not serve pendin
 test('home entry is last, versioned, and unrelated sections have no new CSS selectors',()=>{
  const index=read('index.html');
  assert.ok(index.indexOf('assets/283-control-center-v1.js')>index.indexOf('assets/198-budgets-client360-v1.js'));
- assert.match(index,/283-control-center-v1.css\?v=20261113-3/);
+ assert.match(index,/283-control-center-v1.css\?v=20261114-1/);
  assert.match(index,/05-performance-core.js\?v=23.7.13-control-center-v1/);
  assert.doesNotThrow(()=>new Function(source));
  assert.doesNotMatch(css,/#page-(?:clients|tasks|sales|triovist|debt)\b/);
