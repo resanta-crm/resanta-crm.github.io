@@ -34,7 +34,7 @@ function mount(){
 }
 async function load(){
  if(!role()||busy)return;
- mount();const out=page.querySelector('#c360-output');busy=true;out.textContent='Загружаю реестр…';
+ mount();checked.clear();const out=page.querySelector('#c360-output');busy=true;out.textContent='Загружаю реестр…';
  try{
   const q=page.querySelector('#c360-search').value.trim();
   const {data,error}=await db.rpc('client360_catalog_v1',{p_query:q});
@@ -89,6 +89,8 @@ async function group(){
  const name=page.querySelector('#c360-legal').value.trim();
  if(checked.size<2){alert('Отметьте как минимум две карточки одного юрлица.');return}
  if(name.length<3){alert('Укажите подтверждённое название юрлица.');return}
+ const selected=items.filter(c=>checked.has(c.id));if(selected.length!==checked.size){checked.clear();renderSelected();alert('Состав изменился. Выберите карточки ещё раз.');return;}
+ if(!confirm('Связать под юрлицом «'+name+'» следующие карточки?\n\n'+selected.map(c=>c.name).join('\n')+'\n\nИсходные ID, маршруты, визиты и бюджеты сохраняются.'))return;
  const button=page.querySelector('#c360-group');button.disabled=true;
  try{
   const {data,error}=await db.rpc('client360_group_clients_v1',{p_name:name,p_client_ids:[...checked]});
