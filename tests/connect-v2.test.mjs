@@ -1,0 +1,39 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
+import {validSubscription,resultFor} from '../supabase/functions/connect-delivery-v2/rules.mjs';
+const root=new URL('../',import.meta.url),read=p=>fs.readFileSync(new URL(p,root),'utf8');
+const dom=await import(process.env.CRM_DOM_MODULE||'../../control-test-tools/node_modules/linkedom/esm/index.js');
+const sub={endpoint:'https://fcm.googleapis.com/fcm/send/test',keys:{p256dh:'A'.repeat(87),auth:'B'.repeat(22)}};
+test('Web Push rejects SSRF endpoints, credentials, non-TLS and malformed encryption keys',()=>{assert.equal(validSubscription(sub),true);for(const endpoint of ['http://fcm.googleapis.com/a','https://127.0.0.1/a','https://fcm.googleapis.com.evil.test/a','https://user@fcm.googleapis.com/a','https://fcm.googleapis.com:444/a'])assert.equal(validSubscription({...sub,endpoint}),false);assert.equal(validSubscription({...sub,keys:{auth:'x',p256dh:'x'}}),false);});
+test('Known rejects retry, revoked devices cancel and uncertain delivery is never blindly retried',()=>{assert.equal(resultFor(429).status,'failed');assert.equal(resultFor(503).status,'failed');assert.equal(resultFor(410).status,'cancelled');assert.equal(resultFor(null).status,'unknown');});
+function notifications(){
+ const {document,window:domWindow}=dom.parseHTML('<html><body><div id="app" data-active-page="connect" style="display:block"><div id="page-connect"><div class="c126-top"></div></div><div id="c126-rooms"><button class="c126-room active" data-room-id="room-a"></button></div></div></body></html>');
+ Object.defineProperty(document,'hidden',{value:true,writable:true});Object.defineProperty(document,'readyState',{value:'loading'});document.hasFocus=()=>true;
+ const timers=[],notices=[],rpc=[],store=new Map();let status,rows=[];let currentRoom='room-a';
+ const db={auth:{getUser:async()=>({data:{user:{id:'actor'}}})},from:table=>({select:()=>({eq:()=>table==='connect_permissions_v1'?{maybeSingle:async()=>({data:{chat_enabled:true,video_enabled:true}})}:{neq:()=>({order:()=>({limit:async()=>({data:[{id:'message-a',room_id:'room-a',sender_id:'other',body:'Текст'}]})})})}})}),rpc:async name=>{rpc.push(name);return {data:name==='connect_unread_counts_v1'?rows:true}},channel:()=>({on(){return this},subscribe(fn){status=fn;return this}})};
+ class Notification{static permission='granted';constructor(...args){notices.push(args)}}
+ const window={addEventListener(){},crmConnectRoomState216:{roomId:()=>currentRoom,lastMessageId:()=> 'message-a',atBottom:()=>true},setInterval(){}};
+ const code=read('assets/153-resanta-connect-notify-v1.js').replace('init,refresh,incoming:onRealtimeMessage','init,_check:checkAccount,refresh,incoming:onRealtimeMessage');
+ vm.runInNewContext(code,{window,document,Notification,db,currentProfile:{id:'actor'},localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},setTimeout:f=>{timers.push(f);return timers.length},clearTimeout(){},console:{warn(){}},MutationObserver:class{observe(){}}});
+ return {document,api:window.crmConnectNotify128,notices,rpc,timers,setStatus:s=>status(s),setRows:r=>rows=r,setRoom:r=>currentRoom=r,domWindow};
+}
+test('Realtime outage now produces fallback notification despite retained channel object',async()=>{const t=notifications();await t.api._check();await t.api.refresh();t.setStatus('CHANNEL_ERROR');t.setRows([{room_id:'room-a',unread_count:1}]);await t.api.refresh();assert.equal(t.notices.length,1);});
+test('Read acknowledgement requires visible matching room and shown message id',async()=>{const t=notifications();await t.api._check();t.api.markRead('room-a');await t.timers.at(-1)();assert.ok(!t.rpc.includes('connect_mark_read_v2'));t.document.hidden=false;t.setRoom('room-b');t.api.markRead('room-a');await t.timers.at(-1)();assert.ok(!t.rpc.includes('connect_mark_read_v2'));t.setRoom('room-a');t.api.markRead('room-a');await t.timers.at(-1)();assert.ok(t.rpc.includes('connect_mark_read_v2'));});
+test('Duplicate realtime event produces one notice',async()=>{const t=notifications();await t.api._check();const m={id:'m',room_id:'room-b',sender_id:'other',body:'x'};t.api.incoming(m);t.api.incoming(m);assert.equal(t.notices.length,1);});
+function video(){
+ const {document,window:domWindow}=dom.parseHTML('<html><body><div id="app"><div id="page-connect"><header class="c126-head"></header></div></div></body></html>');
+ const records=[];let instance;class Room{constructor(){instance=this;this.handlers={};this.remoteParticipants=new Map();this.localParticipant={identity:'actor',setMicrophoneEnabled:async()=>{},setCameraEnabled:async()=>{}};}on(name,fn){this.handlers[name]=fn;}async connect(){}async disconnect(){}async startAudio(){}}
+ const window={isSecureContext:true,LivekitClient:{Room,RoomEvent:{TrackSubscribed:'ts',TrackUnsubscribed:'tu',LocalTrackPublished:'lp',LocalTrackUnpublished:'lu',ParticipantConnected:'pc',ParticipantDisconnected:'pd',Disconnected:'dc',Reconnecting:'reconnecting',Reconnected:'reconnected',ConnectionQualityChanged:'quality'}}};
+ vm.runInNewContext(read('assets/154-resanta-connect-video-v1.js'),{window,document,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},MutationObserver:class{observe(){}},console});
+ window.crmConnectVideo131.init({client:()=>({functions:{invoke:async()=>({data:{ok:true,url:'wss://mock',token:'mock'}})},rpc:async(n,a)=>{records.push(a.p_action);return {data:{call:{id:'call-a',status:'ringing'}}};}}),roomId:()=> 'room',actor:()=> 'actor',actorName:()=> 'Александр',isOpen:()=>true,isSignedIn:()=>true});
+ for(const select of document.querySelectorAll('select'))Object.defineProperty(select,'value',{get(){return this._value||this.querySelector('option')?.value||'';},set(v){this._value=v;}});
+ return {document,domWindow,window,records,instance:()=>instance};
+}
+test('Camera and two screen shares use independent tracks, screen selection and cleanup',async()=>{const t=video();await t.window.crmConnectVideo131.join();const person={identity:'other',name:'Коллега'};
+ function track(sid,source){let element;return {sid,source,kind:'video',attach(){element=t.document.createElement('video');return element;},detach(){return [element];}};}
+ const camera=track('camera','camera'),a=track('screen-a','screen_share'),b=track('screen-b','screen_share');const emit=(x)=>t.instance().handlers.ts(x,{source:x.source},person);
+ emit(camera);emit(a);emit(b);assert.equal(t.document.querySelectorAll('#c131-wall video').length,1);assert.equal(t.document.querySelectorAll('#c216-screens video').length,2);assert.equal(t.document.getElementById('c216-stage').hidden,false);assert.equal(t.document.getElementById('c216-select').hidden,false);
+ t.instance().handlers.tu(b);assert.equal(t.document.querySelectorAll('#c216-screens video').length,1);t.instance().handlers.tu(a);assert.equal(t.document.getElementById('c216-stage').hidden,true);assert.equal(t.document.querySelectorAll('#c131-wall video').length,1);
+ assert.deepEqual(t.records.slice(0,2),['start','accept']);
+});
+test('Worker contains no fetch/cache interception and validates recipient before displaying',()=>{const sw=read('connect-push-sw.js');assert.doesNotMatch(sw,/addEventListener\('fetch'/);assert.match(sw,/d.account_id!==binding.account_id/);assert.match(sw,/expires_at/);assert.match(sw,/showNotification/);assert.match(sw,/notificationclick/);});
+test('Migration is confined to CONNECT and deliveries cannot be directly read by authenticated users',()=>{const s=read('supabase/migrations/20261114151152_connect_delivery_calls_v2.sql');assert.doesNotMatch(s,/alter table public\.(clients|users|sales|visits|tasks|crm_lpr)/);assert.match(s,/revoke all on public\.connect_delivery_v2 from public,anon,authenticated/);assert.match(s,/LEGACY_SENT/);assert.match(s,/m.room_id=connect_attachments_v1.room_id/);});

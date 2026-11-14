@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-v2';
+const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-v2-connect-v2';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -364,8 +364,8 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 .v2273214-technical{font-size:10px;color:var(--sub)}
 </style>
 
-<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=3">
-<link rel="stylesheet" href="./assets/154-resanta-connect-video-v1.css?v=2">
+<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=3&connectRelease=20261114-v2">
+<link rel="stylesheet" href="./assets/154-resanta-connect-video-v1.css?v=2&connectRelease=20261114-v2">
 <link rel="stylesheet" href="./assets/155-resanta-connect-permissions-v1.css?v=1">
 </head>
 <body>
@@ -1833,12 +1833,13 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <script defer src="./assets/191-sales360-recovery-lera-v1.js?v=20261110-1"></script>
 <!-- PDZ360 voice shares daily snapshot with the debt page; no automatic reads. -->
 <script defer src="./assets/194-pdz360-lera-v1.js?v=20261110-1"></script>
-<script defer src="./assets/151-resanta-connect-v1.js?v=8&fix=20261106"></script>
-<script defer src="./assets/152-resanta-connect-media-v1.js?v=1"></script>
-<script defer src="./assets/153-resanta-connect-notify-v1.js?v=3"></script>
-<script defer src="./assets/154-resanta-connect-video-v1.js?v=7&fix=20261106"></script>
+<script defer src="./assets/151-resanta-connect-v1.js?v=8&connectRelease=20261114-v2"></script>
+<script defer src="./assets/152-resanta-connect-media-v1.js?v=3&connectRelease=20261114-v2"></script>
+<script defer src="./assets/153-resanta-connect-notify-v1.js?v=3&connectRelease=20261114-v2"></script>
+<script defer src="./assets/154-resanta-connect-video-v1.js?v=7&connectRelease=20261114-v2"></script>
 <script defer src="./assets/155-resanta-connect-permissions-v1.js?v=1"></script>
-<script defer src="./assets/156-resanta-connect-android-push-v1.js?v=2"></script>
+<script defer src="./assets/156-resanta-connect-android-push-v1.js?v=2&connectRelease=20261114-v2"></script>
+<script defer src="./assets/287-connect-delivery-v2.js?v=20261114-connect-v2"></script>
 <!-- Safe staff-only Android Lera: mic and AI loaded only by explicit tap. -->
 <script defer src="./assets/157-resanta-ai360-android-staff-launch-v1.js?v=2&lera=20261112-naturalvoice&dialogueRelease=20261113-v2&controlRelease=20261113-v2"></script>
 <script defer src="./assets/149-lpr-v1.js?v=client360-20261102&lprRelease=20261114-v2"></script>

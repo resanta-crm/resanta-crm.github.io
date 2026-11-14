@@ -7,6 +7,9 @@ import { AccessToken } from "npm:livekit-server-sdk@2.19.2";
 const origins = new Set([
   "https://resanta-crm.by",
   "https://www.resanta-crm.by",
+  "http://localhost",
+  "https://localhost",
+  "capacitor://localhost",
 ]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

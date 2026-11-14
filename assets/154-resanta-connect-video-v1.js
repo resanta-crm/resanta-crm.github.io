@@ -10,7 +10,7 @@ let ready=false, connecting=false, call=null, callChat=null, sdkLoading=null, mo
 let minimized=false, callIdentity=null,screenBusy=false,micBusy=false,callName='';
 // Recent invitations suppress a reverse notification when the recipient joins.
 const incomingRooms=new Map();
-let invitationBusy=false;
+let invitationBusy=false,callSession=null,callWatch=null,screenChoice=null,screenZoom='fit';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text??'');return n;};
 const status=(s,bad)=>{const e=$('c131-status');if(e){e.textContent=s;e.classList.toggle('error',!!bad);}};
 function loadSdk(){
@@ -70,28 +70,48 @@ function restore(){
  $('c131-overlay').hidden=false;
  updateMini();
 }
-function attach(track,person,local){
+function screenLayout(){
+ const host=$('c216-screens');if(!host)return;
+ const items=Array.from(host.children);if(!items.some(x=>x.dataset.screen===screenChoice))screenChoice=items[0]?.dataset.screen||null;
+ const select=$('c216-select');select?.replaceChildren();
+ for(const item of items){item.hidden=item.dataset.screen!==screenChoice;const o=el('option','',item.dataset.name);o.value=item.dataset.screen;select?.append(o);}
+ if(select){select.value=screenChoice||'';select.hidden=items.length<2;}
+ $('c216-stage').hidden=!items.length;$('c131-overlay').classList.toggle('c216-sharing',items.length>0);
+ const v=items.find(x=>!x.hidden)?.querySelector('video');
+ if(v){v.style.width=screenZoom==='fit'?'100%':Math.round((v.videoWidth||1280)*(screenZoom==='150'?1.5:1))+'px';v.style.height=screenZoom==='fit'?'100%':'auto';v.style.maxWidth=screenZoom==='fit'?'100%':'none';}
+}
+function attach(track,person,local,publication){
  if(!track)return;
- const parent=tile(local?'local':person.identity,local?(ctx.actorName?.()||'Вы')+' (вы)':person.name);
+ const sid=track.sid||publication?.trackSid||track.mediaStreamTrack?.id;
+ if(sid&&Array.from(document.querySelectorAll('[data-connect-track]')).some(x=>x.dataset.connectTrack===sid))return;
  if(track.kind==='audio'){
-  if(local)return;
-  const audio=track.attach();audio.autoplay=true;
+  if(local)return;const audio=track.attach();audio.autoplay=true;if(sid)audio.dataset.connectTrack=sid;
   $('c131-audio')?.append(audio);
-  try{audio.play()?.catch(()=>status('Для звука нажмите «Разрешить звук».'));}catch(_){}
+  try{audio.play()?.catch(()=>{$('c216-audio').hidden=false;status('Для звука нажмите «Разрешить звук».');});}catch(_){}
  }else if(track.kind==='video'){
-  const video=track.attach();video.className='c131-video';video.playsInline=true;
-  video.autoplay=true;video.muted=!!local;
-  parent?.querySelector('.c131-tracks')?.append(video);
+  const source=publication?.source||track.source;
+  const screen=source==='screen_share';
+  const video=track.attach();video.className='c131-video';video.playsInline=true;video.autoplay=true;video.muted=!!local;
+  if(sid)video.dataset.connectTrack=sid;
+  if(screen){
+   const box=el('div','c216-screen');box.dataset.screen=sid||person.identity;box.dataset.name=(local?'Вы':person.name||'Сотрудник')+' · экран';
+   box.append(video);$('c216-screens').append(box);screenChoice=box.dataset.screen;screenZoom='fit';$('c216-zoom').value='fit';
+   video.addEventListener('loadedmetadata',screenLayout);screenLayout();
+  }else{const parent=tile(local?'local':person.identity,local?(ctx.actorName?.()||'Вы')+' (вы)':person.name);parent?.querySelector('.c131-tracks')?.append(video);}
  }
 }
 function detach(track){
  if(!track)return;
- try{track.detach().forEach(e=>{e.pause?.();e.remove();});}catch(_){}
+ try{track.detach().forEach(e=>{const box=e.parentElement;e.pause?.();e.remove();if(box?.classList.contains('c216-screen'))box.remove();});}catch(_){}
+ screenLayout();
+}
+async function callAction(action,room=callChat,id=callSession?.id){
+ const r=await ctx.client().rpc('connect_call_action_v2',{p_room_id:room,p_action:action,p_call_id:id||null});if(r.error)throw r.error;return r.data;
 }
 function hide(){
  $('c131-overlay').hidden=true;
  if($('c131-mini'))$('c131-mini').hidden=true;
- $('c131-wall')?.replaceChildren();$('c131-audio')?.replaceChildren();
+ $('c131-wall')?.replaceChildren();$('c131-audio')?.replaceChildren();$('c216-screens')?.replaceChildren();screenLayout();
  callChat=null;callIdentity=null;minimized=false;connecting=false;screenBusy=false;micBusy=false;
  $('c131-start').disabled=false;
  $('c131-start').textContent='📹 Видеозвонок';
@@ -100,12 +120,14 @@ async function leave(quiet=false){
  requestEpoch++;
  const old=call;call=null;
  if(monitor){clearInterval(monitor);monitor=null;}
+ if(callWatch){clearInterval(callWatch);callWatch=null;}
+ if(callSession&&callChat){try{await callAction('leave');}catch(_){}callSession=null;}
  if(old)try{await old.disconnect();}catch(_){}
  hide();
  if(!quiet)ctx.notify?.('Видеозвонок завершён.');
 }
 function rememberIncoming(message){
- if(!message||message.sender_id===ctx.actor?.()||
+ if(!message||!message.call_id||message.sender_id===ctx.actor?.()||
     !String(message.body||'').startsWith('📹 Начался видеозвонок'))return;
  const ts=Date.parse(message.created_at||'');
  if(Number.isFinite(ts)&&Date.now()-ts>=0&&Date.now()-ts<4*60*1000)
@@ -144,10 +166,10 @@ async function join(options){
   candidate.on(livekit.RoomEvent.ParticipantDisconnected,p=>{
    Array.from($('c131-wall')?.children||[]).find(e=>e.dataset.participant===p.identity)?.remove();count();
   });
-  candidate.on(livekit.RoomEvent.TrackSubscribed,(t,_pub,p)=>attach(t,p,false));
+  candidate.on(livekit.RoomEvent.TrackSubscribed,(t,pub,p)=>attach(t,p,false,pub));
   candidate.on(livekit.RoomEvent.TrackUnsubscribed,t=>detach(t));
   candidate.on(livekit.RoomEvent.LocalTrackPublished,pub=>{
-   if(pub.track)attach(pub.track,candidate.localParticipant,true);
+   if(pub.track)attach(pub.track,candidate.localParticipant,true,pub);
    if(call===candidate)updateMini();
   });
   candidate.on(livekit.RoomEvent.LocalTrackUnpublished,pub=>{
@@ -160,8 +182,15 @@ async function join(options){
    }
   });
   candidate.on(livekit.RoomEvent.Disconnected,()=>{if(call===candidate)leave(true);});
+  candidate.on(livekit.RoomEvent.Reconnecting,()=>{$('c216-quality').textContent='Восстанавливаем связь…';});
+  candidate.on(livekit.RoomEvent.Reconnected,()=>{$('c216-quality').textContent='Связь восстановлена';});
+  candidate.on(livekit.RoomEvent.ConnectionQualityChanged,(quality,p)=>{if(p?.identity===candidate.localParticipant.identity)$('c216-quality').textContent='Качество связи: '+({excellent:'отличное',good:'хорошее',poor:'слабое',lost:'потеряна'}[quality]||quality);});
   await candidate.connect(response.data.url,response.data.token);
   if(epoch!==requestEpoch||!ctx.isOpen?.()||ctx.roomId?.()!==selected)throw Error('Чат закрыт.');
+  const session=await callAction(isJoiningIncoming?'get':'start',selected,null);
+  if(!session?.call||!['ringing','active'].includes(session.call.status))throw Error('Приглашение уже завершено. Начните новый звонок.');
+  await callAction('accept',selected,session.call.id);callSession=session.call;
+  if(epoch!==requestEpoch||ctx.roomId?.()!==selected){await callAction('leave',selected,callSession.id);callSession=null;throw Error('Чат изменился.');}
   call=candidate;callChat=selected;callName=ctx.roomName?.()||'Текущий чат';callIdentity=expectedActor;connecting=false;$('c131-start').disabled=false;
   $('c131-start').textContent='📹 Вернуться в звонок';
   tile('local',(ctx.actorName?.()||'Вы')+' (вы)');
@@ -170,7 +199,7 @@ async function join(options){
   status('Видеозвонок подключён. Камеру и микрофон можно включить отдельно.');
   // The first participant automatically notifies every permitted chat participant.
   // A recipient joining an invitation must not create a reciprocal call alert.
-  if(!isJoiningIncoming)void invite(true);
+  callWatch=setInterval(async()=>{if(!call||!callSession)return;try{const data=await callAction('get');if(data?.call&&['ended','missed'].includes(data.call.status))await leave(true);}catch(_){}},10000);
   monitor=setInterval(()=>{
    // Do not automatically minimize an explicitly restored call.
    // Navigation transitions are handled once by MutationObserver below.
@@ -207,7 +236,7 @@ async function toggle(kind){
    status(enabled?'Камера включена.':'Камера выключена.');
   }else{
    const enabled=!p.isScreenShareEnabled;
-   await p.setScreenShareEnabled(enabled,{audio:true});
+   await p.setScreenShareEnabled(enabled,{audio:true,contentHint:'text'});
    b.textContent=enabled?'⏹ Остановить экран':'🖥 Показать экран';
    // A successful selection must replace an earlier browser permission error.
    // Treat the SDK's actual publication state as the source of truth.
@@ -231,26 +260,11 @@ async function toggle(kind){
   b.disabled=false;updateMini();
  }
 }
-async function invite(automatic=false){
+async function invite(_automatic=false){
  if(!call||!callChat||invitationBusy)return;
- const targetRoom=callChat;
- invitationBusy=true;
- const button=$('c131-invite');button.disabled=true;
- try{
-  const body='📹 Начался видеозвонок. Откройте этот чат и нажмите «Видеозвонок», чтобы присоединиться.';
-  const r=await ctx.client().from('connect_messages_v1')
-   .insert({room_id:callChat,sender_id:ctx.actor(),body})
-   .select('id,room_id,sender_id,body,created_at').single();
-  if(r.error)throw r.error;
-  if(r.data){
-   ctx.onMessage?.(r.data);
-   const pushed=await window.crmConnectPush138?.sendForMessage?.(r.data.id);
-   // Even without FCM delivery, the invite is visible in the durable chat history.
-   if(pushed?.ok===false)status('Приглашение видно в чате, но push пока не подтверждён.',true);
-   else status('📹 Приглашение на видеозвонок создано в чате.');
-  }
- }catch(e){status('Не удалось отправить приглашение: '+String(e?.message||e),true);}
- finally{invitationBusy=false;button.disabled=false;}
+ invitationBusy=true;const button=$('c131-invite');button.disabled=true;
+ try{const data=await callAction('get');status(data?.call&&['ringing','active'].includes(data.call.status)?'Приглашение уже создано. Коллеги могут присоединиться из чата.':'Звонок завершён.');}
+ catch(_){status('Не удалось проверить приглашение.',true);}finally{invitationBusy=false;button.disabled=false;}
 }
 function init(hooks){
  Object.assign(ctx,hooks);
@@ -269,8 +283,10 @@ function init(hooks){
   '<div id="c131-room" class="c131-status"></div><div id="c131-waiting" class="c131-status" hidden></div>',
   '<div id="c131-status" class="c131-status" role="status">Подключение…</div>',
   '<div class="c131-share-hint">Чтобы показать свою работу, нажмите «Показать экран», выберите вкладку CRM или весь экран и разрешите доступ. При сворачивании видеосвязь не прерывается.</div>',
-  '<div id="c131-wall" class="c131-wall"></div><div id="c131-audio" hidden></div>',
+  '<div id="c216-quality" class="c131-status" role="status">Качество связи: подключение…</div>',
+  '<div class="c216-layout"><section id="c216-stage" class="c216-stage" aria-label="Демонстрация экрана" hidden><div class="c216-view-tools"><select id="c216-select" aria-label="Экран участника" hidden></select><select id="c216-zoom" aria-label="Масштаб демонстрации"><option value="fit">Вписать экран</option><option value="100">100% · исходный размер</option><option value="150">150% · увеличить</option></select><button type="button" id="c216-fullscreen" class="c126-btn">Полный экран</button></div><div id="c216-screens" class="c216-screens"></div></section><div id="c131-wall" class="c131-wall"></div></div><div id="c131-audio" hidden></div>',
   '<div class="c131-tools">',
+  '<button type="button" id="c216-audio" class="c126-btn" hidden>Разрешить звук</button>',
   '<button type="button" id="c131-mic" class="c126-btn">🎤 Включить микрофон</button>',
   '<button type="button" id="c131-cam" class="c126-btn">📷 Включить камеру</button>',
   '<button type="button" id="c131-screen" class="c126-btn">🖥 Показать экран</button>',
@@ -304,6 +320,10 @@ function init(hooks){
  $('c131-screen').addEventListener('click',()=>toggle('screen'));
  $('c131-invite').addEventListener('click',invite);
  $('c131-join').addEventListener('click',join);
+ $('c216-select').addEventListener('change',e=>{screenChoice=e.target.value;screenZoom='fit';$('c216-zoom').value='fit';screenLayout();});
+ $('c216-zoom').addEventListener('change',e=>{screenZoom=e.target.value;screenLayout();});
+ $('c216-fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else if($('c216-stage').requestFullscreen)await $('c216-stage').requestFullscreen();else status('Полный экран недоступен в этом браузере. Используйте увеличение.',true);}catch(_){status('Браузер не разрешил полный экран.',true);}});
+ $('c216-audio').addEventListener('click',async()=>{try{await call?.startAudio();$('c216-audio').hidden=true;status('Звук разрешён.');}catch(_){status('Звук пока заблокирован браузером.',true);}});
  // React immediately to CRM navigation/logout, not just the periodic fallback.
  if(typeof MutationObserver!=='undefined'){
   let previousPage=$('app')?.dataset?.activePage||'';

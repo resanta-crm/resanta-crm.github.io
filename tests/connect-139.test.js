@@ -59,6 +59,7 @@ function videoRuntime(){
  vm.runInNewContext(video,{window,document,MutationObserver,
   setTimeout,clearTimeout,setInterval:()=>42,clearInterval:()=>{},console});
  const client=()=>({
+  rpc:async(name,args)=>{assert.equal(name,'connect_call_action_v2');if(args.p_action==='start')history.push({body:'📹 Начался видеозвонок',room_id:args.p_room_id});return {data:{call:{id:'call-a',status:'ringing'}}};},
   functions:{invoke:async()=>({data:{ok:true,url:'wss://test.livekit.cloud',token:'test'}})},
   from:table=>{assert.equal(table,'connect_messages_v1');return{
    insert:obj=>{history.push(obj);return{
@@ -71,13 +72,13 @@ function videoRuntime(){
  return {window,ids,calls,send,history,setRoom:id=>roomId=id,flush:()=>new Promise(r=>setTimeout(r,40))};
 }
 (async()=>{
- await check('Starting a video meeting automatically saves ONE invitation and requests FCM',async()=>{
+ await check('Starting a video meeting creates ONE server invitation without a second client push',async()=>{
   const t=videoRuntime();
   t.ids.get('c131-start').click();await t.flush();
   assert.equal(t.calls.filter(x=>x==='connected').length,1);
   assert.equal(t.history.length,1,'sender should not need to press Invite separately');
   assert.match(t.history[0].body,/^📹 Начался видеозвонок/);
-  assert.equal(t.send.length,1,'automatic invite should request push');
+  assert.equal(t.send.length,0,'server queue owns push, no duplicate client transport');
   t.ids.get('c131-leave').click();await t.flush();
  });
  await check('Explicitly joining another chat leaves old room and joins the selected room',async()=>{
@@ -91,7 +92,7 @@ function videoRuntime(){
  await check('Recipient joining an incoming call NEVER sends reverse invite/push',async()=>{
   const t=videoRuntime();
   t.window.crmConnectVideo131.rememberIncoming({
-   room_id:'room-uuid',sender_id:'another-user',created_at:new Date().toISOString(),
+   room_id:'room-uuid',call_id:'call-a',sender_id:'another-user',created_at:new Date().toISOString(),
    body:'📹 Начался видеозвонок. Войдите'
   });
   t.ids.get('c131-start').click();await t.flush();
@@ -139,7 +140,7 @@ function videoRuntime(){
  });
  await check('All role and invitation cache versions are present, modules syntax parse',()=>{
   for(const version of [
-   '151-resanta-connect-v1.js?v=8&fix=20261106','154-resanta-connect-video-v1.js?v=7&fix=20261106',
+   '151-resanta-connect-v1.js?v=8&connectRelease=20261114-v2','154-resanta-connect-video-v1.js?v=7&connectRelease=20261114-v2',
    '156-resanta-connect-android-push-v1.js?v=2',
    '144-resanta-ai360-branch-voice-v1.js?v=12',
    '146-resanta-ai360-branch-premium-voice-v1.js?v=6',

@@ -1,0 +1,26 @@
+name: CONNECT v2 delivery and screen regression
+on:
+  pull_request:
+    paths: ['assets/*connect*', 'connect-push-sw.js', 'supabase/functions/connect-*/**', 'supabase/migrations/*connect*', 'tests/connect-*', 'tests/sql/connect-*', '.github/workflows/connect-*', 'index.html']
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Browser and worker syntax
+        run: |
+          for f in assets/151-resanta-connect-v1.js assets/153-resanta-connect-notify-v1.js assets/154-resanta-connect-video-v1.js assets/156-resanta-connect-android-push-v1.js assets/287-connect-delivery-v2.js connect-push-sw.js; do node --check "$f"; done
+      - name: Legacy CONNECT, navigation, staff voice and APK compatibility
+        run: |
+          for f in tests/connect-*.test.js; do node "$f"; done
+      - name: DOM runtime
+        run: npm install --prefix "$RUNNER_TEMP/connect-dom" --no-audit --no-fund linkedom@0.18.12
+      - name: Delivery auth, outage fallback, read boundaries and multiple screen sources
+        run: CRM_DOM_MODULE="$RUNNER_TEMP/connect-dom/node_modules/linkedom/esm/index.js" node --test tests/connect-v2.test.mjs tests/connect-v2-http.test.mjs

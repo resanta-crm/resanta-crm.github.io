@@ -69,8 +69,8 @@
   await push().addListener('pushNotificationActionPerformed',result=>{
    const info=result?.notification?.data||{};
    const id=String(info.room_id||'');
-   if(/^[0-9a-f-]{36}$/i.test(id)&&profile()?.id){
-    window.crmConnectOpenRoom136?.(id,info.kind==='video_call');
+   if(/^[0-9a-f-]{36}$/i.test(id)&&profile()?.id&&(!info.account_id||info.account_id===profile().id)){
+    window.crmConnectOpenRoom136?.(id,false); // Join remains an explicit action in the selected chat.
    }
   });
  }
@@ -91,18 +91,20 @@
  function init(){
   if(!native()||!push())return;
   buildButton();
+  const resume=async()=>{if(!profile()?.id||registered)return;try{await checkRights(profile().id);await listeners();const p=await push().checkPermissions();if(p.receive==='granted')await push().register();}catch(_){}};
+  void resume();
   // Register click handlers on every APK startup, not only after requesting permission.
   // This permits notification taps to open the chat when Android resumes a closed WebView.
   listeners().catch(()=>{});
   const app=$('app');
   if(app&&typeof MutationObserver!=='undefined'){
-   const observer=new MutationObserver(()=>{if(app.style.display==='none')onSignedOut();else buildButton();});
+   const observer=new MutationObserver(()=>{if(app.style.display==='none')onSignedOut();else {buildButton();void resume();}});
    observer.observe(app,{attributes:true,attributeFilter:['style']});
   }
   const client=dbClient();
   if(client?.auth?.onAuthStateChange){
    client.auth.onAuthStateChange((event)=>{
-    if(event==='SIGNED_OUT')onSignedOut();
+    if(event==='SIGNED_OUT')onSignedOut();else if(event==='SIGNED_IN')void resume();
    });
   }
  }

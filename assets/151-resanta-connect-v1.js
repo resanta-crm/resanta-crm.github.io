@@ -10,7 +10,7 @@
  const node=(tag,css,text)=>{const n=document.createElement(tag);if(css)n.className=css;if(text!==undefined)n.textContent=String(text??'');return n;};
  let staff=[],rooms=[],members=[],actor=null,roomId=null,channel=null;
  let active=false,loading=false,sending=false,ticker=null,dialogMode='create',myPermissions=null;
- let filterText='';
+ let filterText='',refreshing=false,oldest=null,loadingOlder=false;const drafts=new Map(),previews=new Map();
  const dbClient=()=>typeof db!=='undefined'?db:null;
  const profile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
  const isOpen=()=>$('app')?.dataset?.activePage==='connect'&&$('app')?.style?.display!=='none'&&!!profile();
@@ -56,35 +56,47 @@
    const b=button('','c126-room'+(r.id===roomId?' active':''),()=>selectRoom(r.id).catch(e=>notice(textErr(e),true)));
    b.dataset.roomId=r.id;
    b.append(node('b','',roomLabel(r)),node('small','',(r.kind==='direct'?'Личный':r.kind==='channel'?'Канал':'Группа')+' · '+members.filter(x=>x.room_id===r.id).length+' уч.'));
+   const preview=previews.get(r.id);if(preview)b.append(node('span','c216-preview',preview.body?.slice(0,85)||''),node('time','',dateTime(preview.created_at)));
    host.append(b);
   });
   window.crmConnectNotify128?.paint();
  }
  async function getDirectory(){
-  const res=await dbClient().rpc('connect_directory_v1');
+  const expected=actor;const res=await dbClient().rpc('connect_directory_v1');if(actor!==expected)return;
   staff=ensure(res)||[];
   if(!staff.some(u=>u.id===actor))throw Error('Нет доступа к реестру сотрудников CRM.');
  }
  async function getRooms(){
-  const results=await Promise.all([
+  const expected=actor;const results=await Promise.all([
    dbClient().from('connect_rooms_v1').select('id,kind,title,created_at').order('created_at',{ascending:false}),
-   dbClient().from('connect_room_members_v1').select('room_id,user_id,role')
+   dbClient().from('connect_room_members_v1').select('room_id,user_id,role,last_read_at'),
+   dbClient().rpc('connect_room_previews_v2')
   ]);
+  if(actor!==expected||profile()?.id!==expected)return;
+  previews.clear();for(const r of ensure(results[2])||[])previews.set(r.room_id,r);
   rooms=ensure(results[0])||[];
   members=ensure(results[1])||[];
   if(roomId&&!ownMember(roomId))resetRoom();
   renderRooms();
  }
- function appendMsg(message){
+ function receipt(message){const others=members.filter(x=>x.room_id===message.room_id&&x.user_id!==actor);return others.length&&others.every(x=>Date.parse(x.last_read_at)>=Date.parse(message.created_at))?(others.length>1?'Прочитано всеми':'Прочитано'):'Сохранено';}
+ function updateCall(message,bubble){
+  if(!message.call_id||!myPermissions?.video_enabled)return;
+  let state=bubble.querySelector('.c216-call-state');if(state?.dataset.final==='1'||state?.dataset.busy==='1')return;
+  if(!state){state=node('small','c216-call-state','Проверяем состояние звонка…');bubble.append(state);}state.dataset.busy='1';
+  dbClient().rpc('connect_call_action_v2',{p_room_id:message.room_id,p_action:'get',p_call_id:message.call_id}).then(r=>{if(!bubble.isConnected)return;const c=r.data?.call;const active=c&&['ringing','active'].includes(c.status);state.textContent=c?({ringing:'Ожидает ответа',active:'Звонок идёт',ended:'Звонок завершён',missed:'Пропущенный звонок'}[c.status]||'Звонок'):'Состояние недоступно';if(c&&!active){bubble.querySelector('button')?.remove();state.dataset.final='1';}}).catch(()=>{state.textContent='Состояние временно недоступно';}).finally(()=>{state.dataset.busy='';});
+ }
+ function appendMsg(message,prepend=false){
   window.crmConnectVideo131?.rememberIncoming?.(message);
   const host=$('c126-messages');
   if(!host||message.room_id!==roomId)return;
-  if(host.querySelector('[data-message="'+message.id+'"]'))return;
+  const atBottom=host.scrollHeight-host.scrollTop-host.clientHeight<80;
+  const existing=host.querySelector('[data-message="'+message.id+'"]');if(existing){const r=existing.querySelector('.c216-receipt');if(r)r.textContent=receipt(message);updateCall(message,existing);return;}
   host.querySelector('.c126-empty')?.remove();
   const bubble=node('article','c126-bubble'+(message.sender_id===actor?' mine':''));
   bubble.dataset.message=message.id;
   bubble.append(node('b','',staffName(message.sender_id)),node('div','',message.body),node('time','',dateTime(message.created_at)));
-  const incomingCall=String(message.body||'').startsWith('📹 Начался видеозвонок')&&
+  const incomingCall=!!message.call_id&&
     message.sender_id!==actor&&myPermissions?.video_enabled===true&&
     Date.now()-Date.parse(message.created_at||'')<4*60*1000&&
     Date.now()-Date.parse(message.created_at||'')>=0;
@@ -95,20 +107,28 @@
     enter.title='Подключиться к звонку этого чата';
     bubble.append(enter);
   }
-  host.append(bubble);
-  host.scrollTop=host.scrollHeight;
+  updateCall(message,bubble);
+  if(message.sender_id===actor)bubble.append(node('small','c216-receipt',receipt(message)));
+  if(prepend)host.prepend(bubble);else{host.append(bubble);host.dataset.latestMessage=message.id;if(atBottom)host.scrollTop=host.scrollHeight;else $('c216-new-messages').hidden=false;}
  }
  async function getMessages(){
-  const requested=roomId;if(!requested)return;
-  const res=await dbClient().from('connect_messages_v1')
-   .select('id,room_id,sender_id,body,created_at')
-   .eq('room_id',requested).order('created_at',{ascending:false}).limit(100);
-  const rows=ensure(res)||[];
-  if(roomId!==requested)return;
-  const host=$('c126-messages');host.replaceChildren();
-  if(!rows.length)host.append(node('div','c126-empty','Напишите первое сообщение.'));
-  rows.slice().reverse().forEach(appendMsg);
+  const requested=roomId,expected=actor;if(!requested)return;
+  const res=await dbClient().from('connect_messages_v1').select('id,room_id,sender_id,body,created_at,call_id').eq('room_id',requested).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100);
+  const rows=ensure(res)||[];if(roomId!==requested||actor!==expected||profile()?.id!==expected)return;
+  const host=$('c126-messages');const initial=host.dataset.roomId!==requested;
+  if(initial){host.replaceChildren();host.dataset.roomId=requested;host.dataset.latestMessage='';oldest=rows.at(-1)||null;$('c216-older').hidden=rows.length<100;$('c216-new-messages').hidden=true;}
+  if(!rows.length&&!host.children.length)host.append(node('div','c126-empty','Напишите первое сообщение.'));
+  rows.slice().reverse().forEach(m=>appendMsg(m));
+  if(initial)host.scrollTop=host.scrollHeight;
   await window.crmConnectMedia127?.sync(requested,rows.map(x=>x.id));
+ }
+ async function getOlder(){
+  if(loadingOlder||!oldest||!roomId)return;loadingOlder=true;const requested=roomId,expected=actor,boundary=oldest,host=$('c126-messages'),height=host.scrollHeight,scroll=host.scrollTop;
+  try{const r=await dbClient().from('connect_messages_v1').select('id,room_id,sender_id,body,created_at,call_id').eq('room_id',requested).or('created_at.lt.'+boundary.created_at+',and(created_at.eq.'+boundary.created_at+',id.lt.'+boundary.id+')').order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100);
+   const rows=ensure(r)||[];if(roomId!==requested||actor!==expected||profile()?.id!==expected)return;
+   for(const m of rows)appendMsg(m,true);if(rows.length)oldest=rows.at(-1);$('c216-older').hidden=rows.length<100;host.scrollTop=scroll+host.scrollHeight-height;
+   await window.crmConnectMedia127?.sync(requested,rows.map(x=>x.id));
+  }catch(e){notice(textErr(e),true);}finally{loadingOlder=false;}
  }
  function subscribe(id){
   stopSub();
@@ -129,10 +149,12 @@
   const room=rooms.find(x=>x.id===id);
   if(!room||!ownMember(id))throw Error('Чат недоступен.');
   window.crmConnectVideo131?.chatChanged(id);
-  roomId=id;
+  if(roomId)drafts.set(actor+':'+roomId,$('c126-text').value);
+  const changed=roomId!==id;roomId=id;$('page-connect').querySelector('.c126-grid')?.classList.add('c216-room-open');if(changed){$('c126-text').value=drafts.get(actor+':'+id)||'';$('c126-messages').dataset.roomId='';}
   window.crmConnectMedia127?.discardIfNeeded();
   $('c126-name').textContent=roomLabel(room);
   $('c126-info').textContent=members.filter(x=>x.room_id===id).length+' участников';
+  if($('c216-mute'))$('c216-mute').textContent=window.crmConnectDeliveryV2?.isMuted?.(id)?'Уведомления чата: выкл.':'Уведомления чата: вкл.';
   $('c126-invite').hidden=room.kind==='direct'||ownMember(id)?.role!=='owner';
   $('c126-compose').hidden=false;
   if($('c131-start'))$('c131-start').hidden=!myPermissions?.video_enabled;
@@ -195,22 +217,20 @@
  }
  async function send(e){
   e.preventDefault();if(sending||!roomId)return;
-  const input=$('c126-text'),body=input.value.trim();
+  const input=$('c126-text'),original=input.value,body=original.trim(),targetRoom=roomId,targetActor=actor;
   if(!body)return;
   sending=true;$('c126-send').disabled=true;
   try{
    const res=await dbClient().from('connect_messages_v1')
-    .insert({room_id:roomId,sender_id:actor,body})
+    .insert({room_id:targetRoom,sender_id:targetActor,body})
     .select('id,room_id,sender_id,body,created_at').single();
-   const message=ensure(res);if(message){appendMsg(message);window.crmConnectPush138?.sendForMessage?.(message.id);}
-   input.value='';notice('Сообщение отправлено.');
+   const message=ensure(res);if(actor!==targetActor||profile()?.id!==targetActor)return;
+   drafts.delete(targetActor+':'+targetRoom);if(message&&roomId===targetRoom){appendMsg(message);if(input.value===original)input.value='';notice('Сообщение сохранено.');}
   }catch(e){notice(textErr(e),true);}
   finally{sending=false;$('c126-send').disabled=false;}
  }
  async function refresh(){
-  if(!isOpen()||!actor)return;
-  await getRooms();if(roomId)await getMessages();
-  window.crmConnectNotify128?.refresh();
+  if(!isOpen()||!actor||refreshing)return;refreshing=true;try{await getRooms();if(roomId)await getMessages();window.crmConnectNotify128?.refresh();}finally{refreshing=false;}
  }
  async function open(){
   if(typeof goPage!=='function'||!$('page-connect'))return;
@@ -228,7 +248,7 @@
    myPermissions=rights.data;
    goPage('connect','Чаты');
    if(actor!==response.data.user.id){
-    stopSub();actor=response.data.user.id;rooms=[];members=[];staff=[];resetRoom();
+    stopSub();actor=response.data.user.id;rooms=[];members=[];staff=[];drafts.clear();previews.clear();$('c126-messages').dataset.roomId='';resetRoom();
    }
    await getDirectory();await getRooms();
    if(roomId&&ownMember(roomId))await selectRoom(roomId);
@@ -248,6 +268,11 @@
  }
  function init(){
   const host=$('page-connect');if(!host)return;
+  const mute=button('Уведомления чата: вкл.','c126-btn',async()=>{if(!roomId)return;const value=!window.crmConnectDeliveryV2?.isMuted?.(roomId);const r=await dbClient().rpc('connect_set_mute_v2',{p_room_id:roomId,p_muted:value});if(r.error){notice(textErr(r.error),true);return;}window.crmConnectDeliveryV2?.setMuted?.(roomId,value);mute.textContent=value?'Уведомления чата: выкл.':'Уведомления чата: вкл.';});mute.id='c216-mute';$('c126-info').parentElement?.append(mute);
+  const back=button('← Все чаты','c126-btn c216-back',()=>{$('page-connect').querySelector('.c126-grid')?.classList.remove('c216-room-open');});$('c126-name').parentElement?.prepend(back);
+  const messages=$('c126-messages');const older=button('Загрузить предыдущие сообщения','c126-btn',getOlder);older.id='c216-older';older.hidden=true;messages.before(older);
+  const next=button('Новые сообщения ↓','c126-btn',()=>{messages.scrollTop=messages.scrollHeight;next.hidden=true;window.crmConnectNotify128?.markRead(roomId);});next.id='c216-new-messages';next.hidden=true;messages.after(next);
+  messages.addEventListener('scroll',()=>{if(messages.scrollHeight-messages.scrollTop-messages.clientHeight<80){next.hidden=true;window.crmConnectNotify128?.markRead(roomId);}});
   $('c126-refresh').addEventListener('click',()=>refresh().catch(e=>notice(textErr(e),true)));
   $('c126-new').addEventListener('click',()=>openDialog(false));
   $('c126-invite').addEventListener('click',()=>openDialog(true));
@@ -287,6 +312,7 @@
   await selectRoom(id);
   if(joinVideo&&myPermissions?.video_enabled)await window.crmConnectVideo131?.join?.({incoming:true});
  }
+ window.crmConnectRoomState216={roomId:()=>roomId,lastMessageId:()=>($('c126-messages')?.dataset.latestMessage||null),atBottom:()=>{const e=$('c126-messages');return !!e&&e.scrollHeight-e.scrollTop-e.clientHeight<80;}};
  window.crmConnectOpenRoom136=openInvitedRoom;
  window.crmConnectOpen126=open;
  // defer scripts execute while readyState is 'interactive'; later CONNECT modules

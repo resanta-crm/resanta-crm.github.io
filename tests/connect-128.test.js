@@ -32,9 +32,9 @@ test('no direct writes or anonymous access',()=>{
  assert.doesNotMatch(sql,/grant\s+update\s+on\s+public\.connect_room_members_v1/i);
 });
 test('optional browser notifications, no app-closed push claim',()=>{
- assert.match(notify,/Notification\.requestPermission\(\)/);
- assert.match(notify,/document\.hidden&&typeof Notification/);
- assert.match(notify,/while the CRM page remains open/);
+ assert.match(read('assets/287-connect-delivery-v2.js'),/Notification\.requestPermission\(\)/);
+ assert.match(notify,/document\.hidden\|\|/);
+ assert.match(notify,/Open-page fallback/);
  assert.doesNotMatch(notify,/ServiceWorker|pushManager|serviceWorker\.register/);
 });
 test('unread refresh is lazy and login-safe',()=>{

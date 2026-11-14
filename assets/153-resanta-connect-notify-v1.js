@@ -1,5 +1,5 @@
 /* RESANTA CONNECT #128: unread counters + optional browser notifications.
- * No OS background push: works while the CRM page remains open.
+ * Open-page fallback; background Web Push is isolated in CONNECT v2.
  * No extra sign-in, no service worker or microphone use.
  */
 (function(){
@@ -7,14 +7,14 @@
 if(window.crmConnectNotify128)return;
 let client=null,account=null,counts=new Map(),total=0;
 let pollTimer=null,observer=null,fetchBusy=false,initialized=false,seenFirst=false,ackTimer=null;
-let realtimeChannel=null,seenMessageIds=new Set(),notificationAccount=null,videoAllowed=false;
+let realtimeReady=false;let realtimeChannel=null,seenMessageIds=new Set(),notificationAccount=null,videoAllowed=false;
 const $=id=>document.getElementById(id);
 const activeProfile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
 const database=()=>typeof db!=='undefined'?db:null;
 const isSignedIn=()=>!!activeProfile()?.id&&$('app')?.style?.display!=='none';
 function clearState(){
  if(realtimeChannel&&database())database().removeChannel(realtimeChannel).catch?.(()=>{});
- realtimeChannel=null;notificationAccount=null;seenMessageIds.clear();
+ realtimeChannel=null;realtimeReady=false;notificationAccount=null;seenMessageIds.clear();
  account=null;counts.clear();total=0;seenFirst=false;videoAllowed=false;
  for(const id of ['c128-nav-count','c128-bottom-count']){
   const span=$(id);if(span){span.textContent='';span.hidden=true;}
@@ -39,7 +39,7 @@ function paint(){
   if(b){b.textContent=count>99?'99+':String(count);b.hidden=!count;}
  }
  const hint=$('c128-allow');
- if(hint)hint.hidden=!isSignedIn()||typeof Notification==='undefined'||Notification.permission!=='default';
+ if(hint)hint.hidden=!isSignedIn();
 }
 function startUi(){
  badge('c128-nav-count','nav-connect');
@@ -49,15 +49,8 @@ function startUi(){
   const btn=document.createElement('button');
   btn.type='button';btn.id='c128-allow';btn.className='c126-btn';
   btn.textContent='🔔 Уведомления';btn.hidden=true;
-  btn.title='Разрешить уведомления, пока CRM открыта';
-  btn.addEventListener('click',async()=>{
-   if(typeof Notification==='undefined')return;
-   try{
-    const result=await Notification.requestPermission();
-    if(result==='granted')btn.hidden=true;
-    else btn.hidden=true;
-   }catch(_){btn.hidden=true;}
-  });
+  btn.title='Подключение браузера, APK и проверка доставки';
+  btn.addEventListener('click',()=>window.crmConnectDeliveryV2?.panel?.());
   bar.append(btn);
  }
  paint();
@@ -71,6 +64,7 @@ async function checkAccount(){
  const rights=await database().from('connect_permissions_v1').select('chat_enabled,video_enabled')
   .eq('user_id',id).maybeSingle();
  if(rights.error||!rights.data?.chat_enabled){clearState();return null;}
+ if(!isSignedIn()||activeProfile()?.id!==id)return null;
  account=id;counts.clear();total=0;seenFirst=false;videoAllowed=rights.data.video_enabled===true;
  startUi();startRealtime(id);return id;
 }
@@ -87,21 +81,19 @@ async function refresh(){
   const next=new Map(),data=result.data||[];
   for(const row of data){const n=Math.max(0,Number(row.unread_count)||0);if(n)next.set(row.room_id,n);}
   const newTotal=[...next.values()].reduce((a,b)=>a+b,0);
-  const increment=seenFirst&&newTotal>total;
+  const changed=data.filter(r=>seenFirst&&(Number(r.unread_count)||0)>(counts.get(r.room_id)||0));
   counts=next;total=newTotal;seenFirst=true;
   paint();
-  if(increment&&document.hidden&&typeof Notification!=='undefined'&&Notification.permission==='granted'&&!realtimeChannel){
-   try{
-    const n=new Notification('РЕСАНТА CONNECT',{body:'Новые сообщения в корпоративных чатах',tag:'resanta-connect-unread'});
-    n.onclick=()=>{window.focus();n.close();window.crmConnectOpen126?.();};
-   }catch(_){}
+  if(!realtimeReady){
+   for(const row of changed){const latest=await database().from('connect_messages_v1').select('id,room_id,sender_id,body,created_at,call_id').eq('room_id',row.room_id).neq('sender_id',id).order('created_at',{ascending:false}).limit(1);if(account===id&&!latest.error&&latest.data?.[0])onRealtimeMessage(latest.data[0]);}
   }
+
  }catch(e){
   // Chat notification service must not break login, CRM navigation or messages.
   console.warn('CONNECT unread refresh:',String(e?.message||e));
  }finally{fetchBusy=false;}
 }
-function notificationToast(roomId,isVideo){
+function notificationToast(roomId,isVideo,callId){
   if(!isSignedIn())return;
   let host=$('c136-notification-toast');
   if(!host){
@@ -114,28 +106,33 @@ function notificationToast(roomId,isVideo){
   const open=document.createElement('button');open.type='button';open.textContent=isVideo?'Присоединиться':'Открыть чат';
   open.addEventListener('click',async()=>{
    host.hidden=true;
-   try{await window.crmConnectOpenRoom136?.(roomId,isVideo);}catch(e){console.warn('CONNECT incoming action:',String(e?.message||e));}
+   try{await window.crmConnectOpenRoom136?.(roomId,false);if(isVideo){if(callId){const r=await database().rpc('connect_call_action_v2',{p_room_id:roomId,p_action:'get',p_call_id:callId});if(!r.data?.call||!['ringing','active'].includes(r.data.call.status))throw Error('Звонок уже завершён.');}await window.crmConnectVideo131?.join?.({incoming:true});}}catch(e){console.warn('CONNECT incoming action:',String(e?.message||e));}
   });
   const close=document.createElement('button');close.type='button';close.textContent='✕';
   close.setAttribute('aria-label','Скрыть уведомление');close.addEventListener('click',()=>{host.hidden=true;});
-  host.append(message,open,close);host.hidden=false;
+  host.append(message,open);
+  if(isVideo&&callId){const decline=document.createElement('button');decline.type='button';decline.textContent='Отклонить';decline.addEventListener('click',async()=>{await database().rpc('connect_call_action_v2',{p_room_id:roomId,p_action:'decline',p_call_id:callId});host.hidden=true;});host.append(decline);}
+  host.append(close);host.hidden=false;
+  if(isVideo){window.crmConnectDeliveryV2?.playSound?.();setTimeout(()=>{if(host.dataset.callId===callId)host.hidden=true;},90000);host.dataset.callId=callId||'';}
 }
 function onRealtimeMessage(message){
  if(!message?.id||!account||message.sender_id===account||!message.room_id)return;
+ if(window.crmConnectDeliveryV2?.isMuted?.(message.room_id)){void refresh();return;}
  if(seenMessageIds.has(message.id))return;
  seenMessageIds.add(message.id);
  if(seenMessageIds.size>150)seenMessageIds.clear();
  // Chat-only staff must never see a button offering to join a forbidden video call.
- const isVideo=videoAllowed&&String(message.body||'').startsWith('📹 Начался видеозвонок');
+ const isVideo=videoAllowed&&!!(message.call_id||message.kind==='video_call');
  // Do not display alert for a chat that the user is actively reading, except for calls.
- const alreadyReading=$('app')?.dataset?.activePage==='connect' &&
+ const alreadyReading=!document.hidden&&(document.hasFocus?.()??true)&&$('app')?.dataset?.activePage==='connect' &&
   !!document.querySelector('#c126-rooms .c126-room.active[data-room-id="'+message.room_id+'"]');
- if(!alreadyReading||isVideo)notificationToast(message.room_id,isVideo);
- if(typeof Notification!=='undefined'&&Notification.permission==='granted'&&document.hidden){
+ let noticeClaim=true;try{const key='connect-notice:'+account+':'+message.id;noticeClaim=!localStorage.getItem(key);if(noticeClaim)localStorage.setItem(key,String(Date.now()));}catch(_){}
+ if(noticeClaim&&(!alreadyReading||isVideo))notificationToast(message.room_id,isVideo,message.call_id);
+ if(noticeClaim&&typeof Notification!=='undefined'&&Notification.permission==='granted'&&(document.hidden||!(document.hasFocus?.()??true))&&!window.crmConnectDeliveryV2?.isSubscribed?.()){
   try{
    const n=new Notification(isVideo?'📹 Видеозвонок РЕСАНТА CONNECT':'💬 Сообщение РЕСАНТА CONNECT',{
     body:isVideo?'Приглашение от коллеги. Откройте чат для подключения.':'Новое сообщение от коллеги.',
-    tag:'connect-incoming-'+message.id
+    tag:'connect-'+message.id
    });
    n.onclick=()=>{window.focus();n.close();window.crmConnectOpenRoom136?.(message.room_id,isVideo);};
   }catch(_){}
@@ -150,6 +147,7 @@ function startRealtime(id){
    if(account===id&&isSignedIn())onRealtimeMessage(event.new);
   })
   .subscribe(state=>{
+   realtimeReady=state==='SUBSCRIBED';
    if(state==='CHANNEL_ERROR')console.warn('CONNECT realtime notifications unavailable, falling back to polling');
   });
 }
@@ -160,13 +158,12 @@ function acknowledge(roomId){
  const expectedRoom=roomId,expectedAccount=account;
  ackTimer=setTimeout(async()=>{
   ackTimer=null;
-  if(!isSignedIn()||account!==expectedAccount||$('app')?.dataset?.activePage!=='connect')return;
+  if(!isSignedIn()||account!==expectedAccount||document.hidden||!(document.hasFocus?.()??true)||$('app')?.dataset?.activePage!=='connect'||window.crmConnectRoomState216?.roomId()!==expectedRoom||!window.crmConnectRoomState216?.atBottom())return;
+  const last=window.crmConnectRoomState216?.lastMessageId();if(!last)return;
   try{
-   const result=await database().rpc('connect_mark_read_v1',{p_room_id:expectedRoom});
+   const result=await database().rpc('connect_mark_read_v2',{p_room_id:expectedRoom,p_message_id:last});
    if(result.error)throw result.error;
-   counts.delete(expectedRoom);
-   total=[...counts.values()].reduce((a,b)=>a+b,0);
-   paint();
+   await refresh();
   }catch(e){console.warn('CONNECT mark read:',String(e?.message||e));}
  },450);
 }
@@ -174,7 +171,8 @@ function init(){
  if(initialized)return;
  initialized=true;startUi();
  pollTimer=window.setInterval(refresh,35000);
- document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden){refresh();acknowledge(window.crmConnectRoomState216?.roomId());}});
+ window.addEventListener('focus',()=>{refresh();acknowledge(window.crmConnectRoomState216?.roomId());});
  const root=$('app');
  if(root){
   observer=new MutationObserver(()=>{
@@ -186,7 +184,7 @@ function init(){
  refresh();
 }
 window.crmConnectNotify128={
- init,refresh,markRead:acknowledge,paint,roomCount:id=>counts.get(id)||0
+ init,refresh,incoming:onRealtimeMessage,markRead:acknowledge,paint,roomCount:id=>counts.get(id)||0
 };
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
 else init();

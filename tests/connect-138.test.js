@@ -42,36 +42,17 @@ verify('No Firebase service secrets in browser or migration',()=>{
  assert.doesNotMatch(js,/service_account|private_key|FCM_SERVER_KEY|SUPABASE_SERVICE_ROLE_KEY|google-services\.json/);
  assert.match(html,/assets\/156-resanta-connect-android-push-v1\.js\?v=2/);
 });
-verify('FCM server requires sender CRM JWT and exact message ownership',()=>{
+verify('Legacy sender verifies authenticated message owner and never sends a second push',()=>{
  const worker=read('supabase/functions/connect-fcm-send/index.ts');
- assert.match(worker,/auth\.getUser\(jwt\)/);
- assert.match(worker,/msg\.data\.sender_id!==userId/);
- assert.match(worker,/connect_active_staff_v1/);
- assert.match(worker,/connect_room_members_v1/);
- assert.match(worker,/if\(self\.error\|\|!self\.data\)/);
- assert.match(worker,/connect_permissions_v1/);
- assert.match(worker,/!isVideo\|\|x\.video_enabled/);
- assert.match(worker,/connect_push_devices_v1/);
+ assert.match(worker,/auth\.getUser\(token\)/);assert.match(worker,/m\.data\.sender_id!==a\.data\.user\.id/);assert.match(worker,/queued:true/);assert.doesNotMatch(worker,/messages:send/);
 });
-verify('FCM worker uses server credentials, no customer message in notification payload',()=>{
- const worker=read('supabase/functions/connect-fcm-send/index.ts');
- assert.match(worker,/FIREBASE_SERVICE_ACCOUNT_JSON/);
- assert.match(worker,/SUPABASE_SERVICE_ROLE_KEY/);
- assert.match(worker,/https:\/\/fcm\.googleapis\.com\/v1\/projects\//);
- assert.match(worker,/notification:\{title:/);
- assert.doesNotMatch(worker,/notification:\{[^}]*msg\.data\.body/);
- assert.match(worker,/connect_push_delivery_v1/);
- assert.match(sql,/create table if not exists public\.connect_push_delivery_v1/);
- assert.match(sql,/revoke all on public\.connect_push_delivery_v1 from public,anon,authenticated/);
+verify('Server queue covers text, attachments and calls with bounded ownership-checked transports',()=>{
+ const worker=read('supabase/functions/connect-delivery-v2/index.ts');
+ const migration=read('supabase/migrations/20261114151152_connect_delivery_calls_v2.sql');
+ assert.match(worker,/FIREBASE_SERVICE_ACCOUNT_JSON/);assert.match(worker,/auth\.getUser\(bearer\)/);assert.match(worker,/connect_active_staff_v1/);assert.match(worker,/connect_delivery_claim_v2/);assert.match(worker,/webpush\.sendNotification/);assert.match(worker,/eq\('user_id',task\.recipient_id\)/);
+ assert.match(migration,/after insert on public\.connect_messages_v1/);assert.match(migration,/for update skip locked/);assert.match(migration,/ACCESS_CHANGED/);assert.match(migration,/LEASE_EXPIRED/);assert.doesNotMatch(worker,/body:.*task\.body/);
 });
-verify('Every sent chat and call invitation requests FCM without blocking conversation',()=>{
- const chat=read('assets/151-resanta-connect-v1.js');
- const livekit=read('assets/154-resanta-connect-video-v1.js');
- assert.match(chat,/crmConnectPush138\?\.sendForMessage\?\.\(message\.id\)/);
- assert.match(livekit,/crmConnectPush138\?\.sendForMessage\?\.\(r\.data\.id\)/);
- assert.match(js,/connect-fcm-send/);
- assert.match(js,/sendForMessage/);
- assert.match(html,/151-resanta-connect-v1\.js\?v=8/);
- assert.match(html,/154-resanta-connect-video-v1\.js\?v=7/);
+verify('Calls use server lifecycle and browser push is integrated without an alternate login',()=>{
+ const video=read('assets/154-resanta-connect-video-v1.js');assert.match(video,/connect_call_action_v2/);assert.match(html,/287-connect-delivery-v2/);assert.match(js,/connect-fcm-send/);
 });
 console.log('CONNECT #138 staging '+count+' tests passed');
