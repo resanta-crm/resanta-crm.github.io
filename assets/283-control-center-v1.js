@@ -268,6 +268,7 @@ function onClick(e){
 }
 function onChange(e){if(!active()||!e.target.matches?.('[data-cc-month]'))return;const m=String(e.target.value);if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||m>monthNow())return;persist();state.month=m;state.slots={};restore();load();}
 function prepareAgentRequest(question,memory={}){
+ if(w.RESANTA_CLIENTS_UNIFIED_V1?.active?.())return w.RESANTA_CLIENTS_UNIFIED_V1.prepareAgentRequest(question,memory);
  const unchanged={question,memory};if(!active()||state.legacy||state.actor!==actor())return unchanged;
  const q=String(question||'');
  const months=['январ','феврал','март','апрел','мая','июн','июл','август','сентябр','октябр','ноябр','декабр'];

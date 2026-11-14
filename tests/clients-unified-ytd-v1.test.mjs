@@ -35,6 +35,7 @@ test('one client has five distinct TTs, exact visits, no duplicated per-store re
  assert.equal(f.document.querySelectorAll('#uc-detail script').length,0);f.click('[data-uc-tab=stores]');
  assert.equal(f.document.querySelectorAll('#uc-detail .uc-content .uc-store').length,5);assert.match(f.document.getElementById('uc-detail').textContent,/На согласовании/);assert.match(f.document.getElementById('uc-detail').textContent,/Визитов за 2026-11: 4/);assert.doesNotMatch(f.document.querySelector('.uc-store').textContent,/500/);
  const prepared=f.ctx.RESANTA_CLIENTS_UNIFIED_V1.prepareAgentRequest('Сводка по этому клиенту',{});assert.match(prepared.question,/client_id/);assert.doesNotMatch(prepared.question,/500/);
+ const home=read('assets/283-control-center-v1.js');f.ctx.w=f.ctx;const hook=vm.runInContext('('+home.slice(home.indexOf('function prepareAgentRequest('),home.indexOf('function install(){'))+')',f.ctx);assert.equal(hook('Сводка по этому клиенту',{}).question,prepared.question);
 });
 test('read-only director cannot edit links or addresses; actor changes discard detail and selection',async()=>{
  const f=fixture({edit:false});await flush();await f.ctx.RESANTA_CLIENTS_UNIFIED_V1.openDetail(ids[0]);f.click('[data-uc-tab=stores]');assert.equal(f.document.querySelector('[data-uc-action=edit-store]'),null);assert.equal(f.document.querySelector('[data-uc-action=add-store]'),null);
