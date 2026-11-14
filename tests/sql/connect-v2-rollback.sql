@@ -30,10 +30,27 @@ begin
  update public.connect_delivery_v2 set status='sending',lease_at=now()-interval '3 minutes',attempts=1 where id=d;
  perform public.connect_delivery_claim_v2(12);
  assert (select status='unknown' from public.connect_delivery_v2 where id=d),'uncertain delivery no blind retry';
+ perform set_config('request.jwt.claim.sub','19dd9943-99ae-47c4-a39c-4f82a11059a6',true);
+ perform public.connect_set_mute_v2(r,true);
+ perform set_config('request.jwt.claim.sub','544fb1e2-ef70-44de-bc62-e0e1596a4bfc',true);
+ insert into public.connect_messages_v1(room_id,sender_id,body) values(r,auth.uid(),'rollback muted') returning id into f;
+ assert not exists(select 1 from public.connect_delivery_v2 where message_id=f),'muted recipient is not enqueued';
+ perform set_config('request.jwt.claim.sub','19dd9943-99ae-47c4-a39c-4f82a11059a6',true);perform public.connect_set_mute_v2(r,false);
+ perform set_config('request.jwt.claim.sub','544fb1e2-ef70-44de-bc62-e0e1596a4bfc',true);
+ insert into public.connect_messages_v1(room_id,sender_id,body) values(r,auth.uid(),'📹 Начался видеозвонок fake plain text') returning id into f;
+ assert not exists(select 1 from public.connect_delivery_v2 where message_id=f and kind='video_call'),'plain text cannot spoof a structured call';
+ perform set_config('connect.test_room',r::text,true);
+ perform set_config('request.jwt.claim.sub','4fd79fa0-232d-4768-8099-25f47923cc4f',true);
  -- Private tables: authenticated role never has SELECT on tokens or queue.
  assert not has_table_privilege('authenticated','public.connect_web_devices_v2','select'),'private web subscriptions';
  assert not has_table_privilege('authenticated','public.connect_runtime_v2','select'),'private VAPID/dispatch secrets';
  assert not has_function_privilege('authenticated','public.connect_delivery_claim_v2(integer)','execute'),'service-only claim';
 end $$;
+set local role authenticated;
+do $$ begin
+ assert not exists(select 1 from public.connect_calls_v2 where room_id=current_setting('connect.test_room')::uuid),'RLS hides calls of another room';
+ assert not exists(select 1 from public.connect_messages_v1 where room_id=current_setting('connect.test_room')::uuid),'RLS hides messages of another room';
+end $$;
+reset role;
 rollback;
 select 'PASS: calls, ownership, read boundary, queue, leases and private grants; transaction rolled back' result;
