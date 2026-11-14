@@ -1,0 +1,2 @@
+# User routes verify every token with auth.getUser; internal cron verifies the protected dispatch secret.
+verify_jwt = false

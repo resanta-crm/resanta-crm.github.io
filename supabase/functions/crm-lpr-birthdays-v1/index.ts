@@ -1,245 +1,60 @@
-// Isolated LPR & birthday service. Role is rechecked against CRM users for every request.
-// All writes are server-side, scoped by client's current manager. No birth year stored.
+// JWTs are verified with auth.getUser. Only dispatch uses the protected internal secret.
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
-const PROJECT='https://baqchjtvtmcfzwjjluhs.supabase.co';
-const SIDS=new Set(['ba55dfe5-7e48-4f1f-b40e-674c7752fe1a','544fb1e2-ef70-44de-bc62-e0e1596a4bfc']);
-const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
-const SVC=createClient(Deno.env.get('SUPABASE_URL')||PROJECT,
- Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'',{auth:{persistSession:false,autoRefreshToken:false}});
-const h=r=>({'content-type':'application/json; charset=utf-8','cache-control':'no-store',
- 'Access-Control-Allow-Origin':ORIGINS.has(r.headers.get('origin'))?r.headers.get('origin'):'https://resanta-crm.by',
- 'Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info,x-crm-dispatch-secret',
- 'Access-Control-Allow-Methods':'POST,OPTIONS','Vary':'Origin'});
-const respond=(r,o,status=200)=>new Response(JSON.stringify(o),{status,headers:h(r)});
-const normalize=s=>String(s||'').trim().toLocaleLowerCase('ru-RU').replace(/\s+/g,' ');
-const fmt=d=>new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Europe/Minsk'}).format(d);
-const asDate=(s)=>{const [y,m,d]=s.split('-').map(Number);return new Date(Date.UTC(y,m-1,d,12));};
-const yearless=(d)=>({month:Number(fmt(d).slice(5,7)),day:Number(fmt(d).slice(8,10))});
-const validMonthDay=(month,day)=>Number.isInteger(month)&&Number.isInteger(day)&&
- month>=1&&month<=12&&day>=1&&day<=31&&new Date(Date.UTC(2000,month-1,day)).getUTCMonth()===month-1;
-const clamp=(x,n)=>typeof x==='string'&&x.trim().length<=n?x.trim():'';
-const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-async function identity(req){
- const token=String(req.headers.get('authorization')||'').replace(/^Bearer /i,'');
- if(!token||token.length>6000)throw Error('login_required');
- const a=await SVC.auth.getUser(token);
- if(a.error||!a.data.user?.id)throw Error('login_required');
- const {data:user,error}=await SVC.from('users').select('id,name,role,region,email').eq('id',a.data.user.id).maybeSingle();
- if(error||!user||user.id!==a.data.user.id)throw Error('account_unavailable');
- const boss=SIDS.has(user.id)&&user.role==='boss'&&user.region==='Витебск'&&
-   (user.id.startsWith('ba55')?normalize(user.name)==='сидарович к.н.':normalize(user.name)==='александр паюшин');
- const allowedManagerIds={
-  'Руднев':'19dd9943-99ae-47c4-a39c-4f82a11059a6',
-  'Ачинович':'3d935a76-c6fe-44b6-b248-fcbe58c6bf1c',
-  'Шкуран':'4fd79fa0-232d-4768-8099-25f47923cc4f'};
- const manager=user.role==='manager'&&user.region==='Витебск'&&
-   allowedManagerIds[user.name]===user.id;
- if(!boss&&!manager)throw Error('not_authorized');
- return {...user,tier:boss?'director':'manager'};
+import {PEOPLE,DIRECTORS,principal,norm,validDate,localDay,nextBirthday,canRead,recipients,responsible,eventsFor,vipCategory,deliveryResult} from './domain.mjs';
+const SVC=createClient(Deno.env.get('SUPABASE_URL')||'https://baqchjtvtmcfzwjjluhs.supabase.co',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'',{auth:{persistSession:false,autoRefreshToken:false}});
+const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by','http://localhost','https://localhost','capacitor://localhost']);
+const headers=req=>({'content-type':'application/json; charset=utf-8','cache-control':'no-store','Access-Control-Allow-Origin':ORIGINS.has(req.headers.get('origin'))?req.headers.get('origin'):'https://resanta-crm.by','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info,x-crm-dispatch-secret','Access-Control-Allow-Methods':'POST,OPTIONS','Vary':'Origin'});
+const reply=(req,body,status=200)=>new Response(JSON.stringify(body),{status,headers:headers(req)});
+const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(x);
+const text=(x,n)=>typeof x==='string'&&x.trim().length<=n?x.trim():'';
+const checked=r=>{if(r.error)throw Error('database_unavailable');return r.data;};
+async function all(table,columns,configure=q=>q){const out=[];for(let start=0;start<20000;start+=1000){const rows=checked(await configure(SVC.from(table).select(columns)).order(table==='vip_membership_v236429'?'client_name':table==='crm_lpr_vip_links_v2'?'vip_name':table==='client360_entity_clients_v1'?'client_id':'id').range(start,start+999))||[];out.push(...rows);if(rows.length<1000)return out;}throw Error('directory_limit_reached');}
+async function identity(req){const token=String(req.headers.get('authorization')||'').replace(/^Bearer /i,'');if(!token||token.length>6000)throw Error('login_required');const auth=await SVC.auth.getUser(token);if(auth.error||!auth.data?.user)throw Error('login_required');const p=checked(await SVC.from('users').select('id,name,role,region,email,access_scope').eq('id',auth.data.user.id).maybeSingle());const u=principal(auth.data.user,p);if(!u)throw Error('not_authorized');return u;}
+async function directories(u){
+ const ids=u.tier==='triovist'?[]:checked(await SVC.rpc('crm_lpr_client_scope_v2',{p_user_id:u.id}))||[];
+ const clients=[];for(let i=0;i<ids.length;i+=75)clients.push(...checked(await SVC.from('clients').select('id,name,manager_name,city,code,contact').in('id',ids.slice(i,i+75)).order('name'))||[]);
+ const [membership,overrides,profiles,bindings]=await Promise.all([all('vip_membership_v236429','client_id,client_name,department,active',q=>q.eq('active',true)),all('crm_lpr_vip_links_v2','vip_name,client_id'),SVC.rpc('crm_lpr_profiles_v2').then(checked),SVC.from('crm_telegram_bindings').select('user_id,chat_id').eq('active',true).then(checked)]);
+ const links=ids.length?await all('client360_entity_clients_v1','client_id,entity_id'):[],legalIds=[...new Set(links.filter(l=>ids.includes(l.client_id)).map(l=>l.entity_id))];const entities=legalIds.length?checked(await SVC.from('client360_entities_v1').select('id,name').in('id',legalIds)):[];for(const c of clients){const l=links.find(l=>l.client_id===c.id),entity=(entities||[]).find(e=>e.id===l?.entity_id),override=overrides.find(o=>o.client_id===c.id);c.legal_entity_id=entity?.id||null;c.source_client_name=c.name;c.name=entity?.name||override?.vip_name||c.name;}
+ if(u.tier==='director'||u.tier==='triovist')clients.push({id:'triovist',name:'Триовист',manager_name:null,city:'Витебск',code:null});
+ const decorated=clients.map(c=>({...c,vip_group:vipCategory(c,membership,overrides),is_vip:!!vipCategory(c,membership,overrides)}));for(const c of decorated){if(c.legal_entity_id&&!c.vip_group){const peer=decorated.find(x=>x.legal_entity_id===c.legal_entity_id&&x.vip_group);if(peer){c.vip_group=peer.vip_group;c.is_vip=true;}}}
+ return {clients:decorated,membership,overrides,legalLinks:links,profiles:profiles||[],bindings:bindings||[],ids:new Set(ids)};
 }
-async function allowedClients(u){
- let q=SVC.from('clients').select('id,name,manager_name,is_vip').or('is_archived.eq.false,is_archived.is.null').or('to_delete.eq.false,to_delete.is.null');
- if(u.tier==='manager')q=q.eq('manager_name',u.name);
- // Directors can see all VIP clients across the existing CRM; manager remains scoped.
- // Owner boss can see VIP from whole client base, but not ordinary LPR contacts.
- const {data,error}=await q.order('name').limit(3000);
- if(error)throw Error('client_directory_unavailable');
- const clients=data||[];
- // VIP is true if either CRM flag OR the active master VIP membership.
- const ids=clients.map(x=>x.id);
- let vipIds=new Set();
- if(ids.length){
-   const {data:membership,error:e}=await SVC.from('vip_membership_v236429')
-    .select('client_id,client_name').eq('active',true).limit(4000);
-   if(e)throw Error('vip_membership_unavailable');
-   vipIds=new Set((membership||[]).map(x=>x.client_id).filter(Boolean));
-   for(const m of (membership||[]).filter(x=>!x.client_id&&x.client_name)){
-     const matches=clients.filter(c=>normalize(c.name)===normalize(m.client_name));
-     if(matches.length===1)vipIds.add(matches[0].id);
-   }
- }
- return clients.map(c=>({...c,is_vip:c.is_vip===true||vipIds.has(c.id)}));
+// Bounded batches avoid URLs containing hundreds of client IDs.
+async function fetchScopedLprContacts(ids,svc=SVC){const contacts=[],allowed=new Set(ids);for(let offset=0;offset<ids.length;offset+=225){const requests=[];for(let i=offset;i<Math.min(offset+225,ids.length);i+=75)requests.push(svc.from('crm_lpr_contacts_v1').select('id,client_id,organization_key,responsible_user_id,full_name,position_title,birth_day,birth_month,note,active,updated_at').in('client_id',ids.slice(i,i+75)).eq('active',true).order('full_name').limit(2500));for(const r of await Promise.all(requests)){if(r.error)throw Error('lpr_read_unavailable');if((r.data||[]).length>=2500)throw Error('lpr_read_limit_reached');for(const c of r.data||[])if(allowed.has(c.client_id))contacts.push(c);}}return contacts;}
+async function contactList(u,ctx){const list=await fetchScopedLprContacts([...ctx.ids]);if(u.tier==='director'||u.tier==='triovist'){const rows=await all('crm_lpr_contacts_v1','id,client_id,organization_key,responsible_user_id,full_name,position_title,birth_day,birth_month,note,active,updated_at',q=>{q=q.eq('organization_key','triovist').eq('active',true);return u.tier==='triovist'?q.eq('responsible_user_id',u.id):q;});list.push(...rows);}return [...new Map(list.filter(p=>canRead(u,p,ctx.ids)).map(p=>[p.id,p])).values()];}
+async function list(u,req,body){const ctx=await directories(u),people=await contactList(u,ctx),today=localDay(),map=new Map(ctx.clients.map(c=>[c.id,c]));const contacts=people.map(p=>{const client=map.get(p.organization_key==='triovist'?'triovist':p.client_id);if(!client)return null;const owner=responsible(p,client,ctx.profiles);return {...p,client_id:p.organization_key==='triovist'?'triovist':p.client_id,client_name:client.name,manager_name:PEOPLE[owner]?.name||client.manager_name,vip_group:client.vip_group,is_vip:client.is_vip,...nextBirthday(p.birth_month,p.birth_day,today)};}).filter(Boolean);
+ const covered=new Set(contacts.map(c=>c.client_id)),coveredEntities=new Set(ctx.clients.filter(c=>covered.has(c.id)&&c.legal_entity_id).map(c=>c.legal_entity_id)),clients=ctx.clients.map(c=>({...c,has_lpr:covered.has(c.id)||!!c.legal_entity_id&&coveredEntities.has(c.legal_entity_id)})),accounts=[...new Map(clients.map(c=>[c.legal_entity_id||c.id,c])).values()];
+ const sourceVip=ctx.membership.filter(v=>['ВИП ДФС','ВИП ДФ'].includes(v.department));const unresolved=u.tier==='director'?sourceVip.filter(v=>!v.client_id&&!ctx.overrides.some(o=>norm(o.vip_name)===norm(v.client_name))).map(v=>({name:v.client_name,vip_group:v.department})):[];
+ const [delivery,worker]=await Promise.all([(async()=>{const logs=[];for(let i=0;i<people.length;i+=75)logs.push(...checked(await SVC.from('crm_lpr_birthday_delivery_v1').select('id,lpr_id,recipient_user_id,event_date,event_kind,status,attempts,last_error,delivered_at,updated_at').in('lpr_id',people.slice(i,i+75).map(p=>p.id)).order('updated_at',{ascending:false}).limit(100))||[]);return logs.sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at))).slice(0,100)})(),SVC.from('crm_lpr_worker_state_v2').select('started_at,finished_at,status,sent,failed,unknown,no_binding,error_code').eq('id',true).maybeSingle().then(checked)]);
+ const visibleRecipients=u.tier==='director'?Object.keys(PEOPLE):[u.id,...DIRECTORS];const telegram=visibleRecipients.map(id=>({user_id:id,name:PEOPLE[id].name,connected:ctx.bindings.some(b=>b.user_id===id),self:id===u.id}));
+ const managers=Object.entries(PEOPLE).filter(([id,p])=>u.tier==='director'||id===u.id).map(([id,p])=>({id,name:p.name,tier:p.tier}));
+ return reply(req,{mode:'lpr_v1',version:'lpr_v2',scope:u.tier,actor_id:u.id,as_of:today,read_only:false,clients,contacts,upcoming:contacts.filter(c=>c.days_until<=14).sort((a,b)=>a.days_until-b.days_until),missing_clients:accounts.filter(c=>!c.has_lpr).length,total_vip:accounts.filter(c=>c.is_vip).length,missing_vip:accounts.filter(c=>c.is_vip&&!c.has_lpr).length,unmatched_vip:unresolved.map(x=>x.name),unresolved_vip:unresolved,telegram,managers,deliveries:delivery||[],delivery_total_lpr:people.length,worker:u.tier==='director'?worker:worker?{started_at:worker.started_at,finished_at:worker.finished_at,status:worker.status,error_code:worker.error_code}:null,schedule:{days_before:1,hour:10,time_zone:'Europe/Minsk',leap_day:'28 февраля в невисокосный год'}});
 }
-// Keep scoped LPR reads below PostgREST URL limits when directors have hundreds of clients.
-// Do not broaden permissions: only request contacts for the authorized client IDs.
-async function fetchScopedLprContacts(ids,svc=SVC){
- const allowed=new Set(ids),contacts=[],batchSize=75,parallel=3;
- for(let offset=0;offset<ids.length;offset+=batchSize*parallel){
-  const requests=[];
-  for(let i=offset;i<Math.min(offset+batchSize*parallel,ids.length);i+=batchSize){
-   const part=ids.slice(i,i+batchSize);
-   requests.push(svc.from('crm_lpr_contacts_v1')
-    .select('id,client_id,full_name,position_title,birth_day,birth_month,note,updated_at,created_by')
-    .in('client_id',part).eq('active',true).order('full_name').limit(2500));
-  }
-  const responses=await Promise.all(requests);
-  for(const {data,error} of responses){
-   if(error)throw Error('lpr_read_unavailable');
-   for(const contact of data||[])if(allowed.has(contact.client_id))contacts.push(contact);
-  }
- }
- contacts.sort((a,b)=>String(a.full_name||'').localeCompare(String(b.full_name||''),'ru'));
- return contacts.slice(0,2500);
+async function save(u,body,req){const ctx=await directories(u),client=ctx.clients.find(c=>c.id===body.client_id);if(!client)return reply(req,{error:'client_not_owned'},403);const full_name=text(body.full_name,120),position_title=text(body.position_title||'',120),id=body.id||null;const birth_day=Number(body.birth_day),birth_month=Number(body.birth_month);if(id&&!uuid(id)||full_name.length<2||!validDate(birth_month,birth_day))return reply(req,{error:'invalid_person_or_birthday'},400);
+ if(body.position_title!==undefined&&(typeof body.position_title!=='string'||body.position_title.trim().length>120)||body.note!==undefined&&(typeof body.note!=='string'||body.note.trim().length>200))return reply(req,{error:'invalid_person_or_birthday'},400);
+ const tri=client.id==='triovist',manager=tri?body.responsible_user_id:null;if(tri&&(!PEOPLE[manager]||PEOPLE[manager].tier!=='triovist'||u.tier==='triovist'&&manager!==u.id))return reply(req,{error:'responsible_not_authorized'},403);
+ let old=null;if(id){old=checked(await SVC.from('crm_lpr_contacts_v1').select('*').eq('id',id).eq('active',true).maybeSingle());if(!old||!canRead(u,old,ctx.ids))return reply(req,{error:'contact_not_owned'},403);if((old.organization_key==='triovist'?'triovist':old.client_id)!==client.id)return reply(req,{error:'contact_client_cannot_change'},409);}
+ if(!tri&&client.legal_entity_id){const members=ctx.legalLinks.filter(l=>l.entity_id===client.legal_entity_id&&ctx.ids.has(l.client_id)).map(l=>l.client_id);const existing=checked(await SVC.from('crm_lpr_contacts_v1').select('id,full_name,birth_day,birth_month').in('client_id',members).eq('active',true));if((existing||[]).some(p=>p.id!==id&&norm(p.full_name)===norm(full_name)&&p.birth_day===birth_day&&p.birth_month===birth_month))return reply(req,{error:'duplicate_person'},409);}
+ const values={client_id:tri?null:client.id,organization_key:tri?'triovist':null,responsible_user_id:manager,full_name,position_title,birth_month,birth_day,note:body.note===undefined?old?.note||'':text(body.note,200),updated_by:u.id,updated_at:new Date().toISOString()};
+ const q=id?SVC.from('crm_lpr_contacts_v1').update(values).eq('id',id):SVC.from('crm_lpr_contacts_v1').insert({...values,created_by:u.id});const r=await q.select('id').single();if(r.error)return reply(req,{error:r.error.code==='23505'?'duplicate_person':'save_failed'},409);return reply(req,{ok:true,id:r.data.id});
 }
-async function list(u,req){
- const clients=await allowedClients(u),ids=clients.map(c=>c.id);
- const contacts=await fetchScopedLprContacts(ids);
- const map=new Map(clients.map(c=>[c.id,c]));
- const today=fmt(new Date()),mid=asDate(today);
- const upcoming=contacts.map(x=>{
-  const c=map.get(x.client_id);if(!c)return null;
-  let days=null;
-  for(let i=0;i<=14;i++){
-   const next=new Date(mid.getTime()+i*86400000),parts=yearless(next);
-   if(parts.month===x.birth_month&&parts.day===x.birth_day){days=i;break;}
-  }
-  return days===null?null:{id:x.id,full_name:x.full_name,position_title:x.position_title,
-    client_name:c.name,client_id:c.id,manager_name:c.manager_name,is_vip:c.is_vip,
-    days_until:days,birth_day:x.birth_day,birth_month:x.birth_month};
- }).filter(Boolean).sort((a,b)=>a.days_until-b.days_until||Number(b.is_vip)-Number(a.is_vip)).slice(0,120);
- let unmatchedVip=[];
- if(u.tier==='director'){
-  const {data:master,error:masterErr}=await SVC.from('vip_membership_v236429')
-   .select('client_name').eq('active',true).is('client_id',null).limit(100);
-  if(masterErr)throw Error('vip_master_unavailable');
-  unmatchedVip=(master||[]).map(v=>v.client_name).filter(Boolean);
- }
- const covered=new Set(contacts.map(c=>c.client_id));
- return respond(req,{mode:'lpr_v1',scope:u.tier,read_only:false,as_of:today,
-  clients:clients.map(c=>({id:c.id,name:c.name,manager_name:c.manager_name,is_vip:c.is_vip,
-   has_lpr:covered.has(c.id)})),
-  contacts:contacts.map(({created_by,...item})=>item),
-  upcoming,missing_clients:clients.filter(c=>!covered.has(c.id)).length,total_vip:clients.filter(c=>c.is_vip).length,missing_vip:clients.filter(c=>c.is_vip&&!covered.has(c.id)).length,unmatched_vip:unmatchedVip});
-}
-async function save(u,b,req){
- if(u.tier!=='manager'&&u.tier!=='director')return respond(req,{error:'forbidden'},403);
- const id=typeof b.id==='string'&&/^[0-9a-f-]{36}$/i.test(b.id)?b.id:null;
- const client_id=typeof b.client_id==='string'&&/^[0-9a-f-]{36}$/i.test(b.client_id)?b.client_id:'';
- const full_name=clamp(b.full_name,120),position_title=clamp(b.position_title??'',120),note=clamp(b.note??'',200);
- const birth_month=Number(b.birth_month),birth_day=Number(b.birth_day);
- if(!client_id||full_name.length<2||!validMonthDay(birth_month,birth_day))
-  return respond(req,{error:'invalid_person_or_birthday'},400);
- const clients=await allowedClients(u);
- if(!clients.some(c=>c.id===client_id))return respond(req,{error:'client_not_owned'},403);
- if(id){
-  const {data:original,error:oe}=await SVC.from('crm_lpr_contacts_v1').select('id,client_id')
-   .eq('id',id).eq('active',true).maybeSingle();
-  if(oe||!original||original.client_id!==client_id)return respond(req,{error:'contact_not_owned'},403);
- }
- const update={client_id,full_name,position_title,note,birth_month,birth_day,
-  updated_by:u.id,updated_at:new Date().toISOString()};
- let query;
- if(id)query=SVC.from('crm_lpr_contacts_v1').update(update).eq('id',id).eq('client_id',client_id);
- else query=SVC.from('crm_lpr_contacts_v1').insert({...update,created_by:u.id});
- const {data,error}=await query.select('id,client_id,full_name,birth_month,birth_day').single();
- if(error)return respond(req,{error:error.code==='23505'?'duplicate_person':'save_failed'},409);
- return respond(req,{ok:true,contact:data});
-}
-async function remove(u,b,req){
- if(u.tier!=='manager'&&u.tier!=='director')return respond(req,{error:'forbidden'},403);
- const id=String(b.id||'');if(!/^[0-9a-f-]{36}$/i.test(id))return respond(req,{error:'invalid_id'},400);
- const {data:existing,error:e}=await SVC.from('crm_lpr_contacts_v1')
-  .select('client_id').eq('id',id).eq('active',true).maybeSingle();
- if(e||!existing)return respond(req,{error:'not_found'},404);
- const clients=await allowedClients(u);
- if(!clients.some(c=>c.id===existing.client_id))return respond(req,{error:'client_not_owned'},403);
- const {error}=await SVC.from('crm_lpr_contacts_v1').update({active:false,updated_by:u.id,
-  updated_at:new Date().toISOString()}).eq('id',id).eq('client_id',existing.client_id);
- if(error)return respond(req,{error:'save_failed'},503);
- return respond(req,{ok:true});
-}
-async function telegram(chat_id,text){
- const secret=Deno.env.get('TELEGRAM_BOT_TOKEN')||'';
- if(!secret)throw Error('telegram_token_missing');
- const r=await fetch('https://api.telegram.org/bot'+secret+'/sendMessage',{method:'POST',
-  headers:{'content-type':'application/json'},body:JSON.stringify({chat_id,text,
-    parse_mode:'HTML',disable_web_page_preview:true}),signal:AbortSignal.timeout(8000)});
- if(!r.ok||(await r.json().catch(()=>null))?.ok!==true)throw Error('telegram_send_failed');
-}
-async function dispatch(req){
- const {data:runtime,error:re}=await SVC.from('crm_telegram_runtime').select('value')
-  .eq('key','dispatch_secret').maybeSingle();
- const expected=String(runtime?.value?.secret||''),provided=req.headers.get('x-crm-dispatch-secret')||'';
- if(re||!expected||provided!==expected)return respond(req,{error:'forbidden'},403);
- const date=fmt(new Date()),base=asDate(date),events=[
-  {event_kind:'birthday',date,parts:yearless(base)},
-  {event_kind:'3_days',date:fmt(new Date(base.getTime()+3*86400000)),
-   parts:yearless(new Date(base.getTime()+3*86400000))}
- ];
- // No birthdays / personal data in log messages; no owner info in web response.
- const {data:contacts,error:ce}=await SVC.from('crm_lpr_contacts_v1')
-  .select('id,client_id,full_name,position_title,birth_month,birth_day').eq('active',true).limit(5000);
- if(ce)throw Error('birthday_contacts_unavailable');
- const candidates=(contacts||[]).filter(c=>events.some(e=>e.parts.month===c.birth_month&&e.parts.day===c.birth_day));
- if(!candidates.length)return respond(req,{ok:true,candidates:0,sent:0});
- const ids=[...new Set(candidates.map(c=>c.client_id))];
- const [cr,vr,ur,br]=await Promise.all([
-  SVC.from('clients').select('id,name,manager_name,is_vip').in('id',ids).or('is_archived.eq.false,is_archived.is.null').or('to_delete.eq.false,to_delete.is.null'),
-  SVC.from('vip_membership_v236429').select('client_id').in('client_id',ids).eq('active',true),
-  SVC.from('users').select('id,name,role,region').in('name',['Руднев','Ачинович','Шкуран','Сидарович К.Н.','Александр Паюшин']),
-  SVC.from('crm_telegram_bindings').select('user_id,chat_id').eq('active',true)
- ]);
- if([cr,vr,ur,br].some(x=>x.error))throw Error('dispatch_directory_unavailable');
- const vipIds=new Set((vr.data||[]).map(x=>x.client_id)),map=new Map((cr.data||[]).map(c=>[c.id,c]));
- const users=(ur.data||[]),bind=new Map((br.data||[]).map(b=>[b.user_id,b.chat_id]));
- let sent=0,skipped=0,failed=0;
- for(const person of candidates){
-  const client=map.get(person.client_id);
-  if(!client||(!client.is_vip&&!vipIds.has(client.id)))continue; // Only VIP gets Telegram.
-  const recipients=users.filter(u=>u.role==='manager'&&u.region==='Витебск'&&u.name===client.manager_name||
-    u.role==='boss'&&u.region==='Витебск'&&
-    (u.name==='Александр Паюшин'||u.name==='Сидарович К.Н.'&&
-     ['Руднев','Ачинович','Шкуран'].includes(client.manager_name)));
-  for(const event of events){
-   if(person.birth_month!==event.parts.month||person.birth_day!==event.parts.day)continue;
-   for(const u of recipients){
-    const chat=bind.get(u.id);
-    if(!chat){skipped++;continue;}
-    const row={lpr_id:person.id,recipient_user_id:u.id,event_date:event.date,
-     event_kind:event.event_kind,status:'pending',attempts:1};
-    // Insert before send: unique constraint prevents two cron invocations from
-    // producing duplicate birthday messages on the same day.
-    const {error:ie}=await SVC.from('crm_lpr_birthday_delivery_v1').insert(row);
-    if(ie){if(ie.code==='23505'){skipped++;continue;}throw Error('delivery_log_unavailable');}
-    const label=event.event_kind==='birthday'?'🎂 Сегодня день рождения':'🎉 Через три дня день рождения';
-    const msg=label+'\n<b>'+esc(person.full_name)+'</b>'+
-      (person.position_title?' · '+esc(person.position_title):'')+
-      '\nКлиент ВИП: <b>'+esc(client.name)+'</b>'+
-      '\nОтветственный: '+esc(client.manager_name)+'\nОткройте CRM → ЛПР и дни рождения.';
-    try{
-     await telegram(chat,msg);
-     await SVC.from('crm_lpr_birthday_delivery_v1').update({status:'sent',
-       delivered_at:new Date().toISOString(),updated_at:new Date().toISOString()})
-      .eq('lpr_id',person.id).eq('recipient_user_id',u.id)
-      .eq('event_date',event.date).eq('event_kind',event.event_kind);
-     sent++;
-    }catch{
-     await SVC.from('crm_lpr_birthday_delivery_v1').update({status:'failed',
-       last_error:'telegram_unavailable',updated_at:new Date().toISOString()})
-      .eq('lpr_id',person.id).eq('recipient_user_id',u.id)
-      .eq('event_date',event.date).eq('event_kind',event.event_kind);
-     failed++;
-    }
-   }
-  }
- }
- return respond(req,{ok:true,sent,skipped,failed});
-}
-Deno.serve(async(req)=>{
- if(req.method==='OPTIONS')return new Response(null,{status:204,headers:h(req)});
- if(req.method!=='POST')return respond(req,{error:'method_not_allowed'},405);
- const origin=req.headers.get('origin');
- if(origin&&!ORIGINS.has(origin))return respond(req,{error:'origin_forbidden'},403);
- try{
-  const body=await req.json().catch(()=>({})),action=String(body.action||'');
-  if(action==='dispatch')return await dispatch(req);
-  const u=await identity(req);
-  if(action==='list'||action==='brief')return await list(u,req);
-  if(action==='save')return await save(u,body,req);
-  if(action==='delete')return await remove(u,body,req);
-  return respond(req,{error:'unknown_action'},400);
- }catch(e){const code=String(e?.message||'internal_error');
-  return respond(req,{error:code==='login_required'?'login_required':
-   code==='not_authorized'?'not_authorized':'server_unavailable'},
-   ['login_required','not_authorized'].includes(code)?403:503);}
-});
+async function archive(u,b,req){if(!uuid(b.id))return reply(req,{error:'invalid_id'},400);const ctx=await directories(u),p=checked(await SVC.from('crm_lpr_contacts_v1').select('*').eq('id',b.id).eq('active',true).maybeSingle());if(!p||!canRead(u,p,ctx.ids))return reply(req,{error:'contact_not_owned'},403);checked(await SVC.from('crm_lpr_contacts_v1').update({active:false,updated_by:u.id,updated_at:new Date().toISOString()}).eq('id',p.id));return reply(req,{ok:true});}
+async function linkVip(u,b,req){if(u.tier!=='director')return reply(req,{error:'forbidden'},403);const ctx=await directories(u);if(!ctx.ids.has(b.client_id)||!ctx.membership.some(m=>m.active&&['ВИП ДФС','ВИП ДФ'].includes(m.department)&&m.client_name===b.vip_name&&!m.client_id))return reply(req,{error:'invalid_vip_link'},403);checked(await SVC.from('crm_lpr_vip_links_v2').upsert({vip_name:b.vip_name,client_id:b.client_id,updated_by:u.id,updated_at:new Date().toISOString()},{onConflict:'vip_name'}));return reply(req,{ok:true});}
+const html=x=>String(x||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function equalSecret(a,b){if(!a||!b)return false;const encoder=new TextEncoder(),hash=async x=>new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(x)));const [x,y]=await Promise.all([hash(a),hash(b)]);let diff=0;for(let i=0;i<x.length;i++)diff|=x[i]^y[i];return diff===0;}
+async function dispatch(req,b){const runtime=checked(await SVC.from('crm_telegram_runtime').select('value').eq('key','dispatch_secret').maybeSingle());if(!await equalSecret(String(runtime?.value?.secret||''),req.headers.get('x-crm-dispatch-secret')||''))return reply(req,{error:'forbidden'},403);
+ const dry=b.dry_run===true,today=localDay(),hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Minsk',hour:'2-digit',hour12:false}).format(new Date()));if(!dry&&hour<10)return reply(req,{ok:true,waiting_for_hour:10});
+ const people=await all('crm_lpr_contacts_v1','id,client_id,organization_key,responsible_user_id,full_name,position_title,birth_month,birth_day,active',q=>q.eq('active',true));const due=people.filter(p=>eventsFor(p,today).length);if(dry){let telegram={configured:!!Deno.env.get('TELEGRAM_BOT_TOKEN'),checked:false,ready:false};if(b.check_telegram===true&&telegram.configured){try{const r=await fetch('https://api.telegram.org/bot'+Deno.env.get('TELEGRAM_BOT_TOKEN')+'/getMe',{signal:AbortSignal.timeout(8000)});const x=await r.json();telegram={...telegram,checked:true,ready:r.ok&&x.ok===true&&norm(x.result?.username)==='resantacrmactionsbot'};}catch{telegram={...telegram,checked:true};}}const profile_checks=[];if(b.check_profiles===true){const ps=checked(await SVC.rpc('crm_lpr_profiles_v2'))||[];for(const p of ps){if(!PEOPLE[p.id])continue;const actor={...p,tier:PEOPLE[p.id].tier},ctx=await directories(actor),contacts=await contactList(actor,ctx);profile_checks.push({name:p.name,clients:ctx.clients.length,contacts:contacts.length,scope:actor.tier});}}return reply(req,{ok:true,dry_run:true,contacts:people.length,due:due.length,telegram,profile_checks});}
+ checked(await SVC.rpc('crm_lpr_delivery_recover_v2'));const start=new Date().toISOString();checked(await SVC.from('crm_lpr_worker_state_v2').update({started_at:start,status:'running',error_code:null}).eq('id',true));let sent=0,failed=0,unknown=0,no_binding=0,attempted=0;
+ try{const [profiles,bindings]=await Promise.all([SVC.rpc('crm_lpr_profiles_v2').then(checked),SVC.from('crm_telegram_bindings').select('user_id,chat_id').eq('active',true).then(checked)]);const candidates=new Map(due.map(p=>[p.id,p]));
+ peopleLoop: for(const person of candidates.values()){let client=null;if(person.client_id){client=checked(await SVC.from('clients').select('id,name,manager_name,is_archived,to_delete').eq('id',person.client_id).maybeSingle());if(!client||client.is_archived||client.to_delete)continue;}else client={id:'triovist',name:'Триовист'};
+ const ids=recipients(person,client,profiles||[]);if(!ids.length)continue;
+ // Field clients must still belong to Vitebsk; explicit branch assignment wins.
+ const owner=responsible(person,client,profiles||[]);if(person.client_id){const allowed=checked(await SVC.rpc('crm_lpr_client_scope_v2',{p_user_id:owner}))||[];if(!allowed.includes(person.client_id))continue;}
+ for(const event of eventsFor(person,today))for(const recipient of ids){const binding=(bindings||[]).find(x=>x.user_id===recipient&&Number(x.chat_id)>0);if(attempted>=6)break peopleLoop;const claim=checked(await SVC.rpc('crm_lpr_delivery_claim_v2',{p_lpr:person.id,p_recipient:recipient,p_date:event.event_date,p_kind:event.event_kind,p_bound:!!binding}));if(!binding){no_binding++;continue;}if(!claim)continue;
+ attempted++;
+ let result;try{const token=Deno.env.get('TELEGRAM_BOT_TOKEN');if(!token){result={status:'failed',error:'telegram_token_missing',retry_after:300};}else{const message=(event.event_kind==='birthday'?'🎂 Сегодня день рождения':'🎉 Завтра день рождения')+'\n<b>'+html(person.full_name)+'</b>'+(person.position_title?' · '+html(person.position_title):'')+'\nКлиент: <b>'+html(client.name)+'</b>\nОтветственный: '+html(PEOPLE[owner].name)+(event.adjusted?'\nДата рождения 29.02; в этом году поздравление 28.02.':'')+'\nCRM → ЛПР и дни рождения';const response=await fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:binding.chat_id,text:message,parse_mode:'HTML',disable_web_page_preview:true}),signal:AbortSignal.timeout(8000)});const body=await response.json().catch(()=>null);result=deliveryResult(response,body);}}catch{result={status:'delivery_unknown',error:'telegram_response_unknown'};}
+ const values={status:result.status,last_error:result.error||null,telegram_message_id:result.message_id||null,delivered_at:result.status==='sent'?new Date().toISOString():null,next_attempt_at:result.status==='failed'?new Date(Date.now()+(result.retry_after||300)*1000).toISOString():null,updated_at:new Date().toISOString()};const saved=await SVC.from('crm_lpr_birthday_delivery_v1').update(values).eq('id',claim).eq('status','sending').select('id').maybeSingle();if(saved.error||!saved.data){unknown++;continue;}if(result.status==='sent')sent++;else if(result.status==='failed')failed++;else unknown++;
+ }}checked(await SVC.from('crm_lpr_worker_state_v2').update({finished_at:new Date().toISOString(),status:failed||unknown||no_binding?'partial':'ok',sent,failed,unknown,no_binding,error_code:null}).eq('id',true));return reply(req,{ok:true,sent,failed,unknown,no_binding});
+ }catch{await SVC.from('crm_lpr_worker_state_v2').update({finished_at:new Date().toISOString(),status:'error',sent,failed,unknown,no_binding,error_code:'dispatch_failed'}).eq('id',true);return reply(req,{error:'dispatch_failed'},503);}}
+Deno.serve(async req=>{if(req.method==='OPTIONS')return new Response(null,{status:204,headers:headers(req)});if(req.method!=='POST')return reply(req,{error:'method_not_allowed'},405);const origin=req.headers.get('origin');if(origin&&!ORIGINS.has(origin))return reply(req,{error:'origin_forbidden'},403);try{const raw=await req.json().catch(()=>({})),b=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};if(b.action==='dispatch')return await dispatch(req,b);const u=await identity(req);if(b.action==='list'||b.action==='brief')return await list(u,req,b);if(b.action==='save')return await save(u,b,req);if(b.action==='delete')return await archive(u,b,req);if(b.action==='link_vip')return await linkVip(u,b,req);return reply(req,{error:'unknown_action'},400);}catch(e){const code=String(e?.message||'server_unavailable');return reply(req,{error:['login_required','not_authorized','directory_limit_reached'].includes(code)?code:'server_unavailable'},code==='login_required'?401:code==='not_authorized'?403:503);}});

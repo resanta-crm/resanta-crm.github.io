@@ -34,10 +34,10 @@ test('Manager route selects an exact physical store, not first company GPS',()=>
 });
 
 test('LPR boss may create birthdays, field manager cannot edit other clients',()=>{
- assert.match(lpr,/if\(u\.tier!=='manager'&&u\.tier!=='director'\)/);
- assert.match(lpr,/clients\.some\(c=>c\.id===client_id\)/);
- assert.match(lpr,/allowedManagerIds\[user\.name\]===user\.id/);
- assert.match(lpr,/unmatched_vip:unmatchedVip/);
+ assert.match(lpr,/principal\(auth.data.user,p\)/);
+ assert.match(lpr,/ctx.clients.find\(c=>c.id===body.client_id\)/);
+ assert.match(lpr,/canRead\(u,old,ctx.ids\)/);
+ assert.match(lpr,/unmatched_vip:unresolved.map/);
 });
 
 test('Versioned Client360 entrypoint does not replace CRM login',()=>{

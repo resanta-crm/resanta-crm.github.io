@@ -1,154 +1,63 @@
-/* Isolated LPR screen: birth day/month only. No polling of user data. */
-(function(root){
-'use strict';
-if(root.crmLprV1)return;
-const ENDPOINT='crm-lpr-birthdays-v1';
-const IDS=['544fb1e2-ef70-44de-bc62-e0e1596a4bfc','ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'];
-const M=['Руднев','Ачинович','Шкуран'];
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let nav=null,page=null,info=null,editId=null,loading=false;
-function role(){
- try{
-  const p=currentProfile,u=currentUser;
-  if(!u?.id||document.getElementById('app')?.style.display==='none')return null;
-  if(p?.role==='manager'&&p.region==='Витебск'&&M.includes(p.name))return 'manager';
-  if(p?.role==='boss'&&p.region==='Витебск'&&IDS.includes(u.id))return 'director';
- }catch{}return null;
-}
-function mount(){
- const main=document.getElementById('main-content'),link=document.getElementById('nav-clients');
- if(!main||!link)return;
- if(!nav){
-  nav=document.createElement('button');nav.className='nav-item';nav.id='nav-lpr-birthdays';
-  nav.textContent='🎂 ЛПР и дни рождения';nav.addEventListener('click',open);
-  link.parentNode?.insertBefore(nav,link.nextSibling);
- }
- if(!page){
-  page=document.createElement('div');page.className='page';page.id='page-lpr-birthdays';
-  page.innerHTML='<div class="page-title">🎂 ЛПР и дни рождения</div><div id="lpr-view-v1"></div>';
-  main.appendChild(page);
- }
+/* LPR-only view, exact identities and actor-bound responses. No financial or route mutations. */
+(function(root,d){
+'use strict';if(root.crmLprV2)return;
+const USERS={
+ '544fb1e2-ef70-44de-bc62-e0e1596a4bfc':['Александр Паюшин','boss','Витебск','director'],
+ 'ba55dfe5-7e48-4f1f-b40e-674c7752fe1a':['Сидарович К.Н.','boss','Витебск','director'],
+ '19dd9943-99ae-47c4-a39c-4f82a11059a6':['Руднев','manager','Витебск','manager'],
+ '3d935a76-c6fe-44b6-b248-fcbe58c6bf1c':['Ачинович','manager','Витебск','manager'],
+ '4fd79fa0-232d-4768-8099-25f47923cc4f':['Шкуран','manager','Витебск','manager'],
+ '9076ccde-a8cc-47e3-b71e-c31170b693ff':['Кришталь','manager','Триовист / 21vek.by','triovist'],
+ '6efa656e-45c6-473b-a853-89eccb9ee43a':['Александренко','manager','Триовист / 21vek.by','triovist']};
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),norm=x=>String(x||'').toLocaleLowerCase('ru-RU').replaceAll('ё','е').replace(/\s+/g,' ').trim(),compact=x=>norm(x).replace(/[^а-яa-z0-9]/g,'');
+const profile=()=>{try{return currentProfile||{}}catch(_){return {}}},user=()=>{try{return currentUser||{}}catch(_){return {}}};
+const actor=()=>[user().id,profile().id,profile().name,profile().role,profile().region,profile().email,profile().access_scope].join('|');
+function role(){const p=profile(),u=user(),a=USERS[u.id];if(['service_manager','payment_executor'].includes(p.access_scope)||!a||u.id!==p.id||norm(p.name)!==norm(a[0])||p.role!==a[1]||p.region!==a[2]||d.getElementById('app')?.style.display==='none')return null;return a[3];}
+let nav=null,page=null,info=null,editId=null,loading=false,saving=false,run=0,actorKey='',tab='upcoming',query='',category='',manager='',period=14,offset=0,error='',voiceSeq=0;
+const active=()=>role()&&page?.classList.contains('active');
+function reset(){if(actorKey===actor()&&role())return;actorKey=actor();info=null;editId=null;loading=false;saving=false;run++;voiceSeq++;query='';category='';manager='';offset=0;error='';if(page)page.querySelector('#lpr-view-v1').textContent='';}
+function mount(){const main=d.getElementById('main-content'),link=d.getElementById('nav-clients');if(!main||!link)return;
+ if(!nav){nav=d.createElement('button');nav.className='nav-item';nav.id='nav-lpr-birthdays';nav.textContent='🎂 ЛПР и дни рождения';nav.onclick=open;link.parentNode?.insertBefore(nav,link.nextSibling);}
+ if(!page){page=d.createElement('div');page.className='page';page.id='page-lpr-birthdays';page.innerHTML='<div class="page-title">🎂 ЛПР и дни рождения</div><div id="lpr-view-v1"></div>';main.appendChild(page);page.addEventListener('click',click);page.addEventListener('change',change);page.addEventListener('input',input);}
  nav.style.display=role()?'':'none';
+ if(!d.getElementById('lpr-v2-style')){const style=d.createElement('style');style.id='lpr-v2-style';style.textContent='#page-lpr-birthdays .lpr-controls{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:end}#page-lpr-birthdays label{display:grid;gap:6px;font-size:12px}#page-lpr-birthdays .lpr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:12px 0}#page-lpr-birthdays .lpr-stat{border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--card);display:grid;gap:7px}#page-lpr-birthdays .lpr-stat strong{font-size:22px}#page-lpr-birthdays .lpr-muted{font-size:12px;color:var(--sub);line-height:1.5}#page-lpr-birthdays .lpr-table{overflow:auto}#page-lpr-birthdays [aria-pressed=true]{background:var(--a);color:white}#page-lpr-birthdays .lpr-months{display:grid;grid-template-columns:repeat(12,minmax(15px,1fr));gap:6px;align-items:end;height:90px;margin:14px 0}#page-lpr-birthdays .lpr-months>div{display:grid;align-items:end;gap:4px;text-align:center;font-size:11px}#page-lpr-birthdays .lpr-months i{display:block;background:var(--a);border-radius:3px;min-height:2px}#page-lpr-birthdays .lpr-form label{min-width:0}#page-lpr-birthdays .form-input{min-width:0;max-width:100%}#page-lpr-birthdays .lpr-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}#page-lpr-birthdays button{min-height:36px}@media(max-width:560px){#page-lpr-birthdays .form-input{font-size:16px}#page-lpr-birthdays button{min-height:44px}}';d.head.appendChild(style);}}
+async function request(body){if(!role())throw Error('Нет доступа');const owner=actor();let timer;try{const r=await Promise.race([db.functions.invoke('crm-lpr-birthdays-v1',{body}),new Promise((_,reject)=>timer=root.setTimeout(()=>reject(Error(body.action==='save'?'Ответ о сохранении не получен. Обновите список перед повтором.':'Сервис не ответил вовремя. Повторите загрузку.')),15000))]);if(owner!==actor()||!role())throw Error('Учётная запись изменилась');if(r.error||r.data?.error){let code=r.data?.error;try{if(!code&&r.error?.context?.json)code=(await r.error.context.json()).error}catch(_){}const messages={duplicate_person:'Такой ЛПР уже записан у клиента.',contact_client_cannot_change:'При редактировании клиент сохраняется. Для другого клиента создайте нового ЛПР.',client_not_owned:'Клиент не входит в вашу область доступа.',contact_not_owned:'ЛПР не входит в вашу область доступа.',responsible_not_authorized:'Проверьте закреплённого менеджера.',invalid_person_or_birthday:'Проверьте имя и календарную дату.',login_required:'Требуется вход в CRM.',not_authorized:'Нет доступа к разделу.'};throw Error(messages[code]||'Не удалось подтвердить результат. Обновите данные.');}return r.data;}finally{root.clearTimeout(timer);}}
+async function reload(){if(!role())return;reset();if(loading)return;mount();if(!page)return;const owner=actor(),seq=++run;loading=true;error='';render();try{const x=await request({action:'list'});if(owner!==actor()||seq!==run)return;if(x?.version!=='lpr_v2'||x.actor_id!==user().id||x.scope!==role())throw Error('Неподтверждённые данные');info=x;}catch(e){if(owner===actor()&&seq===run)error=e.message;}finally{if(owner===actor()&&seq===run){loading=false;render();}}}
+async function open(){if(!role())return;reset();mount();root.goPage?.('lpr-birthdays','ЛПР и дни рождения');await reload();}
+const button=(label,a,id='')=>'<button type="button" class="btn-secondary" data-lpr-action="'+a+'" data-id="'+esc(id)+'">'+esc(label)+'</button>';
+const date=c=>String(c.birth_day).padStart(2,'0')+'.'+String(c.birth_month).padStart(2,'0');
+const status=s=>({sent:'Telegram принял сообщение',failed:'Ошибка · возможен повтор',no_binding:'Telegram не подключён',delivery_unknown:'Результат неизвестен · автоматический повтор остановлен',sending:'Отправляется',pending:'В очереди',cancelled:'Отменено'})[s]||s;
+function selectedContacts(){return (info?.contacts||[]).filter(c=>(!category||c.vip_group===category)&&(!manager||c.manager_name===manager)&&(!query||norm([c.full_name,c.client_name,c.position_title].join(' ')).includes(norm(query)))&&(tab!=='upcoming'||c.days_until<=period)).sort((a,b)=>tab==='upcoming'?a.days_until-b.days_until:norm(a.client_name).localeCompare(norm(b.client_name),'ru'));}
+function render(){const v=page?.querySelector('#lpr-view-v1');if(!v||!role())return;const a=info;const focused=d.activeElement?.id==='lpr-query',cursor=focused?d.activeElement.selectionStart:null;
+ if(!a){v.innerHTML='<div class="card" role="status">'+esc(error||(loading?'Загружаю ЛПР…':'Откройте список ЛПР.'))+' '+button('Повторить','reload')+'</div>';return;}
+ const rows=selectedContacts(),tabs=[['upcoming','Ближайшие даты'],['contacts','Все ЛПР'],['missing','Что заполнить'],['delivery','Telegram']];
+ v.innerHTML='<div class="lpr-controls"><span class="lpr-muted">Витебск · '+esc(role()==='director'?'Разрешённые клиенты':USERS[user().id][0])+'</span>'+button('Обновить','reload')+button('Добавить ЛПР','new')+'</div>'+
+ '<div class="lpr-stats"><div class="lpr-stat"><span>ЛПР</span><strong>'+a.contacts.length+'</strong></div><div class="lpr-stat"><span>Клиентов без ЛПР</span><strong>'+a.missing_clients+'</strong></div><div class="lpr-stat"><span>Дни рождения · 14 дней</span><strong>'+a.upcoming.length+'</strong></div><div class="lpr-stat"><span>Ваш Telegram</span><strong style="font-size:16px">'+(a.telegram.find(x=>x.self)?.connected?'Подключён':'Не подключён')+'</strong>'+button('Подключение','telegram')+'</div></div>'+
+ '<div class="lpr-controls">'+tabs.map(([key,label])=>'<button type="button" class="btn-secondary" data-lpr-tab="'+key+'" aria-pressed="'+(tab===key)+'">'+label+'</button>').join('')+'</div>'+
+ '<div class="lpr-controls"><label>Поиск<input class="form-input" id="lpr-query" value="'+esc(query)+'" placeholder="ЛПР, клиент, должность"></label><label>VIP-разрез<select class="form-input" id="lpr-category"><option value="">Все ЛПР</option>'+['ВИП ДФС','ВИП ДФ','ВИП ДД'].map(g=>'<option'+(category===g?' selected':'')+'>'+g+'</option>').join('')+'</select></label>'+(role()==='director'?'<label>Менеджер<select class="form-input" id="lpr-manager"><option value="">Все доступные</option>'+a.managers.filter(x=>x.tier!=='director').map(x=>'<option'+(manager===x.name?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></label>':'')+(tab==='upcoming'?'<label>Период<select class="form-input" id="lpr-period">'+[1,7,14,30,90,366].map(n=>'<option value="'+n+'"'+(period===n?' selected':'')+'>'+n+' дн.</option>').join('')+'</select></label>':'')+'</div>'+
+ '<p class="lpr-muted">Напоминания по всем заполненным ЛПР: за день и в день рождения, 10:00 по Москве/Минску. Получатели: закреплённый менеджер, Сидарович и Александр.</p>'+
+ (error?'<p role="alert">'+esc(error)+'</p>':'')+(loading?'<p role="status">Обновляю…</p>':'')+'<div id="lpr-content"></div><div id="lpr-editor"></div>';
+ const target=v.querySelector('#lpr-content');if(tab==='contacts'||tab==='upcoming'){
+ const counts=Array.from({length:12},(_,i)=>rows.filter(c=>c.birth_month===i+1).length),max=Math.max(1,...counts);
+ target.innerHTML='<div class="card" style="margin-top:12px"><h3>Дни рождения по месяцам</h3><div class="lpr-months" role="img" aria-label="Количество известных дней рождения по месяцам">'+counts.map((n,i)=>'<div><span>'+n+'</span><i style="height:'+(n/max*55)+'px"></i><span>'+['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'][i]+'</span></div>').join('')+'</div><div class="lpr-table"><table class="tbl"><thead><tr><th>Клиент</th><th>ЛПР / должность</th><th>День рождения</th><th>Ответственный</th><th></th></tr></thead><tbody>'+rows.slice(offset,offset+25).map(c=>'<tr><td>'+esc(c.client_name)+(c.vip_group?'<br><span class="lpr-muted">'+esc(c.vip_group)+'</span>':'')+'</td><td>'+esc(c.full_name)+'<br><span class="lpr-muted">'+esc(c.position_title)+'</span></td><td>'+date(c)+(tab==='upcoming'?'<br>'+esc(c.days_until===0?'Сегодня':c.days_until===1?'Завтра':'Через '+c.days_until+' дн.'):'')+(c.adjusted?'<br>В этом году 28.02':'')+'</td><td>'+esc(c.manager_name)+'</td><td>'+button('Изменить','edit',c.id)+' '+button('Архивировать','archive',c.id)+'</td></tr>').join('')+'</tbody></table></div>'+(!rows.length?'<p>Известных дат по выбранным фильтрам нет. Незаполненные клиенты показаны отдельно.</p>':'')+'<div class="lpr-controls">'+(offset?button('Назад','previous'):'')+'<span class="lpr-muted">'+Math.min(offset+25,rows.length)+' из '+rows.length+'</span>'+(offset+25<rows.length?button('Далее','next'):'')+'</div></div>';
+ }else if(tab==='missing'){
+ const missing=a.clients.filter(c=>!c.has_lpr&&(!category||c.vip_group===category)&&(!manager||c.manager_name===manager)&&(!query||norm(c.name).includes(norm(query)))).filter((c,i,all)=>!c.legal_entity_id||all.findIndex(x=>x.legal_entity_id===c.legal_entity_id)===i).sort((a,b)=>Number(!!b.vip_group)-Number(!!a.vip_group)||a.name.localeCompare(b.name,'ru'));
+ target.innerHTML='<div class="card" style="margin-top:12px"><h3>Требуют заполнения</h3><p class="lpr-muted">ФИО и даты уточняет ответственный. Неизвестные значения не создаются автоматически.</p>'+a.unresolved_vip.map(c=>'<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+esc(c.name)+' · '+esc(c.vip_group)+' · нужна привязка карточки '+button('Привязать для ЛПР','link-vip',c.name)+'</div>').join('')+missing.slice(offset,offset+25).map(c=>'<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+esc(c.name)+' · '+esc(c.manager_name||'Назначение по ЛПР')+' '+button('Заполнить','pick',c.id)+'</div>').join('')+'<div class="lpr-controls">'+(offset?button('Назад','previous'):'')+'<span>'+Math.min(offset+25,missing.length)+' из '+missing.length+'</span>'+(offset+25<missing.length?button('Далее','next'):'')+'</div></div>';
+ }else{target.innerHTML='<div class="card" style="margin-top:12px"><h3>Доставка Telegram</h3><p>Последний запуск: '+esc(a.worker?.finished_at?new Date(a.worker.finished_at).toLocaleString('ru-RU'):'ещё не выполнен')+' · '+esc(a.worker?.status||'не проверено')+'</p><p class="lpr-muted">Подключение бота и успешная отправка — разные состояния. «Telegram принял» не означает «прочитано».</p>'+a.telegram.map(t=>'<p>'+esc(t.name)+' · '+(t.connected?'Подключён':'Нужно подключить')+'</p>').join('')+'<div class="lpr-table"><table class="tbl"><thead><tr><th>ЛПР</th><th>Получатель</th><th>Событие</th><th>Статус</th></tr></thead><tbody>'+a.deliveries.map(x=>'<tr><td>'+esc(a.contacts.find(p=>p.id===x.lpr_id)?.full_name||'ЛПР')+'</td><td>'+esc(USERS[x.recipient_user_id]?.[0]||'Получатель')+'</td><td>'+esc(x.event_date)+' · '+(x.event_kind==='1_day'?'За день':x.event_kind==='birthday'?'В день рождения':'Старое событие')+'</td><td>'+esc(status(x.status))+' · попыток '+x.attempts+'/3</td></tr>').join('')+'</tbody></table></div>'+(!a.deliveries.length?'<p>Подтверждённых записей доставки пока нет.</p>':'')+'<p class="lpr-muted">Показаны последние 100 записей по '+a.delivery_total_lpr+' ЛПР текущей области.</p></div>';}
+ if(focused){const el=v.querySelector('#lpr-query');el.focus();try{el.setSelectionRange(cursor,cursor)}catch(_){}}
 }
-async function request(body){
- if(!role())throw Error('Нет доступа');
- const sess=await db.auth.getSession();if(!sess.data?.session?.access_token)throw Error('Требуется вход в CRM');
- const {data,error}=await db.functions.invoke(ENDPOINT,{body});
- if(error||data?.error)throw Error(data?.error||'Сервис ЛПР недоступен');
- return data;
-}
-async function reload(){
- if(loading||!role())return;loading=true;
- const v=page?.querySelector('#lpr-view-v1');if(v)v.textContent='Загружаю ЛПР…';
- try{const x=await request({action:'list'});
-  if(x.mode!=='lpr_v1'||x.scope!==role())throw Error('Данные не подтверждены');
-  info=x;render();
- }catch(e){if(v)v.textContent='Не удалось загрузить ЛПР: '+String(e.message||e);}
- finally{loading=false;}
-}
-async function open(){
- if(!role())return;mount();
- if(typeof root.goPage==='function')root.goPage('lpr-birthdays','ЛПР и дни рождения');
- else{document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));page.classList.add('active');}
- await reload();
-}
-function read(id){return page?.querySelector('#lpr-'+id)?.value||'';}
-function field(label,id,value='',type='text'){
- return '<label style="display:block;font-size:12px">'+label+
- '<input class="form-input" id="lpr-'+id+'" type="'+type+'" value="'+esc(value)+'"></label>';
-}
-function render(){
- const v=page?.querySelector('#lpr-view-v1');if(!v||!info)return;
- const clients=info.clients||[],contacts=info.contacts||[],upcoming=info.upcoming||[],canWrite=['manager','director'].includes(role());
- const fmt=d=>d.days_until===0?'Сегодня':d.days_until===1?'Завтра':'Через '+d.days_until+' дн.';
- v.innerHTML='<div class="card"><b>📅 Брифинг: ближайшие 14 дней</b>'+
- '<p>ЛПР: '+contacts.length+' · ВИП: '+(info.total_vip??'—')+' · ВИП без ЛПР: '+(info.missing_vip??'—')+' · Скоро дни рождения: '+upcoming.length+
- ' · Клиентов без ЛПР: '+info.missing_clients+'</p>'+
- (upcoming.length?upcoming.slice(0,40).map(c=>'<div style="padding:5px 0">'+esc(fmt(c))+
- ' — <b>'+esc(c.full_name)+'</b>, '+esc(c.client_name)+
- (c.is_vip?' 💎 ВИП':'')+(role()==='director'?' · '+esc(c.manager_name):'')+'</div>').join(''):
- '<p>В ближайшие 14 дней известных дат нет.</p>')+
- '<p style="font-size:11px;color:var(--sub)">Напоминания в Telegram для ВИП: за 3 дня и в день рождения, только при подключённом аккаунте.</p>'+
- '<button class="btn-secondary" id="lpr-link-telegram">Подключить Telegram</button></div>'+
- (canWrite?'<div class="card" style="margin-top:10px"><b>Добавить / изменить ЛПР</b>'+
- '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin:10px 0">'+
- '<label>Клиент<input id="lpr-client-find" class="form-input" placeholder="Поиск клиента"><select id="lpr-client" class="form-input"><option value="">Выбрать точку…</option>'+
- clients.slice().sort((a,b)=>Number(b.is_vip)-Number(a.is_vip)||a.name.localeCompare(b.name,'ru')).map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+(c.is_vip?' 💎':'')+'</option>').join('')+'</select></label>'+
- field('ФИО','name')+field('Должность','position')+
- field('День','day','','number')+field('Месяц','month','','number')+
- '</div><button class="btn-primary" id="lpr-save">Сохранить</button> '+
- '<button class="btn-secondary" id="lpr-new">Новый ЛПР</button>'+
- '<p style="font-size:11px;color:var(--sub)">Можно добавить нескольких ЛПР одного клиента. Год рождения не требуется.</p></div>':'')+
- '<div class="card" style="margin-top:10px"><b>ЛПР клиентов</b>'+
- '<div style="max-height:380px;overflow:auto"><table class="tbl"><thead><tr><th>Клиент</th><th>ФИО</th><th>Должность</th><th>ДР</th><th></th></tr></thead><tbody>'+
- (contacts.length?contacts.map(c=>'<tr><td>'+esc(clients.find(x=>x.id===c.client_id)?.name||'')+
- '</td><td>'+esc(c.full_name)+'</td><td>'+esc(c.position_title)+'</td><td>'+
- String(c.birth_day).padStart(2,'0')+'.'+String(c.birth_month).padStart(2,'0')+'</td><td>'+
- (canWrite?'<button class="btn-secondary" data-lpr-edit="'+esc(c.id)+'">Изменить</button>':'')+
- '</td></tr>').join(''):'<tr><td colspan="5">ЛПР пока не заполнены</td></tr>')+
- '</tbody></table></div></div>'+
- '<div class="card" style="margin-top:10px"><b>💎 Полный реестр ВИП</b>'+
- '<p style="font-size:12px;color:var(--sub)">ВИП-клиенты отображаются даже без записанного ЛПР.</p>'+
- '<div style="max-height:340px;overflow:auto">'+
- clients.filter(c=>c.is_vip).map(c=>'<div style="padding:6px;border-top:1px solid var(--border);font-size:12px">'+
- esc(c.name)+' · '+(c.has_lpr?'✅ ЛПР заполнен':'⚠️ ЛПР не заполнен')+
- (canWrite?'<button class="btn-secondary" style="margin-left:8px" data-lpr-pick="'+esc(c.id)+'">Заполнить</button>':'')+
- '</div>').join('')+'</div>'+
- ((info.unmatched_vip||[]).length?'<p style="font-size:12px;color:#b45309">⚠️ В реестре ВИП есть записи без привязки к карточке клиента: '+(info.unmatched_vip||[]).map(esc).join(', ')+'. Проверьте соответствие вручную.</p>':'')+'</div>';
- v.querySelector('#lpr-client-find')?.addEventListener('input',e=>{
-   const term=String(e.target.value||'').trim().toLowerCase();
-   v.querySelectorAll('#lpr-client option').forEach(o=>{if(o.value)o.hidden=!!term&&!o.textContent.toLowerCase().includes(term);});
- });
- v.querySelectorAll('[data-lpr-pick]').forEach(b=>b.onclick=()=>{
-   const target=v.querySelector('#lpr-client');if(!target)return;
-   target.value=b.dataset.lprPick;
-   v.querySelector('#lpr-client-find').value='';
-   target.querySelectorAll('option').forEach(o=>o.hidden=false);
-   target.scrollIntoView({behavior:'smooth',block:'center'});
-   v.querySelector('#lpr-name')?.focus();
- });
- v.querySelector('#lpr-save')?.addEventListener('click',save);
- v.querySelector('#lpr-new')?.addEventListener('click',()=>{editId=null;render();});
- v.querySelector('#lpr-link-telegram')?.addEventListener('click',linkTelegram);
- v.querySelectorAll('[data-lpr-edit]').forEach(b=>b.addEventListener('click',()=>{
-  const c=contacts.find(x=>x.id===b.dataset.lprEdit);if(!c)return;editId=c.id;
-  for(const [id,val] of [['client',c.client_id],['name',c.full_name],['position',c.position_title],
-    ['day',c.birth_day],['month',c.birth_month]]){const node=v.querySelector('#lpr-'+id);if(node)node.value=val;}
- }));
-}
-async function save(){
- if(!['manager','director'].includes(role()))return;
- const body={action:'save',id:editId||undefined,client_id:read('client'),
-  full_name:read('name'),position_title:read('position'),birth_day:Number(read('day')),
-  birth_month:Number(read('month'))};
- try{await request(body);editId=null;await reload();}
- catch(e){root.alert('ЛПР: '+String(e.message||e));}
-}
-async function linkTelegram(){
- try{
-  const x=await db.rpc('crm_telegram_binding_status');
-  if(x.data?.connected){root.alert('Telegram уже подключён.');return;}
-  const c=await db.rpc('crm_create_telegram_link_code');
-  if(c.error||!c.data)throw Error('Не удалось получить код');
-  const url='https://t.me/ResantaCRMActionsBot?start='+encodeURIComponent(c.data);
-  if(!root.open(url,'_blank'))root.location.href=url;
- }catch(e){root.alert('Telegram: '+String(e.message||e));}
-}
-function voice(question,ui){
- if(!role()||!/день рожден|дни рожден|именинник|поздрав|лпр/.test(String(question||'').toLowerCase()))return false;
- void (async()=>{
-  try{const x=await request({action:'brief'});
-   if(!role()||x.scope!==role())return;
-   const a=(x.upcoming||[]).slice(0,7).map(v=>
-    (v.days_until===0?'Сегодня':v.days_until===1?'Завтра':'Через '+v.days_until+' дня')+
-    ' день рождения у '+v.full_name+', клиент '+v.client_name+(v.is_vip?', ВИП':'')+'.');
-   ui?.answer?.('Брифинг ЛПР. '+(a.length?a.join(' '):'На ближайшие две недели записанных дней рождения нет.')+
-    ' Без ЛПР осталось '+x.missing_clients+' клиентов. Подробности в разделе «ЛПР и дни рождения».');
-  }catch{ui?.answer?.('Не могу подтвердить даты рождения через CRM. Открой раздел ЛПР для проверки.');}
- })();
- return true;
-}
-function reconcile(){if(role())mount();else if(nav)nav.style.display='none';}
-reconcile();root.setInterval(reconcile,5000);
-root.crmLprV1={open,reload,voice,role};
-})(window);
+const field=(label,id,value='',type='text')=>'<label>'+label+'<input class="form-input" id="lpr-'+id+'" type="'+type+'" value="'+esc(value)+'"></label>';
+function editor(id=null,pick=''){if(!info)return;editId=id;const c=info.contacts.find(c=>c.id===id),client=c?.client_id||pick;const el=page.querySelector('#lpr-editor');el.innerHTML='<div class="card" style="margin-top:14px"><h3>'+(c?'Изменить ЛПР':'Добавить ЛПР')+'</h3><div class="lpr-form">'+(!c?field('Найти клиента','client-find',''):'')+'<label>Клиент<select class="form-input" id="lpr-client"'+(c?' disabled':'')+'><option value="">Выбрать клиента</option>'+info.clients.map(x=>'<option value="'+esc(x.id)+'"'+(client===x.id?' selected':'')+'>'+esc(x.name)+(x.source_client_name&&x.source_client_name!==x.name?' · '+esc(x.source_client_name):'')+(x.vip_group?' · '+esc(x.vip_group):'')+'</option>').join('')+'</select></label>'+field('ФИО / известное имя','name',c?.full_name||'')+field('Должность','position',c?.position_title||'')+field('День','day',c?.birth_day||'','number')+field('Месяц','month',c?.birth_month||'','number')+'<label id="lpr-owner-wrap"'+(client==='triovist'?'':' hidden')+'>Ответственный за ЛПР<select class="form-input" id="lpr-owner"><option value="">Выбрать ответственного</option>'+info.managers.filter(m=>m.tier==='triovist').map(m=>'<option value="'+m.id+'"'+((c?.responsible_user_id||user().id)===m.id?' selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label>'+field('Заметка','note',c?.note||'')+'</div><div class="lpr-controls">'+button('Сохранить','save')+button('Отмена','cancel')+'</div><p id="lpr-save-error" role="alert"></p><p class="lpr-muted">Год рождения не требуется. Один ЛПР сохраняется один раз, его не нужно копировать во все ТТ.</p></div>';const hint=info.clients.find(x=>x.id===client)?.contact;if(hint){const p=d.createElement('p');p.className='lpr-muted';p.textContent='Контакт из исходной карточки: '+hint+'. Проверьте, к кому относится дата рождения.';el.prepend(p);}el.scrollIntoView?.({behavior:'smooth',block:'start'});}
+const value=id=>page.querySelector('#lpr-'+id)?.value||'';
+async function save(){if(saving)return;const owner=actor();saving=true;const b=page.querySelector('[data-lpr-action=save]');if(b)b.disabled=true;try{await request({action:'save',id:editId||undefined,client_id:value('client'),full_name:value('name'),position_title:value('position'),birth_day:Number(value('day')),birth_month:Number(value('month')),note:value('note'),responsible_user_id:value('owner')});if(owner!==actor())return;editId=null;await reload();}catch(e){if(owner===actor()){const el=page.querySelector('#lpr-save-error');if(el)el.textContent=e.message;}}finally{if(owner===actor()){saving=false;if(b?.isConnected)b.disabled=false;}}}
+async function linkTelegram(){try{const status=await db.rpc('crm_telegram_binding_status');if(status.error)throw status.error;if(status.data?.connected){root.alert('Telegram подключён. Состояние отправки смотрите на вкладке Telegram.');return;}const r=await db.rpc('crm_create_telegram_link_code');if(r.error||!r.data)throw Error('Код подключения не получен');const url='https://t.me/ResantaCRMActionsBot?start='+encodeURIComponent(r.data);if(!root.open(url,'_blank'))root.location.href=url;}catch(e){root.alert('Подключение Telegram: '+(e.message||e));}}
+async function click(e){const t=e.target.closest?.('[data-lpr-tab]');if(t){tab=t.dataset.lprTab;offset=0;render();return;}const b=e.target.closest?.('[data-lpr-action]');if(!b)return;const id=b.dataset.id;switch(b.dataset.lprAction){case'reload':await reload();break;case'new':editor();break;case'pick':editor(null,id);break;case'edit':editor(id);break;case'cancel':editId=null;page.querySelector('#lpr-editor').textContent='';break;case'save':await save();break;case'telegram':await linkTelegram();break;case'previous':offset=Math.max(0,offset-25);render();break;case'next':offset+=25;render();break;case'archive':if(root.confirm('Архивировать ЛПР? Его будущие напоминания прекратятся; запись и журнал сохранятся.')){try{await request({action:'delete',id});await reload();}catch(e){root.alert(e.message)}}break;case'link-vip':{const c=info.unresolved_vip.find(c=>c.name===id);if(!c)break;const el=page.querySelector('#lpr-editor');el.innerHTML='<div class="card"><h3>Привязка только для ЛПР: '+esc(id)+'</h3><p>Проверьте юрлицо и выберите карточку. Глобальный VIP-реестр и финансы не меняются.</p><select class="form-input" id="lpr-link-target"><option value="">Выбрать</option>'+info.clients.filter(c=>c.id!=='triovist').map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('')+'</select>'+button('Подтвердить привязку','confirm-link',id)+button('Отмена','cancel')+'</div>';break;}case'confirm-link':{const target=page.querySelector('#lpr-link-target')?.value;if(!target||!root.confirm('Реквизиты юрлица проверены? Сохранить эту привязку только для раздела ЛПР?'))break;try{await request({action:'link_vip',vip_name:id,client_id:target});await reload();}catch(e){root.alert(e.message)}break;}}}
+function change(e){if(e.target.id==='lpr-client'){const wrap=page.querySelector('#lpr-owner-wrap');if(wrap)wrap.hidden=e.target.value!=='triovist';return;}if(e.target.id==='lpr-category')category=e.target.value;else if(e.target.id==='lpr-manager')manager=e.target.value;else if(e.target.id==='lpr-period')period=Number(e.target.value);else return;offset=0;render();}
+function input(e){if(e.target.id==='lpr-client-find'){const q=compact(e.target.value);page.querySelectorAll('#lpr-client option').forEach(o=>{if(o.value)o.hidden=!!q&&!compact(o.textContent).includes(q)});return;}if(e.target.id!=='lpr-query')return;query=e.target.value.slice(0,120);offset=0;render();}
+function voice(question,ui){const seq=++voiceSeq;if(!role()||!/день рожден|дни рожден|дня рожден|дню рожден|именинник|поздрав|лпр|(?:^|\s)др(?:\s|$)/i.test(question))return false;if(/созда|измени|добавь|удали|архивируй|напомни|назначь|отправь/i.test(question))return false;const owner=actor();void(async()=>{try{const a=await request({action:'brief'});if(owner!==actor()||seq!==voiceSeq||a.actor_id!==user().id||a.scope!==role()||ui?.authorized&&!ui.authorized())return;const q=norm(question);let rows=a.contacts||[];let specific=false;const subject=q.match(/(?:у клиента|клиента|клиенту|у)\s+(.+?)[?.!]*$/)?.[1];if(subject&&!/^(кого|нас|меня|сотрудников|клиентов)(?:\s|$)/.test(subject)){const key=compact(subject);rows=rows.filter(c=>compact(c.client_name).includes(key)||compact(c.full_name).includes(key));specific=true;}if(!specific){const months=['январ','феврал','март','апрел','ма[йя]','июн','июл','август','сентябр','октябр','ноябр','декабр'],named=months.findIndex(x=>new RegExp(x).test(q));if(named>=0)rows=rows.filter(c=>c.birth_month===named+1);else if(/этом месяце/.test(q))rows=rows.filter(c=>c.birth_month===Number(a.as_of.slice(5,7)));else if(/следующем месяце/.test(q))rows=rows.filter(c=>c.birth_month===Number(a.as_of.slice(5,7))%12+1);else if(/сегодня/.test(q))rows=rows.filter(c=>c.days_until===0);else if(/завтра/.test(q))rows=rows.filter(c=>c.days_until===1);else if(/недел/.test(q))rows=rows.filter(c=>c.days_until<=7);else if(/месяц/.test(q))rows=rows.filter(c=>c.days_until<=30);else rows=rows.filter(c=>c.days_until<=14);}rows.sort((a,b)=>a.days_until-b.days_until);let answer;if(/не заполн|без лпр/.test(q))answer='Клиентов без записанного ЛПР: '+a.missing_clients+'. '+(a.unresolved_vip.length?'Есть VIP-записи, требующие привязки к карточке. ':'')+'Список доступен во вкладке «Что заполнить».';else if(/отправ|достав|уведомлен|телеграм|telegram/i.test(q))answer='Последний запуск рассылки: '+(a.worker?.finished_at?new Date(a.worker.finished_at).toLocaleString('ru-RU'):'не подтверждён')+'. '+(a.deliveries.length?a.deliveries.slice(0,5).map(x=>(a.contacts.find(c=>c.id===x.lpr_id)?.full_name||'ЛПР')+': '+status(x.status)).join('. '):'Подтверждённых доставок в журнале пока нет.');else answer=rows.length?rows.slice(0,10).map(c=>c.full_name+', '+c.client_name+', день рождения '+date(c)+', ответственный '+c.manager_name+'.').join(' ')+(rows.length>10?' Всего найдено '+rows.length+', остальные в разделе ЛПР.':''):(specific?'По этому имени или клиенту в вашей области доступа записанных дат не найдено.':'В выбранном периоде известных дат нет.')+' Неизвестные даты нужно уточнить у менеджера.';ui?.answer?.(answer);}catch{if(owner===actor()&&seq===voiceSeq)ui?.answer?.('Не удалось подтвердить даты по CRM. Повторите запрос или откройте раздел ЛПР.');}})();return true;}
+function wrapStaff(){const fn=root.crmAI360BranchUnifiedHandleV1;if(typeof fn!=='function'||fn.__lprV2)return;const wrapped=function(q,ui){if((!ui?.authorized||ui.authorized())&&voice(q,{answer:ui?.show||ui?.answer,authorized:ui?.authorized}))return true;return fn.apply(this,arguments)};wrapped.__lprV2=true;root.crmAI360BranchUnifiedHandleV1=wrapped;}
+function reconcile(){const before=actorKey;reset();if(role())mount();else if(nav)nav.style.display='none';wrapStaff();if(active()&&!info&&!loading&&(before!==actorKey))void reload();}
+function refreshVisible(){if(active()&&!saving&&!page.querySelector('#lpr-editor .card'))void reload();}
+root.addEventListener('focus',refreshVisible);d.addEventListener('visibilitychange',()=>{if(!d.hidden)refreshVisible()});
+root.crmLprV1=root.crmLprV2=Object.freeze({open,reload,voice,role,version:'20261114-v2'});reconcile();root.setInterval(reconcile,5000);root.addEventListener('pagehide',()=>{run++;info=null;});
+})(window,document);
