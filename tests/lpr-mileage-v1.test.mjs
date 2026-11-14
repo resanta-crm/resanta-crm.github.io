@@ -16,22 +16,18 @@ test('LPR dates and sending logs are private, no change to client or GPS tables'
  assert.match(sql,/birth_day smallint/);assert.match(sql,/birth_month smallint/);
  assert.doesNotMatch(sql,/birth_year/);
 });
-test('Exact field-manager UUID and protected director write, with per-client ownership enforced',()=>{
- for(const str of ['SVC.auth.getUser(token)','allowedManagerIds[user.name]===user.id',
-  "q=q.eq('manager_name',u.name)",
-  "if(u.tier!=='manager'&&u.tier!=='director')",
-  "clients.some(c=>c.id===client_id)","original.client_id!==client_id",
-  "validMonthDay(birth_month,birth_day)",
-  "const boss=SIDS.has(user.id)&&user.role==='boss'"])
-   assert.ok(service.includes(str),str);
- assert.match(service,/return clients\.map\(c=>\(\{\.\.\.c,is_vip:/);
- assert.match(service,/unmatched_vip:unmatchedVip/);
+test('Exact identities and client/LPR ownership are checked by the shared rules and HTTP handler',()=>{
+ const rules=f('supabase/functions/crm-lpr-birthdays-v1/domain.mjs');
+ for(const id of ['19dd9943-99ae-47c4-a39c-4f82a11059a6','3d935a76-c6fe-44b6-b248-fcbe58c6bf1c','4fd79fa0-232d-4768-8099-25f47923cc4f'])assert.ok(rules.includes(id));
+ assert.match(service,/SVC.auth.getUser\(token\)/);assert.match(service,/principal\(auth.data.user,p\)/);
+ assert.match(service,/canRead\(u,old,ctx.ids\)/);assert.match(service,/contact_client_cannot_change/);
+ assert.match(service,/validDate\(birth_month,birth_day\)/);assert.match(rules,/user.email_confirmed_at/);
 });
-test('VIP Telegram reminders at three days and birthday with dedupe',()=>{
- for(const s of ["event_kind:'3_days'","event_kind:'birthday'","x-crm-dispatch-secret",
-  "crm_lpr_birthday_delivery_v1","if(ie.code==='23505')",
-  "if(!client||(!client.is_vip&&!vipIds.has(client.id)))continue"])
-   assert.ok(service.includes(s),s);
+test('Birthday events are one day and same day, with claimed delivery and an explicit unknown state',()=>{
+ const rules=f('supabase/functions/crm-lpr-birthdays-v1/domain.mjs');
+ assert.match(rules,/'birthday':'1_day'/);assert.match(service,/crm_lpr_delivery_claim_v2/);
+ assert.match(service,/x-crm-dispatch-secret/);assert.match(service,/delivery_unknown/);
+ assert.doesNotMatch(service,/Only VIP gets Telegram/);
 });
 test('Personal mileage does not read other users or write GPS',()=>{
  for(const s of ['SVC.auth.getUser(token)',".eq('manager_name',u.name)",
@@ -55,9 +51,9 @@ test('UI only loads private endpoints after click; no old CRM data source change
 
 
 test('LPR director reads hundreds of clients in bounded, ownership-safe requests', async()=>{
- const match=service.match(/async function fetchScopedLprContacts\(ids,svc=SVC\)\{[\s\S]*?\n\}\nasync function list/);
+ const match=service.match(/async function fetchScopedLprContacts\(ids,svc=SVC\)\{[^\n]+\}/);
  assert.ok(match,'scoped batch reader present');
- const load=new Function('SVC','return ('+match[0].slice(0,-'\nasync function list'.length)+');')({});
+ const load=new Function('SVC','return ('+match[0]+');')({});
  const ids=Array.from({length:685},(_,i)=>'client-'+String(i).padStart(4,'0'));
  const queries=[];
  const svc={from(table){
@@ -79,9 +75,9 @@ test('LPR director reads hundreds of clients in bounded, ownership-safe requests
  assert.equal(small.length,1);
 });
 test('LPR batch reader surfaces failed database requests instead of displaying partial list',async()=>{
- const match=service.match(/async function fetchScopedLprContacts\(ids,svc=SVC\)\{[\s\S]*?\n\}\nasync function list/);
+ const match=service.match(/async function fetchScopedLprContacts\(ids,svc=SVC\)\{[^\n]+\}/);
  assert.ok(match);
- const load=new Function('SVC','return ('+match[0].slice(0,-'\nasync function list'.length)+');')({});
+ const load=new Function('SVC','return ('+match[0]+');')({});
  const failing={from(){const q={select(){return q},in(){return q},eq(){return q},order(){return q},limit(){return Promise.resolve({data:null,error:{code:'PGRST'}})}};return q;}};
  await assert.rejects(load(['some-client'],failing),/lpr_read_unavailable/);
 });
