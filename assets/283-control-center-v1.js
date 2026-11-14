@@ -234,10 +234,10 @@ function render(){
  const html='<header class="cc-head"><div><div class="cc-kicker">Обзор работы</div><h2>Центр управления</h2><p class="cc-muted">'+esc(coverage)+'</p></div><div class="cc-controls"><label for="cc-month">Продажи и поступления<select id="cc-month" data-cc-month>'+dates.map(m=>'<option value="'+m+'"'+(m===state.month?' selected':'')+'>'+esc(monthLabel(m))+'</option>').join('')+'</select></label><button class="cc-btn" type="button" data-cc-refresh>Обновить</button></div></header>'+
  '<div class="cc-metrics">'+metrics+'</div>'+routeBlock(data)+'<section class="cc-brief"><strong>✦ Брифинг Леры</strong><p>'+esc(brief.join(' '))+'</p>'+action('Открыть разбор','dashboard',{scroll:'cc-issues'})+'<span class="cc-muted">Сводка по данным CRM · без автоматических действий</span></section>'+
  '<div class="cc-columns"><section class="cc-panel"><div class="cc-panel-head"><h3>План и факт продаж</h3><span class="cc-muted">'+esc(monthLabel(state.month))+'</span></div>'+planChart(rows)+salesTable+'<p class="cc-muted">План месяца, не дневной. '+esc(kpi?.latest_sales_month&&state.month>kpi.latest_sales_month?'Продажи команды за выбранный месяц ещё не загружены.':'Действующая методика KPI 360°. При отсутствии плана процент не рассчитывается.')+'</p>'+action('Открыть продажи','sales')+'</section>'+
- '<section class="cc-panel"><div class="cc-panel-head"><h3>Просроченная задолженность</h3><span class="cc-muted">Последние 30 отчётных дней</span></div>'+debtChart(pdz)+action('Открыть задолженность','debt')+'</section></div>'+
+ '<section class="cc-panel"><div class="cc-panel-head"><h3>Продажи с начала года</h3><span class="cc-muted">'+state.month.slice(0,4)+' / '+(Number(state.month.slice(0,4))-1)+'</span></div><div id="cc-year-chart" data-year="'+state.month.slice(0,4)+'"><p class="cc-muted">Загружаю годовую динамику…</p></div></section></div>'+
  '<section class="cc-panel" id="cc-issues"><div class="cc-panel-head"><h3>Требует решения</h3><span class="cc-muted">'+issues.length+' вопросов · текущие обязательства и выбранный месяц</span></div>'+issuesHTML+checksBlock()+'</section>'+
  '<section class="cc-panel"><div class="cc-panel-head"><h3>'+(boss()?'Команда':'Мои результаты')+'</h3>'+action('Открыть KPI','managers')+'</div>'+teamHTML+'</section>'+sourceNotes()+'<div class="cc-bottom"><button type="button" class="cc-link" data-cc-legacy>Исходная сводка и подробные списки</button><span class="cc-muted">Центр управления · v1</span></div>';
- paint(root,html);let notice=d.getElementById('cc-refresh-status');if(!notice){notice=d.createElement('div');notice.id='cc-refresh-status';notice.addEventListener('click',onClick);root.insertAdjacentElement?.('beforebegin',notice);}notice.hidden=false;notice.innerHTML=refreshNotice();
+ paint(root,html);w.RESANTA_YEAR_SALES_V1?.mount(d.getElementById('cc-year-chart'),Number(state.month.slice(0,4)));let notice=d.getElementById('cc-refresh-status');if(!notice){notice=d.createElement('div');notice.id='cc-refresh-status';notice.addEventListener('click',onClick);root.insertAdjacentElement?.('beforebegin',notice);}notice.hidden=false;notice.innerHTML=refreshNotice();
  const tt=d.getElementById('topbar-title');if(tt)tt.textContent='Центр управления';
 }
 function mount(){
@@ -268,6 +268,7 @@ function onClick(e){
 }
 function onChange(e){if(!active()||!e.target.matches?.('[data-cc-month]'))return;const m=String(e.target.value);if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)||m>monthNow())return;persist();state.month=m;state.slots={};restore();load();}
 function prepareAgentRequest(question,memory={}){
+ if(w.RESANTA_CLIENTS_UNIFIED_V1?.active?.())return w.RESANTA_CLIENTS_UNIFIED_V1.prepareAgentRequest(question,memory);
  const unchanged={question,memory};if(!active()||state.legacy||state.actor!==actor())return unchanged;
  const q=String(question||'');
  const months=['январ','феврал','март','апрел','мая','июн','июл','август','сентябр','октябр','ноябр','декабр'];
@@ -275,8 +276,8 @@ function prepareAgentRequest(question,memory={}){
  const month=iso?iso[0]:named>=0?(year?year[0]:state.month.slice(0,4))+'-'+String(named+1).padStart(2,'0'):state.month;
  const next={...memory,month};
  if(/^(?:лера[, ]+)?(?:создай|создать|поставь|назначь|отправь|удали|измени|утверди|согласуй|напомни|запланируй|открой|перейди|вернись|покажи раздел)(?:\s|$)/i.test(q))return {question,memory:next};
- const deictic=/здесь|на этом экране|этот процент|эти цифры|центр(?:е|а)? управления|этой сводк/i.test(q);
- if(!deictic||!/процент|цифр|план|выручк|продаж|задач|маршрут|пдз|задолж|поступлен|проблем|экран|сводк|центр(?:е|а)? управления|что\s+(?:у нас\s+)?здесь/i.test(q))return {question,memory:next};
+ const deictic=/здесь|на этом экране|этот процент|этот график|эти цифры|центр(?:е|а)? управления|этой сводк/i.test(q);
+ if(!(deictic||/с начала года|годов.*продаж|динамик.*продаж|продаж.*202[0-9].*202[0-9]/i.test(q))||!/график|динамик|процент|цифр|план|выручк|продаж|задач|маршрут|пдз|задолж|поступлен|проблем|экран|сводк|центр(?:е|а)? управления|что\s+(?:у нас\s+)?здесь/i.test(q))return {question,memory:next};
  // No browser-provided amounts, names of clients or claims of freshness. The
  // existing server reauthorizes and rereads every financial/operational fact.
  const context={screen:'Центр управления',sales_month:month,sales_scope:triAllowed()?'План команды Витебска и интернет-магазина Триовист, Триовист учтён один раз':boss()?'Команда Витебска в пределах прав доступа':'Только мои показатели',routes_period:'Текущая неделя, точки до сегодняшнего дня',debt_period:'Последний подтверждённый отчёт'};
@@ -313,6 +314,6 @@ function install(){
  if(active()){resetActor();render();load();}
  if(allowed()&&d.getElementById('page-alerts')?.classList.contains('active'))w.goPage?.('alerts','Сигналы');
 }
-w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261113.3',readOnly:true,signalsMerged:allowed,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
+w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261114.1',readOnly:true,signalsMerged:allowed,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(window,document);

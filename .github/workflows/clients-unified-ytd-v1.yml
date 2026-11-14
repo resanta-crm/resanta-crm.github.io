@@ -1,0 +1,25 @@
+name: Unified clients and annual sales
+on:
+  pull_request:
+    paths: ['index.html', 'assets/28[345]-*', 'supabase/migrations/*clients*', 'supabase/functions/crm-ai360-agent-v1/**', 'tests/clients-unified-ytd-v1.test.mjs', '.github/workflows/clients-unified-ytd-v1.yml']
+  push:
+    branches: [main]
+    paths: ['index.html', 'assets/28[345]-*', 'supabase/migrations/*clients*', 'supabase/functions/crm-ai360-agent-v1/**', 'tests/clients-unified-ytd-v1.test.mjs', '.github/workflows/clients-unified-ytd-v1.yml']
+permissions: {contents: read}
+jobs:
+  clients-and-sales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: DOM runtime
+        run: npm install --prefix "$RUNNER_TEMP/crm-dom" --no-audit --no-fund linkedom@0.18.12
+      - name: Syntax and real DOM regression
+        run: |
+          node --check assets/284-control-sales-year-v1.js
+          node --check assets/285-clients-unified-v1.js
+          CRM_DOM_MODULE="$RUNNER_TEMP/crm-dom/node_modules/linkedom/esm/index.js" node --test tests/clients-unified-ytd-v1.test.mjs
+      - name: Existing home, client, role and agent compatibility
+        run: node --test tests/control-center-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/crm-release-guard-v1.test.mjs tests/warehouse-vitebsk360-v1.test.mjs

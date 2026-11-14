@@ -18,7 +18,7 @@
 // Решение: при каждом деплое меняем APP_VERSION. Браузер сравнивает её с той,
 // что запомнил, и если версия новая — принудительно чистит всё локальное
 // хранилище, сбрасывает кеши и один раз перезагружает страницу начисто.
-const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-control-center-v3';
+const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-clients-ytd-20261114-v1';
 (function(){
   try{
     const saved = localStorage.getItem('crm_app_version');
@@ -1241,7 +1241,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <div class="modal-bg" id="modal-duplicates">
   <div class="modal" style="max-width:640px">
     <div class="modal-head"><div class="modal-title">🔍 Возможные дубли клиентов</div><button class="modal-close" onclick="closeModal('modal-duplicates')">×</button></div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:12px">Система нашла клиентов с похожими названиями. Проверьте каждую пару и объедините, если это один и тот же клиент. <b>Объединение необратимо</b> — задачи, визиты и фото переедут в выбранного клиента.</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:12px">Система нашла клиентов с похожими названиями. Проверьте каждую пару и объедините, если это один и тот же клиент. Связывание под общим юрлицом сохраняет исходные карточки, задачи, визиты и фото. Проверьте реквизиты перед подтверждением.</div>
     <div id="dupes-list"></div>
   </div>
 </div>
@@ -1872,7 +1872,11 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Budgets 360 · read-only presentation and scoped existing budget audit/history. -->
 <script defer src="./assets/198-budgets-client360-v1.js?v=20261111-budget360-renderloopfix4"></script>
 <!-- Approved home only: authenticated reads, unchanged route/task engines. -->
-<link rel="stylesheet" href="./assets/283-control-center-v1.css?v=20261113-3">
-<script defer src="./assets/283-control-center-v1.js?v=20261113-3"></script>
+<link rel="stylesheet" href="./assets/283-control-center-v1.css?v=20261114-1">
+<script defer src="./assets/283-control-center-v1.js?v=20261114-1"></script>
+<link rel="stylesheet" href="./assets/284-control-sales-year-v1.css?v=20261114-1">
+<script defer src="./assets/284-control-sales-year-v1.js?v=20261114-1"></script>
+<link rel="stylesheet" href="./assets/285-clients-unified-v1.css?v=20261114-1">
+<script defer src="./assets/285-clients-unified-v1.js?v=20261114-1"></script>
 </body>
 </html>
