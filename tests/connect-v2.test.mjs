@@ -21,12 +21,12 @@ test('Read acknowledgement requires visible matching room and shown message id',
 test('Duplicate realtime event produces one notice',async()=>{const t=notifications();await t.api._check();const m={id:'m',room_id:'room-b',sender_id:'other',body:'x'};t.api.incoming(m);t.api.incoming(m);assert.equal(t.notices.length,1);});
 function video(){
  const {document,window:domWindow}=dom.parseHTML('<html><body><div id="app"><div id="page-connect"><header class="c126-head"></header></div></div></body></html>');
- const records=[];let instance;class Room{constructor(){instance=this;this.handlers={};this.remoteParticipants=new Map();this.localParticipant={identity:'actor',setMicrophoneEnabled:async()=>{},setCameraEnabled:async()=>{}};}on(name,fn){this.handlers[name]=fn;}async connect(){}async disconnect(){}async startAudio(){}}
+ const records=[];let instance;let disconnects=0;class Room{constructor(){instance=this;this.handlers={};this.remoteParticipants=new Map();this.localParticipant={identity:'actor',setMicrophoneEnabled:async()=>{},setCameraEnabled:async()=>{}};}on(name,fn){this.handlers[name]=fn;}async connect(){}async disconnect(){disconnects++;}async startAudio(){}}
  const window={isSecureContext:true,LivekitClient:{Room,RoomEvent:{TrackSubscribed:'ts',TrackUnsubscribed:'tu',LocalTrackPublished:'lp',LocalTrackUnpublished:'lu',ParticipantConnected:'pc',ParticipantDisconnected:'pd',Disconnected:'dc',Reconnecting:'reconnecting',Reconnected:'reconnected',ConnectionQualityChanged:'quality'}}};
  vm.runInNewContext(read('assets/154-resanta-connect-video-v1.js'),{window,document,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},MutationObserver:class{observe(){}},console});
  window.crmConnectVideo131.init({client:()=>({functions:{invoke:async()=>({data:{ok:true,url:'wss://mock',token:'mock'}})},rpc:async(n,a)=>{records.push(a.p_action);return {data:{call:{id:'call-a',status:'ringing'}}};}}),roomId:()=> 'room',actor:()=> 'actor',actorName:()=> 'Александр',isOpen:()=>true,isSignedIn:()=>true});
  for(const select of document.querySelectorAll('select'))Object.defineProperty(select,'value',{get(){return this._value||this.querySelector('option')?.value||'';},set(v){this._value=v;}});
- return {document,domWindow,window,records,instance:()=>instance};
+ return {document,domWindow,window,records,instance:()=>instance,disconnects:()=>disconnects};
 }
 test('Camera and two screen shares use independent tracks, screen selection and cleanup',async()=>{const t=video();await t.window.crmConnectVideo131.join();const person={identity:'other',name:'Коллега'};
  function track(sid,source){let element;return {sid,source,kind:'video',attach(){element=t.document.createElement('video');return element;},detach(){return [element];}};}
@@ -37,3 +37,5 @@ test('Camera and two screen shares use independent tracks, screen selection and 
 });
 test('Worker contains no fetch/cache interception and validates recipient before displaying',()=>{const sw=read('connect-push-sw.js');assert.doesNotMatch(sw,/addEventListener\('fetch'/);assert.match(sw,/d.account_id!==binding.account_id/);assert.match(sw,/expires_at/);assert.match(sw,/showNotification/);assert.match(sw,/notificationclick/);});
 test('Migration is confined to CONNECT and deliveries cannot be directly read by authenticated users',()=>{const s=read('supabase/migrations/20261114151152_connect_delivery_calls_v2.sql');assert.doesNotMatch(s,/alter table public\.(clients|users|sales|visits|tasks|crm_lpr)/);assert.match(s,/revoke all on public\.connect_delivery_v2 from public,anon,authenticated/);assert.match(s,/LEGACY_SENT/);assert.match(s,/m.room_id=connect_attachments_v1.room_id/);});
+
+test('Leaving a call stops local media even if the database response is unavailable',async()=>{const t=video();await t.window.crmConnectVideo131.join();t.document.getElementById('c131-leave').dispatchEvent(new t.domWindow.Event('click'));await new Promise(r=>setTimeout(r,0));assert.equal(t.disconnects(),1);assert.equal(t.document.getElementById('c131-overlay').hidden,true);});

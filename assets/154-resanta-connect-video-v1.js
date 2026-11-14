@@ -121,9 +121,11 @@ async function leave(quiet=false){
  const old=call;call=null;
  if(monitor){clearInterval(monitor);monitor=null;}
  if(callWatch){clearInterval(callWatch);callWatch=null;}
- if(callSession&&callChat){try{await callAction('leave');}catch(_){}callSession=null;}
+ const endedSession=callSession,endedRoom=callChat;callSession=null;
  if(old)try{await old.disconnect();}catch(_){}
  hide();
+ // Media shutdown must never wait for the database/network.
+ if(endedSession&&endedRoom)void callAction('leave',endedRoom,endedSession.id).catch(()=>{});
  if(!quiet)ctx.notify?.('Видеозвонок завершён.');
 }
 function rememberIncoming(message){
