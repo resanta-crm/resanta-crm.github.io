@@ -1,10 +1,10 @@
 name: Unified clients and annual sales
 on:
   pull_request:
-    paths: ['index.html', 'assets/28[345]-*', 'supabase/migrations/*clients*', 'supabase/functions/crm-ai360-agent-v1/**', 'tests/clients-unified-ytd-v1.test.mjs', '.github/workflows/clients-unified-ytd-v1.yml']
+    paths: ['index.html', 'assets/28[3456]-*', 'supabase/migrations/*clients*', 'supabase/functions/crm-ai360-agent-v1/**', 'tests/clients-unified-ytd-v1.test.mjs', 'tests/clients-legal-simple-v1.test.mjs', '.github/workflows/clients-unified-ytd-v1.yml']
   push:
     branches: [main]
-    paths: ['index.html', 'assets/28[345]-*', 'supabase/migrations/*clients*', 'supabase/functions/crm-ai360-agent-v1/**', 'tests/clients-unified-ytd-v1.test.mjs', '.github/workflows/clients-unified-ytd-v1.yml']
+    paths: ['index.html', 'assets/28[3456]-*', 'supabase/migrations/*clients*', 'supabase/functions/crm-ai360-agent-v1/**', 'tests/clients-unified-ytd-v1.test.mjs', 'tests/clients-legal-simple-v1.test.mjs', '.github/workflows/clients-unified-ytd-v1.yml']
 permissions: {contents: read}
 jobs:
   clients-and-sales:
@@ -20,6 +20,7 @@ jobs:
         run: |
           node --check assets/284-control-sales-year-v1.js
           node --check assets/285-clients-unified-v1.js
-          CRM_DOM_MODULE="$RUNNER_TEMP/crm-dom/node_modules/linkedom/esm/index.js" node --test tests/clients-unified-ytd-v1.test.mjs
+          node --check assets/286-clients-legal-simple-v1.js
+          CRM_DOM_MODULE="$RUNNER_TEMP/crm-dom/node_modules/linkedom/esm/index.js" node --test tests/clients-unified-ytd-v1.test.mjs tests/clients-legal-simple-v1.test.mjs
       - name: Existing home, client, role and agent compatibility
         run: node --test tests/control-center-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/crm-release-guard-v1.test.mjs tests/warehouse-vitebsk360-v1.test.mjs
