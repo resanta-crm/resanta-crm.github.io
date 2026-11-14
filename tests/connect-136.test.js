@@ -66,7 +66,7 @@ check('Realtime notifications alert incoming messages and call invitations',()=>
  assert.match(notify,/const isVideo=videoAllowed&&/);
  assert.match(notify,/if\(rights.error\|\|!rights.data\?\.chat_enabled\)/);
  assert.match(notify,/connect_messages_v1/);
- assert.match(notify,/startsWith\('📹 Начался видеозвонок'\)/);
+ assert.match(notify,/message\.call_id\|\|message\.kind==='video_call'/);
  assert.match(notify,/crmConnectOpenRoom136/);
  assert.match(chat,/crmConnectOpenRoom136=openInvitedRoom/);
  assert.match(get('assets/154-resanta-connect-video-v1.js'),/window\.crmConnectVideo131=\{init,chatChanged,join,rememberIncoming\}/);

@@ -59,7 +59,7 @@ function fakeCrm(){
  window.crmConnectVideo131.init({
   actor:()=>signed?'employee-123':null,
   actorName:()=> 'Тестовый сотрудник',
-  client:()=>({functions:{invoke:async()=>({data:{ok:true,url:'wss://demo.livekit.cloud',token:'mock'}})}}),
+  client:()=>({rpc:async()=>({data:{call:{id:'call-a',status:'ringing'}}}),functions:{invoke:async()=>({data:{ok:true,url:'wss://demo.livekit.cloud',token:'mock'}})}}),
   isOpen:()=>nav==='connect',
   roomId:()=> 'chat-a',
   isSignedIn:id=>signed&&id==='employee-123',
