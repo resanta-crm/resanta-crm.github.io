@@ -1,0 +1,32 @@
+name: Дневные реализации 1С — проверка задач
+on:
+  push:
+    branches: [main]
+    paths: ['daily_sales_report_v4.py', 'sync_daily_sales_v4.py', '.github/workflows/import-daily-sales-v4.yml']
+  schedule:
+    # Poll the mailbox after 06:30–22:30 Minsk reports; retry delayed mail.
+    - cron: '5,20,35,50 3-20 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: daily-sales-task-evidence-v4
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install --disable-pip-version-check xlrd==2.0.1 openpyxl==3.1.5 requests==2.32.5
+      - name: Проверить отдельные дневные отчёты и обновить задачи
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python sync_daily_sales_v4.py
