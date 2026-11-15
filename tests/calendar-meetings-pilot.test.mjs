@@ -15,7 +15,7 @@ function harness(id=OWNER){
  rpc:async(name,args)=>{calls.push({name,args});const m=rows.find(x=>x.id===args.p_id);Object.assign(m,args.p_patch);return {data:m};}};
  const doc={addEventListener(n,fn){listener=fn},getElementById:k=>k==='cmp-root'?root:k==='app'?app:inputs[k]||null,querySelector(){return null}};
  const win={db:client,confirm:()=>true};vm.runInNewContext(code,{window:win,document:doc,currentUser:{id},currentProfile:{id,role:'manager',name:'Test'},Intl,Date,Set,Array,String,Object,Number,Promise,AbortSignal,setTimeout,navigator:{clipboard:{writeText:async()=>{}}}});
- return {win,root,calls,inputs,rows,async click(key,value){const target={dataset:{[key.replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]:value},hasAttribute:a=>a==='data-'+key};await listener({target:{closest:()=>target}});await tick();},async render(){win.crmMeetingPlannerPilotV1.render();await tick();}};
+ return {win,root,calls,inputs,rows,doc,async click(key,value){const target={dataset:{[key.replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]:value},hasAttribute:a=>a==='data-'+key};await listener({target:{closest:()=>target}});await tick();},async render(){win.crmMeetingPlannerPilotV1.render();await tick();}};
 }
 test('all active accounts have calendar access except Nesterov; analytical scope remains separate',()=>{
  assert.equal(meetingAccess({id:EXCLUDED},{id:EXCLUDED,role:'boss'}),null);
@@ -56,4 +56,10 @@ test('tomorrow, explicit dates and current calendar day reach the agenda API cor
  root.crmAI360ActionHandleV1('Какие встречи завтра?',ui);await tick();assert.equal(calls.at(-1).period,'tomorrow');
  root.crmAI360ActionHandleV1('Какие встречи 20.11.2026?',ui);await tick();assert.equal(calls.at(-1).from,'2026-11-20');assert.equal(calls.at(-1).to,'2026-11-21');
  root.crmAI360ActionHandleV1('Мои встречи',ui);await tick();assert.equal(calls.at(-1).from,'2026-12-12');
+});
+
+test('calendar opens the existing staff launcher and never closes an already open Lera',async()=>{
+ const h=harness('office');await h.render();let launches=0;h.doc.querySelector=s=>s.includes('rsa-branch-launch')?{click(){launches++}}:null;
+ await h.click('cmp-voice');assert.equal(launches,1);
+ h.doc.querySelector=s=>s.includes('rva-window')?{}:{click(){launches++}};await h.click('cmp-voice');assert.equal(launches,1);
 });

@@ -113,7 +113,7 @@ async function onClick(e){const target=e.target.closest?.('#page-meeting-planner
  else if(target.hasAttribute('data-cmp-copy')){const text=agendaText();if(!text){state.notice='Сначала выберите темы или сохранённую повестку.';}else{try{await navigator.clipboard.writeText(text);state.notice='Повестка скопирована.';}catch{window.prompt('Скопируйте повестку:',text);}}}
  else if(target.hasAttribute('data-cmp-gps')){if(typeof goPage==='function'){goPage('gps-control','GPS-контроль');setTimeout(()=>window.crmGPSFirstTTv1?.open(),350);}return;}
  else if(target.hasAttribute('data-cmp-connect')){if(typeof window.crmConnectOpen126==='function')void window.crmConnectOpen126();else state.notice='CONNECT пока недоступен.';return;}
- else if(target.hasAttribute('data-cmp-voice')){const launch=document.querySelector('.rva-launch:not([hidden]), .rva-ai360-safe-launch:not([hidden])');if(launch){launch.click();return;}state.notice='Лера недоступна для этой учётной записи. Календарь работает независимо от доступа к агенту.';}
+ else if(target.hasAttribute('data-cmp-voice')){const opened=document.querySelector('.rva-window:not([hidden]):not(.rva-mini), .rsa-branch-panel:not([hidden])');if(opened){state.notice='Лера открыта: можно обсуждать выбранную встречу и повестку.';}else{const launch=document.querySelector('.rva-launch:not([hidden]), .rva-ai360-safe-launch:not([hidden]), .rsa-branch-launch:not([hidden]), .rsa-mobile-voice-launch:not([hidden])');if(launch){launch.click();return;}state.notice='Лера недоступна для этой учётной записи. Календарь работает независимо от доступа к агенту.';}}
  else return;
  if(reload){invalidate();state.meetingId='';state.loaded=false;state.meetingSeq++;state.loading=false;}
  draw();if(reload)void meetingsRefresh();}
