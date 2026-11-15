@@ -233,7 +233,7 @@ function handle(q,ui){
  }
  if(root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{})&&/^(?:(?:лера|пожалуйста|можешь|можно|давай|прошу)\s+){0,3}(?:перенеси|перенести|отмени|отменить|сохрани|сохранить|запиши).{0,180}(?:встреч|совещан|повестк|итог)/iu.test(text)){void prepare(text,ui);return true;}
  if(!ACTION.test(n)){
-  if(REMINDER.test(n)&&root.__resantaLeraDialogueV2!==true){say(ui,'Автоматические уведомления о встречах пока не настроены. Могу создать встречу в личном календаре CRM или поставить задачу с датой.');return true;}
+  if(REMINDER.test(n)){void prepare(text,ui);return true;}
   if(AGENDA.test(n)){
    const range=calendarRange(text);
    if(range.error){say(ui,range.error);return true;}

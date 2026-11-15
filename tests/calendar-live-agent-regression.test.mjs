@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {prepareMeetingChange,commitMeetingChange} from '../supabase/functions/crm-ai360-actions-v1/meeting-actions.mjs';
+import {runFreeConversation} from '../supabase/functions/crm-ai360-agent-v1/conversation.mjs';
 import {agentPrincipal,normalizeAgentRequest,agentGreeting} from '../supabase/functions/crm-ai360-agent-v1/contract.mjs';
 const OWNER='544fb1e2-ef70-44de-bc62-e0e1596a4bfc',ID='a9d05f99-4810-4c35-b56d-0c1f9f6480ee',PREP='a8cfc7af-b657-4cdd-8b88-f2526f3d7bc4';
 const tick=()=>new Promise(r=>setImmediate(r));
@@ -39,4 +40,15 @@ test('meeting explanation returns the protocol required by the live voice bridge
  const source=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8').replace(/^import .*\n/gm,'');
  vm.runInNewContext(source,{Deno:{serve:fn=>{handler=fn},env:{get:()=> 'configured'}},createClient:()=>svc,agentPrincipal,normalizeAgentRequest,agentGreeting,readMeetingContext:async()=>({month:'2026-11',text:'19 подтверждённых просроченных'}),runFreeConversation:async()=>({answer:'19 подтверждённых просроченных',mode:'agent360_free_conversation_v1',read_only:true}),saveHistoryTurn:async()=>({saved:false}),Request,Response,Intl,Date,Set});
  const res=await handler(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer abcdefghijklmnop','Content-Type':'application/json'},body:JSON.stringify({action:'ask',protocol:'lera_dialogue_v2',question:'Почему высокий приоритет совещания?',meeting_context:{focus:'2026-11-15'}})}));assert.equal(res.status,200);const data=await res.json();assert.equal(data.protocol,'lera_dialogue_v2');assert.match(data.answer,/19/);
+});
+
+test('server meeting answers are not mislabeled as ungrounded casual chat',async()=>{
+ const answer=await runFreeConversation({svc:{rpc:async name=>({data:name.includes('claim')?{allowed:true,claim_id:'claim'}:{ok:true}})},userId:OWNER,question:'Почему приоритет?',history:[],meetingFacts:'19 подтверждённых просроченных',apiKey:'test',fetcher:async()=>new Response(JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'19 подтверждённых просроченных.'}]}],usage:{input_tokens:10,output_tokens:5}}),{status:200})});
+ assert.equal(answer.mode,'agent360_meeting_conversation_v2');assert.deepEqual(answer.domains_used,['meeting_preparation']);assert.equal(answer.answer_verified,false);
+});
+test('explicit reminder goes directly to signed preparation even in unified dialogue',async()=>{
+ const source=fs.readFileSync('assets/219-lera360-agent-actions-v1.js','utf8');let request;const root={__resantaLeraDialogueV2:true,addEventListener(){}};
+ const doc={hidden:false,addEventListener(){},getElementById:()=>({style:{display:'flex'}}),querySelector:()=>({})};
+ vm.runInNewContext(source,{window:root,document:doc,currentUser:{id:OWNER},db:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},functions:{invoke:async(name,{body})=>{request=body;return {data:{mode:'needs_details',question:'На какое время?'}};}}},Set,Array,String,Object,Number,Promise});
+ assert.equal(root.crmAI360ActionHandleV1('Напомни мне завтра проверить тест',{answer(){},textStatus(){}}),true);await tick();assert.equal(request.kind,'prepare');assert.match(request.question,/Напомни/);
 });

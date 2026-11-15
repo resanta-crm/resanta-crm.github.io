@@ -98,7 +98,7 @@ export async function runFreeConversation({svc,userId,question,history,feedback=
  if(status!=='ok')return {error,status:error==='openai_provider_rate_limit'?429:503};
  return {
   answer,brief:answer,detail:'',followup_question:'',intent:'free_conversation',
-  mode:'agent360_free_conversation_v1',read_only:true,answer_verified:false,
+  mode:meetingFacts?'agent360_meeting_conversation_v2':'agent360_free_conversation_v1',read_only:true,answer_verified:false,
   domains_used:meetingFacts?['meeting_preparation']:[],source:meetingFacts?'server_meeting_preparation':'general_dialogue_no_crm_reads',
   as_of:null
  };
