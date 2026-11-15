@@ -6,6 +6,9 @@ on:
       - 'supabase/functions/_shared/meeting-*.mjs'
       - 'supabase/functions/crm-meeting-prepare-v2/**'
       - 'supabase/functions/crm-ai360-agent-v1/meeting-context.mjs'
+      - 'supabase/functions/crm-ai360-actions-v1/meeting-actions.mjs'
+      - 'assets/264-resanta-ai360-finance-voice-bridge-v1.js'
+      - 'tests/calendar-live-agent-regression.test.mjs'
       - 'supabase/migrations/*calendar*.sql'
       - 'tests/calendar-meetings-pilot.test.mjs'
       - '.github/workflows/calendar-meetings-v2.yml'
@@ -19,4 +22,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - name: Calendar behaviour and scope regressions
-        run: node --test tests/calendar-meetings-pilot.test.mjs tests/lera-calendar-coverage-gps-continuous-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/lera360-agent-actions-v1.test.mjs
+        run: node --test tests/calendar-live-agent-regression.test.mjs tests/calendar-meetings-pilot.test.mjs tests/lera-calendar-coverage-gps-continuous-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/lera360-agent-actions-v1.test.mjs

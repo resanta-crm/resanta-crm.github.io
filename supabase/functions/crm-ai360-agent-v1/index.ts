@@ -83,12 +83,13 @@ Deno.serve(async req=>{
   if(principal.tier!=='network_director')parsed.payload.month=calendar.month;
   // Detailed business questions retain the original scoped tool gateway and their own subject.
   // Meeting explanations consume only the selected preparation, never inject its names into routing.
-  if(/совещан|повестк|приоритет|подготов|что.{0,20}обсуд|^а?\s*почему|итог.{0,15}встреч/iu.test(input.question)){
+  const calendarCommand=/^(?:лера[,\s]+)?(?:(?:пожалуйста|можешь|можно|давай|прошу|мне|нам)\s+){0,3}(?:создай|создать|назначь|назначить|запланируй|запланировать|перенеси|перенести|отмени|отменить|сохрани|сохранить|запиши|записать|напомни)\s/iu.test(input.question);
+  if(!calendarCommand&&/совещан|повестк|приоритет|подготов|что.{0,20}обсуд|^а?\s*почему|итог.{0,15}встреч/iu.test(input.question)){
    const answer=await runFreeConversation({svc,userId:user.id,question:input.question,
     history:parsed.payload.history,meetingFacts:calendar.text,apiKey:Deno.env.get('OPENAI_API_KEY')||''});
    if(answer.error)return fault(req,answer.error,answer.status||503);
    const stored=await saveHistoryTurn(svc,user.id,{mode:'crm',question:input.question,answer:answer.answer,answerVerified:false});
-   return reply(req,{...answer,agent:'resanta_ai_agent360_v1',route_tier:principal.tier,
+   return reply(req,{...answer,protocol:'lera_dialogue_v2',agent:'resanta_ai_agent360_v1',route_tier:principal.tier,
     memory:parsed.payload.memory,writes_enabled:false,history_saved:stored.saved});
   }
  }
