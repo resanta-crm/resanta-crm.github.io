@@ -73,7 +73,7 @@ async function prepare(text,ui){
  status(ui,'Лера готовит безопасное действие…');
  try{
   const calendar=root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{});
-  const data=await invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,meeting_context:calendar?.meeting_context||null});
+  const data=await invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,calendar_capabilities_v3:true,meeting_context:calendar?.meeting_context||null});
   if(run!==seq||user!==currentId()||!allowed())return;
   if(data.mode==='needs_details'){
    missing=text;
@@ -161,9 +161,9 @@ async function agenda(ui,period,range={}){
  const run=++seq,user=currentId();setBusy(true);
  status(ui,'Проверяю мой календарь CRM…');
  try{
-  let result=await invoke('agenda',{period,...range});
+  let result=await invoke('agenda',{period,...range,calendar_capabilities_v3:true});
   let items=[...(result.items||[])],pages=0;
-  while(result.has_more&&pages++<39){const next=await invoke('agenda',{period,...range,offset:result.next_offset});items.push(...(next.items||[]));result=next;}
+  while(result.has_more&&pages++<39){const next=await invoke('agenda',{period,...range,offset:result.next_offset,calendar_capabilities_v3:true});items.push(...(next.items||[]));result=next;}
   result={...result,items};
   if(run!==seq||user!==currentId()||!allowed())return;
   if(result.mode!=='agenda'||!Array.isArray(result.items))throw Error('agenda_response_invalid');

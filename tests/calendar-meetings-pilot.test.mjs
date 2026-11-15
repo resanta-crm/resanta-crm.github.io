@@ -13,7 +13,7 @@ function harness(id=OWNER,source=code){
  const client={auth:{getUser:async()=>({data:{user:{id}}})},functions:{invoke:async(name,{body})=>{calls.push({name,body});return {data:{preparation_id:'9d3f5760-64a8-4cfa-aeaa-7c77c2b7fede',briefing:{mode:'readonly',month:body.context.month,generated_at:new Date().toISOString(),scope:'test',cards:[{id:'tasks',level:'high',title:'Задачи',fact:'Факт',action:'Проверить',source:'tasks',attention:true}]},coverage:{entries:[],signals:[],registered:0}}};}},
  from(table){const filters=[];let insert=null;const q={select(){return q},eq(k,v){filters.push([k,v]);return q},gte(){return q},lt(){return q},order(){return q},limit(){return q},or(){return q},insert(x){insert=x;return q},single(){return q},then(resolve){calls.push({table,filters,insert});if(insert){const x={...insert,id:'new-id',status:'scheduled',updated_at:'2026-11-15T09:00:00Z'};rows.push(x);resolve({data:x});}else resolve({data:rows.filter(x=>x.owner_id===id)});}};return q;},
  rpc:async(name,args)=>{calls.push({name,args});const m=rows.find(x=>x.id===args.p_id);Object.assign(m,args.p_patch);return {data:m};}};
- const doc={addEventListener(n,fn){listener=fn},getElementById:k=>k==='cmp-root'?root:k==='app'?app:inputs[k]||null,querySelector(){return null}};
+ const doc={addEventListener(n,fn){if(n==='click')listener=fn},getElementById:k=>k==='cmp-root'?root:k==='app'?app:inputs[k]||null,querySelector(){return null}};
  const win={db:client,confirm:()=>true};vm.runInNewContext(source,{window:win,document:doc,currentUser:{id},currentProfile:{id,role:'manager',name:'Test'},Intl,Date,Set,Array,String,Object,Number,Promise,AbortSignal,setTimeout,clearTimeout,navigator:{clipboard:{writeText:async()=>{}}}});
  return {win,root,calls,inputs,rows,doc,client,async click(key,value){const target={dataset:{[key.replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]:value},hasAttribute:a=>a==='data-'+key};await listener({target:{closest:()=>target}});await tick();},async render(){win.crmMeetingPlannerPilotV1.render();await tick();}};
 }
@@ -87,4 +87,14 @@ test('Lera receives server-owned coverage counts and distinguishes loading from 
  const svc={from(){return {select(){return this},eq(){return this},maybeSingle:async()=>({data:prep})}}};
  const r=await readMeetingContext(svc,{id:OWNER},{id:OWNER,role:'boss'},{focus:'2026-11-15',month:'2026-11',preparation_id:'9d3f5760-64a8-4cfa-aeaa-7c77c2b7fede'},'2026-11-15');
  assert.match(r.text,/Ошибки загрузки источников: 0/);assert.match(r.text,/"control_count":1150/);assert.match(r.text,/"control_count":null/);assert.match(r.text,/Ассортимент клиента/);assert.doesNotMatch(r.text,/"name":"client_detail"/);
+});
+
+test('invalid meeting keeps all draft fields and displays a specific title error',async()=>{
+ const h=harness();await h.render();await h.click('cmp-new');Object.assign(h.inputs,{'cmp-title':{value:'А'},'cmp-purpose':{value:'Не терять введённую цель'},'cmp-date-input':{value:'2026-11-20'},'cmp-time-input':{value:'11:25'},'cmp-duration':{value:'30'}});await h.click('cmp-save-meeting');
+ assert.match(h.root.innerHTML,/Введите название от 3 до 160/);assert.match(h.root.innerHTML,/Не терять введённую цель/);assert.match(h.root.innerHTML,/value="11:25"/);assert.match(h.root.innerHTML,/value="30"/);assert.equal(h.rows.length,0);
+ h.inputs['cmp-title'].value='План';h.inputs['cmp-purpose'].value='';await h.click('cmp-save-meeting');assert.equal(h.rows.length,1);assert.equal(h.rows[0].title,'План');assert.equal(h.rows[0].purpose,'');
+});
+test('invited meeting is visible without edit, cancellation or private preparation controls',async()=>{
+ const h=harness();h.win.crmCalendarInvitesV3={list:async()=>[{id:'invite',owner_id:'other',is_owner:false,organizer:'Коллега',title:'Совещание',purpose:'Рабочая встреча',starts_at:new Date().toISOString(),duration_minutes:30,status:'scheduled',agenda:{},minutes:''}]};await h.render();await h.click('cmp-meeting','invite');
+ assert.match(h.root.innerHTML,/Приглашение · Совещание/);assert.doesNotMatch(h.root.innerHTML,/data-cmp-edit=|data-cmp-cancel=|data-cmp-save-agenda|data-cmp-save-minutes/);assert.equal(h.win.crmMeetingPlannerPilotV1.prepareAgentRequest('Почему?',{}).meeting_context.meeting_id,null);
 });

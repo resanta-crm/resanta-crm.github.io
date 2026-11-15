@@ -10,12 +10,19 @@ self.addEventListener('push',e=>e.waitUntil((async()=>{
  if(d.room_id&&!/^[0-9a-f-]{36}$/i.test(d.room_id))return;
  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
  // A focused CRM page owns the in-app banner; background notifications are owned here.
- let focused=false;for(const c of windows){if(new URL(c.url).origin!==self.location.origin)continue;c.postMessage({type:'CONNECT_PUSH',payload:d});if(c.focused&&c.visibilityState==='visible')focused=true;}
+ let focused=false;for(const c of windows){if(new URL(c.url).origin!==self.location.origin)continue;c.postMessage({type:d.kind==='calendar'?'CALENDAR_PUSH':'CONNECT_PUSH',payload:d});if(c.focused&&c.visibilityState==='visible')focused=true;}
  if(focused&&d.kind!=='test')return;
  await self.registration.showNotification(d.title||'РЕСАНТА CONNECT',{body:d.body||'Новое событие',tag:'connect-'+(d.message_id||d.delivery_id),data:d,renotify:false,requireInteraction:d.kind==='video_call'});
 })()));
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil((async()=>{
  const d=e.notification.data||{},binding=await state();if(!binding?.account_id||binding.account_id!==d.account_id)return;
+ if(d.kind==='calendar'){
+  if(!/^[0-9a-f-]{36}$/i.test(d.meeting_id||''))return;
+  const url=self.location.origin+'/?'+new URLSearchParams({calendar_meeting:d.meeting_id,calendar_account:d.account_id,calendar_day:d.calendar_day||''});
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true}),c=windows.find(w=>new URL(w.url).origin===self.location.origin);
+  if(c){c.postMessage({type:'CALENDAR_OPEN',payload:d});await c.focus();}else await self.clients.openWindow(url);
+  return;
+ }
  const params=new URLSearchParams({connect_room:d.room_id||'',connect_account:d.account_id||'',connect_call:d.call_id||'',connect_test:d.kind==='test'?d.delivery_id||'':''});
  const url=self.location.origin+'/?'+params;
  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
