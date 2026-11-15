@@ -52,3 +52,14 @@
 @media(max-width:850px){#tasks-route-v4 .tr-grid{grid-template-columns:1fr}#tasks-route-v4 .tr-list{max-height:none}#tasks-route-v4.tr-client-open .tr-client-panel{display:none}#tasks-route-v4:not(.tr-client-open) .tr-detail-panel{display:none}#tasks-route-v4 .tr-mobile-back{display:block}#tasks-route-v4 .tr-panel{padding:14px}#tasks-route-v4 .tr-number{font-size:23px}#tasks-route-v4 .tr-metrics{gap:7px}}
 @media(max-width:420px){#tasks-route-v4 .tr-fields{grid-template-columns:1fr}#tasks-route-v4 .tr-product{grid-template-columns:minmax(0,1fr) 80px}#tasks-route-v4 .tr-shelf-row{grid-template-columns:minmax(0,1fr) 70px 70px}#tasks-route-v4 .tr-bar{grid-template-columns:75px minmax(0,1fr) 50px}#tasks-route-v4 input,#tasks-route-v4 select,#tasks-route-v4 textarea{font-size:16px}}
 @media(max-width:520px){#tasks-route-v4 .tr-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#tasks-route-v4 .tr-metrics>.tr-panel:last-child{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}#tasks-route-v4 .tr-metrics>.tr-panel:last-child>.tr-sub:last-child{grid-column:1/-1}}
+/* Approved single workspace: content fits real long names and phone screens. */
+#tasks-route-v4 .tr-list{max-height:none;overflow:visible}
+#tasks-route-v4 .tr-client,#tasks-route-v4 .tr-product>div,#tasks-route-v4 .tr-note{overflow-wrap:anywhere;min-width:0}
+#tasks-route-v4 .tr-meter{display:flex;min-width:0}
+#tasks-route-v4 .tr-meter .tr-partial{background:#a36a20}
+#tasks-route-v4 .tr-bar{grid-template-columns:110px minmax(70px,1fr) 100px 100px;text-align:left;width:100%;font-weight:400}
+#tasks-route-v4 .tr-metrics>button{text-align:left;color:var(--tr-ink)}
+#tasks-route-v4 .tr-metrics>.tr-panel:last-child{display:block;grid-column:auto}
+#tasks-route-v4 .tr-grid{grid-template-columns:minmax(230px,.75fr) minmax(0,1.65fr)}
+@media(max-width:850px){#tasks-route-v4 .tr-grid{grid-template-columns:1fr}}
+@media(max-width:600px){#tasks-route-v4 .tr-metrics{grid-template-columns:1fr}#tasks-route-v4 .tr-bar{grid-template-columns:85px minmax(50px,1fr) 85px}#tasks-route-v4 .tr-bar>.tr-sub{grid-column:2/4}}
