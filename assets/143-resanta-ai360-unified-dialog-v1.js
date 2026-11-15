@@ -90,8 +90,9 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(!session?.access_token)throw new Error('not_authorized');
    awaitingDetail=null;
    const payload={action:'ask',question,history:history.slice(-12),memory};
-   const screen=window.RESANTA_CONTROL_CENTER_V1?.prepareAgentRequest?.(question,memory);
+   const screen=(window.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(question,memory)||window.RESANTA_CONTROL_CENTER_V1?.prepareAgentRequest?.(question,memory));
    if(screen){payload.question=screen.question;payload.memory=screen.memory;}
+   if(screen?.meeting_context)payload.meeting_context=screen.meeting_context;
    if(window.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    // One verified backend only. Never silently downgrade to an older AI engine.
    let result=await db.functions.invoke(ENDPOINT,{body:payload});

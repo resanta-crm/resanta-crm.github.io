@@ -2210,6 +2210,8 @@ async function crmStartAuditorWarehouseV1(){
   if(crmAuditorWarehouseFlightV1)return crmAuditorWarehouseFlightV1;
   crmAuditorWarehouseFlightV1=(async()=>{
     document.body.classList.add('crm-auditor-mode');
+    const calendarNav=document.getElementById('nav-meeting-planner');
+    if(calendarNav&&currentUser?.id!=='bcc330b8-9100-4c60-b87f-22a36988fc97')calendarNav.style.display='flex';
     const app=document.getElementById('app');
     document.getElementById('login-wrap').style.display='none';
     if(app)app.style.display='flex';
@@ -2219,7 +2221,7 @@ async function crmStartAuditorWarehouseV1(){
     if(title)title.textContent='Склад · Витебск';
     if(!document.getElementById('crm-auditor-style-v1')){
       const style=document.createElement('style');style.id='crm-auditor-style-v1';
-      style.textContent='body.crm-auditor-mode .nav-item:not(#nav-warehouse-control),body.crm-auditor-mode .bn-item,body.crm-auditor-mode #nav-section-boss{display:none!important}';
+      style.textContent='body.crm-auditor-mode .nav-item:not(#nav-warehouse-control):not(#nav-meeting-planner),body.crm-auditor-mode .bn-item,body.crm-auditor-mode #nav-section-boss{display:none!important}';
       document.head.appendChild(style);
     }
     const load=async(path,globalName)=>{
@@ -2337,10 +2339,10 @@ async function startApp() {
   document.getElementById('app').style.display='flex';
   document.getElementById('user-name').textContent = currentProfile?.name||currentUser?.email||'...';
   document.getElementById('topbar-title').textContent = 'CRM · '+(currentProfile?.region||'');
-  // Isolated calendar pilot: show ONLY to the verified network director, not all bosses.
+  // Calendar v2: all active CRM accounts except explicitly excluded Nesterov.
   const calendarPilotNav=document.getElementById('nav-meeting-planner');
-  if(calendarPilotNav)calendarPilotNav.style.display=(currentUser?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc' &&
-    currentProfile?.id===currentUser.id && currentProfile?.role==='boss')?'flex':'none';
+  if(calendarPilotNav)calendarPilotNav.style.display=(currentUser?.id && currentUser.id!=='bcc330b8-9100-4c60-b87f-22a36988fc97' &&
+    currentProfile?.id===currentUser.id && currentProfile?.role!=='auditor_pending')?'flex':'none';
   // Мобильное меню каждый вход настраивается заново по роли.
   const bossBottomIds=['bn-control','bn-managers','bn-routes-boss','bn-users'];
   bossBottomIds.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
@@ -2909,10 +2911,10 @@ function crmRenderPage(p){
   else if(p==='my-routes')return renderMyRoutes();
 }
 function goPage(p,title) {
-  if(p==='meeting-planner' && !(currentUser?.id==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc' &&
-     currentProfile?.id===currentUser.id && currentProfile?.role==='boss'))return;
+  if(p==='meeting-planner' && !(currentUser?.id && currentUser.id!=='bcc330b8-9100-4c60-b87f-22a36988fc97' &&
+     currentProfile?.id===currentUser.id && currentProfile?.role!=='auditor_pending'))return;
   if(String(currentProfile?.role||'').toLowerCase()==='executive_viewer'&&p!=='company-viewer')return;
-  if(String(currentProfile?.role||'').toLowerCase()==='auditor'&&p!=='warehouse-control')return;
+  if(String(currentProfile?.role||'').toLowerCase()==='auditor'&&p!=='warehouse-control'&&p!=='meeting-planner')return;
   const appRoot=document.getElementById('app');
   const previousPage=appRoot?.dataset?.activePage||'';
   const epoch=++crmNavEpoch;window.__crmNavEpoch=epoch;

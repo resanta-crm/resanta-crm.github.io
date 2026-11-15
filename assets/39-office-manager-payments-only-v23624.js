@@ -42,19 +42,21 @@ if(typeof basePrefetch==='function')window.crmUltraPrefetchPageV22734=function()
 
 function lockMenus(){
   if(!isOM())return false;
-  const allowed=new Set(['nav-payment-registry','nav-markdown']);
+  const allowed=new Set(['nav-payment-registry','nav-markdown','nav-meeting-planner']);
   if(canOfficeWarehouse())allowed.add('nav-warehouse-control');
   document.querySelectorAll('.nav-item').forEach(el=>{el.style.display=allowed.has(el.id)?'flex':'none'});
   document.querySelectorAll('.nav-section').forEach(el=>el.style.display='none');
   document.querySelectorAll('.mobile-nav-item,.bottom-nav-item,.bn-item').forEach(el=>{el.style.display=['bn-markdown','bn-payment-registry','nav-payment-registry'].includes(el.id)?'flex':'none'});
+  const onCalendar=!!document.getElementById('page-meeting-planner')?.classList.contains('active');
   const onMarkdown=!!document.getElementById('page-markdown')?.classList.contains('active');
   const onWarehouse=canOfficeWarehouse()&&!!document.getElementById('page-warehouse-control')?.classList.contains('active');
-  const t=document.querySelector('.topbar-title');if(t)t.textContent=onWarehouse?'Склад · Приёмка и заказы':onMarkdown?'Уценка':'Безналичные оплаты';
+  const t=document.querySelector('.topbar-title');if(t)t.textContent=onCalendar?'Календарь и совещания':onWarehouse?'Склад · Приёмка и заказы':onMarkdown?'Уценка':'Безналичные оплаты';
   return true;
 }
 function enterPayments(){
   if(!isOM())return false;
   clearHeavyState();lockMenus();
+  if(document.getElementById('page-meeting-planner')?.classList.contains('active'))return true;
   if(document.getElementById('page-markdown')?.classList.contains('active')||(canOfficeWarehouse()&&document.getElementById('page-warehouse-control')?.classList.contains('active')))return true;
   const nav=document.getElementById('nav-payment-registry');
   const page=document.getElementById('page-payment-registry');
@@ -66,7 +68,7 @@ try{
   if(typeof goPage==='function'){
     const baseGoPage=goPage;
     goPage=function(p,title){
-      if(isOM()&&!(['payment-registry','markdown'].includes(p)||(canOfficeWarehouse()&&p==='warehouse-control'))){p='payment-registry';title='Безналичные оплаты'}
+      if(isOM()&&!(['payment-registry','markdown','meeting-planner'].includes(p)||(canOfficeWarehouse()&&p==='warehouse-control'))){p='payment-registry';title='Безналичные оплаты'}
       const out=baseGoPage.call(this,p,title);
       if(isOM())setTimeout(lockMenus,0);
       return out;

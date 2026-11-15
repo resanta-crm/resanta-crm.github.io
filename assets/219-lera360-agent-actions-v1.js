@@ -111,6 +111,7 @@ async function commit(ui){
   if(run!==seq||user!==currentId()||!allowed())return;
   clearProposal();
   if(data.mode==='created_meeting'&&data.created===1){
+   void root.crmMeetingPlannerPilotV1?.refresh?.();
    say(ui,'Встреча «'+String(data.title||'')+'» сохранена на '+String(data.due_date||'')+' в '+String(data.due_time||'')+'. '+String(data.note||''));
   }else if(data.mode==='created_visit'&&data.created===1){
    say(ui,String(data.note||'Плановый визит создан.')+' '+String(data.client_name||''));
@@ -139,18 +140,33 @@ async function commit(ui){
 }
 const AGENDA=/(?:какие|покажи|назови|список|расписание|что\s+у\s+меня).{0,110}(?:встреч|совещан|календар|расписани)|^(?:мой|мои)\s+(?:встречи|календарь|расписание)$/i;
 const REMINDER=/^(?:напомни|напоминай|напоминание)(?=$|[\s,.!?])/i;
-async function agenda(ui,period){
+function calendarRange(question){
+ const q=String(question).toLowerCase(),day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const move=(d,n)=>new Date(Date.parse(d+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
+ if(/(?:^|\s)завтра(?=\s|[?.!,]|$)/u.test(q))return {period:'tomorrow'};
+ if(/(?:^|\s)сегодня(?=\s|[?.!,]|$)/u.test(q))return {period:'today'};
+ const explicit=[...q.matchAll(/(20\d\d)-(\d\d)-(\d\d)|(\d{1,2})[.](\d{1,2})[.](20\d\d)/g)].map(x=>x[1]?x[1]+'-'+x[2]+'-'+x[3]:x[6]+'-'+x[5].padStart(2,'0')+'-'+x[4].padStart(2,'0'));
+ if(explicit.some(d=>!Number.isFinite(Date.parse(d+'T12:00Z'))||new Date(d+'T12:00Z').toISOString().slice(0,10)!==d))return {error:'Проверьте дату: используйте ДД.ММ.ГГГГ.'};
+ if(explicit.length)return {period:'range',from:explicit[0],to:move(explicit[1]||explicit[0],1)};
+ if(/недел/.test(q)){const dow=(new Date(day+'T12:00Z').getUTCDay()+6)%7,from=move(day,-dow+(/следующ/.test(q)?7:0));return {period:'range',from,to:move(from,7)};}
+ const focus=root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.('расписание',{})?.meeting_context?.focus;
+ return focus?{period:'range',from:focus,to:move(focus,1)}:{period:'next7'};
+}
+async function agenda(ui,period,range={}){
  if(working||!allowed())return;
  const run=++seq,user=currentId();setBusy(true);
  status(ui,'Проверяю мой календарь CRM…');
  try{
-  const result=await invoke('agenda',{period});
+  let result=await invoke('agenda',{period,...range});
+  let items=[...(result.items||[])],pages=0;
+  while(result.has_more&&pages++<39){const next=await invoke('agenda',{period,...range,offset:result.next_offset});items.push(...(next.items||[]));result=next;}
+  result={...result,items};
   if(run!==seq||user!==currentId()||!allowed())return;
   if(result.mode!=='agenda'||!Array.isArray(result.items))throw Error('agenda_response_invalid');
   if(!result.items.length){say(ui,'На выбранный период в личном календаре CRM нет запланированных встреч.');return;}
   const list=result.items.map(x=>x.when+' — '+x.title+
    (x.client_name?' · '+x.client_name:'')).join('\n');
-  say(ui,'Запланированные встречи:\n'+list+(result.has_more?'\nПоказаны первые 25 записей.':''));
+  say(ui,'Запланированные встречи:\n'+list+(result.has_more?'\nСписок ограничен; уточните период.':''));
   status(ui,'Проверено через личный календарь CRM');
  }catch(e){
   if(run===seq&&user===currentId()&&allowed())say(ui,'Не удалось прочитать календарь CRM. '+String(e?.message||'').slice(0,65),false);
@@ -214,7 +230,9 @@ function handle(q,ui){
  if(!ACTION.test(n)){
   if(REMINDER.test(n)&&root.__resantaLeraDialogueV2!==true){say(ui,'Автоматические уведомления о встречах пока не настроены. Могу создать встречу в личном календаре CRM или поставить задачу с датой.');return true;}
   if(AGENDA.test(n)){
-   void agenda(ui,/\bзавтра\b/.test(n)?'tomorrow':/\bсегодня\b/.test(n)?'today':'next7');return true;
+   const range=calendarRange(text);
+   if(range.error){say(ui,range.error);return true;}
+   void agenda(ui,range.period,range.period==='range'?{from:range.from,to:range.to}:{});return true;
   }
   return false;
  }

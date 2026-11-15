@@ -333,6 +333,7 @@ async function execute(req,body,actor,svc,caller,secret){
       confirmation:'explicit_user_confirmation',confirmed_at:new Date().toISOString()}};
    const inserted=await svc.from('tasks').insert(row).select('id,manager_name,source').single();
    if(inserted.error){
+     if(String(inserted.error.message||'').includes('calendar_conflict'))return respond(req,{mode:'conflict_meeting',created:0,note:'В это время уже есть другая встреча.'});
      if(inserted.error.code==='23505')return respond(req,{mode:'already_exists',created:0,task_id:id});
      return fail(req,'task_create_failed',503);
    }
@@ -355,7 +356,7 @@ async function execute(req,body,actor,svc,caller,secret){
      return fail(req,'meeting_client_scope_changed',403);
    const at=Date.parse(draft.starts_at),until=at+draft.duration_minutes*60000;
    const nearby=await caller.from('crm_ai360_meetings_v1').select('id,title,starts_at,duration_minutes')
-     .eq('owner_id',actor.id)
+     .eq('owner_id',actor.id).eq('status','scheduled')
      .gte('starts_at',new Date(at-4*3600000).toISOString())
      .lt('starts_at',new Date(until).toISOString()).limit(20);
    if(nearby.error)return fail(req,'meeting_calendar_read_unavailable',503);
@@ -375,6 +376,7 @@ async function execute(req,body,actor,svc,caller,secret){
    const inserted=await caller.from('crm_ai360_meetings_v1').insert(row)
      .select('id,owner_id,starts_at,source').single();
    if(inserted.error){
+     if(String(inserted.error.message||'').includes('calendar_conflict'))return respond(req,{mode:'conflict_meeting',created:0,note:'В это время уже есть другая встреча.'});
      if(inserted.error.code==='23505')return respond(req,{mode:'already_exists',created:0});
      return fail(req,'meeting_create_failed',503);
    }
@@ -491,21 +493,27 @@ Deno.serve(async req=>{
    if(body?.kind==='agenda'){
      const now=localDate(),days=body.period==='today'?1:body.period==='tomorrow'?1:7;
      const base=Date.parse(now.date+'T00:00:00+03:00');
-     const from=base+(body.period==='tomorrow'?86400000:0);
-     const to=from+days*86400000;
+     let from=base+(body.period==='tomorrow'?86400000:0),to=from+days*86400000;
+     if(body.period==='range'){
+       if(!/^20\d\d-\d\d-\d\d$/.test(body.from||'')||!/^20\d\d-\d\d-\d\d$/.test(body.to||''))return fail(req,'invalid_agenda_period');
+       if(new Date(body.from+'T12:00Z').toISOString().slice(0,10)!==body.from||new Date(body.to+'T12:00Z').toISOString().slice(0,10)!==body.to)return fail(req,'invalid_agenda_period');
+       from=Date.parse(body.from+'T00:00:00+03:00');to=Date.parse(body.to+'T00:00:00+03:00');
+       if(!Number.isFinite(from)||!Number.isFinite(to)||to<=from||to-from>62*86400000)return fail(req,'invalid_agenda_period');
+     }
+     const offset=Number.isSafeInteger(body.offset)&&body.offset>=0&&body.offset<=10000?body.offset:0;
      const rows=await caller.from('crm_ai360_meetings_v1')
        .select('id,title,client_name,starts_at,duration_minutes,format,location')
-       .eq('owner_id',actor.id).gte('starts_at',new Date(from).toISOString())
+       .eq('owner_id',actor.id).eq('status','scheduled').gte('starts_at',new Date(from).toISOString())
        .lt('starts_at',new Date(to).toISOString())
-       .order('starts_at',{ascending:true}).limit(25);
+       .order('starts_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+25);
      if(rows.error)return fail(req,'agenda_not_available',503);
      const fmt=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',
        month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
-     return respond(req,{mode:'agenda',items:(rows.data||[]).map(x=>({
+     return respond(req,{mode:'agenda',from:new Date(from).toISOString(),to:new Date(to).toISOString(),items:(rows.data||[]).slice(0,25).map(x=>({
        id:x.id,title:x.title,client_name:x.client_name,
        when:fmt.format(new Date(x.starts_at)),minutes:x.duration_minutes,
        location:x.location
-     })),count:(rows.data||[]).length,has_more:(rows.data||[]).length===25});
+     })),count:Math.min(25,(rows.data||[]).length),has_more:(rows.data||[]).length>25,next_offset:(rows.data||[]).length>25?offset+25:null});
    }
    if(body?.kind==='prepare')return await makeDraft({req,kind:'prepare',
      question:body.question,actor,svc,caller,secret,openai});

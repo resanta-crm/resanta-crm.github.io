@@ -31,6 +31,18 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
  // A CI-only PR may leave CRM core byte-identical to main. Normalize only
  // when the branch actually changed core; otherwise retain exact equality.
  if(core!==before){
+  // Calendar access was explicitly approved for every active employee except
+  // Nesterov. Normalize only its navigation exceptions; retain the GPS guard
+  // over all visit/route/client transactions and the rest of both role shells.
+  const calendarBlock=/  \/\/ (?:Calendar v2|Isolated calendar pilot)[^\n]*\n[\s\S]*?(?=  \/\/ Мобильное меню)/;
+  normalized=normalized.replace(calendarBlock,before.match(calendarBlock)?.[0]||'');
+  if(!before.includes("    const calendarNav=document.getElementById('nav-meeting-planner');"))
+   normalized=normalized.replace("    const calendarNav=document.getElementById('nav-meeting-planner');\n    if(calendarNav&&currentUser?.id!=='bcc330b8-9100-4c60-b87f-22a36988fc97')calendarNav.style.display='flex';\n",'');
+  if(!before.includes('.nav-item:not(#nav-warehouse-control):not(#nav-meeting-planner)'))
+   normalized=normalized.replace('.nav-item:not(#nav-warehouse-control):not(#nav-meeting-planner)','.nav-item:not(#nav-warehouse-control)');
+  restore('function goPage(p,title) {',"  const appRoot=document.getElementById('app');");
+  if(normalized!==before){
+
   if(!before.includes('let visitSelectionKeyV3=null;\n'))
     normalized=normalized.replace('let visitSelectionKeyV3=null;\n','');
   restore('function openAddVisit(clientId){','// ===== Проверка на НМС');
@@ -51,6 +63,7 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
     '  const resolvedVisitPoint=geo?await gpsResolveRoutePointForVisit(c,matchedVisitPlan):matchedVisitPlan;\n  const gchk=gpsCheckAgainstClient(c,geo,resolvedVisitPoint);',
     '  const gchk=gpsCheckAgainstClient(c,geo,matchedVisitPlan);'
   );
+  }
  }
  assert.equal(normalized,before,'Never replace original visit transactions, routes, parsers or clients');
  const events=(core.match(/resanta-gps360-store-check/g)||[]);

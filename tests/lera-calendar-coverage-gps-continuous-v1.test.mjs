@@ -67,10 +67,10 @@ test('CRM breadth audit comes from 34-domain catalog and keeps samples PARTIAL',
  assert.match(coverage,/status:'partial'/);
  assert.match(coverage,/sample_only/);
  assert.match(coverage,/scope:'limited_sample'/);
- assert.match(calendar,/COVERAGE_ENDPOINT='crm-ai360-meeting-coverage-v1'/);
- assert.match(calendar,/data\.registered!==34/);
- assert.match(calendar,/Частично: выборка без полной аналитики/);
- assert.match(calendar,/Неполная выборка/);
+ assert.match(calendar,/ENDPOINT='crm-meeting-prepare-v2'/);
+ assert.match(calendar,/d\.coverage\?\.entries/);
+ assert.match(calendar,/Это не полная проверка всех правил CRM/);
+ assert.match(calendar,/Ограничения и свежесть данных/);
  assert.doesNotMatch(coverage,/\binsert\(|\bupdate\(|\bupsert\(|\bdelete\(/);
 });
 test('new browser modules parse and do not collect microphone or data on initial import',()=>{
@@ -89,6 +89,6 @@ test('on-demand page bootstrap loads only new CSS and unchanged AI Agent #309',(
  const lazy=read('assets/137-resanta-ai360-lazy-launch-v1.js');
  assert.match(lazy,/135-resanta-voice-capture-fix-v2\.js\?v=21&lera=20261113-turntaking&release=continuous-gps-1/);
  assert.match(lazy,/134-resanta-voice-ai360-pilot-v1\.js\?v=21&lera=20261113&release=continuous-gps-1/);
- assert.match(html,/270-calendar-meetings-pilot-v1\.js\?v=20261113-pilot1&release=coverage-gps-1/);
+ assert.match(html,/270-calendar-meetings-pilot-v1\.js\?v=meetings-v2-20261115/);
  assert.match(html,/181-gps-director360-v1\.js/);
 });

@@ -56,21 +56,22 @@ if(typeof basePrefetch==='function'){
 function lockMenus(){
   if(!isServiceManager())return false;
   document.querySelectorAll('.nav-item').forEach(el=>{
-    el.style.display=el.id==='nav-markdown'?'flex':'none';
-    el.classList.toggle('active',el.id==='nav-markdown');
+    el.style.display=['nav-markdown','nav-meeting-planner'].includes(el.id)?'flex':'none';
+    el.classList.toggle('active',el.id===(document.getElementById('page-meeting-planner')?.classList.contains('active')?'nav-meeting-planner':'nav-markdown'));
   });
   document.querySelectorAll('.nav-section').forEach(el=>el.style.display='none');
   document.querySelectorAll('.mobile-nav-item,.bottom-nav-item,.bn-item').forEach(el=>{
     el.style.display=el.id==='bn-markdown'?'flex':'none';
   });
   const t=document.querySelector('.topbar-title');
-  if(t)t.textContent='Уценка';
+  if(t)t.textContent=document.getElementById('page-meeting-planner')?.classList.contains('active')?'Календарь и совещания':'Уценка';
   return true;
 }
 function enterMarkdown(){
   if(!isServiceManager())return false;
   clearHeavyState();
   lockMenus();
+  if(document.getElementById('page-meeting-planner')?.classList.contains('active'))return true;
   const page=document.getElementById('page-markdown');
   const nav=document.getElementById('nav-markdown');
   if(page?.classList.contains('active')){
@@ -89,7 +90,7 @@ try{
   if(typeof goPage==='function'){
     const baseGoPage=goPage;
     goPage=function(p,title){
-      if(isServiceManager()&&p!=='markdown'){p='markdown';title='Уценка'}
+      if(isServiceManager()&&!['markdown','meeting-planner'].includes(p)){p='markdown';title='Уценка'}
       const out=baseGoPage.call(this,p,title);
       if(isServiceManager())setTimeout(lockMenus,0);
       return out;
