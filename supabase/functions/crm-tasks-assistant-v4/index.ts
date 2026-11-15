@@ -1,4 +1,5 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
+import {routeAction} from './route-action.mjs';
 import {UUID,validateShelfDraft,objectionReply} from './domain.mjs';
 const originSet=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const send=(req:Request,body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{
@@ -19,6 +20,10 @@ Deno.serve(async(req:Request)=>{
  const access=await caller.rpc('crm_tasks_access_v4',{p_client:input.client_id});
  if(access.error||access.data!==true)return send(req,{error:'forbidden'},403);
  const svc=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
+ if(['prepare_route_task','commit_route_task'].includes(input.action)){
+  try{return send(req,await routeAction({caller,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}));}
+  catch(e){return send(req,{error:String((e as Error).message||'TASK_CREATE_FAILED')},422);}
+ }
  const text=String(input.transcript||'').trim();
  if(text.length>10000)return send(req,{error:'transcript_too_long'},400);
  if(input.action==='objection')return send(req,{answer:objectionReply(text),writes:false});
