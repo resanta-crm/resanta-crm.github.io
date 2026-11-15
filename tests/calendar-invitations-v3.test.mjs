@@ -27,3 +27,15 @@ test('calendar push uses a separate page event and account-bound meeting deep li
  handlers.notificationclick({notification:{data:payload,close(){}},waitUntil:p=>done=p});await done;assert.equal(messages.at(-1).type,'CALENDAR_OPEN');
  handlers.push({data:{json:()=>({...payload,kind:'message'})},waitUntil:p=>done=p});await done;assert.equal(messages.at(-1).type,'CONNECT_PUSH');
 });
+test('actual action handler reads both legacy personal agenda and the new invitation projection',async()=>{
+ const owner='544fb1e2-ef70-44de-bc62-e0e1596a4bfc';let handler,clients=0;
+ const svc={auth:{getUser:async()=>({data:{user:{id:owner}}})},from(){return {select(){return this},eq(){return this},maybeSingle:async()=>({data:{id:owner,name:'Александр Паюшин',role:'boss'}})}}};
+ const item=title=>({id:'meeting',title,starts_at:'2026-11-16T10:10Z',duration_minutes:60});
+ const caller={from(){const q={select(){return q},eq(){return q},gte(){return q},lt(){return q},order(){return q},range:async()=>({data:[item('Личная встреча')]})};return q},rpc:async()=>({data:[item('Приглашение')]})};
+ const src=fs.readFileSync('supabase/functions/crm-ai360-actions-v1/index.ts','utf8').replace(/^import .*\n/gm,'');
+ vm.runInNewContext(src,{Deno:{serve:fn=>handler=fn,env:{get:()=> 'configured'}},createClient:()=>clients++%2===0?svc:caller,TextEncoder,Response,Request,Intl,Date,Set});
+ for(const [modern,title] of [[false,'Личная встреча'],[true,'Приглашение']]){
+  const r=await handler(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer abcdefghijklmnopqrstuvwxyz','Content-Type':'application/json'},body:JSON.stringify({kind:'agenda',period:'range',from:'2026-11-16',to:'2026-11-17',calendar_capabilities_v3:modern})}));
+  assert.equal(r.status,200);const body=await r.json();assert.equal(body.mode,'agenda');assert.equal(body.items[0].title,title);
+ }
+});

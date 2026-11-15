@@ -246,7 +246,7 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai,calen
   const resolved=await resolveClient(svc,actor,model.client_name,true);
   if(resolved.error)return respond(req,{mode:'needs_details',question:'Уточни название клиента в CRM.',created:0});
   const title=esc(model.title).slice(0,160),details=esc(model.details).slice(0,800);
-  if(title.length<3)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
+  if(title.length<3)return respond(req,{mode:'needs_details',question:'Как назвать встречу? Название — от 3 символов.',created:0});
   const dur=Number.isInteger(model.duration_minutes)&&model.duration_minutes>=15&&model.duration_minutes<=240?model.duration_minutes:60;
   const picked=(Array.isArray(model.participants)?model.participants:[]).slice(0,12).map(name=>matchOne(name,directory));
   if(picked.some(x=>!x)||new Set(picked.map(x=>x.id)).size!==picked.length)
@@ -512,7 +512,7 @@ Deno.serve(async req=>{
      let rows;
      if(body.calendar_capabilities_v3===true){const r=await caller.rpc('crm_calendar_list_v3',{p_from:new Date(from).toISOString(),p_to:new Date(to).toISOString()});rows={error:r.error,data:Array.isArray(r.data)?r.data.slice(offset,offset+26):[]};}
      else{
-     const rows=await caller.from('crm_ai360_meetings_v1')
+     rows=await caller.from('crm_ai360_meetings_v1')
        .select('id,title,client_name,starts_at,duration_minutes,format,location')
        .eq('owner_id',actor.id).eq('status','scheduled').gte('starts_at',new Date(from).toISOString())
        .lt('starts_at',new Date(to).toISOString())
