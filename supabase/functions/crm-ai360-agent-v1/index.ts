@@ -6,6 +6,7 @@ import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {agentPrincipal,agentCapabilities,normalizeAgentRequest,agentGreeting} from './contract.mjs';
 import {classifyAgentQuestion,runFreeConversation} from './conversation.mjs';
 import {historyAction,historyEnabled,saveHistoryTurn,recentFreeMemory} from './history.mjs';
+import {readMeetingContext} from './meeting-context.mjs';
 import {controlCenterPlanRequest,readControlCenterPlan} from './control-center.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
@@ -72,6 +73,24 @@ Deno.serve(async req=>{
   const h=await historyEnabled(svc,user.id);
   return reply(req,{...agentCapabilities(principal),history_enabled:h.enabled===true,
    history_retention_days:30,history_audio_saved:false,dialogue_protocol:'lera_dialogue_v2'});
+ }
+ // Calendar context is owner-scoped and uses only server-created preparation records.
+ if(input.meeting_context){
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const calendar=await readMeetingContext(svc,user,profile.data,input.meeting_context,today);
+  if(calendar.error)return fault(req,calendar.error,403);
+  parsed.payload.memory={...parsed.payload.memory,month:calendar.month};
+  if(principal.tier!=='network_director')parsed.payload.month=calendar.month;
+  // Detailed business questions retain the original scoped tool gateway and their own subject.
+  // Meeting explanations consume only the selected preparation, never inject its names into routing.
+  if(/совещан|повестк|приоритет|подготов|что.{0,20}обсуд|^а?\s*почему|итог.{0,15}встреч/iu.test(input.question)){
+   const answer=await runFreeConversation({svc,userId:user.id,question:input.question,
+    history:parsed.payload.history,meetingFacts:calendar.text,apiKey:Deno.env.get('OPENAI_API_KEY')||''});
+   if(answer.error)return fault(req,answer.error,answer.status||503);
+   const stored=await saveHistoryTurn(svc,user.id,{mode:'crm',question:input.question,answer:answer.answer,answerVerified:false});
+   return reply(req,{...answer,agent:'resanta_ai_agent360_v1',route_tier:principal.tier,
+    memory:parsed.payload.memory,writes_enabled:false,history_saved:stored.saved});
+  }
  }
  // Ordinary conversation is explicitly isolated from CRM reads. Every caller is
  // still authenticated, identity-scoped and metered before contacting OpenAI.

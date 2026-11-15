@@ -79,3 +79,23 @@
 #page-meeting-planner .cmp-coverage-details summary{font-size:12px;font-weight:750;color:#245e8d;cursor:pointer;margin-bottom:8px}
 #page-meeting-planner .cmp-coverage-details .cmp-audit-item{align-items:start}
 #page-meeting-planner .cmp-coverage-details .cmp-audit-item small{line-height:1.35;grid-column:2/4}
+/* v2: same CRM surfaces, readable controls, personal schedule and saved agenda. */
+#page-meeting-planner .cmp-muted,#page-meeting-planner .cmp-source-note,#page-meeting-planner .cmp-topic p,#page-meeting-planner .cmp-audit-item{font-size:14px}
+#page-meeting-planner .cmp-audit-item small,#page-meeting-planner .cmp-meeting small{font-size:12px;overflow-wrap:anywhere}
+#page-meeting-planner .cmp-btn{font-size:14px;min-height:44px}
+#page-meeting-planner .cmp-scope{margin:12px 0;padding:14px;background:#fff;border:1px solid #dde6f0;border-radius:12px;font-size:14px}
+#page-meeting-planner input,#page-meeting-planner textarea{box-sizing:border-box;max-width:100%;border:1px solid #cbd9e7;border-radius:8px;padding:10px;font:inherit;color:inherit;background:#fff}
+#page-meeting-planner textarea{width:100%;min-height:90px}
+#page-meeting-planner .cmp-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+#page-meeting-planner .cmp-form label{display:flex;flex-direction:column;gap:6px;font-size:14px}
+#page-meeting-planner .cmp-editor{margin:12px 0}
+#page-meeting-planner .cmp-meeting.selected{background:#f0f7ff;border-radius:10px}
+#page-meeting-planner .cmp-meeting .cmp-btn{margin:6px 5px 0 0}
+#page-meeting-planner .cmp-minutes{display:block;margin:18px 0 10px}
+#page-meeting-planner summary{cursor:pointer;font-size:14px;padding:10px 0}
+#page-meeting-planner .cmp-columns{grid-template-columns:minmax(300px,.85fr) minmax(360px,1.15fr)}
+@media(max-width:1050px){#page-meeting-planner .cmp-columns{grid-template-columns:1fr}}
+@media(max-width:620px){#page-meeting-planner .cmp-form{grid-template-columns:1fr}#page-meeting-planner .cmp-day b{font-size:11px}#page-meeting-planner .cmp-daygrid:not(.is-month) .cmp-day{min-height:90px}}
+
+#page-meeting-planner .cmp-day b:not(:empty)::after{content:' встреч'}
+@media(max-width:620px){#page-meeting-planner .cmp-day small{display:none}#page-meeting-planner .cmp-day b:not(:empty)::after{content:''}}

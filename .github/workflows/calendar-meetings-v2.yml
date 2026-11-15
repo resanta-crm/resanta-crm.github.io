@@ -1,0 +1,22 @@
+name: Calendar v2 scoped preparation and personal meetings
+on:
+  pull_request:
+    paths:
+      - 'assets/270-calendar-meetings-pilot-v1.js'
+      - 'supabase/functions/_shared/meeting-*.mjs'
+      - 'supabase/functions/crm-meeting-prepare-v2/**'
+      - 'supabase/functions/crm-ai360-agent-v1/meeting-context.mjs'
+      - 'supabase/migrations/*calendar*.sql'
+      - 'tests/calendar-meetings-pilot.test.mjs'
+      - '.github/workflows/calendar-meetings-v2.yml'
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  calendar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Calendar behaviour and scope regressions
+        run: node --test tests/calendar-meetings-pilot.test.mjs tests/lera-calendar-coverage-gps-continuous-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/lera360-agent-actions-v1.test.mjs
