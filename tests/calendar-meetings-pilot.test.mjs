@@ -8,14 +8,14 @@ import {prepareMeeting} from '../supabase/functions/_shared/meeting-prepare.mjs'
 import {readMeetingContext} from '../supabase/functions/crm-ai360-agent-v1/meeting-context.mjs';
 const code=fs.readFileSync('assets/270-calendar-meetings-pilot-v1.js','utf8');
 const tick=()=>new Promise(r=>setImmediate(r));
-function harness(id=OWNER){
+function harness(id=OWNER,source=code){
  const root={innerHTML:'',textContent:''},app={style:{display:'flex'},dataset:{activePage:'meeting-planner'}},calls=[],inputs={},rows=[];let listener;
  const client={auth:{getUser:async()=>({data:{user:{id}}})},functions:{invoke:async(name,{body})=>{calls.push({name,body});return {data:{preparation_id:'9d3f5760-64a8-4cfa-aeaa-7c77c2b7fede',briefing:{mode:'readonly',month:body.context.month,generated_at:new Date().toISOString(),scope:'test',cards:[{id:'tasks',level:'high',title:'Задачи',fact:'Факт',action:'Проверить',source:'tasks',attention:true}]},coverage:{entries:[],signals:[],registered:0}}};}},
  from(table){const filters=[];let insert=null;const q={select(){return q},eq(k,v){filters.push([k,v]);return q},gte(){return q},lt(){return q},order(){return q},limit(){return q},or(){return q},insert(x){insert=x;return q},single(){return q},then(resolve){calls.push({table,filters,insert});if(insert){const x={...insert,id:'new-id',status:'scheduled',updated_at:'2026-11-15T09:00:00Z'};rows.push(x);resolve({data:x});}else resolve({data:rows.filter(x=>x.owner_id===id)});}};return q;},
  rpc:async(name,args)=>{calls.push({name,args});const m=rows.find(x=>x.id===args.p_id);Object.assign(m,args.p_patch);return {data:m};}};
  const doc={addEventListener(n,fn){listener=fn},getElementById:k=>k==='cmp-root'?root:k==='app'?app:inputs[k]||null,querySelector(){return null}};
- const win={db:client,confirm:()=>true};vm.runInNewContext(code,{window:win,document:doc,currentUser:{id},currentProfile:{id,role:'manager',name:'Test'},Intl,Date,Set,Array,String,Object,Number,Promise,AbortSignal,setTimeout,navigator:{clipboard:{writeText:async()=>{}}}});
- return {win,root,calls,inputs,rows,doc,async click(key,value){const target={dataset:{[key.replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]:value},hasAttribute:a=>a==='data-'+key};await listener({target:{closest:()=>target}});await tick();},async render(){win.crmMeetingPlannerPilotV1.render();await tick();}};
+ const win={db:client,confirm:()=>true};vm.runInNewContext(source,{window:win,document:doc,currentUser:{id},currentProfile:{id,role:'manager',name:'Test'},Intl,Date,Set,Array,String,Object,Number,Promise,AbortSignal,setTimeout,clearTimeout,navigator:{clipboard:{writeText:async()=>{}}}});
+ return {win,root,calls,inputs,rows,doc,client,async click(key,value){const target={dataset:{[key.replace(/-([a-z])/g,(_,x)=>x.toUpperCase())]:value},hasAttribute:a=>a==='data-'+key};await listener({target:{closest:()=>target}});await tick();},async render(){win.crmMeetingPlannerPilotV1.render();await tick();}};
 }
 test('all active accounts have calendar access except Nesterov; analytical scope remains separate',()=>{
  assert.equal(meetingAccess({id:EXCLUDED},{id:EXCLUDED,role:'boss'}),null);
@@ -62,4 +62,8 @@ test('calendar opens the existing staff launcher and never closes an already ope
  const h=harness('office');await h.render();let launches=0;h.doc.querySelector=s=>s.includes('rsa-branch-launch')?{click(){launches++}}:null;
  await h.click('cmp-voice');assert.equal(launches,1);
  h.doc.querySelector=s=>s.includes('rva-window')?{}:{click(){launches++}};await h.click('cmp-voice');assert.equal(launches,1);
+});
+
+test('hung preparation stops loading and exposes an explicit timeout',async()=>{
+ const h=harness(OWNER,code.replace('),45000);','),1);'));await h.render();h.client.functions.invoke=()=>new Promise(()=>{});await h.click('cmp-brief');await new Promise(r=>setTimeout(r,10));assert.match(h.root.innerHTML,/Источник не ответил вовремя/);assert.doesNotMatch(h.root.innerHTML,/Подготавливаю…/);
 });

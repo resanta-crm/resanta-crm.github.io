@@ -63,8 +63,9 @@ async function meetingsRefresh(){if(!authorized()||state.loading)return;const ac
  if(state.meetingId&&!selectedMeeting())state.meetingId='';
  }catch(e){if(seq===state.meetingSeq&&actor===userId()){state.loaded=false;state.loadError=String(e.message||e).slice(0,180);}}
  finally{if(seq===state.meetingSeq){state.loading=false;if(authorized())draw();}}}
+async function deadline(promise,ms){let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Источник не ответил вовремя. Обновите подготовку.')),ms);})]);}finally{clearTimeout(timer);}}
 async function briefRefresh(){if(!authorized()||state.briefLoading)return;const actor=userId(),seq=++state.briefSeq;state.briefLoading=true;state.briefError='';const ctx=context();draw();try{
- const c=await session(),r=await c.functions.invoke(ENDPOINT,{body:{kind:'meeting_prepare',context:ctx},signal:AbortSignal.timeout(45000)});
+ const c=await session(),r=await deadline(c.functions.invoke(ENDPOINT,{body:{kind:'meeting_prepare',context:ctx}}),45000);
  if(r.error||r.data?.error)throw Error(r.data?.error||r.error.message);const d=r.data;
  if(d?.briefing?.mode!=='readonly'||!Array.isArray(d.briefing.cards)||!Array.isArray(d.coverage?.entries)||d.briefing.month!==ctx.month)throw Error('Некорректный ответ подготовки');
  if(seq!==state.briefSeq||actor!==userId()||!authorized())return;state.preparationId=d.preparation_id;state.briefing=d.briefing;state.coverage=d.coverage;state.selected=new Set(d.briefing.cards.filter(x=>x.attention).map(x=>x.id));state.notice='Подготовка готова. Причины приоритетов и ограничения показаны у источников.';
