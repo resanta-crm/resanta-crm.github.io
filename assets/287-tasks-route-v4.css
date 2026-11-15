@@ -63,3 +63,9 @@
 #tasks-route-v4 .tr-grid{grid-template-columns:minmax(230px,.75fr) minmax(0,1.65fr)}
 @media(max-width:850px){#tasks-route-v4 .tr-grid{grid-template-columns:1fr}}
 @media(max-width:600px){#tasks-route-v4 .tr-metrics{grid-template-columns:1fr}#tasks-route-v4 .tr-bar{grid-template-columns:85px minmax(50px,1fr) 85px}#tasks-route-v4 .tr-bar>.tr-sub{grid-column:2/4}}
+
+#tasks-route-v4 .tr-modal-shade{position:fixed;inset:0;background:#13294280;z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto}
+#tasks-route-v4 .tr-modal{width:min(920px,100%);max-height:calc(100dvh - 48px);overflow:auto;box-shadow:0 20px 70px #142b4933}
+#tasks-route-v4 .tr-modal article{overflow-wrap:anywhere}
+#tasks-route-v4 .tr-modal input[type=checkbox]{width:20px;height:20px}
+@media(max-width:600px){#tasks-route-v4 .tr-modal-shade{padding:8px}#tasks-route-v4 .tr-modal{max-height:calc(100dvh - 16px)}#tasks-route-v4 .tr-modal h2{font-size:21px}}
