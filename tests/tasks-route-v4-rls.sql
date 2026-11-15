@@ -36,10 +36,20 @@ do $$begin
  if exists(select 1 from public.tasks where id=(select task_id from tasks_v4_test_ids)and done)then raise exception 'RETURN_MUST_REOPEN';end if;
 end $$;
 -- Cutoff moves this outstanding task into partial, not into fulfilled.
+update public.crm_daily_sales_runs_v4 set source_message_at=now()-interval'2 minutes'where id in(select id from tasks_v4_test_runs);
 update public.crm_task_contracts_v4 set control_at=now()-interval'1 minute' where task_id=(select task_id from tasks_v4_test_ids);
 select public.crm_tasks_reconcile_v4();
 do $$begin
  if not exists(select 1 from public.crm_task_contracts_v4 where task_id=(select task_id from tasks_v4_test_ids)and state='partial')then raise exception 'CUTOFF_PARTIAL_MISSING';end if;
+end $$;
+-- A later full shipment closes fulfillment but cannot erase Friday's partial result.
+with r as(insert into public.crm_daily_sales_runs_v4(branch,report_day,source_message_at,source_message_id,content_sha256,explicit_empty,total_qty,total_revenue,row_count,parser)
+ values('Витебск',(now()at time zone'Europe/Minsk')::date,now(),'TEST-LATE-ROLLBACK',repeat('b',64),false,2,20,1,'daily-sales-v4.1')returning id)
+insert into public.crm_daily_sales_rows_v4(run_id,line_no,client_name,legal_key,sku,product,qty,revenue)
+select r.id,1,'ПРОВЕРКА V4 — ОТКАТ',t.legal_key,'75/6/1','Тестовый SKU',2,20 from r cross join tasks_v4_test_ids t;
+select public.crm_tasks_reconcile_v4();
+do $$begin
+ if not exists(select 1 from public.crm_task_contracts_v4 where task_id=(select task_id from tasks_v4_test_ids)and state='verified'and cutoff_state='partial')then raise exception 'LATE_SHIPMENT_ERASED_CUTOFF';end if;
 end $$;
 grant select on tasks_v4_test_ids to authenticated;
 select set_config('request.jwt.claims',(select json_build_object('sub',manager_id,'email',(select email from public.users where id=manager_id),'role','authenticated')::text from tasks_v4_test_ids),true);
@@ -47,7 +57,7 @@ set local role authenticated;
 do $$begin
  if not exists(select 1 from public.crm_task_contracts_v4 where task_id=(select task_id from tasks_v4_test_ids))then raise exception 'ASSIGNED_MANAGER_CANNOT_SEE_TASK';end if;
  begin
-  update public.tasks set done=true where id=(select task_id from tasks_v4_test_ids);
+  update public.tasks set done=false where id=(select task_id from tasks_v4_test_ids);
   raise exception 'MANUAL_CLOSE_WAS_ALLOWED';
  exception when insufficient_privilege then null;end;
  begin
@@ -67,5 +77,5 @@ do $$begin
  or has_function_privilege('authenticated','public.crm_daily_sales_ingest_v4(jsonb)','execute')
  or has_function_privilege('authenticated','public.crm_tasks_reconcile_v4()','execute')then raise exception 'SERVICE_FUNCTION_EXPOSED';end if;
 end $$;
-select 'PASS: partial, full shipment, return, cutoff, manager delivery, manual-close guard, target guard, foreign-manager isolation, service-only ingestion' result;
+select 'PASS: partial, full shipment, return, cutoff, late shipment preserves review, manager delivery, manual-close guard, target guard, foreign-manager isolation, service-only ingestion' result;
 rollback;

@@ -6,6 +6,7 @@ import hashlib
 import imaplib
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime
@@ -21,11 +22,33 @@ def text_header(value):
 def candidates(mail):
     # Read/unread flags never affect imports. Search only the dedicated feed.
     since = (datetime.now(timezone.utc)-timedelta(days=4)).strftime("%d-%b-%Y")
-    ok, data = mail.uid("search", "CHARSET", "UTF-8", f'(SINCE {since} SUBJECT "Реализации за день")'.encode())
+    # Gmail rejects raw UTF-8 in this IMAP command. Read a bounded header batch,
+    # decode MIME locally, and download bodies only for the dedicated subject.
+    ok, data = mail.uid("search", None, f'(SINCE {since})')
     if ok != "OK":
         raise RuntimeError("Daily mailbox search failed")
     found = []
-    for uid in data[0].split()[-30:]:
+    selected = []
+    ids = data[0].split()[-2000:]
+    for start in range(0,len(ids),100):
+        batch=ids[start:start+100]
+        ok, parts=mail.uid("fetch", b','.join(batch), '(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])')
+        if ok!='OK':
+            raise RuntimeError('Daily mailbox header fetch failed')
+        for item in parts:
+            if not isinstance(item,tuple):
+                continue
+            uid_match=re.search(rb'\bUID\s+(\d+)',item[0])
+            if not uid_match:
+                raise RuntimeError('Daily header UID is missing')
+            header=email.message_from_bytes(item[1])
+            if not text_header(header.get('Subject')).startswith(SUBJECT+' от '):
+                continue
+            sent=parsedate_to_datetime(header['Date'])
+            if sent.tzinfo is None:
+                raise ValueError('Daily message timezone is missing')
+            selected.append((sent,uid_match.group(1)))
+    for _,uid in sorted(selected)[-50:]:
         ok, parts = mail.uid("fetch", uid, "(BODY.PEEK[] INTERNALDATE)")
         if ok != "OK":
             raise RuntimeError("Daily message fetch failed")
