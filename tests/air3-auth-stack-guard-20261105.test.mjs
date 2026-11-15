@@ -64,6 +64,8 @@ test('No async Supabase API calls are awaited in direct auth callbacks',()=>{
 test('Core script refreshes cache, Supabase library remains unchanged; no APK',()=>{
  assert.match(index,/<script defer src="https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2"><\/script>/);
  assert.ok(index.includes('./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1'));
- assert.ok(index.includes('<link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1" as="script">'));
+ const script=index.match(/<script defer src="([^"]*01-crm-core\.js\?[^"]+)"><\/script>/)?.[1];
+ const preload=index.match(/<link rel="preload" href="([^"]*01-crm-core\.js\?[^"]+)" as="script">/)?.[1];
+ assert.ok(script);assert.equal(preload,script,'preload and executable core must use exactly the same cache version');
  assert.ok(!index.includes('<script defer src="./assets/01-crm-core.js?v=23.6.339-client360-1"></script>'));
 });

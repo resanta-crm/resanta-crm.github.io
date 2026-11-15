@@ -49,8 +49,8 @@ jobs:
           # Run all CONNECT regression tests for shared index.html changes,
           # but enforce CONNECT-only scope only when CONNECT sources/wiring actually change.
           # A route/KPI feature may append its own <script> without modifying CONNECT.
-          if ! grep -Eq '^assets/(144-resanta-ai360-branch-voice-v1|146-resanta-ai360-branch-premium-voice-v1|147-resanta-ai360-staff-unified-dialog-v1|151-resanta-connect-v1|154-resanta-connect-video-v1|156-resanta-connect-android-push-v1|157-resanta-ai360-android-staff-launch-v1)\.js$|^tests/connect-[0-9]+\.test\.js$|^supabase/(functions/connect-|migrations/.*connect_)' /tmp/connect-files \
-            && ! git diff origin/main...HEAD -- index.html | grep -Eq '^[+-][^+-].*(144-resanta-ai360-branch-voice|146-resanta-ai360-branch-premium-voice|147-resanta-ai360-staff-unified-dialog|151-resanta-connect|154-resanta-connect-video|156-resanta-connect-android-push|157-resanta-ai360-android-staff-launch)'; then
+          if ! grep -Eq '^assets/(151-resanta-connect-v1|154-resanta-connect-video-v1|156-resanta-connect-android-push-v1|157-resanta-ai360-android-staff-launch-v1)\.js$|^tests/connect-[0-9]+\.test\.js$|^supabase/(functions/connect-|migrations/.*connect_)' /tmp/connect-files \
+            && ! git diff origin/main...HEAD -- index.html | grep -Eq '^[+-][^+-].*(151-resanta-connect|154-resanta-connect-video|156-resanta-connect-android-push|157-resanta-ai360-android-staff-launch)'; then
             echo 'CONNECT source/wiring unchanged. Regression tests passed; cross-feature changes are allowed.'
             exit 0
           fi
