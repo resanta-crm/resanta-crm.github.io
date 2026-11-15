@@ -99,3 +99,24 @@
 
 #page-meeting-planner .cmp-day b:not(:empty)::after{content:' встреч'}
 @media(max-width:620px){#page-meeting-planner .cmp-day small{display:none}#page-meeting-planner .cmp-day b:not(:empty)::after{content:''}}
+
+/* Coverage: loading, business findings and unavailable checks are separate. */
+#page-meeting-planner .cmp-coverage-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0 12px}
+#page-meeting-planner .cmp-coverage-summary>div{display:flex;flex-direction:column;gap:6px;padding:14px;background:#f5f8fc;border:1px solid #dce6f0;border-radius:12px}
+#page-meeting-planner .cmp-coverage-summary b{font-size:26px;color:#194f7e;font-variant-numeric:tabular-nums}
+#page-meeting-planner .cmp-coverage-summary span{font-size:13px;line-height:1.4;color:#536b83}
+#page-meeting-planner .cmp-coverage-card{min-width:0;display:flex;flex-direction:column;gap:8px;padding:16px;background:#fff;border:1px solid #dce6f0;border-top:4px solid #4f83b5;border-radius:12px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+#page-meeting-planner .cmp-coverage-card h4{font-size:16px;margin:0 0 8px;line-height:1.4}
+#page-meeting-planner .cmp-coverage-card p{margin:0}
+#page-meeting-planner .cmp-coverage-status{display:inline-block;background:#edf4fc;color:#245c89;border-radius:6px;padding:4px 7px;font-size:12px;font-weight:700}
+#page-meeting-planner .cmp-coverage-card.ok{border-top-color:#17805b}
+#page-meeting-planner .cmp-coverage-card.ok .cmp-coverage-status{background:#edf8f2;color:#146d4e}
+#page-meeting-planner .cmp-coverage-card.warning{border-top-color:#b77912}
+#page-meeting-planner .cmp-coverage-card.warning .cmp-coverage-status{background:#fff4dd;color:#875407}
+#page-meeting-planner .cmp-coverage-card.error{border-top-color:#bb4545}
+#page-meeting-planner .cmp-coverage-card.error .cmp-coverage-status{background:#fff0f0;color:#a12e2e}
+#page-meeting-planner .cmp-coverage-card.muted{border-top-color:#95a4b4;background:#f8fafc}
+#page-meeting-planner .cmp-coverage-card.muted .cmp-coverage-status{background:#edf0f4;color:#52677b}
+#page-meeting-planner .cmp-coverage-card .cmp-muted{font-size:12px;line-height:1.5;color:#61758b}
+#page-meeting-planner .cmp-coverage-card .cmp-btn{align-self:flex-start;margin-top:auto}
+@media(max-width:760px){#page-meeting-planner .cmp-coverage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}

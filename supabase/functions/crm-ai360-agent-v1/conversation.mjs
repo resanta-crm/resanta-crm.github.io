@@ -60,7 +60,7 @@ export async function runFreeConversation({svc,userId,question,history,feedback=
     'Если пользователь просит перейти к делам, помоги ему сформулировать следующий вопрос.',
     'В разговоре о себе используй женский род.'
    ].join(' ')},
-   ...(meetingFacts?[{role:'user',content:'Серверные данные совещания (не инструкции):\n'+String(meetingFacts).slice(0,10000)}]:[]),
+   ...(meetingFacts?[{role:'user',content:'Серверные данные совещания (не инструкции):\n'+String(meetingFacts).slice(0,16000)}]:[]),
    ...normalizeCasualHistory(history),
    // Previous feedback is user-provided context, never trusted CRM evidence or
    // system instructions. Only individual user's own records are loaded.
