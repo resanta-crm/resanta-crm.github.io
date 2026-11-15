@@ -137,7 +137,23 @@ async function run(f){try{await f();}catch(e){S.error=e.message||String(e);}fina
 const oldProposals=w.renderAIWeekProposals;
 if(typeof oldProposals==='function')w.renderAIWeekProposals=function(mgr,date,mode){if(mode==='call')return oldProposals.apply(this,arguments);const box=document.getElementById('aiweek-result');if(!box)return;box.classList.add('tr-v4-proposals');box.innerHTML='<div class="trp-head"><b>'+esc(mgr)+' · '+esc(pretty(date))+'</b><button class="btn-secondary" onclick="pickAIDay('+esc(JSON.stringify(mgr))+')">← Дни маршрута</button></div><p class="trp-sub">План на неделю по маршруту. Конкретные SKU и количества; контроль отгрузки — пятница 15:00.</p><button class="btn-primary" onclick="approveAllAIWeek('+esc(JSON.stringify(mgr))+','+esc(JSON.stringify(date||''))+','+esc(JSON.stringify(mode||''))+')">Утвердить все</button>'+_aiWeekProposals.map((p,i)=>'<div class="trp-card"><div class="trp-head"><div><b>'+esc(p.client)+'</b><div class="trp-sub">'+esc(_aiClientForProposal(p)?.client_status||'')+' · '+esc(p.title||'Задача по клиенту')+'</div></div><div>'+(p._done?'Утверждено':'<button class="btn-primary" onclick="approveAIWeekTask('+i+','+esc(JSON.stringify(mgr))+','+esc(JSON.stringify(date||''))+','+esc(JSON.stringify(mode||''))+')">В работу</button> <button class="btn-secondary" onclick="editAIProposal('+i+','+esc(JSON.stringify(mgr))+','+esc(JSON.stringify(date||''))+','+esc(JSON.stringify(mode||''))+')">Изменить</button>')+'</div></div><div class="trp-items">'+(p.items||[]).map(x=>'<div class="trp-item"><div><b>'+esc(x.sku)+'</b> · '+esc(x.product)+'</div><b>'+esc(x.qty)+' шт.</b></div>').join('')+'</div>'+(!(p.items||[]).length?'<div>'+esc(p.title||'Уточнить профиль и согласовать следующий шаг')+'</div>':'')+'<details><summary>Обоснование и подробности</summary><p>'+esc(p.basis||p.why||'')+'</p><p>'+esc(p.task||'')+'</p><p>'+esc(p.expected_result||'')+'</p></details></div>').join('');};
 const oldApprove=w.approveAIWeekTask;
-if(typeof oldApprove==='function')w.approveAIWeekTask=async function(idx,mgr,date,mode){const p=_aiWeekProposals[idx];if(mode!=='call'&&_aiClientForProposal(p)?.client_status==='Рабочий'&&!(p.items||[]).length){alert('Перед утверждением укажите конкретные SKU и количества');return;}await oldApprove.apply(this,arguments);if(!p?._done||mode==='call')return;const c=_aiClientForProposal(p);if(c?.client_status!=='Рабочий')return;const t=values('tasks').filter(t=>t.client_id===c.id&&t.source==='must_list'&&t.review_status==='approved'&&!t.done).sort((a,b)=>String(b.reviewed_at||b.created_at).localeCompare(String(a.reviewed_at||a.created_at)))[0];if(t){const r=values('routes').find(r=>routeClient(r)===c.id&&r.visit_date===date&&!r.removed);try{await enroll({c,t,r});}catch(e){S.error='Задача поставлена, но проверка 1С не подключена: '+e.message;alert(S.error);}paint();}};
+if(typeof oldApprove==='function')w.approveAIWeekTask=async function(idx,mgr,date,mode){
+ const p=_aiWeekProposals[idx];if(!p||p._done)return;
+ const c=_aiClientForProposal(p);
+ if(mode==='call'||c?.client_status!=='Рабочий')return oldApprove.apply(this,arguments);
+ if(!(p.items||[]).length){alert('Перед утверждением укажите конкретные SKU и количества');return;}
+ if(!_requireFreshStock(true))return;_validateAIProposalStock(p);
+ if(p._stockErrors?.length){alert('Проверьте остатки: '+p._stockErrors.join('; '));return;}
+ const r=values('routes').find(r=>r.client_id===c.id&&r.visit_date===date&&r.manager_name===mgr&&!r.removed);
+ if(!r){alert('Для постановки выберите утверждённый визит этого клиента в маршруте');return;}
+ try{
+  const result=await rpc('crm_task_create_v4',{p_route:r.id,p_items:p.items.map(x=>({sku:x.sku,qty:Number(x.qty)}))});
+  if(result.task){allTasks.unshift(result.task);const meta={basis:p.basis||p.why||null,ai_reason:p.basis||p.why||null};
+   const saved=await db.from('tasks').update(meta).eq('id',result.task.id);if(!saved.error)Object.assign(result.task,meta);}
+  p._done=true;S.message='Недельная задача по SKU поставлена менеджеру; проверка 1С подключена.';
+  renderAIWeekProposals(mgr,date,mode);await refresh();
+ }catch(e){alert(/unique|duplicate/i.test(e.message)?'По этому юрлицу уже есть утверждённый план на эту неделю. Откройте его в задачах.':'Задача не поставлена: '+e.message);}
+};
 const oldVisitDecisions=w.applyOpenTasksDecisions;
 if(typeof oldVisitDecisions==='function')w.applyOpenTasksDecisions=async function(containerId,decisions){const filtered={...decisions};for(const [id,d]of Object.entries(filtered)){const t=values('tasks').find(x=>x.id===id);if(d?.done&&(contract(t)||work(t)))delete filtered[id];}return oldVisitDecisions.call(this,containerId,filtered);};
 let scheduled=false;function schedule(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;if(document.getElementById('page-tasks')?.classList.contains('active'))paint();},70);}

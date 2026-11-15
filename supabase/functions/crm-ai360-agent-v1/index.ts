@@ -75,7 +75,7 @@ Deno.serve(async req=>{
   return reply(req,{...agentCapabilities(principal),history_enabled:h.enabled===true,
    history_retention_days:30,history_audio_saved:false,dialogue_protocol:'lera_dialogue_v2'});
  }
- const taskQuestion=selectedTaskQuestion(input);
+ const taskQuestion=input.task_context?selectedTaskQuestion(input):null;
  if(taskQuestion){
   try{
    const result=await fetch(url+'/functions/v1/crm-tasks-assistant-v4',{method:'POST',headers:{Authorization:auth,apikey:anon,'Content-Type':'application/json'},body:JSON.stringify(taskQuestion),signal:AbortSignal.timeout(45000)});
