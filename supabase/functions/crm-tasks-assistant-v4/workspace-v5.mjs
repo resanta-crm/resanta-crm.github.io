@@ -17,7 +17,7 @@ export function validatePlan(plan,client,catalog,stock){
   seen.add(x.sku);return {sku:x.sku,product:names[0],qty,reason:take(x.reason,400)};
  })};
 }
-async function data(query){const r=await query;if(r.error)throw Error('task_context_unavailable');return r.data;}
+async function data(query){const r=await query;if(r.error){console.warn('Task context query',r.error.code,r.error.message);throw Error('task_context_unavailable');}return r.data;}
 export async function workspaceAction({caller,svc,user,input,secret,model}){
  const client=await data(caller.from('clients').select('id,name,client_status,manager_name,role_type,assortment,sku_count,sku_our,notes').eq('id',input.client_id).single());
  if(input.action==='commit_workspace_v5'){
