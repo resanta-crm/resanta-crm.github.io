@@ -1,9 +1,9 @@
 name: Задачи по маршруту — проверка V4
 on:
   push:
-    paths: ['assets/287-*', '*daily_sales*v4.py', 'tests/*tasks*v4*', 'tests/test_daily_sales_v4.py', 'supabase/functions/crm-tasks-assistant-v4/**', 'supabase/functions/crm-ai360-agent-v1/**', 'supabase/migrations/*tasks*route*v4.sql', '.github/workflows/tasks-route-v4.yml']
+    paths: ['assets/287-*', '*daily_sales*v4.py', 'tests/*tasks*v4*', 'tests/*tasks*v5*', 'supabase/migrations/*tasks*v5.sql', 'tests/test_daily_sales_v4.py', 'supabase/functions/crm-tasks-assistant-v4/**', 'supabase/functions/crm-ai360-agent-v1/**', 'supabase/migrations/*tasks*route*v4.sql', '.github/workflows/tasks-route-v4.yml']
   pull_request:
-    paths: ['assets/287-*', '*daily_sales*v4.py', 'tests/*tasks*v4*', 'tests/test_daily_sales_v4.py', 'supabase/functions/crm-tasks-assistant-v4/**', 'supabase/functions/crm-ai360-agent-v1/**', 'supabase/migrations/*tasks*route*v4.sql', '.github/workflows/tasks-route-v4.yml']
+    paths: ['assets/287-*', '*daily_sales*v4.py', 'tests/*tasks*v4*', 'tests/*tasks*v5*', 'supabase/migrations/*tasks*v5.sql', 'tests/test_daily_sales_v4.py', 'supabase/functions/crm-tasks-assistant-v4/**', 'supabase/functions/crm-ai360-agent-v1/**', 'supabase/migrations/*tasks*route*v4.sql', '.github/workflows/tasks-route-v4.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +23,6 @@ jobs:
       - run: python -m pytest tests/test_daily_sales_v4.py -q
       - run: node --check assets/287-tasks-route-v4.js
       - name: Route, manager scope, voice draft and save flows
-        run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/tasks-route-v4-ui.test.mjs tests/tasks-assistant-v4.test.mjs tests/tasks-context-v4.test.mjs tests/tasks-route-action-v4.test.mjs
+        run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/tasks-route-v4-ui.test.mjs tests/tasks-assistant-v4.test.mjs tests/tasks-context-v4.test.mjs tests/tasks-route-action-v4.test.mjs tests/tasks-workspace-v5.test.mjs
       - name: Existing Lera, task approvals and calendar stay compatible
         run: node --test tests/tasks-360-v1.test.cjs tests/ai360-agent360-unified-gateway-v1.test.mjs tests/ai360-agent360-conversation-routing-v1.test.mjs tests/ai360-unified-dialog-v1.test.cjs tests/lera360-agent-actions-v1.test.mjs tests/calendar-invitations-v3.test.mjs

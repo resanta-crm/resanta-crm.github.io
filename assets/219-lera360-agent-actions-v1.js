@@ -73,7 +73,7 @@ async function prepare(text,ui){
  status(ui,'Лера готовит безопасное действие…');
  try{
   const calendar=root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{});
-  const routeRequest=/(?:задач|поручен)/iu.test(text)?root.RESANTA_TASKS_ROUTE_V4?.prepareAgentTask?.(text):null;
+  const routeRequest=/(?:задач|поручен|запиши|сохрани|обнови|внеси)/iu.test(text)?root.RESANTA_TASKS_ROUTE_V4?.prepareAgentTask?.(text):null;
   const data=await (routeRequest||invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,calendar_capabilities_v3:true,meeting_context:calendar?.meeting_context||null}));
   if(run!==seq||user!==currentId()||!allowed())return;
   if(data.mode==='needs_details'){
@@ -122,6 +122,8 @@ async function commit(ui){
    say(ui,String(data.note||'Плановый визит создан.')+' '+String(data.client_name||''));
   }else if(data.mode==='conflict_meeting'){
    say(ui,(item.draft.action==='reschedule_meeting'?'Встречу не перенесла: ':'Встречу не создала: ')+String(data.note||'найдено пересечение в календаре.'));
+  }else if(data.mode==='saved_task'&&data.updated===1){
+   say(ui,String(data.note||'Подтверждённые сведения сохранены.'));
   }else if(data.mode==='created_task'&&data.created===1){
    say(ui,'Поручение действительно создано в CRM для '+String(data.assigned_to||'сотрудника')+
       '. '+String(data.note||''));
