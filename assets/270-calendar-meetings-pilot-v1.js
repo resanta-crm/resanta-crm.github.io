@@ -54,8 +54,8 @@ function coverageCard(x,c){
  else if(x.status==='partial'){tone='muted';status='Нужна отдельная проверка';result='Данные связанных источников показаны ниже. Полный разбор этого направления не выполнен.';}
  else if(x.status==='profiled'){status='Сводный расчёт выполнен';result='Результаты — в темах совещания. Ограничения расчёта сохранены.';}
  else if(empty){tone='muted';status='Нет записей в указанной области';result='Отсутствие записей не подтверждает отсутствие проблем.';}
- else if(hasControl){tone=risk>0?'warning':'ok';status=risk>0?'Требует проверки':'По проверенному признаку отклонений нет';result=check+': '+count(risk)+(x.id==='infographics'?' элементов.':' записей.');}
- const period=x.period_mode==='selected_month'?'Период: '+monthTitle(state.focus):x.period_mode==='latest_report_in_or_before_month'?'Последний отчёт не позже конца '+monthTitle(state.focus):'Текущее состояние на момент проверки';
+ else if(hasControl){tone=risk>0?'warning':'ok';status=risk>0?'Требует проверки':'По проверенному признаку отклонений нет';result=check+'. Найдено: '+count(risk)+'.';}
+ const period=x.period_mode==='selected_month'?'Период: '+monthTitle(state.focus):x.period_mode==='latest_report_in_or_before_month'?'Месяц отчёта: '+monthTitle(state.focus)+' или ранее':'Текущее состояние на момент проверки';
  const report=coverageDate(x.as_of),checked=coverageDate(c.generated_at,true);let dates=report?'Дата отчёта / обновления: '+report: x.period_mode==='current_state'?'Отдельная дата обновления источником не передана.':x.period_mode==='selected_month'?'Отбор по выбранному месяцу; отдельная дата отчёта не передана.':'Дата отчёта источником не передана.';
  if(report&&x.period_mode==='latest_report_in_or_before_month'){
   const diff=Math.floor((Date.parse(state.focus+'T12:00:00Z')-Date.parse(String(x.as_of).slice(0,10)+'T12:00:00Z'))/86400000);
