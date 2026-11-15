@@ -1,7 +1,7 @@
 name: CONNECT v2 delivery and screen regression
 on:
   pull_request:
-    paths: ['assets/*connect*', 'connect-push-sw.js', 'supabase/functions/connect-*/**', 'supabase/migrations/*connect*', 'tests/connect-*', 'tests/sql/connect-*', '.github/workflows/connect-*', 'index.html']
+    paths: ['assets/*connect*', 'connect-push-sw.js', 'supabase/functions/connect-*/**', 'supabase/migrations/*connect*', 'tests/connect-*', 'tests/sql/connect-*', '.github/workflows/connect-*', '.github/workflows/publish-crm-pages.yml', 'index.html']
   push:
     branches: [main]
 permissions:
@@ -23,4 +23,4 @@ jobs:
       - name: DOM runtime
         run: npm install --prefix "$RUNNER_TEMP/connect-dom" --no-audit --no-fund linkedom@0.18.12
       - name: Delivery auth, outage fallback, read boundaries and multiple screen sources
-        run: CRM_DOM_MODULE="$RUNNER_TEMP/connect-dom/node_modules/linkedom/esm/index.js" node --test tests/connect-v2.test.mjs tests/connect-v2-http.test.mjs
+        run: CRM_DOM_MODULE="$RUNNER_TEMP/connect-dom/node_modules/linkedom/esm/index.js" node --test tests/connect-v2.test.mjs tests/connect-v2-http.test.mjs tests/connect-push-publish.test.mjs
