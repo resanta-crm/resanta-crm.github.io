@@ -18,6 +18,8 @@ function reset(){epoch++;busy=false;memory={};userId=''}
 function financeIntent(raw){
  const q=norm(raw);
  if(!q||q.length<4)return false;
+ // Meeting explanations belong to the selected preparation, not the legacy client-finance route.
+ if(/совещан|повестк|приоритет/.test(q)&&root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(raw,{}))return false;
  if(/бюджет|резерв|зарезерв|перерасход|начислени.*клиент/.test(q))return true;
  if(/пдз|просроч|задолж|долг|должен/.test(q)&&
     (/клиент|у\s|его|нее|неё|он\s|она\s/.test(q)||Boolean(memory.client_id)))return true;

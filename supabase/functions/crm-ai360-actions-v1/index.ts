@@ -1,3 +1,4 @@
+import {MEETING_CHANGES,prepareMeetingChange,commitMeetingChange} from './meeting-actions.mjs';
 import {reminderDraft,commitReminder} from './reminders.mjs';
 import {directoryAlias,displayPerson,canonicalMeetingClient} from './identity-aliases.mjs';
 /* RESANTA Lera 360 agent actions v1.
@@ -110,19 +111,20 @@ async function callModel(openai,question,names,now,svc,userId){
 }
 async function callModelClaimed(openai,question,names,now){
  const schema={type:'object',additionalProperties:false,properties:{
-   action:{type:'string',enum:['task','chat','meeting','visit','reminder','none']},
+   action:{type:'string',enum:['task','chat','meeting','visit','reminder','reschedule_meeting','cancel_meeting','save_meeting_agenda','save_meeting_minutes','none']},
    assignee:{type:'string'},title:{type:'string'},details:{type:'string'},
    due_date:{type:'string'},due_time:{type:'string'},
    room_kind:{type:'string',enum:['direct','group']},room_title:{type:'string'},
    participants:{type:'array',items:{type:'string'}},
-   client_name:{type:'string'},location:{type:'string'},
+   client_name:{type:'string'},location:{type:'string'},meeting_ref:{type:'string'},
    event_format:{type:'string',enum:['in_person','remote','internal']},duration_minutes:{type:'integer'}
- },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants','client_name','location','event_format','duration_minutes']};
+ },required:['action','assignee','title','details','due_date','due_time','room_kind','room_title','participants','client_name','location','meeting_ref','event_format','duration_minutes']};
  const body={model:'gpt-5.4-mini',store:false,max_output_tokens:500,reasoning:{effort:'low'},
   input:[{role:'system',content:[
-    'Извлеки намерение СОЗДАТЬ задачу, чат CONNECT, встречу, личное напоминание (action=reminder) или плановый визит из естественной русской речи.',
+    'Извлеки намерение создать задачу, чат CONNECT, встречу, личное напоминание (action=reminder), плановый визит или изменить существующую личную встречу из естественной русской речи.',
     'Фраза «у меня встреча» НЕ команда на создание: action=none. «Подготовь меня к встрече» тоже action=none.',
     'Напомни мне — личное напоминание с датой и временем. «Можешь создать чат с Петровичем» — поручение создать чат с Виталием Петровичевым, если он есть в доступном списке.',
+    'Для переноса существующей встречи action=reschedule_meeting, отмены action=cancel_meeting, сохранения повестки action=save_meeting_agenda, итогов action=save_meeting_minutes. meeting_ref — точное название существующей встречи из запроса, либо пустая строка для выбранной в календаре. Не превращай перенос или отмену в создание новой встречи. Для итогов details содержит только продиктованные пользователем решения, не выдумывай их.',
     'Встреча — action=meeting; физический маршрутный визит МПП — action=visit.',
     'Никогда не превращай плановую встречу в фактическое GPS-посещение.',
     'Это только черновик, ничего не создавай. Не выдумывай сотрудников, даты, время, участников и их имена.',
@@ -197,7 +199,7 @@ async function resolveStore(svc,client,location){
  return {error:'store_ambiguous',variants:candidates.slice(0,4).map(x=>[x.city,x.address].filter(Boolean).join(', '))};
 }
 
-async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
+async function makeDraft({req,kind,question,actor,svc,caller,secret,openai,calendarContext=null,calendarActionsV2=false}){
  const now=localDate();
  if(kind!=='prepare'||typeof question!=='string'||question.length<5||question.length>2400)
   return fail(req,'invalid_question');
@@ -211,6 +213,11 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai}){
  let model;
  try{model=await callModel(openai,question,names,now,svc,actor.id);}
  catch{return fail(req,'action_understanding_unavailable',503);}
+ if(MEETING_CHANGES.has(model.action)){
+  if(!calendarActionsV2)return respond(req,{mode:'needs_details',question:'Для изменения встречи обнови окно Леры, затем повтори команду.',created:0});
+  const result=await prepareMeetingChange({caller,actor,model,context:calendarContext,proof:draft=>prepareToken(secret,actor.id,draft),moment});
+  return respond(req,result,result.status||200);
+ }
  if(model.action==='none')return respond(req,{mode:'not_an_action',read_only:true,created:0});
  if(model.action==='reminder'){
   const runtime=await svc.from('crm_telegram_runtime').select('value').eq('key','dispatch_secret').maybeSingle();
@@ -300,6 +307,7 @@ async function execute(req,body,actor,svc,caller,secret){
  if(!draft||typeof draft!=='object'||draft.source!==SOURCE||!await verifyToken(secret,actor.id,draft,token))
    return fail(req,'approval_invalid_or_expired',403);
  if(body?.confirmation!=='подтверждаю')return fail(req,'explicit_confirmation_required',403);
+ if(MEETING_CHANGES.has(draft.action)){const result=await commitMeetingChange({caller,actor,draft,moment});return respond(req,result,result.status||200);}
  if(draft.action==='reminder'){
   const result=await commitReminder({svc,caller,actor,draft,validMoment:moment});
   return respond(req,result,result.status||200);
@@ -516,7 +524,7 @@ Deno.serve(async req=>{
      })),count:Math.min(25,(rows.data||[]).length),has_more:(rows.data||[]).length>25,next_offset:(rows.data||[]).length>25?offset+25:null});
    }
    if(body?.kind==='prepare')return await makeDraft({req,kind:'prepare',
-     question:body.question,actor,svc,caller,secret,openai});
+     question:body.question,actor,svc,caller,secret,openai,calendarContext:body.meeting_context,calendarActionsV2:body.calendar_capabilities_v2===true});
    if(body?.kind==='commit')return await execute(req,body,actor,svc,caller,secret);
    return fail(req,'unknown_action',400);
  }catch(e){

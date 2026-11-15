@@ -6,6 +6,7 @@ import {prepareLeraSpeech} from '../supabase/functions/_shared/lera-speech-v3.mj
 import {gpsQuestionDay,gpsStartAnswer,readGpsEvidence} from '../supabase/functions/_shared/lera-gps-evidence-v3.mjs';
 import {directoryAlias,canonicalMeetingClient} from '../supabase/functions/crm-ai360-actions-v1/identity-aliases.mjs';
 import {reminderDraft,commitReminder} from '../supabase/functions/crm-ai360-actions-v1/reminders.mjs';
+import {MEETING_CHANGES,prepareMeetingChange,commitMeetingChange} from '../supabase/functions/crm-ai360-actions-v1/meeting-actions.mjs';
 import {deliverReminder} from '../supabase/functions/crm-ai360-reminders-v1/delivery.mjs';
 import {requestContext} from '../supabase/functions/crm-ai360-dialog-v4/context.mjs';
 const read=p=>fs.readFileSync(p,'utf8');
@@ -92,7 +93,7 @@ test('signed external Triovist meeting can commit without activating an archived
  const actor={id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc',tier:'owner'},date=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
  const draft={action:'meeting',owner_id:actor.id,client_id:null,client_name:'Триовист',title:'Обсудить продажи клиента',details:'План продаж на следующий месяц',due_date:date,due_time:'16:00',starts_at:new Date(date+'T16:00:00+03:00').toISOString(),duration_minutes:60,format:'in_person',location:'',participant_names:[],source:'lera_agent360_confirmed_v1'};
  const caller={from:table=>{assert.equal(table,'crm_ai360_meetings_v1');const q={select:()=>q,eq:()=>q,gte:()=>q,lt:()=>q,limit:async()=>({data:[]}),insert:row=>{mutations.push(row);return {select:()=>({single:async()=>({data:{id:'11111111-1111-4111-8111-111111111111',owner_id:actor.id,starts_at:draft.starts_at,source:draft.source}})})};}};return q;}};
- const code=read('supabase/functions/crm-ai360-actions-v1/index.ts').replace(/^import .*;\r?\n/gm,'');const ctx={directoryAlias,canonicalMeetingClient,reminderDraft,commitReminder,TextEncoder,crypto,Response,Request,Intl,Date,Deno:{serve(){},env:{get(){}}},console};
+ const code=read('supabase/functions/crm-ai360-actions-v1/index.ts').replace(/^import .*;\r?\n/gm,'');const ctx={directoryAlias,canonicalMeetingClient,reminderDraft,commitReminder,MEETING_CHANGES,prepareMeetingChange,commitMeetingChange,TextEncoder,crypto,Response,Request,Intl,Date,Deno:{serve(){},env:{get(){}}},console};
  vm.runInNewContext(code+'\nthis.run=execute;this.sign=prepareToken;',ctx);
  const proof=await ctx.sign('fixture-key',actor.id,draft);
  const result=await ctx.run(new Request('https://resanta-crm.by'),{draft,approval_token:proof.token,confirmation:'подтверждаю'},actor,svc,caller,'fixture-key');

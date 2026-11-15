@@ -44,7 +44,7 @@ function makeButtons(ui,proposalCopy){
  row.style.cssText='display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid #9ab7d5;background:#edf5fc;border-radius:9px;margin:6px 0;font-size:12px';
  const lead=document.createElement('strong');lead.textContent='Проверенное предложение Леры · действие не выполнено';
  lead.style.cssText='flex:1 1 100%;font-size:12px;color:#24527f';
- const yes=document.createElement('button');yes.type='button';yes.textContent=proposalCopy.draft?.action==='cancel_reminder'?'✓ Подтвердить отмену':'✓ Подтвердить и создать';
+ const yes=document.createElement('button');yes.type='button';yes.textContent=['cancel_reminder','cancel_meeting'].includes(proposalCopy.draft?.action)?'✓ Подтвердить отмену':proposalCopy.draft?.action==='reschedule_meeting'?'✓ Подтвердить перенос':/^save_meeting_/.test(proposalCopy.draft?.action||'')?'✓ Подтвердить и сохранить':'✓ Подтвердить и создать';
  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Отмена';
  yes.style.cssText='padding:8px;border-radius:8px;background:#1768a9;color:white;border:0;';
  cancel.style.cssText='padding:8px;border-radius:8px;background:white;border:1px solid #a9b8c9;';
@@ -72,7 +72,8 @@ async function prepare(text,ui){
  clearProposal();setBusy(true);ownerId=user;
  status(ui,'Лера готовит безопасное действие…');
  try{
-  const data=await invoke('prepare',{question:text.slice(0,2400)});
+  const calendar=root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{});
+  const data=await invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,meeting_context:calendar?.meeting_context||null});
   if(run!==seq||user!==currentId()||!allowed())return;
   if(data.mode==='needs_details'){
    missing=text;
@@ -89,12 +90,12 @@ async function prepare(text,ui){
   proposal={draft:data.draft,approval_token:data.approval_token,
     expires_at:data.expires_at,owner:user};
   status(ui,'Ничего не создано · требуется подтверждение');
-  say(ui,'Проверила. '+String(data.summary||'')+' Создать?');
+  say(ui,'Проверила. '+String(data.summary||'')+(['reschedule_meeting','cancel_meeting','save_meeting_agenda','save_meeting_minutes'].includes(data.draft.action)?' Подтвердить изменение?':' Создать?'));
   makeButtons(ui,proposal);
  }catch(e){
   if(run===seq&&user===currentId()&&allowed()){
    status(ui,'Действие не выполнено');
-   say(ui,'Не удалось подготовить поручение или чат. '+String(e?.message||'Ошибка').slice(0,70)+'. Ничего не создано.',false);
+   say(ui,'Не удалось подготовить действие. '+String(e?.message||'Ошибка').slice(0,70)+'. Ничего не создано.',false);
   }
  }finally{if(run===seq)setBusy(false);}
 }
@@ -110,13 +111,16 @@ async function commit(ui){
     approval_token:item.approval_token,confirmation:'подтверждаю'});
   if(run!==seq||user!==currentId()||!allowed())return;
   clearProposal();
-  if(data.mode==='created_meeting'&&data.created===1){
+  if(['rescheduled_meeting','cancelled_meeting','saved_meeting_agenda','saved_meeting_minutes'].includes(data.mode)&&data.updated===1){
+   void root.crmMeetingPlannerPilotV1?.refresh?.();
+   say(ui,data.mode==='rescheduled_meeting'?'Встреча «'+data.title+'» перенесена на '+data.due_date+' в '+data.due_time+' по Минску.':data.mode==='cancelled_meeting'?'Встреча «'+data.title+'» отменена.':data.mode==='saved_meeting_agenda'?'Повестка встречи «'+data.title+'» сохранена в CRM.':'Итоги встречи «'+data.title+'» сохранены в CRM.');
+  }else if(data.mode==='created_meeting'&&data.created===1){
    void root.crmMeetingPlannerPilotV1?.refresh?.();
    say(ui,'Встреча «'+String(data.title||'')+'» сохранена на '+String(data.due_date||'')+' в '+String(data.due_time||'')+'. '+String(data.note||''));
   }else if(data.mode==='created_visit'&&data.created===1){
    say(ui,String(data.note||'Плановый визит создан.')+' '+String(data.client_name||''));
   }else if(data.mode==='conflict_meeting'){
-   say(ui,'Встречу не создала: '+String(data.note||'найдено пересечение в календаре.'));
+   say(ui,(item.draft.action==='reschedule_meeting'?'Встречу не перенесла: ':'Встречу не создала: ')+String(data.note||'найдено пересечение в календаре.'));
   }else if(data.mode==='created_task'&&data.created===1){
    say(ui,'Поручение действительно создано в CRM для '+String(data.assigned_to||'сотрудника')+
       '. '+String(data.note||''));
@@ -134,7 +138,7 @@ async function commit(ui){
   if(run===seq&&user===currentId()&&allowed()){
    clearProposal();
    status(ui,'Создание не подтверждено');
-   say(ui,'Не получила подтверждения операции. Проверь задачи или CONNECT перед повтором. '+String(e?.message||'').slice(0,60),false);
+   say(ui,'Не получила подтверждения операции. '+(/meeting/.test(item.draft.action)?'Проверь календарь перед повтором. ':'Проверь задачи или CONNECT перед повтором. ')+String(e?.message||'').slice(0,60),false);
   }
  }finally{if(run===seq)setBusy(false);}
 }
@@ -203,8 +207,8 @@ function handle(q,ui){
   if(YES.test(n)){void commit(ui);return true;}
   if(FIX.test(n)){
     const act=proposal.draft?.action;
-    const original=act==='task'?'Создать задачу: ':act==='chat'?'Создать чат: ':act==='visit'?'Запланировать визит: ':'Назначить встречу: ';
-    const context=act==='task'?
+    const original=act==='reschedule_meeting'?'Перенести встречу: ':act==='cancel_meeting'?'Отменить встречу: ':act==='save_meeting_agenda'?'Сохранить повестку встречи: ':act==='save_meeting_minutes'?'Сохранить итоги встречи: ':act==='task'?'Создать задачу: ':act==='chat'?'Создать чат: ':act==='visit'?'Запланировать визит: ':'Назначить встречу: ';
+    const context=['reschedule_meeting','cancel_meeting','save_meeting_agenda','save_meeting_minutes'].includes(act)?[proposal.draft.title,proposal.draft.due_date,proposal.draft.due_time].filter(Boolean).join('; '):act==='task'?
       [proposal.draft.assignee_name,proposal.draft.title,proposal.draft.details,proposal.draft.due_date,proposal.draft.due_time].join('; '):
       act==='chat'?[proposal.draft.participant_names?.join(', '),proposal.draft.room_title].join('; '):
       [proposal.draft.client_name,proposal.draft.title,proposal.draft.details,proposal.draft.due_date,proposal.draft.due_time,proposal.draft.location].join('; ');
@@ -227,8 +231,9 @@ function handle(q,ui){
   else void reminderCommand(ui,index);
   return true;
  }
+ if(root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{})&&/^(?:(?:лера|пожалуйста|можешь|можно|давай|прошу)\s+){0,3}(?:перенеси|перенести|отмени|отменить|сохрани|сохранить|запиши).{0,180}(?:встреч|совещан|повестк|итог)/iu.test(text)){void prepare(text,ui);return true;}
  if(!ACTION.test(n)){
-  if(REMINDER.test(n)&&root.__resantaLeraDialogueV2!==true){say(ui,'Автоматические уведомления о встречах пока не настроены. Могу создать встречу в личном календаре CRM или поставить задачу с датой.');return true;}
+  if(REMINDER.test(n)){void prepare(text,ui);return true;}
   if(AGENDA.test(n)){
    const range=calendarRange(text);
    if(range.error){say(ui,range.error);return true;}
