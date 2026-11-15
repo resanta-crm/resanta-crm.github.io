@@ -73,7 +73,8 @@ async function prepare(text,ui){
  status(ui,'Лера готовит безопасное действие…');
  try{
   const calendar=root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{});
-  const data=await invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,calendar_capabilities_v3:true,meeting_context:calendar?.meeting_context||null});
+  const routeRequest=/(?:задач|поручен)/iu.test(text)?root.RESANTA_TASKS_ROUTE_V4?.prepareAgentTask?.(text):null;
+  const data=await (routeRequest||invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,calendar_capabilities_v3:true,meeting_context:calendar?.meeting_context||null}));
   if(run!==seq||user!==currentId()||!allowed())return;
   if(data.mode==='needs_details'){
    missing=text;
@@ -107,8 +108,8 @@ async function commit(ui){
  }
  setBusy(true);status(ui,'Выполняю подтверждённое действие…');
  try{
-  const data=await invoke('commit',{draft:item.draft,
-    approval_token:item.approval_token,confirmation:'подтверждаю'});
+  const payload={draft:item.draft,approval_token:item.approval_token,confirmation:'подтверждаю'};
+  const data=item.draft.action==='route_task_v4'?await root.RESANTA_TASKS_ROUTE_V4.commitAgentTask(payload):await invoke('commit',payload);
   if(run!==seq||user!==currentId()||!allowed())return;
   clearProposal();
   if(['rescheduled_meeting','cancelled_meeting','saved_meeting_agenda','saved_meeting_minutes'].includes(data.mode)&&data.updated===1){

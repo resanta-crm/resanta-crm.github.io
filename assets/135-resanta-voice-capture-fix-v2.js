@@ -455,6 +455,7 @@
  });
  window.addEventListener('pagehide',()=>{resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();});
  window.setInterval(()=>{
+   if(window.RESANTA_TASKS_ROUTE_V4?.recording?.()){if(mode)void stopAll();return;}
    if(!panel)init();
    if(!panel)return;
    const open=!!visiblePanel();
