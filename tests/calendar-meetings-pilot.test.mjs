@@ -98,3 +98,6 @@ test('invited meeting is visible without edit, cancellation or private preparati
  const h=harness();h.win.crmCalendarInvitesV3={list:async()=>[{id:'invite',owner_id:'other',is_owner:false,organizer:'Коллега',title:'Совещание',purpose:'Рабочая встреча',starts_at:new Date().toISOString(),duration_minutes:30,status:'scheduled',agenda:{},minutes:''}]};await h.render();await h.click('cmp-meeting','invite');
  assert.match(h.root.innerHTML,/Приглашение · Совещание/);assert.doesNotMatch(h.root.innerHTML,/data-cmp-edit=|data-cmp-cancel=|data-cmp-save-agenda|data-cmp-save-minutes/);assert.equal(h.win.crmMeetingPlannerPilotV1.prepareAgentRequest('Почему?',{}).meeting_context.meeting_id,null);
 });
+test('created invitations are not mislabeled as unconfirmed invitations',async()=>{
+ const h=harness();h.rows.push({id:'own',owner_id:OWNER,title:'Тест',starts_at:new Date().toISOString(),duration_minutes:30,status:'scheduled',participants:['Александр'],participant_ids:[OWNER]});await h.render();assert.match(h.root.innerHTML,/приглашения созданы/);assert.doesNotMatch(h.root.innerHTML,/приглашения не подтверждены/);
+});
