@@ -69,3 +69,5 @@
 #tasks-route-v4 .tr-modal article{overflow-wrap:anywhere}
 #tasks-route-v4 .tr-modal input[type=checkbox]{width:20px;height:20px}
 @media(max-width:600px){#tasks-route-v4 .tr-modal-shade{padding:8px}#tasks-route-v4 .tr-modal{max-height:calc(100dvh - 16px)}#tasks-route-v4 .tr-modal h2{font-size:21px}}
+
+#tasks-route-v4 .tr-modal .tr-product input{width:100%;min-width:0}
