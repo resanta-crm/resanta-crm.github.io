@@ -21,7 +21,7 @@ export async function prepareMeetingChange({caller,actor,model,context,proof,mom
   if(!starts)return {mode:'needs_details',question:'На какую будущую дату и время по Минску перенести встречу?',created:0};
   Object.assign(draft,{starts_at:starts,due_date:model.due_date,due_time:model.due_time});
   summary='Перенести личную встречу «'+m.title+'» на '+model.due_date+' в '+model.due_time+' (Минск). Продолжительность останется '+m.duration_minutes+' минут.';
- }else if(model.action==='cancel_meeting')summary='Отменить личную встречу «'+m.title+'». Запись сохранится со статусом отмены; приглашения не отправляются.';
+ }else if(model.action==='cancel_meeting')summary='Отменить личную встречу «'+m.title+'». Запись сохранится со статусом отмены. Приглашённые участники получат уведомление об отмене.';
  else if(model.action==='save_meeting_minutes'){
   draft.minutes=String(model.details||'').trim().slice(0,800);
   if(draft.minutes.length<3)return {mode:'needs_details',question:'Какие решения или итоги сохранить? Продиктуй текст.',created:0};
@@ -71,5 +71,5 @@ export async function commitMeetingChange({caller,actor,draft,moment}){
  const row=changed.data;
  if(!row||row.id!==m.id||row.owner_id!==actor.id||Object.entries(patch).some(([key,value])=>key==='starts_at'?Date.parse(row[key])!==Date.parse(value):JSON.stringify(ordered(row[key]))!==JSON.stringify(ordered(value))))return {error:'meeting_update_unverified',status:503};
  const modes={reschedule_meeting:'rescheduled_meeting',cancel_meeting:'cancelled_meeting',save_meeting_agenda:'saved_meeting_agenda',save_meeting_minutes:'saved_meeting_minutes'};
- return {mode:modes[draft.action],updated:1,meeting_id:row.id,title:row.title,due_date:draft.due_date||null,due_time:draft.due_time||null,note:'Изменение личной встречи подтверждено сервером. Приглашения не отправлялись.'};
+ return {mode:modes[draft.action],updated:1,meeting_id:row.id,title:row.title,due_date:draft.due_date||null,due_time:draft.due_time||null,note:'Изменение встречи подтверждено сервером. Уведомления выбранным участникам обрабатываются календарём.'};
 }

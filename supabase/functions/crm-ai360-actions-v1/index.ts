@@ -199,7 +199,7 @@ async function resolveStore(svc,client,location){
  return {error:'store_ambiguous',variants:candidates.slice(0,4).map(x=>[x.city,x.address].filter(Boolean).join(', '))};
 }
 
-async function makeDraft({req,kind,question,actor,svc,caller,secret,openai,calendarContext=null,calendarActionsV2=false}){
+async function makeDraft({req,kind,question,actor,svc,caller,secret,openai,calendarContext=null,calendarActionsV2=false,calendarInvitationsV3=false}){
  const now=localDate();
  if(kind!=='prepare'||typeof question!=='string'||question.length<5||question.length>2400)
   return fail(req,'invalid_question');
@@ -246,16 +246,16 @@ async function makeDraft({req,kind,question,actor,svc,caller,secret,openai,calen
   const resolved=await resolveClient(svc,actor,model.client_name,true);
   if(resolved.error)return respond(req,{mode:'needs_details',question:'Уточни название клиента в CRM.',created:0});
   const title=esc(model.title).slice(0,160),details=esc(model.details).slice(0,800);
-  if(title.length<8||details.length<8)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
+  if(title.length<3)return respond(req,{mode:'needs_details',question:'Какова цель встречи?',created:0});
   const dur=Number.isInteger(model.duration_minutes)&&model.duration_minutes>=15&&model.duration_minutes<=240?model.duration_minutes:60;
   const picked=(Array.isArray(model.participants)?model.participants:[]).slice(0,12).map(name=>matchOne(name,directory));
   if(picked.some(x=>!x)||new Set(picked.map(x=>x.id)).size!==picked.length)
     return respond(req,{mode:'needs_details',question:'Назови точных сотрудников-участников встречи.',created:0});
   const draft={action:'meeting',owner_id:actor.id,client_id:resolved.client?.id||null,client_name:resolved.client?.name||resolved.external_name||'',
     title,details,due_date:day,due_time:time,starts_at:start,duration_minutes:dur,
-    format:model.event_format,location:esc(model.location).slice(0,250),participant_names:picked.map(x=>x.name),source:SOURCE};
+    format:model.event_format,location:esc(model.location).slice(0,250),participant_names:picked.map(x=>x.name),...(calendarInvitationsV3?{participant_ids:picked.map(x=>x.id),calendar_invitations_v3:true}:{}),source:SOURCE};
   const proof=await prepareToken(secret,actor.id,draft);
-  return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'»'+(draft.client_name?' с клиентом '+draft.client_name:'')+' на '+day+' в '+time+' (Минск), '+dur+' минут. Это личный календарь CRM, не приглашение и не GPS-визит.',
+  return respond(req,{mode:'prepared',draft,summary:'Встреча «'+title+'»'+(draft.client_name?' с клиентом '+draft.client_name:'')+' на '+day+' в '+time+' (Минск), '+dur+' минут. '+(calendarInvitationsV3&&picked.length?'Участников: '+picked.length+'. После подтверждения отправятся приглашения и напоминания.':'Это личный календарь CRM, не приглашение и не GPS-визит.'),
     approval_token:proof.token,expires_at:proof.expires_at,requires_confirmation:true,created:0});
  }
  if(model.action==='visit'){
@@ -353,8 +353,8 @@ async function execute(req,body,actor,svc,caller,secret){
  if(draft.action==='meeting'){
    if(draft.owner_id!==actor.id||!dateIsValid(draft.due_date,draft.due_time,localDate())||
      moment(draft.due_date,draft.due_time)!==draft.starts_at||
-     typeof draft.title!=='string'||draft.title.length<8||draft.title.length>160||
-     typeof draft.details!=='string'||draft.details.length<8||draft.details.length>800||
+     typeof draft.title!=='string'||draft.title.length<3||draft.title.length>160||
+     typeof draft.details!=='string'||draft.details.length>800||
      !['in_person','remote','internal'].includes(draft.format)||
      !Number.isInteger(draft.duration_minutes)||draft.duration_minutes<15||draft.duration_minutes>240||
      typeof draft.location!=='string'||draft.location.length>250)
@@ -380,7 +380,7 @@ async function execute(req,body,actor,svc,caller,secret){
      format:draft.format,title:draft.title,purpose:draft.details,
      client_id:draft.client_id||null,client_name:draft.client_name||null,
      starts_at:draft.starts_at,duration_minutes:draft.duration_minutes,
-     location:draft.location,participants:draft.participant_names||[],source:SOURCE};
+     location:draft.location,participants:draft.participant_names||[],...(draft.calendar_invitations_v3?{participant_ids:draft.participant_ids||[],reminder_minutes:15}:{}),source:SOURCE};
    const inserted=await caller.from('crm_ai360_meetings_v1').insert(row)
      .select('id,owner_id,starts_at,source').single();
    if(inserted.error){
@@ -393,7 +393,7 @@ async function execute(req,body,actor,svc,caller,secret){
      return fail(req,'meeting_verification_failed',503);
    return respond(req,{mode:'created_meeting',created:1,meeting_id:inserted.data.id,
      title:draft.title,due_date:draft.due_date,due_time:draft.due_time,
-     note:'Встреча сохранена в личном календаре CRM. Приглашения и push-напоминания не отправлялись; GPS-визит не отмечен.'});
+     note:draft.calendar_invitations_v3?(draft.participant_ids?.length?'Встреча сохранена. Выбранным участникам созданы приглашения; уведомления поставлены в очередь. Напоминание — за 15 минут.':'Личная встреча сохранена. Напоминание запланировано за 15 минут.'):'Встреча сохранена в личном календаре CRM. Приглашения и push-напоминания не отправлялись; GPS-визит не отмечен.'});
  }
  if(draft.action==='visit'){
    if(actor.tier!=='employee'||!FIELD_MANAGERS.has(actor.name)||
@@ -509,11 +509,15 @@ Deno.serve(async req=>{
        if(!Number.isFinite(from)||!Number.isFinite(to)||to<=from||to-from>62*86400000)return fail(req,'invalid_agenda_period');
      }
      const offset=Number.isSafeInteger(body.offset)&&body.offset>=0&&body.offset<=10000?body.offset:0;
+     let rows;
+     if(body.calendar_capabilities_v3===true){const r=await caller.rpc('crm_calendar_list_v3',{p_from:new Date(from).toISOString(),p_to:new Date(to).toISOString()});rows={error:r.error,data:Array.isArray(r.data)?r.data.slice(offset,offset+26):[]};}
+     else{
      const rows=await caller.from('crm_ai360_meetings_v1')
        .select('id,title,client_name,starts_at,duration_minutes,format,location')
        .eq('owner_id',actor.id).eq('status','scheduled').gte('starts_at',new Date(from).toISOString())
        .lt('starts_at',new Date(to).toISOString())
        .order('starts_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+25);
+     }
      if(rows.error)return fail(req,'agenda_not_available',503);
      const fmt=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',
        month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
@@ -524,7 +528,7 @@ Deno.serve(async req=>{
      })),count:Math.min(25,(rows.data||[]).length),has_more:(rows.data||[]).length>25,next_offset:(rows.data||[]).length>25?offset+25:null});
    }
    if(body?.kind==='prepare')return await makeDraft({req,kind:'prepare',
-     question:body.question,actor,svc,caller,secret,openai,calendarContext:body.meeting_context,calendarActionsV2:body.calendar_capabilities_v2===true});
+     question:body.question,actor,svc,caller,secret,openai,calendarContext:body.meeting_context,calendarActionsV2:body.calendar_capabilities_v2===true,calendarInvitationsV3:body.calendar_capabilities_v3===true});
    if(body?.kind==='commit')return await execute(req,body,actor,svc,caller,secret);
    return fail(req,'unknown_action',400);
  }catch(e){

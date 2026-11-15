@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'assets/270-calendar-meetings-pilot-v1.js'
+      - 'assets/273-calendar-invitations-v3.js'
+      - 'connect-push-sw.js'
+      - 'supabase/functions/crm-calendar-delivery-v3/**'
+      - 'tests/calendar-invitations-v3.test.mjs'
       - 'supabase/functions/_shared/meeting-*.mjs'
       - 'supabase/functions/crm-meeting-prepare-v2/**'
       - 'supabase/functions/crm-ai360-agent-v1/meeting-context.mjs'
@@ -22,4 +26,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - name: Calendar behaviour and scope regressions
-        run: node --test tests/calendar-live-agent-regression.test.mjs tests/calendar-meetings-pilot.test.mjs tests/lera-calendar-coverage-gps-continuous-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/lera360-agent-actions-v1.test.mjs
+        run: node --test tests/calendar-invitations-v3.test.mjs tests/calendar-live-agent-regression.test.mjs tests/calendar-meetings-pilot.test.mjs tests/lera-calendar-coverage-gps-continuous-v1.test.mjs tests/ai360-agent360-*.test.mjs tests/lera360-agent-actions-v1.test.mjs
