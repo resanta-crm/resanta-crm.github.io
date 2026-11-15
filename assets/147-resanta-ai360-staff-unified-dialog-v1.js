@@ -48,6 +48,7 @@ root.crmAI360BranchUnifiedHandleV1=function(q,ui){
    const screen=(root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(question,memory)||root.RESANTA_CONTROL_CENTER_V1?.prepareAgentRequest?.(question,memory));
    if(screen){payload.question=screen.question;payload.memory={...screen.memory,month:localMonth(question)||screen.memory.month||null};}
    if(screen?.meeting_context)payload.meeting_context=screen.meeting_context;
+   const taskContext=window.RESANTA_TASKS_ROUTE_V4?.context?.();if(taskContext)payload.task_context=taskContext;
    if(root.__resantaLeraDialogueV2===true)payload.protocol='lera_dialogue_v2';
    let result=await db.functions.invoke(ENDPOINT,{body:payload});
    if(Number(result.error?.context?.status)===401&&typeof db.auth?.refreshSession==='function'){

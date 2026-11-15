@@ -8,6 +8,7 @@ import {classifyAgentQuestion,runFreeConversation} from './conversation.mjs';
 import {historyAction,historyEnabled,saveHistoryTurn,recentFreeMemory} from './history.mjs';
 import {readMeetingContext} from './meeting-context.mjs';
 import {controlCenterPlanRequest,readControlCenterPlan} from './control-center.mjs';
+import {selectedTaskQuestion} from './task-context.mjs';
 
 const ORIGINS=new Set(['https://resanta-crm.by','https://www.resanta-crm.by']);
 const headers=origin=>({
@@ -73,6 +74,15 @@ Deno.serve(async req=>{
   const h=await historyEnabled(svc,user.id);
   return reply(req,{...agentCapabilities(principal),history_enabled:h.enabled===true,
    history_retention_days:30,history_audio_saved:false,dialogue_protocol:'lera_dialogue_v2'});
+ }
+ const taskQuestion=input.task_context?selectedTaskQuestion(input):null;
+ if(taskQuestion){
+  try{
+   const result=await fetch(url+'/functions/v1/crm-tasks-assistant-v4',{method:'POST',headers:{Authorization:auth,apikey:anon,'Content-Type':'application/json'},body:JSON.stringify(taskQuestion),signal:AbortSignal.timeout(45000)});
+   const data=await result.json();if(!result.ok||data.error)return fault(req,data.error||'task_context_unavailable',result.status);
+   const stored=await saveHistoryTurn(svc,user.id,{mode:'crm',question:input.question,answer:data.answer,answerVerified:false});
+   return reply(req,{...data,agent:'resanta_ai_agent360_v1',mode:'task_context_v4',writes_enabled:false,history_saved:stored.saved});
+  }catch{return fault(req,'task_context_unavailable',503);}
  }
  // Calendar context is owner-scoped and uses only server-created preparation records.
  if(input.meeting_context){
