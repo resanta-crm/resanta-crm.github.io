@@ -2470,7 +2470,7 @@ install();
       document.getElementById('mrl-editor').style.display='block';toggleType();renderCities();renderPoints();renderNetworkPoints();renderSummary();
       const mine=ps.filter(assignedToSelectedManager),working=mine.filter(p=>normM(p.primary?.client_status)==='рабочий').length,potential=mine.filter(p=>normM(p.primary?.client_status)==='потенциальный').length,cities=new Set(mine.map(pointCity)).size;
       status.textContent=state.manager+': закреплено клиентов '+mine.length+' · городов '+cities+' · Рабочих '+working+' · Потенциальных '+potential+' · сетевых точек '+networkForManager(state.manager).length+'. Поиск сверху при необходимости ищет по всей активной базе.';
-    }catch(e){status.textContent='';alert(e.message||e);}finally{state.loading=false;setEditorBusy(false);renderCurrentDay();}
+    }catch(e){status.textContent=String(e.message||e);document.getElementById('mrl-editor').style.display='none';state.revision=null;}finally{state.loading=false;setEditorBusy(false);renderCurrentDay();}
   }
 
   function assignedToSelectedManager(p){return normM(p?.assigned_manager||p?.primary?.manager_name)===normM(state.manager);}
