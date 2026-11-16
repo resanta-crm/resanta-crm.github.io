@@ -1,0 +1,20 @@
+name: Route day editor atomic regression
+on:
+  pull_request:
+    paths: ['assets/03-triovist-routes.js','assets/287-tasks-route-v4.js','tests/route-day-*','supabase/migrations/*route_day_atomic*','supabase/migrations/*route_task_guard*','.github/workflows/route-day-atomic-v1.yml']
+  push:
+    branches: [main]
+    paths: ['assets/03-triovist-routes.js','assets/287-tasks-route-v4.js','tests/route-day-*','.github/workflows/route-day-atomic-v1.yml']
+permissions:
+  contents: read
+jobs:
+  routes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/route-dom" --ignore-scripts --no-audit --no-fund linkedom@0.18.12
+      - run: node --check assets/03-triovist-routes.js && node --check assets/287-tasks-route-v4.js
+      - run: CRM_DOM_MODULE="$RUNNER_TEMP/route-dom/node_modules/linkedom/esm/index.js" node --test tests/route-day-editor-v1.test.mjs tests/tasks-route-v4-ui.test.mjs tests/route-director-360-v1.test.cjs
