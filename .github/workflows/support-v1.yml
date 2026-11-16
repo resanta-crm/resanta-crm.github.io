@@ -1,0 +1,20 @@
+name: CRM support access and workflow
+on:
+  pull_request:
+    paths: ['assets/288-*','supabase/functions/crm-support-worker-v1/**','supabase/migrations/*support*','tests/support-v1*','.github/workflows/support-v1.yml']
+  push:
+    branches: [main]
+    paths: ['assets/288-*','supabase/functions/crm-support-worker-v1/**','supabase/migrations/*support*','tests/support-v1*','.github/workflows/support-v1.yml']
+permissions:
+  contents: read
+jobs:
+  support:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/support-dom" --ignore-scripts --no-audit --no-fund linkedom@0.18.12
+      - run: node --check assets/288-support-v1.js
+      - run: CRM_DOM_MODULE="$RUNNER_TEMP/support-dom/node_modules/linkedom/esm/index.js" node --test tests/support-v1.test.mjs
