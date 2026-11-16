@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {cachedModel} from '../supabase/functions/crm-tasks-assistant-v4/model-cache.mjs';
-function db(){const rows=new Map();return {rows,from(){return {async insert(row){if(rows.has(row.key))return {error:{code:'23505'}};rows.set(row.key,row);return {};},select(){return {eq(_,key){return {async single(){return {data:rows.get(key)}}}}}},update(patch){return {async eq(_,key){Object.assign(rows.get(key),patch);return {}}}}}}};}
+function db(){const rows=new Map();return {rows,from(){return {async insert(row){if(rows.has(row.key))return {error:{code:'23505'}};rows.set(row.key,row);return {};},select(){return {eq(_,key){return {async single(){return {data:rows.get(key)}},async maybeSingle(){return {data:rows.get(key)||null}}}}}},update(patch){return {async eq(_,key){Object.assign(rows.get(key),patch);return {}}}}}}};}
 test('repeat and concurrent request cannot trigger a second paid call',async()=>{
  const svc=db();let calls=0,release;const wait=new Promise(r=>release=r);
  const run=async()=>{calls++;await wait;return {title:'result'}};
@@ -13,3 +13,7 @@ test('repeat and concurrent request cannot trigger a second paid call',async()=>
  await cachedModel(svc,'other user','instruction','facts',async()=>{calls++;return {}});assert.equal(calls,3);
 });
 test('failed paid attempt is not automatically replayed',async()=>{const svc=db();let calls=0;const run=async()=>{calls++;throw Error('timeout')};await assert.rejects(cachedModel(svc,'u','i','f',run),/timeout/);await assert.rejects(cachedModel(svc,'u','i','f',run),/PREPARATION_FAILED/);assert.equal(calls,1);});
+
+test('JSONB field order and tied fact rows reuse the same paid response',async()=>{const svc=db();let n=0;const run=async()=>{n++;return {title:'same'}};await cachedModel(svc,'u','i','data:\n'+JSON.stringify({previous:{title:'T',items:[{sku:'x',qty:1}]},visits:[{date:'d',text:'B'},{date:'d',text:'A'}]}),run);await cachedModel(svc,'u','i','data:\n'+JSON.stringify({visits:[{text:'A',date:'d'},{text:'B',date:'d'}],previous:{items:[{qty:1,sku:'x'}],title:'T'}}),run);assert.equal(n,1);});
+
+test('migration reuses a previously paid legacy key without calling the model',async()=>{const svc=db(),input='data:\n'+JSON.stringify({z:1,a:2});const source=JSON.stringify(['tasks-v2','gpt-5.4-mini','u','i',input]);const legacy=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source))),x=>x.toString(16).padStart(2,'0')).join('');svc.rows.set(legacy,{status:'ready',result:{title:'paid already'}});let n=0;const result=await cachedModel(svc,'u','i',input,async()=>{n++;return {}});assert.equal(n,0);assert.equal(result.title,'paid already');assert.equal(svc.rows.size,2);});

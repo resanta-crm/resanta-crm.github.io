@@ -7,6 +7,7 @@ export function latestPurchaseRestriction(visits){
 }
 export function potentialFallback(client){return {title:'Уточнить карточку клиента и сверить полку',basis:'Для подготовки предложения не хватает подтверждённых данных. Известные сведения карточки нужно проверить, а не заполнять заново.',expected_result:'Зафиксировать категорию и товарный профиль клиента, общее число SKU и число наших SKU, фактические товары на полке и фото. Уточнить ответственное за закупки лицо, интересующие группы и согласовать следующий шаг с датой. Не записывать неподтверждённый интерес как договорённость.',stage:'profile',items:[]};}
 const take=(x,n)=>String(x||'').trim().slice(0,n);
+const plain=x=>String(x||'').replace(/\bpurchase_evidence\b/g,'историю закупок').replace(/\bpurchase_analysis\b/g,'анализ закупок и ABC').replace(/\bpurchase_history\b/g,'историю закупок').replace(/\bcandidates\b/g,'подходящие товары').replace(/\bstage\s*=\s*shipment\b/g,'результат — отгрузка');
 export function shortlistCandidates(items,analysis,directions,limit=100){
  const evidence=new Map(analysis.items.map(x=>[x.sku,x]));
  const wanted=new Set(directions?.skus||[]);
@@ -30,7 +31,7 @@ function checkCandidates(plan,facts){if(facts&&plan.items.some(x=>!facts.candida
 function checkSeason(plan,route,exception){if(winterDate(route.visit_date)&&plan.items.some(summerProduct)&&String(exception||'').trim().length<8)throw Error('TASK_SEASON_REASON_REQUIRED');return plan;}
 export function validatePlan(plan,client,catalog,stock){
  if(!plan||typeof plan!=='object')throw Error('TASK_PLAN_REQUIRED');
- const title=take(plan.title,160),basis=take(plan.basis,2000),expected=take(plan.expected_result,1000);
+ const title=take(plain(plan.title),160),basis=take(plain(plan.basis),2000),expected=take(plain(plan.expected_result),1000);
  if(title.length<3||basis.length<3||expected.length<5)throw Error('TASK_PLAN_REQUIRED');
  const working=client.client_status==='Рабочий';
  const stage=working?'shipment':plan.stage;
@@ -46,9 +47,10 @@ export function validatePlan(plan,client,catalog,stock){
   if(seen.has(x.sku))throw Error('TASK_TARGETS_INVALID: повтор артикула '+x.sku);
   if(!Number.isFinite(qty)||qty<=0||qty>100000)throw Error('TASK_TARGETS_INVALID: неверное количество '+x.sku);
   if(qty>available)throw Error('TASK_TARGETS_INVALID: '+x.sku+' запрошено '+qty+', доступно '+available);
-  seen.add(x.sku);return {sku:x.sku,product:names[0],qty,reason:take(x.reason,400)};
+  seen.add(x.sku);return {sku:x.sku,product:names[0],qty,reason:take(plain(x.reason),400)};
  })};
  if(working){result.expected_result='Отгрузка, подтверждённая 1С: '+result.items.map(x=>x.sku+' — '+x.qty+' шт.').join('; ')+'. Переговоры и сверка полки не завершают задачу.';if(!/отгруз|постав/i.test(result.title))result.title='Согласовать и отгрузить '+result.items.length+' SKU по визиту';}
+ else result.expected_result=take(expected,650)+' Обязательно проверить карточку: категорию клиента, товарный профиль, общее число SKU и число наших SKU. Сверить фактическую полку и фото. Записать конкретный результат и согласовать следующий шаг с датой.';
  return result;
 }
 async function data(query){const r=await query;if(r.error){console.warn('Task context query',r.error.code,r.error.message);throw Error('task_context_unavailable');}return r.data;}
