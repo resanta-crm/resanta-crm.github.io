@@ -13,6 +13,13 @@ export function canonicalModelInput(input){
  try{return input.slice(0,at+1)+JSON.stringify(stable(JSON.parse(input.slice(at+1))));}catch{return input;}
 }
 const digest=async source=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source))),x=>x.toString(16).padStart(2,'0')).join('');
+// Called only after workspaceAction's current boss/route/client checks, using
+// the caller's RLS session. Never enumerate cache rows or cross-branch actors.
+export async function legacyPreparationUserIds(caller,userId){
+ const result=await caller.from('users').select('id').eq('role','boss').in('region',['Витебск','Все филиалы']);
+ if(result.error||!Array.isArray(result.data))throw Error('TASK_CACHE_ACTORS_UNAVAILABLE: не удалось проверить ранее оплаченные проекты; новый платный запрос не запускался');
+ return [...new Set([userId,...result.data.map(row=>row.id).filter(id=>typeof id==='string'&&id)])];
+}
 export async function cachedModel(svc,userId,instructions,input,run,options={}){
  // Shared preparation contains only facts already read through this caller's
  // RLS/access checks. Record/transcript actions remain private to the user.
@@ -26,9 +33,12 @@ export async function cachedModel(svc,userId,instructions,input,run,options={}){
  };
  const canonical=await read(key);if(canonical)return value(canonical);
  // Reuse responses paid for under the old serializer before making any call.
- // Both raw and canonical old keys are checked; no key scan or cross-user read.
+ // Both raw and canonical old keys are checked. Shared preparation may reuse
+ // an authorized branch boss's exact old input; personal records stay private.
+ // The IDs came from caller-RLS role/region checks, never from request JSON.
  const aliases=new Set();
- for(const raw of [input,...(options.legacyInputs||[])])for(const variant of [canonicalModelInput(raw),raw])aliases.add(await digest(source(variant)));
+ const actors=options.shared?[...new Set([userId,...(options.legacyUserIds||[])])]:[userId];
+ for(const actor of actors)for(const raw of [input,...(options.legacyInputs||[])])for(const variant of [canonicalModelInput(raw),raw])aliases.add(await digest(source(variant,actor)));
  for(const alias of aliases){
   const old=await read(alias);if(!old)continue;
   const result=value(old);
