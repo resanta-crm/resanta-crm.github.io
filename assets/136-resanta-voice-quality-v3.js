@@ -393,6 +393,14 @@ async function playAndroidAudio(blob,run){
    await playHtmlAudio(blob,run,request.signal);
  }finally{if(androidPlaybackRequest===request)androidPlaybackRequest=null;}
 }
+function isMp3AudioHeader(bytes){
+ const id3=bytes.length>=10&&bytes[0]===73&&bytes[1]===68&&bytes[2]===51&&
+   bytes[3]>=2&&bytes[3]<=4&&bytes[4]!==255&&[6,7,8,9].every(i=>bytes[i]<128);
+ const frame=bytes.length>=4&&bytes[0]===255&&(bytes[1]&224)===224&&
+   (bytes[1]&24)!==8&&(bytes[1]&6)===2&&
+   (bytes[2]>>4)>0&&(bytes[2]>>4)<15&&(bytes[2]&12)!==12;
+ return id3||frame;
+}
 async function cloudSpeak(msg,voice,run,provider='openai'){
  const isYandex=provider==='yandex';
  const voiceText=isYandex&&typeof window.crmAI360ApplySpeechAccentsV1==='function'?window.crmAI360ApplySpeechAccentsV1(msg):msg;
@@ -407,8 +415,11 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
      if(!session?.access_token)throw new Error('no_session');
      if(!isYandex)setStatus('Готовлю естественный голос…');
      if(isYandex&&nativeAndroidDirector()){
-       if(window.crmAir3VoiceAvailableV1?.())return window.crmAir3VoiceTransportV1('tts',session,{text:voiceText,voice},signal);
-       return air3ReadVoiceAudioV1(session,{text:voiceText,voice},signal);
+       // One synthesis with the same voice/text, compressed only for glasses.
+       // Older server deployments may still return WAV; accept either container.
+       const body={text:voiceText,voice,format:'mp3'};
+       if(window.crmAir3VoiceAvailableV1?.())return window.crmAir3VoiceTransportV1('tts',session,body,signal);
+       return air3ReadVoiceAudioV1(session,body,signal);
      }
      return db.functions.invoke(isYandex?'crm-voice-yandex-tts-v1':'crm-voice-tts-v1',{body:{text:voiceText,voice},signal});
    },request);
@@ -418,17 +429,19 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  if(result.error){let detail='';try{const d=await result.error.context?.json?.();detail=d?.error||'';}catch{}
   throw new Error(detail||result.error.message||'voice_failed');}
  // Supabase FunctionsClient returns Blob only for application/octet-stream.
- // Wrap decoded bytes with an explicit WAV MIME so browsers play SpeechKit audio reliably.
+ // Preserve the provider bytes and identify their container before playback.
  const rawBlob=result.data instanceof Blob?result.data:null;
  if(!rawBlob||rawBlob.size<300)throw new Error('empty_audio_response');
  const header=new Uint8Array(await rawBlob.slice(0,12).arrayBuffer());
  const riff=String.fromCharCode(...header.slice(0,4));
  const wave=String.fromCharCode(...header.slice(8,12));
- if(isYandex && (riff!=='RIFF'||wave!=='WAVE'))throw new Error('yandex_invalid_wav');
- const blob=isYandex?new Blob([rawBlob],{type:'audio/wav'}):rawBlob;
+ const wav=riff==='RIFF'&&wave==='WAVE';
+ const mp3=isYandex&&nativeAndroidDirector()&&isMp3AudioHeader(header);
+ if(isYandex&&!wav&&!mp3)throw new Error('yandex_invalid_wav');
+ const blob=isYandex?new Blob([rawBlob],{type:mp3?'audio/mpeg':'audio/wav'}):rawBlob;
  if(nativeAndroidDirector()){
    const context=androidContext();
-   console.info('AIR3 Yandex audio validated',{bytes:blob.size,format:isYandex?'WAV':'audio',contextState:context?.state||'unavailable'});
+   console.info('AIR3 Yandex audio validated',{bytes:blob.size,format:isYandex?(mp3?'MP3':'WAV'):'audio',contextState:context?.state||'unavailable'});
    await playAndroidAudio(blob,run);
    return;
  }

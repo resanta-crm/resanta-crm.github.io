@@ -7,6 +7,8 @@ on:
       - 'assets/137-resanta-ai360-lazy-launch-v1.js'
       - 'tests/air3-yandex-output-safety-20261105.test.mjs'
       - 'tests/air3-voice-local-reliability-20261116.test.mjs'
+      - 'tests/air3-tts-optional-mp3-20261116.test.mjs'
+      - 'supabase/functions/crm-voice-yandex-tts-v1/**'
       - '.github/workflows/air3-yandex-output-safety.yml'
   workflow_dispatch:
 permissions:
@@ -28,6 +30,7 @@ jobs:
           node --check assets/137-resanta-ai360-lazy-launch-v1.js
           node --test tests/air3-yandex-output-safety-20261105.test.mjs
           node --test tests/air3-voice-local-reliability-20261116.test.mjs
+          node --test tests/air3-tts-optional-mp3-20261116.test.mjs
           node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
           node --test tests/air3-voice-audio-transfer-20261116.test.mjs tests/voice-network-deadline-20261116.test.mjs
           node --test tests/air3-native-voice-transport-20261116.test.mjs

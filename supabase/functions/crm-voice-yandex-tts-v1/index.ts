@@ -11,6 +11,14 @@ function json(data:unknown,status=200,origin:string|null=null) {
  return new Response(JSON.stringify(data),{status,headers:{...cors(origin),'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
 }
 const VOICES = new Set(['lera','dasha']);
+function isMp3AudioHeader(bytes:Uint8Array):boolean {
+ const id3=bytes.length>=10&&bytes[0]===73&&bytes[1]===68&&bytes[2]===51&&
+   bytes[3]>=2&&bytes[3]<=4&&bytes[4]!==255&&[6,7,8,9].every(i=>bytes[i]<128);
+ const frame=bytes.length>=4&&bytes[0]===255&&(bytes[1]&224)===224&&
+   (bytes[1]&24)!==8&&(bytes[1]&6)===2&&
+   (bytes[2]>>4)>0&&(bytes[2]>>4)<15&&(bytes[2]&12)!==12;
+ return id3||frame;
+}
 function b64Bytes(value:string):Uint8Array {
  const raw=atob(value), buffer=new Uint8Array(raw.length);
  for(let i=0;i<raw.length;i++)buffer[i]=raw.charCodeAt(i);
@@ -95,6 +103,10 @@ Deno.serve(async(req:Request)=>{
  const text=prepareLeraSpeech(String(payload?.text||'').trim());
  if(!VOICES.has(voice))return json({error:'invalid_voice'},400,origin);
  if(text.length<1||text.length>240)return json({error:'text_length_240'},400,origin);
+ // Default and desktop callers keep WAV. Format selection changes only the
+ // container of this one synthesis, never voice/model/text or billing units.
+ const format=payload?.format===undefined?'wav':payload.format;
+ if(format!=='wav'&&format!=='mp3')return json({error:'invalid_audio_format'},400,origin);
  // Atomic monthly RUB reservation. Each request here is <=240 chars and
  // one billable unit of the 'general' model, currently 0.1626 RUB incl. VAT.
  const claim=await supabase.rpc('crm_ai360_yandex_monthly_claim_v1',{p_user_id:user.id,p_characters:text.length});
@@ -109,7 +121,8 @@ Deno.serve(async(req:Request)=>{
  try{
   upstream=await fetch('https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis',{
    method:'POST',headers,signal:AbortSignal.timeout(26000),
-   body:JSON.stringify({text,model:'general',hints:[{voice},{role:'friendly'}]})
+   body:JSON.stringify({text,model:'general',hints:[{voice},{role:'friendly'}],
+    ...(format==='mp3'?{outputAudioSpec:{containerAudio:{containerAudioType:'MP3'}}}:{})})
   });
  }catch(e){
   console.warn('Yandex SpeechKit network failure',String(e).slice(0,100));
@@ -127,5 +140,6 @@ Deno.serve(async(req:Request)=>{
  if(!size||size>1800000)return json({error:'yandex_audio_empty_or_large'},502,origin);
  const output=new Uint8Array(size);
  let offset=0;for(const part of pieces){output.set(part,offset);offset+=part.length;}
- return new Response(output,{status:200,headers:{...cors(origin),'Content-Type':'application/octet-stream','X-Audio-Content-Type':'audio/wav','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+ if(format==='mp3'&&!isMp3AudioHeader(output))return json({error:'yandex_audio_invalid'},502,origin);
+ return new Response(output,{status:200,headers:{...cors(origin),'Content-Type':'application/octet-stream','X-Audio-Content-Type':format==='mp3'?'audio/mpeg':'audio/wav','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 });

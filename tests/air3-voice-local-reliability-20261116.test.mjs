@@ -7,13 +7,13 @@ const root='assets/';
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 const flush=async()=>{for(let i=0;i<80;i++)await Promise.resolve();};
 function fixture(file,options={}){
- const timers=[],intervals=[],logs=[],sources=[],players=[];let timerId=0,paidCalls=0,micCalls=0,recorders=0,resumes=0;
+ const timers=[],intervals=[],logs=[],sources=[],players=[],networkBodies=[],blobs=[];let timerId=0,paidCalls=0,micCalls=0,recorders=0,resumes=0;
  const status={textContent:''},panel={hidden:false,isConnected:true,classList:{contains:()=>false},querySelector:selector=>selector==='.rva-status'?status:null};
  const audioContext={state:options.state||'running',destination:{},
   resume(){resumes++;if(options.resume)return options.resume(audioContext);audioContext.state='running';return Promise.resolve();},
   suspend(){audioContext.state='suspended';return Promise.resolve();},
   close(){audioContext.state='closed';return Promise.resolve();},
-  decodeAudioData:()=>options.decode?options.decode():Promise.resolve({duration:1}),
+  decodeAudioData:buffer=>options.decode?options.decode(buffer):Promise.resolve({duration:1}),
   createMediaStreamSource:()=>({connect(){},disconnect(){}}),
   createAnalyser:()=>({fftSize:1024,disconnect(){},getByteTimeDomainData:buffer=>buffer.fill(128)}),
   createBufferSource(){const source={playbackRate:{},connect(){},disconnect(){},start(){source.started=true;if(options.autoEnd!==false)queueMicrotask(()=>source.onended?.());},stop(){source.stopped=true;queueMicrotask(()=>source.onended?.());}};sources.push(source);return source;},
@@ -35,7 +35,7 @@ function fixture(file,options={}){
   console:{info:(...args)=>logs.push(args),warn:(...args)=>logs.push(args)},
   navigator:{userAgent:options.desktop?'Macintosh':'Android',mediaDevices:{getUserMedia(){micCalls++;return options.getUserMedia?.()||Promise.reject(Error('unused microphone'));}}},
   localStorage:storage,MediaRecorder:Recorder,AudioContext:function(){return audioContext;},Audio:AudioPlayer,
-  URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},
+  URL:{createObjectURL:blob=>{blobs.push(blob);return 'blob:test';},revokeObjectURL(){}},
   speechSynthesis:{speaking:false,cancel(){}},
   document:{hidden:false,getElementById:()=>({style:{display:''}}),querySelector:()=>null,addEventListener(){},createElement:()=>({setAttribute(){},style:{}})},
   setTimeout:(fn,ms)=>{const t={id:++timerId,fn,ms,active:true};timers.push(t);return t.id;},
@@ -53,7 +53,7 @@ function fixture(file,options={}){
   crmResantaVoiceAuthorizeV3:()=>true,crmResantaVoiceHasConsentV3:()=>true,
  };
  const wav=new Blob([new Uint8Array([82,73,70,70,0,0,0,0,87,65,86,69]),new Uint8Array(400)],{type:'application/octet-stream'});
- const paid=async()=>{paidCalls++;return {data:wav};};
+ const paid=async(...args)=>{paidCalls++;networkBodies.push(args[1]?.body||args[2]);return {data:options.audioBlob||wav};};
  ctx.crmAir3VoiceTransportV1=paid;
  ctx.db={functions:{invoke:paid}};
  ctx.window=ctx;
@@ -65,7 +65,7 @@ function fixture(file,options={}){
  vm.runInNewContext(source,ctx);
  ctx.__voiceTest.setPanel(panel);
  const expire=async ms=>{const t=timers.find(t=>t.active&&t.ms===ms);assert.ok(t,'active deadline '+ms);t.active=false;t.fn();await flush();};
- return {ctx,api:ctx.__voiceTest,audioContext,sources,players,timers,intervals,logs,status,wav,expire,
+ return {ctx,api:ctx.__voiceTest,audioContext,sources,players,timers,intervals,logs,status,wav,expire,networkBodies,blobs,
   counts:()=>({paidCalls,micCalls,recorders,resumes})};
 }
 const voice=options=>fixture('136-resanta-voice-quality-v3.js',options);
@@ -174,5 +174,33 @@ test('a hidden panel or changed actor during cleanup cannot start a late microph
   if(hidden)h.ctx.document.hidden=true;else h.ctx.crmAI360GreetingV1=()=>({id:'another-actor'});
   closing.resolve();await starting;await flush();
   assert.equal(h.api.state().mode,'');assert.equal(h.counts().micCalls,1);assert.equal(h.counts().paidCalls,0);
+ }
+});
+test('native requests one MP3 synthesis and decodes the exact ID3 or MPEG-frame bytes',async()=>{
+ for(const header of [[73,68,51,4,0,0,0,0,0,0],[255,251,144,0]]){
+  const audio=new Blob([new Uint8Array(header),new Uint8Array(400)],{type:'application/octet-stream'});let decoded;
+  const h=voice({audioBlob:audio,decode:async buffer=>{decoded=new Uint8Array(buffer);return {duration:1};}});
+  const result=h.ctx.crmResantaVoiceSpeakV3('Проверка формата.');await flush();await h.expire(250);
+  assert.equal((await result).ok,true);assert.equal(h.counts().paidCalls,1);assert.equal(h.networkBodies[0].format,'mp3');assert.equal(h.networkBodies[0].voice,'lera');assert.equal(h.networkBodies[0].text,'Проверка формата.');
+  assert.deepEqual(decoded,new Uint8Array(await audio.arrayBuffer()));assert.equal(h.players.length,0);
+ }
+});
+test('MP3 decode failure reuses those exact bytes and safe MIME in HTML without resynthesis',async()=>{
+ const audio=new Blob([new Uint8Array([73,68,51,4,0,0,0,0,0,0]),new Uint8Array(400)],{type:'application/octet-stream'});
+ const h=voice({audioBlob:audio,decode:async()=>{throw Error('unsupported decoder');}});
+ const result=h.ctx.crmResantaVoiceSpeakV3('Проверка резервного плеера.');await flush();await h.expire(250);
+ assert.equal((await result).ok,true);assert.equal(h.counts().paidCalls,1);assert.equal(h.players.length,1);assert.equal(h.blobs[0].type,'audio/mpeg');
+ assert.deepEqual(new Uint8Array(await h.blobs[0].arrayBuffer()),new Uint8Array(await audio.arrayBuffer()));
+});
+test('MP3 is optional for glasses; desktop requests stay WAV and reject unexpected MP3',async()=>{
+ const audio=new Blob([new Uint8Array([73,68,51,4,0,0,0,0,0,0]),new Uint8Array(400)]);
+ const h=voice({desktop:true,audioBlob:audio});const result=h.ctx.crmResantaVoiceSpeakV3('Обычный браузер.');await flush();await h.expire(250);
+ assert.equal((await result).ok,false);assert.equal(h.networkBodies[0].format,undefined);assert.equal(h.players.length,0);assert.equal(h.sources.length,0);assert.equal(h.counts().paidCalls,1);
+});
+test('invalid MP3 markers cannot be played or trigger a second paid request',async()=>{
+ for(const header of [[73,68,51,9,0,0,0,0,0,0],[255,255,255,0]]){
+  const h=voice({audioBlob:new Blob([new Uint8Array(header),new Uint8Array(400)])});
+  const result=h.ctx.crmResantaVoiceSpeakV3('Неисправное аудио.');await flush();await h.expire(250);
+  assert.equal((await result).ok,false);assert.equal(h.counts().paidCalls,1);assert.equal(h.players.length,0);assert.equal(h.sources.length,0);
  }
 });
