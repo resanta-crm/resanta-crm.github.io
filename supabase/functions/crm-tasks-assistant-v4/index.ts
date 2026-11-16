@@ -1,4 +1,5 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
+import {cachedModel} from './model-cache.mjs';
 import {taskModelInput} from './model-context.mjs';
 import {workspaceAction} from './workspace-v5.mjs';
 import {routeAction} from './route-action.mjs';
@@ -26,11 +27,13 @@ Deno.serve(async(req:Request)=>{
   let claim:any=null,usedIn=0,usedOut=0,rounds=0,ok=false;
   const model=async(instructions:string,facts:unknown)=>{
    const modelInput=taskModelInput(facts);
+   return cachedModel(svc,user.id,instructions,modelInput,async()=>{
    if(rounds>=3)throw Error('TASK_MODEL_CALL_LIMIT');
    if(!claim){const r=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:user.id,p_reserve_rub:5});if(r.error||r.data?.allowed!==true)throw Error('budget_unavailable');claim=r.data;}
    rounds++;const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+Deno.env.get('OPENAI_API_KEY'),'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-5.4-mini',store:false,max_output_tokens:3500,reasoning:{effort:'low'},instructions,input:modelInput,text:{format:{type:'json_object'}}}),signal:AbortSignal.timeout(45000)});
    if(!response.ok){const failure=await response.json().catch(()=>({}));console.warn('Task model failure',response.status,failure.error?.code,failure.error?.message);throw Error('model_unavailable');}const result=await response.json();usedIn+=Number(result.usage?.input_tokens)||0;usedOut+=Number(result.usage?.output_tokens)||0;
    const raw=result.output?.flatMap((x:any)=>x.content||[]).find((x:any)=>x.type==='output_text')?.text;return JSON.parse(raw||'{}');
+   });
   };
   try{const result=await workspaceAction({caller,svc,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,model});ok=true;return send(req,result);}
   catch(e){console.warn('Tasks workspace failure',String((e as Error).message||'TASK_ACTION_FAILED'));return send(req,{error:String((e as Error).message||'TASK_ACTION_FAILED')},422);}

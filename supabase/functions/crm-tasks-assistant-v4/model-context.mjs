@@ -16,7 +16,14 @@ export function compactTaskFacts(facts){
 }
 
 export function taskModelInput(facts){
- const text='Верни JSON. Данные для обработки:\n'+JSON.stringify(compactTaskFacts(facts));
+ const compact=compactTaskFacts(facts);
+ // Lossless tabular encoding: field names occur once, every row is retained.
+ const table=rows=>{const columns=[...new Set(rows.flatMap(x=>Object.keys(x)))];return {columns,rows:rows.map(x=>columns.map(k=>x[k]??null))};};
+ const dense=compact===facts?compact:{...compact,
+  purchase_analysis:compact.purchase_analysis?{...compact.purchase_analysis,items:table(compact.purchase_analysis.items)}:null,
+  ...(compact.candidates?{candidates:table(compact.candidates)}:{}),
+  ...(compact.winter_products?{winter_products:table(compact.winter_products)}:{})};
+ const text='Верни JSON. Таблицы columns/rows читаются по порядку колонок, null означает отсутствие данных. История и ABC находятся в purchase_analysis и purchase_history; кандидаты ссылаются на них по sku. Данные для обработки:\n'+JSON.stringify(dense);
  // Fail before a paid call rather than silently truncating evidence.
  if(text.length>90000)throw Error('TASK_CONTEXT_TOO_LARGE: слишком большой объём данных для экономного формирования; требуется уточнить задачу');
  return text;
