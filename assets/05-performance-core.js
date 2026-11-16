@@ -42,6 +42,7 @@ const TTL={
 };
 const PERSIST=new Set(['tasks','visits','routes','absences','negotiations','aliases','kpi','imports','vips']);
 let bootFlight=null,bootReady=false,warmStarted=false,optionalStarted=false;
+let bootOwner='',bootFlightOwner='',bootAbort=null,coreEpoch=0,coreActor='';
 let bgBusy=false,lastInteractionAt=0,hoverTimer=0,lastPageOpenAt=0;
 const bgQueue=[],queuedKeys=new Set();
 
@@ -65,10 +66,30 @@ function ttl(name){return TTL[name]||5*60*1000;}
 function isFresh(name){const s=state(name);return s.status==='ready'&&age(s)<=ttl(name);}
 function currentUserCacheKey(){
   const id=String(currentUser?.id||currentProfile?.email||currentProfile?.name||'anonymous').replace(/[^a-zA-Z0-9_.@-]/g,'_');
-  const scope=String(currentProfile?.access_scope||currentProfile?.role||'user').replace(/[^a-zA-Z0-9_.@-]/g,'_');
+  const scope=String((currentProfile?.access_scope||currentProfile?.role||'user')+'|'+(currentProfile?.region||'')).replace(/[^a-zA-Z0-9_.@-]/g,'_');
   return id+'|'+scope;
 }
 function cacheKey(name){return 'core|'+CACHE_SCHEMA+'|'+currentUserCacheKey()+'|'+name;}
+function actorKey(){return String(currentUser?.id||currentProfile?.id||'')+'|'+String(currentProfile?.access_scope||currentProfile?.role||'')+'|'+String(currentProfile?.region||'');}
+function sameActor(scope){return scope.actor===actorKey()&&scope.actor===coreActor&&scope.epoch===coreEpoch;}
+function clearCoreData(){allClients=[];allUsers=[];allTasks=[];allVisits=[];allRoutePlans=[];allNegotiations=[];allClientAliases=[];allVisitQualityReviews=[];allVisitRouteReviews=[];allTaskPartialReviews=[];allManagerKpiPlans=[];allImportStatus=[];allVipSales=[];allVipPromotions=[];allPurchaseHistory=[];allPurchases=[];allPurchaseItems=[];allClientPhotos=[];allPromotions=[];allPromotionBudgets=[];allPromotionBudgetMovements=[];allPromotionPhotos=[];allPromotionBudgetAudit=[];allClientDebt=[];allDebtComments=[];allStock=[];allPrice=[];try{allManagerAbsences=[];}catch(_){} }
+function resetCoreActor(next=''){coreEpoch++;coreActor=next;bootAbort?.abort(new Error('bootstrap_session_changed'));bootAbort=null;bootFlight=null;bootFlightOwner='';bootReady=false;bootOwner='';states.clear();bgQueue.length=0;queuedKeys.clear();bgBusy=false;warmStarted=false;optionalStarted=false;clearCoreData();}
+function actorScope(){const actor=actorKey();if(coreActor!==actor)resetCoreActor(actor);return {actor,epoch:coreEpoch};}
+function assertActor(scope,signal){signal?.throwIfAborted();if(!sameActor(scope))throw new Error('bootstrap_session_changed');}
+// Follow the existing signed-out UI/local logout path; do not add an early
+// auth listener before Android's initial session recovery.
+for(const name of ['crmLocalSignOutV236258','crmShowSignedOutUiV236258']){const previous=window[name];if(typeof previous==='function')window[name]=function(){resetCoreActor();return previous.apply(this,arguments);};}
+
+async function coreDeadline(factory,ms,parent,code){const controller=new AbortController();let timer,onAbort,onParent;
+ const stopped=new Promise((_,reject)=>{onAbort=()=>reject(controller.signal.reason||new Error(code));controller.signal.addEventListener('abort',onAbort,{once:true});onParent=()=>controller.abort(parent.reason||new Error('bootstrap_session_changed'));if(parent?.aborted)onParent();else parent?.addEventListener('abort',onParent,{once:true});timer=setTimeout(()=>controller.abort(new Error(code)),ms);});
+ try{return await Promise.race([stopped,Promise.resolve().then(()=>{controller.signal.throwIfAborted();return factory(controller.signal);})]);}finally{clearTimeout(timer);controller.signal.removeEventListener('abort',onAbort);parent?.removeEventListener('abort',onParent);}}
+function requestWithSignal(request,signal){return typeof request?.abortSignal==='function'?request.abortSignal(signal):request;}
+function coreAuthError(error){return [401,403].includes(Number(error?.status||error?.statusCode))||/^PGRST30[123]$/.test(String(error?.code||''))||/^core_http_(401|403)$/.test(String(error?.message||error||''));}
+async function nativeCorePlugin(scope,signal){if(!(window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))return null;const plugin=window.Capacitor?.Plugins?.Air3Voice;if(typeof plugin?.capabilities!=='function')return null;try{const caps=await coreDeadline(()=>plugin.capabilities(),2000,signal,'bootstrap_capability_timeout');assertActor(scope,signal);return caps?.bootstrapCore===true?plugin:null;}catch(error){assertActor(scope,signal);return null;}}
+async function nativeCoreData(plugin,scope,signal){const auth=await coreDeadline(()=>db.auth.getSession(),5000,signal,'bootstrap_auth_timeout');assertActor(scope,signal);const session=auth?.data?.session;if(auth?.error||!session?.access_token||session.user?.id&&session.user.id!==String(currentUser?.id||currentProfile?.id||''))throw new Error('bootstrap_auth_required');
+ return coreDeadline(async requestSignal=>{const requestId='core-'+(window.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(16).slice(2));const cancel=()=>{try{Promise.resolve(plugin.cancel({requestId})).catch(()=>{});}catch(_){}};requestSignal.addEventListener('abort',cancel,{once:true});try{requestSignal.throwIfAborted();const response=await plugin.bootstrapCore({requestId,accessToken:session.access_token,apiKey:SUPABASE_KEY});assertActor(scope,requestSignal);return response?.result;}finally{requestSignal.removeEventListener('abort',cancel);}},25000,signal,'bootstrap_native_timeout');}
+function validCore(data){return !!data&&typeof data==='object'&&Array.isArray(data.clients)&&Array.isArray(data.users);}
+function bootstrapError(error){const code=String(error?.message||error||'');let message=code;if(code==='bootstrap_session_changed')message='Учётная запись изменилась. Выполните вход снова.';else if(code==='bootstrap_auth_required'||coreAuthError(error))message='Сессия CRM не подтверждена. Выполните вход снова.';else if(code==='bootstrap_auth_timeout')message='Не удалось проверить сессию за 5 секунд. Нажмите «Повторить загрузку».';else if(/bootstrap_.*timeout|core_native_.*failed|core_http_\d+/.test(code))message='Основные данные не загрузились вовремя. Нажмите «Повторить загрузку».';else if(code==='bootstrap_response_invalid')message='Сервер вернул неполные основные данные. Нажмите «Повторить загрузку».';const result=new Error(message);result.code=code;return result;}
 
 function openCache(){
   return new Promise((resolve,reject)=>{
@@ -79,29 +100,30 @@ function openCache(){
   });
 }
 async function cacheGet(name){
-  if(!PERSIST.has(name))return null;
+  if(!PERSIST.has(name))return null;const scope=actorScope(),key=cacheKey(name);
   try{
-    const d=await openCache();if(!d)return null;
+    const d=await openCache();if(!d||!sameActor(scope))return null;
     return await new Promise((resolve,reject)=>{
-      const tx=d.transaction(CACHE_STORE,'readonly'),r=tx.objectStore(CACHE_STORE).get(cacheKey(name));
+      const tx=d.transaction(CACHE_STORE,'readonly'),r=tx.objectStore(CACHE_STORE).get(key);
       r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);
     });
   }catch(e){log(name,'cache-read-error',{error:String(e?.message||e)});return null;}
 }
-async function cacheSet(name,data){
-  if(!PERSIST.has(name)||!Array.isArray(data))return false;
+async function cacheSet(name,data,scope=actorScope()){
+  if(!PERSIST.has(name)||!Array.isArray(data)||!sameActor(scope))return false;const key=cacheKey(name);
   try{
-    const d=await openCache();if(!d)return false;
+    const d=await openCache();if(!d||!sameActor(scope))return false;
     const payload={schema:CACHE_SCHEMA,savedAt:Date.now(),rows:data};
     await new Promise((resolve,reject)=>{
       const tx=d.transaction(CACHE_STORE,'readwrite');
-      tx.objectStore(CACHE_STORE).put(payload,cacheKey(name));
+      tx.objectStore(CACHE_STORE).put(payload,key);
       tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);
     });
     return true;
   }catch(e){log(name,'cache-write-error',{error:String(e?.message||e)});return false;}
 }
 function persistSnapshot(){
+  const scope=actorScope();
   for(const name of PERSIST){
     let data=null;
     if(name==='tasks')data=allTasks;
@@ -113,7 +135,7 @@ function persistSnapshot(){
     else if(name==='kpi')data=allManagerKpiPlans;
     else if(name==='imports')data=allImportStatus;
     else if(name==='vips')data=allVipSales;
-    if(Array.isArray(data)&&data.length)cacheSet(name,data);
+    if(Array.isArray(data)&&data.length)cacheSet(name,data,scope);
   }
 }
 
@@ -187,10 +209,11 @@ function rerenderActiveFor(name){
 }
 
 async function hydrate(name){
-  const s=state(name);
+  const scope=actorScope(),s=state(name);
   if(s.status==='ready'||s.hydrated)return s.status==='ready';
   s.hydrated=true;
   const cached=await cacheGet(name);
+  if(!sameActor(scope))return false;
   if(!cached||cached.schema!==CACHE_SCHEMA||!Array.isArray(cached.rows)||!cached.rows.length)return false;
   if(Date.now()-Number(cached.savedAt||0)>PERSIST_MAX_AGE)return false;
   apply(name,cached.rows);
@@ -200,20 +223,21 @@ async function hydrate(name){
   return true;
 }
 async function fetchFresh(name){
-  const s=state(name);
+  const scope=actorScope(),s=state(name);
   if(s.promise)return s.promise;
   const fn=resourceLoaders[name];if(!fn)return null;
   const started=now();s.refreshing=true;s.error=null;log(name,'network-start');
   const promise=(async()=>{
     try{
-      const data=await fn();apply(name,data);
+      const data=await fn();assertActor(scope);apply(name,data);
       s.data=data;s.loadedAt=Date.now();s.status='ready';s.error=null;
       log(name,'network-ready',{duration_ms:Math.round(now()-started),rows:Array.isArray(data)?data.length:undefined});
-      cacheSet(name,data);
+      cacheSet(name,data,scope);
       // SINGLE RENDER: data resources only mark dependants dirty.
       try{window.crmSingleRenderMarkResourceV227327?.(name);}catch(_){}
       return data;
     }catch(e){
+      if(!sameActor(scope))throw e;
       s.error=e;if(s.status!=='ready')s.status='error';
       log(name,'network-error',{duration_ms:Math.round(now()-started),error:String(e?.message||e)});
       console.warn('CRM resource '+name+' refresh failed; cached UI stays usable',e);
@@ -223,13 +247,13 @@ async function fetchFresh(name){
   s.promise=promise;return promise;
 }
 async function get(name,force=false){
-  const s=state(name);
+  const scope=actorScope(),s=state(name);
   if(!force){
     if(s.status==='ready'){
       if(!isFresh(name)&&!s.refreshing)queueResource(name,70);
       return s.data;
     }
-    await hydrate(name);
+    await hydrate(name);assertActor(scope);
     if(state(name).status==='ready'){
       if(!isFresh(name))queueResource(name,70);
       return state(name).data;
@@ -265,17 +289,17 @@ async function waitForCalm(){
   while(Date.now()-lastInteractionAt<450)await waitTurn(120);
 }
 async function pump(){
-  if(bgBusy)return;bgBusy=true;
+  const scope=actorScope();if(bgBusy)return;bgBusy=true;
   try{
-    while(bgQueue.length){
+    while(bgQueue.length&&sameActor(scope)){
       bgQueue.sort((a,b)=>b.priority-a.priority||a.notBefore-b.notBefore);
       const job=bgQueue.shift();queuedKeys.delete(job.key);
       const wait=Math.max(0,job.notBefore-Date.now());if(wait)await waitTurn(wait);
       if(job.priority<80)await waitForCalm();
-      try{await job.fn();}catch(e){console.warn('CRM ultra prefetch '+job.key,e);}
+      if(!sameActor(scope))break;try{await job.fn();}catch(e){console.warn('CRM ultra prefetch '+job.key,e);}
       await waitTurn(0);
     }
-  }finally{bgBusy=false;}
+  }finally{if(sameActor(scope))bgBusy=false;}
 }
 
 function pageLoading(page,text){
@@ -326,49 +350,57 @@ window.crmCoreResourceStatusV1=function(name){
 
 async function bootstrap(force=false){
   if(String(currentProfile?.access_scope||'').toLowerCase()==='triovist')return await legacyFullLoad.apply(this,arguments);
-  if(bootReady&&!force)return true;
-  if(bootFlight)return bootFlight;
-  const started=now();log('bootstrap','start');
-  bootFlight=(async()=>{
+  const scope=actorScope();
+  if(!currentUser?.id&&!currentProfile?.id)throw bootstrapError(new Error('bootstrap_auth_required'));
+  if(bootReady&&bootOwner===scope.actor&&!force)return true;
+  if(bootFlight&&bootFlightOwner===scope.actor)return bootFlight;
+  const controller=new AbortController(),started=now();bootAbort=controller;bootReady=false;bootFlightOwner=scope.actor;log('bootstrap','start');
+  let flight;
+  flight=(async()=>{
     try{
+      assertActor(scope,controller.signal);
       try{v2273ResetHistoryIndexes?.();}catch(_){}
       try{_clientNameMatchCache=null;}catch(_){}
-      // v23.6.316: one fast bootstrap RPC instead of two RLS-heavy table reads.
-      // The server resolves actor scope once, so clients no longer evaluate
-      // is_boss()/current_user_name() for every row during every page refresh.
+      const plugin=await nativeCorePlugin(scope,controller.signal);assertActor(scope,controller.signal);
       let core=null,coreError=null;
-      try{
-        const res=await db.rpc('crm_bootstrap_core_v236316');
-        core=res?.data||null;coreError=res?.error||null;
-      }catch(e){coreError=e}
-      if(coreError||!core){
-        console.warn(VERSION+' fast bootstrap RPC fallback',coreError);
-        const clientsReq=db.from('clients').select('*').order('revenue_total',{ascending:false}).limit(1000);
-        const usersReq=db.from('users').select('*');
-        const [clientsRes,usersRes]=await Promise.all([clientsReq,usersReq]);
-        if(clientsRes?.error)throw clientsRes.error;
-        allClients=(clientsRes?.data||[]).filter(c=>!clientIsArchived(c));
-        allUsers=usersRes?.error?(currentProfile?[currentProfile]:[]):(usersRes?.data||[]);
+      if(plugin){
+        // Once native dispatch starts, an error is shown for an explicit retry.
+        // Never issue an automatic WebView duplicate after a native request.
+        core=await nativeCoreData(plugin,scope,controller.signal);
+        if(!validCore(core))throw new Error('bootstrap_response_invalid');
       }else{
-        allClients=(Array.isArray(core.clients)?core.clients:[]).filter(c=>!clientIsArchived(c));
-        allUsers=Array.isArray(core.users)&&core.users.length?core.users:(currentProfile?[currentProfile]:[]);
+        try{
+          const res=await coreDeadline(signal=>requestWithSignal(db.rpc('crm_bootstrap_core_v236316'),signal),15000,controller.signal,'bootstrap_rpc_timeout');
+          core=res?.data;coreError=res?.error?Object.assign(new Error(res.error.message||'bootstrap_rpc_failed'),res.error,{status:res.status||res.error.status}):null;
+          if(!coreError&&!validCore(core))coreError=new Error('bootstrap_response_invalid');
+        }catch(e){coreError=e;}
+        assertActor(scope,controller.signal);
+        if(coreError){
+          if(coreAuthError(coreError))throw coreError;
+          console.warn(VERSION+' bounded bootstrap fallback',String(coreError.message||coreError));
+          core=await coreDeadline(async signal=>{
+            const clientsReq=requestWithSignal(db.from('clients').select('*').order('revenue_total',{ascending:false}).limit(1000),signal);
+            const usersReq=requestWithSignal(db.from('users').select('*'),signal);
+            const [clientsRes,usersRes]=await Promise.all([clientsReq,usersReq]);
+            if(clientsRes?.error)throw clientsRes.error;if(usersRes?.error)throw usersRes.error;
+            const value={clients:clientsRes?.data,users:usersRes?.data};if(!validCore(value))throw new Error('bootstrap_response_invalid');return value;
+          },25000,controller.signal,'bootstrap_fallback_timeout');
+        }
       }
-
+      assertActor(scope,controller.signal);
+      const clients=core.clients.filter(c=>!clientIsArchived(c)),users=core.users.length?core.users:(currentProfile?[currentProfile]:[]);
+      // Validate both datasets and actor before applying either one.
+      allClients=clients;allUsers=users;
       allTasks=[];allVisits=[];allRoutePlans=[];allNegotiations=[];allClientAliases=[];
       allVisitQualityReviews=[];allVisitRouteReviews=[];allTaskPartialReviews=[];allManagerKpiPlans=[];allImportStatus=[];allVipSales=[];allVipPromotions=[];
-      try{allManagerAbsences=[];}catch(_){}
-      try{_clientAliasesById=null;}catch(_){}
-
+      try{allManagerAbsences=[];}catch(_){}try{_clientAliasesById=null;}catch(_){}
       allPurchaseHistory=[];try{v2273HistoryNeedsRefresh=true;}catch(_){}
-      allPurchases=[];allPurchaseItems=[];allClientPhotos=[];
-      allPromotions=[];allPromotionBudgets=[];allPromotionBudgetMovements=[];allPromotionPhotos=[];allPromotionBudgetAudit=[];
-      allClientDebt=[];allDebtComments=[];allStock=[];allPrice=[];
-
-      bootReady=true;log('bootstrap','ready',{duration_ms:Math.round(now()-started),clients:allClients.length,users:allUsers.length});
-      return true;
-    }finally{bootFlight=null;}
+      allPurchases=[];allPurchaseItems=[];allClientPhotos=[];allPromotions=[];allPromotionBudgets=[];allPromotionBudgetMovements=[];allPromotionPhotos=[];allPromotionBudgetAudit=[];allClientDebt=[];allDebtComments=[];allStock=[];allPrice=[];
+      bootOwner=scope.actor;bootReady=true;log('bootstrap','ready',{duration_ms:Math.round(now()-started),clients:allClients.length,users:allUsers.length});return true;
+    }catch(error){if(sameActor(scope))bootReady=false;throw bootstrapError(error);}
+    finally{if(bootFlight===flight){bootFlight=null;bootFlightOwner='';if(bootAbort===controller)bootAbort=null;}}
   })();
-  return bootFlight;
+  bootFlight=flight;return flight;
 }
 window.crmFastBootstrapV22733=bootstrap;
 
@@ -423,15 +455,16 @@ window.crmUltraPageOpenedV22734=function(page,epoch){
 };
 
 async function warmDashboard(){
+  const scope=actorScope();
   if(String(currentProfile?.access_scope||'').toLowerCase()==='triovist')return;
   if(warmStarted)return;warmStarted=true;
 
   // SINGLE RENDER CORE: persisted snapshot first, then one fresh batch.
-  await hydrateCore();
+  await hydrateCore();if(!sameActor(scope))return;
   if(activePage()==='dashboard')try{window.crmSingleRenderRequestV227327?.('dashboard',{reason:'core-cache',delay:20});}catch(_){}
   // Reduce simultaneous dashboard RPC pressure on PostgREST after login.
   for(const name of ['tasks','visits','routes','absences']){
-    await fetchFresh(name);
+    if(!sameActor(scope))return;await fetchFresh(name);
     await waitTurn(120);
   }
   if(activePage()==='dashboard')try{window.crmSingleRenderRequestV227327?.('dashboard',{reason:'core-fresh-batch',delay:40});}catch(_){}
