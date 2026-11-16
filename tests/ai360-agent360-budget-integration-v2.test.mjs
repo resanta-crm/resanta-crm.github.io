@@ -1,3 +1,4 @@
+import {prepareRouteRequest} from '../supabase/functions/crm-ai360-agent-v1/route-tasks.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -33,7 +34,7 @@ function setup(outputs){
  const env={SUPABASE_URL:'https://test.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'test-service',SUPABASE_ANON_KEY:'test-anon',OPENAI_API_KEY:'test-provider'};
  vm.runInNewContext(code,{...imports,createClient:()=>svc,fetch:fetcher,Deno:{env:{get:k=>env[k]},serve:f=>{handler=f;}},Response,Request,AbortSignal,Intl,Date,console});return handler;}
  director=load('crm-ai360-dialog-v4',{...planning,...gps,...catalog,...context,...managerSales,runToolCore,dialogueName,readTasks:async()=>{throw Error('unexpected tasks');},resolveClient:async()=>({error:'not_found'}),resolveAnyClient:async()=>({error:'not_found'})});
- const gateway=load('crm-ai360-agent-v1',{...contract,...conversation,...history,...controlCenter});
+ const gateway=load('crm-ai360-agent-v1',{...contract,...conversation,...history,...controlCenter,prepareRouteRequest});
  const ask=question=>gateway(new Request('https://test.supabase.co/functions/v1/crm-ai360-agent-v1',{method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json',Origin:'https://resanta-crm.by'},body:JSON.stringify({action:'ask',protocol:'lera_dialogue_v2',question})}));
  return {ask,rpcCalls,forwarded};
 }

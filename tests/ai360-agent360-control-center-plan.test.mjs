@@ -1,3 +1,4 @@
+import {prepareRouteRequest} from '../supabase/functions/crm-ai360-agent-v1/route-tasks.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -72,7 +73,7 @@ test('authenticated gateway uses caller JWT, one settled claim, no upstream/mode
  },rpc:async(name,args)=>{calls.push({name,args});return {data:name==='crm_ai360_core_claim_v2'?{allowed:true,claim_id:'claim-card'}:{ok:true}};}};
  const token='test-authenticated-caller-jwt',env={SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_ANON_KEY:'public-key',SUPABASE_SERVICE_ROLE_KEY:'service-key'};
  const code=fs.readFileSync('supabase/functions/crm-ai360-agent-v1/index.ts','utf8').replace(/^import .*;\r?\n/gm,'');
- vm.runInNewContext(code,{...contract,...conversation,...history,controlCenterPlanRequest,readControlCenterPlan,
+ vm.runInNewContext(code,{prepareRouteRequest,...contract,...conversation,...history,controlCenterPlanRequest,readControlCenterPlan,
   createClient(url,key,options){if(key==='service-key')return svc;assert.equal(key,'public-key');assert.equal(options.global.headers.Authorization,'Bearer '+token);return caller;},
   Deno:{env:{get:k=>env[k]},serve:f=>{serve=f;}},Request,Response,AbortSignal,
   fetch:()=>{throw Error('unexpected model/upstream');}});
