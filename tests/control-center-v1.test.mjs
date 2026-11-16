@@ -140,7 +140,7 @@ test('home entry is last, versioned, and unrelated sections have no new CSS sele
  const index=read('index.html');
  assert.ok(index.indexOf('assets/283-control-center-v1.js')>index.indexOf('assets/198-budgets-client360-v1.js'));
  assert.match(index,/283-control-center-v1.css\?v=20261114-1/);
- assert.match(index,/05-performance-core.js\?v=20261116-air3-native-bootstrap-1/);
+ assert.match(index,/05-performance-core.js\?v=20261116-air3-native-bootstrap-2/);
  assert.doesNotThrow(()=>new Function(source));
  assert.doesNotMatch(css,/#page-(?:clients|tasks|sales|triovist|debt)\b/);
  assert.doesNotMatch(source,/\.from\([^)]*\)\.(?:insert|update|delete|upsert)|\.auth\.|signOut|setInterval|localStorage|\.fetch\(/);

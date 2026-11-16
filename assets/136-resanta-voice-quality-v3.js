@@ -12,48 +12,84 @@ window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,budgetLabel,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
 let checkBtn=null,checkFeedback=null,checkBusy=false;
 let current='yandex:lera',epoch=0,prevVisible=true,paused=false;
-let androidSource=null,androidOutputMode='',speechRequest=null;
+let androidSource=null,androidOutputMode='',speechRequest=null,androidPlaybackRequest=null;
 const nativeAndroidDirector=()=>window.__resantaAI360AndroidDirectorOptIn===true &&
  window.Capacitor?.isNativePlatform?.()===true &&
  window.Capacitor?.getPlatform?.()==='android';
 function androidContext(){return nativeAndroidDirector()?window.__resantaAI360AndroidOutputContextV1:null;}
+// Android WebView may leave resume/decode promises pending. Bound local audio
+// work separately from the paid request; cancellation must never replay TTS.
+function androidAudioWait(task,ms,code,signal){
+ return new Promise((resolve,reject)=>{
+   let settled=false,timer;
+   const finish=(error,value)=>{
+     if(settled)return;settled=true;clearTimeout(timer);
+     signal?.removeEventListener('abort',abort);
+     if(error)reject(error);else resolve(value);
+   };
+   const abort=()=>finish(new Error('voice_request_cancelled'));
+   Promise.resolve(task).then(value=>finish(null,value),error=>finish(error));
+   if(signal?.aborted){abort();return;}
+   signal?.addEventListener('abort',abort,{once:true});
+   timer=setTimeout(()=>finish(new Error(code)),ms);
+ });
+}
+async function resumeAndroidContext(context,signal){
+ if(!context||context.state==='closed')throw new Error('android_audio_context_unavailable');
+ signal?.throwIfAborted();
+ if(context.state!=='running'){
+   try{await androidAudioWait(context.resume(),3000,'android_audio_resume_timeout',signal);}
+   catch(e){if(signal?.aborted||e?.message==='android_audio_resume_timeout')throw e;throw new Error('android_audio_context_suspended');}
+   if(context.state!=='running')throw new Error('android_audio_context_suspended');
+ }
+}
 // This is called from the already explicit sound-test click. No autoplay on login.
 function resumeAndroidOutputFromGesture(){
  if(!nativeAndroidDirector())return;
- const context=androidContext();
- if(!context)return;
  try{
-   const attempt=context.resume();
-   if(attempt&&typeof attempt.catch==='function')
-     void attempt.catch(e=>console.warn('AIR3 output unlock:',String(e?.name||'error').slice(0,60)));
+   let context=androidContext();
+   if(!context||context.state==='closed'){
+     const Audio=window.AudioContext||window.webkitAudioContext;
+     if(!Audio)return;
+     context=new Audio();window.__resantaAI360AndroidOutputContextV1=context;
+   }
+   void resumeAndroidContext(context).catch(e=>console.warn('AIR3 output unlock:',String(e?.message||e?.name||'error').slice(0,60)));
  }catch(e){console.warn('AIR3 output resume unavailable:',String(e?.name||'error').slice(0,60));}
 }
-async function playAndroidWav(blob,run){
+async function playAndroidWav(blob,run,signal){
  const context=androidContext();
- if(!context||context.state!=='running')throw new Error('android_audio_context_suspended');
+ await resumeAndroidContext(context,signal);
  let decoded;
- try{decoded=await context.decodeAudioData(await blob.arrayBuffer());}
- catch(e){throw new Error('android_wav_decode_failed');}
- if(run!==epoch)return;
+ try{decoded=await androidAudioWait((async()=>context.decodeAudioData(await blob.arrayBuffer()))(),5000,'android_wav_decode_timeout',signal);}
+ catch(e){if(signal?.aborted||e?.message==='android_wav_decode_timeout')throw e;throw new Error('android_wav_decode_failed');}
+ if(run!==epoch||signal?.aborted)throw new Error('voice_request_cancelled');
  if(!(decoded?.duration>0))throw new Error('android_audio_empty_duration');
+ while(paused&&run===epoch&&!signal?.aborted)
+   await androidAudioWait(new Promise(resolve=>setTimeout(resolve,180)),500,'android_audio_pause_timeout',signal);
+ if(run!==epoch||signal?.aborted)throw new Error('voice_request_cancelled');
+ // The OS can suspend the context while WAV decoding is in progress.
+ await resumeAndroidContext(context,signal);
  await new Promise((resolve,reject)=>{
-   let settled=false,timeout;
-   const source=context.createBufferSource();
+   let settled=false,timeout,source;
+   try{source=context.createBufferSource();source.buffer=decoded;source.playbackRate.value=1.12;source.connect(context.destination);}
+   catch(e){reject(new Error('android_audio_start_failed'));return;}
    androidSource=source;
-   source.buffer=decoded;
-   source.playbackRate.value=1.12;
-   source.connect(context.destination);
    const finish=(error)=>{
      if(settled)return;
      settled=true;clearTimeout(timeout);
+     signal?.removeEventListener('abort',abort);
      if(androidSource===source)androidSource=null;
      if(audioDone===done)audioDone=null;
+     if(error)try{source.stop();}catch{}
      try{source.disconnect();}catch{}
      if(error)reject(error);else resolve();
    };
    const done=()=>finish();
+   const abort=()=>finish(new Error('voice_request_cancelled'));
    audioDone=done;
    source.onended=done;
+   if(signal?.aborted){abort();return;}
+   signal?.addEventListener('abort',abort,{once:true});
    timeout=setTimeout(()=>finish(new Error('android_audio_timeout')),Math.min(90000,Math.max(7000,(decoded.duration+7)*1000)));
    try{
      source.start(0);
@@ -196,9 +232,11 @@ async function refreshMonthlyBudget(){
 }
 const setStatus=(txt)=>{const el=panel?.querySelector('.rva-status');if(el)el.textContent=txt;};
 function stopSpeech(){
+ const wasPaused=paused;
  speechRequest?.abort(new Error('voice_request_cancelled'));speechRequest=null;
  paused=false;
  epoch++;
+ androidPlaybackRequest?.abort(new Error('voice_request_cancelled'));androidPlaybackRequest=null;
  updatePlaybackControls();
  window.__resantaVoiceOutputBusy=false;
  if(androidSource){try{androidSource.stop();}catch{}try{androidSource.disconnect();}catch{}androidSource=null;}
@@ -207,6 +245,10 @@ function stopSpeech(){
  if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
  try{speechSynthesis.cancel();}catch{}
  if(browserDone){const resolve=browserDone;browserDone=null;resolve();}
+ // Stop the old buffer before undoing our own pause. No audio is replayed;
+ // the next answer can use the already unlocked context again.
+ if(wasPaused&&nativeAndroidDirector())
+   void resumeAndroidContext(androidContext()).catch(e=>console.warn('AIR3 output reset:',String(e?.message||'error').slice(0,60)));
 }
 // Playback is independent of the foreground microphone capture.
 function updatePlaybackControls(){
@@ -223,10 +265,14 @@ window.crmResantaVoiceTogglePauseV3=()=>{
  }
  if(androidSource&&androidContext()){
    const context=androidContext();
+   const run=epoch,wanted=paused;
    try{
-     const task=paused?context.suspend():context.resume();
-     if(task&&typeof task.catch==='function')
-       void task.catch(e=>setStatus('Не удалось переключить паузу звука: '+String(e?.name||'error').slice(0,55)));
+     const task=wanted?androidAudioWait(context.suspend(),3000,'android_audio_pause_timeout'):resumeAndroidContext(context);
+     void task.catch(e=>{
+       if(run!==epoch||paused!==wanted)return;
+       stopSpeech();
+       setStatus('Не удалось переключить паузу звука: '+String(e?.message||e?.name||'error').slice(0,55)+'. Озвучка остановлена.');
+     });
    }catch(e){console.warn('AIR3 pause unavailable:',String(e?.name||'error').slice(0,50));}
  }
  updatePlaybackControls();
@@ -298,6 +344,55 @@ async function air3ReadVoiceAudioV1(session,body,signal){
  console.info('AIR3 voice network: complete bytes='+bytes+' elapsed_ms='+(Date.now()-started));
  return {data:new Blob(pieces,{type:response.headers.get('content-type')||'application/octet-stream'})};
 }
+async function playHtmlAudio(blob,run,signal){
+ if(signal&&(signal.aborted||run!==epoch))throw new Error('voice_request_cancelled');
+ // Release the previous completed part, preserving the newest playback.
+ if(output){try{output.pause();}catch(_){}output=null;}
+ if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
+ outputUrl=URL.createObjectURL(blob);
+ output=new Audio(outputUrl);output.preload='auto';output.playbackRate=1.12;
+ if(nativeAndroidDirector()){output.muted=false;output.volume=1;}
+ await new Promise((resolve,reject)=>{
+  let settled=false,timer=0;
+  const finish=(error)=>{
+   if(settled)return;settled=true;clearTimeout(timer);
+   signal?.removeEventListener('abort',abort);
+   if(audioDone===done)audioDone=null;
+   if(error){try{output?.pause();}catch{}reject(new Error(error));}else resolve();
+  };
+  const done=()=>finish();
+  const abort=()=>finish('voice_request_cancelled');
+  audioDone=done;
+  output.addEventListener('ended',done,{once:true});
+  output.addEventListener('error',()=>finish('audio_device_error'),{once:true});
+  if(signal?.aborted){abort();return;}
+  signal?.addEventListener('abort',abort,{once:true});
+  if(nativeAndroidDirector()){
+   timer=setTimeout(()=>finish('android_html_audio_stalled'),30000);
+   output.addEventListener('playing',()=>console.info('AIR3 HTML fallback started'),{once:true});
+  }
+  Promise.resolve(output.play()).catch(()=>finish('autoplay_denied'));
+ });
+}
+async function playAndroidAudio(blob,run){
+ const request=new AbortController();androidPlaybackRequest=request;
+ try{
+   if(androidContext()){
+     try{await playAndroidWav(blob,run,request.signal);return;}
+     catch(e){
+       if(run!==epoch||request.signal.aborted)throw new Error('voice_request_cancelled');
+       // Only failures BEFORE playback starts may use the same received WAV.
+       // A playback timeout must not replay a possibly already audible answer.
+       if(!/^(android_audio_context_(?:unavailable|suspended)|android_audio_resume_timeout|android_wav_decode_(?:failed|timeout)|android_audio_empty_duration|android_audio_start_failed)$/.test(String(e?.message||'')))throw e;
+       console.warn('AIR3 Web Audio fallback:',String(e.message));
+     }
+   }
+   if(run!==epoch||request.signal.aborted)throw new Error('voice_request_cancelled');
+   androidOutputMode='html-audio-fallback';
+   setStatus('🔊 Web Audio недоступен, проверяю тот же звук стандартным плеером очков…');
+   await playHtmlAudio(blob,run,request.signal);
+ }finally{if(androidPlaybackRequest===request)androidPlaybackRequest=null;}
+}
 async function cloudSpeak(msg,voice,run,provider='openai'){
  const isYandex=provider==='yandex';
  const voiceText=isYandex&&typeof window.crmAI360ApplySpeechAccentsV1==='function'?window.crmAI360ApplySpeechAccentsV1(msg):msg;
@@ -334,33 +429,10 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  if(nativeAndroidDirector()){
    const context=androidContext();
    console.info('AIR3 Yandex audio validated',{bytes:blob.size,format:isYandex?'WAV':'audio',contextState:context?.state||'unavailable'});
-   if(context){
-     await playAndroidWav(blob,run);
-     return;
-   }
-   // Only if Web Audio API is truly unavailable, retain HTML audio fallback.
-   androidOutputMode='html-audio-fallback';
-   setStatus('🔊 Web Audio недоступен, проверяю стандартный аудиоплеер очков…');
+   await playAndroidAudio(blob,run);
+   return;
  }
- // Release the previous completed part, preserving the newest playback.
- if(output){try{output.pause();}catch(_){}output=null;}
- if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
- outputUrl=URL.createObjectURL(blob);
- output=new Audio(outputUrl);output.preload='auto';output.playbackRate=1.12;
- if(nativeAndroidDirector()){output.muted=false;output.volume=1;}
- await new Promise((resolve,reject)=>{
-  let settled=false,timer=0;
-  const done=()=>{if(settled)return;settled=true;clearTimeout(timer);if(audioDone===done)audioDone=null;resolve();};
-  const fail=(code)=>{if(settled)return;settled=true;clearTimeout(timer);if(audioDone===done)audioDone=null;reject(new Error(code));};
-  audioDone=done;
-  output.addEventListener('ended',done,{once:true});
-  output.addEventListener('error',()=>fail('audio_device_error'),{once:true});
-  if(nativeAndroidDirector()){
-    timer=setTimeout(()=>fail('android_html_audio_stalled'),30000);
-    output.addEventListener('playing',()=>console.info('AIR3 HTML fallback started'),{once:true});
-  }
-  Promise.resolve(output.play()).catch(()=>fail('autoplay_denied'));
- });
+ await playHtmlAudio(blob,run);
 }
 window.crmResantaVoiceSpeakV3=async function(message,options={}){
  const msg=cleanSpeech(message);

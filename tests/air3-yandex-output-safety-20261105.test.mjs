@@ -20,11 +20,11 @@ test('Android output is primed only after an explicit director action, not at CR
 });
 
 test('Android sound is a separate optional file; desktop retains old player path',()=>{
- assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3&networkRelease=20261116-3'"));
- assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3&networkRelease=20261116-3'"),'desktop and Android retain optional Yandex module with fresh cache revision');
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3&networkRelease=20261116-4'"));
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3&networkRelease=20261116-4'"),'desktop and Android retain optional Yandex module with fresh cache revision');
  assert.ok(quality.includes('const nativeAndroidDirector='));
  assert.ok(quality.includes('const context=androidContext();'));
- assert.ok(quality.includes('await playAndroidWav(blob,run);'));
+ assert.ok(quality.includes('await playAndroidWav(blob,run,request.signal);'));
  assert.ok(quality.includes("androidOutputMode='html-audio-fallback'"));
  assert.ok(quality.includes('output=new Audio(outputUrl);output.preload='));
  assert.ok(quality.includes('!approvedYandex'));
@@ -32,12 +32,12 @@ test('Android sound is a separate optional file; desktop retains old player path
 });
 
 function isolatePlayer(context,setStatus=()=>{}){
- const begin=quality.indexOf('async function playAndroidWav(blob,run){');
+ const begin=quality.indexOf('function androidAudioWait(task,ms,code,signal){');
  const end=quality.indexOf('const VOICE_KEY=',begin);
  assert.ok(begin>=0&&end>begin);
  const part=quality.slice(begin,end);
  return new Function('context','setStatus',
- 'let epoch=7, audioDone=null,androidSource=null,androidOutputMode="";\n'+
+ 'let epoch=7, paused=false,audioDone=null,androidSource=null,androidOutputMode="";\n'+
  'const androidContext=()=>context;\n'+part+
  '\nreturn {playAndroidWav,state:()=>({epoch,audioDone,androidSource,androidOutputMode})};'
  )(context,setStatus);
@@ -66,6 +66,19 @@ test('Suspended output and invalid WAV are reported instead of silent success',a
  await assert.rejects(suspended.playAndroidWav({arrayBuffer:async()=>new ArrayBuffer(32)},7),/android_audio_context_suspended/);
  const invalid=isolatePlayer({state:'running',decodeAudioData:async()=>{throw Error('bad wav')}});
  await assert.rejects(invalid.playAndroidWav({arrayBuffer:async()=>new ArrayBuffer(32)},7),/android_wav_decode_failed/);
+});
+test('Cancelling a started buffer stops audio and clears its callback and source',async()=>{
+ let started=0,stopped=0,disconnected=0;
+ const context={state:'running',destination:{},decodeAudioData:async()=>({duration:0.5}),
+ createBufferSource:()=>({playbackRate:{value:1},connect(){},disconnect(){disconnected++;},start(){started++;},stop(){stopped++;}})};
+ const p=isolatePlayer(context),request=new AbortController();
+ const playing=p.playAndroidWav({arrayBuffer:async()=>new ArrayBuffer(32)},7,request.signal);
+ for(let i=0;i<20;i++)await Promise.resolve();
+ assert.equal(started,1);
+ const rejected=assert.rejects(playing,/voice_request_cancelled/);
+ request.abort();await rejected;
+ assert.equal(stopped,1);assert.equal(disconnected,1);
+ assert.equal(p.state().androidSource,null);assert.equal(p.state().audioDone,null);
 });
 test('Output timeout and fallback leave CRM alive without touching Supabase writes',()=>{
  assert.ok(quality.includes('android_audio_timeout'));
