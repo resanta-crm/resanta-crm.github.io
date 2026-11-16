@@ -31,6 +31,10 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
  // A CI-only PR may leave CRM core byte-identical to main. Normalize only
  // when the branch actually changed core; otherwise retain exact equality.
  if(core!==before){
+  // Explicit AIR3 scope: isolate only the bounded voice request helper.
+  // Visit, route, auth and client code remain covered by exact comparison.
+  const voiceBlock=/\n\/\/ Bound the entire voice request, including auth acquisition\.[\s\S]*?(?=\/\/ v23\.6\.166:)/;
+  normalized=normalized.replace(voiceBlock,before.match(voiceBlock)?.[0]||'\n');
   // Calendar access was explicitly approved for every active employee except
   // Nesterov. Normalize only its navigation exceptions; retain the GPS guard
   // over all visit/route/client transactions and the rest of both role shells.
