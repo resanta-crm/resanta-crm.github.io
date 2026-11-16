@@ -25,3 +25,4 @@ jobs:
           node --check assets/137-resanta-ai360-lazy-launch-v1.js
           node --test tests/air3-yandex-output-safety-20261105.test.mjs
           node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
+          node --test tests/air3-voice-audio-transfer-20261116.test.mjs tests/voice-network-deadline-20261116.test.mjs

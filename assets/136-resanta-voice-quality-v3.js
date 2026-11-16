@@ -263,6 +263,41 @@ function localSpeak(msg,run){
    try{window.speechSynthesis.cancel();window.speechSynthesis.speak(utter);}catch{finish();}
  });
 }
+// Use the already verified session once on AIR3. Read the audio explicitly so
+// download progress and cancellation are separate from the Supabase SDK parser.
+async function air3ReadVoiceAudioV1(session,body,signal){
+ const started=Date.now();
+ console.info('AIR3 voice network: sending one audio request');
+ const response=await fetch(SUPABASE_URL+'/functions/v1/crm-voice-yandex-tts-v1',{
+   method:'POST',headers:{'Authorization':'Bearer '+session.access_token,
+     'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+   body:JSON.stringify(body),signal
+ });
+ signal.throwIfAborted();
+ console.info('AIR3 voice network: headers status='+response.status+' after_ms='+(Date.now()-started));
+ if(!response.ok){
+   let detail;try{detail=await response.json();}catch{}
+   throw new Error(detail?.error||'voice_http_'+response.status);
+ }
+ const pieces=[];let bytes=0,reported=0;
+ const reader=response.body?.getReader?.();
+ if(!reader){const blob=await response.blob();signal.throwIfAborted();return {data:blob};}
+ try{
+   while(true){
+     signal.throwIfAborted();
+     const part=await reader.read();
+     signal.throwIfAborted();
+     if(part.done)break;
+     bytes+=part.value.byteLength;
+     if(bytes>1800100)throw new Error('voice_audio_too_large');
+     pieces.push(part.value);
+     if(bytes-reported>=65536){reported=bytes;console.info('AIR3 voice network: received_bytes='+bytes);}
+   }
+ }catch(error){try{await reader.cancel();}catch{}throw error;}
+ finally{reader.releaseLock();}
+ console.info('AIR3 voice network: complete bytes='+bytes+' elapsed_ms='+(Date.now()-started));
+ return {data:new Blob(pieces,{type:response.headers.get('content-type')||'application/octet-stream'})};
+}
 async function cloudSpeak(msg,voice,run,provider='openai'){
  const isYandex=provider==='yandex';
  const voiceText=isYandex&&typeof window.crmAI360ApplySpeechAccentsV1==='function'?window.crmAI360ApplySpeechAccentsV1(msg):msg;
@@ -276,6 +311,7 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
      if(run!==epoch)throw new Error('voice_request_cancelled');
      if(!session?.access_token)throw new Error('no_session');
      if(!isYandex)setStatus('Готовлю естественный голос…');
+     if(isYandex&&nativeAndroidDirector())return air3ReadVoiceAudioV1(session,{text:voiceText,voice},signal);
      return db.functions.invoke(isYandex?'crm-voice-yandex-tts-v1':'crm-voice-tts-v1',{body:{text:voiceText,voice},signal});
    },request);
  }finally{if(speechRequest===request)speechRequest=null;}
