@@ -68,7 +68,7 @@ test('direction stage keeps assortment evidence and constraints while final plan
  assert.equal(directions.purchase_history,undefined);
  assert.deepEqual(directions.purchase_analysis.coverage_months,facts.purchase_analysis.coverage_months);
  for(const key of ['client','visits','tasks','shelf','season','purchase_restriction','request','field_policy'])assert.deepEqual(directions[key],facts[key]);
- assert.deepEqual(directions.winter_products,winter);assert.deepEqual(directions.subgroups,subgroups);
+ assert.deepEqual(directions.winter_products,winter);assert.deepEqual(directions.subgroups,[...subgroups].sort());
  assert.deepEqual(directions.route,{visit_date:facts.route.visit_date,address:facts.route.address});
  assert.deepEqual(directions.purchase_analysis.items.find(row=>row.sku==='a').historical_groups,['Другая импортная категория','Инструмент','Шуруповёрты']);
  for(const item of directions.purchase_analysis.items){
@@ -125,4 +125,13 @@ test('offer and winter catalogs keep literal adjacent SKU/name pairs without unu
  assert.equal(dense.candidates[0].product,'Бензопила Huter');assert.equal(dense.candidates[0].product_ref,undefined);
  assert.deepEqual(dense.dictionaries.products,['Исторический товар']);
  assert.equal(dense.winter_products[0].product,'Конвектор Ресанта');
+});
+
+test('direction requests place an identical catalog and policy prefix before changing client facts',()=>{
+ const rows=[{sku:'a',product:'Шуруповёрт',month:'2026-10',qty:1,revenue:100}],facts=factsFor(rows);
+ const winter=[{sku:'b',product:'Конвектор'},{sku:'a',product:'Бензопила'}],groups=['Тепло','Инструмент'];
+ const first=directionFacts(facts,winter,groups),other=directionFacts({...facts,client:{id:'different',notes:'Другой профиль'}},[...winter].reverse(),[...groups].reverse());
+ assert.deepEqual(Object.keys(first).slice(0,3),['winter_products','subgroups','field_policy']);
+ assert.deepEqual(first.winter_products,other.winter_products);assert.deepEqual(first.subgroups,other.subgroups);
+ const inputA=taskModelInput(first),inputB=taskModelInput(other);assert.equal(inputA.slice(0,inputA.indexOf('"client"')),inputB.slice(0,inputB.indexOf('"client"')));
 });

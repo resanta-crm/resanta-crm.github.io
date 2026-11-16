@@ -21,6 +21,13 @@ test('winter candidates prioritize climate and exclude historical summer washers
 test('manual winter exception requires a recorded reason and is signed without inventing approval',async()=>{const h=setup('Рабочий',{price_list:[{sku:'75/6/1',product:'Мойка Huter'}]});const invalid=await workspaceAction({...h,input:{...input,action:'validate_plan_v5',plan}});assert.equal(invalid.mode,'editable');assert.match(invalid.validation_error,/SEASON_REASON/);const r=await workspaceAction({...h,input:{...input,action:'validate_plan_v5',plan,expected_draft_revision:invalid.persistence.revision,season_exception:'Клиент подтвердил заказ для автомойки'}});assert.match(r.draft.basis,/Клиент подтвердил/);assert.deepEqual(h.calls,[]);});
 test('catalog search returns canonical stock without model calls or writes',async()=>{const h=setup();const r=await workspaceAction({...h,input:{...input,action:'catalog_search_v5',query:'75/6'}});assert.equal(r.items[0].available,5);assert.deepEqual(h.modelCalls,[]);assert.deepEqual(h.calls,[]);});
 
+test('only final plan generation receives the strict stock-bound response format; direction selection stays unchanged',async()=>{
+ const h=setup(),formats=[];
+ h.model=async(_,facts,options)=>{formats.push(options?.format);return facts.candidates?plan:{subgroups:['Инструмент']};};
+ const result=await workspaceAction({...h,input});assert.equal(result.mode,'prepared');assert.equal(formats.length,2);assert.equal(formats[0],undefined);assert.equal(formats[1].type,'json_schema');assert.equal(formats[1].strict,true);
+ assert.equal(formats[1].schema.properties.items.items.anyOf[0].properties.sku.enum[0],'75/6/1');assert.equal(formats[1].schema.properties.items.items.anyOf[0].properties.qty.maximum,5);assert.deepEqual(h.calls,[]);
+});
+
 
 test('legacy task report can be prepared without a new assignment and needs confirmation',async()=>{
  const h=setup('Рабочий',{tasks:{id:'old',client_id:'c',title:'Старая задача'},crm_task_assignments_v5:null});
