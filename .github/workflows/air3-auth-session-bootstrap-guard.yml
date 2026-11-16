@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'assets/01-crm-core.js'
+      - 'assets/05-performance-core.js'
+      - 'tests/air3-core-bootstrap-20261116.test.mjs'
       - 'tests/air3-auth-stack-guard-20261105.test.mjs'
       - '.github/workflows/air3-auth-session-bootstrap-guard.yml'
   workflow_dispatch:
@@ -21,5 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check assets/01-crm-core.js
+          node --check assets/05-performance-core.js
+          node --test tests/air3-core-bootstrap-20261116.test.mjs
           node --test tests/air3-auth-stack-guard-20261105.test.mjs
           node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
