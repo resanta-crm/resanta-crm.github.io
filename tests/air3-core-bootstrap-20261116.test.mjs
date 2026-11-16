@@ -18,10 +18,29 @@ function fixture(options={}){
  vm.runInNewContext(source,ctx);
  const expire=async ms=>{const t=timers.find(x=>x.active&&x.ms===ms);assert.ok(t,'active deadline '+ms);t.active=false;t.fn();await flush();};
  const switchUser=async()=>{await ctx.crmLocalSignOutV236258();ctx.currentUser={id:'manager'};ctx.currentProfile={id:'manager',name:'Manager',role:'manager'};};
- return {ctx,calls,writes,cache,listeners,expire,switchUser};
+ return {ctx,calls,writes,cache,listeners,timers,expire,switchUser};
 }
 test('native capability uses one bootstrap without voice opt-in or WebView fallback',async()=>{
  const h=fixture();await Promise.all([h.ctx.crmFastBootstrapV22733(),h.ctx.crmFastBootstrapV22733()]);assert.equal(h.calls.filter(x=>x.kind==='native').length,1);assert.equal(h.calls.filter(x=>x.kind==='rpc'||x.kind==='table').length,0);assert.equal(h.calls.find(x=>x.kind==='native').args.apiKey,'public-test');assert.equal(h.ctx.allClients[0].id,'owner-client');assert.equal(h.ctx.__resantaAI360AndroidDirectorOptIn,undefined);
+});
+test('explicit paged native capability gets one 90-second operation and applies the complete snapshot atomically',async()=>{
+ const response=deferred(),h=fixture({caps:async()=>({bootstrapCore:true,bootstrapCorePaged:true}),nativeCall:()=>response.promise});
+ const first=h.ctx.crmFastBootstrapV22733(),same=h.ctx.crmFastBootstrapV22733();await flush();
+ assert.equal(h.calls.filter(x=>x.kind==='native').length,1);assert.equal(h.ctx.allClients.length,0);
+ assert.equal(h.timers.some(t=>t.active&&t.ms===90000),true);assert.equal(h.timers.some(t=>t.active&&t.ms===25000),false);
+ const call=h.calls.find(x=>x.kind==='native');assert.deepEqual(Object.keys(call.args).sort(),['accessToken','apiKey','requestId']);
+ assert.equal(call.args.accessToken,'session-owner');assert.equal(call.args.apiKey,'public-test');
+ const clients=Array.from({length:1103},(_,i)=>({id:'client-'+i}));response.resolve({result:{clients,users:[{id:'owner'}]}});
+ await Promise.all([first,same]);assert.equal(h.ctx.allClients.length,1103);assert.equal(h.ctx.allClients.at(-1).id,'client-1102');
+ assert.equal(h.calls.filter(x=>x.kind==='rpc'||x.kind==='table').length,0);assert.equal(h.timers.some(t=>t.active&&t.ms===90000),false);
+});
+test('paged native deadline cancels once, never falls back and ignores a late snapshot',async()=>{
+ const response=deferred(),h=fixture({caps:async()=>({bootstrapCore:true,bootstrapCorePaged:true}),nativeCall:()=>response.promise});
+ const loading=h.ctx.crmFastBootstrapV22733();await flush();await h.expire(90000);
+ await assert.rejects(loading,e=>e.code==='bootstrap_native_timeout');assert.equal(h.calls.filter(x=>x.kind==='cancel').length,1);
+ assert.equal(h.calls.filter(x=>x.kind==='rpc'||x.kind==='table').length,0);assert.equal(h.ctx.allClients.length,0);
+ response.resolve({result:{clients:[{id:'late-paged-client'}],users:[{id:'owner'}]}});await flush();
+ assert.equal(h.ctx.allClients.length,0);assert.equal(h.calls.filter(x=>x.kind==='native').length,1);
 });
 test('old APK proxy with an unimplemented capability safely uses bounded WebView RPC',async()=>{
  const h=fixture({caps:async()=>{throw Error('UNIMPLEMENTED')}});await h.ctx.crmFastBootstrapV22733();assert.equal(h.calls.filter(x=>x.kind==='native').length,0);const rpc=h.calls.find(x=>x.kind==='rpc');assert.ok(rpc.signal);assert.equal(rpc.signal.aborted,false);
