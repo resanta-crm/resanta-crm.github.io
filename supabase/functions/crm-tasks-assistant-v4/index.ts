@@ -1,6 +1,7 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.56.0';
 import {cachedModel} from './model-cache.mjs';
 import {taskModelInput} from './model-context.mjs';
+import {legacyTaskModelInput} from './model-context-legacy.mjs';
 import {workspaceAction} from './workspace-v5.mjs';
 import {routeAction} from './route-action.mjs';
 import {UUID,validateShelfDraft,objectionReply} from './domain.mjs';
@@ -24,20 +25,21 @@ Deno.serve(async(req:Request)=>{
  if(access.error||access.data!==true)return send(req,{error:'forbidden'},403);
  const svc=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
  if(['prepare_plan_v5','validate_plan_v5','prepare_record_v5','commit_workspace_v5','catalog_search_v5'].includes(input.action)){
-  let claim:any=null,usedIn=0,usedOut=0,rounds=0,ok=false;
-  const model=async(instructions:string,facts:unknown)=>{
+  let claim:any=null,usedIn=0,usedOut=0,cachedIn=0,rounds=0,ok=false;
+  const usage=()=>({input_tokens:usedIn,output_tokens:usedOut,cached_input_tokens:cachedIn,model_calls:rounds,cost_usd:((usedIn-cachedIn)*.75+cachedIn*.075+usedOut*4.5)/1000000,cache_hit:rounds===0});
+  const model=async(instructions:string,facts:unknown,options:any={})=>{
    const modelInput=taskModelInput(facts);
    return cachedModel(svc,user.id,instructions,modelInput,async()=>{
-   if(rounds>=3)throw Error('TASK_MODEL_CALL_LIMIT');
+   if(rounds>=2)throw Error('TASK_MODEL_CALL_LIMIT');
    if(!claim){const r=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:user.id,p_reserve_rub:5});if(r.error||r.data?.allowed!==true)throw Error('budget_unavailable');claim=r.data;}
    rounds++;const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+Deno.env.get('OPENAI_API_KEY'),'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-5.4-mini',store:false,max_output_tokens:3500,reasoning:{effort:'low'},instructions,input:modelInput,text:{format:{type:'json_object'}}}),signal:AbortSignal.timeout(45000)});
-   if(!response.ok){const failure=await response.json().catch(()=>({}));console.warn('Task model failure',response.status,failure.error?.code,failure.error?.message);throw Error('model_unavailable');}const result=await response.json();usedIn+=Number(result.usage?.input_tokens)||0;usedOut+=Number(result.usage?.output_tokens)||0;
+   if(!response.ok){const failure=await response.json().catch(()=>({}));console.warn('Task model failure',response.status,failure.error?.code,failure.error?.message);throw Error('model_unavailable');}const result=await response.json();usedIn+=Number(result.usage?.input_tokens)||0;usedOut+=Number(result.usage?.output_tokens)||0;cachedIn+=Math.min(Number(result.usage?.input_tokens_details?.cached_tokens)||0,Number(result.usage?.input_tokens)||0);
    const raw=result.output?.flatMap((x:any)=>x.content||[]).find((x:any)=>x.type==='output_text')?.text;return JSON.parse(raw||'{}');
-   });
+   },{shared:input.action==='prepare_plan_v5',legacyInputs:[legacyTaskModelInput(options.legacyFacts||facts)]});
   };
-  try{const result=await workspaceAction({caller,svc,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,model});ok=true;return send(req,result);}
-  catch(e){console.warn('Tasks workspace failure',String((e as Error).message||'TASK_ACTION_FAILED'));return send(req,{error:String((e as Error).message||'TASK_ACTION_FAILED')},422);}
-  finally{if(claim)await svc.rpc('crm_ai360_core_finish_v2',{p_claim_id:claim.claim_id,p_actual_rub:(usedIn*.75+usedOut*4.5)*100/1000000,p_input_tokens:usedIn,p_output_tokens:usedOut,p_rounds:rounds,p_status:ok?'ok':'failed'});}
+  try{const result=await workspaceAction({caller,svc,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,model});ok=true;return send(req,{...result,usage:usage()});}
+  catch(e){console.warn('Tasks workspace failure',String((e as Error).message||'TASK_ACTION_FAILED'));return send(req,{error:String((e as Error).message||'TASK_ACTION_FAILED'),usage:usage()},422);}
+  finally{if(claim)await svc.rpc('crm_ai360_core_finish_v2',{p_claim_id:claim.claim_id,p_actual_rub:usage().cost_usd*100,p_input_tokens:usedIn,p_output_tokens:usedOut,p_rounds:rounds,p_status:ok?'ok':'failed'});}
  }
  if(['prepare_route_task','commit_route_task'].includes(input.action)){
   try{return send(req,await routeAction({caller,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}));}
