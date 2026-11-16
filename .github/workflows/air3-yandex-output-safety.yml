@@ -26,3 +26,4 @@ jobs:
           node --test tests/air3-yandex-output-safety-20261105.test.mjs
           node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
           node --test tests/air3-voice-audio-transfer-20261116.test.mjs tests/voice-network-deadline-20261116.test.mjs
+          node --test tests/air3-native-voice-transport-20261116.test.mjs

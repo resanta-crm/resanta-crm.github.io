@@ -204,7 +204,16 @@
        signal.throwIfAborted();
        if(epoch!==listenEpoch||!mode)return null;
        if(!session?.access_token)throw new Error('not_authorized');
-       const form=new FormData(),type=clip.blob.type||'audio/webm';
+       const type=clip.blob.type||'audio/webm';
+       if(window.crmAir3VoiceAvailableV1?.()){
+         const audioBase64=await window.crmAir3VoiceEncodeV1(clip.blob,signal);
+         signal.throwIfAborted();
+         const resp=await window.crmAir3VoiceTransportV1('stt',session,{audioBase64,mime:type,duration:Math.min(16.4,clip.duration)},signal);
+         signal.throwIfAborted();
+         if(epoch!==listenEpoch||!mode)return null;
+         return String(resp.data?.text||'').trim();
+       }
+       const form=new FormData();
        form.append('audio',new File([clip.blob], 'question.'+(type.includes('mp4')?'mp4':'webm'),{type}));
        form.append('duration',String(Math.min(16.4,clip.duration)));
        const resp=await db.functions.invoke(ENDPOINT,{body:form,signal});
