@@ -27,5 +27,7 @@ jobs:
         run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/tasks-route-v4-ui.test.mjs tests/tasks-assistant-v4.test.mjs tests/tasks-context-v4.test.mjs tests/tasks-route-action-v4.test.mjs tests/tasks-workspace-v5.test.mjs tests/tasks-season-voice.test.mjs
       - name: Paid context, cache migration and recovery do not charge twice
         run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/task-model-context-economy.test.mjs tests/task-model-cache-economy.test.mjs tests/task-route-drafts-persistence.test.mjs tests/task-plan-schema.test.mjs tests/support-mobile-and-route-products-20261116.test.mjs
+      - name: Actual Edge read-only handler cannot pay twice for unchanged facts
+        run: node --experimental-vm-modules --test tests/task-private-read-economy.test.mjs
       - name: Existing Lera, task approvals and calendar stay compatible
         run: node --test tests/tasks-360-v1.test.cjs tests/ai360-agent360-unified-gateway-v1.test.mjs tests/ai360-agent360-conversation-routing-v1.test.mjs tests/ai360-unified-dialog-v1.test.cjs tests/lera360-agent-actions-v1.test.mjs tests/calendar-invitations-v3.test.mjs
