@@ -1,0 +1,48 @@
+begin;
+select set_config('request.jwt.claims',(select jsonb_build_object('sub',id,'email',email,'role','authenticated')::text from public.users where id='ba55dfe5-7e48-4f1f-b40e-674c7752fe1a'),true);
+set local role authenticated;
+set local search_path='';
+do $$
+declare snap jsonb; result jsonb; again jsonb; req uuid:=gen_random_uuid(); c uuid; payload jsonb; saved_id uuid; failed boolean; before_count int;
+begin
+ perform count(*) from public.clients;
+ if not public.is_boss() then raise exception 'TEST_BOSS';end if;
+ select id into c from public.clients where manager_name='Шкуран' and client_status='Рабочий' and not coalesce(is_archived,false) limit 1;
+ if c is null then raise exception 'TEST_CLIENT';end if;
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
+ payload:=jsonb_build_array(jsonb_build_object('client_id',c,'client_name','Служебный тест ROLLBACK','city','Тест','address','Тестовый адрес','is_office_day',false,'is_network_point',false,'sort_order',1));
+ result:=public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',req,'revision',snap->>'revision','rows',payload));
+ again:=public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',req,'revision',snap->>'revision','rows',payload));
+ if result<>again or (result->>'count')::int<>1 then raise exception 'TEST_RETRY';end if;
+ saved_id:=(result->'rows'->0->>'id')::uuid;
+ update public.route_plans set link_status=null where id=saved_id;
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
+ perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows',jsonb_set(payload,'{0,sort_order}','7')));
+ if not exists(select 1 from public.route_plans where id=saved_id and sort_order=7) then raise exception 'TEST_EDIT_NULL_VISIT';end if;
+ failed:=false;begin perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows','[]'::jsonb));exception when others then if sqlerrm='ROUTE_CHANGED_RELOAD' then failed:=true;else raise;end if;end;
+ if not failed then raise exception 'TEST_STALE';end if;
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
+ failed:=false;begin perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows',payload||jsonb_build_array(jsonb_build_object('client_id',gen_random_uuid(),'client_name','INVALID'))));exception when others then if sqlerrm='ROUTE_CLIENT_INVALID' then failed:=true;else raise;end if;end;
+ if not failed or snap<>public.crm_route_day_v1('read','Шкуран','2099-11-17') then raise exception 'TEST_ROLLBACK';end if;
+ result:=public.crm_route_day_v1('move','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','target_date','2099-11-18'));
+ if not exists(select 1 from public.route_plans where id=saved_id and visit_date='2099-11-18') or exists(select 1 from public.route_plans where visit_date='2099-11-17' and manager_name='Шкуран' and not coalesce(removed,false)) then raise exception 'TEST_MOVE_ID';end if;
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
+ perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows',payload));
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
+ failed:=false;begin perform public.crm_route_day_v1('move','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','target_date','2099-11-18'));exception when others then if sqlerrm='ROUTE_TARGET_OCCUPIED' then failed:=true;else raise;end if;end;
+ if not failed then raise exception 'TEST_OCCUPIED';end if;
+ perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows',jsonb_build_array(jsonb_build_object('client_name','Офисный день','is_office_day',true,'is_network_point',false))));
+ if (select count(*) from public.route_plans where manager_name='Шкуран' and visit_date='2099-11-17' and not coalesce(removed,false))<>1 or not exists(select 1 from public.route_plans where manager_name='Шкуран' and visit_date='2099-11-17' and removed) then raise exception 'TEST_REPLACE_HISTORY';end if;
+ update public.route_plans set visited=true where id=saved_id;
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-18');
+ failed:=false;begin perform public.crm_route_day_v1('move','Шкуран','2099-11-18',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','target_date','2099-11-19'));exception when others then if sqlerrm='ROUTE_VISITED_DAY_PROTECTED' then failed:=true;else raise;end if;end;
+ if not failed then raise exception 'TEST_VISITED';end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims',(select jsonb_build_object('sub',id,'email',email,'role','authenticated')::text from public.users where id='3d935a76-c6fe-44b6-b248-fcbe58c6bf1c'),true);
+set local role authenticated;
+do $$ begin
+ begin perform public.crm_route_day_v1('read','Шкуран','2099-11-17');raise exception 'TEST_MANAGER_ALLOWED';exception when insufficient_privilege then null;end;
+ if exists(select 1 from public.crm_route_changes_v1) then raise exception 'TEST_AUDIT_LEAK';end if;
+end $$;
+rollback;

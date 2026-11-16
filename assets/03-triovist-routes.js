@@ -2251,7 +2251,7 @@ install();
     selected:new Set(),locked:new Set(),networkSelected:new Set(),networkLocked:new Set(),
     networkPoints:[],networkLoaded:false,
     plansCache:new Map(),planMapCache:new Map(),monthIndexCache:new Map(),rowPointCache:new Map(),physicalClientMap:null,
-    loading:false,installed:false,refreshTimer:null,liveChannel:null
+    loading:false,saving:false,revision:null,loadedManager:'',loadedDate:'',installed:false,refreshTimer:null,liveChannel:null
   };
 
   const api=()=>window.RESANTA_MANUAL_ROUTE_API;
@@ -2287,13 +2287,13 @@ install();
   function ensureStyles(){
     if(document.getElementById('manual-route-lite-style'))return;
     const s=document.createElement('style');s.id='manual-route-lite-style';s.textContent=`
-      #manual-route-lite{border:2px solid #7C3AED;background:#FAF5FF;margin:10px 0 14px;padding:14px;border-radius:14px}
+      #manual-route-lite{border:1px solid #d7e3f2;background:#f7faff;margin:10px 0 14px;padding:14px;border-radius:14px}
       .mrl-grid{display:grid;grid-template-columns:180px 180px 190px 1fr;gap:10px;align-items:end}.mrl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
       .mrl-work{display:grid;grid-template-columns:240px 1fr;gap:12px;margin-top:12px}.mrl-cities,.mrl-points{background:#fff;border:1px solid var(--border);border-radius:10px;max-height:460px;overflow:auto}
-      .mrl-city{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--border);background:#fff;padding:10px 12px;cursor:pointer}.mrl-city.active{background:#EDE9FE;color:#5B21B6;font-weight:700}
+      .mrl-city{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--border);background:#fff;padding:10px 12px;cursor:pointer}.mrl-city.active{background:#eaf3ff;color:#155ca8;font-weight:700}
       .mrl-row{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--border)}.mrl-row.locked{opacity:.7;background:#F8FAFC}
       .mrl-must{color:var(--r);font-weight:700}.mrl-due{color:var(--am);font-weight:700}.mrl-ok{color:var(--g)}
-      .mrl-summary{background:#fff;border:1px solid #C4B5FD;border-radius:10px;padding:10px;margin-top:10px;max-height:180px;overflow:auto}.mrl-day{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px}
+      .mrl-summary{background:#fff;border:1px solid #cfe0f3;border-radius:10px;padding:10px;margin-top:10px;max-height:180px;overflow:auto}.mrl-day{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px}
       @media(max-width:900px){.mrl-grid{grid-template-columns:1fr 1fr}.mrl-work{grid-template-columns:1fr}}@media(max-width:520px){.mrl-grid{grid-template-columns:1fr}}
     `;document.head.appendChild(s);
   }
@@ -2390,24 +2390,24 @@ install();
 
   function panelHtml(){
     return `<div id="manual-route-lite">
-      <div style="font-size:18px;font-weight:800;color:#5B21B6">🗓 Ручной маршрут руководителя</div>
-      <div style="font-size:12px;color:var(--sub);margin-top:4px">Выберите менеджера, дату и тип дня. Клиенты загружаются только после нажатия кнопки — раздел больше не обрабатывает весь месяц сразу.</div>
+      <div style="font-size:18px;font-weight:800;color:#155ca8">Маршрут менеджера</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px">Выберите день и измените состав. Сохранение заменяет состав этого дня. Для смены даты используйте «Перенести день».</div>
       <div class="mrl-grid" style="margin-top:12px">
         <label><span class="form-label">Менеджер</span><select id="mrl-manager" class="form-input">${MANAGERS.map(m=>'<option>'+escM(m)+'</option>').join('')}</select></label>
         <label><span class="form-label">Дата</span><input id="mrl-date" class="form-input" type="date"></label>
         <label><span class="form-label">Тип дня</span><select id="mrl-type" class="form-input"><option value="field">Полевой день</option><option value="office">Офисный день 09:00–18:00</option></select></label>
-        <div class="mrl-actions"><button class="btn-primary" id="mrl-load">Показать клиентов</button><button class="btn-secondary" id="mrl-check">Проверить покрытие месяца</button></div>
+        <div class="mrl-actions"><button class="btn-primary" id="mrl-load">Открыть / обновить день</button><button class="btn-secondary" id="mrl-check">Проверить покрытие месяца</button></div>
       </div>
       <div id="mrl-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
-      <div id="mrl-editor" style="display:none">
+      <div id="mrl-editor" style="display:none"><div class="mrl-actions"><label>Перенести на дату<input type="date" id="mrl-move-date" class="form-input"></label><button id="mrl-move" class="btn-secondary">Перенести день</button></div>
         <div id="mrl-field">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><input id="mrl-search" class="form-input" style="max-width:360px" placeholder="Поиск клиента или адреса"><button class="btn-secondary" id="mrl-recommended">Добавить рекомендованные в городе</button><button class="btn-secondary" id="mrl-clear">Снять выбор</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><input id="mrl-search" class="form-input" style="max-width:360px" placeholder="Поиск клиента или адреса"><button class="btn-secondary" id="mrl-recommended">Добавить рекомендации в выбранном городе</button><button class="btn-secondary" id="mrl-clear">Снять выбор</button></div>
           <div class="mrl-work"><div id="mrl-cities" class="mrl-cities"></div><div id="mrl-points" class="mrl-points"></div></div>
           <div id="mrl-network-wrap" style="margin-top:12px;background:#EFF6FF;border:1px solid #93C5FD;border-radius:10px;padding:10px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b style="color:#1D4ED8">🏬 Сетевые точки / передача</b><div style="font-size:11px;color:var(--sub);margin-top:2px">Не являются клиентами и не участвуют в продажах, АКБ, ABC, планах и ИИ-задачах.</div></div><button type="button" class="btn-secondary" id="mrl-network-geocode" style="font-size:11px">📍 Геокодировать сети</button></div>
             <div id="mrl-network-points" style="margin-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:6px"></div>
           </div>
-          <div id="mrl-summary" class="mrl-summary"></div>
+          <div id="mrl-summary" class="mrl-summary"></div><div id="mrl-advice" class="mrl-day"></div>
         </div>
         <div id="mrl-office" style="display:none;background:var(--ab);border-radius:10px;padding:14px;margin-top:12px;color:var(--at)"><b>Офисный день 09:00–18:00.</b> Непосещённые клиентские точки этой даты будут сняты. Посещённые строки сохраняются.</div>
         <div class="mrl-actions" style="justify-content:flex-end"><button class="btn-primary" id="mrl-save">Сохранить и сразу отправить менеджеру</button></div>
@@ -2435,8 +2435,8 @@ install();
   function bindPanel(){
     const manager=document.getElementById('mrl-manager'),date=document.getElementById('mrl-date'),type=document.getElementById('mrl-type');
     manager.value=state.manager;date.value=state.date||defaultDate();type.value=state.type;
-    manager.addEventListener('change',()=>{state.manager=manager.value;resetEditor();renderCurrentDay();});
-    date.addEventListener('change',()=>{state.date=date.value;resetEditor();renderCurrentDay();});
+    manager.addEventListener('change',()=>{resetEditor();loadEditor();});
+    date.addEventListener('change',()=>{resetEditor();loadEditor();});
     type.addEventListener('change',()=>{state.type=type.value;toggleType();});
     document.getElementById('mrl-load').addEventListener('click',loadEditor);
     document.getElementById('mrl-check').addEventListener('click',showReminder);
@@ -2444,9 +2444,9 @@ install();
     document.getElementById('mrl-recommended').addEventListener('click',addRecommended);
     document.getElementById('mrl-clear').addEventListener('click',()=>{state.selected=new Set(state.locked);state.networkSelected=new Set(state.networkLocked);renderPoints();renderNetworkPoints();renderSummary();});
     document.getElementById('mrl-network-geocode').addEventListener('click',()=>window.v2271GeocodeNetworkPoints?.(state.manager));
-    document.getElementById('mrl-save').addEventListener('click',saveDay);
+    document.getElementById('mrl-save').addEventListener('click',saveDay);document.getElementById('mrl-move').addEventListener('click',moveDay);
   }
-  function resetEditor(){state.selected=new Set();state.locked=new Set();state.networkSelected=new Set();state.networkLocked=new Set();state.city='';state.query='';const ed=document.getElementById('mrl-editor');if(ed)ed.style.display='none';}
+  function resetEditor(){state.revision=null;state.selected=new Set();state.locked=new Set();state.networkSelected=new Set();state.networkLocked=new Set();state.city='';state.query='';const ed=document.getElementById('mrl-editor');if(ed)ed.style.display='none';}
   function toggleType(){const office=state.type==='office';document.getElementById('mrl-field').style.display=office?'none':'block';document.getElementById('mrl-office').style.display=office?'block':'none';}
 
   async function loadEditor(){
@@ -2455,8 +2455,8 @@ install();
     try{
       state.manager=document.getElementById('mrl-manager').value;state.date=document.getElementById('mrl-date').value;state.type=document.getElementById('mrl-type').value;
       if(!state.date)throw new Error('Выберите дату.');
-      if(state.date<=todayM())throw new Error('Выберите будущую дату после '+todayM()+'.');
-      await Promise.all([loadNetworkPoints(),window.crmRouteCatalogV3.load(true)]);
+      if(state.date<todayM())throw new Error('Прошедшие дни доступны в истории. Выберите сегодня или будущую дату.');
+      setEditorBusy(true);const scope={manager:state.manager,date:state.date};const [_,__,snapshot]=await Promise.all([loadNetworkPoints(),window.crmRouteCatalogV3.load(true),routeRpc('read',scope.manager,scope.date)]);if(scope.manager!==document.getElementById('mrl-manager').value||scope.date!==document.getElementById('mrl-date').value)return;allRoutePlans=(allRoutePlans||[]).filter(r=>r.manager_name!==scope.manager||r.visit_date!==scope.date).concat(snapshot.rows);state.revision=snapshot.revision;state.loadedManager=scope.manager;state.loadedDate=scope.date;
       clearIndexes();state.plansCache.clear();state.planMapCache.clear();
       const ps=getPlans(state.manager),idx=monthIndex(state.manager,state.date.slice(0,7));
       state.selected=new Set();state.locked=new Set();state.networkSelected=new Set();state.networkLocked=new Set();
@@ -2466,11 +2466,11 @@ install();
         if(isVisited(r)){if(ids[0])state.selected.add(ids[0]);ids.forEach(pid=>state.locked.add(pid));}
         else ids.forEach(pid=>state.selected.add(pid));
       }
-      state.city='';
+      state.city='';state.type=(idx.dayRows.get(state.date)||[]).some(r=>r.is_office_day)?'office':'field';document.getElementById('mrl-type').value=state.type;document.getElementById('mrl-search').value='';
       document.getElementById('mrl-editor').style.display='block';toggleType();renderCities();renderPoints();renderNetworkPoints();renderSummary();
       const mine=ps.filter(assignedToSelectedManager),working=mine.filter(p=>normM(p.primary?.client_status)==='рабочий').length,potential=mine.filter(p=>normM(p.primary?.client_status)==='потенциальный').length,cities=new Set(mine.map(pointCity)).size;
       status.textContent=state.manager+': закреплено клиентов '+mine.length+' · городов '+cities+' · Рабочих '+working+' · Потенциальных '+potential+' · сетевых точек '+networkForManager(state.manager).length+'. Поиск сверху при необходимости ищет по всей активной базе.';
-    }catch(e){status.textContent='';alert(e.message||e);}finally{state.loading=false;}
+    }catch(e){status.textContent='';alert(e.message||e);}finally{state.loading=false;setEditorBusy(false);renderCurrentDay();}
   }
 
   function assignedToSelectedManager(p){return normM(p?.assigned_manager||p?.primary?.manager_name)===normM(state.manager);}
@@ -2478,7 +2478,7 @@ install();
     const ps=getPlans(state.manager).filter(assignedToSelectedManager),counts={};ps.forEach(p=>counts[pointCity(p)]=(counts[pointCity(p)]||0)+1);
     const all='<button class="mrl-city '+(!state.city?'active':'')+'" data-city="">Все мои города <span style="float:right;color:var(--sub)">'+ps.length+'</span></button>';
     document.getElementById('mrl-cities').innerHTML=all+Object.keys(counts).sort((a,b)=>a.localeCompare(b,'ru')).map(c=>'<button class="mrl-city '+(c===state.city?'active':'')+'" data-city="'+escM(c)+'">'+escM(c)+' <span style="float:right;color:var(--sub)">'+counts[c]+'</span></button>').join('');
-    document.querySelectorAll('#mrl-cities .mrl-city').forEach(b=>b.addEventListener('click',()=>{state.city=b.dataset.city||'';renderCities();renderPoints();}));
+    document.querySelectorAll('#mrl-cities .mrl-city').forEach(b=>b.addEventListener('click',()=>{state.city=b.dataset.city||'';state.query='';document.getElementById('mrl-search').value='';renderCities();renderPoints();renderAdvice();}));
   }
   function visiblePlans(){
     const q=normM(state.query),counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date),rank={must:0,due:1,ok:2};
@@ -2513,16 +2513,18 @@ install();
     }).join('');
     root.querySelectorAll('input[data-npid]').forEach(ch=>ch.addEventListener('change',()=>{const id=String(ch.dataset.npid);if(ch.checked&&!state.networkSelected.has(id)&&state.selected.size+state.networkSelected.size>=MAX_POINTS){ch.checked=false;alert('В один день можно поставить максимум '+MAX_POINTS+' торговых точек, включая сетевые.');return;}if(ch.checked)state.networkSelected.add(id);else state.networkSelected.delete(id);renderSummary();}));
   }
-  function addRecommended(){const counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date);for(const p of visiblePlans()){if(state.selected.size+state.networkSelected.size>=MAX_POINTS)break;if(recommendation(p,counts).level!=='ok')state.selected.add(pointId(p));}renderPoints();renderSummary();}
+  function recommendationCandidates(){const cities=state.city?[state.city]:[...new Set(getPlans(state.manager).filter(p=>state.selected.has(pointId(p))).map(pointCity))];const counts=countsExcludingDate(state.manager,state.date.slice(0,7),state.date),rank={must:0,due:1,ok:2};return getPlans(state.manager).filter(p=>assignedToSelectedManager(p)&&cities.includes(pointCity(p))&&!state.selected.has(pointId(p))).map(p=>({p,rec:recommendation(p,counts)})).filter(x=>x.rec.level!=='ok').sort((a,b)=>rank[a.rec.level]-rank[b.rec.level]||(Number(b.p.visits)||1)-(Number(a.p.visits)||1)||String(a.p.label).localeCompare(String(b.p.label),'ru'));}
+  function renderAdvice(){const el=document.getElementById('mrl-advice');if(!el)return;const rows=recommendationCandidates(),count=state.selected.size+state.networkSelected.size;el.innerHTML='<b>Рекомендации по поездке</b><p style="font-size:12px">В плане '+count+' ТТ · максимум 15. '+(!state.city&&!count?'Выберите город поездки — покажу рабочие и потенциальные точки, которым нужен визит.':count>=15?'День заполнен. Для добавления замените одну из точек.':rows.length?'В этой поездке есть ещё '+rows.length+' точек без нужного покрытия.':'Дополнительных точек с нехваткой визитов не найдено.')+'</p>'+rows.slice(0,5).map(x=>'<div style="padding:8px 0;border-top:1px solid #e2e9f4"><b>'+escM(x.p.label)+'</b> · '+escM(pointCity(x.p))+'<div style="font-size:12px">'+escM(x.rec.text)+' · '+(isPotential(x.p.primary)?'Потенциальный':'Рабочий')+'</div><button class="btn-secondary" data-rec="'+escM(pointId(x.p))+'"'+(count>=15?' disabled':'')+'>Добавить в маршрут</button></div>').join('')+'<p style="font-size:11px;color:var(--sub)">Приоритет — клиенты без визита и с недостающими посещениями по категории. 15 ТТ — предел, а не норма: учитывайте дорогу и время переговоров.</p>';el.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>{if(state.selected.size+state.networkSelected.size<MAX_POINTS)state.selected.add(b.dataset.rec);renderPoints();renderSummary();});}
+  function addRecommended(){if(!state.city){alert('Выберите город слева. Рекомендации не смешивают все города менеджера.');return;}for(const x of recommendationCandidates()){if(state.selected.size+state.networkSelected.size>=MAX_POINTS)break;state.selected.add(pointId(x.p));}renderPoints();renderSummary();}
   function renderSummary(){
     const root=document.getElementById('mrl-summary');if(!root)return;
     const selected=getPlans(state.manager).filter(p=>state.selected.has(pointId(p))).sort((a,b)=>pointCity(a).localeCompare(pointCity(b),'ru')||pointAddress(a).localeCompare(pointAddress(b),'ru'));
     const networks=networkForManager(state.manager).filter(n=>state.networkSelected.has(networkId(n)));
     const total=selected.length+networks.length,grouped={};selected.forEach(p=>(grouped[pointCity(p)]||(grouped[pointCity(p)]=[])).push(p));
     root.innerHTML='<b>Выбрано: '+total+' из '+MAX_POINTS+' · клиентских ТТ '+selected.length+' · сетевых '+networks.length+'</b>'
-      +(selected.length?Object.entries(grouped).map(([c,ps])=>'<div style="padding:5px 0;border-top:1px solid #E9D5FF"><b>'+escM(c)+'</b> — '+ps.length+': '+ps.map(p=>escM(p.label)).join('; ')+'</div>').join(''):'')
+      +(selected.length?Object.entries(grouped).map(([c,ps])=>'<div style="padding:5px 0;border-top:1px solid #e2e9f4"><b>'+escM(c)+'</b> — '+ps.length+': '+ps.map(p=>escM(p.label)).join('; ')+'</div>').join(''):'')
       +(networks.length?'<div style="padding:5px 0;border-top:1px solid #BFDBFE;color:#1D4ED8"><b>🏬 Сети</b> — '+networks.map(n=>escM(n.network_name+' · '+n.city)).join('; ')+'</div>':'')
-      +(!total?'<div style="padding-top:6px;color:var(--sub)">Точки ещё не выбраны.</div>':'')+(total>MAX_POINTS?'<div style="color:var(--r);font-weight:700">Лимит 15 ТТ превышен.</div>':'');
+      +(!total?'<div style="padding-top:6px;color:var(--sub)">Точки ещё не выбраны.</div>':'')+(total>MAX_POINTS?'<div style="color:var(--r);font-weight:700">Лимит 15 ТТ превышен.</div>':'');renderAdvice();
   }
 
   function showReminder(){
@@ -2574,89 +2576,30 @@ install();
     delete row.id;const {error}=await db.from('route_month_workflow').upsert(row,{onConflict:'manager_name,route_month'});if(error)throw error;
   }
 
+  function setEditorBusy(busy){for(const id of ['mrl-manager','mrl-date','mrl-type','mrl-load','mrl-save','mrl-move']){const el=document.getElementById(id);if(el)el.disabled=busy;}}
+  async function routeRpc(action,manager,date,data={}){const r=await db.rpc('crm_route_day_v1',{p_action:action,p_manager:manager,p_date:date,p_data:data});if(r.error)throw r.error;return r.data;}
+  function routeError(e){const text=String(e?.message||e);return text.includes('ROUTE_CHANGED_RELOAD')?'День изменился в другой сессии. Откройте / обновите день и повторите изменение.':text.includes('ROUTE_TARGET_OCCUPIED')?'На новой дате уже есть маршрут. Выберите свободную дату: существующий день не перезаписывается.':text.includes('ROUTE_VISITED_DAY_PROTECTED')?'В этом дне есть выполненный визит. Его история защищена; весь день перенести или заменить офисным нельзя.':text.includes('ROUTE_LIMIT')?'В день допускается максимум 15 ТТ. Снимите лишние точки.':'Не удалось сохранить: '+text;}
+  function acceptRouteResult(result,manager,dates){allRoutePlans=(allRoutePlans||[]).filter(r=>r.manager_name!==manager||!dates.includes(r.visit_date)).concat(result.rows);clearIndexes();try{window.renderRoutesBoss?.();window.renderRouteCoverageV23675?.();window.RESANTA_TASKS_ROUTE_V4?.refresh?.();}catch(e){console.warn('Route view refresh',e)}}
   async function saveDay(){
-    if(currentProfile?.role!=='boss')return;
-    state.manager=document.getElementById('mrl-manager').value;state.date=document.getElementById('mrl-date').value;state.type=document.getElementById('mrl-type').value;
-    if(!state.date||state.date<=todayM()){alert('Выберите будущую дату после '+todayM()+'.');return;}
-    const office=state.type==='office';
-    const selected=getPlans(state.manager).filter(p=>state.selected.has(pointId(p))).sort((a,b)=>pointCity(a).localeCompare(pointCity(b),'ru')||pointAddress(a).localeCompare(pointAddress(b),'ru'));
-    const selectedNetworks=networkForManager(state.manager).filter(n=>state.networkSelected.has(networkId(n))).sort((a,b)=>String(a.city||'').localeCompare(String(b.city||''),'ru')||String(a.address||'').localeCompare(String(b.address||''),'ru'));
-    const totalSelected=selected.length+selectedNetworks.length;
-    if(!office&&!totalSelected){alert('Выберите хотя бы одну клиентскую или сетевую торговую точку.');return;}
-    if(totalSelected>MAX_POINTS){alert('На день можно сохранить не более 15 физических ТТ, включая сетевые точки.');return;}
-    if(!confirm((office?'Сохранить офисный день':'Сохранить '+totalSelected+' ТТ, включая сетевых '+selectedNetworks.length)+' для '+state.manager+' на '+state.date+' и сразу отправить менеджеру?'))return;
-    const btn=document.getElementById('mrl-save');btn.disabled=true;btn.textContent='Сохраняю…';
-    try{
-      // Mandatory preflight: an earlier request could have been committed even
-      // when Android/desktop received Failed to fetch. Prevent duplicate inserts.
-      await syncRouteDaySafe(state.manager,state.date);
-      const old=(allRoutePlans||[]).filter(r=>r.manager_name===state.manager&&r.visit_date===state.date&&activeRow(r)),visited=old.filter(isVisited),replaceable=old.filter(r=>!isVisited(r)),keepIds=new Set();
-      const visitedClientIds=new Set();visited.forEach(r=>rowClientIds(r,state.manager).forEach(id=>visitedClientIds.add(id)));
-      const visitedNetworkIds=new Set(visited.filter(r=>r.is_network_point&&r.network_point_id).map(r=>String(r.network_point_id)));
-      if(office){
-        const row={manager_name:state.manager,visit_date:state.date,client_name:'Офисный день',city:'',region:'',address:'',category:'Офис',approved:true,review_status:'approved',source:'boss_manual_approved',generated_month:state.date.slice(0,7),removed:false,sort_order:0,planned_minutes:540,planned_start:'09:00:00',planned_end:'18:00:00',is_office_day:true,route_version:VERSION,reason:'Офисный день вручную утверждён руководителем',approved_by:currentProfile?.name||null,approved_at:new Date().toISOString(),is_network_point:false,network_point_id:null};
-        const existing=old.find(r=>r.is_office_day&&!isVisited(r));if(existing){const {error}=await db.from('route_plans').update(row).eq('id',existing.id);if(error)throw error;keepIds.add(String(existing.id));}else{const {data,error}=await db.from('route_plans').insert(row).select().single();if(error)throw error;if(data)keepIds.add(String(data.id));}
-      }else{
-        const entries=[...selected.map(p=>({kind:'client',city:pointCity(p),address:pointAddress(p),value:p})),...selectedNetworks.map(n=>({kind:'network',city:String(n.city||''),address:String(n.address||''),value:n}))].sort((a,b)=>a.city.localeCompare(b.city,'ru')||a.address.localeCompare(b.address,'ru'));
-        for(let i=0;i<entries.length;i++){
-          const e=entries[i];
-          if(e.kind==='client'){
-            const p=e.value,pid=pointId(p);
-            if(visitedClientIds.has(pid)){const vr=visited.find(r=>rowClientIds(r,state.manager).includes(pid));if(vr)keepIds.add(String(vr.id));continue;}
-            const patch=rowFromPlan(p,state.manager,state.date,i,entries.length),existing=old.find(r=>!r.is_network_point&&rowClientIds(r,state.manager).includes(pid)&&!isVisited(r));
-            if(existing){const {error}=await db.from('route_plans').update(patch).eq('id',existing.id);if(error)throw error;keepIds.add(String(existing.id));}
-            else{const removed=(allRoutePlans||[]).find(r=>r.manager_name===state.manager&&r.visit_date===state.date&&r.removed&&!r.is_network_point&&rowPointId(r,state.manager)===pid);if(removed){const {error}=await db.from('route_plans').update(patch).eq('id',removed.id);if(error)throw error;keepIds.add(String(removed.id));}else{const {data,error}=await db.from('route_plans').insert(patch).select().single();if(error)throw error;if(data)keepIds.add(String(data.id));}}
-          }else{
-            const n=e.value,nid=networkId(n);
-            if(visitedNetworkIds.has(nid)){const vr=visited.find(r=>r.is_network_point&&String(r.network_point_id||'')===nid);if(vr)keepIds.add(String(vr.id));continue;}
-            const patch=rowFromNetwork(n,state.manager,state.date,i,entries.length),existing=old.find(r=>r.is_network_point&&String(r.network_point_id||'')===nid&&!isVisited(r));
-            if(existing){const {error}=await db.from('route_plans').update(patch).eq('id',existing.id);if(error)throw error;keepIds.add(String(existing.id));}
-            else{const removed=(allRoutePlans||[]).find(r=>r.manager_name===state.manager&&r.visit_date===state.date&&r.removed&&r.is_network_point&&String(r.network_point_id||'')===nid);if(removed){const {error}=await db.from('route_plans').update(patch).eq('id',removed.id);if(error)throw error;keepIds.add(String(removed.id));}else{const {data,error}=await db.from('route_plans').insert(patch).select().single();if(error)throw error;if(data)keepIds.add(String(data.id));}}
-          }
-        }
-      }
-      const removeIds=replaceable.filter(r=>!keepIds.has(String(r.id))).map(r=>r.id);if(removeIds.length)await updateRows(removeIds,{removed:true,approved:false,source:'superseded_by_manual_v2271'});
-      const dayIds=[...keepIds,...visited.map(r=>String(r.id))];if(dayIds.length)await updateRows(dayIds,{approved:true,review_status:'approved',approved_by:currentProfile?.name||null,approved_at:new Date().toISOString()});
-      await approveWorkflow(state.manager,state.date.slice(0,7));await reloadRoutes();
-      try{await window.syncRouteCoverageCallsV23675?.(state.date.slice(0,7));}catch(e){console.warn('v23.6.75 coverage sync',e);}
-      try{window.renderRouteCoverageV23675?.();window.renderRouteCoverageV23674?.();}catch(_){}
-      // Explicit handoff from director's route AI. Confirm action only after normal manual save.
-      const aiAction=state.aiFocus;
-      state.aiFocus=null;
-      if(aiAction&&aiAction.manager===state.manager&&aiAction.date===state.date&&!office
-          &&state.selected.has(String(aiAction.clientId))
-          &&(allRoutePlans||[]).some(r=>r.manager_name===state.manager&&r.visit_date===state.date&&!r.removed&&!r.is_office_day&&!r.is_network_point&&
-             (String(r.client_id||'')===String(aiAction.clientId)||(Array.isArray(r.linked_client_ids)&&r.linked_client_ids.map(String).includes(String(aiAction.clientId)))))){
-        try{window.dispatchEvent(new CustomEvent('resanta-route-ai-saved',{detail:{manager:state.manager,date:state.date,clientId:aiAction.clientId,review:aiAction.review}}));}
-        catch(e){console.warn('route AI save followup',e)}
-      }
-      renderCurrentDay();resetEditor();
-      alert('Готово. День сразу утверждён и отправлен менеджеру.\n\n'+state.manager+' · '+state.date+'\n'+(office?'Офисный день 09:00–18:00':'Всего ТТ: '+totalSelected+' · клиентских: '+selected.length+' · сетевых: '+selectedNetworks.length));
-    }catch(e){
-      console.warn('Manual route save interrupted; verifying actual server state',e);
-      try{
-        const actual=await syncRouteDaySafe(state.manager,state.date);
-        renderCurrentDay();
-        const clients=new Set(actual.filter(r=>!r.is_network_point&&!r.is_office_day)
-          .flatMap(r=>rowClientIds(r,state.manager)));
-        const networks=new Set(actual.filter(r=>r.is_network_point).map(r=>String(r.network_point_id||'')));
-        const matched=selected.filter(p=>clients.has(pointId(p))).length+
-          selectedNetworks.filter(n=>networks.has(networkId(n))).length;
-        const fullyRecorded=office
-          ? actual.length===1&&actual[0].is_office_day&&approvedRow(actual[0])
-          : actual.length===totalSelected&&matched===totalSelected&&actual.every(approvedRow);
-        if(fullyRecorded){
-          resetEditor();
-          alert('Соединение прервалось при завершении сохранения, но повторная проверка подтвердила все точки в базе.\n\n'+state.manager+' · '+state.date+' · '+actual.length+' точек согласованы.\n\nПовторно создавать маршрут НЕ нужно.');
-        }else{
-          alert('Сохранение прервалось, состояние сверено с сервером.\n\n'+state.manager+' · '+state.date+'\nВ базе активных строк: '+actual.length+'. Из выбранных точек обнаружено: '+matched+' из '+totalSelected+'.\n\nЧасть изменений могла сохраниться. Ничего не удаляйте. Перед повторной попыткой нажмите «Показать клиентов» и проверьте список.');
-        }
-      }catch(checkError){
-        console.warn('Manual route verification temporarily unavailable',checkError);
-        alert('Связь с сервером потеряна. Пока НЕВОЗМОЖНО проверить результат сохранения.\n\nДанные посещений не удалялись. Не создавайте маршрут повторно вслепую: после восстановления связи откройте этот день и проверьте сохранённые точки.\n\n'+(e.message||e));
-      }
-    }
-    finally{btn.disabled=false;btn.textContent='Сохранить и сразу отправить менеджеру';}
+    if(currentProfile?.role!=='boss'||state.saving||state.loading)return;
+    const manager=state.manager,date=state.date,office=state.type==='office';
+    if(!state.revision||manager!==state.loadedManager||date!==state.loadedDate||manager!==document.getElementById('mrl-manager').value||date!==document.getElementById('mrl-date').value){alert('Сначала откройте выбранный день.');return;}
+    const selected=getPlans(manager).filter(p=>state.selected.has(pointId(p))),networks=networkForManager(manager).filter(n=>state.networkSelected.has(networkId(n))),total=selected.length+networks.length;
+    if(!office&&total>MAX_POINTS){alert('Снимите лишние точки: максимум 15 ТТ.');return;}
+    const rows=office?[{client_name:'Офисный день',is_office_day:true,is_network_point:false,planned_start:'09:00:00',planned_end:'18:00:00',planned_minutes:540,sort_order:0}]:[...selected.map(p=>({kind:'client',city:pointCity(p),address:pointAddress(p),value:p})),...networks.map(n=>({kind:'network',city:n.city||'',address:n.address||'',value:n}))].sort((x,y)=>x.city.localeCompare(y.city,'ru')||x.address.localeCompare(y.address,'ru')).map((e,i,all)=>e.kind==='client'?rowFromPlan(e.value,manager,date,i,all.length):rowFromNetwork(e.value,manager,date,i,all.length));
+    if(!confirm(manager+' · '+date+'\n'+(office?'Сохранить офисный день':total?'Сохранить '+total+' ТТ вместо прежнего состава этого дня':'Снять все непосещённые точки этого дня')+'?'))return;
+    state.saving=true;setEditorBusy(true);const req={revision:state.revision,request_id:crypto.randomUUID(),rows};
+    try{let result;try{result=await routeRpc('save',manager,date,req);}catch(e){if(!/fetch|network|timeout/i.test(e.message||''))throw e;result=await routeRpc('save',manager,date,req);}acceptRouteResult(result,manager,[date]);const focus=state.aiFocus;state.aiFocus=null;if(focus&&focus.manager===manager&&focus.date===date&&!office&&result.rows.some(r=>!r.removed&&(String(r.client_id)===String(focus.clientId)||(r.linked_client_ids||[]).includes(focus.clientId))))window.dispatchEvent(new CustomEvent('resanta-route-ai-saved',{detail:{manager,date,clientId:focus.clientId,review:focus.review}}));try{await window.syncRouteCoverageCallsV23675?.(date.slice(0,7));}catch(e){console.warn('Saved route; coverage calls need retry',e);}resetEditor();renderCurrentDay();document.getElementById('mrl-status').textContent='Сохранено. '+manager+' · '+date+' · '+result.count+' строк. Маршрут доступен менеджеру.';
+      const status=document.getElementById('mrl-status');if(!office&&rows.length){const b=document.createElement('button');b.className='btn-primary';b.textContent='Подготовить задачи по этому маршруту';b.onclick=async()=>{try{window.goPage?.('tasks','Задачи');await window.RESANTA_TASKS_ROUTE_V4.openAgentRoute({manager,date,route_ids:result.rows.filter(r=>!r.removed&&!r.is_office_day&&!r.is_network_point).map(r=>r.id)});}catch(e){alert(e.message||e)}};status.append(document.createElement('br'),b);}
+    }catch(e){alert(routeError(e)+'\nСохранение выполняется целиком: новые точки не добавляются поверх старых частями.');}finally{state.saving=false;setEditorBusy(false);}
+  }
+  async function moveDay(){
+    if(state.loading||state.saving||!state.revision)return;
+    const manager=state.loadedManager,date=state.loadedDate,target=document.getElementById('mrl-move-date').value;
+    if(!target||target<todayM()||target===date){alert('Выберите новую дату, не раньше сегодняшней.');return;}
+    if(!confirm('Перенести сохранённый маршрут '+manager+' с '+date+' на '+target+'? Несохранённые изменения выбора не переносятся.'))return;
+    state.saving=true;setEditorBusy(true);const req={revision:state.revision,request_id:crypto.randomUUID(),target_date:target};
+    try{let result;try{result=await routeRpc('move',manager,date,req);}catch(e){if(!/fetch|network|timeout/i.test(e.message||''))throw e;result=await routeRpc('move',manager,date,req);}acceptRouteResult(result,manager,[date,target]);document.getElementById('mrl-date').value=target;state.date=target;resetEditor();await loadEditor();document.getElementById('mrl-status').textContent='Маршрут перенесён на '+target+'. На прежней дате активных точек нет. Сроки уже утверждённых задач сохранены.';}catch(e){alert(routeError(e));}finally{state.saving=false;setEditorBusy(false);}
   }
 
   function lightweightBossRender(){
