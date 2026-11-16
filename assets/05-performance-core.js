@@ -66,7 +66,7 @@ function ttl(name){return TTL[name]||5*60*1000;}
 function isFresh(name){const s=state(name);return s.status==='ready'&&age(s)<=ttl(name);}
 function currentUserCacheKey(){
   const id=String(currentUser?.id||currentProfile?.email||currentProfile?.name||'anonymous').replace(/[^a-zA-Z0-9_.@-]/g,'_');
-  const scope=String((currentProfile?.access_scope||currentProfile?.role||'user')+'|'+(currentProfile?.region||'')).replace(/[^a-zA-Z0-9_.@-]/g,'_');
+  const scope=encodeURIComponent(String((currentProfile?.access_scope||currentProfile?.role||'user')+'|'+(currentProfile?.region||'')));
   return id+'|'+scope;
 }
 function cacheKey(name){return 'core|'+CACHE_SCHEMA+'|'+currentUserCacheKey()+'|'+name;}

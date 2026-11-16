@@ -53,3 +53,9 @@ test('capability timeout stays on the bounded web path and late metadata dispatc
 test('an owner cache write waiting for IndexedDB cannot enter the manager cache after logout',async()=>{
  const gate=deferred(),h=fixture({cacheGate:gate,rpc:name=>name==='crm_core_tasks_v236341'?{data:[{id:'owner-secret-task',client_id:null}]}:undefined});await h.ctx.crmFastBootstrapV22733();await h.ctx.crmCoreGetV22733('tasks',true);await h.switchUser();await h.ctx.crmFastBootstrapV22733();gate.resolve();await flush();assert.equal(h.writes.length,0);assert.equal(h.ctx.allTasks.length,0);
 });
+test('one actor in distinct Cyrillic regions cannot collide in persistent cache keys',async()=>{
+ const h=fixture();h.ctx.currentProfile.region='Витебск';await h.ctx.crmFastBootstrapV22733();h.ctx.allTasks=[{id:'vitebsk-only'}];h.listeners.pagehide();await flush();
+ const first=h.writes.find(x=>x.key.endsWith('|tasks'));assert.ok(first);
+ h.ctx.currentProfile.region='Могилев';await h.ctx.crmFastBootstrapV22733();assert.equal(h.ctx.allTasks.length,0);h.ctx.allTasks=[{id:'mogilev-only'}];h.listeners.pagehide();await flush();
+ const second=h.writes.filter(x=>x.key.endsWith('|tasks')).at(-1);assert.notEqual(first.key,second.key);assert.match(first.key,/%D0/);assert.equal(first.data.rows[0].id,'vitebsk-only');assert.equal(second.data.rows[0].id,'mogilev-only');
+});
