@@ -53,13 +53,13 @@ const table=rows=>{
  return {columns,rows:rows.map(x=>columns.map(k=>x[k]??null))};
 };
 
-// Repeated product names and group names are dictionary references; SKU values
-// remain their original strings so the model returns actual articles, not IDs.
+// Historical analysis stays dense. The actual offer catalogs keep literal
+// SKU/product pairs adjacent: saving a few tokens is not worth a wrong pairing.
 // Each SKU's complete monthly ledger is encoded once, with a shared month list.
 export function denseTaskFacts(facts){
  const compact=compactTaskFacts(facts);
  if(!compact||typeof compact!=='object')return compact;
- const sourceRows=[...(compact.purchase_analysis?.items||[]),...(compact.candidates||[]),...(compact.winter_products||[])];
+ const sourceRows=compact.purchase_analysis?.items||[];
  // Stable dictionaries also protect the paid cache from order-only changes in
  // imported rows. Ref numbers must not depend on which row arrived first.
  const products=[...new Set(sourceRows.map(item=>item.product).filter(value=>typeof value==='string'))].sort();
@@ -74,7 +74,7 @@ export function denseTaskFacts(facts){
  }));
  const dense={...compact};
  if(compact.purchase_analysis?.items)dense.purchase_analysis={...compact.purchase_analysis,items:table(compact.purchase_analysis.items.map(row))};
- for(const key of ['candidates','winter_products'])if(Array.isArray(compact[key]))dense[key]=table(compact[key].map(row));
+ for(const key of ['candidates','winter_products'])if(Array.isArray(compact[key]))dense[key]=compact[key].map(({sku,product,...details})=>({sku,product,...details}));
  if(compact.purchase_history?.rows){
   const months=[...new Set(compact.purchase_history.rows.map(x=>x[1]))].sort();
   const monthIds=new Map(months.map((month,index)=>[month,index])),bySku=new Map();

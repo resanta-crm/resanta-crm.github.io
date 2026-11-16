@@ -99,11 +99,28 @@ test('manual invalid edits persist across refresh and never acquire an approval 
  const restored=await workspaceAction({...h,input});assert.equal(restored.draft.items[0].qty,50);assert.equal(restored.mode,'editable');assert.equal(h.modelCalls.length,2);
 });
 
-test('restoring an AI proposal cannot silently promote an originally ineligible SKU into a signed plan',async()=>{
+test('unknown nonhistorical SKU outside the complete eligible assortment remains editable on restore',async()=>{
  const h=harness();h.rows.price_list.push({sku:'99/1/1',product:'Посторонний товар',subgroup:'Неподходящее направление'});h.rows.stock_balances.push({sku:'99/1/1',qty_avail:5});
  h.model=async(_,facts)=>{h.modelCalls.push(facts);return facts.candidates?{...plan,items:[{sku:'99/1/1',qty:1}]}:{subgroups:['Инструмент']};};
- const first=await workspaceAction({...h,input});assert.equal(first.mode,'editable');assert.equal(first.approval_token,undefined);
+ const first=await workspaceAction({...h,input});assert.equal(first.mode,'editable');assert.equal(first.approval_token,undefined);assert.equal([...h.svc.rows.values()][0].proposal._eligible_skus.includes('99/1/1'),false);
  const restored=await workspaceAction({...h,input});assert.equal(restored.mode,'editable');assert.equal(restored.approval_token,undefined);assert.match(restored.validation_error,/отобранному ассортименту/);assert.equal(h.modelCalls.length,2);
+});
+
+test('a valid article beyond the 100-item technical shortlist is accepted from the complete eligible assortment',async()=>{
+ const h=harness();h.rows.price_list=Array.from({length:120},(_,index)=>({sku:'75/6/'+(index+1),product:'Шуруповёрт Ресанта № '+(index+1),subgroup:'Инструмент'}));
+ h.rows.stock_balances=h.rows.price_list.map((item,index)=>({sku:item.sku,qty_avail:5,...(index===0?{report_date:new Date().toISOString().slice(0,10)}:{})}));
+ let chosen;h.model=async(_,facts)=>{h.modelCalls.push(facts);if(!facts.candidates)return {subgroups:['Инструмент']};assert.equal(facts.candidates.length,100);chosen=h.rows.price_list.find(item=>!facts.candidates.some(candidate=>candidate.sku===item.sku));return {...plan,items:[{sku:chosen.sku,qty:1}]};};
+ const result=await workspaceAction({...h,input});assert.equal(result.mode,'prepared');assert.equal(result.draft.items[0].sku,chosen.sku);assert.ok(result.approval_token);
+ const saved=[...h.svc.rows.values()][0].proposal;assert.equal(saved._selection_skus.length,100);assert.equal(saved._selection_skus.includes(chosen.sku),false);assert.equal(saved._eligible_skus.length,120);assert.equal(saved._eligible_skus.includes(chosen.sku),true);
+ assert.equal(h.modelCalls.length,2);assert.deepEqual(h.calls,[]);
+});
+
+test('an old paid 100-item project restores a full-history article for free without an automatic model repair',async()=>{
+ const h=harness();await workspaceAction({...h,input});const saved=[...h.svc.rows.values()][0];delete saved.proposal._eligible_skus;
+ saved.proposal.items=[{sku:'70/14/1',qty:1,reason:'Историческая закупка дровокола'}];
+ h.rows.price_list.push({sku:'70/14/1',product:'Дровокол Huter',subgroup:'Дровоколы'});h.rows.stock_balances.push({sku:'70/14/1',qty_avail:4});h.rows.purchase_history.push({sku:'70/14/1',product:'Дровокол Huter',month:'2025-11',qty:7,revenue:700});
+ h.model=async()=>{throw Error('legacy history repair must be free')};
+ const result=await workspaceAction({...h,input});assert.equal(result.mode,'prepared');assert.equal(result.draft.items[0].sku,'70/14/1');assert.equal(result.draft.items[0].product,'Дровокол Huter');assert.ok(result.approval_token);assert.equal(result.persistence.reused,true);assert.equal(h.modelCalls.length,2);
 });
 
 test('manual season exception survives refresh and can be explicitly cleared without a paid call',async()=>{
