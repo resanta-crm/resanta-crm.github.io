@@ -14,7 +14,7 @@
  let panel,mic,wake,status,field,send,meter;
  let mode='',stream=null,context=null,analyser=null,src=null,clock=0,segment=0,starting=false,busy=false;
  let wakeHeard=false,wakeStart=0,clipCount=0,activeRecorder=null,userOptIn=false,listenEpoch=0;
- let transcriptFailure='';
+ let transcriptFailure='',transcriptRequest=null;
  // Short-term conversation context stays only in memory; no transcript storage.
  let resumeConversationUntil=0;
  const RESUME_WINDOW_MS=3*60*1000;
@@ -100,7 +100,7 @@
    return msg[code]||('Не удалось включить микрофон: '+code+'. '+String(e?.message||'').slice(0,100));
  }
  async function stopAll(message){
-   mode='';listenEpoch++;clearInterval(clock);clock=0;clearTimeout(segment);segment=0;
+   mode='';listenEpoch++;transcriptRequest?.abort(new Error('voice_request_cancelled'));transcriptRequest=null;clearInterval(clock);clock=0;clearTimeout(segment);segment=0;
    try{activeRecorder&&activeRecorder.state==='recording'&&activeRecorder.stop();}catch{}
    activeRecorder=null;
    try{src?.disconnect();}catch{}src=null;
@@ -180,6 +180,7 @@
  }
  function cloudError(error){
    const code=String(error?.code||error?.context?.error||error?.message||'');
+   if(/voice_network_timeout|Failed to fetch|FunctionsFetchError/i.test(code))return 'Нет ответа от сервера речи. Разговор остановлен. Проверь связь и нажми «Начать разговор», чтобы повторить.';
    if(/speech_monthly_budget_exhausted/.test(code))return 'Месячный бюджет РЕСАНТА AI 360° достиг 5 000 рублей. Запись остановлена для защиты расходов.';
    if(/speech_budget_meter_unavailable|speech_budget_unavailable/.test(code))return 'Учёт расходов речи временно недоступен. Запись не отправлена в OpenAI.';
    if(/voice_daily_limit|daily_limit/.test(code))return 'Лимит распознавания на сегодня исчерпан (300 фраз). Это не ошибка микрофона.';
@@ -195,21 +196,26 @@
    if(!clip||epoch!==listenEpoch || !mode)return null;
    if(!clip.blob?.size || clip.blob.size<900)return '';
    if(clip.blob.size>500000){transcriptFailure='Запись слишком большая. Скажи короче.';info(transcriptFailure);return null;}
-   let session=null;
-   try{session=await window.crmEnsureFreshSessionV236166?.(false);}
-   catch(e){transcriptFailure='CRM потеряла авторизацию. Обнови страницу и войди заново.';info(transcriptFailure);return null;}
-   if(!session?.access_token){transcriptFailure='Не удалось подтвердить сессию CRM.';info(transcriptFailure);return null;}
-   const form=new FormData(),type=clip.blob.type||'audio/webm';
-   form.append('audio',new File([clip.blob], 'question.'+(type.includes('mp4')?'mp4':'webm'),{type}));
-   form.append('duration',String(Math.min(16.4,clip.duration)));
+   const request=new AbortController();transcriptRequest=request;
    busy=true;info('Распознаю фразу…');
    try{
-     const resp=await db.functions.invoke(ENDPOINT,{body:form});
-     if(epoch!==listenEpoch||!mode)return null;
-     if(resp.error){let detail=null;try{detail=await resp.error.context?.json?.();}catch{}transcriptFailure=cloudError({message:resp.error.message,code:detail?.error||''});info(transcriptFailure);return null;}
-     return String(resp.data?.text||'').trim();
-   }catch(e){transcriptFailure=cloudError(e);if(epoch===listenEpoch)info(transcriptFailure);return null;}
-   finally{busy=false;}
+     return await window.crmVoiceRequestV1(async signal=>{
+       const session=await window.crmEnsureFreshSessionV236166?.(false);
+       signal.throwIfAborted();
+       if(epoch!==listenEpoch||!mode)return null;
+       if(!session?.access_token)throw new Error('not_authorized');
+       const form=new FormData(),type=clip.blob.type||'audio/webm';
+       form.append('audio',new File([clip.blob], 'question.'+(type.includes('mp4')?'mp4':'webm'),{type}));
+       form.append('duration',String(Math.min(16.4,clip.duration)));
+       const resp=await db.functions.invoke(ENDPOINT,{body:form,signal});
+       signal.throwIfAborted();
+       if(epoch!==listenEpoch||!mode)return null;
+       if(resp.error){let detail=null;try{detail=await resp.error.context?.json?.();}catch{}throw Object.assign(new Error(resp.error.message),{code:detail?.error||''});}
+       return String(resp.data?.text||'').trim();
+     },request);
+   }catch(e){if(epoch===listenEpoch){transcriptFailure=cloudError(e);info(transcriptFailure);}return null;}
+   finally{if(transcriptRequest===request){transcriptRequest=null;busy=false;}}
+
  }
  async function recognizeTurn(clip,epoch,expectedMode){
    const collect=window.crmAI360TurnTakingV1?.collect;
