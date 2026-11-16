@@ -71,3 +71,5 @@ test('pilot analytical show requests reach the agent instead of being consumed a
 });
 
 test('owner refuses a silent downgrade to the legacy chat',async()=>{const f=director(async()=>({protocol:'legacy',answer:'WRONG'}),'');f.w.crmAI360UnifiedDialogHandleV1('Продажи',f.ui);await tick();assert.equal(f.answers.includes('WRONG'),false);assert.match(f.answers[0],/Единый агент/);});
+
+test('route preparation response opens exact batch and never generic write action',async()=>{const opened=[];const f=director(async()=>({mode:'route_task_prepare_v5',read_only:true,created:0,requires_confirmation:true,manager:'Руднев',date:'2026-11-17',route_ids:['r'],answer:'Подготавливаю маршрут',memory:{route_task_prepare:null}}));f.w.RESANTA_TASKS_ROUTE_V4={openAgentRoute:async d=>opened.push(d)};f.w.crmAI360UnifiedDialogHandleV1('Ты можешь поставить задачи Рудневу на 17 число?',f.ui);await tick();assert.equal(opened.length,1);assert.equal(opened[0].manager,'Руднев');assert.equal(opened[0].date,'2026-11-17');assert.deepEqual(f.prepared,[]);assert.match(f.answers[0],/Подготавливаю/);});
