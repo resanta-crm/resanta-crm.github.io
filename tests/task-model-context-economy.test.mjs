@@ -51,8 +51,8 @@ test('dense plan round-trips every SKU/month amount, ABC, prior season and produ
  assert.deepEqual(sortRows(decodeHistory(dense.purchase_history)),sortRows(compact.purchase_history.rows));
  assert.equal(decodeHistory(dense.purchase_history).find(row=>row[0]==='75/6/1'&&row[1]==='2025-10')[2],4);
  assert.deepEqual(decodeProducts(dense.purchase_analysis.items,dense.dictionaries),compact.purchase_analysis.items);
- assert.deepEqual(decodeProducts(dense.candidates,dense.dictionaries),compact.candidates);
- assert.deepEqual(decodeProducts(dense.winter_products,dense.dictionaries),facts.winter_products);
+ assert.deepEqual(dense.candidates,compact.candidates);
+ assert.deepEqual(dense.winter_products,facts.winter_products);
  for(const key of ['client','visits','tasks','shelf','season','purchase_restriction','request','field_policy'])assert.deepEqual(dense[key],facts[key]);
 });
 
@@ -113,4 +113,16 @@ test('reordering catalog/history object keys and rows does not invalidate canoni
  reordered.purchase_history.reverse();reordered.purchase_analysis.items.reverse();reordered.candidates.reverse();reordered.winter_products.reverse();
  for(const key of ['candidates','winter_products'])reordered[key]=reordered[key].map(item=>Object.fromEntries(Object.entries(item).reverse()));
  assert.equal(canonicalModelInput(taskModelInput(reordered)),canonicalModelInput(taskModelInput(facts)));
+});
+
+test('offer and winter catalogs keep literal adjacent SKU/name pairs without unused product dictionary entries',()=>{
+ const facts=factsFor([{sku:'history',product:'Исторический товар',month:'2026-10',qty:1,revenue:100}]);
+ facts.candidates=[{available:7,product:'Бензопила Huter',sku:'70/6/4',subgroup:'Бензопилы'}];
+ facts.winter_products=[{subgroup:'Климат',product:'Конвектор Ресанта',sku:'67/1/24'}];
+ const dense=denseTaskFacts(facts);
+ assert.deepEqual(Object.keys(dense.candidates[0]).slice(0,2),['sku','product']);
+ assert.deepEqual(Object.keys(dense.winter_products[0]).slice(0,2),['sku','product']);
+ assert.equal(dense.candidates[0].product,'Бензопила Huter');assert.equal(dense.candidates[0].product_ref,undefined);
+ assert.deepEqual(dense.dictionaries.products,['Исторический товар']);
+ assert.equal(dense.winter_products[0].product,'Конвектор Ресанта');
 });
