@@ -1,3 +1,4 @@
+import {inverterWelder} from './assortment.mjs';
 // Explicit SKU targets only. No guessed quantities or silent partial parsing.
 export function routeItems(text){
  const s=String(text||'').replace(/\s*дробь\s*/giu,'/').replace(/\s*\/\s*/g,'/');
@@ -44,7 +45,7 @@ export async function routeAction({caller,user,input,secret}){
  if(r.error||c.error||p.error)throw Error('task_context_unavailable');
  if(!r.data||r.data.client_id!==input.client_id||r.data.removed||!(r.data.approved||r.data.review_status==='approved')||r.data.manager_name!==c.data?.manager_name)throw Error('TASK_ROUTE_REQUIRED');
  if(c.data?.client_status!=='Рабочий')throw Error('TASK_WORKING_CLIENT_REQUIRED');
- const resolved=items.map(x=>{const names=[...new Set((p.data||[]).filter(y=>y.sku===x.sku).map(y=>y.product))];if(names.length!==1)throw Error('shelf_unknown_sku');return {...x,product:names[0]};});
+ const resolved=items.map(x=>{const names=[...new Set((p.data||[]).filter(y=>y.sku===x.sku).map(y=>y.product))];if(names.length!==1)throw Error('shelf_unknown_sku');if(inverterWelder(names[0]))throw Error('TASK_FIELD_INVERTER_FORBIDDEN');return {...x,product:names[0]};});
  const draft={action:'route_task_v4',client_id:c.data.id,route_id:r.data.id,manager_name:r.data.manager_name,route_day:r.data.visit_date,items:resolved};
  const proof=await signRoute(secret,user.id,draft);
  return {mode:'prepared',draft,...proof,requires_confirmation:true,writes:false,summary:`${c.data.name} · ${r.data.manager_name} · маршрут ${r.data.visit_date}. Отгрузить: `+resolved.map(x=>`${x.sku} · ${x.product} — ${x.qty} шт.`).join('; ')+'. Контроль — пятница 15:00, факт по 1С. Остатки будут повторно проверены при создании.'};

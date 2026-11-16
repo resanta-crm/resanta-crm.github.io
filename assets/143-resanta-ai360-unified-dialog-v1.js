@@ -34,6 +34,7 @@ function pretty(code){
   openai_provider_timeout:'OpenAI не ответил вовремя. Попробуй повторить короткий вопрос.',
   analysis_unavailable:'Ядро AI 360° не смогло подтвердить результат. Данные CRM не изменены. Попробуй уточнить вопрос.',
   ai_quota_exhausted:'Достигнуто ограничение обращений к OpenAI. Это не лимит микрофона.',
+  route_ui_unavailable:'Не удалось открыть подготовку маршрута. Обновите страницу CRM; задачи ещё не созданы.',
   agent_protocol_unavailable:'Единый агент сейчас недоступен. Обнови окно Леры и повтори запрос.',
   new_core_unavailable:'Единое ядро Леры временно недоступно. На старую аналитику не переключаюсь, чтобы не перепутать данные клиента.'
  };
@@ -112,6 +113,15 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    if(!allowed()||run!==epoch||actor!==window.crmAI360GreetingV1?.()?.id)return;
    const data=result.data||{};
    if(window.__resantaLeraDialogueV2===true&&data.protocol!=='lera_dialogue_v2')throw Error('agent_protocol_unavailable');
+   if(['route_task_prepare_v5','route_task_clarify_v5'].includes(data.mode)){
+    if(data.read_only!==true||data.created!==0||data.requires_confirmation!==true)throw Error('action_prepare_unavailable');
+    memory={...memory,...data.memory};
+    if(data.mode==='route_task_prepare_v5'){
+     if(!window.RESANTA_TASKS_ROUTE_V4?.openAgentRoute)throw Error('route_ui_unavailable');
+     await window.RESANTA_TASKS_ROUTE_V4.openAgentRoute(data);
+    }
+    ui.answer(data.answer);history.push({role:'user',content:question},{role:'assistant',content:data.answer});history=history.slice(-12);return;
+   }
    if(data.mode==='agent360_action_request_v2'){
     if(data.protocol!=='lera_dialogue_v2'||data.requires_confirmation!==true||data.created!==0||data.read_only!==true||
        !window.crmAI360ActionPrepareV2?.(data.action_question,ui))throw Error('action_prepare_unavailable');
