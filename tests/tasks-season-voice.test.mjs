@@ -38,3 +38,9 @@ test('spoken dates resolve from today, never a selected old week; invalid dates 
  assert.equal(spokenRouteDate('на 31 ноября',today),null);
 });
 test('selected task question passes exact task and route identifiers',()=>{const c={client_id:'11111111-1111-4111-8111-111111111111',task_id:'old',route_id:'r'};const p=selectedTaskQuestion({task_context:c,question:'Что сделать по этой задаче?'});assert.equal(p.task_id,'old');assert.equal(p.route_id,'r');});
+
+test('microphone transcript Rudnevo resolves only the uniquely matched manager',async()=>{
+ const r=await prepareRouteRequest(caller([{id:'r',client_id:'c',approved:true}]),{question:'подготовь задачи из маршрута Руднево на 17 ноября'},boss,today);
+ assert.equal(r.mode,'route_task_prepare_v5');assert.equal(r.manager,'Руднев');assert.equal(r.date,'2026-11-17');
+ const ambiguous=await prepareRouteRequest(caller(),{question:'Подготовь задачи Руднево и Шкурана на 17 ноября'},boss,today);assert.equal(ambiguous.mode,'route_task_clarify_v5');
+});

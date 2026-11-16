@@ -23,7 +23,7 @@ export async function prepareRouteRequest(caller,input,profile,today){
  if(pending&&!routeTaskCommand(q)&&q.length>140)return null;
  const users=await caller.from('users').select('name').eq('role','manager').eq('region','Витебск');
  if(users.error)throw Error('staff_directory_unavailable');
- const names=(users.data||[]).map(x=>x.name),matches=names.filter(n=>norm(q).split(/[^а-я]+/).some(word=>norm(n).split(' ').some(part=>part.length>=4&&new RegExp('^'+part+'(?:а|у|е|ом|ым|ой|ей)?$').test(word))));
+ const names=(users.data||[]).map(x=>x.name),matches=names.filter(n=>norm(q).split(/[^а-я]+/).some(word=>norm(n).split(' ').some(part=>part.length>=4&&new RegExp('^'+part+'(?:а|у|е|о|ом|ым|ой|ей)?$').test(word))));
  const manager=matches.length===1?matches[0]:matches.length>1?null:names.includes(pending?.manager)?pending.manager:null;
  const explicitDate=spokenRouteDate(q,today),date=explicitDate||pending?.date||null;
  const memory={route_task_prepare:{manager,date}};
