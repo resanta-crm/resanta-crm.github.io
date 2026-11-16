@@ -47,6 +47,37 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <link rel="stylesheet" href="./assets/271-calendar-meetings-pilot-v1.css?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2">
 <link rel="stylesheet" href="./assets/273-gps-first-tt-lateness-v1.css?v=20261113-evidence1">
 <script defer src="./assets/210-promotions360-uniai-v1.js?v=20261112-sales-chart3"></script>
+<script id="crm-native-bootstrap-ready-gate-v1">
+// Native session recovery may finish before later deferred data modules load.
+// Keep the original core on its bounded bootstrap path during that short gap.
+(function(){
+  if(!(window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))return;
+  if(window.RESANTA_CRM_ULTRA_FAST_FINAL&&typeof window.crmFastBootstrapV22733==='function')return;
+  const moduleError=()=>new Error('Основной модуль CRM не загрузился за 10 секунд. Нажмите «Повторить загрузку».');
+  const stub=async function(...args){
+    const actor=String(currentUser?.id||'')+'|'+String(currentProfile?.id||'');
+    const sameActor=()=>actor===String(currentUser?.id||'')+'|'+String(currentProfile?.id||'');
+    const sessionChanged=()=>new Error('Сессия CRM изменилась. Выполните вход снова.');
+    await new Promise((resolve,reject)=>{
+      let poll,deadline;
+      const finish=error=>{clearTimeout(poll);clearTimeout(deadline);error?reject(error):resolve();};
+      const check=()=>{
+        if(!sameActor()){finish(sessionChanged());return;}
+        const actual=window.crmFastBootstrapV22733;
+        if(window.RESANTA_CRM_ULTRA_FAST_FINAL&&typeof actual==='function'&&actual!==stub){finish();return;}
+        poll=setTimeout(check,50);
+      };
+      deadline=setTimeout(()=>finish(moduleError()),10000);
+      check();
+    });
+    if(!sameActor())throw sessionChanged();
+    const actual=window.crmFastBootstrapV22733;
+    if(!window.RESANTA_CRM_ULTRA_FAST_FINAL||typeof actual!=='function'||actual===stub)throw moduleError();
+    return await actual.apply(this,args);
+  };
+  window.crmFastBootstrapV22733=stub;
+})();
+</script>
 <script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1&meetingRelease=20261115&networkRelease=20261116-4"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258&controlRelease=20261113-v2"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>

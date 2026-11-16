@@ -2383,32 +2383,6 @@ function clearRestoredMainSearches(){
   });
 }
 
-// Native session recovery can finish while later deferred scripts are still
-// loading. Wait for the complete bounded data module instead of entering the
-// old unbounded full-table loader during that gap. This does not read auth.
-async function crmLoadStartupDataV20261116(force=false){
-  const nativeAndroid=window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android';
-  if(nativeAndroid){
-    const actor=String(currentUser?.id||'')+'|'+String(currentProfile?.id||'');
-    const sameActor=()=>actor===String(currentUser?.id||'')+'|'+String(currentProfile?.id||'');
-    const sessionChanged=()=>new Error('Сессия CRM изменилась. Выполните вход снова.');
-    await new Promise((resolve,reject)=>{
-      let poll,deadline;
-      const finish=error=>{clearTimeout(poll);clearTimeout(deadline);error?reject(error):resolve();};
-      const check=()=>{
-        if(!sameActor()){finish(sessionChanged());return;}
-        if(window.RESANTA_CRM_ULTRA_FAST_FINAL&&typeof window.crmFastBootstrapV22733==='function'){finish();return;}
-        poll=setTimeout(check,50);
-      };
-      deadline=setTimeout(()=>finish(new Error('Основной модуль CRM не загрузился за 10 секунд. Нажмите «Повторить загрузку».')),10000);
-      check();
-    });
-    if(!sameActor())throw sessionChanged();
-  }
-  if(typeof window.crmFastBootstrapV22733==='function')return force?await window.crmFastBootstrapV22733(true):await window.crmFastBootstrapV22733();
-  return await loadData();
-}
-
 async function startApp() {
   document.body.classList.remove('crm-auditor-mode');
   clearRestoredMainSearches();
@@ -2485,7 +2459,8 @@ async function startApp() {
     // старт больше не ждёт 13 независимых таблиц одним Promise.all.
     // Для оболочки достаточно профиля + клиентов; остальное догружается
     // через единый Core Data Hub уже после того, как меню стало рабочим.
-    await crmLoadStartupDataV20261116();
+    if(typeof window.crmFastBootstrapV22733==='function')await window.crmFastBootstrapV22733();
+    else await loadData();
   } catch(e){
     console.error('fast bootstrap failed',e);
     showLoadError(e);
@@ -2543,7 +2518,8 @@ async function retryLoad(){
   document.getElementById('loading-spinner').style.display='block';
   document.getElementById('loading-text').style.display='block';
   try{
-    await crmLoadStartupDataV20261116(true);
+    if(typeof window.crmFastBootstrapV22733==='function')await window.crmFastBootstrapV22733(true);
+    else await loadData();
   } catch(e){
     console.error('retryLoad failed',e);
     showLoadError(e);

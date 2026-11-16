@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source=fs.readFileSync('assets/01-crm-core.js','utf8');
-const helper=source.slice(source.indexOf('async function crmLoadStartupDataV20261116('),source.indexOf('async function startApp()'));
+const index=fs.readFileSync('index.html','utf8');
+const gate=index.match(/<script id="crm-native-bootstrap-ready-gate-v1">([\s\S]*?)<\/script>/)?.[1];
+assert.ok(gate,'early native bootstrap gate');
 const start=source.slice(source.indexOf('async function startApp()'),source.indexOf('// Кнопка "Повторить загрузку"'));
 const showError=source.slice(source.indexOf('function showLoadError('),source.indexOf('// Полный сброс на стороне устройства'));
 const retry=source.slice(source.indexOf('async function retryLoad('),source.indexOf('function crmInviteScopeChangedGomelV1('));
@@ -22,14 +24,22 @@ function fixture({native=true,fast,ready=false}={}){
   if(native)ctx.Capacitor={isNativePlatform:()=>true,getPlatform:()=> 'android'};
   if(fast)ctx.crmFastBootstrapV22733=fast;
   if(ready)ctx.RESANTA_CRM_ULTRA_FAST_FINAL={fastShell:true};
-  vm.runInNewContext([helper,start,showError,retry].join('\n'),ctx);
+  vm.runInNewContext([gate,start,showError,retry].join('\n'),ctx);
+  const earlyBootstrap=ctx.crmFastBootstrapV22733;
   const expire=async ms=>{
     const found=[...timers].find(([,timer])=>timer.ms===ms);assert.ok(found,'active timer '+ms);
     timers.delete(found[0]);found[1].fn();await flush();
   };
   const install=()=>{ctx.crmFastBootstrapV22733=async(...args)=>calls.push({kind:'fast',args});ctx.RESANTA_CRM_ULTRA_FAST_FINAL={fastShell:true};};
-  return {ctx,calls,nodes,timers,expire,install};
+  return {ctx,calls,nodes,timers,expire,install,earlyBootstrap};
 }
+
+test('inline gate precedes original deferred core and leaves its loader branches intact',()=>{
+  assert.ok(index.indexOf('<script id="crm-native-bootstrap-ready-gate-v1">')<index.indexOf('<script defer src="./assets/01-crm-core.js'));
+  assert.match(start,/if\(typeof window\.crmFastBootstrapV22733==='function'\)await window\.crmFastBootstrapV22733\(\);\s*else await loadData\(\);/);
+  assert.match(retry,/if\(typeof window\.crmFastBootstrapV22733==='function'\)await window\.crmFastBootstrapV22733\(true\);\s*else await loadData\(\);/);
+  assert.doesNotMatch(gate,/\.auth\.|onAuthStateChange|createElement|loadData/);
+});
 
 test('native start waits for deferred 05 and invokes only its bounded bootstrap',async()=>{
   const h=fixture(),loading=h.ctx.startApp();await flush();
@@ -61,7 +71,7 @@ test('missing native data module ends with a visible retry error and never start
 
 test('session changes during the module wait cannot launch the old startup',async()=>{
   for(const nextActor of [null,{id:'manager'}]){
-    const h=fixture(),loading=h.ctx.crmLoadStartupDataV20261116();await flush();
+    const h=fixture(),loading=h.earlyBootstrap();await flush();
     h.ctx.currentUser=nextActor;h.ctx.currentProfile=nextActor;h.install();
     const rejected=assert.rejects(loading,/Сессия CRM изменилась/);
     await h.expire(50);await rejected;assert.equal(h.calls.length,0);assert.equal(h.timers.size,0);
