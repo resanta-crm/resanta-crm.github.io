@@ -58,3 +58,36 @@ test('review can replace, add and remove canonical SKU before any creation',asyn
 
 test('system-replaced historical tasks are not counted as successful sales or overdue',async()=>{const h=harness();h.data.tasks.push({id:'replaced',client_id:cid,manager_name:'Руднев',due_date:'2026-11-18',done:true,closed_by:'CRM',fact_result:'Заменена более новой актуальной задачей без потери истории.'});await h.settle();await h.click('view','history');assert.match(h.document.querySelector('.tr-list').textContent,/Заменено другой задачей/);assert.equal(h.api.overview().filter(h.api.overdue).length,0);assert.match(h.document.querySelector('[data-tr="metric"][data-value="work"]').textContent,/0%0 из 2/);});
 test('automatic legacy cleanup respects the scoped history-preservation gate',async()=>{let called=0;const names=['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks'];const h=harness('boss',Object.fromEntries(names.map(n=>[n,async()=>++called])));await h.settle();for(const n of names)assert.equal(await h.window[n](),0);assert.equal(called,0);h.ctx.currentProfile.region='Другой филиал';await h.window[names[0]]();assert.equal(called,1);});
+
+test('history browsing retains list position and navigates without finding the task again',async()=>{
+ const h=harness();h.data.tasks.push({...h.data.tasks[0],id:'second',title:'Другая задача',created_at:'2026-11-01'});await h.settle();await h.click('view','history');
+ const list=h.document.querySelector('.tr-list');list.scrollTop=230;
+ await h.click('next');assert.equal(h.document.querySelector('.tr-list').scrollTop,230);assert.match(h.document.querySelector('.tr-task-nav').textContent,/2 из 2/);
+ await h.click('previous');assert.match(h.document.querySelector('.tr-task-nav').textContent,/1 из 2/);
+ assert.ok(h.document.querySelector('[data-tr="previous"]').hasAttribute('disabled'));
+});
+test('typing filters the entire history without a search button and reset restores it',async()=>{
+ const h=harness();h.data.tasks.push({...h.data.tasks[0],id:'second',title:'Уникальная задача'});await h.settle();await h.click('view','history');
+ const el=h.document.querySelector('[data-tr-search]');el.value='Уникальная';el.dispatchEvent(new h.window.Event('input',{bubbles:true}));while(h.timers.length)h.timers.shift()();await h.settle();
+ assert.equal(h.document.querySelectorAll('.tr-client').length,1);assert.match(h.document.querySelector('.tr-client').textContent,/Уникальная/);
+ await h.click('clear-filters');assert.equal(h.document.querySelectorAll('.tr-client').length,2);
+});
+test('long historical text remains available without filling the initial card',async()=>{
+ const h=harness();h.data.crm_task_contracts_v4=[];h.data.crm_task_assignments_v5=[];h.data.tasks[0].text='Сохранённое описание. '.repeat(60);await h.settle();
+ const detail=h.document.querySelector('.tr-full-text');assert.ok(detail);assert.equal(detail.hasAttribute('open'),false);assert.equal(detail.querySelector('p').textContent,h.data.tasks[0].text);
+ assert.equal(h.document.querySelector('.tr-summary').hasAttribute('open'),false);await h.click('view','control');assert.ok(h.document.querySelector('.tr-metrics'));assert.equal(h.document.querySelector('.tr-summary'),null);
+});
+test('Lera answer stays attached to its task when browsing and returning',async()=>{
+ const h=harness();h.data.tasks.push({...h.data.tasks[0],id:'second',title:'Другая задача'});await h.settle();await h.click('brief');
+ assert.match(h.document.querySelector('.tr-detail-panel').textContent,/Подтверждено 1 из 2/);
+ const selected=h.document.querySelector('.tr-client[aria-current="true"]').dataset.value;const other=[...h.document.querySelectorAll('.tr-client')].find(x=>x.dataset.value!==selected).dataset.value;
+ await h.click('select',other);assert.doesNotMatch(h.document.querySelector('.tr-detail-panel').textContent,/Подтверждено 1 из 2/);
+ await h.click('select',selected);assert.match(h.document.querySelector('.tr-detail-panel').textContent,/Подтверждено 1 из 2/);
+});
+
+test('confirmed Lera report updates the result form instead of retaining stale draft fields',async()=>{
+ const h=harness();await h.settle();let body;
+ h.db.functions.invoke=async(_,args)=>{body=args.body;return {data:body.action==='prepare_record_v5'?{mode:'prepared',draft:{version:5,operation:'report',client_id:cid,task_id:tid,fact:'Новый результат',next:'Позвонить',date:'2026-11-20'},approval_token:'signed',summary:'Проверьте результат'}:{mode:'saved_task',updated:1}};};
+ h.input('question','Запиши новый результат');await h.click('ask-lera');await h.click('confirm-agent-task');await h.click('report');
+ assert.equal(h.document.querySelector('[data-tr-field="fact"]').value,'Новый результат');assert.equal(h.document.querySelector('[data-tr-field="nextDate"]').value,'2026-11-20');
+});
