@@ -14,7 +14,24 @@
  let panel,mic,wake,status,field,send,meter;
  let mode='',stream=null,context=null,analyser=null,src=null,clock=0,segment=0,starting=false,busy=false;
  let wakeHeard=false,wakeStart=0,clipCount=0,activeRecorder=null,userOptIn=false,listenEpoch=0;
- let transcriptFailure='',transcriptRequest=null;
+ let transcriptFailure='',transcriptRequest=null,permissionRequest=null;
+ const nativeAndroidVoice=()=>window.__resantaAI360AndroidDirectorOptIn===true&&
+   window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android';
+ function androidMicWait(task,ms,code,signal){
+   return new Promise((resolve,reject)=>{
+     let settled=false,timer;
+     const finish=(error,value)=>{
+       if(settled)return;settled=true;clearTimeout(timer);
+       signal?.removeEventListener('abort',abort);
+       if(error)reject(error);else resolve(value);
+     };
+     const abort=()=>finish(new Error('voice_request_cancelled'));
+     Promise.resolve(task).then(value=>finish(null,value),error=>finish(error));
+     if(signal?.aborted){abort();return;}
+     signal?.addEventListener('abort',abort,{once:true});
+     timer=setTimeout(()=>finish(new Error(code)),ms);
+   });
+ }
  // Short-term conversation context stays only in memory; no transcript storage.
  let resumeConversationUntil=0;
  const RESUME_WINDOW_MS=3*60*1000;
@@ -87,6 +104,15 @@
    }
  }
  function reason(e){
+   if(nativeAndroidVoice()){
+     const nativeReason={
+       android_mic_permission_timeout:'Очки не ответили на запрос микрофона. Запись остановлена. Проверь разрешение и нажми «Начать разговор» ещё раз.',
+       android_mic_context_timeout:'Очки не активировали обработку микрофона. Запись остановлена. Нажми «Начать разговор», чтобы повторить.',
+       android_mic_context_suspended:'Обработка микрофона на очках остановлена. Нажми «Начать разговор», чтобы повторить.',
+       voice_request_cancelled:'Микрофон выключен.',
+     }[String(e?.message||'')];
+     if(nativeReason)return nativeReason;
+   }
    const code=String(e?.name||e?.code||'');
    const msg={
      NotAllowedError:'Доступ к микрофону запрещён. Разреши его для resanta-crm.by в настройках браузера.',
@@ -101,10 +127,23 @@
  }
  async function stopAll(message){
    mode='';listenEpoch++;transcriptRequest?.abort(new Error('voice_request_cancelled'));transcriptRequest=null;clearInterval(clock);clock=0;clearTimeout(segment);segment=0;
+   if(nativeAndroidVoice()){permissionRequest?.abort(new Error('voice_request_cancelled'));permissionRequest=null;}
    try{activeRecorder&&activeRecorder.state==='recording'&&activeRecorder.stop();}catch{}
    activeRecorder=null;
    try{src?.disconnect();}catch{}src=null;
    try{analyser?.disconnect();}catch{}analyser=null;
+   if(nativeAndroidVoice()){
+     // Release ownership before awaiting close: a late Android media callback
+     // must not keep recording or overwrite a newer foreground session.
+     const closing=context;context=null;
+     const closingStream=stream;stream=null;
+     try{closingStream?.getTracks().forEach(t=>t.stop());}catch{}
+     if(meter){meter.value=0;meter.hidden=true;}
+     busy=false;starting=false;wakeHeard=false;controls();
+     if(message)info(message);
+     try{if(closing)await androidMicWait(closing.close(),1500,'android_mic_close_timeout');}catch{}
+     return;
+   }
    try{await context?.close();}catch{}context=null;
    try{stream?.getTracks().forEach(t=>t.stop());}catch{}stream=null;
    if(meter){meter.value=0;meter.hidden=true;}
@@ -125,10 +164,37 @@
    meter.style.cssText='width:calc(100% - 32px);height:5px;accent-color:#64b5f6;display:block;margin:0 16px;flex:0 0 5px;';
    meter.hidden=true;status?.parentElement?.after(meter);
  }
- async function permission(){
+ async function permission(epoch=listenEpoch){
    if(stream?.active)return;
    if(!navigator.mediaDevices?.getUserMedia){throw Object.assign(new Error('getUserMedia not supported'),{name:'UnsupportedBrowser'});}
    info('Запрашиваю доступ к микрофону…');
+   if(nativeAndroidVoice()){
+     const request=new AbortController();permissionRequest=request;
+     const current=()=>!request.signal.aborted&&epoch===listenEpoch&&!!mode&&visiblePanel();
+     try{
+       const granted=Promise.resolve(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false})).then(value=>{
+         // getUserMedia cannot be aborted. Dispose a grant arriving after a
+         // timeout, hidden panel, logout or explicit stop instead of recording.
+         if(!current()){value?.getTracks().forEach(t=>t.stop());throw new Error('voice_request_cancelled');}
+         return value;
+       });
+       let acquired;
+       try{acquired=await androidMicWait(granted,12000,'android_mic_permission_timeout',request.signal);}
+       catch(e){request.abort();throw e;}
+       if(!current()){acquired?.getTracks().forEach(t=>t.stop());throw new Error('voice_request_cancelled');}
+       stream=acquired;
+       if(!window.MediaRecorder)throw Object.assign(new Error('MediaRecorder unavailable'),{name:'UnsupportedRecorder'});
+       const Audio=window.AudioContext||window.webkitAudioContext;
+       if(!Audio)throw new Error('android_mic_context_suspended');
+       context=new Audio();src=context.createMediaStreamSource(stream);analyser=context.createAnalyser();analyser.fftSize=1024;src.connect(analyser);
+       await androidMicWait(context.resume(),3000,'android_mic_context_timeout',request.signal);
+       if(!current())throw new Error('voice_request_cancelled');
+       if(context.state!=='running')throw new Error('android_mic_context_suspended');
+       addMeter();if(meter)meter.hidden=false;
+       info('Микрофон подключён. Скажи команду.');
+       return;
+     }finally{if(permissionRequest===request)permissionRequest=null;}
+   }
    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
    if(!window.MediaRecorder){throw Object.assign(new Error('MediaRecorder unavailable'),{name:'UnsupportedRecorder'});}
    try{
@@ -162,6 +228,9 @@
      };
      try{rec.start(250);}catch(e){reject(e);return;}
      poll=window.setInterval(()=>{
+       if(nativeAndroidVoice()&&context&&context.state!=='running'){
+         end();reject(new Error('android_mic_context_suspended'));return;
+       }
        const rms=audioRms();
        if(rms>=0){peak=Math.max(peak,rms);if(meter)meter.value=Math.min(100,Math.round(rms*3000));}
        if(silence){
@@ -402,14 +471,21 @@
    }
    const continueConversation=automatic&&newMode==='wake'&&resumeConversationUntil>Date.now()&&
      acceptedWakeUntil>Date.now()&&isOwner()&&visiblePanel();
+   const nativeStart=nativeAndroidVoice();
    starting=true;
-   await stopAll();
+   const cleanup=stopAll();
+   const cleanupEpoch=listenEpoch;
+   await cleanup;
+   // stopAll releases Android ownership before awaiting context.close(). A
+   // later Stop, hidden panel, logout or newer start wins over this old click.
+   // Do not clear a newer session's starting/mode flags from a stale continuation.
+   if(nativeStart&&(cleanupEpoch!==listenEpoch||!nativeAndroidVoice()||!isOwner()||!visiblePanel()))return;
    starting=true;
    mode=newMode;listenEpoch++;const epoch=listenEpoch;wakeStart=Date.now();clipCount=0;
    wakeHeard=!!continueConversation||(newMode==='wake'&&(directDialogue||(automatic&&directDialogWanted)));controls();
    if(newMode==='wake'&&!automatic){saveAutoWake(true);saveDirectDialog(!!directDialogue);}
    window.speechSynthesis?.cancel();
-   try{await permission();if(epoch!==listenEpoch)return;starting=false;
+   try{await permission(epoch);if(epoch!==listenEpoch)return;starting=false;
      if(newMode==='manual'){info('Слушаю вопрос и ожидаю естественного завершения речи.');manualLoop(epoch);}
      else{
        if(continueConversation){resumeConversationUntil=0;info('Продолжаем разговор. Можешь задать вопрос без нового приветствия.');}
@@ -417,8 +493,9 @@
        wakeLoop(epoch);
      }
    }catch(e){
+     if(nativeAndroidVoice()&&epoch!==listenEpoch)return;
      await stopAll(reason(e));
-     if(automatic)autoWakeBlocked=true; // No permission or device retry loop.
+     if(automatic||nativeAndroidVoice())autoWakeBlocked=true; // No permission or device retry loop.
    }
  }
  function init(){

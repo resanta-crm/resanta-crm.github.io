@@ -38,7 +38,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 })();
 </script>
 <title>Ресанта CRM</title>
-<link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1&meetingRelease=20261115&networkRelease=20261116-3" as="script">
+<link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1&meetingRelease=20261115&networkRelease=20261116-4" as="script">
 <link rel="preload" href="./assets/03-triovist-routes.js?v=20261116-route-atomic-2" as="script">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="./assets/301-access360-admin-v1.js?v=20261112-access360-v1"></script>
@@ -47,7 +47,38 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <link rel="stylesheet" href="./assets/271-calendar-meetings-pilot-v1.css?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2">
 <link rel="stylesheet" href="./assets/273-gps-first-tt-lateness-v1.css?v=20261113-evidence1">
 <script defer src="./assets/210-promotions360-uniai-v1.js?v=20261112-sales-chart3"></script>
-<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1&meetingRelease=20261115&networkRelease=20261116-3"></script>
+<script id="crm-native-bootstrap-ready-gate-v1">
+// Native session recovery may finish before later deferred data modules load.
+// Keep the original core on its bounded bootstrap path during that short gap.
+(function(){
+  if(!(window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'))return;
+  if(window.RESANTA_CRM_ULTRA_FAST_FINAL&&typeof window.crmFastBootstrapV22733==='function')return;
+  const moduleError=()=>new Error('Основной модуль CRM не загрузился за 10 секунд. Нажмите «Повторить загрузку».');
+  const stub=async function(...args){
+    const actor=String(currentUser?.id||'')+'|'+String(currentProfile?.id||'');
+    const sameActor=()=>actor===String(currentUser?.id||'')+'|'+String(currentProfile?.id||'');
+    const sessionChanged=()=>new Error('Сессия CRM изменилась. Выполните вход снова.');
+    await new Promise((resolve,reject)=>{
+      let poll,deadline;
+      const finish=error=>{clearTimeout(poll);clearTimeout(deadline);error?reject(error):resolve();};
+      const check=()=>{
+        if(!sameActor()){finish(sessionChanged());return;}
+        const actual=window.crmFastBootstrapV22733;
+        if(window.RESANTA_CRM_ULTRA_FAST_FINAL&&typeof actual==='function'&&actual!==stub){finish();return;}
+        poll=setTimeout(check,50);
+      };
+      deadline=setTimeout(()=>finish(moduleError()),10000);
+      check();
+    });
+    if(!sameActor())throw sessionChanged();
+    const actual=window.crmFastBootstrapV22733;
+    if(!window.RESANTA_CRM_ULTRA_FAST_FINAL||typeof actual!=='function'||actual===stub)throw moduleError();
+    return await actual.apply(this,args);
+  };
+  window.crmFastBootstrapV22733=stub;
+})();
+</script>
+<script defer src="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1&meetingRelease=20261115&networkRelease=20261116-4"></script>
 <script defer src="./assets/02-mobile-gps-base.js?v=23.6.258&controlRelease=20261113-v2"></script>
 <script defer src="./assets/123-gps-home-zones-v236419.js?v=23.6.419"></script>
 <script defer src="./assets/197-gps-map-unified-v1.js?v=20261109-map1"></script>
@@ -75,7 +106,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <script defer src="./assets/79-falling-task-period-v236106.js?v=23.6.106"></script>
 <script defer src="./assets/73-route-coverage-v23674.js?v=23.6.75"></script>
 <script defer src="./assets/04-business-analytics.js?v=23.6.202"></script>
-<script defer src="./assets/05-performance-core.js?v=20261116-air3-native-bootstrap-1"></script>
+<script defer src="./assets/05-performance-core.js?v=20261116-air3-native-bootstrap-2"></script>
 <script defer src="./assets/06-root-fixes.js?signalsMerge=20261113-v1&v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
 <script defer src="./assets/66-performance-root-v23657.js?v=20261106-manager-feedback&abcOrder=20261109-2&meetingRelease=20261115"></script>
@@ -1818,7 +1849,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <script defer src="./assets/221-lera360-voice-navigation-v1.js?signalsMerge=20261113-v1&v=20261113-calendar-nav-pilot1&dialogueRelease=20261113-v2&controlRelease=20261113-v2"></script>
 <script defer src="./assets/273-calendar-invitations-v3.js?v=20261115-v1"></script>
 <script defer src="./assets/270-calendar-meetings-pilot-v1.js?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2"></script>
-<script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2&meetingRelease=20261115&tasksRelease=20261115-v2&tasksRelease=20261116-3&networkRelease=20261116-3"></script>
+<script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2&meetingRelease=20261115&tasksRelease=20261115-v2&tasksRelease=20261116-3&networkRelease=20261116-4"></script>
 <!-- Isolated branch-director pilot: no login requests, no Android and no director AI changes. -->
 <!-- Shared staff role UI; each AI service rechecks the permissions on server. -->
 <script defer src="./assets/148-resanta-ai360-staff-identity-v1.js?v=client360-20261102&lprRelease=20261114-v2"></script>
