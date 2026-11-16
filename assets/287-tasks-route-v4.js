@@ -213,6 +213,8 @@ if(typeof oldApprove==='function')w.approveAIWeekTask=async function(idx,mgr,dat
   renderAIWeekProposals(mgr,date,mode);await refresh();
  }catch(e){alert(/unique|duplicate/i.test(e.message)?'По этому юрлицу уже есть утверждённый план на эту неделю. Откройте его в задачах.':'Задача не поставлена: '+e.message);}
 };
+// Preserve task history on load without changing shared core behavior for other audiences.
+for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks']){const prev=w[name];if(typeof prev==='function')w[name]=function(){return allowed()?Promise.resolve(0):prev.apply(this,arguments);};}
 const oldVisitDecisions=w.applyOpenTasksDecisions;
 if(typeof oldVisitDecisions==='function')w.applyOpenTasksDecisions=async function(containerId,decisions){const filtered={...decisions};for(const [id,d]of Object.entries(filtered)){const t=values('tasks').find(x=>x.id===id);if(d?.done&&(contract(t)||work(t)))delete filtered[id];}return oldVisitDecisions.call(this,containerId,filtered);};
 let scheduled=false;function schedule(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;if(document.getElementById('page-tasks')?.classList.contains('active'))paint();},70);}
