@@ -22,9 +22,10 @@ jobs:
       - run: npm install --prefix "$RUNNER_TEMP/task-v4-dom" --ignore-scripts --no-audit --no-fund linkedom@0.18.12
       - run: python -m pytest tests/test_daily_sales_v4.py -q
       - run: node --check assets/287-tasks-route-v4.js
+      - run: node --check assets/289-route-task-products-v1.js
       - name: Route, manager scope, voice draft and save flows
         run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/tasks-route-v4-ui.test.mjs tests/tasks-assistant-v4.test.mjs tests/tasks-context-v4.test.mjs tests/tasks-route-action-v4.test.mjs tests/tasks-workspace-v5.test.mjs tests/tasks-season-voice.test.mjs
       - name: Paid context, cache migration and recovery do not charge twice
-        run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/task-model-context-economy.test.mjs tests/task-model-cache-economy.test.mjs tests/support-mobile-and-route-products-20261116.test.mjs
+        run: CRM_DOM_MODULE="$RUNNER_TEMP/task-v4-dom/node_modules/linkedom/esm/index.js" node --test tests/task-model-context-economy.test.mjs tests/task-model-cache-economy.test.mjs tests/task-route-drafts-persistence.test.mjs tests/support-mobile-and-route-products-20261116.test.mjs
       - name: Existing Lera, task approvals and calendar stay compatible
         run: node --test tests/tasks-360-v1.test.cjs tests/ai360-agent360-unified-gateway-v1.test.mjs tests/ai360-agent360-conversation-routing-v1.test.mjs tests/ai360-unified-dialog-v1.test.cjs tests/lera360-agent-actions-v1.test.mjs tests/calendar-invitations-v3.test.mjs

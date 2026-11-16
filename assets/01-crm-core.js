@@ -4385,34 +4385,7 @@ function buildGoogleUrl(){
 
 function routeTaskHtml(tasks,id){
   if(!tasks||!tasks.length)return '';
-  const items=tasks.map((t,i)=>{
-    const text=String(t.text||'');
-    let displayText=text;
-    // Route cards use the approved product snapshot as well as the short task text.
-    // Older tasks may have only an SKU; resolve its name locally, without another request.
-    const products=(Array.isArray(t.ai_stock_items)?t.ai_stock_items:[]).map(x=>{
-      if(!x||typeof x!=='object')return '';
-      const sku=String(x.sku||'').trim();
-      let product=String(x.product||'').trim();
-      if(!product&&sku&&typeof allPrice!=='undefined'){
-        const names=[...new Set((allPrice||[]).filter(p=>String(p.sku||'').trim()===sku).map(p=>String(p.product||'').trim()).filter(Boolean))];
-        if(names.length===1)product=names[0];
-      }
-      if(!sku&&!product)return '';
-      // Historical task text already contains its product list; keep it without repeating it.
-      if(product&&text.includes(product)&&(!sku||text.includes(sku)))return '';
-      if(product&&sku){
-        const skuPattern=sku.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-        const pattern=new RegExp('(^|[^A-Za-z0-9/])'+skuPattern+'(?=$|[^A-Za-z0-9/])','g');
-        let found=false;
-        displayText=displayText.replace(pattern,(_,prefix)=>{found=true;return prefix+sku+' · '+product});
-        if(found)return '';
-      }
-      const qty=Number(x.qty),quantity=Number.isFinite(qty)&&qty>0?' — '+qty+' шт.':'';
-      return '<div>'+esc([sku,product||'Название товара не указано'].filter(Boolean).join(' · ')+quantity)+'</div>';
-    }).filter(Boolean).join('');
-    return '<div class="route-task-item">'+(tasks.length>1?'<b>'+(i+1)+'.</b> ':'')+esc(displayText)+(products?'<div class="route-task-products"><b>Товары:</b>'+products+'</div>':'')+'</div>';
-  }).join('');
+  const items=tasks.map((t,i)=>'<div class="route-task-item">'+(tasks.length>1?'<b>'+(i+1)+'.</b> ':'')+esc(String(t.text||''))+'</div>').join('');
   return '<div id="'+id+'" class="route-task-box route-task-collapsed" onclick="event.stopPropagation();toggleRouteTaskBlock(\''+id+'\')">'
     +'<div class="route-task-head">📌 '+(tasks.length===1?'Задача':'Задачи: '+tasks.length)+'</div>'
     +'<div class="route-task-text">'+items+'</div>'

@@ -6,7 +6,7 @@ const {parseHTML}=await import(process.env.CRM_DOM_MODULE||'linkedom');
 const core=fs.readFileSync('assets/01-crm-core.js','utf8');
 const routeSource=core.slice(core.indexOf('function routeTaskHtml('),core.indexOf('function toggleRouteTaskBlock('));
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function route(tasks,prices=[]){const ctx={esc,allPrice:prices};vm.createContext(ctx);vm.runInContext(routeSource,ctx);return ctx.routeTaskHtml(tasks,'test-route-task');}
+function route(tasks,prices=[]){const ctx={esc,allPrice:prices};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(routeSource,ctx);vm.runInContext(fs.readFileSync('assets/289-route-task-products-v1.js','utf8'),ctx);return ctx.routeTaskHtml(tasks,'test-route-task');}
 
 test('route cards show approved SKU, product and quantity without mutating tasks',()=>{
   const tasks=[{id:'kept',text:'Отгрузить утверждённые SKU по маршруту',ai_stock_items:[{sku:'67/1/2',product:'Конвектор Ресанта ОК-2000',qty:3}]}];
