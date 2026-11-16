@@ -34,6 +34,39 @@ window.crmVoiceRequestV1=async function(factory,controller=new AbortController()
   }finally{clearTimeout(timer);signal.removeEventListener('abort',onAbort);}
 };
 
+// AIR3 speech has its own native network queue, while WebView remains the sole
+// owner of authentication. Never fall back/retry after dispatching paid audio.
+window.crmAir3VoiceAvailableV1=()=>window.__resantaAI360AndroidDirectorOptIn===true&&
+ window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android'&&
+ window.Capacitor?.isPluginAvailable?.('Air3Voice')===true;
+window.crmAir3VoiceEncodeV1=async function(blob,signal){
+ const bytes=new Uint8Array(await blob.arrayBuffer());signal.throwIfAborted();
+ let text='';for(let at=0;at<bytes.length;at+=32768)text+=String.fromCharCode(...bytes.subarray(at,at+32768));
+ return btoa(text);
+};
+window.crmAir3VoiceTransportV1=async function(kind,session,data,signal){
+ signal.throwIfAborted();
+ if(!window.crmAir3VoiceAvailableV1())throw new Error('air3_unavailable');
+ if(!['tts','stt'].includes(kind))throw new Error('voice_endpoint_invalid');
+ const plugin=window.Capacitor.Plugins.Air3Voice;
+ const requestId='voice-'+(window.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(16).slice(2));
+ let onAbort;
+ const stopped=new Promise((_,reject)=>{
+  onAbort=()=>{void plugin.cancel({requestId}).catch(()=>{});reject(signal.reason||new Error('voice_request_cancelled'));};
+  signal.addEventListener('abort',onAbort,{once:true});
+ });
+ try{
+  signal.throwIfAborted();
+  const response=await Promise.race([stopped,plugin.request({requestId,kind,accessToken:session.access_token,data})]);
+  signal.throwIfAborted();
+  if(kind==='stt')return {data:response.result};
+  const raw=atob(response.audioBase64||'');
+  if(raw.length>1800100)throw new Error('voice_audio_too_large');
+  const bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  return {data:new Blob([bytes],{type:'application/octet-stream'})};
+ }finally{signal.removeEventListener('abort',onAbort);}
+};
+
 // v23.6.166: единый самовосстанавливающийся auth-слой.
 // После сна ноутбука/телефона access JWT может уже истечь в момент первого запроса.
 // Раньше тяжёлая purchase_history трижды повторяла запрос тем же просроченным JWT

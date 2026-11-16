@@ -311,7 +311,10 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
      if(run!==epoch)throw new Error('voice_request_cancelled');
      if(!session?.access_token)throw new Error('no_session');
      if(!isYandex)setStatus('Готовлю естественный голос…');
-     if(isYandex&&nativeAndroidDirector())return air3ReadVoiceAudioV1(session,{text:voiceText,voice},signal);
+     if(isYandex&&nativeAndroidDirector()){
+       if(window.crmAir3VoiceAvailableV1?.())return window.crmAir3VoiceTransportV1('tts',session,{text:voiceText,voice},signal);
+       return air3ReadVoiceAudioV1(session,{text:voiceText,voice},signal);
+     }
      return db.functions.invoke(isYandex?'crm-voice-yandex-tts-v1':'crm-voice-tts-v1',{body:{text:voiceText,voice},signal});
    },request);
  }finally{if(speechRequest===request)speechRequest=null;}
