@@ -84,3 +84,10 @@ test('Lera answer stays attached to its task when browsing and returning',async(
  await h.click('select',other);assert.doesNotMatch(h.document.querySelector('.tr-detail-panel').textContent,/Подтверждено 1 из 2/);
  await h.click('select',selected);assert.match(h.document.querySelector('.tr-detail-panel').textContent,/Подтверждено 1 из 2/);
 });
+
+test('confirmed Lera report updates the result form instead of retaining stale draft fields',async()=>{
+ const h=harness();await h.settle();let body;
+ h.db.functions.invoke=async(_,args)=>{body=args.body;return {data:body.action==='prepare_record_v5'?{mode:'prepared',draft:{version:5,operation:'report',client_id:cid,task_id:tid,fact:'Новый результат',next:'Позвонить',date:'2026-11-20'},approval_token:'signed',summary:'Проверьте результат'}:{mode:'saved_task',updated:1}};};
+ h.input('question','Запиши новый результат');await h.click('ask-lera');await h.click('confirm-agent-task');await h.click('report');
+ assert.equal(h.document.querySelector('[data-tr-field="fact"]').value,'Новый результат');assert.equal(h.document.querySelector('[data-tr-field="nextDate"]').value,'2026-11-20');
+});
