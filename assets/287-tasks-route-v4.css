@@ -73,3 +73,19 @@
 #tasks-route-v4 .tr-modal .tr-product input{width:100%;min-width:0}
 
 #tasks-route-v4 .tr-table-wrap{overflow:auto}#tasks-route-v4 table{width:100%;border-collapse:collapse;text-align:left}#tasks-route-v4 th,#tasks-route-v4 td{padding:12px;border-bottom:1px solid var(--tr-line)}
+
+/* Keep the current task and list position visible while browsing long history. */
+#tasks-route-v4 .tr-summary{background:#fff;border:1px solid var(--tr-line);border-radius:12px;padding:12px 16px}
+#tasks-route-v4 .tr-summary[open]{display:grid;gap:14px}
+#tasks-route-v4 .tr-client-panel{position:sticky;top:16px;padding:12px;gap:10px}
+#tasks-route-v4 .tr-list{max-height:68dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;gap:5px}
+#tasks-route-v4 .tr-client{padding:9px 11px;gap:3px;border-radius:8px;font-weight:400}
+#tasks-route-v4 .tr-client>b{font-size:14px}
+#tasks-route-v4 .tr-client-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px}
+#tasks-route-v4 .tr-client .tr-sub{font-size:12px}
+#tasks-route-v4 .tr-client .tr-tag{font-size:11px;padding:2px 7px}
+#tasks-route-v4 .tr-task-nav{border-bottom:1px solid var(--tr-line);padding-bottom:10px}
+#tasks-route-v4 .tr-list-filters label:last-of-type{flex:1;min-width:180px}
+#tasks-route-v4 .tr-full-text p{white-space:pre-wrap}
+@media(max-width:850px){#tasks-route-v4 .tr-client-panel{position:static}#tasks-route-v4 .tr-list{max-height:65dvh}#tasks-route-v4 .tr-task-nav{gap:5px}#tasks-route-v4 .tr-task-nav button{padding:8px}}
+#tasks-route-v4 .tr-list{grid-auto-rows:max-content;align-content:start}

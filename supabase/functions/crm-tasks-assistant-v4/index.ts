@@ -57,9 +57,10 @@ Deno.serve(async(req:Request)=>{
   const results=await Promise.all([
    caller.from('clients').select('id,name,client_status,role_type,assortment,sku_count,sku_our,notes,contact').eq('id',input.client_id).maybeSingle(),
    (()=>{const q=caller.from('tasks').select('id,title,text,expected_result,criteria,done,result_achieved,fact_result,done_comment,closed_by,done_at,fail_reason,next_action,next_contact_date,review_status,created_at,due_date').eq('client_id',input.client_id);return input.task_id?q.eq('id',input.task_id).limit(1):q.eq('review_status','approved').order('created_at',{ascending:false}).limit(30);})(),
-   caller.from('crm_task_contracts_v4').select('task_id,state,targets,progress,progress_pct,control_at,check_issue,review_decision,cutoff_state,cutoff_progress').eq('client_id',input.client_id).order('approved_at',{ascending:false}).limit(6),
-   caller.from('crm_shelf_scans_v4').select('route_id,items,merchandising_note,created_at').eq('client_id',input.client_id).order('created_at',{ascending:false}).limit(3)]);
+   (()=>{const q=caller.from('crm_task_contracts_v4').select('task_id,state,targets,progress,progress_pct,control_at,check_issue,review_decision,cutoff_state,cutoff_progress').eq('client_id',input.client_id);return (input.task_id?q.eq('task_id',input.task_id):q).order('approved_at',{ascending:false}).limit(6);})(),
+   (()=>{const q=caller.from('crm_shelf_scans_v4').select('route_id,items,merchandising_note,created_at').eq('client_id',input.client_id);return (input.route_id?q.eq('route_id',input.route_id):q).order('created_at',{ascending:false}).limit(3);})()]);
   if(results.some(r=>r.error))return send(req,{error:'task_context_unavailable'},503);
+  if(input.task_id&&!results[1].data?.length)return send(req,{error:'TASK_CLIENT_SCOPE'},404);
   taskFacts={client:results[0].data,selected_task_id:input.task_id,selected_route_id:input.route_id,tasks:(results[1].data||[]).filter((x:any)=>!input.task_id||x.id===input.task_id),verification:(results[2].data||[]).filter((x:any)=>!input.task_id||x.task_id===input.task_id),shelf:(results[3].data||[]).filter((x:any)=>!input.route_id||x.route_id===input.route_id)};
  }
  const claim=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:user.id,p_reserve_rub:1});
