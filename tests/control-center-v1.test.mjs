@@ -308,3 +308,5 @@ for(const tier of ['director','staff'])test('real '+tier+' bridge sends selected
  assert.equal(normalized.payload.memory.month,'2026-11');assert.match(normalized.payload.question||normalized.payload.message,/Контекст интерфейса/);
  if(tier==='staff')assert.doesNotMatch(captured.question,/Триовист/);
 });
+
+test('task counter and click use the unified task service instead of old hidden filters',async()=>{const f=fixture();let opened=0;f.context.RESANTA_TASKS_ROUTE_V4={ensure(){},ready:()=>true,revision:()=>991,overview:()=>[{id:'old-a'},{id:'old-b'},{id:'new-c'}],overdue:t=>t.id!=='new-c',openOverdue(){opened++;}};f.context.RESANTA_CONTROL_CENTER_V1.refresh();await flush();assert.match(f.root().innerHTML,/Просроченные задачи<\/span><strong>2<\/strong>/);const match=f.root().innerHTML.match(/data-cc-action="([^"]+)"[^>]*><span>Просроченные задачи/);assert.ok(match);controlClick(f,'data-cc-action',{ccAction:match[1]});assert.equal(opened,1);});

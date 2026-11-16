@@ -1488,6 +1488,8 @@ function canonicalTasksForManager(name){
 // же типа закрываются как заменённые новой. История сохраняется, в просрочку
 // они больше не попадают.
 async function cleanupDuplicateOpenTasks(){
+  // Opening CRM must not delete, close or reclassify task history.
+  if(window.RESANTA_TASKS_ROUTE_V4?.preserveHistory?.())return 0;
   if(currentProfile?.role!=='boss')return 0;
   const groups=new Map();
   allTasks.filter(isActiveTask).forEach(t=>{
@@ -1525,6 +1527,8 @@ async function cleanupDuplicateOpenTasks(){
 // удаляем и не считаем выполненным: руководитель увидит эти задачи в отдельной
 // папке и решит — вернуть с новым сроком или закрыть с полноценным отчётом.
 async function cleanupLegacyTaskBacklog(){
+  // Opening CRM must not delete, close or reclassify task history.
+  if(window.RESANTA_TASKS_ROUTE_V4?.preserveHistory?.())return 0;
   if(currentProfile?.role!=='boss')return 0;
   const stale=allTasks.filter(t=>
     !t.done && !isPendingTask(t) && !isBacklogReviewTask(t) &&
@@ -1547,6 +1551,8 @@ async function cleanupLegacyTaskBacklog(){
 // done по технической причине остался false. Такие задачи считаем выполненными,
 // не удаляя отчёт и историю.
 async function repairReportedTasks(){
+  // Opening CRM must not delete, close or reclassify task history.
+  if(window.RESANTA_TASKS_ROUTE_V4?.preserveHistory?.())return 0;
   if(currentProfile?.role!=='boss')return 0;
   const stuck=allTasks.filter(t=>!t.done && (
     String(t.fact_result||'').trim() || String(t.done_comment||'').trim() ||
@@ -1566,6 +1572,8 @@ async function repairReportedTasks(){
 // накапливались сотни карточек. Удаляем только НЕсогласованные автозадачи;
 // ручные задачи и запросы менеджеров на перенос срока не затрагиваются.
 async function cleanupPendingAutoTasks(){
+  // Opening CRM must not delete, close or reclassify task history.
+  if(window.RESANTA_TASKS_ROUTE_V4?.preserveHistory?.())return 0;
   if(currentProfile?.role!=='boss')return 0;
   const stale=allTasks.filter(t=>!t.done&&t.review_status==='pending'&&isAutoTask(t));
   if(!stale.length)return 0;

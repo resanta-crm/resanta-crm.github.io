@@ -84,16 +84,17 @@ function coreStatus(name){return w.crmCoreResourceStatusV1?.(name)||{status:'idl
 function coreReady(names){return names.every(k=>{const s=coreStatus(k);return s.status==='ready'&&!s.error;});}
 function coreMessage(names){const error=state.coreTimedOut||names.some(k=>coreStatus(k).error||coreStatus(k).status==='error');return error?'Не удалось обновить данные. Повторите загрузку.':'Данные загружаются…';}
 function localData(){
- const version=[actor(),day(),...['tasks','visits','routes','absences'].map(k=>{const s=coreStatus(k);return [s.status,s.loadedAt,s.error].join(':')})].join('|');
+ const taskAPI=w.RESANTA_TASKS_ROUTE_V4;taskAPI?.ensure?.();
+ const version=[actor(),day(),taskAPI?.revision?.(),...['tasks','visits','routes','absences'].map(k=>{const s=coreStatus(k);return [s.status,s.loadedAt,s.error].join(':')})].join('|');
  if(operationCache?.version===version)return operationCache.data;
  let tasks=[],routes=null;
- const tasksReady=coreReady(['tasks','absences']);
+ const tasksReady=taskAPI?taskAPI.ready():coreReady(['tasks','absences']);
  const routesReady=coreReady(['visits','routes','absences']);
- if(tasksReady){try{tasks=boss()?canonicalActiveTasks(allTasks):canonicalTasksForManager(profile().name)}catch(_){return{tasks:[],tasksReady:false,routesReady:false,routes:null};}}
+ if(tasksReady){try{tasks=taskAPI?taskAPI.overview():(boss()?canonicalActiveTasks(allTasks):canonicalTasksForManager(profile().name))}catch(_){return{tasks:[],tasksReady:false,routesReady:false,routes:null};}}
  if(routesReady){try{routes=routeTruthMetrics(visibleVisitsForCurrentUser(),routePlansForCurrentUser());}catch(_){routes=null;}}
  const data={tasks,tasksReady,routesReady:routesReady&&Boolean(routes),routes};operationCache={version,data};return data;
 }
-function overdueTasks(data){return data.tasksReady?data.tasks.filter(t=>{try{return isTaskOverdue(t)}catch(_){return false}}):[];}
+function overdueTasks(data){return data.tasksReady?data.tasks.filter(t=>{try{return w.RESANTA_TASKS_ROUTE_V4?w.RESANTA_TASKS_ROUTE_V4.overdue(t):isTaskOverdue(t)}catch(_){return false}}):[];}
 function salesRows(kpi,tri,month,manager=''){
  const list=arr(kpi?.sales).filter(x=>FIELD.includes(x.manager_name)&&(!manager||x.manager_name===manager)).map(x=>({name:x.manager_name,actual:kpi.latest_sales_month&&month<=kpi.latest_sales_month?n(x.shipment):null,plan:n(x.shipment_plan)>0?n(x.shipment_plan):null,kind:'field'}));
  if(tri){
@@ -148,7 +149,7 @@ function load(force=false){
 function slotMessage(name){const s=slots()[name];return s?.error?'Данные недоступны · повторите загрузку':s?.loading?'Загружаю данные…':'Данные пока не загружены';}
 function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'',extra.review||'',extra.promotion||'']));actions.set(key,{page,...extra});return key;}
 function action(label,page,extra={}){return '<button type="button" class="cc-btn" data-cc-action="'+actionId(label,page,extra)+'">'+esc(label)+'</button>';}
-function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+actionId(label,page)+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
+function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+actionId(label,page,page==='tasks'?{filter:'overdue'}:{})+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
 function planChart(rows){
  if(!rows.length)return '<p class="cc-muted">'+esc(slotMessage('sales'))+'</p>';
  const max=Math.max(1,...rows.flatMap(x=>[x.actual||0,x.plan||0]));
@@ -248,13 +249,14 @@ function mount(){
 }
 function onClick(e){
  const b=e.target.closest?.('button');if(!b||!active())return;
- if(b.hasAttribute('data-cc-refresh')){load(true);return;}
+ if(b.hasAttribute('data-cc-refresh')){void w.RESANTA_TASKS_ROUTE_V4?.refresh?.();load(true);return;}
  if(b.hasAttribute('data-cc-checks')){void loadChecks();return;}
  if(b.hasAttribute('data-cc-more')){const key=b.dataset.ccMore;if(!['vip','promotions','tasks','clients'].includes(key))return;checks.limits=checks.limits||{};checks.limits[key]=(checks.limits[key]||10)+10;scheduleRender();return;}
  if(b.hasAttribute('data-cc-legacy')){state.legacy=!state.legacy;painted.clear();if(state.legacy)legacyBuild?.();render();return;}
  if(!b.hasAttribute('data-cc-action'))return;
  const a=actions.get(b.dataset.ccAction);if(!a)return;
  if(a.scroll){d.getElementById(a.scroll)?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+ if(a.page==='tasks'&&a.filter==='overdue'&&w.RESANTA_TASKS_ROUTE_V4){w.RESANTA_TASKS_ROUTE_V4.openOverdue();return;}
  if(a.page==='tasks'&&a.filter==='overdue'&&typeof w.goToTasksFiltered==='function'){w.goToTasksFiltered('overdue');return;}
  if(a.promotion&&a.page==='promotions'&&typeof w.openPromotionDetail==='function'){w.openPromotionDetail(a.promotion);return;}
  if(a.client&&a.page==='clients'&&typeof w.openClient==='function'){void w.openClient(a.client);return;}
@@ -314,6 +316,7 @@ function install(){
  if(active()){resetActor();render();load();}
  if(allowed()&&d.getElementById('page-alerts')?.classList.contains('active'))w.goPage?.('alerts','Сигналы');
 }
+w.addEventListener?.('crm-tasks-updated',()=>{operationCache=null;scheduleRender();});
 w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261114.1',readOnly:true,signalsMerged:allowed,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(window,document);

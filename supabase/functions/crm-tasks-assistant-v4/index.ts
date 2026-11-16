@@ -21,17 +21,17 @@ Deno.serve(async(req:Request)=>{
  const access=await caller.rpc('crm_tasks_access_v4',{p_client:input.client_id});
  if(access.error||access.data!==true)return send(req,{error:'forbidden'},403);
  const svc=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
- if(['prepare_plan_v5','validate_plan_v5','prepare_record_v5','commit_workspace_v5'].includes(input.action)){
-  let claim:any=null,usedIn=0,usedOut=0,ok=false;
+ if(['prepare_plan_v5','validate_plan_v5','prepare_record_v5','commit_workspace_v5','catalog_search_v5'].includes(input.action)){
+  let claim:any=null,usedIn=0,usedOut=0,rounds=0,ok=false;
   const model=async(instructions:string,facts:unknown)=>{
    if(!claim){const r=await svc.rpc('crm_ai360_core_claim_v2',{p_user_id:user.id,p_reserve_rub:5});if(r.error||r.data?.allowed!==true)throw Error('budget_unavailable');claim=r.data;}
-   const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+Deno.env.get('OPENAI_API_KEY'),'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-5.4-mini',store:false,max_output_tokens:3500,reasoning:{effort:'low'},instructions,input:'Верни JSON. Данные для обработки:\n'+JSON.stringify(facts),text:{format:{type:'json_object'}}}),signal:AbortSignal.timeout(45000)});
+   rounds++;const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+Deno.env.get('OPENAI_API_KEY'),'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-5.4-mini',store:false,max_output_tokens:3500,reasoning:{effort:'low'},instructions,input:'Верни JSON. Данные для обработки:\n'+JSON.stringify(facts),text:{format:{type:'json_object'}}}),signal:AbortSignal.timeout(45000)});
    if(!response.ok){const failure=await response.json().catch(()=>({}));console.warn('Task model failure',response.status,failure.error?.code,failure.error?.message);throw Error('model_unavailable');}const result=await response.json();usedIn+=Number(result.usage?.input_tokens)||0;usedOut+=Number(result.usage?.output_tokens)||0;
    const raw=result.output?.flatMap((x:any)=>x.content||[]).find((x:any)=>x.type==='output_text')?.text;return JSON.parse(raw||'{}');
   };
   try{const result=await workspaceAction({caller,svc,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,model});ok=true;return send(req,result);}
   catch(e){console.warn('Tasks workspace failure',String((e as Error).message||'TASK_ACTION_FAILED'));return send(req,{error:String((e as Error).message||'TASK_ACTION_FAILED')},422);}
-  finally{if(claim)await svc.rpc('crm_ai360_core_finish_v2',{p_claim_id:claim.claim_id,p_actual_rub:(usedIn*.75+usedOut*4.5)*100/1000000,p_input_tokens:usedIn,p_output_tokens:usedOut,p_rounds:2,p_status:ok?'ok':'failed'});}
+  finally{if(claim)await svc.rpc('crm_ai360_core_finish_v2',{p_claim_id:claim.claim_id,p_actual_rub:(usedIn*.75+usedOut*4.5)*100/1000000,p_input_tokens:usedIn,p_output_tokens:usedOut,p_rounds:rounds,p_status:ok?'ok':'failed'});}
  }
  if(['prepare_route_task','commit_route_task'].includes(input.action)){
   try{return send(req,await routeAction({caller,user,input,secret:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}));}
@@ -56,7 +56,7 @@ Deno.serve(async(req:Request)=>{
  if(input.action==='question'){
   const results=await Promise.all([
    caller.from('clients').select('id,name,client_status,role_type,assortment,sku_count,sku_our,notes,contact').eq('id',input.client_id).maybeSingle(),
-   caller.from('tasks').select('id,title,expected_result,criteria,done,result_achieved,fact_result,fail_reason,next_action,next_contact_date,review_status,created_at,due_date').eq('client_id',input.client_id).eq('review_status','approved').limit(30),
+   (()=>{const q=caller.from('tasks').select('id,title,text,expected_result,criteria,done,result_achieved,fact_result,done_comment,closed_by,done_at,fail_reason,next_action,next_contact_date,review_status,created_at,due_date').eq('client_id',input.client_id);return input.task_id?q.eq('id',input.task_id).limit(1):q.eq('review_status','approved').order('created_at',{ascending:false}).limit(30);})(),
    caller.from('crm_task_contracts_v4').select('task_id,state,targets,progress,progress_pct,control_at,check_issue,review_decision,cutoff_state,cutoff_progress').eq('client_id',input.client_id).order('approved_at',{ascending:false}).limit(6),
    caller.from('crm_shelf_scans_v4').select('route_id,items,merchandising_note,created_at').eq('client_id',input.client_id).order('created_at',{ascending:false}).limit(3)]);
   if(results.some(r=>r.error))return send(req,{error:'task_context_unavailable'},503);
