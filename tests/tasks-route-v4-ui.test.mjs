@@ -103,3 +103,46 @@ test('All managers and new week never reopen old route; explicit return preserve
 test('reopening while stopped request completes waits then shows manager selector',async()=>{const h=batchFixture();await h.settle();const original=h.db.functions.invoke;let release;h.db.functions.invoke=async(n,a)=>a.body.action==='prepare_plan_v5'?await new Promise(r=>release=()=>original(n,a).then(r)):original(n,a);await h.click('generate');await h.click('batch-manager','Руднев');await h.click('batch-day','2026-11-18');await h.click('batch-close');await h.click('generate');assert.match(h.document.querySelector('[role="dialog"]').textContent,/Завершаю текущую операцию/);release();await h.settle();assert.match(h.document.querySelector('[role="dialog"]').textContent,/1. Выберите менеджера/);assert.equal(h.calls.filter(x=>x.args?.action==='prepare_plan_v5').length,1);});
 
 test('manager sees saved route clients before a sales task is created',async()=>{const h=harness('manager');h.data.tasks=[];h.data.crm_task_assignments_v5=[];h.data.crm_task_contracts_v4=[];await h.settle();filter(h,'data-tr-week','2026-11-16');await h.settle();const agenda=h.document.querySelector('.tr-route-agenda');assert.ok(agenda);assert.match(agenda.textContent,/Тест Клиент/);assert.doesNotMatch(agenda.textContent,/ЧУЖОЙ КЛИЕНТ/);assert.match(agenda.textContent,/Задача ещё не поставлена/);assert.equal(h.document.querySelectorAll('.tr-client').length,0);});
+
+function batchInput(h,field,value,row=0,item=null){const el=h.document.querySelector('[data-batch-field="'+field+'"][data-row="'+row+'"]'+(item==null?'':'[data-item="'+item+'"]'));assert.ok(el,field);el.value=value;el.dispatchEvent(new h.window.Event('input',{bubbles:true}));}
+async function reviewRoute(h){await h.settle();await h.click('generate');await h.click('batch-manager','Руднев');await h.click('batch-day','2026-11-18');await h.settle();}
+const zeroUsage={input_tokens:0,output_tokens:0,cached_input_tokens:0,model_calls:0,cost_usd:0};
+function recoveryTransport(h,prepare){const original=h.db.functions.invoke;h.db.functions.invoke=async(name,args)=>{
+ const b=args.body;if(b.client_id!==cid)return original(name,args);
+ h.calls.push({name,args:b});
+ if(b.action==='prepare_plan_v5')return prepare(b);
+ if(b.action==='catalog_search_v5')return {data:{items:[{sku:'67/4/21',product:'Конвектор Ресанта',available:4}],usage:zeroUsage}};
+ if(b.action==='validate_plan_v5')return {data:{mode:'prepared',draft:b.plan,approval_token:'validated-without-ai',usage:zeroUsage}};
+ throw Error('Unexpected recovery action '+b.action);
+};}
+test('editable zero-stock proposal keeps canonical products and can be repaired without a paid regeneration',async()=>{
+ const h=batchFixture();recoveryTransport(h,()=>({data:{mode:'editable',draft:{version:5,operation:'create',client_id:cid,route_id:rid,manager_name:'Руднев',route_day:'2026-11-18',title:'Согласовать отгрузку',basis:'История клиента',expected_result:'Отгрузить по SKU',stage:'shipment',items:[{sku:'67/4/1',product:'Тепловая пушка',qty:8}]},validation_error:'TASK_TARGETS_INVALID: 67/4/1: доступно 0 шт.',usage:{...zeroUsage,input_tokens:1200,output_tokens:150,model_calls:1,cost_usd:.0012}}}));
+ await reviewRoute(h);const checkbox=h.document.querySelector('[data-batch-field="selected"][data-row="0"]');assert.equal(checkbox.hasAttribute('checked'),false);assert.ok(h.document.querySelector('[data-batch-field="query"][data-row="0"]'));assert.match(h.document.querySelector('[role="dialog"]').textContent,/Тепловая пушка.*доступно 0/s);
+ const paidBefore=h.calls.filter(c=>c.args?.action==='prepare_plan_v5').length;
+ await h.click('batch-retry');assert.equal(h.calls.filter(c=>c.args?.action==='prepare_plan_v5').length,paidBefore);
+ await h.click('batch-replace','0:0');await h.click('batch-catalog','0');await h.click('batch-pick','0:0');batchInput(h,'qty','3',0,0);await h.click('batch-validate','0');
+ const validated=h.calls.filter(c=>c.args?.action==='validate_plan_v5').at(-1);assert.equal(validated.args.plan.items[0].sku,'67/4/21');assert.equal(validated.args.plan.items[0].product,'Конвектор Ресанта');assert.equal(validated.args.plan.items[0].qty,3);
+ assert.equal(h.calls.filter(c=>c.args?.action==='prepare_plan_v5').length,paidBefore);assert.equal(h.calls.filter(c=>c.args?.action==='commit_workspace_v5').length,0);assert.equal(h.calls.filter(c=>c.name==='crm_shelf_save_v4').length,0);
+ assert.equal(h.document.querySelector('[data-batch-field="selected"][data-row="0"]').hasAttribute('checked'),true);assert.match(h.document.querySelector('.tr-batch-cost').textContent,/0,001200 \$/);
+});
+for(const scenario of ['oversize','no-data'])test('manual recovery after '+scenario+' starts empty and validates without model calls or shelf changes',async()=>{
+ const h=batchFixture(),shelfKey='crm-task-v4:boss:'+cid+'|'+rid,shelfDraft=JSON.stringify({transcript:'Исходная сверка полки, ещё не сохранена',items:[{sku:'75/6/1',shelf_qty:2,reserve_qty:null}]});h.ctx.sessionStorage.setItem(shelfKey,shelfDraft);
+ recoveryTransport(h,()=>scenario==='oversize'?{error:{message:'HTTP 400',context:{json:async()=>({error:'TASK_CONTEXT_TOO_LARGE',usage:zeroUsage})}}}:{data:{mode:'needs_details',question:'Уточните товарный профиль клиента',usage:zeroUsage}});
+ await reviewRoute(h);assert.ok(h.document.querySelector('[data-tr="batch-manual"][data-value="0"]'));await h.click('batch-manual','0');
+ assert.equal(h.document.querySelector('[data-batch-field="title"][data-row="0"]').value,'');assert.equal(h.document.querySelectorAll('[data-batch-field="qty"][data-row="0"]').length,0);assert.equal(h.document.querySelector('[data-batch-field="selected"][data-row="0"]').hasAttribute('checked'),false);
+ const paidBefore=h.calls.filter(c=>c.args?.action==='prepare_plan_v5').length;
+ batchInput(h,'title','Согласовать заказ');batchInput(h,'basis','Клиент подтвердил интерес');batchInput(h,'expected_result','Отгрузить выбранные товары');
+ await h.click('batch-catalog','0');await h.click('batch-pick','0:0');await h.click('batch-validate','0');
+ assert.equal(h.calls.filter(c=>c.args?.action==='prepare_plan_v5').length,paidBefore);assert.equal(h.calls.filter(c=>c.args?.action==='validate_plan_v5').length,1);assert.equal(h.calls.filter(c=>c.args?.action==='commit_workspace_v5').length,0);assert.equal(h.calls.filter(c=>c.name==='crm_shelf_save_v4').length,0);
+ await h.click('batch-close');assert.equal(h.ctx.sessionStorage.getItem(shelfKey),shelfDraft);
+});
+test('validation returning an unsigned editable draft never reaches commit and never retries AI',async()=>{
+ const h=batchFixture(),original=h.db.functions.invoke;h.db.functions.invoke=async(n,a)=>{if(a.body.action==='validate_plan_v5'&&a.body.client_id===cid){h.calls.push({name:n,args:a.body});return {data:{mode:'editable',draft:a.body.plan,validation_error:'TASK_TARGETS_INVALID: доступно 0',usage:zeroUsage}};}return original(n,a);};
+ await reviewRoute(h);await h.click('batch-approve');assert.equal(h.calls.filter(c=>c.args?.action==='commit_workspace_v5'&&c.args.client_id===cid).length,0);assert.equal(h.calls.filter(c=>c.args?.action==='prepare_plan_v5'&&c.args.client_id===cid).length,1);assert.equal(h.document.querySelector('[data-batch-field="selected"][data-row="0"]').hasAttribute('checked'),false);assert.ok(h.document.querySelector('[data-batch-field="query"][data-row="0"]'));
+});
+test('route usage totals reflect this opening and cached responses add zero',async()=>{
+ const h=batchFixture(),original=h.db.functions.invoke;h.db.functions.invoke=async(n,a)=>{const r=await original(n,a);if(a.body.action==='prepare_plan_v5'){r.data.usage={input_tokens:1000,output_tokens:200,cached_input_tokens:100,model_calls:1,cost_usd:.0015};if(a.body.client_id==='lead')r.data.cache_hit=true;}return r;};
+ await reviewRoute(h);let text=h.document.querySelector('.tr-batch-cost').textContent;assert.match(text,/0,001500 \$/);assert.match(text,/Вызовов модели: 1 · вход: 1000 · выход: 200 · из кеша: 100/);
+ await h.click('batch-edit','0');await h.click('batch-replan','0');text=h.document.querySelector('.tr-batch-cost').textContent;assert.match(text,/0,003000 \$/);assert.match(text,/Вызовов модели: 2/);
+ await h.click('batch-close');await h.click('generate');assert.doesNotMatch(h.document.querySelector('.tr-batch-cost').textContent,/0,003000/);
+});
