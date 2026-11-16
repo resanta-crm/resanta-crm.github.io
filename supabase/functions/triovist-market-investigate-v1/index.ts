@@ -115,16 +115,21 @@ async function feed(svc){
     in_stock:null,observed_at:r.observed_at});
   if(s)signals.push(s);
  }
- const by=new Map(),groups=m.scopes.map(x=>({scope_key:x.scope_key,category:x.category,subgroup:x.subgroup,signals:0}));
+ const by=new Map(),tracked=new Map(),groups=m.scopes.map(x=>({scope_key:x.scope_key,category:x.category,subgroup:x.subgroup,signals:0,own_signals:0,competitor_signals:0,own_tracked:0}));
+ for(const own of ownPositions)if(known.has(own.scope_key))tracked.set(own.scope_key,(tracked.get(own.scope_key)||0)+1);
  for(const s of signals){by.set(s.scope_key,(by.get(s.scope_key)||[]).concat(s))}
  const picked=[];
  for(const g of groups){
   const a=(by.get(g.scope_key)||[]).sort((x,y)=>y.priority-x.priority);
   g.signals=a.length;
-  picked.push(...a.slice(0,3));
+  g.own_signals=a.filter(x=>x.kind==="own").length;
+  g.competitor_signals=a.length-g.own_signals;
+  g.own_tracked=tracked.get(g.scope_key)||0;
+  picked.push(...a);
  }
- picked.sort((a,b)=>b.priority-a.priority);
- return {groups,cases:picked.slice(0,100),signals_total:signals.length,scopes_total:groups.length,
+ // All verified signals from all active categories; give own products priority.
+ picked.sort((a,b)=>(a.kind==="own"?0:1)-(b.kind==="own"?0:1)||b.priority-a.priority);
+ return {groups,cases:picked,signals_total:signals.length,scopes_total:groups.length,
   scopes_with_signals:groups.filter(x=>x.signals).length,source_at:m.stamp,limits:{deep_ai_per_day:MAX_DAILY_AI,daily_auto_ai:MAX_CRON_AI},
   note:"Все действующие подгруппы проверяются; AI глубоко анализирует приоритетные изменения. Позиция не доказывает причину."};
 }
@@ -137,10 +142,20 @@ async function itemEvidence(svc,scope,kind,key){
  const h=check(await svc.from(isOwn?"triovist_market_own_position_snapshots_v1":"triovist_market_comp_position_snapshots_v236352")
    .select("observed_at,position,current_price,in_stock,listing_state")
    .eq("scope_key",scope).eq(isOwn?"sku":"product_key",key).order("observed_at",{ascending:false}).limit(9),"rank_history")||[];
- const peers=check(await svc.from("triovist_market_comp_position_current_v236352")
-   .select("brand,model,position,previous_position,movement,current_price,observed_at")
-   .eq("scope_key",scope).in("movement",["up","entered"]).not("position","is",null)
-   .order("position",{ascending:true}).limit(8),"competitor_context")||[];
+ // Compare nearby ranks only within the selected group; rank proximity does not establish technical equivalence.
+ const [compResponse,ownResponse]=await Promise.all([
+  svc.from("triovist_market_comp_position_current_v236352")
+    .select("product_key,brand,model,position,previous_position,movement,current_price,in_stock,observed_at")
+    .eq("scope_key",scope).not("position","is",null).order("position",{ascending:true}).limit(500),
+  svc.from("triovist_market_own_positions_current_v1")
+    .select("sku,product_name,position,current_price,in_stock,observed_at")
+    .eq("scope_key",scope).not("position","is",null).order("position",{ascending:true}).limit(150)
+ ]);
+ const near=x=>Math.abs((num(x.position)??999)-(num(current.position)??999));
+ const peers=(check(compResponse,"competitor_context")||[])
+    .filter(x=>isOwn||x.product_key!==key).sort((a,b)=>near(a)-near(b)).slice(0,8);
+ const ownPeers=(check(ownResponse,"own_context")||[])
+    .filter(x=>!isOwn||x.sku!==key).sort((a,b)=>near(a)-near(b)).slice(0,6);
  let card=null,assignee=null;
  if(isOwn){
   const c=check(await svc.from("triovist_content_cards").select(
@@ -159,7 +174,11 @@ async function itemEvidence(svc,scope,kind,key){
     previous_position:prev,history:h.map(x=>({date:x.observed_at,position:num(x.position),price:num(x.current_price),in_stock:x.in_stock??null,listing_state:x.listing_state})),
     card:card?{as_of:card.created_at,price:num(card.price),available:card.in_stock,rating:num(card.product_rating),
      reviews:card.review_count,photos:card.photo_count,videos:card.video_count,description:card.description_present,warranty:card.warranty_present}:null,
-    competitors_rising:peers.map(x=>({brand:clip(x.brand,60),model:clip(x.model,90),position:x.position,previous_position:x.previous_position,
+    same_group_own:ownPeers.map(x=>({sku:clip(x.sku,70),name:clip(x.product_name,100),position:x.position,
+      price:num(x.current_price),in_stock:x.in_stock,observed_at:x.observed_at})),
+    competitors_near_rank:peers.map(x=>({brand:clip(x.brand,60),model:clip(x.model,90),position:x.position,
+      previous_position:x.previous_position,movement:x.movement,price:num(x.current_price),observed_at:x.observed_at})),
+    competitors_rising:peers.filter(x=>x.movement==="up"||x.movement==="entered").map(x=>({brand:clip(x.brand,60),model:clip(x.model,90),position:x.position,previous_position:x.previous_position,
       price:num(x.current_price),observed_at:x.observed_at})),
     limitations:["Поисковая позиция зависит от запроса и момента проверки","Изменение позиции само по себе не доказывает причину",
     "Данные о рекламных ставках и промобюджетах конкурента недоступны; не утверждать рекламу без фактов"]}};
@@ -184,7 +203,7 @@ async function llm(svc,userId,evidence){
     headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
     body:JSON.stringify({model:"gpt-4o-mini",temperature:0.1,max_tokens:650,response_format:{type:"json_object"},
      messages:[
-      {role:"system",content:"Ты аналитик 21vek в Беларуси. Верни ТОЛЬКО JSON: {\"finding\":\"факт изменений\", \"hypotheses\":[{\"cause\":\"вероятный фактор\",\"evidence\":\"какие конкретно факты за/против\",\"confidence\":\"низкая|средняя\"}],\"manager_question\":\"один конкретный вопрос менеджеру с запросом источника\",\"action\":\"одно проверяемое действие с измеримым результатом\",\"limits\":\"что НЕ доказано\"}. Никаких выдуманных цифр, скидок, рекламы, истории или источников. Причинность НЕ следует из корреляции. При отсутствии данных пиши неизвестно. Объясняй кратко, по-русски."},
+      {role:"system",content:"Ты аналитик 21vek в Беларуси. Анализируй конкретный товар и его SKU, сопоставляя его с ближайшими по позиции товарами той же группы: same_group_own и competitors_near_rank. Указывай фактические цены, позиции, даты, различия и отсутствие данных; не повторяй одинаковые шаблонные объяснения для разных товаров. Соседняя позиция не доказывает аналогичность товара или причину изменений. Без подтверждения причины задавай предметный вопрос менеджеру. Верни ТОЛЬКО JSON: {\"finding\":\"факт изменений\", \"hypotheses\":[{\"cause\":\"вероятный фактор\",\"evidence\":\"какие конкретно факты за/против\",\"confidence\":\"низкая|средняя\"}],\"manager_question\":\"один конкретный вопрос менеджеру с запросом источника\",\"action\":\"одно проверяемое действие с измеримым результатом\",\"limits\":\"что НЕ доказано\"}. Никаких выдуманных цифр, скидок, рекламы, истории или источников. Причинность НЕ следует из корреляции. При отсутствии данных пиши неизвестно. Объясняй кратко, по-русски."},
       {role:"user",content:JSON.stringify(evidence).slice(0,12000)}]})});
   }finally{clearTimeout(timeout)}
   if(!response.ok)throw Error("openai_unavailable");
@@ -312,7 +331,7 @@ async function daily(svc){
   const seen=new Set();
   let generated=0,attempts=0;
   const ranked=data.cases.filter(x=>(x.kind==="own"&&x.movement==="down")||
-    (x.kind==="competitor"&&x.movement==="up")).sort((a,b)=>b.priority-a.priority);
+    (x.kind==="competitor"&&x.movement==="up")).sort((a,b)=>(a.kind==="own"?0:1)-(b.kind==="own"?0:1)||b.priority-a.priority);
   // Try other scopes if a candidate cannot be backed by the latest two snapshots.
   for(const c of ranked){
    if(generated>=MAX_CRON_AI||attempts>=24)break;
