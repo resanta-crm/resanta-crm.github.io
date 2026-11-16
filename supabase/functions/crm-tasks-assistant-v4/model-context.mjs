@@ -29,10 +29,13 @@ export function directionFacts(facts,winterProducts=[],subgroups=[]){
  }
  const analysis=facts.purchase_analysis;
  return {
+  // Stable, shared catalog/policy prefix comes before client-specific facts.
+  winter_products:[...winterProducts].sort((a,b)=>String(a.sku).localeCompare(String(b.sku))||String(a.product).localeCompare(String(b.product))),
+  subgroups:[...subgroups].sort(),field_policy:facts.field_policy,
   client:facts.client,season:facts.season,purchase_restriction:facts.purchase_restriction,
   route:facts.route?{visit_date:facts.route.visit_date,address:facts.route.address}:undefined,
   visits:facts.visits,tasks:facts.tasks,shelf:facts.shelf,
-  field_policy:facts.field_policy,request:facts.request,
+  request:facts.request,
   purchase_analysis:analysis?{
    basis:analysis.basis,from:analysis.from,to:analysis.to,
    previous_season_year:analysis.previous_season_year,
@@ -42,8 +45,7 @@ export function directionFacts(facts,winterProducts=[],subgroups=[]){
     purchase_months:item.purchase_months,previous_autumn:item.previous_autumn,
     historical_groups:[...(groups.get(item.sku)||[])].sort()
    }))
-  }:null,
-  winter_products:winterProducts,subgroups
+  }:null
  };
 }
 
