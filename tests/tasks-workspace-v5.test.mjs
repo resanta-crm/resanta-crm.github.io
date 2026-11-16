@@ -23,9 +23,10 @@ test('catalog search returns canonical stock without model calls or writes',asyn
 
 test('only final plan generation receives the strict stock-bound response format; direction selection stays unchanged',async()=>{
  const h=setup(),formats=[];
- h.model=async(_,facts,options)=>{formats.push(options?.format);return facts.candidates?plan:{subgroups:['Инструмент']};};
+ h.model=async(_,facts,options)=>{formats.push(options?.format);return facts.candidates?{title:plan.title,basis:plan.basis,items:plan.items,question:null}:{subgroups:['Инструмент']};};
  const result=await workspaceAction({...h,input});assert.equal(result.mode,'prepared');assert.equal(formats.length,2);assert.equal(formats[0],undefined);assert.equal(formats[1].type,'json_schema');assert.equal(formats[1].strict,true);
  assert.equal(formats[1].schema.properties.items.items.anyOf[0].properties.sku.enum[0],'75/6/1');assert.equal(formats[1].schema.properties.items.items.anyOf[0].properties.qty.maximum,5);assert.deepEqual(h.calls,[]);
+ assert.equal(formats[1].schema.properties.stage,undefined);assert.equal(formats[1].schema.properties.expected_result,undefined);assert.equal(result.draft.stage,'shipment');assert.match(result.draft.expected_result,/1С: 75\/6\/1 — 2 шт/);
 });
 
 

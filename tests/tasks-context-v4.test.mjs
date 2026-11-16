@@ -8,7 +8,8 @@ test('no context or unrelated question never reroutes another CRM section',()=>{
 import fs from 'node:fs';import vm from 'node:vm';
 const taskEndpoint=fs.readFileSync(new URL('../supabase/functions/crm-tasks-assistant-v4/index.ts',import.meta.url),'utf8');
 async function selectedFacts(input,rows){
- const source=taskEndpoint.slice(taskEndpoint.indexOf(" if(input.action==='question'){"),taskEndpoint.indexOf(" const claim=await svc.rpc('crm_ai360_core_claim_v2'" )).replace(/\(x:any\)/g,'(x)');
+ const start=taskEndpoint.indexOf(" if(input.action==='question'){");const end=taskEndpoint.indexOf('\n let claim',start);assert(start>=0&&end>start);
+ const source=taskEndpoint.slice(start,end).replace(/\(x:any\)/g,'(x)');
  const caller={from(name){let data=[...(rows[name]||[])];const q={select(){return q},eq(k,v){data=data.filter(x=>x[k]===v);return q},order(){return q},limit(n){data=data.slice(0,n);return q},maybeSingle(){return Promise.resolve({data:data[0],error:null})},then(f){return Promise.resolve({data,error:null}).then(f)}};return q;}};
  return vm.runInNewContext('(async()=>{let taskFacts=null;'+source+';return taskFacts;})()',{input:{action:'question',...input},caller,req:{},send:(_,body,status)=>({body,status})});
 }
