@@ -12,7 +12,7 @@ window.__resantaVoiceQualityV3=true;
 let panel,select,testBtn,budgetLabel,output=null,outputUrl='',browserDone=null,audioDone=null,approvedCloud=false,approvedYandex=false;
 let checkBtn=null,checkFeedback=null,checkBusy=false;
 let current='yandex:lera',epoch=0,prevVisible=true,paused=false;
-let androidSource=null,androidOutputMode='';
+let androidSource=null,androidOutputMode='',speechRequest=null;
 const nativeAndroidDirector=()=>window.__resantaAI360AndroidDirectorOptIn===true &&
  window.Capacitor?.isNativePlatform?.()===true &&
  window.Capacitor?.getPlatform?.()==='android';
@@ -196,6 +196,7 @@ async function refreshMonthlyBudget(){
 }
 const setStatus=(txt)=>{const el=panel?.querySelector('.rva-status');if(el)el.textContent=txt;};
 function stopSpeech(){
+ speechRequest?.abort(new Error('voice_request_cancelled'));speechRequest=null;
  paused=false;
  epoch++;
  updatePlaybackControls();
@@ -266,10 +267,19 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  const isYandex=provider==='yandex';
  const voiceText=isYandex&&typeof window.crmAI360ApplySpeechAccentsV1==='function'?window.crmAI360ApplySpeechAccentsV1(msg):msg;
  if(isYandex && voiceText.length>240)throw new Error('voice_chunk_too_long');
- const session=await window.crmEnsureFreshSessionV236166?.(false).catch(()=>null);
- if(!session?.access_token)throw new Error('no_session');
- if(!isYandex)setStatus('Готовлю естественный голос…'); // keep per-part progress visible for Lera/Dasha
- const result=await db.functions.invoke(isYandex?'crm-voice-yandex-tts-v1':'crm-voice-tts-v1',{body:{text:voiceText,voice}});
+ const request=new AbortController();speechRequest=request;
+ let result;
+ try{
+   result=await window.crmVoiceRequestV1(async signal=>{
+     const session=await window.crmEnsureFreshSessionV236166?.(false);
+     signal.throwIfAborted();
+     if(run!==epoch)throw new Error('voice_request_cancelled');
+     if(!session?.access_token)throw new Error('no_session');
+     if(!isYandex)setStatus('Готовлю естественный голос…');
+     return db.functions.invoke(isYandex?'crm-voice-yandex-tts-v1':'crm-voice-tts-v1',{body:{text:voiceText,voice},signal});
+   },request);
+ }finally{if(speechRequest===request)speechRequest=null;}
+
  if(run!==epoch)return;
  if(result.error){let detail='';try{const d=await result.error.context?.json?.();detail=d?.error||'';}catch{}
   throw new Error(detail||result.error.message||'voice_failed');}
@@ -343,7 +353,9 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
        failedReason=why;
        console.warn('AI360 Yandex narration stopped at segment '+(i+1)+':',why);
        let explanation;
-       if(why.includes('tts_monthly_budget_exhausted')){
+       if(/voice_network_timeout|Failed to fetch|FunctionsFetchError/i.test(why)){
+         explanation='Нет ответа от сервера озвучки. Проверь связь и повтори запрос. CRM доступна для работы.';
+       }else if(why.includes('tts_monthly_budget_exhausted')){
          explanation='Месячный бюджет Яндекс-озвучки 5 000 российских рублей исчерпан.';
        }else if(why.includes('tts_monthly_budget_unavailable')){
          explanation='Сервер временно не смог проверить месячный бюджет озвучки. Расход не подтверждён.';

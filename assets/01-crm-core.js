@@ -16,6 +16,24 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY,{
   }
 });
 
+// Bound the entire voice request, including auth acquisition. Never retry audio
+// automatically: a timed-out request may already have reached the paid provider.
+window.crmVoiceRequestV1=async function(factory,controller=new AbortController(),timeoutMs=30000){
+  let timer,onAbort;
+  const signal=controller.signal;
+  const stopped=new Promise((_,reject)=>{
+    onAbort=()=>reject(signal.reason||new Error('voice_request_cancelled'));
+    if(signal.aborted){onAbort();return;}
+    signal.addEventListener('abort',onAbort,{once:true});
+    timer=setTimeout(()=>controller.abort(new Error('voice_network_timeout')),timeoutMs);
+  });
+  try{
+    return await Promise.race([stopped,Promise.resolve().then(()=>{
+      signal.throwIfAborted();return factory(signal);
+    })]);
+  }finally{clearTimeout(timer);signal.removeEventListener('abort',onAbort);}
+};
+
 // v23.6.166: единый самовосстанавливающийся auth-слой.
 // После сна ноутбука/телефона access JWT может уже истечь в момент первого запроса.
 // Раньше тяжёлая purchase_history трижды повторяла запрос тем же просроченным JWT

@@ -29,9 +29,11 @@ function context(voice,options={}){
     if(options.hideAfterFirst && invoked.length===1)document.hidden=true;
     return {data:new Blob([bytes])};
   }}},
-  Audio:FakeAudio,Blob,Uint8Array,console,setTimeout,clearTimeout,
+  Audio:FakeAudio,Blob,Uint8Array,console,setTimeout,clearTimeout,AbortController,
   speechSynthesis:synthesis
  };
+ const core=fs.readFileSync('assets/01-crm-core.js','utf8');
+ vm.runInNewContext(core.slice(core.indexOf('window.crmVoiceRequestV1='),core.indexOf('// v23.6.166:')),sandbox);
  vm.runInNewContext(code,sandbox,{filename:'voice-quality-v3.js'});
  assert(typeof window.crmAI360SpeechChunksV4==='function');
  return {window,document,invoked,consents};
