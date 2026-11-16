@@ -15,6 +15,10 @@ begin
  again:=public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',req,'revision',snap->>'revision','rows',payload));
  if result<>again or (result->>'count')::int<>1 then raise exception 'TEST_RETRY';end if;
  saved_id:=(result->'rows'->0->>'id')::uuid;
+ update public.route_plans set link_status=null where id=saved_id;
+ snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
+ perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows',jsonb_set(payload,'{0,sort_order}','7')));
+ if not exists(select 1 from public.route_plans where id=saved_id and sort_order=7) then raise exception 'TEST_EDIT_NULL_VISIT';end if;
  failed:=false;begin perform public.crm_route_day_v1('save','Шкуран','2099-11-17',jsonb_build_object('request_id',gen_random_uuid(),'revision',snap->>'revision','rows','[]'::jsonb));exception when others then if sqlerrm='ROUTE_CHANGED_RELOAD' then failed:=true;else raise;end if;end;
  if not failed then raise exception 'TEST_STALE';end if;
  snap:=public.crm_route_day_v1('read','Шкуран','2099-11-17');
