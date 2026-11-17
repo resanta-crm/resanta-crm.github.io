@@ -109,7 +109,7 @@ test('target canonicalization precedes duplicate-read accounting and preserves t
  const f=fixture(heard,{responses:[tool({domain:'triovist',manager:'Руднев',client:'Другой клиент',month:null,level:'groups'}),message('Встреча с Триовистом.')]});
  f.opts.memory.month='2026-11';await runDialogueCore(f.opts);
  assert.equal(f.reads.length,1);assert.equal(f.reads[0].month,'2026-11');
- assert.equal(JSON.parse(f.requests[1].input.find(x=>x.type==='function_call_output').output).error,'request_budget_reached');
+ assert.deepEqual(JSON.parse(f.requests[1].input.find(x=>x.type==='function_call_output').output),triovist);
 });
 test('staff verified-client facts stay authorized and cannot fall back to branch risk',async()=>{
  const f=fixture('Подготовь к встрече с НилСтрой ООО',{domains:['client_detail','clients'],read:async()=>({...customer,scope:'verified_client',managers:['Ачинович']})});
@@ -157,4 +157,39 @@ test('actual owner handler settles an unavailable named client without paying fo
  assert.equal(response.status,200);assert.match(data.answer,/Не удалось получить подтверждённые данные/);assert.equal(f.paid(),0);
  assert.equal(f.calls.find(x=>x.name==='crm_ai360_core_finish_v2').args.p_actual_rub,0);
  assert.equal(f.calls.filter(x=>x.name==='crm_ai360_triovist_brief_v1').length,1);
+});
+
+test('a duplicate source request returns the original facts without a new read, failure or duplicate evidence',async()=>{
+ const f=fixture(heard,{responses:[tool({domain:'triovist'}),tool({domain:'triovist'}),message('Триовист: план 100, факт 80.')]});
+ const result=await runDialogueCore(f.opts);
+ assert.equal(f.reads.length,1);assert.deepEqual(result.used,['triovist']);assert.equal(f.requests.length,3);
+ for(const request of f.requests.slice(1)){
+  const facts=JSON.parse(request.input.filter(x=>x.type==='function_call_output').at(-1).output);
+  assert.deepEqual(facts,triovist);assert.equal(facts.error,undefined);
+ }
+});
+test('authorized related Triovist sources are available only for a Triovist meeting',async()=>{
+ const related=['triovist_tasks','triovist_stock','competitors','cards_21vek','card_issues','mrc','parser','infographics'];
+ for(const domain of related){
+  const own=fixture(heard,{domains:['triovist','client_detail',domain],responses:[tool({domain}),message('Триовист: данные текущего клиента.')],read:async args=>args.domain==='triovist'?triovist:{domain:args.domain,scope:'entity_all',items:[]}});
+  await runDialogueCore(own.opts);assert.deepEqual(own.reads.map(x=>x.domain),['triovist',domain]);assert.equal(own.reads[1].manager,null);
+  const other=fixture('Подготовь к встрече с НилСтрой ООО',{domains:['triovist','client_detail',domain],responses:[tool({domain}),message('НилСтрой: данные текущего клиента.')]});
+  await runDialogueCore(other.opts);assert.deepEqual(other.reads.map(x=>x.domain),['client_detail']);
+  assert.equal(JSON.parse(other.requests[1].input.find(x=>x.type==='function_call_output').output).error,'client_subject_required');
+ }
+});
+test('related-source permission checks still precede cached facts and the four-source/five-round bounds remain',async()=>{
+ const denied=fixture(heard,{domains:['triovist'],responses:[tool({domain:'triovist_tasks'}),message('Триовист.')]});
+ await runDialogueCore(denied.opts);assert.equal(denied.reads.length,1);
+ assert.equal(JSON.parse(denied.requests[1].input.find(x=>x.type==='function_call_output').output).error,'not_authorized_domain');
+ const domains=['triovist','triovist_tasks','triovist_stock','cards_21vek','mrc'];
+ const bounded=fixture(heard,{domains,responses:[...domains.slice(1).map(domain=>tool({domain})),message('Триовист.')],read:async args=>args.domain==='triovist'?triovist:{domain:args.domain,items:[]}});
+ const result=await runDialogueCore(bounded.opts);assert.equal(bounded.reads.length,4);assert.equal(bounded.requests.length,5);assert.equal(result.error,null);
+ assert.equal(bounded.requests[4].tool_choice,'none');
+ assert.equal(JSON.parse(bounded.requests[4].input.filter(x=>x.type==='function_call_output').at(-1).output).error,'request_budget_reached');
+});
+test('actual owner handler receives cached Triovist facts on reread instead of a false unavailable check',async()=>{
+ const f=ownerMeetingHandler([tool({domain:'triovist',manager:'Руднев',client:'Чужой клиент'}),message('Триовист: план 100, факт 80; подготовим вопросы по выполнению плана.')]);
+ const response=await f.ask(),data=await response.json();assert.equal(response.status,200);assert.match(data.answer,/Триовист/);
+ assert.equal(f.calls.filter(x=>x.name==='crm_ai360_triovist_brief_v1').length,1);assert.deepEqual(data.failed_domains,[]);assert.deepEqual(data.partial_sources,[]);assert.equal(f.paid(),2);
 });

@@ -85,7 +85,7 @@ export async function runDialogueCore({question,history=[],memory={},domains=[],
   'brief — естественный ответ до 450 символов; detail — подробности до 2600; offer — один уместный вопрос либо пустая строка.',
   'Работай только в разрешённых направлениях: '+domains.join(', ')+'. Сохраняй серверные ограничения области данных.'
  ].join(' ')},...dialogueHistory(history),{role:'user',content:JSON.stringify({question,memory})}];
- const seen=new Set(),used=[],evidence=[],tools=[readDefinition,PREPARE];
+ const seen=new Map(),used=[],evidence=[],tools=[readDefinition,PREPARE];
  const missingMeeting=(ambiguous=false)=>({kind:'clarification',pair:{kind:'clarification',
   brief:ambiguous?'Не смогла однозначно определить клиента для встречи. Уточни его название в CRM.':
    'Не удалось получить подтверждённые данные этого клиента для подготовки к встрече. Общим отчётом по филиалу их не заменяю.',
@@ -96,7 +96,7 @@ export async function runDialogueCore({question,history=[],memory={},domains=[],
    level:meeting.domain==='client_detail'?'groups':null,group:null,subgroup:null,offset:0};
   let initial;
   try{initial=await readTool(args);}catch{initial={error:'source_unavailable'};}
-  seen.add(JSON.stringify(args));used.push(meeting.domain);evidence.push(initial);
+  seen.set(JSON.stringify(args),initial);used.push(meeting.domain);evidence.push(initial);
   if(initial?.error)return missingMeeting(/client_(?:ambiguous|not_confident|not_found)/.test(String(initial.error)));
   const numeric=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
   const matched=initial?.domain===meeting.domain&&(['client_all','verified_client'].includes(initial.scope))&&
@@ -162,13 +162,17 @@ export async function runDialogueCore({question,history=[],memory={},domains=[],
   const key=JSON.stringify(args);
   let result;
   if(!domains.includes(domain))result={error:'not_authorized_domain'};
-  else if(meeting&&domain!==meeting.domain&&!['client_detail','client_groups','client_schedule','stock'].includes(domain))
+  else if(meeting&&domain!==meeting.domain&&!['client_detail','client_groups','client_schedule','stock'].includes(domain)&&
+    !(meeting.domain==='triovist'&&['triovist_tasks','triovist_stock','competitors','cards_21vek','card_issues','mrc','parser','infographics'].includes(domain)))
    result={error:'client_subject_required',message:'The request names one customer meeting; use that customer source, not an office/network report.'};
-  else if(seen.has(key)||seen.size>=4)result={error:'request_budget_reached'};
+  // Reuse the same current-request facts. A repeat is neither a new source
+  // check nor a failed check and never consumes another unique-read slot.
+  else if(seen.has(key))result=seen.get(key);
+  else if(seen.size>=4)result={error:'request_budget_reached'};
   else{
-   seen.add(key);
    try{result=await readTool(args);}catch{result={error:'source_unavailable'};}
-   evidence.push(result||{error:'no_data'});used.push(domain);
+   result=result||{error:'no_data'};seen.set(key,result);
+   evidence.push(result);used.push(domain);
   }
   const raw=JSON.stringify(result||{error:'no_data'});
   input.push({type:'function_call_output',call_id:call.call_id,
