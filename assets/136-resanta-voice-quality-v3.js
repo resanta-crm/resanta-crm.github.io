@@ -239,6 +239,7 @@ function stopSpeech(){
  androidPlaybackRequest?.abort(new Error('voice_request_cancelled'));androidPlaybackRequest=null;
  updatePlaybackControls();
  window.__resantaVoiceOutputBusy=false;
+ window.crmAIR3HandsfreeV1?.outputBusy?.(false);
  if(androidSource){try{androidSource.stop();}catch{}try{androidSource.disconnect();}catch{}androidSource=null;}
  if(output){try{output.pause();output.currentTime=0;}catch{}output=null;}
  if(audioDone){const resolve=audioDone;audioDone=null;resolve();}
@@ -280,6 +281,7 @@ window.crmResantaVoiceTogglePauseV3=()=>{
  return paused;
 };
 // The visible stop button can interrupt SpeechKit without revoking mic permission.
+window.crmResantaNativeOutputCancelV3=()=>{if(nativeAndroidDirector())stopSpeech();};
 window.crmResantaVoiceStopV3=()=>{
  if(!allowed()||!panel||panel.hidden)return false;
  stopSpeech();
@@ -402,6 +404,8 @@ function isMp3AudioHeader(bytes){
  return id3||frame;
 }
 async function cloudSpeak(msg,voice,run,provider='openai'){
+ const actor=String(window.crmAI360GreetingV1?.()?.id||'');
+ const sameActor=()=>!!actor&&actor===String(window.crmAI360GreetingV1?.()?.id||'');
  const isYandex=provider==='yandex';
  const voiceText=isYandex&&typeof window.crmAI360ApplySpeechAccentsV1==='function'?window.crmAI360ApplySpeechAccentsV1(msg):msg;
  if(isYandex && voiceText.length>240)throw new Error('voice_chunk_too_long');
@@ -411,8 +415,9 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
    result=await window.crmVoiceRequestV1(async signal=>{
      const session=await window.crmEnsureFreshSessionV236166?.(false);
      signal.throwIfAborted();
-     if(run!==epoch)throw new Error('voice_request_cancelled');
+     if(run!==epoch||!sameActor())throw new Error('voice_request_cancelled');
      if(!session?.access_token)throw new Error('no_session');
+     if(session.user?.id&&session.user.id!==actor||window.__resantaAIR3OfflineWakeActiveV1===true&&session.user?.id!==actor)throw new Error('voice_request_cancelled');
      if(!isYandex)setStatus('Готовлю естественный голос…');
      if(isYandex&&nativeAndroidDirector()){
        // One synthesis with the same voice/text, compressed only for glasses.
@@ -425,7 +430,7 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
    },request);
  }finally{if(speechRequest===request)speechRequest=null;}
 
- if(run!==epoch)return;
+ if(run!==epoch||!sameActor())throw new Error('voice_request_cancelled');
  if(result.error){let detail='';try{const d=await result.error.context?.json?.();detail=d?.error||'';}catch{}
   throw new Error(detail||result.error.message||'voice_failed');}
  // Supabase FunctionsClient returns Blob only for application/octet-stream.
@@ -433,6 +438,7 @@ async function cloudSpeak(msg,voice,run,provider='openai'){
  const rawBlob=result.data instanceof Blob?result.data:null;
  if(!rawBlob||rawBlob.size<300)throw new Error('empty_audio_response');
  const header=new Uint8Array(await rawBlob.slice(0,12).arrayBuffer());
+ if(run!==epoch||!sameActor())throw new Error('voice_request_cancelled');
  const riff=String.fromCharCode(...header.slice(0,4));
  const wave=String.fromCharCode(...header.slice(8,12));
  const wav=riff==='RIFF'&&wave==='WAVE';
@@ -452,7 +458,10 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
  if(!msg||!allowed())return {ok:false,reason:'director_or_text_unavailable'};
  stopSpeech(); // A new reply cancels every older audio clip and queue.
  const run=epoch;
+ const narrationActor=String(window.crmAI360GreetingV1?.()?.id||'');
+ const narrationCurrent=()=>run===epoch&&!!narrationActor&&narrationActor===String(window.crmAI360GreetingV1?.()?.id||'');
  window.__resantaVoiceOutputBusy=true;
+ window.crmAIR3HandsfreeV1?.outputBusy?.(true);
  try{
    if(!current.startsWith('yandex:')||!approvedYandex){
      setStatus('Голос Яндекса ещё не разрешён. Включи «Привет, Ресанта» и подтверди озвучку. Кнопка проверки необязательна.');
@@ -462,17 +471,17 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
    updatePlaybackControls();
    let completed=0,failedReason='';
    for(let i=0;i<chunks.length;i++){
-     if(run!==epoch||!allowed()||panel?.hidden)break;
-     while(paused&&run===epoch&&allowed()&&!panel?.hidden)
+     if(!narrationCurrent()||!allowed()||panel?.hidden)break;
+     while(paused&&narrationCurrent()&&allowed()&&!panel?.hidden)
        await new Promise(r=>setTimeout(r,180));
-     if(run!==epoch||!allowed()||panel?.hidden)break;
+     if(!narrationCurrent()||!allowed()||panel?.hidden)break;
      const name=current.endsWith('dasha')?'Даша':'Лера';
      setStatus('🔊 '+name+' озвучивает ответ: фраза '+(i+1)+' из '+chunks.length);
      try{
        await cloudSpeak(chunks[i],current.slice(7),run,'yandex');
-       if(run===epoch)completed++;
+       if(narrationCurrent())completed++;
      }catch(e){
-       if(run!==epoch)break;
+       if(!narrationCurrent())break;
        const why=String(e?.message||e);
        failedReason=why;
        console.warn('AI360 Yandex narration stopped at segment '+(i+1)+':',why);
@@ -502,17 +511,17 @@ window.crmResantaVoiceSpeakV3=async function(message,options={}){
        break; // Do not silently replace the selected voice with Microsoft voices.
      }
    }
-   if(run===epoch && completed===chunks.length)setStatus(options?.shortSummary?
+   if(narrationCurrent() && completed===chunks.length)setStatus(options?.shortSummary?
      '✅ Озвучен краткий итог ('+completed+' '+(completed===1?'фраза':'фраз')+'). Полный анализ остался на экране. Скажи «расскажи подробнее» для полной озвучки.':
      '✅ '+(current.endsWith('dasha')?'Даша':'Лера')+' озвучила ответ полностью ('+completed+' '+(completed===1?'фраза':'фраз')+').');
-   if(run===epoch)void refreshMonthlyBudget();
-   return {ok:completed===chunks.length&&chunks.length>0,reason:failedReason||'playback_interrupted',played:completed,total:chunks.length};
+   if(narrationCurrent())void refreshMonthlyBudget();
+   return {ok:narrationCurrent()&&completed===chunks.length&&chunks.length>0,reason:failedReason||'playback_interrupted',played:completed,total:chunks.length};
  }finally{
    if(run===epoch){
      if(output){try{output.pause();}catch(_){}output=null;}
      if(outputUrl){URL.revokeObjectURL(outputUrl);outputUrl='';}
      await new Promise(r=>setTimeout(r,250));
-     if(run===epoch)window.__resantaVoiceOutputBusy=false;
+     if(run===epoch){window.__resantaVoiceOutputBusy=false;window.crmAIR3HandsfreeV1?.outputBusy?.(false);}
    }
  }
 };
