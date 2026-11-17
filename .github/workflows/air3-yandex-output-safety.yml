@@ -2,11 +2,13 @@ name: AIR3 Yandex speaker output WebView safety
 on:
   pull_request:
     paths:
+      - 'assets/134-resanta-voice-ai360-pilot-v1.js'
       - 'assets/135-resanta-voice-capture-fix-v2.js'
       - 'assets/136-resanta-voice-quality-v3.js'
       - 'assets/137-resanta-ai360-lazy-launch-v1.js'
       - 'tests/air3-yandex-output-safety-20261105.test.mjs'
       - 'tests/air3-voice-local-reliability-20261116.test.mjs'
+      - 'tests/air3-local-handsfree-20261117.test.mjs'
       - 'tests/air3-tts-optional-mp3-20261116.test.mjs'
       - 'supabase/functions/crm-voice-yandex-tts-v1/**'
       - '.github/workflows/air3-yandex-output-safety.yml'
@@ -25,6 +27,7 @@ jobs:
       - name: Verify syntax and isolated Android audio behavior
         run: |
           set -euo pipefail
+          node --check assets/134-resanta-voice-ai360-pilot-v1.js
           node --check assets/135-resanta-voice-capture-fix-v2.js
           node --check assets/136-resanta-voice-quality-v3.js
           node --check assets/137-resanta-ai360-lazy-launch-v1.js
@@ -34,3 +37,5 @@ jobs:
           node --test tests/air3-manager-apk-voice-safety-20261104.test.mjs
           node --test tests/air3-voice-audio-transfer-20261116.test.mjs tests/voice-network-deadline-20261116.test.mjs
           node --test tests/air3-native-voice-transport-20261116.test.mjs
+          node --test tests/air3-local-handsfree-20261117.test.mjs
+          node --test tests/ai360-voice-video-regression-20261026.test.cjs
