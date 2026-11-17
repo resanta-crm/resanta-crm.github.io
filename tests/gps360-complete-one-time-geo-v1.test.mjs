@@ -31,6 +31,9 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
  // A CI-only PR may leave CRM core byte-identical to main. Normalize only
  // when the branch actually changed core; otherwise retain exact equality.
  if(core!==before){
+  // Support #7 explicitly authorizes product labels in the pure route task
+  // renderer. Keep every route, visit and task transaction under this guard.
+  restore('function routeTaskHtml(','function toggleRouteTaskBlock(');
   // Explicit AIR3 scope: isolate only the bounded voice request helper.
   // Visit, route, auth and client code remain covered by exact comparison.
   const voiceBlock=/\n\/\/ Bound the entire voice request, including auth acquisition\.[\s\S]*?(?=\/\/ v23\.6\.166:)/;
