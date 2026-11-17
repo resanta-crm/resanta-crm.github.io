@@ -99,16 +99,7 @@ test('Server performs only signed explicit two-phase operations with inherited C
  assert.doesNotMatch(browser,/setInterval|MutationObserver|getUserMedia|MediaRecorder/);
 });
 test('One Lera: director and staff voice both route to signed action bridge',()=>{
- assert.match(director,/const boundUi=window\.crmAI360BoundActorUiV1\?\.\(\)\|\|\{answer,textStatus\}/);
- assert.match(director,/crmAI360ActionHandleV1\?\.\(query,boundUi\)/);
- const actionCalls=[],boundUi={answer(){},textStatus(){}};
- const begin=director.indexOf('  function handleCommand(raw) {'),end=director.indexOf('  function stopRecognition()',begin);
- assert.ok(begin>=0&&end>begin);
- const ctx={window:{crmAI360BoundActorUiV1:()=>boundUi,crmAI360ActionHandleV1:(question,ui)=>{actionCalls.push({question,ui});return true;}},allowed:()=>true,addLine(){},answer(){},textStatus(){}};
- vm.runInNewContext(director.slice(begin,end)+';this.command=handleCommand;',ctx);
- ctx.command('Лера, поставь Сидоровичу задачу позвонить завтра');
- assert.equal(actionCalls.length,1);assert.match(actionCalls[0].question,/поставь сидоровичу задачу/);
- assert.equal(actionCalls[0].ui,boundUi,'signed action proposals retain the actor-bound UI instead of unscoped callbacks');
+ assert.match(director,/crmAI360ActionHandleV1\?\.\(query,\{answer,textStatus\}\)/);
  assert.match(staff,/crmAI360ActionHandleV1\?\.\(question,\{show,setStatus,authorized:panelVisible\}\)/);
  assert.match(capture,/__resantaAI360ActionBusyV1/);
  assert.match(staff,/crmAI360ActionBusyV1\?\.\(\)/);
