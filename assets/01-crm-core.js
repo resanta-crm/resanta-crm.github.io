@@ -4385,7 +4385,32 @@ function buildGoogleUrl(){
 
 function routeTaskHtml(tasks,id){
   if(!tasks||!tasks.length)return '';
-  const items=tasks.map((t,i)=>'<div class="route-task-item">'+(tasks.length>1?'<b>'+(i+1)+'.</b> ':'')+esc(String(t.text||''))+'</div>').join('');
+  // Approved product names belong to the base route renderer as well as the
+  // optional compatibility module. Never rewrite saved task text or quantities.
+  const taskText=t=>{
+    let text=String(t.text||'');
+    for(const item of Array.isArray(t.ai_stock_items)?t.ai_stock_items:[]){
+      if(!item||typeof item!=='object')continue;
+      const sku=String(item.sku||'').trim();
+      let product=String(item.product||item.product_name||'').trim();
+      if(!product&&sku&&typeof allPrice!=='undefined'){
+        const names=[...new Set((Array.isArray(allPrice)?allPrice:[]).filter(x=>String(x.sku||'').trim()===sku).map(x=>String(x.product||x.product_name||'').trim()).filter(Boolean))];
+        if(names.length===1)product=names[0];
+      }
+      if(!sku&&!product)continue;
+      if(product&&text.includes(product)&&(!sku||text.includes(sku)))continue;
+      if(sku&&product){
+        const escaped=sku.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');let found=false;
+        text=text.replace(new RegExp('(^|[^A-Za-z0-9/])'+escaped+'(?=$|[^A-Za-z0-9/])','g'),(_,prefix)=>{found=true;return prefix+sku+' · '+product;});
+        if(found)continue;
+      }
+      const qty=Number(item.qty);
+      const line=[sku,product||'Название товара не указано'].filter(Boolean).join(' · ')+(Number.isFinite(qty)&&qty>0?' — '+qty+' шт.':'');
+      if(!text.includes(line))text+='\n'+line;
+    }
+    return text;
+  };
+  const items=tasks.map((t,i)=>'<div class="route-task-item">'+(tasks.length>1?'<b>'+(i+1)+'.</b> ':'')+esc(taskText(t))+'</div>').join('');
   return '<div id="'+id+'" class="route-task-box route-task-collapsed" onclick="event.stopPropagation();toggleRouteTaskBlock(\''+id+'\')">'
     +'<div class="route-task-head">📌 '+(tasks.length===1?'Задача':'Задачи: '+tasks.length)+'</div>'
     +'<div class="route-task-text">'+items+'</div>'

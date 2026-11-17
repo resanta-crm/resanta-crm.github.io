@@ -7,6 +7,14 @@ const core=fs.readFileSync('assets/01-crm-core.js','utf8');
 const routeSource=core.slice(core.indexOf('function routeTaskHtml('),core.indexOf('function toggleRouteTaskBlock('));
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function route(tasks,prices=[]){const ctx={esc,allPrice:prices};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(routeSource,ctx);vm.runInContext(fs.readFileSync('assets/289-route-task-products-v1.js','utf8'),ctx);return ctx.routeTaskHtml(tasks,'test-route-task');}
+test('ticket 7: base route renderer shows approved names even without optional module',()=>{
+ const tasks=[{id:'kept',text:'Отгрузка, подтверждённая 1С: 72/14/52 — 2 шт.; 67/4/34 — 3 шт.',ai_stock_items:[{sku:'72/14/52',product:'Дрель-шуруповерт аккумуляторная ДА-20/2Li ЕА+ Eurolux',qty:2},{sku:'67/4/34',product:'Конвектор ОК-1600Ч Ресанта',qty:3}]}];
+ const original=structuredClone(tasks),ctx={esc,allPrice:[]};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(routeSource,ctx);
+ const {document}=parseHTML(ctx.routeTaskHtml(tasks,'ticket-7'));
+ assert.match(document.querySelector('.route-task-text').textContent,/72\/14\/52 · Дрель-шуруповерт аккумуляторная ДА-20\/2Li ЕА\+ Eurolux — 2 шт\./);
+ assert.match(document.querySelector('.route-task-text').textContent,/67\/4\/34 · Конвектор ОК-1600Ч Ресанта — 3 шт\./);
+ assert.deepEqual(tasks,original);
+});
 
 test('route cards show approved SKU, product and quantity without mutating tasks',()=>{
   const tasks=[{id:'kept',text:'Отгрузить утверждённые SKU по маршруту',ai_stock_items:[{sku:'67/1/2',product:'Конвектор Ресанта ОК-2000',qty:3}]}];
