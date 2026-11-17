@@ -42,6 +42,7 @@ function harness(){
   localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},
   speechSynthesis:{speaking:false,cancel(){}},MediaRecorder:Recorder,
   crmResantaVoiceHasConsentV3:()=>true,crmResantaVoiceAuthorizeV3:()=>true,
+  crmAI360GreetingV1:()=>({id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'}),
   crmEnsureFreshSessionV236166:async()=>({access_token:'mock'}),
   confirm:()=>true,setTimeout:()=>1,clearTimeout(){},
   setInterval:(fn,ms)=>{intervals.push({fn,ms});return intervals.length;},
@@ -52,7 +53,7 @@ function harness(){
  }}};
  vm.runInNewContext(exposed,{
   window:win,navigator:nav,document:doc,console,
-  currentUser:{id:'director'},currentProfile:{role:'boss',name:'Александр Паюшин'},
+  currentUser:{id:'544fb1e2-ef70-44de-bc62-e0e1596a4bfc'},currentProfile:{role:'boss',name:'Александр Паюшин'},
   MediaRecorder:Recorder,setTimeout,clearTimeout,clearInterval(){},Date:Clock,Blob,Uint8Array,FormData
  },{filename:'voice-video-regression.js'});
  async function settle(){for(let i=0;i<24;i++)await Promise.resolve();}
@@ -61,7 +62,8 @@ function harness(){
  return {panel,win,counts,tick,settle,visibility,close};
 }
 (async()=>{
- assert(loader.includes('135-resanta-voice-capture-fix-v2.js?v=13'),'new capture must be cache busted');
+ const captureSources=[...loader.matchAll(/'([^']*135-resanta-voice-capture-fix-v2\.js\?[^']+)'/g)].map(match=>new URL(match[1],'https://resanta-crm.by/'));
+ assert(captureSources.length>=2&&captureSources.every(url=>url.searchParams.get('v')==='21'&&url.searchParams.get('wakeRelease')==='20261117-1'),'desktop and native capture must receive the current cache release');
  const h=harness(),test=h.win.__ai360Test;
  await h.tick();
  assert.equal(h.counts.mic,0,'no microphone before panel opened');
@@ -94,8 +96,8 @@ function harness(){
  test.accept();h.close.click();await h.settle();
  assert.equal(test.state().acceptedWakeUntil,0,'close revokes lease');
  assert.equal(test.state().resumeConversationUntil,0,'close revokes recovery');
- assert(source.includes('capture(9,epoch)'),'9s voice limit');
- assert(source.includes("mode==='wake'?1700:1450"),'natural speech pause');
+ assert(source.includes('capture(12,epoch)'),'bounded 12s question capture');
+ assert(source.includes('window.crmAI360TurnTakingV1?.pauseMs||3300'),'shared natural speech pause');
  assert(source.includes('if (/Android/i.test(navigator.userAgent'),'Android remains excluded');
- console.log('AI360 video regression: Lera wake, tab recovery, expiry, close and 9s capture PASS');
+ console.log('AI360 video regression: verified Lera wake, tab recovery, expiry, close and bounded 12s capture PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
