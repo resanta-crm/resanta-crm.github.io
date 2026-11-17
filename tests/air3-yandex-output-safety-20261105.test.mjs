@@ -12,19 +12,16 @@ test('Android output is primed only after an explicit director action, not at CR
  const begin=loader.indexOf("start.addEventListener('click',async()=>{");
  const click=loader.slice(begin,loader.indexOf('\n });\n}',begin));
  assert.ok(click.includes('primeAndroidOutput();'));
- assert.ok(click.indexOf('primeAndroidOutput();')<click.indexOf('await ensureNativeAudio();'));
- const audio=loader.slice(loader.indexOf('async function ensureNativeAudio('),loader.indexOf('function stopHandsfree('));
- assert.ok(audio.includes('await load(src);'),'the shared audio initializer retains the optional script load');
+ assert.ok(click.indexOf('primeAndroidOutput();')<click.indexOf('await load(src);'));
  assert.ok(loader.includes('window.__resantaAI360AndroidOutputContextV1=context'));
  assert.ok(loader.includes('new Constructor()'));
- assert.ok(!loader.slice(loader.indexOf('async function activate(options={}){'),loader.indexOf('function reconcile(){')).includes('primeAndroidOutput();'));
+ assert.ok(!loader.slice(loader.indexOf('async function activate(){'),loader.indexOf('function reconcile(){')).includes('primeAndroidOutput();'));
  assert.ok(!manager.includes('__resantaAI360AndroidOutputContextV1'));
 });
 
 test('Android sound is a separate optional file; desktop retains old player path',()=>{
- const audioSources=[...loader.matchAll(/'([^']*136-resanta-voice-quality-v3\.js\?[^']+)'/g)].map(match=>new URL(match[1],'https://resanta-crm.by/'));
- assert.equal(audioSources.length,2,'desktop and Android retain their optional audio module');
- assert.ok(audioSources.every(url=>url.searchParams.get('v')==='19'&&url.searchParams.get('wakeRelease')==='20261117-1'),'both paths receive the current voice cache release');
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3&networkRelease=20261116-5'"));
+ assert.ok(loader.includes("'./assets/136-resanta-voice-quality-v3.js?v=19&lera=20261112-naturalvoice&videoRelease=20261113-v3&networkRelease=20261116-5'"),'desktop and Android retain optional Yandex module with fresh cache revision');
  assert.ok(quality.includes('const nativeAndroidDirector='));
  assert.ok(quality.includes('const context=androidContext();'));
  assert.ok(quality.includes('await playAndroidWav(blob,run,request.signal);'));

@@ -60,16 +60,15 @@
  // A user-initiated foreground dialogue may skip the wake phrase while the
  // window is visible. The preference is saved ONLY after an explicit click.
  const DIRECT_DIALOG_KEY='resanta-ai360-continuous-dialog-optin-v1';
- const paidAutoSuppressed=()=>nativeAndroidVoice()&&window.__resantaAIR3DisablePaidWakeAutoV1===true;
  let directDialogWanted=false;
- try{directDialogWanted=!paidAutoSuppressed()&&window.localStorage?.getItem(DIRECT_DIALOG_KEY)==='yes';}catch(_){}
+ try{directDialogWanted=window.localStorage?.getItem(DIRECT_DIALOG_KEY)==='yes';}catch(_){}
  function saveDirectDialog(v){
    directDialogWanted=!!v;
    try{if(v)window.localStorage?.setItem(DIRECT_DIALOG_KEY,'yes');
        else window.localStorage?.removeItem(DIRECT_DIALOG_KEY);}catch(_){}
  }
  let autoWakeWanted=false,autoAttemptedThisOpen=false,lastOpen=false,autoWakeBlocked=false;
- try{autoWakeWanted=!paidAutoSuppressed()&&window.localStorage?.getItem(AUTO_WAKE_KEY)==='yes';}catch(_){}
+ try{autoWakeWanted=window.localStorage?.getItem(AUTO_WAKE_KEY)==='yes';}catch(_){}
  try{userOptIn=autoWakeWanted||window.localStorage?.getItem(MIC_CONSENT_KEY)==='yes';}
  catch(_){userOptIn=autoWakeWanted;}
  function saveAutoWake(v){
@@ -261,11 +260,9 @@
    if(/quota_unavailable/.test(code))return 'Сервис лимитов речи временно недоступен.';
    return 'Не удалось распознать речь через сервер. Ошибка: '+code.slice(0,120);
  }
- function nativeActor(){try{return String(currentUser?.id||'');}catch(_){return '';}}
- async function transcribe(clip,epoch,expectedActor='',expectedCurrent=null){
+ async function transcribe(clip,epoch){
    transcriptFailure='';
-   const current=()=>epoch===listenEpoch&&!!mode&&(!expectedActor||nativeActor()===expectedActor)&&(!expectedCurrent||expectedCurrent()===true);
-   if(!clip||!current())return null;
+   if(!clip||epoch!==listenEpoch || !mode)return null;
    if(!clip.blob?.size || clip.blob.size<900)return '';
    if(clip.blob.size>500000){transcriptFailure='Запись слишком большая. Скажи короче.';info(transcriptFailure);return null;}
    const request=new AbortController();transcriptRequest=request;
@@ -274,26 +271,23 @@
      return await window.crmVoiceRequestV1(async signal=>{
        const session=await window.crmEnsureFreshSessionV236166?.(false);
        signal.throwIfAborted();
-       if(!current())return null;
-       if(!session?.access_token||expectedActor&&session.user?.id!==expectedActor)throw new Error('not_authorized');
+       if(epoch!==listenEpoch||!mode)return null;
+       if(!session?.access_token)throw new Error('not_authorized');
        const type=clip.blob.type||'audio/webm';
        if(window.crmAir3VoiceAvailableV1?.()){
          const audioBase64=await window.crmAir3VoiceEncodeV1(clip.blob,signal);
          signal.throwIfAborted();
-         // Encoding is asynchronous. An account, profile or native lease can
-         // change before the periodic reconciler cancels the old operation.
-         if(!current())return null;
          const resp=await window.crmAir3VoiceTransportV1('stt',session,{audioBase64,mime:type,duration:Math.min(16.4,clip.duration)},signal);
          signal.throwIfAborted();
-         if(!current())return null;
+         if(epoch!==listenEpoch||!mode)return null;
          return String(resp.data?.text||'').trim();
        }
        const form=new FormData();
-       form.append('audio',new File([clip.blob], 'question.'+(type.includes('wav')?'wav':type.includes('mp4')?'mp4':'webm'),{type}));
+       form.append('audio',new File([clip.blob], 'question.'+(type.includes('mp4')?'mp4':'webm'),{type}));
        form.append('duration',String(Math.min(16.4,clip.duration)));
        const resp=await db.functions.invoke(ENDPOINT,{body:form,signal});
        signal.throwIfAborted();
-       if(!current())return null;
+       if(epoch!==listenEpoch||!mode)return null;
        if(resp.error){let detail=null;try{detail=await resp.error.context?.json?.();}catch{}throw Object.assign(new Error(resp.error.message),{code:detail?.error||''});}
        return String(resp.data?.text||'').trim();
      },request);
@@ -332,80 +326,6 @@
      await new Promise(r=>setTimeout(r,120));
    }
  }
- // AIR3 local wake owns the only native microphone. This adapter accepts one
- // already captured PCM WAV; it never starts the paid background wake loop.
- let nativeQuestionFlight=null,nativeQuestionKey='',nativeContinuation=null;
- const nativeQuestionSeen=new Set();
- function nativeQuestionCurrent(run){
-   return nativeAndroidVoice()&&visiblePanel()&&nativeActor()===run.actor&&
-     run.actor==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'&&
-     window.crmAIR3HandsfreeV1?.isCurrent(run.leaseId,run.actor)===true;
- }
- function nativeQuestionClip(data){
-   if(data.loud!==true)return null;
-   const encoded=String(data.wavBase64||'');
-   if(data.contentType!=='audio/wav'||encoded.length<60||encoded.length>666728||
-      encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))throw new Error('native_question_audio_invalid');
-   const raw=atob(encoded),bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));
-   if(bytes.length<16044||bytes.length>480044)throw new Error('native_question_audio_invalid');
-   const view=new DataView(bytes.buffer),tag=(at,n)=>String.fromCharCode(...bytes.slice(at,at+n));
-   if(tag(0,4)!=='RIFF'||tag(8,4)!=='WAVE'||tag(12,4)!=='fmt '||tag(36,4)!=='data'||
-      view.getUint32(4,true)!==bytes.length-8||view.getUint32(16,true)!==16||
-      view.getUint16(20,true)!==1||view.getUint16(22,true)!==1||view.getUint32(24,true)!==16000||
-      view.getUint32(28,true)!==32000||view.getUint16(32,true)!==2||view.getUint16(34,true)!==16||
-      view.getUint32(40,true)!==bytes.length-44)throw new Error('native_question_audio_invalid');
-   return {blob:new Blob([bytes],{type:'audio/wav'}),duration:(bytes.length-44)/32000,loud:true};
- }
- window.crmResantaNativeQuestionV2=function(data={}){
-   const run={actor:String(data.actor||''),leaseId:String(data.leaseId||''),eventId:String(data.eventId||'')};
-   const key=run.leaseId+'|'+run.eventId;
-   if(!/^[0-9a-f-]{36}$/i.test(run.leaseId)||!/^[0-9a-f-]{36}$/i.test(run.eventId)||!nativeQuestionCurrent(run))return Promise.resolve({ok:false,reason:'native_question_stale'});
-   if(nativeQuestionFlight)return nativeQuestionKey===key?nativeQuestionFlight:Promise.resolve({ok:false,reason:'native_question_busy'});
-   if(nativeQuestionSeen.has(key))return Promise.resolve({ok:false,reason:'native_question_duplicate'});
-   const limitReached=data.limitReached===true;
-   let clip;try{clip=nativeQuestionClip(data);}catch(_){return Promise.resolve({ok:false,reason:'native_question_audio_invalid'});}
-   // The caller can now release its base64 payload. Keep only one bounded Blob
-   // until STT finishes; the continuation retains text only, never audio.
-   data=null;
-   if(!clip)return Promise.resolve({ok:true,empty:true});
-   nativeQuestionSeen.add(key);if(nativeQuestionSeen.size>64)nativeQuestionSeen.delete(nativeQuestionSeen.values().next().value);
-   nativeQuestionKey=key;
-   const flight=(async()=>{
-     const cleanup=stopAll(),cleanupEpoch=listenEpoch;await cleanup;
-     if(cleanupEpoch!==listenEpoch||!nativeQuestionCurrent(run))return {ok:false,reason:'native_question_stale'};
-     mode='native-question';listenEpoch++;const epoch=listenEpoch;controls();
-     try{
-       let phrase;
-       try{phrase=await transcribe(clip,epoch,run.actor,()=>nativeQuestionCurrent(run));}finally{clip=null;}
-       if(epoch!==listenEpoch||!nativeQuestionCurrent(run))return {ok:false,reason:'native_question_stale'};
-       if(phrase===null)return {ok:false,reason:'native_question_transcription_failed'};
-       const taking=window.crmAI360TurnTakingV1;
-       const text=taking?.removeWake?.(phrase)||String(phrase||'').replace(/^(?:(?:привет\s+)?(?:лера|ресанта))(?=$|[\s,.!?—-])[\s,.!?—-]*/i,'').trim();
-       const continuationKey=run.actor+'|'+run.leaseId;
-       const prior=nativeContinuation?.key===continuationKey&&Date.now()-nativeContinuation.at<3*60*1000?nativeContinuation:null;
-       const decision=taking?.detect?.(text)||'ready';
-       if(decision==='cancel'){nativeContinuation=null;return {ok:true,empty:true};}
-       const unbounded=decision==='done'?(prior?.text||''):(prior?(prior.text.toLocaleLowerCase('ru-RU').endsWith(text.toLocaleLowerCase('ru-RU'))?prior.text:[prior.text,text].filter(Boolean).join(' ')):text);
-       if(unbounded.length>2400){nativeContinuation=null;info('Вопрос слишком длинный. Повтори его короче; текст не обрезан и не отправлен.');return {ok:false,reason:'native_question_too_long'};}
-       const question=decision==='done'?(prior?.text||''):(prior?(taking?.merge?.(prior.text,text)||[prior.text,text].filter(Boolean).join(' ').slice(0,2400)):text);
-       if(!question||noiseOnly(question)||greetingOnly(question))return {ok:true,empty:true};
-       if(limitReached||decision==='more'){
-         const segments=(prior?.segments||0)+1;
-         if(segments>=8){nativeContinuation=null;info('Фраза длинная. Повтори вопрос короче; незавершённый запрос не отправлен.');return {ok:false,reason:'native_question_too_long'};}
-         nativeContinuation={key:continuationKey,text:question.slice(0,2400),segments,at:Date.now()};
-         info('Сохранила начало вопроса. Скажи «Лера» и продолжи, либо «Лера, я закончил».');return {ok:true,continued:true};
-       }
-       nativeContinuation=null;
-       if(!nativeQuestionCurrent(run))return {ok:false,reason:'native_question_stale'};
-       submit(question);await waitForAssistant(epoch,'native-question');
-       return nativeQuestionCurrent(run)?{ok:true,submitted:true}:{ok:false,reason:'native_question_stale'};
-     }finally{if(epoch===listenEpoch&&mode==='native-question')await stopAll();}
-   })();
-   nativeQuestionFlight=flight;
-   void flight.finally(()=>{if(nativeQuestionFlight===flight){nativeQuestionFlight=null;nativeQuestionKey='';}}).catch(()=>{});
-   return flight;
- };
- window.crmResantaNativeQuestionCancelV2=function(){nativeContinuation=null;if(mode==='native-question')void stopAll();};
  async function manualLoop(epoch){
    try{
      const clip=await capture(12,epoch);
@@ -512,7 +432,7 @@
      info('Постоянный режим уже слушает. Просто задай вопрос.');
      return;
    }
-   if(automatic && (paidAutoSuppressed()||!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
+   if(automatic && (!autoWakeWanted || autoWakeBlocked || !visiblePanel()))return;
    if(mode===newMode){
      // A second manual click completes a phrase and sends it; never silently
      // discard speech already recorded by cancelling the session.
@@ -594,13 +514,11 @@
      e.stopImmediatePropagation();e.preventDefault();
      // One explicit click starts a foreground *continuous* conversation.
      // A second click ends it. It never opens a second recorder.
-     if(window.__resantaAIR3OfflineWakeActiveV1===true)window.crmAIR3HandsfreeV1?.suspend?.();
      autoWakeBlocked=false;
      void start('wake',false,true);
    },true);
    wake.addEventListener('click',e=>{
      e.stopImmediatePropagation();e.preventDefault();
-     if(window.__resantaAIR3OfflineWakeActiveV1===true)window.crmAIR3HandsfreeV1?.suspend?.();
      autoWakeBlocked=false;
      void start('wake',false,false);
    },true);
@@ -629,7 +547,6 @@
  });
  window.addEventListener('pagehide',()=>{resumeConversationUntil=0;acceptedWakeUntil=0;void stopAll();});
  window.setInterval(()=>{
-   if(window.__resantaAIR3OfflineWakeActiveV1===true){if(mode==='wake'||mode==='manual')void stopAll();return;}
    if(window.RESANTA_TASKS_ROUTE_V4?.recording?.()){if(mode)void stopAll();return;}
    if(!panel)init();
    if(!panel)return;
@@ -640,7 +557,7 @@
        resumeConversationUntil=0;acceptedWakeUntil=0;
      }
      if(mode)void stopAll();
-   }else if(!paidAutoSuppressed() && autoWakeWanted && !autoAttemptedThisOpen && mode!=='wake' && !starting && !autoWakeBlocked){
+   }else if(autoWakeWanted && !autoAttemptedThisOpen && mode!=='wake' && !starting && !autoWakeBlocked){
      autoAttemptedThisOpen=true; // At most one automatic getUserMedia request per open.
      void start('wake',true);
    }

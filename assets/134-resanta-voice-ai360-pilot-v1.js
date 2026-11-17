@@ -52,25 +52,6 @@
       textStatus(successMessage||'Скопировано. Перед отправкой проверь коммерческие данные.');
     }catch(_){textStatus('Копирование браузером запрещено. Можно выделить и скопировать текст ответа вручную.');}
   }
-  let conversationActor='',conversationEpoch=0;
-  function reconcilePanelActor(){
-    const next=String(window.crmAI360GreetingV1?.()?.id||'');
-    if(next===conversationActor)return;
-    const previous=conversationActor;conversationActor=next;
-    if(!previous)return;
-    conversationEpoch++;++state.manualSequence;clearTimeout(state.manualRestart);state.manualRestart=0;
-    setWake(false);window.crmResantaVoiceSuspendV2?.();window.crmResantaNativeOutputCancelV3?.();
-    window.crmAI360UnifiedDialogResetV1?.();
-    if(historyEl)historyEl.textContent='';if(field)field.value='';
-    lastDetailedResponse='';lastSubstantialAnswer='';feedbackTarget=null;
-    const feedback=root?.querySelector('.rva-feedback');if(feedback)feedback.hidden=true;
-  }
-  window.crmAI360PanelActorReconcileV1=reconcilePanelActor;
-  window.crmAI360BoundActorUiV1=function(){
-    reconcilePanelActor();const actor=conversationActor,run=conversationEpoch;
-    const current=()=>actor&&actor===String(window.crmAI360GreetingV1?.()?.id||'')&&run===conversationEpoch;
-    return {answer:(...args)=>{if(current())answer(...args);},textStatus:(...args)=>{if(current())textStatus(...args);}};
-  };
   function lastUserQuestion(){
     if(!historyEl)return '';
     const entries=[...historyEl.querySelectorAll('.rva-line[data-speaker="you"]')];
@@ -242,7 +223,6 @@
   }
   function handleCommand(raw) {
     if (!allowed()) return;
-    const boundUi=window.crmAI360BoundActorUiV1?.()||{answer,textStatus};
     const input = String(raw || '').trim().slice(0, 2400);
     if (!input) return;
     addLine('Вы', input);
@@ -257,11 +237,11 @@
     }
     // Explicit tasks/CONNECT enter the signed human-confirmed action bridge.
     // Existing free conversation and CRM analysis remain on their working backend.
-    if(window.crmAI360ActionHandleV1?.(query,boundUi))return;
+    if(window.crmAI360ActionHandleV1?.(query,{answer,textStatus}))return;
     // Evidence-only GPS punctuality opens the existing GPS control, not a new CRM section.
-    if(window.crmGPSFirstTTv1?.voiceHandle(query,boundUi))return;
-    if(window.crmAI360NavigateV1?.(query,boundUi))return;
-    if(window.crmLprV1?.voice(query,boundUi))return;
+    if(window.crmGPSFirstTTv1?.voiceHandle(query,{answer,textStatus}))return;
+    if(window.crmAI360NavigateV1?.(query,{answer}))return;
+    if(window.crmLprV1?.voice(query,{answer}))return;
     if(/^(?:(?:лера|ресанта)\s+)?(?:остановись|останови\s+(?:речь|озвучку)|хватит\s+говорить|замолчи)$/.test(query)){
       window.crmResantaVoiceStopV3?.();
       textStatus('Озвучка остановлена. Можешь задать следующий вопрос.');
@@ -275,11 +255,11 @@
     // Pending signed actions, stop commands and explicit navigation above keep
     // their existing behavior; no generic model path can commit a write.
     if(window.__resantaLeraDialogueV2===true&&
-       window.crmAI360UnifiedDialogHandleV1?.(query,boundUi))return;
+       window.crmAI360UnifiedDialogHandleV1?.(query,{answer,textStatus}))return;
     // The latest question «Хочешь подробнее?» belongs to the unified dialogue.
     // Handle yes/no/screen before legacy «read full answer» text patterns.
     if(typeof window.crmAI360UnifiedDialogFollowupV3==='function'){
-      try{if(window.crmAI360UnifiedDialogFollowupV3(query,boundUi))return;}
+      try{if(window.crmAI360UnifiedDialogFollowupV3(query,{answer,textStatus}))return;}
       catch(e){console.warn('AI360 followup unavailable',e);}
     }
     const asksForFullNarration=/(?:расскаж|прочита|озвуч|произнес|хочу|можешь|нужно|дай|пожалуйста).{0,105}(?:подробн|поподробн|полност|целиком|весь\s+ответ|услыш|послуш|слушать|не\s+хочу\s+читать)|^(?:подробнее|поподробнее|полностью|прочитай\s+все|вслух)$|^(?:(?:лера|ресанта)\s+)?(?:расскажи|прочитай|озвучь|зачитай|повтори)\s+(?:(?:мне|пожалуйста)\s+){0,2}(?:(?:весь|полный|предыдущий)\s+)?(?:план|ответ|разбор)(?:\s+(?:целиком|подробно|полностью))?$/.test(query);
@@ -299,7 +279,7 @@
     const approvalCommand=/(?:соглас(?:ую|уем|ует|уете|овать|уй|уйте|овыва[а-я]*)|утвержда[а-я]*|утверд(?:ить|и|ите)|одобря[а-я]*|одобр(?:ить|и|ите)|согласен\s+на|согласна\s+на)/i.test(query)
       &&/(?:перв[а-я]*|втор[а-я]*|трет[а-я]*|выбранн[а-я]*|поручен[а-я]*|задач[а-я]*|[1-3])/.test(query);
     if (typeof window.crmAI360TaskDraftsHandleV1 === 'function') {
-      try { if (window.crmAI360TaskDraftsHandleV1(query, boundUi)) return; }
+      try { if (window.crmAI360TaskDraftsHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('AI360 task approval module failed', e); }
     }
     if(approvalCommand){
@@ -309,18 +289,18 @@
 
     // Debt day-over-day questions share the authoritative scoped PDZ360 history.
     if (typeof window.crmAI360PDZDailyHandleV1 === 'function') {
-      try { if (window.crmAI360PDZDailyHandleV1(query, boundUi)) return; }
+      try { if (window.crmAI360PDZDailyHandleV1(query, {answer, textStatus})) return; }
       catch(e){console.warn('PDZ360 read-only voice unavailable',e);}
     }
     // Shared Sales360/Lera recovery evidence takes precedence only for sales-loss intents.
     if (typeof window.crmAI360SalesRecoveryHandleV1 === 'function') {
-      try { if (window.crmAI360SalesRecoveryHandleV1(query, boundUi)) return; }
+      try { if (window.crmAI360SalesRecoveryHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('Sales360 recovery voice unavailable',e); }
     }
     // The director briefing has its own authenticated read-only data source.
     // It takes precedence over generic analytics on the explicit briefing intent.
     if (typeof window.crmAI360DirectorBriefHandleV1 === 'function') {
-      try { if (window.crmAI360DirectorBriefHandleV1(query, boundUi)) return; }
+      try { if (window.crmAI360DirectorBriefHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('AI360 director briefing unavailable',e); }
     }
     if(/(?:брифинг(?:\s+директора)?|приоритет[а-яё]*\s+(?:дня|на\s+сегодня))/i.test(query)){
@@ -334,12 +314,12 @@
       answer(openPage('markdown','Уценка')?'Открываю раздел «Уценка».':'Раздел «Уценка» сейчас недоступен.');return;
     }
     if (typeof window.crmAI360UnifiedDialogHandleV1 === 'function') {
-      try { if (window.crmAI360UnifiedDialogHandleV1(query, boundUi)) return; }
+      try { if (window.crmAI360UnifiedDialogHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('AI360 unified conversation unavailable',e); }
     }
     // Optional sales/KPI dialogue. No background requests; director action only.
     if (typeof window.crmAI360SalesHandleV1 === 'function') {
-      try { if (window.crmAI360SalesHandleV1(query, boundUi)) return; }
+      try { if (window.crmAI360SalesHandleV1(query, {answer, textStatus})) return; }
       catch (e) { console.warn('AI360 sales dialogue unavailable',e); }
     }
     const stats = snapshot();
@@ -495,25 +475,12 @@
     else textStatus('Фоновая голосовая активация выключена');
   }
   function closePanel() {
-    if(window.__resantaAIR3OfflineWakeActiveV1===true)window.crmAIR3HandsfreeV1?.suspend?.();
     ++state.manualSequence;clearTimeout(state.manualRestart);state.manualRestart=0;
     setWake(false); window.speechSynthesis?.cancel(); state.speaking=false;
     if(root){root.hidden=true;root.classList.remove('rva-mini');}
     feedbackTarget=null;
     if(trigger)trigger.setAttribute('aria-expanded','false');
   }
-  // Idempotent opening for the separately consented native AIR3 controller.
-  // Programmatic resume must not toggle the panel or buy an unsolicited greeting.
-  window.crmAI360OpenPanelV1=function(options={}){
-    if(!allowed())return false;
-    reconcilePanelActor();
-    if(!state.mounted)mount();
-    if(!root)return false;
-    root.hidden=false;root.classList.remove('rva-mini');
-    trigger?.setAttribute('aria-expanded','true');
-    if(options.greet===true){const hello=window.crmAI360GreetingV1?.();if(hello)answer(hello.greeting);}
-    textStatus('Лера готова к вопросу. Говори или напиши.');return true;
-  };
   function mount() {
     if (state.mounted || !document.getElementById('app')) return;
     const top=document.querySelector('#app .topbar'); if(!top)return;
@@ -624,7 +591,6 @@
     mini.addEventListener('click',()=>{
       const shrunk=root.classList.toggle('rva-mini');
       if(shrunk){
-        if(window.__resantaAIR3OfflineWakeActiveV1===true)window.crmAIR3HandsfreeV1?.suspend?.();
         root.classList.remove('rva-fullscreen');
         window.crmResantaVoiceSuspendV2?.();
         textStatus('Мини-плеер · микрофон приостановлен, озвучка продолжается.');
@@ -683,7 +649,6 @@
     updateButtons();
   }
   function reconcile() {
-    reconcilePanelActor();
     if(!state.mounted)mount();
     if(!state.mounted)return;
     const ok=allowed();
