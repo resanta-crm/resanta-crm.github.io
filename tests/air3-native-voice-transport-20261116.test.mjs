@@ -3,6 +3,33 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const core=fs.readFileSync('assets/01-crm-core.js','utf8');
+const httpSource=fs.readFileSync('assets/00-air3-control-http-v1.js','utf8');
+function httpBoot(post, native=true){
+ const calls=[],fallback=[];
+ const window={location:{href:'https://resanta-crm.by/'},fetch:async(...args)=>{fallback.push(args);return 'original'},Capacitor:{isNativePlatform:()=>native,getPlatform:()=> 'android',isPluginAvailable:()=>true,Plugins:{CapacitorHttp:{post:async args=>{calls.push(args);return post(args)}}}}};
+ vm.runInNewContext(httpSource,{window,URL,Headers,Response,Set,Promise,JSON,Object,String,Error});
+ return {window,calls,fallback};
+}
+test('AIR3 control read retains JSON, authentication headers and response status',async()=>{
+ const f=httpBoot(async()=>({status:200,data:{month:'2026-11',sales:[]},headers:{'content-type':'application/json'}}));
+ const result=await f.window.fetch('https://baqchjtvtmcfzwjjluhs.supabase.co/rest/v1/rpc/crm_control_sales_summary_v1',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer test'},body:'{"p_month":"2026-11"}'});
+ assert.equal(f.calls.length,1);assert.equal(f.calls[0].headers.authorization,'Bearer test');assert.equal(f.calls[0].data.p_month,'2026-11');assert.equal(f.calls[0].disableRedirects,true);
+ assert.equal(result.status,200);assert.equal((await result.json()).month,'2026-11');assert.equal(f.fallback.length,0);
+});
+test('AIR3 read routing leaves browser, auth, paid AI and mutations unchanged',async()=>{
+ const f=httpBoot(async()=>{throw Error('unexpected')});
+ for(const path of ['/auth/v1/token','/functions/v1/crm-ai360-dialog-v4','/rest/v1/tasks','/rest/v1/rpc/crm_route_day_v1'])await f.window.fetch('https://baqchjtvtmcfzwjjluhs.supabase.co'+path,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+ assert.equal(f.calls.length,0);assert.equal(f.fallback.length,4);
+ const browser=httpBoot(()=>{},false);assert.equal(browser.window.RESANTA_AIR3_CONTROL_HTTP_V1,undefined);
+});
+test('stopped AIR3 control reads never dispatch or accept a delayed result',async()=>{
+ let release;const f=httpBoot(()=>new Promise(r=>{release=r}));const c=new AbortController();c.abort(new Error('stopped'));
+ const url='https://baqchjtvtmcfzwjjluhs.supabase.co/rest/v1/rpc/triovist_get_dashboard';
+ const options={method:'POST',headers:{'content-type':'application/json'},body:'{}'};
+ await assert.rejects(f.window.fetch(url,{...options,signal:c.signal}),/stopped/);assert.equal(f.calls.length,0);
+ const active=new AbortController(),pending=f.window.fetch(url,{...options,signal:active.signal});await Promise.resolve();active.abort(new Error('stopped'));
+ await assert.rejects(pending,/stopped/);release({status:200,data:{stale:true}});await Promise.resolve();assert.equal(f.calls.length,1);assert.equal(f.fallback.length,0);
+});
 const code=core.slice(core.indexOf('window.crmAir3VoiceAvailableV1='),core.indexOf('// v23.6.166:'));
 function boot(request){
  const sent=[],cancelled=[];
