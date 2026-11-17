@@ -36,7 +36,9 @@ function pretty(code){
   ai_quota_exhausted:'Достигнуто ограничение обращений к OpenAI. Это не лимит микрофона.',
   route_ui_unavailable:'Не удалось открыть подготовку маршрута. Обновите страницу CRM; задачи ещё не созданы.',
   agent_protocol_unavailable:'Единый агент сейчас недоступен. Обнови окно Леры и повтори запрос.',
-  new_core_unavailable:'Единое ядро Леры временно недоступно. На старую аналитику не переключаюсь, чтобы не перепутать данные клиента.'
+  new_core_unavailable:'Единое ядро Леры временно недоступно. На старую аналитику не переключаюсь, чтобы не перепутать данные клиента.',
+  sales_source_unavailable:'Продажи сейчас не удалось проверить. Повторите запрос позже.',
+  control_center_sources_unavailable:'Источники плана продаж сейчас недоступны. Повторите запрос позже.'
  };
  return messages[code]||'Не получилось получить проверенные данные CRM. Повтори вопрос позднее. Ничего не изменено.';
 }
@@ -139,7 +141,12 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    lastMode=answerMode;
    if(isChat){awaitingDetail=null;
      ui.textStatus('Лера · единый агент · разговор');}
-   else ui.textStatus('Лера · единый агент · данные CRM');
+   const failed=Array.isArray(data.failed_domains)?data.failed_domains:[];
+   const partial=Array.isArray(data.partial_sources)?data.partial_sources:[];
+   const labels={sales:'продажи',debt:'задолженность',operations:'задачи и маршруты',clients:'клиенты',tasks:'задачи',routes:'маршруты',visits:'визиты',gps:'GPS',triovist:'Триовист',stock:'склад',payments:'платежи',cash:'поступления',promotions:'акции',vip:'ВИП-клиенты',client_detail:'карточка клиента'};
+   const names=list=>[...new Set(list.map(x=>labels[x]).filter(x=>typeof x==='string'))].slice(0,3).join(', ')||'часть источников';
+   const sourceWarning=isChat?'':[failed.length?'Не удалось проверить: '+names(failed)+'.':'',partial.length?'Показана часть данных: '+names(partial)+'.':''].filter(Boolean).join(' ');
+   if(!isChat)ui.textStatus(sourceWarning?'Лера · источники проверены частично':'Лера · единый агент · данные CRM');
    const brief=String(data.brief||data.answer||'').trim();
    const detail=String(data.detail||'').trim();
    const offer=String(data.followup_question||'').trim();
@@ -147,14 +154,16 @@ window.crmAI360UnifiedDialogHandleV1=function(text,ui){
    const withOffer=detail && detail!==brief && offer &&
       !/хочешь|хотите|рассказать подробнее|разберём подробнее/i.test(brief.slice(-180))
        ?brief+' '+offer:brief;
-   if(detail&&detail!==brief)awaitingDetail={detail,at:Date.now()};
+   if(detail&&detail!==brief)awaitingDetail={detail:sourceWarning?sourceWarning+'\n\n'+detail:detail,at:Date.now()};
    if(data.memory&&typeof data.memory==='object')memory=data.memory;
-   history.push({role:'user',content:question},{role:'assistant',content:withOffer});
+   const displayAnswer=sourceWarning?sourceWarning+'\n\n'+withOffer:withOffer;
+   history.push({role:'user',content:question},{role:'assistant',content:displayAnswer});
    history=history.slice(-12);
    // Prefer one short verified voice segment for the common quick questions.
    // Full answer and offer remain readable in the CRM dialogue panel.
-   const shortVoice=withOffer.length<=205?withOffer:(brief.length<=205?brief:'');
-   ui.answer(withOffer,shortVoice?{speechSummary:shortVoice}:{fullVoice:true});
+   const voiceBrief=sourceWarning?sourceWarning+' '+brief:brief;
+   const shortVoice=displayAnswer.length<=205?displayAnswer:(voiceBrief.length<=205?voiceBrief:'');
+   ui.answer(displayAnswer,shortVoice?{speechSummary:shortVoice}:{fullVoice:true});
   }catch(e){if(allowed()&&run===epoch&&actor===window.crmAI360GreetingV1?.()?.id)ui.answer(pretty(String(e?.message||e)));}
   finally{if(run===epoch){pending=false;window.__resantaAI360PendingV1=false;}}
  })();

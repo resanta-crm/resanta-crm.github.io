@@ -1,5 +1,5 @@
 import {routeEvidenceAnswer,riskEvidenceAnswer} from './scoped-planning.mjs';
-import {dialogueName} from './dialogue-core.mjs';
+import {dialogueName,clientMeetingTarget,clientMeetingMemory,shouldUseClientRiskAnswer} from './dialogue-core.mjs';
 // Same AI360 tool-orchestrator as director v4, but every data read is reauthorized
 // through the existing staff-scoped Edge gateway under the caller's own JWT.
 // No write APIs, no service-role data returned to LLM without a branch-scope check.
@@ -81,6 +81,9 @@ Deno.serve(async req=>{
   level:['groups','subgroups','sku'].includes(body.memory?.level)?body.memory.level:'',
   offset:Number.isSafeInteger(body.memory?.offset)?Math.max(0,Math.min(200,body.memory.offset)):0
  };
+ const clientMeeting=dialogue?clientMeetingTarget(question,{explicit_manager:directMatches[0]||null}):null;
+ // Conversation state is separate from the unchanged authorized staff portfolio.
+ if(clientMeeting)Object.assign(memory,clientMeetingMemory(memory,clientMeeting),{manager:subject||''});
  const history=Array.isArray(body?.history)?body.history.slice(dialogue?-12:-6).map(x=>({
   role:x?.role==='assistant'?'assistant':'user',
   content:String(x?.content||'').slice(0,dialogue?800:250)
@@ -187,7 +190,7 @@ Deno.serve(async req=>{
   factualEvidence.push(result);return result;
  };
  const output=await runToolCore({
-  question,history,memory:{...memory,today:day,
+  question,history,memory:{...memory,today:day,explicit_manager:directMatches[0]||null,
    role:permission.tier,permitted_managers:permitted,
    instruction:permission.tier==='triovist_category'?
      'Только личные категории Триовиста и 21vek. Смотри свежесть импорта, карточки, позиции, ошибки, инфографику и свои задачи. Не выдумывай данные конкурентов; если они запрещены — скажи об этом. Создание поручений строго запрещено.':
@@ -212,13 +215,14 @@ Deno.serve(async req=>{
   answer:output.pair.brief,read_only:true,answer_verified:false,domains_used:[],memory
  });
  if(!output?.pair)return reply(req,{error:'verified_dialog_unavailable',answer_verified:false},503);
- const pair=routeEvidenceAnswer(factualEvidence)||riskEvidenceAnswer(factualEvidence)||output.pair;
+ const pair=(!clientMeeting?routeEvidenceAnswer(factualEvidence):null)||(shouldUseClientRiskAnswer(question,memory)?riskEvidenceAnswer(factualEvidence):null)||output.pair;
  const answer=[pair.detail?.startsWith(pair.brief)?'':pair.brief,pair.detail,pair.offer].map(x=>String(x||'').trim()).filter(Boolean).join('\n');
  return reply(req,{mode:'staff_ai360_shared_core_v1',answer_verified:!dialogue,read_only:true,
   ...(dialogue?{protocol:'lera_dialogue_v2'}:{}),
   model:CORE_MODEL,scope:permission.tier==='triovist_category'?'Триовист / 21vek.by':'Витебск',role:permission.tier,subject_manager:subject,month,
   answer:answer.slice(0,4000),speech_summary:pair.brief.slice(0,400),offer:pair.offer,
   domains_used:output.used,as_of:day,
-  memory:{manager:subject||'',month,client:memory.client,group:memory.group,subgroup:memory.subgroup,
-   level:memory.level,offset:memory.offset}});
+  memory:{manager:subject||'',month,client:clientMeeting?String(factualEvidence.find(x=>x.domain==='client_detail'&&x.client_name)?.client_name||''):memory.client,
+   group:memory.group,subgroup:memory.subgroup,level:memory.level,offset:memory.offset,
+   ...(clientMeeting?{subject:'client',domain:clientMeeting.domain}:{})}});
 });

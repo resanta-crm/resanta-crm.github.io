@@ -1,6 +1,6 @@
 import {readRouteWindow,readClientRisk,branchScope,routeEvidenceAnswer,riskEvidenceAnswer} from './scoped-planning.mjs';
 import {readGpsEvidence,gpsStartAnswer} from './gps-evidence.mjs';
-import {dialogueName} from './dialogue-core.mjs';
+import {dialogueName,clientMeetingTarget,clientMeetingMemory,shouldUseClientRiskAnswer} from './dialogue-core.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoiceDomain, getVoiceCapabilities } from './catalog.mjs';
 import { runToolCore } from './core.mjs';
@@ -170,8 +170,13 @@ Deno.serve(async req => {
   if(directory.error)return respond(req,{error:'staff_directory_unavailable',answer_verified:false},503);
   const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
   const subject=requestContext(question,memory,managerNames);
+  const clientMeeting=clientMeetingTarget(question,{explicit_manager:subject.explicitManager});
+  if(clientMeeting){
+    Object.assign(memory,clientMeetingMemory(memory,clientMeeting));
+    Object.assign(subject,{explicitManager:null,manager:null,network:false,client:true,subject:'client'});
+  }
   const branch=branchScope(question,memory);
-  if(branch==='Витебск'&&!subject.explicitManager&&/витебск|по\s+филиалу/i.test(question)){subject.manager=null;subject.network=true;subject.subject='network';}
+  if(!clientMeeting&&branch==='Витебск'&&!subject.explicitManager&&/витебск|по\s+филиалу/i.test(question)){subject.manager=null;subject.network=true;subject.subject='network';}
   const invalidSources=[], evidence=[];
   let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='',lastGroup='',lastSubgroup='',lastLevel='',lastNextOffset=0;
   const readTool = async args => {
@@ -298,7 +303,13 @@ Deno.serve(async req => {
       }
       const managed=await managedRead(svc,domain,manager,month,day,question,
         userId==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'?date=>createClient(url,Deno.env.get('SUPABASE_ANON_KEY')||'',{auth:{persistSession:false},global:{headers:{Authorization:'Bearer '+token}}}).rpc('crm_gps_first_tt_lateness_v1',{p_from:date,p_to:date}):null);
-      if(managed){evidence.push(managed);return managed;}
+      if(managed){
+        if(clientMeeting&&domain===clientMeeting.domain){
+          subject.manager=null;subject.subject='client';subject.client=true;lastManager=null;
+          lastClientName=managed.owner||managed.client_name||clientMeeting.client;
+        }
+        evidence.push(managed);return managed;
+      }
       const tool = getTool(domain);
       if (!tool) return { domain, error: 'unknown_domain' };
       const isNextPage=memory.domain===domain&&
@@ -479,7 +490,7 @@ Deno.serve(async req => {
      (/^(а\s|и\s|ещё|еще|какие|покажи|расскажи|а теперь|продолж|дальше|остальн|следующ)/i.test(question)&&
        DOMAINS.includes(memory.domain)?memory.domain:null);
   const output = await runToolCore({
-    question, history, memory: { ...memory,
+    question, history, memory: { ...memory,month:allowedMonth,
       manager:subject.manager||'',subject:subject.subject,client:memory.client||'',
       subject_is_client:subject.client,explicit_manager:subject.explicitManager||null,
       catalog: CRM_AI360_TOOLS.map(x => x.id + ': ' + x.label).join('; '),
@@ -499,6 +510,21 @@ Deno.serve(async req => {
   if (settlement.error || settlement.data?.ok !== true) {
     return respond(req, { error: 'budget_settlement_unavailable', answer_verified: false }, 503);
   }
+  // A successful unrelated tool cannot establish unavailable sales figures.
+  // Check before every model-answer branch, including chat/clarification/action.
+  const salesRequired=preferredDomain==='sales'||
+    /выручк|оборот|отгруз|реализац|\bkpi\b|(?:план|факт|процент).{0,35}продаж|продаж.{0,35}(?:план|факт|процент)/i.test(question);
+  const preferredReady=preferredDomain&&preferredDomain!=='sales'&&
+    evidence.some(x=>x.domain===preferredDomain&&!x.error);
+  // Unknown/general overviews fail closed. Only an explicitly selected,
+  // successfully read non-sales source may continue with the source warning.
+  if(invalidSources.includes('sales')&&(salesRequired||!preferredReady))return respond(req,{
+    error:'sales_source_unavailable',
+    answer:'Продажи сейчас не удалось проверить. Повторите запрос позже.',
+    read_only:true,answer_verified:false,failed_domains:[...new Set(invalidSources)],
+    partial_sources:[...new Set(evidence.filter(x=>x.partial).map(x=>x.domain))],
+    mode:'director_readonly_v4',protocol:'lera_dialogue_v2'
+  },503);
   if(dialogue&&output.pair&&output.kind==='action')return respond(req,{
     mode:'agent360_action_request_v2',protocol:'lera_dialogue_v2',intent:'prepare_action',
     action_question:output.actionQuestion,answer:output.pair.brief,
@@ -509,7 +535,10 @@ Deno.serve(async req => {
     answer:output.pair.brief,brief:output.pair.brief,detail:output.pair.detail,
     followup_question:output.pair.offer,read_only:true,answer_verified:false,domains_used:[],memory
   });
-  const pair=routeEvidenceAnswer(evidence)||riskEvidenceAnswer(evidence)||gpsStartAnswer(evidence,{question})||(evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
+  const pair=(!clientMeeting?routeEvidenceAnswer(evidence):null)||
+    (shouldUseClientRiskAnswer(question,memory)?riskEvidenceAnswer(evidence):null)||
+    (!clientMeeting?gpsStartAnswer(evidence,{question}):null)||
+    (evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
   if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
     answer_verified: false,
