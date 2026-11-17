@@ -8,6 +8,9 @@
 'use strict';
 if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 
+// The asset query is a cache token, not the canonical application release.
+// Keep this marker aligned with data/app-version.json; tests enforce parity.
+const FRONTEND_VERSION='23.7.12';
 const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.122'}catch(_){return'23.6.122'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
 const VERSIONED_GUARDS=Object.freeze({RESANTA_ROUTE_VISIT_EVIDENCE_V23629:'v23.6.264',RESANTA_TRIOVIST_21VEK_CONTROL_V236107:'v23.6.379',RESANTA_PROMOTIONS_CLOSE_V23656:'v23.6.361',RESANTA_PROMOTIONS_STABLE_RENDER_V23671:'v23.6.364',RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.320',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.320',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.155',RESANTA_WAREHOUSE_ORDERS_V1:'v23.6.242',RESANTA_WAREHOUSE_ORDERS_TAB_V1:'v23.6.177',RESANTA_MARKDOWN_V23687:'v23.6.245',RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651:'v23.6.380',RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551:'v23.6.249',RESANTA_TRIOVIST_AUTH_EXPORT_V236221:'v23.6.326',RESANTA_TRIOVIST_ROOT_V23614:'v23.6.401',RESANTA_TRIOVIST_COMPETITORS_V236218:'v23.6.384'});
 
@@ -369,12 +372,12 @@ async function checkFrontendVersion(force=false){
     const r=await fetch('./data/app-version.json?ts='+now,{cache:'no-store'});
     if(!r.ok)return false;
     const j=await r.json(),remote=String(j?.version||'').replace(/^v/,'');
-    if(remote&&remote!==V){
+    if(remote&&remote!==FRONTEND_VERSION){
       const reloadKey='crm_frontend_reload_target_v236119';
       let attempted='';
       try{attempted=sessionStorage.getItem(reloadKey)||''}catch(_){}
       if(attempted===remote){
-        console.warn('CRM version mismatch persisted after one reload:',{loaded:V,remote});
+        console.warn('CRM version mismatch persisted after one reload:',{loaded:FRONTEND_VERSION,remote});
         const b=document.getElementById('crm-update-banner');
         if(b)b.classList.remove('show');
         return false;

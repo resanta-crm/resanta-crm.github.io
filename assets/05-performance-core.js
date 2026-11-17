@@ -94,7 +94,7 @@ async function nativeCoreData(plugin,scope,signal){const auth=await coreDeadline
  const timeoutMs=nativeCoreCapabilities.get(plugin)?.paged===true?90000:25000;
  return coreDeadline(async requestSignal=>{const requestId='core-'+(window.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(16).slice(2));const cancel=()=>{try{Promise.resolve(plugin.cancel({requestId})).catch(()=>{});}catch(_){}};requestSignal.addEventListener('abort',cancel,{once:true});try{requestSignal.throwIfAborted();const response=await plugin.bootstrapCore({requestId,accessToken:session.access_token,apiKey:SUPABASE_KEY});assertActor(scope,requestSignal);return response?.result;}finally{requestSignal.removeEventListener('abort',cancel);}},timeoutMs,signal,'bootstrap_native_timeout');}
 function validCore(data){return !!data&&typeof data==='object'&&Array.isArray(data.clients)&&Array.isArray(data.users);}
-function bootstrapError(error){const code=String(error?.message||error||'');let message=code;if(code==='bootstrap_session_changed')message='Учётная запись изменилась. Выполните вход снова.';else if(code==='bootstrap_auth_required'||coreAuthError(error))message='Сессия CRM не подтверждена. Выполните вход снова.';else if(code==='bootstrap_auth_timeout')message='Не удалось проверить сессию за 5 секунд. Нажмите «Повторить загрузку».';else if(/bootstrap_.*timeout|core_native_.*failed|core_body_(timeout|io|missing|limit)|core_http_\d+/.test(code))message='Основные данные не загрузились вовремя. Нажмите «Повторить загрузку».';else if(/^(bootstrap_response_invalid|core_json_invalid|core_shape_invalid)$/.test(code))message='Сервер вернул неполные основные данные. Нажмите «Повторить загрузку».';const result=new Error(message);result.code=code;return result;}
+function bootstrapError(error){const code=String(error?.message||error||'');let message=code;if(code==='bootstrap_session_changed')message='Учётная запись изменилась. Выполните вход снова.';else if(code==='bootstrap_auth_required'||coreAuthError(error))message='Сессия CRM не подтверждена. Выполните вход снова.';else if(code==='bootstrap_page_closed')message='Загрузка прервана при закрытии страницы. Нажмите «Повторить загрузку».';else if(code==='bootstrap_auth_timeout')message='Не удалось проверить сессию за 5 секунд. Нажмите «Повторить загрузку».';else if(/bootstrap_.*timeout|core_native_.*failed|core_body_(timeout|io|missing|limit)|core_http_\d+/.test(code))message='Основные данные не загрузились вовремя. Нажмите «Повторить загрузку».';else if(/^(bootstrap_response_invalid|core_json_invalid|core_shape_invalid)$/.test(code))message='Сервер вернул неполные основные данные. Нажмите «Повторить загрузку».';const result=new Error(message);result.code=code;return result;}
 
 function openCache(){
   return new Promise((resolve,reject)=>{
@@ -503,7 +503,13 @@ window.crmUltraInvalidateV22734=function(...names){
 document.addEventListener('pointerdown',()=>{lastInteractionAt=Date.now();},true);
 document.addEventListener('keydown',()=>{lastInteractionAt=Date.now();},true);
 document.addEventListener('scroll',()=>{lastInteractionAt=Date.now();},{passive:true,capture:true});
-window.addEventListener('pagehide',persistSnapshot);
+window.addEventListener('pagehide',()=>{
+  persistSnapshot();
+  // Native reads outlive JavaScript navigation unless their own lease is cancelled.
+  // This does not sign out, cancel voice, or retry any accepted request.
+  if(window.Capacitor?.isNativePlatform?.()===true&&window.Capacitor?.getPlatform?.()==='android')
+    bootAbort?.abort(new Error('bootstrap_page_closed'));
+});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistSnapshot();});
 
 window.RESANTA_CRM_PERFORMANCE_FINAL=Object.freeze({
