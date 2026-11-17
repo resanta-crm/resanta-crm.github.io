@@ -78,3 +78,31 @@ test('one actor in distinct Cyrillic regions cannot collide in persistent cache 
  h.ctx.currentProfile.region='Могилев';await h.ctx.crmFastBootstrapV22733();assert.equal(h.ctx.allTasks.length,0);h.ctx.allTasks=[{id:'mogilev-only'}];h.listeners.pagehide();await flush();
  const second=h.writes.filter(x=>x.key.endsWith('|tasks')).at(-1);assert.notEqual(first.key,second.key);assert.match(first.key,/%D0/);assert.equal(first.data.rows[0].id,'vitebsk-only');assert.equal(second.data.rows[0].id,'mogilev-only');
 });
+
+test('page navigation aborts only its pending native bootstrap and ignores the abandoned snapshot',async()=>{
+ const response=deferred(),h=fixture({nativeCall:()=>response.promise});
+ const loading=h.ctx.crmFastBootstrapV22733();await flush();
+ const request=h.calls.find(x=>x.kind==='native');assert.ok(request);
+ const rejected=assert.rejects(loading,e=>e.code==='bootstrap_page_closed');h.listeners.pagehide();await rejected;
+ const cancellations=h.calls.filter(x=>x.kind==='cancel');assert.equal(cancellations.length,1);assert.equal(cancellations[0].args.requestId,request.args.requestId);
+ assert.equal(h.calls.filter(x=>x.kind==='native').length,1);assert.equal(h.calls.filter(x=>x.kind==='rpc'||x.kind==='table').length,0);
+ response.resolve({result:{clients:[{id:'abandoned-owner-client'}],users:[{id:'owner'}]}});await flush();assert.equal(h.ctx.allClients.length,0);
+ assert.equal(h.timers.some(t=>t.active&&t.ms===25000),false);
+});
+test('pagehide does not cancel a finished native bootstrap or change desktop loading',async()=>{
+ const ready=fixture();await ready.ctx.crmFastBootstrapV22733();ready.listeners.pagehide();await flush();assert.equal(ready.calls.filter(x=>x.kind==='cancel').length,0);assert.equal(ready.ctx.allClients[0].id,'owner-client');
+ const response=deferred(),desktop=fixture({native:false,rpc:()=>response.promise});
+ const loading=desktop.ctx.crmFastBootstrapV22733();await flush();desktop.listeners.pagehide();await flush();assert.equal(desktop.calls[0].signal.aborted,false);
+ response.resolve({data:{clients:[{id:'desktop-client'}],users:[{id:'owner'}]}});await loading;assert.equal(desktop.ctx.allClients[0].id,'desktop-client');
+});
+test('an abandoned owner read cannot overwrite a new actor after pagehide and local logout',async()=>{
+ const owner=deferred(),h=fixture({nativeCall:args=>args.accessToken==='session-owner'?owner.promise:Promise.resolve({result:{clients:[{id:'manager-client'}],users:[{id:'manager'}]}})});
+ const old=h.ctx.crmFastBootstrapV22733();await flush();const rejected=assert.rejects(old,e=>e.code==='bootstrap_page_closed');h.listeners.pagehide();await rejected;
+ await h.switchUser();await h.ctx.crmFastBootstrapV22733();owner.resolve({result:{clients:[{id:'old-owner-secret'}],users:[{id:'owner'}]}});await flush();
+ assert.equal(h.ctx.allClients[0].id,'manager-client');assert.equal(h.calls.filter(x=>x.kind==='cancel').length,1);
+});
+test('native busy rejection remains an explicit retry with no automatic read or paid-voice replay',async()=>{
+ const h=fixture({nativeCall:async()=>{throw Error('core_transport_busy')}});
+ await assert.rejects(h.ctx.crmFastBootstrapV22733(),e=>e.code==='core_transport_busy');await flush();
+ assert.equal(h.calls.filter(x=>x.kind==='native').length,1);assert.equal(h.calls.filter(x=>x.kind==='rpc'||x.kind==='table'||x.kind==='cancel').length,0);
+});
