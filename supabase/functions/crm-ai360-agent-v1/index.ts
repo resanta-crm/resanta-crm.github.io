@@ -177,13 +177,18 @@ Deno.serve(async req=>{
   return fault(req,'agent_invalid_upstream',503);
  // Keep the upstream's exact answer_verified/read_only semantics. Do not
  // upgrade an LLM-generated answer to a verified factual answer.
- if(!upstream.ok)return fault(req,typeof result.error==='string'?result.error.slice(0,90):
-  'agent_upstream_unavailable',upstream.status>=400&&upstream.status<600?upstream.status:503);
+ const sourceNames=key=>[...new Set((Array.isArray(result[key])?result[key]:[])
+  .filter(name=>typeof name==='string'&&principal.domains.includes(name)))];
+ const sourceMeta={...(Array.isArray(result.failed_domains)?{failed_domains:sourceNames('failed_domains')}:{}),
+  ...(Array.isArray(result.partial_sources)?{partial_sources:sourceNames('partial_sources')}:{})};
+ if(!upstream.ok)return reply(req,{error:typeof result.error==='string'?result.error.slice(0,90):
+  'agent_upstream_unavailable',read_only:true,answer_verified:false,...sourceMeta},
+  upstream.status>=400&&upstream.status<600?upstream.status:503);
  const stored=await saveHistoryTurn(svc,user.id,{mode:'crm',
   question:input.question,answer:String(result.answer||result.brief||''),
   answerVerified:result.answer_verified===true});
  return reply(req,{
-  ...result,
+  ...result,...sourceMeta,
   ...(input.protocol==='lera_dialogue_v2'?{protocol:'lera_dialogue_v2'}:{}),
   agent:'resanta_ai_agent360_v1',
   route_tier:principal.tier,

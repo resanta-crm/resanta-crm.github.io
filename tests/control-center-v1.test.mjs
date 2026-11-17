@@ -7,7 +7,7 @@ const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const source=read('assets/283-control-center-v1.js');
 const css=read('assets/283-control-center-v1.css');
 const flush=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r));};
-const sampleKpi={version:'kpi360-visual-v2',month:'2026-11',latest_sales_month:'2026-11',sales:[
+const sampleKpi={version:'kpi360-sales-v1',month:'2026-11',latest_sales_month:'2026-11',sales:[
  {manager_name:'Шкуран',shipment:100,shipment_plan:200},
  {manager_name:'Руднев',shipment:200,shipment_plan:300},
  {manager_name:'Ачинович',shipment:300,shipment_plan:500}
@@ -25,7 +25,7 @@ function fixture(options={}){
  const profile={id:'owner',role:'boss',name:'Александр Паюшин',email:'payushin_ar@resanta.ru',region:'Витебск',access_scope:'standard',...options.profile};
  const statuses=Object.fromEntries(['tasks','visits','routes','absences'].map(x=>[x,{status:'ready',error:'',loadedAt:1}]));
  if(options.coreError)statuses.tasks={status:'error',error:'network'};
- const data={crm_manager_kpi360_dashboard_v2:options.kpi||structuredClone(sampleKpi),triovist_get_dashboard:options.tri||structuredClone(sampleTri),crm_pdz360_daily_v1:options.pdz||structuredClone(samplePdz)};
+ const data={crm_control_sales_summary_v1:options.kpi||structuredClone(sampleKpi),triovist_get_dashboard:options.tri||structuredClone(sampleTri),crm_pdz360_daily_v1:options.pdz||structuredClone(samplePdz)};
  const document={readyState:'complete',getElementById:id=>nodes.get(id)||null,createElement:()=>{const el=node();el.insertAdjacentElement=(_p,x)=>nodes.set(x.id,x);return el;},addEventListener(){}};
  const context={document,currentProfile:profile,currentUser:{id:profile.id},setTimeout:options.setTimeout||setTimeout,clearTimeout:options.clearTimeout||clearTimeout,AbortController,TODAY:'2026-11-13',ROUTE_CONTROL_START_LABEL:'13.08.2026',console,Date:options.Date||Date,Map,Set,Promise,sessionStorage:options.sessionStorage,
   allTasks:[{id:'t1',manager_name:'Руднев',due_date:'2026-11-12',text:'call'},{id:'t2',manager_name:'Шкуран',due_date:'2026-11-15'}],allClients:[],
@@ -209,14 +209,14 @@ test('pagination totals every receipt, not just the first API page',async()=>{
 });
 test('new month clears previous source data and sends the exact month to both sales sources',async()=>{
  const f=fixture();await flush();f.root().events.change({target:{matches:()=>true,value:'2026-10'}});await flush();
- assert.ok(f.calls.some(x=>x.name==='crm_manager_kpi360_dashboard_v2'&&x.args.p_month==='2026-10'));
+ assert.ok(f.calls.some(x=>x.name==='crm_control_sales_summary_v1'&&x.args.p_month==='2026-10'));
  assert.ok(f.calls.some(x=>x.name==='triovist_get_dashboard'&&x.args.p_end_month==='2026-10'));
  assert.match(f.root().innerHTML,/октябрь 2026/);
  assert.match(f.root().innerHTML,/не удалось прочитать/,'wrong-month fixture responses are rejected');
 });
 test('late response after logout/account switch cannot paint or chain reads into the new session',async()=>{
  let resolve;const waiting=new Promise(r=>resolve=r);
- const f=fixture({rpc:(name)=>name==='crm_manager_kpi360_dashboard_v2'?waiting:Promise.resolve({data:sampleTri})});
+ const f=fixture({rpc:(name)=>name==='crm_control_sales_summary_v1'?waiting:Promise.resolve({data:sampleTri})});
  f.context.currentUser={id:'next'};f.context.currentProfile={id:'next',role:'auditor'};f.page.classList.remove('active');resolve({data:sampleKpi});await flush();
  assert.equal(f.calls.filter(x=>x.name==='crm_pdz360_daily_v1').length,0);
  assert.equal(f.calls.filter(x=>x.table).length,0);
@@ -224,7 +224,7 @@ test('late response after logout/account switch cannot paint or chain reads into
 });
 test('leaving home stops subsequent source requests; repeated home renders share loaded results',async()=>{
  const f=fixture();await flush();const count=f.calls.length;f.context.buildDashboard();await flush();assert.equal(f.calls.length,count);
- let resolve;const wait=new Promise(r=>resolve=r);const other=fixture({rpc:name=>name==='crm_manager_kpi360_dashboard_v2'?wait:Promise.resolve({data:sampleTri})});
+ let resolve;const wait=new Promise(r=>resolve=r);const other=fixture({rpc:name=>name==='crm_control_sales_summary_v1'?wait:Promise.resolve({data:sampleTri})});
  other.page.classList.remove('active');resolve({data:sampleKpi});await flush();assert.equal(other.calls.filter(x=>x.name==='crm_pdz360_daily_v1').length,0);
 });
 test('core readiness accessor is read-only and preserves refresh errors instead of treating cache fallback as success',()=>{
@@ -279,7 +279,7 @@ test('timeouts finish loading, abort the request, allow explicit retry and ignor
  const timers=new Map();let timerId=0,salesCalls=0,resolveOld;
  const old=new Promise(r=>resolveOld=r);
  const f=fixture({setTimeout:(fn,ms)=>{timers.set(++timerId,{fn,ms});return timerId},clearTimeout:id=>timers.delete(id),rpc:name=>{
-  if(name==='crm_manager_kpi360_dashboard_v2'){salesCalls++;return salesCalls===1?old:Promise.resolve({data:sampleKpi});}
+  if(name==='crm_control_sales_summary_v1'){salesCalls++;return salesCalls===1?old:Promise.resolve({data:sampleKpi});}
   return Promise.resolve({data:name==='triovist_get_dashboard'?sampleTri:samplePdz});
  }});await flush();
  for(const [id,t] of [...timers]){timers.delete(id);t.fn();}await flush();
@@ -290,7 +290,7 @@ test('timeouts finish loading, abort the request, allow explicit retry and ignor
 });
 test('an explicit permission denial removes the cached source instead of showing it as a network fallback',async()=>{
  let denied=false;const values=new Map();const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v)};
- const f=fixture({sessionStorage:storage,rpc:name=>Promise.resolve(denied&&name==='crm_manager_kpi360_dashboard_v2'?{error:{code:'42501',message:'Нет доступа'}}:{data:name==='crm_manager_kpi360_dashboard_v2'?sampleKpi:name==='triovist_get_dashboard'?sampleTri:samplePdz})});
+ const f=fixture({sessionStorage:storage,rpc:name=>Promise.resolve(denied&&name==='crm_control_sales_summary_v1'?{error:{code:'42501',message:'Нет доступа'}}:{data:name==='crm_control_sales_summary_v1'?sampleKpi:name==='triovist_get_dashboard'?sampleTri:samplePdz})});
  await flush();denied=true;f.context.RESANTA_CONTROL_CENTER_V1.refresh();await flush();
  assert.match(f.root().innerHTML,/Всего · неполные данные/);assert.equal(JSON.parse(values.get('crm_control_center_v2:owner')).slots.sales,undefined);
 });

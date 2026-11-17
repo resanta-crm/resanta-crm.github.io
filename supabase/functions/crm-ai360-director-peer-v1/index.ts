@@ -1,6 +1,6 @@
 import {readRouteWindow,readClientRisk,branchScope,routeEvidenceAnswer,riskEvidenceAnswer} from './scoped-planning.mjs';
 import {readGpsEvidence,gpsStartAnswer} from './gps-evidence.mjs';
-import {dialogueName} from './dialogue-core.mjs';
+import {dialogueName,clientMeetingTarget,clientMeetingMemory,shouldUseClientRiskAnswer} from './dialogue-core.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { CRM_AI360_ALL_DOMAINS, CRM_AI360_TOOLS, getTool, collectTool, inferVoiceDomain, getVoiceCapabilities } from './catalog.mjs';
 import { runToolCore } from './core.mjs';
@@ -178,8 +178,13 @@ Deno.serve(async req => {
   if(directory.error)return respond(req,{error:'staff_directory_unavailable',answer_verified:false},503);
   const managerNames=(directory.data||[]).map(x=>String(x.name||'')).filter(Boolean);
   const subject=requestContext(question,memory,managerNames);
-  const branch=branchScope(question,memory);
-  if(branch==='Витебск'&&!subject.explicitManager&&/витебск|по\s+филиалу/i.test(question)){subject.manager=null;subject.network=true;subject.subject='network';}
+  const clientMeeting=dialogue?clientMeetingTarget(question,{explicit_manager:subject.explicitManager}):null;
+  if(clientMeeting){
+    Object.assign(memory,clientMeetingMemory(memory,clientMeeting));
+    Object.assign(subject,{manager:null,explicitManager:null,network:false,client:true,subject:'client'});
+  }
+  const branch=clientMeeting?null:branchScope(question,memory);
+  if(!clientMeeting&&branch==='Витебск'&&!subject.explicitManager&&/витебск|по\s+филиалу/i.test(question)){subject.manager=null;subject.network=true;subject.subject='network';}
   const invalidSources=[], evidence=[];
   let lastManager=subject.manager,lastMonth=allowedMonth,lastDomain='',lastClientName='',lastGroup='',lastSubgroup='',lastLevel='',lastNextOffset=0;
   const readTool = async args => {
@@ -306,7 +311,13 @@ Deno.serve(async req => {
       }
       const managed=await managedRead(svc,domain,manager,month,day,question,
         userId==='544fb1e2-ef70-44de-bc62-e0e1596a4bfc'?date=>createClient(url,Deno.env.get('SUPABASE_ANON_KEY')||'',{auth:{persistSession:false},global:{headers:{Authorization:'Bearer '+token}}}).rpc('crm_gps_first_tt_lateness_v1',{p_from:date,p_to:date}):null);
-      if(managed){evidence.push(managed);return managed;}
+      if(managed){
+        if(clientMeeting&&domain===clientMeeting.domain&&managed.scope==='client_all'){
+          lastManager=null;subject.manager=null;subject.network=false;subject.subject='client';subject.client=true;
+          lastClientName=String(managed.owner||managed.client_name||clientMeeting.client);
+        }
+        evidence.push(managed);return managed;
+      }
       const tool = getTool(domain);
       if (!tool) return { domain, error: 'unknown_domain' };
       const isNextPage=memory.domain===domain&&
@@ -487,7 +498,7 @@ Deno.serve(async req => {
      (/^(а\s|и\s|ещё|еще|какие|покажи|расскажи|а теперь|продолж|дальше|остальн|следующ)/i.test(question)&&
        DOMAINS.includes(memory.domain)?memory.domain:null);
   const output = await runToolCore({
-    question, history, memory: { ...memory,
+    question, history, memory: { ...memory,month:allowedMonth,
       manager:subject.manager||'',subject:subject.subject,client:memory.client||'',
       subject_is_client:subject.client,explicit_manager:subject.explicitManager||null,
       catalog: CRM_AI360_TOOLS.map(x => x.id + ': ' + x.label).join('; '),
@@ -517,7 +528,7 @@ Deno.serve(async req => {
     answer:output.pair.brief,brief:output.pair.brief,detail:output.pair.detail,
     followup_question:output.pair.offer,read_only:true,answer_verified:false,domains_used:[],memory
   });
-  const pair=routeEvidenceAnswer(evidence)||riskEvidenceAnswer(evidence)||gpsStartAnswer(evidence,{question})||(evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
+  const pair=(!clientMeeting?routeEvidenceAnswer(evidence):null)||(shouldUseClientRiskAnswer(question,memory)?riskEvidenceAnswer(evidence):null)||gpsStartAnswer(evidence,{question})||(evidence.length?guardVoicePair(output.pair,{evidence,managers:managerNames,question,period:allowedMonth}):null);
   if(!pair) return respond(req, {
     answer: 'Не смогла получить надёжный ответ. Данные CRM не изменены.',
     answer_verified: false,

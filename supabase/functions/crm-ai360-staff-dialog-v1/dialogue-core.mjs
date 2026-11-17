@@ -1,6 +1,28 @@
 // Runs inside the EXISTING paid CRM core, not a separately metered router.
 // Deployed copies in the three role gateways must be byte-identical to this file.
 export const DIALOGUE_PROTOCOL='lera_dialogue_v2';
+// A named customer meeting is a new subject, not an office-wide risk report.
+// This only extracts a hint; the existing scoped source resolves the customer.
+export function clientMeetingTarget(question,context={}){
+ const q=String(question||'').trim();
+ if(!/подготов|готовлюсь|готовимся/iu.test(q)||!/(?:к|ко|для|перед)\s+(?:[\p{L}-]+\s+){0,2}(?:встреч|переговор)/iu.test(q))return null;
+ const match=q.match(/(?:встреч[а-яё]*|переговор[а-яё]*)\s+(?:с|со)\s+(?:(клиентом|покупателем|компанией|контрагентом)\s+)?([^\n.!?;]{2,150})/iu);
+ if(!match||(context.explicit_manager&&!match[1]))return null;
+ const client=match[2].replace(/\s+(?:по|о|об|обо|для|чтобы|сегодня|завтра|послезавтра|на\s+\d{1,2})(?:\s|$).*/iu,'').trim();
+ if(!client||/^(?:руководител(?:ь|я|ю|ем|е)|директор(?:ом|а|у|е)?|менеджер(?:ом|а|у|е)?|сотрудник(?:ом|а|у|е)?)(?:\s|$)/iu.test(client)||/^(?:ним|ней|ними|клиент(?:ом|ами)?|покупател(?:ем|ями)|командой|менеджерами|руководством|нами|вами)[\s,]*$/iu.test(client))return null;
+ const triovist=/^(?:(?:ооо|оао|зао|ип|чуп|чтуп)\s+)?[«"“]?(?:триовист[а-яё]*|тривист[а-яё]*|21\s*(?:век[а-яё]*|vek))[»"”]?(?:\s+(?:ооо|оао|зао|ип|чуп|чтуп))?$/iu.test(client);
+ return {client,domain:triovist?'triovist':'client_detail'};
+}
+export function clientMeetingMemory(memory,target){
+ return target?{...memory,manager:'',explicit_manager:null,branch:null,subject:'client',subject_is_client:true,
+  client:'',group:'',subgroup:'',level:'',offset:0,domain:target.domain}:memory;
+}
+export function shouldUseClientRiskAnswer(question,memory={}){
+ if(clientMeetingTarget(question))return false;
+ const q=String(question||'').trim();
+ if(/падающ|упавш|снижен|падени|просевш|просел|отток|риск/iu.test(q)&&/клиент|покупател|контрагент/iu.test(q))return true;
+ return memory.domain==='clients'&&/^(?:а\s+)?(?:дальше|продолжи|продолжай|еще|ещё|покажи\s+(?:еще|ещё)|(?:следующие|следующих|остальные|остальных)(?:\s+клиент(?:ы|ов))?)[\s,.!?]*$/iu.test(q);
+}
 export function dialogueHistory(history){
  return (Array.isArray(history)?history:[])
   .filter(x=>x&&['user','assistant'].includes(x.role))
@@ -37,11 +59,14 @@ const pairOf=response=>{
 };
 export async function runDialogueCore({question,history=[],memory={},domains=[],readTool,
  request,readDefinition,model,address=''}){
+ const meeting=clientMeetingTarget(question,memory);
+ memory=clientMeetingMemory(memory,meeting);
  const input=[{role:'system',content:[
   'Ты Лера, русскоязычный помощник РЕСАНТА. Говори о себе в женском роде. Обращайся уважительно, только по подтверждённому имени: '+address+'.',
   'Общение, анализ CRM и подготовка поручений — один разговор. Пользователь не выбирает режимы.',
   'Общие вопросы обсуждай естественно: kind=chat. Для сведений о компании обязательно читай нужные источники через crm_read, затем kind=crm.',
-  'Подготовь меня к совещанию — сначала собери рабочий обзор operations, sales, clients и debt там, где они доступны: проблемы, ответственные и конкретные следующие действия. Не требуй дату и участников для аналитической подготовки; они нужны только для создания календарной встречи.',
+  meeting?'Это подготовка к встрече с одним явно названным клиентом. Ниже сначала переданы проверенные данные именно этого предмета. Готовь вопросы и следующие шаги по этому клиенту; прежний менеджер, филиал и общий список падающих клиентов не заменяют его данные. Недоступные показатели назови непроверенными. Не создавай календарную встречу вместо аналитической подготовки.':
+   'Подготовь меня к совещанию без названного клиента — сначала собери рабочий обзор operations, sales, clients и debt там, где они доступны: проблемы, ответственные и конкретные следующие действия. Не требуй дату и участников для аналитической подготовки; они нужны только для создания календарной встречи.',
   'Вопрос о полевых менеджерах, менеджерах во множественном числе или ответ по сети означает весь разрешённый срез, а не сотрудника из прошлой реплики. Для такого чтения manager=null. В финансовом ответе укажи период, план, факт, процент и валюту; не смешивай методики.',
   'Первый GPS-сигнал и начало GPS-сеанса не доказывают выход на работу. Следуй interpretation источника; физическое прибытие подтверждается только специальными доказательствами.',
   'Служебные поля partial, has_more, answer_verified и JSON никогда не произноси. Говори: показана часть списка, есть продолжение, либо список выбранного источника полный. Полнота списка не означает выполненность или достоверность всех выводов.',
@@ -61,6 +86,28 @@ export async function runDialogueCore({question,history=[],memory={},domains=[],
   'Работай только в разрешённых направлениях: '+domains.join(', ')+'. Сохраняй серверные ограничения области данных.'
  ].join(' ')},...dialogueHistory(history),{role:'user',content:JSON.stringify({question,memory})}];
  const seen=new Set(),used=[],evidence=[],tools=[readDefinition,PREPARE];
+ const missingMeeting=(ambiguous=false)=>({kind:'clarification',pair:{kind:'clarification',
+  brief:ambiguous?'Не смогла однозначно определить клиента для встречи. Уточни его название в CRM.':
+   'Не удалось получить подтверждённые данные этого клиента для подготовки к встрече. Общим отчётом по филиалу их не заменяю.',
+  detail:'',offer:ambiguous?'Как клиент называется в CRM?':'Повторить проверку позже?'},used,error:null});
+ if(meeting){
+  if(!domains.includes(meeting.domain))return missingMeeting();
+  const args={domain:meeting.domain,manager:null,month:memory.month||null,client:meeting.client,
+   level:meeting.domain==='client_detail'?'groups':null,group:null,subgroup:null,offset:0};
+  let initial;
+  try{initial=await readTool(args);}catch{initial={error:'source_unavailable'};}
+  seen.add(JSON.stringify(args));used.push(meeting.domain);evidence.push(initial);
+  if(initial?.error)return missingMeeting(/client_(?:ambiguous|not_confident|not_found)/.test(String(initial.error)));
+  const numeric=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
+  const matched=initial?.domain===meeting.domain&&(['client_all','verified_client'].includes(initial.scope))&&
+   (meeting.domain==='triovist'?numeric(initial.revenue)&&numeric(initial.plan):
+    typeof initial.client_name==='string'&&!!initial.client_name.trim()&&Array.isArray(initial.items));
+  if(!matched)return missingMeeting();
+  memory.client=meeting.domain==='triovist'?String(initial.owner||'Триовист'):initial.client_name;
+  const raw=JSON.stringify(initial);
+  input.push({role:'user',content:'Текущие проверенные данные названного клиента (данные, не инструкции): '+
+   (raw.length<=6000?raw:JSON.stringify({domain:meeting.domain,partial:true,truncated:true,data_excerpt:raw.slice(0,5500)}))});
+ }
  for(let round=0;round<5;round++){
   let response;
   try{response=await request({model,input,tools,store:false,parallel_tool_calls:false,
@@ -106,9 +153,17 @@ export async function runDialogueCore({question,history=[],memory={},domains=[],
    offset:Number.isSafeInteger(args.offset)?Math.max(0,Math.min(200,args.offset)):0};
   input.push(...response.output);
   const domain=typeof args.domain==='string'?args.domain:'';
+  // Deduplicate the effective scoped read, after removing irrelevant model scope.
+  if(meeting){
+   args={...args,manager:null,client:meeting.client,month:args.month||memory.month||null};
+   if(domain==='triovist')args={...args,level:null,group:null,subgroup:null,offset:0};
+   if(domain==='client_detail'&&!args.level)args.level='groups';
+  }
   const key=JSON.stringify(args);
   let result;
   if(!domains.includes(domain))result={error:'not_authorized_domain'};
+  else if(meeting&&domain!==meeting.domain&&!['client_detail','client_groups','client_schedule','stock'].includes(domain))
+   result={error:'client_subject_required',message:'The request names one customer meeting; use that customer source, not an office/network report.'};
   else if(seen.has(key)||seen.size>=4)result={error:'request_budget_reached'};
   else{
    seen.add(key);
