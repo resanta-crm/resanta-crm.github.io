@@ -1,0 +1,67 @@
+{
+  "source": {
+    "path": "assets/01-crm-core.js",
+    "sha256": "9f7fa12519e776cb7caf9ccdc262fdd91a8a7817b4b103ed94cdb8adf7c079a1",
+    "baseline": "34902906",
+    "modified": false
+  },
+  "definitions": [
+    {
+      "name": "refresh",
+      "startLine": 75,
+      "endLine": 112,
+      "text": "let crmAuthRefreshFlightV236166=null;\nfunction crmJwtExpiredV236166(err){\n  const msg=String(err?.message||err?.error_description||err?.details||err||'');\n  const code=String(err?.code||'');\n  const status=Number(err?.status||err?.statusCode||0);\n  return /jwt\\s*expired|token\\s*expired|expired\\s*jwt/i.test(msg)\n    || code==='PGRST303'\n    || (status===401&&/jwt|token/i.test(msg));\n}\nasync function crmEnsureFreshSessionV236166(force=false){\n  if(crmAuthRefreshFlightV236166)return crmAuthRefreshFlightV236166;\n  crmAuthRefreshFlightV236166=(async()=>{\n    const {data,error}=await db.auth.getSession();\n    if(error)throw error;\n    const session=data?.session;\n    if(!session)throw new Error('Сессия CRM завершена. Войдите снова.');\n    const now=Math.floor(Date.now()/1000),exp=Number(session.expires_at||0);\n    if(!force&&exp>now+90)return session;\n    const refreshed=await db.auth.refreshSession();\n    if(refreshed.error||!refreshed.data?.session){\n      throw refreshed.error||new Error('Не удалось обновить сессию CRM');\n    }\n    currentUser=refreshed.data.session.user||currentUser;\n    return refreshed.data.session;\n  })().finally(()=>{crmAuthRefreshFlightV236166=null});\n  return crmAuthRefreshFlightV236166;\n}\nasync function crmAuthRetryV236166(factory){\n  let result=await factory();\n  if(result?.error&&crmJwtExpiredV236166(result.error)){\n    await crmEnsureFreshSessionV236166(true);\n    result=await factory();\n  }\n  return result;\n}\nwindow.crmEnsureFreshSessionV236166=crmEnsureFreshSessionV236166;\nwindow.crmAuthRetryV236166=crmAuthRetryV236166;\n\n",
+      "sha256": "48fb180f0b758db33dcf82c30d563bbdac14314bc04a9afc12fdc3587112e14e"
+    },
+    {
+      "name": "sessionControls",
+      "startLine": 117,
+      "endLine": 154,
+      "text": "let crmLoginFlightV236258=null;\nlet crmFreshSessionV236258=null;\nlet crmFreshSessionUntilV236258=0;\nlet crmExplicitSignOutV236258=false;\n\nfunction crmShowSignedOutUiV236258(){\n  currentUser=null; currentProfile=null;\n  const login=document.getElementById('login-wrap');\n  const app=document.getElementById('app');\n  if(login)login.style.display='flex';\n  if(app)app.style.display='none';\n}\n\nasync function crmLocalSignOutV236258(){\n  crmExplicitSignOutV236258=true;\n  crmFreshSessionV236258=null;\n  crmFreshSessionUntilV236258=0;\n  try{return await db.auth.signOut({scope:'local'});}\n  finally{setTimeout(()=>{crmExplicitSignOutV236258=false;},500);}\n}\n\nasync function crmRecoverFreshSessionV236258(){\n  if(crmExplicitSignOutV236258||Date.now()>crmFreshSessionUntilV236258)return null;\n  let session=null;\n  try{session=(await db.auth.getSession()).data?.session||null;}catch(_){}\n  if(session?.user)return session;\n  const fresh=crmFreshSessionV236258;\n  if(!fresh?.access_token||!fresh?.refresh_token)return null;\n  try{\n    const restored=await db.auth.setSession({\n      access_token:fresh.access_token,\n      refresh_token:fresh.refresh_token\n    });\n    if(!restored.error&&restored.data?.session)return restored.data.session;\n  }catch(_){}\n  return null;\n}\n\n",
+      "sha256": "06f9c6cdb0b8da14f7694f55d3add943d48283120d4a5c301846718072551bdc"
+    },
+    {
+      "name": "login",
+      "startLine": 2163,
+      "endLine": 2211,
+      "text": "async function doLogin() {\n  // На Android Enter + tap (или двойной tap WebView) раньше могли запустить два\n  // signInWithPassword одновременно. Это создаёт две сессии и оставляет старый\n  // refresh-поток конкурировать с новой сессией. Разрешаем только один login-flight.\n  if(crmLoginFlightV236258)return crmLoginFlightV236258;\n  crmLoginFlightV236258=(async()=>{\n    const email = document.getElementById('login-email').value.trim().toLowerCase();\n    const pass = document.getElementById('login-pass').value;\n    const err = document.getElementById('login-error');\n    const btn = document.getElementById('login-btn');\n    err.style.display='none';\n    if (!email||!pass){err.textContent='Введите email и пароль';err.style.display='block';return;}\n    btn.disabled=true; btn.textContent='Входим...';\n\n    // Останавливаем старый refresh-таймер WebView и локально очищаем только эту\n    // вкладку/приложение. Глобальный signOut здесь запрещён: он отзывает сессии\n    // пользователя на других устройствах.\n    try{db.auth.stopAutoRefresh();}catch(_){}\n    crmExplicitSignOutV236258=true;\n    try{await db.auth.signOut({scope:'local'});}catch(_){}\n    crmExplicitSignOutV236258=false;\n\n    try{\n      const {data,error} = await withTimeout(\n        db.auth.signInWithPassword({email,password:pass}), 20000, 'вход в систему'\n      );\n      if (error){\n        err.textContent='Неверный email или пароль';err.style.display='block';return;\n      }\n      currentUser = data.user;\n      crmFreshSessionV236258=data.session||null;\n      crmFreshSessionUntilV236258=Date.now()+12000;\n      try{db.auth.startAutoRefresh();}catch(_){}\n      await loadProfileAndStart();\n      // После стабильного старта свежий refresh-token больше в guard не нужен.\n      setTimeout(()=>{\n        if(Date.now()>=crmFreshSessionUntilV236258)crmFreshSessionV236258=null;\n      },13000);\n    }catch(e){\n      console.error('doLogin failed',e);\n      err.textContent='Сервер не отвечает. Проверьте интернет и попробуйте снова.';\n      err.style.display='block';\n    }finally{\n      try{db.auth.startAutoRefresh();}catch(_){}\n      btn.disabled=false; btn.textContent='Войти';\n    }\n  })().finally(()=>{crmLoginFlightV236258=null;});\n  return crmLoginFlightV236258;\n}\n",
+      "sha256": "5c53362679b91de04141217299404046cb33a1e36b09b6242c6f59a8ab85ad8c"
+    },
+    {
+      "name": "logout",
+      "startLine": 2243,
+      "endLine": 2247,
+      "text": "async function doLogout() {\n  document.body.classList.remove('crm-auditor-mode');\n  await crmLocalSignOutV236258();\n  crmShowSignedOutUiV236258();\n}\n",
+      "sha256": "00e9c2d0bf1b73ce3e02b6303a12f4d9250d320b8be6f2cb83ea5e2fbbe97c68"
+    },
+    {
+      "name": "profile",
+      "startLine": 2308,
+      "endLine": 2371,
+      "text": "async function loadProfileAndStart() {\n  try {\n    const email=String(currentUser?.email||'').trim().toLowerCase();\n    const loadProfile=()=>db.from('users').select('*').eq('email',email).maybeSingle();\n    let result=null;\n    for(const delay of [0,500,1400]){\n      if(delay)await new Promise(r=>setTimeout(r,delay));\n      result=await crmAuthRetryV236166(loadProfile);\n      if(!result?.error)break;\n    }\n    const {data:profile,error}=result||{};\n    if(error) throw error;\n    if(!profile){\n      // SECURITY: подтверждённое отсутствие активного CRM-профиля — реальный logout.\n      await crmLocalSignOutV236258().catch(()=>{});\n      currentUser=null;currentProfile=null;\n      document.getElementById('login-wrap').style.display='flex';\n      document.getElementById('app').style.display='none';\n      const err=document.getElementById('login-error');\n      if(err){err.textContent='Доступ к CRM отключён. Обратитесь к руководителю.';err.style.display='block';}\n      return;\n    }\n    currentProfile=profile;\n    // Company leadership gets its own server-scoped read-only portal.\n    // Never run the broad manager/boss bootstrap for this role.\n    if(String(profile.role||'').toLowerCase()==='executive_viewer'){\n      if(!window.crmCompanyViewer360?.start){\n        document.getElementById('app').style.display='none';\n        document.getElementById('login-wrap').style.display='flex';\n        const e=document.getElementById('login-error');\n        if(e){e.style.display='block';e.textContent='Руководящий режим временно недоступен. Обновите страницу.';}\n        return;\n      }\n      await window.crmCompanyViewer360.start(profile);\n      return;\n    }\n    // Auditors use the NORMAL CRM login, never an independent website.\n    // The warehouse shell skips sales, clients, GPS and other CRM bootstrap.\n    if(['auditor','auditor_pending'].includes(String(profile.role||'').toLowerCase())){\n      await crmStartAuditorWarehouseV1();\n      return;\n    }\n    startApp();\n  } catch(e) {\n    // v23.6.257: временный обрыв сети/проверки профиля больше не уничтожает\n    // действующую Supabase-сессию. Менеджеру не надо заново вводить пароль.\n    console.error('Profile load failed; session preserved',e);\n    let session=null;\n    try{session=(await db.auth.getSession()).data?.session||null;}catch(_){}\n    if(session?.user)currentUser=session.user;\n    if(currentProfile){\n      document.getElementById('login-wrap').style.display='none';\n      document.getElementById('app').style.display='flex';\n      return;\n    }\n    document.getElementById('login-wrap').style.display='flex';\n    document.getElementById('app').style.display='none';\n    const err=document.getElementById('login-error');\n    if(err){\n      err.textContent='Связь с CRM временно прервалась. Сессия сохранена — проверьте интернет и откройте приложение ещё раз, пароль вводить не нужно.';\n      err.style.display='block';\n    }\n  }\n}\n",
+      "sha256": "726d746502087d7d09d1a26b67c7ebd82525bc473068b859edeb4adddf9727c2"
+    },
+    {
+      "name": "init",
+      "startLine": 10659,
+      "endLine": 10675,
+      "text": "async function initAuth(){\n  // Recovery URLs must never bootstrap sales, GPS or warehouse before the\n  // PASSWORD_RECOVERY event has verified the one-time link.\n  if(crmIsRecoveryUrlV1()){\n    document.getElementById('login-wrap').style.display='flex';\n    const info=document.getElementById('login-info');\n    if(info){info.textContent='Проверяем ссылку для смены пароля…';info.style.display='block'}\n    return;\n  }\n  const {data:{session}} = await db.auth.getSession();\n  if(session && session.user){\n    currentUser=session.user;\n    await loadProfileAndStart();\n    return;\n  }\n  document.getElementById('login-wrap').style.display='flex';\n}\n",
+      "sha256": "0fc893a3f09f1e4ca5367234abf4d997cc905fedd41f06c44b5876d3bac6f914"
+    },
+    {
+      "name": "authEvent",
+      "startLine": 10682,
+      "endLine": 10706,
+      "text": "function crmHandleAuthEventV20261105(event,session){\n  if(event==='PASSWORD_RECOVERY'){\n    // Defer user interaction until the auth callback returns: no auth calls\n    // inside the onAuthStateChange handler (prevents session deadlock).\n    setTimeout(crmShowPasswordRecoveryV1,0);\n    return;\n  }\n  if(event==='SIGNED_OUT'){\n    // Android WebView может прислать поздний SIGNED_OUT от старого refresh-потока\n    // уже после успешного нового входа. Серверная свежая сессия при этом жива.\n    if(!crmExplicitSignOutV236258&&Date.now()<=crmFreshSessionUntilV236258&&crmFreshSessionV236258){\n      setTimeout(async()=>{\n        const session=await crmRecoverFreshSessionV236258();\n        if(session?.user){\n          currentUser=session.user;\n          if(!currentProfile)await loadProfileAndStart();\n          return;\n        }\n        crmShowSignedOutUiV236258();\n      },180);\n      return;\n    }\n    crmShowSignedOutUiV236258();\n  }\n}\n",
+      "sha256": "ecb6a7756f4a287fef8bb0fe27077822196ccd3c18ab97768101837034fc3bbf"
+    }
+  ],
+  "gpsObserver": {
+    "source": "assets/02-mobile-gps-base.js",
+    "sha256": "ab89f374c6f23b7d19c88c594119006df0bc4fb6629c10bda5968f2858f21957",
+    "startLine": 1982,
+    "text": "  // Keep native GPS supplied with the current access token only.\n  // Never send or adopt refresh_token outside Supabase JS in WebView.\n  try{\n    db.auth.onAuthStateChange((event,session)=>{\n      if(session&&['INITIAL_SESSION','SIGNED_IN','TOKEN_REFRESHED','USER_UPDATED'].includes(event)){\n        setTimeout(()=>v208PushWebSession(session),0);\n      }\n    });\n  }catch(_){ }\n",
+    "modified": false
+  },
+  "interpretation": "Exact complete relevant existing definitions. Synthetic SDK/DOM boundaries in tests; no actual login/JWT/provider. 12s is stale-SIGNED_OUT recovery grace; refresh changes currentUser object; normalized email links profile; native GPS observes session without owning refresh."
+}

@@ -37,6 +37,13 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/changes
+          # Reviewed V34 exception: exact base, full projected tree and frozen product bytes.
+          # An ineligible series keeps every original deny-path check below.
+          if node tests/v34-accepted-series-scope-v1.mjs --base origin/main --head HEAD; then
+            node --test tests/v34-accepted-series-scope-v1.test.mjs
+            awk '$0 != "assets/03-triovist-routes.js"' /tmp/changes > /tmp/changes.v34
+            mv /tmp/changes.v34 /tmp/changes
+          fi
           ! grep -E '^assets/(01-crm-core|03-triovist-routes|80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1)[.]js$' /tmp/changes
           ! (grep '^supabase/migrations/' /tmp/changes | grep -v -E '^supabase/migrations/20261105_triovist_ai_brainstorm_(subgroups_preview|approve|verify)_v2[.]sql$')
           ! grep -E 'DELETE FROM public[.]triovist_ai_tasks|TRUNCATE TABLE|DROP TABLE' supabase/migrations/20261105_triovist_ai_brainstorm_*.sql
