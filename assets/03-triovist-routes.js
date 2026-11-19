@@ -600,16 +600,18 @@ install();
 
   // Личный комментарий руководителя по падающему клиенту.
   let fallingNotes={},fallingNotesLoaded=false,fallingNotesLoading=false;
+  const fallingNoteRevisions={};
+  window.v2274ConfirmFallingNote=function(row){if(currentProfile?.role==='boss'&&row&&row.client_id&&typeof row.note==='string'){const key=String(row.client_id);fallingNotes[key]={...row};fallingNoteRevisions[key]=(fallingNoteRevisions[key]||0)+1;}};
   async function loadFallingNotes(){
     if(currentProfile?.role!=='boss'||fallingNotesLoaded||fallingNotesLoading)return;
-    fallingNotesLoading=true;
-    try{const {data,error}=await db.from('falling_client_notes').select('*');if(error)throw error;(data||[]).forEach(x=>fallingNotes[String(x.client_id)]=x);fallingNotesLoaded=true;}
+    fallingNotesLoading=true;const versions={...fallingNoteRevisions};
+    try{const {data,error}=await db.from('falling_client_notes').select('*');if(error)throw error;(data||[]).forEach(x=>{const key=String(x.client_id);if((fallingNoteRevisions[key]||0)===(versions[key]||0))fallingNotes[key]=x;});fallingNotesLoaded=true;}
     catch(e){console.warn('falling notes',e);}finally{fallingNotesLoading=false;}
   }
   window.v221SaveFallingNote=async function(clientId,clientName){
     if(currentProfile?.role!=='boss')return;const el=document.getElementById('fall-note-'+clientId),note=String(el?.value||'').trim();
     const row={client_id:String(clientId),client_name:clientName||null,note,updated_by:currentProfile?.name||null,updated_at:new Date().toISOString()};
-    const {data,error}=await db.from('falling_client_notes').upsert(row,{onConflict:'client_id'}).select().single();if(error){alert(error.message);return;}fallingNotes[String(clientId)]=data||row;alert('Комментарий сохранён только для руководителя.');
+    const {data,error}=await db.from('falling_client_notes').upsert(row,{onConflict:'client_id'}).select().single();if(error){alert(error.message);return;}window.v2274ConfirmFallingNote(data||row);alert('Комментарий сохранён только для руководителя.');
   };
   const baseFallingCard=window.v20FallingCard;
   window.v20FallingCard=function(x){
@@ -5458,41 +5460,156 @@ function stockHtml(d){
 }
 window.v2274OpenFallingAi=async function(id){
   if(currentProfile?.role!=='boss'){alert('ИИ-задачу формирует и подтверждает руководитель.');return;}
+  const recoveryActor=receiptActor();if(!recoveryActor){alert('Нужна действующая сессия руководителя.');return;}const recoveryMarker=receiptLoad(recoveryActor,id);if(receiptUncertain(recoveryMarker)){receiptOpenRecovery(recoveryActor,id,recoveryMarker);return;}
   const data=v20ComputeFalling(),row=data.rows.find(x=>String(x.client.id)===String(id));if(!row){alert('Клиент уже не находится в активном списке падения. Пересчитайте период.');return;}
   row.period=data.period;
   const existing=activeClientTask(row.client);if(existing){alert('У клиента уже есть активная задача:\n\n'+String(existing.text||'').slice(0,350)+'\n\nСначала завершите или скорректируйте её, чтобы не создавать дубль.');return;}
   const note=leaderNote(row.client);if(!note){alert('Сначала заполните комментарий руководителя под карточкой клиента. Он обязателен и будет главным приоритетом ИИ-задачи.');document.getElementById('fall-note-'+id)?.focus();return;}
   const route=futureRoute(row.client);if(!route){alert('У клиента нет будущей СОГЛАСОВАННОЙ точки маршрута. ИИ-задача по падению не назначается без маршрута. Сначала добавьте/согласуйте визит, затем сформируйте задачу.');return;}
-  draft=buildDraft(row,note);installModal();
+  fallingReceiptView=null;draft=buildDraft(row,note);fallingDraftActors.set(draft,receiptActor());installModal();receiptRestoreBody();fallingReceiptPanelEpoch++;
+  const receiptModal=document.getElementById('modal-v2274-falling-ai');if(receiptModal?.dataset){receiptModal.dataset.receiptActor=receiptActor()?.key||'';receiptModal.dataset.receiptAttempt='';}const receiptBox=document.getElementById('v2274-ai-receipt');if(receiptBox)receiptBox.innerHTML='';const receiptSave=document.getElementById('v2274-ai-save');if(receiptSave){receiptSave.hidden=false;receiptSave.disabled=false;}
   document.getElementById('v2274-ai-client').textContent=draft.c.name+' · '+(draft.c.manager_name||'—');
   document.getElementById('v2274-ai-summary').innerHTML='<b>Падение '+draft.row.pct.toFixed(1)+'% · потеря '+money(draft.row.loss)+'</b><br>Срок <b>'+esc(draft.due)+'</b> · 100% привязан к ближайшей будущей согласованной точке маршрута.';
   document.getElementById('v2274-ai-note').value=draft.note;document.getElementById('v2274-ai-date').value=draft.due;document.getElementById('v2274-ai-priority').value=draft.priority;document.getElementById('v2274-ai-text').value=draft.text;document.getElementById('v2274-ai-expected').value=draft.expected;document.getElementById('v2274-ai-criteria').value=draft.criteria;document.getElementById('v2274-ai-basis').value=draft.basis;document.getElementById('v2274-ai-stock').innerHTML=stockHtml(draft);
   document.getElementById('modal-v2274-falling-ai').classList.add('open');document.body.style.overflow='hidden';
 };
-window.v2274CloseFallingAi=function(){document.getElementById('modal-v2274-falling-ai')?.classList.remove('open');document.body.style.overflow='';};
+window.v2274CloseFallingAi=function(){fallingReceiptPanelEpoch++;document.getElementById('modal-v2274-falling-ai')?.classList.remove('open');document.body.style.overflow='';};
+// V34-01 receipt contract begin: no network, defaults or business-value normalization.
+const fallingReceiptContract=(function(){
+ const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k),object=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
+ const isId=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+ const day=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Number.isFinite(Date.parse(x+'T00:00:00Z'))&&new Date(x+'T00:00:00Z').toISOString().slice(0,10)===x;
+ const instant=x=>typeof x==='string'&&day(x.slice(0,10))&&x.length>10&&Number.isFinite(Date.parse(x));
+ const wire=x=>{try{return JSON.parse(JSON.stringify(x));}catch(_){return null;}};
+ const fields=['client_id','manager_name','title','text','due_date','done','auto_generated','review_status','reviewed_by','reviewed_at','source','priority','basis','expected_result','criteria','next_step','ai_reason','ai_stock_items','ai_stock_snapshot_date','ai_stock_checked_at','ai_stock_status','ai_stock_issue','ai_stock_kpi_exempt','ai_stock_policy_version','ai_stock_replacements','ai_selection_context'];
+ const conditional=new Set(['ai_stock_snapshot_date','ai_stock_issue']);
+ function payloadErrors(p){
+  if(!object(p))return ['payload'];const errors=[];
+  for(const k of fields)if(!conditional.has(k)&&!own(p,k))errors.push(k+':missing');
+  if(!isId(p.client_id))errors.push('client_id');
+  if(!(p.manager_name===null||typeof p.manager_name==='string'&&p.manager_name.length>0))errors.push('manager_name');
+  for(const k of ['title','text','priority','expected_result','criteria','next_step','ai_stock_status','ai_stock_policy_version'])if(typeof p[k]!=='string'||!p[k].length)errors.push(k);
+  if(typeof p.basis!=='string')errors.push('basis');if(typeof p.ai_reason!=='string')errors.push('ai_reason');
+  if(!(p.reviewed_by===null||typeof p.reviewed_by==='string'))errors.push('reviewed_by');
+  if(!day(p.due_date)||!instant(p.reviewed_at)||!instant(p.ai_stock_checked_at))errors.push('date');
+  if(p.source!=='falling_ai'||p.done!==false||p.auto_generated!==true||p.review_status!=='approved'||typeof p.ai_stock_kpi_exempt!=='boolean')errors.push('initial_state');
+  if(own(p,'ai_stock_snapshot_date')&&p.ai_stock_snapshot_date!==null&&!day(p.ai_stock_snapshot_date))errors.push('ai_stock_snapshot_date');
+  if(own(p,'ai_stock_issue')&&p.ai_stock_issue!==null&&typeof p.ai_stock_issue!=='string')errors.push('ai_stock_issue');
+  if(!Array.isArray(p.ai_stock_items))errors.push('ai_stock_items');else for(const x of p.ai_stock_items){if(!object(x)||typeof x.sku!=='string'||!x.sku.length||typeof x.product!=='string'||typeof x.qty!=='number'||!Number.isFinite(x.qty)||x.qty<=0||typeof x.warehouse!=='string')errors.push('ai_stock_items:item');}
+  if(!Array.isArray(p.ai_stock_replacements)||!object(p.ai_selection_context))errors.push('selection');
+  return errors;
+ }
+ function recordErrors(r){
+  if(!object(r)||!isId(r.id))return ['id:type'];const errors=[];
+  for(const k of ['review_status','manager_name','title','priority','basis','expected_result','criteria','next_step','source','reviewed_by','ai_reason','ai_stock_status','ai_stock_issue','ai_stock_policy_version'])if(own(r,k)&&r[k]!==null&&typeof r[k]!=='string')errors.push(k+':type');
+  if(own(r,'text')&&typeof r.text!=='string')errors.push('text:type');
+  if(own(r,'client_id')&&r.client_id!==null&&!isId(r.client_id))errors.push('client_id:type');
+  for(const k of ['done','auto_generated'])if(own(r,k)&&r[k]!==null&&typeof r[k]!=='boolean')errors.push(k+':type');
+  if(own(r,'ai_stock_kpi_exempt')&&typeof r.ai_stock_kpi_exempt!=='boolean')errors.push('ai_stock_kpi_exempt:type');
+  for(const k of ['reviewed_at','ai_stock_checked_at','created_at'])if(own(r,k)&&r[k]!==null&&!instant(r[k]))errors.push(k+':type');
+  for(const k of ['due_date','ai_stock_snapshot_date'])if(own(r,k)&&r[k]!==null&&!day(r[k]))errors.push(k+':type');
+  for(const k of ['ai_stock_items','ai_stock_replacements'])if(own(r,k)&&!Array.isArray(r[k]))errors.push(k+':type');
+  if(Array.isArray(r.ai_stock_items))for(const x of r.ai_stock_items)if(!object(x)||typeof x.sku!=='string'||typeof x.product!=='string'||typeof x.qty!=='number'||!Number.isFinite(x.qty)||typeof x.warehouse!=='string')errors.push('ai_stock_items:item_type');
+  if(own(r,'ai_selection_context')&&!object(r.ai_selection_context))errors.push('ai_selection_context:type');return errors;
+ }
+ function equal(a,b){if(a===b)return true;if(a===null||b===null||typeof a!==typeof b)return false;if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>equal(v,b[i]));if(object(a)&&object(b)){const ak=Object.keys(a).sort(),bk=Object.keys(b).sort();return equal(ak,bk)&&ak.every(k=>equal(a[k],b[k]));}return false;}
+ function compare(p,r){
+  const input=payloadErrors(p);if(input.length)return{ok:false,kind:'invalid_payload',fields:input};
+  const shape=recordErrors(r);if(shape.length)return{ok:false,kind:'invalid_record',fields:shape};
+  const changed=[];
+  for(const k of fields){if(!own(p,k))continue;if(!own(r,k)){changed.push(k+':missing');continue;}const same=['reviewed_at','ai_stock_checked_at'].includes(k)?instant(r[k])&&Date.parse(p[k])===Date.parse(r[k]):equal(p[k],r[k]);if(!same)changed.push(k);}
+  if(own(r,'created_at')&&r.created_at!==null&&!instant(r.created_at))changed.push('created_at:invalid');
+  return{ok:changed.length===0,kind:changed.length?'record_mismatch':'record_matches',fields:changed};
+ }
+ function outcome(p,reply,readback){const first=compare(p,reply);if(!first.ok)return{state:first.kind==='invalid_payload'?'invalid_payload':'task_outcome_unknown',reason:first.kind,fields:first.fields,taskId:isId(reply?.id)?reply.id:null,allowInsert:false};if(recordErrors(readback).length||readback.id!==reply.id)return{state:'saved_response_readback_unknown',taskId:reply.id,allowInsert:false};const current=compare(p,readback);if(current.fields.some(k=>k.includes(':missing')||k==='created_at:invalid'))return{state:'saved_response_readback_unknown',taskId:reply.id,allowInsert:false};return{state:current.ok?(p.manager_name===null?'saved_without_named_manager':'record_verified_history_unknown'):'saved_record_changed',taskId:reply.id,fields:current.fields,allowInsert:false};}
+ return Object.freeze({fields:Object.freeze(fields),isId,wire,payloadErrors,recordErrors,compare,outcome});
+})();
+// V34-01 receipt contract end.
+const fallingReceipts=new Map(),fallingDraftActors=new WeakMap();
+let fallingReceiptPanelEpoch=0,fallingReceiptBodyTemplate=null;
+function receiptRestoreBody(){const body=document.querySelector?.('#modal-v2274-falling-ai .v2274-ai-body');if(body&&fallingReceiptBodyTemplate!==null){body.innerHTML=fallingReceiptBodyTemplate;fallingReceiptBodyTemplate=null;}}
+let fallingReceiptAuthEpoch=0,fallingReceiptView=null;
+function receiptInstallAuthLifecycle(){for(const name of ['doLogin','crmLocalSignOutV236258','crmShowSignedOutUiV236258']){const base=window[name];if(typeof base!=='function'||base.__fallingReceiptAuthV1)continue;const wrapped=function(...args){fallingReceiptAuthEpoch++;return base.apply(this,args);};Object.defineProperty(wrapped,'__fallingReceiptAuthV1',{value:true});window[name]=wrapped;}}
+receiptInstallAuthLifecycle();
+function receiptActor(){try{const user=currentUser,profile=currentProfile,email=String(user?.email||'').trim().toLowerCase(),profileEmail=String(profile?.email||'').trim().toLowerCase();if(profile?.role!=='boss'||!profile.id||!user?.id||!email||email!==profileEmail||typeof crmExplicitSignOutV236258!=='undefined'&&crmExplicitSignOutV236258)return null;return{id:user.id,key:JSON.stringify([user.id,profile.id,email,profile.role,profile.name||'',profile.region||'']),epoch:fallingReceiptAuthEpoch};}catch(_){return null;}}
+function receiptSameActor(a,b){return !!a&&!!b&&a.key===b.key&&a.epoch===b.epoch;}
+function receiptOwnActor(a,b){return !!a&&!!b&&a.key===b.key;}
+function receiptCurrent(op){return !!op&&receiptSameActor(receiptActor(),op.actor);}
+function receiptStorageKey(actor,clientId){return 'crm.falling.receipt.v1:'+actor.id+':'+clientId;}
+function receiptMarker(op,phase){const value={version:1,actorId:op.actor.id,clientId:op.clientId,attemptId:op.attemptId,startedAt:op.startedAt,phase,taskId:fallingReceiptContract.isId(op.taskId)?op.taskId:null};window.sessionStorage.setItem(receiptStorageKey(op.actor,op.clientId),JSON.stringify(value));op.phase=phase;}
+function receiptLoad(actor,clientId){try{const raw=window.sessionStorage.getItem(receiptStorageKey(actor,clientId));if(!raw)return null;const m=JSON.parse(raw);if(m.version!==1||m.actorId!==actor.id||m.clientId!==clientId||typeof m.phase!=='string')throw Error('receipt_marker_invalid');return m;}catch(e){return{phase:'storage_unavailable',error:true};}}
+function receiptUncertain(m){return !!m&&!['verified','saved_changed','saved_unassigned','note_rejected','task_rejected'].includes(m.phase);}
+function receiptClear(op){try{const key=receiptStorageKey(op.actor,op.clientId),m=JSON.parse(window.sessionStorage.getItem(key)||'null');if(m?.attemptId===op.attemptId)window.sessionStorage.removeItem(key);}catch(_){} }
+function receiptHideOld(op){if(receiptCurrent(op))return;const modal=document.getElementById('modal-v2274-falling-ai');if(modal?.dataset?.receiptAttempt===op.attemptId){modal.classList.remove('open');document.body.style.overflow='';const box=document.getElementById('v2274-ai-receipt');if(box)box.textContent='';}}
+function receiptMessage(op,message){if(!receiptCurrent(op)){receiptHideOld(op);return;}if(op.panelEpoch!==undefined&&op.panelEpoch!==fallingReceiptPanelEpoch)return;let box=document.getElementById('v2274-ai-receipt');if(!box){const host=document.querySelector?.('#modal-v2274-falling-ai .v2274-ai-foot');if(host){box=document.createElement('div');box.id='v2274-ai-receipt';box.setAttribute('role','status');host.prepend(box);}}if(box){box.innerHTML='<p>'+esc(message)+'</p>'+(fallingReceiptContract.isId(op.taskId)?'<p>ID: '+esc(op.taskId)+'</p><button type="button" class="btn-secondary" onclick="v2274OpenSavedFallingTask(\''+op.taskId+'\')">Открыть эту задачу</button>':'');}else alert(message+(op.taskId?'\nID: '+op.taskId:''));}
+async function receiptRequest(builder){let timer,controller=typeof AbortController==='function'?new AbortController():null;try{const request=controller&&typeof builder.abortSignal==='function'?builder.abortSignal(controller.signal):builder;return await Promise.race([request,new Promise((_,reject)=>{timer=setTimeout(()=>{controller?.abort();reject(Error('receipt_request_timeout'));},20000);})]);}finally{clearTimeout(timer);}}
+function receiptRejected(error){return !!error&&typeof error==='object'&&['42501','23503','23505','23514','22023','22P02'].includes(error.code)&&typeof error.message==='string';}
+function receiptCache(record){const i=allTasks.findIndex(t=>t.id===record.id);if(i<0)allTasks.unshift(record);else allTasks[i]=record;}
+function receiptPaint(op){try{receiptMarker(op,op.phase);}catch(_){}if(!receiptCurrent(op)){receiptHideOld(op);return;}const messages={note_unknown:'Результат сохранения комментария неизвестен. Задача не отправлялась. Не повторяйте назначение вслепую; сохранённый проект остаётся в окне.',note_rejected:'Текущий запрос комментария отклонён сервером. Задача не отправлялась; проект сохранён.',task_rejected:'Комментарий сохранён, текущий запрос задачи отклонён сервером. Это частичный результат; проект сохранён.',task_unknown:'Комментарий сохранён. Результат назначения пока не подтверждён. Не отправляйте задачу повторно: сначала проверьте существующий результат.',response_mismatch:'Ответ не подтверждает сохранность согласованного поручения. Запись могла сохраниться; повторное назначение не выполняется.',readback_unknown:'Сервер вернул запись, но повторное чтение не подтверждено. Не создавайте задачу заново.',verified:'Задача сохранена для '+(op.payload?.manager_name||'неуказанного исполнителя')+' · срок '+op.payload?.due_date+'. Журнал событий назначения отдельно не подтверждён.',saved_changed:'Сервер подтвердил исходную запись; при повторном чтении её поля или состояние изменились. Откройте тот же ID. Новая задача не создаётся.',saved_unassigned:'Задача сохранена без установленного исполнителя. Назначение конкретному менеджеру не подтверждено; журнал событий отдельно не проверен.',storage_unavailable:'Не удалось сохранить состояние отправки в этой вкладке. Назначение не начато.'};receiptMessage(op,messages[op.phase]||'Результат предыдущей отправки требует проверки. Обновление страницы не разрешает повторную отправку.');}
+function receiptFullRead(t,op){return !!t&&t.id===op.taskId&&t.client_id===op.clientId&&!fallingReceiptContract.recordErrors(t).length&&[...fallingReceiptContract.fields,'created_at'].every(k=>Object.prototype.hasOwnProperty.call(t,k));}
+function receiptReadbackCurrent(op,revision){return (op.readbackRevision||0)===revision&&fallingReceipts.get(receiptStorageKey(op.actor,op.clientId))===op;}
+function receiptViewCurrent(view){return !!view&&view===fallingReceiptView&&view.panelEpoch===fallingReceiptPanelEpoch&&receiptSameActor(view.actor,receiptActor());}
+function receiptViewMessage(op,view,message){if(!receiptViewCurrent(view))return;let box=document.getElementById('v2274-ai-receipt');if(!box){const host=document.querySelector?.('#modal-v2274-falling-ai .v2274-ai-foot');if(host){box=document.createElement('div');box.id='v2274-ai-receipt';box.setAttribute('role','status');host.prepend(box);}}if(box)box.innerHTML='<p>'+esc(message)+'</p>'+(fallingReceiptContract.isId(op.taskId)?'<p>ID: '+esc(op.taskId)+'</p><button type="button" class="btn-secondary" onclick="v2274OpenSavedFallingTask(\''+op.taskId+'\')">Проверить эту задачу</button>':'');else alert(message);}
+function receiptRecoveryText(op){const states={task_unknown:'результат назначения не подтверждён',readback_unknown:'повторное чтение не подтверждено',response_mismatch:'сохранность отправленных полей не подтверждена',note_unknown:'сохранение комментария не подтверждено',note_in_flight:'запрос комментария ещё не завершён',task_in_flight:'запрос назначения ещё не завершён',readback_in_flight:'проверка сохранённой записи ещё не завершена',storage_unavailable:'состояние отправки недоступно'};return 'Восстановление предыдущей операции: '+(states[op.phase]||'результат требует проверки')+'. '+(op.manual?'Показаны прежние согласованные ручные поля.':'Исходные ручные поля после обновления страницы недоступны; новый проект не подставлен.')+' Повторная отправка не выполняется.';}
+function receiptOpenRecovery(actor,clientId,marker){const key=receiptStorageKey(actor,clientId),cached=fallingReceipts.get(key),op=cached&&receiptOwnActor(cached.actor,actor)?cached:{actor,clientId,taskId:marker.taskId||null,attemptId:marker.attemptId,startedAt:marker.startedAt,phase:marker.phase,payload:null,manual:null};fallingReceipts.set(key,op);installModal();receiptRestoreBody();fallingReceiptPanelEpoch++;draft=null;const view={actor,panelEpoch:fallingReceiptPanelEpoch,op};fallingReceiptView=view;const modal=document.getElementById('modal-v2274-falling-ai');if(modal?.dataset){modal.dataset.receiptActor=actor.key;modal.dataset.receiptAttempt='';}const manual=op.manual||{};for(const [suffix,value]of Object.entries({note:manual.note,date:manual.due,priority:manual.priority,text:manual.text,expected:manual.expected,criteria:manual.criteria,basis:manual.basis})){const node=document.getElementById('v2274-ai-'+suffix);if(node)node.value=value??'';}const title=document.getElementById('v2274-ai-client');if(title)title.textContent=op.draft?.c?.name||'Клиент '+clientId;const summary=document.getElementById('v2274-ai-summary');if(summary)summary.textContent=receiptRecoveryText(op);const stock=document.getElementById('v2274-ai-stock');if(stock)stock.innerHTML=op.draft?stockHtml(op.draft):'';const button=document.getElementById('v2274-ai-save');if(button)button.hidden=true;modal?.classList.add('open');document.body.style.overflow='hidden';receiptViewMessage(op,view,receiptRecoveryText(op));}
+window.v2274OpenSavedFallingTask=async function(id){const actor=receiptActor(),op=actor&&[...fallingReceipts.values()].find(x=>receiptOwnActor(x.actor,actor)&&x.taskId===id);if(!op||!fallingReceiptContract.isId(id))return;const view={actor,panelEpoch:fallingReceiptPanelEpoch,op};fallingReceiptView=view;let result;try{result=await receiptRequest(db.from('tasks').select('*').eq('id',id).single());}catch(_){receiptViewMessage(op,view,'Чтение этой задачи пока недоступно. Её существование не опровергнуто; повторная отправка не выполняется.');return;}if(!receiptViewCurrent(view))return;if(result?.error||!result?.data||result.data.id!==id){receiptViewMessage(op,view,'Чтение этой задачи не подтверждено. Не повторяйте назначение.');return;}const t=result.data;if(!receiptFullRead(t,op)){receiptViewMessage(op,view,'Не получены все поля этой задачи. Проверка не завершена; повторно назначать её нельзя.');return;}let verified=false;if(op.payload){const outcome=fallingReceiptContract.outcome(op.payload,op.response||t,t);if(['record_verified_history_unknown','saved_without_named_manager','saved_record_changed'].includes(outcome.state)){op.readbackRevision=(op.readbackRevision||0)+1;op.phase=({record_verified_history_unknown:'verified',saved_without_named_manager:'saved_unassigned',saved_record_changed:'saved_changed'})[outcome.state];op.fields=outcome.fields||[];receiptMarker(op,op.phase);receiptCache(t);verified=true;}}else receiptCache(t);if(verified)try{renderFallingClients();renderTasks();buildDashboard();updateTasksAlertDot();}catch(_){}const modal=document.getElementById('modal-v2274-falling-ai'),body=document.querySelector?.('#modal-v2274-falling-ai .v2274-ai-body');if(!body){receiptViewMessage(op,view,'Открыта сохранённая задача '+id+' · '+String(t.title||''));return;}if(fallingReceiptBodyTemplate===null)fallingReceiptBodyTemplate=body.innerHTML;body.innerHTML='<h3>Сохранённая задача</h3><p>ID: '+esc(id)+'</p><p>Исполнитель: '+esc(t.manager_name||'не указан')+' · исходный срок '+esc(t.due_date||'не указан')+'</p><p>Текущий статус: '+esc(t.review_status||'не указан')+' · выполнена: '+(t.done===true?'да':'нет')+'</p><h4>'+esc(t.title||'')+'</h4><p style="white-space:pre-wrap">'+esc(t.text||'')+'</p><h4>Ожидаемый результат</h4><p>'+esc(t.expected_result||'не сохранён')+'</p><h4>Критерий</h4><p>'+esc(t.criteria||'не сохранён')+'</p><p>Создана: '+esc(t.created_at||'дата не сохранена')+' · проверена: '+esc(t.reviewed_at||'дата не сохранена')+'</p><p>'+esc(verified?'Сохранность исходного поручения сверена; состояние операции обновлено.':'Текущая запись прочитана, но исходное поручение полностью не сверено; неопределённый результат не снят.')+' Наличие отдельного события назначения не проверено; историческое выполнение не переименовывается в подтверждение 1С.</p>';if(modal){modal.dataset.receiptActor=actor.key;modal.classList.add('open');}const button=document.getElementById('v2274-ai-save');if(button)button.hidden=true;receiptViewMessage(op,view,verified?'Повторное чтение подтвердило результат. Новая задача не создавалась.':'Известная запись прочитана, но исходные отправленные поля не подтверждены. Повторное назначение заблокировано.');};
+
+window.RESANTA_FALLING_RECEIPT_V1=Object.freeze({version:'20261118-local-v1',contract:fallingReceiptContract});
+
 window.v2274ApproveFallingAi=async function(){
-  if(saving||!draft)return;const c=draft.c;
+  if(saving||!draft)return;const actor=receiptActor(),picked=draft,c=picked.c;
+  if(!actor){alert('Нужна действующая сессия руководителя. Проект не отправлен.');return;}
+  if(!receiptSameActor(fallingDraftActors.get(picked),actor)){window.v2274CloseFallingAi();alert('Проект открыт в другой или завершённой сессии. Откройте его заново без повторной генерации.');return;}
+  const prior=receiptLoad(actor,c.id);
+  if(receiptUncertain(prior)){const old=fallingReceipts.get(receiptStorageKey(actor,c.id))||{actor,clientId:c.id,taskId:prior.taskId||null,attemptId:prior.attemptId,startedAt:prior.startedAt,phase:prior.phase};fallingReceipts.set(receiptStorageKey(actor,c.id),old);receiptPaint(old);return;}
   const currentRoute=futureRoute(c);if(!currentRoute){alert('Назначение остановлено: у клиента больше нет будущей согласованной точки маршрута. Сначала согласуйте маршрут.');return;}
   const due=dateOnly(currentRoute.visit_date);if(!due){alert('У согласованной точки маршрута нет корректной даты.');return;}
   const dateEl=document.getElementById('v2274-ai-date');if(dateEl)dateEl.value=due;
   const note=n(document.getElementById('v2274-ai-note')?.value),text=n(document.getElementById('v2274-ai-text')?.value),expected=n(document.getElementById('v2274-ai-expected')?.value),criteria=n(document.getElementById('v2274-ai-criteria')?.value),basis=n(document.getElementById('v2274-ai-basis')?.value),prio=n(document.getElementById('v2274-ai-priority')?.value)||'высокий';
   if(!note||!text||!expected||!criteria){alert('Заполните комментарий руководителя, задачу, ожидаемый результат и критерий выполнения.');return;}
   const duplicate=activeClientTask(c);if(duplicate){alert('Сохранение остановлено: у клиента уже появилась активная задача. Обновите раздел.');return;}
+  const st=picked.stock.status,items=picked.items||[];
+  const approvedItems=items.map(x=>({sku:x.sku,product:x.product,qty:x.qty,warehouse:'Витебск',stock_at_approval:x.avail,free_at_approval:x.free_avail,reserved_other:x.reserved_other,safety_stock:x.safety_stock,abc_class:x.abc_class,selection_reason:x.selection_reason,category:x.category||null,subgroup:null,growth_kind:'falling_recovery'}));
   if(!confirm('Назначить проверенную задачу менеджеру '+(c.manager_name||'—')+' со сроком '+due+'?'))return;
-  saving=true;const btn=document.getElementById('v2274-ai-save');if(btn){btn.disabled=true;btn.textContent='Назначаю…';}
+  if(!receiptSameActor(actor,receiptActor())||draft!==picked)return;
+  const payload=fallingReceiptContract.wire({client_id:c.id,manager_name:c.manager_name||null,title:picked.title,text,due_date:due,done:false,auto_generated:true,review_status:'approved',reviewed_by:currentProfile?.name||null,reviewed_at:new Date().toISOString(),source:'falling_ai',priority:prio,basis,expected_result:expected,criteria,next_step:'Зафиксировать результат и следующую дату в CRM.',ai_reason:'Падение '+picked.row.pct.toFixed(1)+'%, потеря '+money(picked.row.loss)+'. Комментарий руководителя: '+note,ai_stock_items:approvedItems,ai_stock_snapshot_date:st.ok?st.latest:null,ai_stock_checked_at:new Date().toISOString(),ai_stock_status:items.length?'ok':'none',ai_stock_issue:st.ok?(items.length?null:'Подходящие потерянные SKU не найдены.'):st.reason,ai_stock_kpi_exempt:false,ai_stock_policy_version:'v22.6.8',ai_stock_replacements:[],ai_selection_context:{type:'falling_recovery',period:picked.row.period.start+'_'+picked.row.period.end,loss:picked.row.loss,pct:picked.row.pct,warehouse:'Витебск',leader_note:note}});
+  if(fallingReceiptContract.payloadErrors(payload).length){alert('Не удалось проверить структуру поручения. Назначение не начато; проект сохранён.');return;}
+  const op={actor,clientId:c.id,payload,draft:picked,manual:{note,text,expected,criteria,basis,priority:prio,due},panelEpoch:fallingReceiptPanelEpoch,phase:'note_in_flight',taskId:null,startedAt:new Date().toISOString(),attemptId:window.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)};
+  if(!receiptCurrent(op))return;
+  try{receiptMarker(op,'note_in_flight');}catch(_){op.phase='storage_unavailable';receiptPaint(op);return;}
+  fallingReceipts.set(receiptStorageKey(actor,c.id),op);saving=true;
+  const btn=document.getElementById('v2274-ai-save'),modal=document.getElementById('modal-v2274-falling-ai');if(modal?.dataset){modal.dataset.receiptActor=actor.key;modal.dataset.receiptAttempt=op.attemptId;}if(btn){btn.disabled=true;btn.textContent='Назначаю…';}
+  let readbackRevision=null;
   try{
     const noteRow={client_id:String(c.id),client_name:c.name,note,updated_by:currentProfile?.name||null,updated_at:new Date().toISOString()};
-    const noteRes=await db.from('falling_client_notes').upsert(noteRow,{onConflict:'client_id'});if(noteRes.error)throw new Error('Не удалось сохранить комментарий руководителя: '+noteRes.error.message);
-    const st=draft.stock.status,items=draft.items||[];
-    const approvedItems=items.map(x=>({sku:x.sku,product:x.product,qty:x.qty,warehouse:'Витебск',stock_at_approval:x.avail,free_at_approval:x.free_avail,reserved_other:x.reserved_other,safety_stock:x.safety_stock,abc_class:x.abc_class,selection_reason:x.selection_reason,category:x.category||null,subgroup:null,growth_kind:'falling_recovery'}));
-    const payload={client_id:c.id,manager_name:c.manager_name||null,title:draft.title,text,due_date:due,done:false,auto_generated:true,review_status:'approved',reviewed_by:currentProfile?.name||null,reviewed_at:new Date().toISOString(),source:'falling_ai',priority:prio,basis,expected_result:expected,criteria,next_step:'Зафиксировать результат и следующую дату в CRM.',ai_reason:'Падение '+draft.row.pct.toFixed(1)+'%, потеря '+money(draft.row.loss)+'. Комментарий руководителя: '+note,ai_stock_items:approvedItems,ai_stock_snapshot_date:st.ok?st.latest:null,ai_stock_checked_at:new Date().toISOString(),ai_stock_status:items.length?'ok':'none',ai_stock_issue:st.ok?(items.length?null:'Подходящие потерянные SKU не найдены.'):st.reason,ai_stock_kpi_exempt:false,ai_stock_policy_version:'v22.6.8',ai_stock_replacements:[],ai_selection_context:{type:'falling_recovery',period:draft.row.period.start+'_'+draft.row.period.end,loss:draft.row.loss,pct:draft.row.pct,warehouse:'Витебск',leader_note:note}};
-    const {data,error}=await db.from('tasks').insert(payload).select().single();if(error)throw new Error(error.message);if(data)allTasks.unshift(data);
-    const sourceNote=document.getElementById('fall-note-'+c.id);if(sourceNote)sourceNote.value=note;
-    window.v2274CloseFallingAi();renderFallingClients();setTimeout(()=>{const e=document.getElementById('fall-note-'+c.id);if(e)e.value=note;},0);try{renderTasks();buildDashboard();updateTasksAlertDot();}catch(_){ }
-    alert('ИИ-задача проверена руководителем и назначена менеджеру. История сохранится после выполнения.');
-  }catch(e){alert('Не удалось назначить задачу: '+(e.message||e));}
-  finally{saving=false;if(btn){btn.disabled=false;btn.textContent='Проверил — назначить менеджеру';}}
+    const noteRes=await receiptRequest(db.from('falling_client_notes').upsert(noteRow,{onConflict:'client_id'}));
+    if(noteRes?.error){op.phase=noteRes.data==null&&receiptRejected(noteRes.error)?'note_rejected':'note_unknown';if(op.phase==='note_rejected')receiptClear(op);receiptPaint(op);return;}
+    if(!noteRes||typeof noteRes!=='object'||!Object.prototype.hasOwnProperty.call(noteRes,'error')||noteRes.error!==null){op.phase='note_unknown';receiptPaint(op);return;}
+    if(!receiptCurrent(op)||op.panelEpoch!==fallingReceiptPanelEpoch){op.phase='note_saved_not_submitted';receiptClear(op);receiptHideOld(op);return;}
+    window.v2274ConfirmFallingNote?.(noteRow);try{renderFallingClients();}catch(_){}
+    op.phase='task_in_flight';receiptMarker(op,op.phase);
+    const response=await receiptRequest(db.from('tasks').insert(payload).select().single());
+    if(!receiptCurrent(op)){if(op.phase==='task_in_flight'){if(fallingReceiptContract.isId(response?.data?.id))op.taskId=response.data.id;op.phase='task_unknown';try{receiptMarker(op,op.phase);}catch(_){}}receiptHideOld(op);return;}
+    if(fallingReceiptContract.isId(response?.data?.id))op.taskId=response.data.id;
+    if(response?.error){op.phase=response.data==null&&receiptRejected(response.error)?'task_rejected':'task_unknown';if(op.phase==='task_rejected')receiptClear(op);receiptPaint(op);return;}
+    if(!response||!Object.prototype.hasOwnProperty.call(response,'error')||response.error!==null){op.phase='task_unknown';receiptPaint(op);return;}
+    const first=fallingReceiptContract.compare(payload,response.data);
+    if(!first.ok){op.phase='response_mismatch';op.fields=first.fields;receiptPaint(op);return;}
+    op.response=response.data;op.phase='readback_in_flight';receiptMarker(op,op.phase);
+    if(!receiptCurrent(op)){receiptHideOld(op);return;}
+    readbackRevision=op.readbackRevision||0;
+    const readback=await receiptRequest(db.from('tasks').select('*').eq('id',op.taskId).single());
+    if(!receiptReadbackCurrent(op,readbackRevision))return;
+    if(!receiptCurrent(op)){if(op.phase==='readback_in_flight'){op.phase='readback_unknown';try{receiptMarker(op,op.phase);}catch(_){}}receiptHideOld(op);return;}
+    const outcome=fallingReceiptContract.outcome(payload,response.data,readback&&Object.prototype.hasOwnProperty.call(readback,'error')&&readback.error===null?readback.data:null);
+    op.phase=({record_verified_history_unknown:'verified',saved_without_named_manager:'saved_unassigned',saved_record_changed:'saved_changed'})[outcome.state]||'readback_unknown';op.fields=outcome.fields||[];
+    if(!receiptCurrent(op)){try{receiptMarker(op,op.phase);}catch(_){}receiptHideOld(op);return;}
+    if(['verified','saved_unassigned','saved_changed'].includes(op.phase)){receiptCache(readback.data);const sourceNote=document.getElementById('fall-note-'+c.id);if(sourceNote)sourceNote.value=note;try{renderFallingClients();renderTasks();buildDashboard();updateTasksAlertDot();}catch(_){} }
+    receiptPaint(op);
+  }catch(_){if(readbackRevision!==null&&!receiptReadbackCurrent(op,readbackRevision))return;op.phase=op.phase==='note_in_flight'?'note_unknown':op.phase==='readback_in_flight'?'readback_unknown':op.phase==='task_in_flight'?'task_unknown':op.phase;receiptPaint(op);}
+  finally{saving=false;if(receiptCurrent(op)&&draft===picked&&btn){btn.disabled=false;btn.textContent='Проверил — назначить менеджеру';}}
 };
+
 function installRecoveryBlock(){
   if(currentProfile?.role!=='boss')return;const list=document.getElementById('falling-list');if(!list)return;document.getElementById('v2274-recovered')?.remove();
   const fallingIds=new Set((v20FallingRows||[]).map(x=>String(x.client.id)));
