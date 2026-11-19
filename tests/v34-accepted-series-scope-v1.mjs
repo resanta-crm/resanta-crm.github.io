@@ -138,6 +138,42 @@ export const POLICY={
         "mode": "100644",
         "oid": "6f69d20dda6fee4cc7eeaa23dc62532237ee03ee"
       }
+    },
+    "tests/lera360-stable-agent-release-20261113.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "oid": "61a3b2fc23d327e6d7e17843d19751badf1ef1d8"
+      },
+      "after": {
+        "mode": "100644",
+        "oid": "3d0fd19a784cd0a30b3dfe946219557e3d1735cc"
+      },
+      "before_sha256": "4f0425dfd6190c5cefc86ede9aff827d53c1d9263d8349a2628dc7d55a354890",
+      "after_sha256": "6eba0384ca2a471cb560f0ad0470cd1a39ba28092bef064732d56a005e07c52c"
+    },
+    "tests/warehouse-vitebsk360-v1.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "oid": "dec44bcd7dcbca833d2f4e5ccd4f6c77b837c858"
+      },
+      "after": {
+        "mode": "100644",
+        "oid": "c5b9e8935ab8b6a3a7690d26b55399e2bc627ad7"
+      },
+      "before_sha256": "ddd815c0cb918ea82862c9804ce0e8f08255e63675f04f7cad48b306e382392b",
+      "after_sha256": "9593fce43bdc8cadb203802220ad01374b717e2a9861b8693bf932b10200dc0e"
+    },
+    "tests/triovist-decisions360-v1.test.mjs": {
+      "before": {
+        "mode": "100644",
+        "oid": "ab185ee04cd56aad33286150db24327a7d2f9b75"
+      },
+      "after": {
+        "mode": "100644",
+        "oid": "d893a1366ba7160ceaae8d6832a98558e05485ab"
+      },
+      "before_sha256": "e33271f5d5e3fe78eb245555e0b3a85bb85b89167dc1bf36f72480f38a0cd831",
+      "after_sha256": "d85817a3adafca55cafd4826b61c6a5c6504a3ede465d411da493ab167ce4308"
     }
   },
   "newCiFiles": [
@@ -148,9 +184,12 @@ export const POLICY={
     ".github/workflows/gps-director360-evidence-v1.yml",
     ".github/workflows/gps360-complete-one-time-geo-v1.yml",
     ".github/workflows/triovist-brainstorm-subgroups-v2.yml",
+    "tests/lera360-stable-agent-release-20261113.test.mjs",
     "tests/route-change-scope-v1.mjs",
+    "tests/triovist-decisions360-v1.test.mjs",
     "tests/v34-accepted-series-scope-v1.mjs",
-    "tests/v34-accepted-series-scope-v1.test.mjs"
+    "tests/v34-accepted-series-scope-v1.test.mjs",
+    "tests/warehouse-vitebsk360-v1.test.mjs"
   ]
 };
 const same=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);

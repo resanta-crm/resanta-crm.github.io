@@ -24,3 +24,10 @@ for(const [label,p]of [
 test('missing reviewed product file is rejected',()=>{const s=fresh();delete s.head.entries['tests/v34-01-receipt-lifecycle.test.mjs'];s.head.tree=treeId(s.head.entries);assert.throws(()=>verifySnapshot(s));});
 test('product mode cannot be changed to symlink',()=>{const s=fresh();s.head.entries['assets/03-triovist-routes.js'].mode='120000';s.head.tree=treeId(s.head.entries);assert.throws(()=>verifySnapshot(s));});
 test('legacy branch-name escape does not influence eligibility',()=>{const previous=process.env.GITHUB_HEAD_REF;try{process.env.GITHUB_HEAD_REF='fix/manager-feedback-20261106';assert.throws(()=>verifySnapshot(mutate(fresh(),'assets/01-crm-core.js')));}finally{if(previous===undefined)delete process.env.GITHUB_HEAD_REF;else process.env.GITHUB_HEAD_REF=previous;}});
+
+// Exact version-test overlay: neither arbitrary test edits nor old release expectations are allowed.
+for(const p of ['tests/lera360-stable-agent-release-20261113.test.mjs','tests/warehouse-vitebsk360-v1.test.mjs','tests/triovist-decisions360-v1.test.mjs']){
+ test('version assertion bytes are pinned: '+p,()=>assert.throws(()=>verifySnapshot(mutate(fresh(),p))));
+ test('old version assertion cannot replace reviewed update: '+p,()=>{const s=fresh();s.head.entries[p]={...POLICY.ciFixed[p].before};s.head.tree=treeId(s.head.entries);assert.throws(()=>verifySnapshot(s));});
+}
+test('an unlisted test file remains denied',()=>assert.throws(()=>verifySnapshot(mutate(fresh(),'tests/unreviewed-version-assertion.test.mjs'))));
