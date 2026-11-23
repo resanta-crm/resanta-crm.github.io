@@ -1,10 +1,16 @@
 name: Триовист — 21vek · позиции конкурентов
 
 on:
+  pull_request:
+    paths:
+      - 'tools/triovist_21vek_competitor_positions.py'
+      - 'tests/test_triovist_position_watch_exit.py'
+      - '.github/workflows/triovist-21vek-competitor-positions.yml'
   push:
     branches: [main]
     paths:
       - 'tools/triovist_21vek_competitor_positions.py'
+      - 'tests/test_triovist_position_watch_exit.py'
       - '.github/workflows/triovist-21vek-competitor-positions.yml'
   schedule:
     # Лёгкий монитор позиций каждые 3 часа. Сдвинут относительно ночного полного рынка.
@@ -36,6 +42,18 @@ jobs:
       - name: Проверить синтаксис
         run: |
           python -m py_compile tools/triovist_21vek_market.py tools/triovist_21vek_competitor_positions.py
+
+      - name: Проверить статусы успешного, частичного и ошибочного сбора
+        run: python -m unittest discover -s tests -p 'test_triovist_position_watch_exit.py'
+
+      - name: Регрессии существующих разделов и парсера 21vek
+        run: |
+          node --test \
+            tests/triovist-parser-hourly-schema.test.mjs \
+            tests/triovist-parser-hybrid-v1.test.mjs \
+            tests/triovist-competitors-uni-cache.test.mjs \
+            tests/triovist-competitors-uni-listing.test.mjs \
+            tests/triovist-market-ai-investigations-v1.test.mjs
 
       - name: Установить зависимости
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
