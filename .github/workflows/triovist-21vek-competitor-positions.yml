@@ -46,6 +46,15 @@ jobs:
       - name: Проверить статусы успешного, частичного и ошибочного сбора
         run: python -m unittest discover -s tests -p 'test_triovist_position_watch_exit.py'
 
+      - name: Регрессии существующих разделов и парсера 21vek
+        run: |
+          node --test \
+            tests/triovist-parser-hourly-schema.test.mjs \
+            tests/triovist-parser-hybrid-v1.test.mjs \
+            tests/triovist-competitors-uni-cache.test.mjs \
+            tests/triovist-competitors-uni-listing.test.mjs \
+            tests/triovist-market-ai-investigations-v1.test.mjs
+
       - name: Установить зависимости
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: pip install requests beautifulsoup4
