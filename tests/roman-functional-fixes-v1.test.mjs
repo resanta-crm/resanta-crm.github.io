@@ -69,6 +69,6 @@ test('SQL mutations are limited to legal links and physical address, preserving 
  assert.doesNotMatch(migration,/DELETE FROM public\.clients|UPDATE public\.route_plans|DELETE FROM public\.visits|UPDATE public\.gps/i);
 });
 test('cache-bust reloads only the 3 touched existing UI modules',()=>{
- for(const src of ['03-triovist-routes.js?v=20261116-route-atomic-2','158-client360-legal-stores-v1.js?v=roman-v2','166-route-director-360-v1.js?v=20261103-legal2'])
+ for(const src of ['03-triovist-routes.js?v=20261118-v34-r06-20c36f7a0dc8','158-client360-legal-stores-v1.js?v=roman-v2','166-route-director-360-v1.js?v=20261103-legal2'])
   assert.ok(index.includes(src),src);
 });
