@@ -311,6 +311,15 @@ def error_rows(
     return current_rows, snapshots
 
 
+def completion_exit_code(status: str) -> int:
+    """Treat partial 21vek position scans as failed CI without changing saved observations."""
+    if status == "complete":
+        return 0
+    if status == "partial":
+        return 1
+    return 2
+
+
 def main() -> None:
     scopes = load_scopes()
     tracked_by_scope = load_tracked()
@@ -394,8 +403,9 @@ def main() -> None:
             },
         )
         print(f"DONE {status}: scopes={len(scopes)} queries={query_count} success={success_count} errors={error_count}", flush=True)
-        if status == "failed":
-            raise SystemExit(2)
+        exit_code = completion_exit_code(status)
+        if exit_code:
+            raise SystemExit(exit_code)
     except Exception as exc:
         try:
             rest_patch(
