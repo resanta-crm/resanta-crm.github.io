@@ -26,12 +26,20 @@ function summarize(data,scope='all',from=1,to=12){
   delta:finite(now)&&finite(before)?now-before:null,percent:finite(now)&&before>0?(now/before-1)*100:null,closedMonths:closed.length};
 }
 function graph(rows){
- const max=Math.max(1,...rows.flatMap(x=>[x.current,x.previous]).filter(finite).map(Number));
- const bar=(value,kind)=>'<span class="ys-column ys-'+kind+'" style="height:'+(finite(value)?Math.max(0,Math.min(100,Number(value)/max*100)):0)+'%" aria-hidden="true"></span>';
- return '<div class="ys-bars" aria-label="Сравнение продаж по завершённым месяцам">'+rows.map(r=>{
+ const values=rows.flatMap(x=>[x.current,x.previous]).filter(finite).map(Number);
+ const min=Math.min(0,...values),max=Math.max(0,...values),span=max-min||1;
+ const zero=max===0&&min===0?100:max/span*100;
+ const bar=(value,kind)=>{
+  if(!finite(value))return '';
+  const n=Number(value),top=n<0?zero:(max-n)/span*100,height=Math.abs(n)/span*100;
+  return '<span class="ys-column ys-'+kind+'" style="top:'+top+'%;height:'+height+'%" aria-hidden="true"></span>';
+ };
+ const lowest=min<0?'<p class="cc-muted">Нижняя отметка · '+esc((min/1000).toLocaleString('ru-RU',{maximumFractionDigits:3}))+' тыс. BYN</p>':'';
+ const baseline=min<0?'<span class="ys-zero" style="top:'+zero+'%" aria-hidden="true"></span>':'';
+ return lowest+'<div class="ys-bars" aria-label="Сравнение продаж по завершённым месяцам">'+rows.map(r=>{
   const delta=finite(r.current)&&finite(r.previous)?money(Number(r.current)-Number(r.previous)):'Нет данных';
   const full=label(r.month)+': '+r.month.slice(0,4)+' — '+money(r.current)+'; '+(r.previous_month?.slice(0,4)||String(Number(r.month.slice(0,4))-1))+' — '+money(r.previous)+'; разница — '+delta;
-  return '<button type="button" class="ys-month-row" data-ys-month="'+Number(r.month.slice(5))+'" title="'+esc(full)+'" aria-label="'+esc(full+'; к прошлому году '+changeLabel(r.current,r.previous))+'"><strong class="ys-month-change">'+esc(changeLabel(r.current,r.previous))+'</strong><span class="ys-column-pair">'+bar(r.current,'current')+bar(r.previous,'previous')+'</span><strong class="ys-month-name">'+esc(label(r.month))+'</strong></button>';
+  return '<button type="button" class="ys-month-row" data-ys-month="'+Number(r.month.slice(5))+'" title="'+esc(full)+'" aria-label="'+esc(full+'; к прошлому году '+changeLabel(r.current,r.previous))+'"><strong class="ys-month-change">'+esc(changeLabel(r.current,r.previous))+'</strong><span class="ys-column-pair">'+baseline+bar(r.current,'current')+bar(r.previous,'previous')+'</span><strong class="ys-month-name">'+esc(label(r.month))+'</strong></button>';
  }).join('')+'</div>';
 }
 function html(expanded=false){
@@ -41,7 +49,7 @@ function html(expanded=false){
  const names=data.months[0]?.managers?.map(x=>x.name)||[];
  const actualMonths=s.rows.filter(x=>!x.future),closedMonths=actualMonths.filter(x=>!x.partial);
  const period=rows=>rows.length?label(rows[0].month)+' – '+label(rows.at(-1).month):'нет месяцев';
- const details=m?'<div class="ys-selected"><div class="ys-selected-head"><strong>'+esc(monthLabel(m.month))+'</strong>'+(m.partial?'<span>Текущий месяц</span>':m.future?'<span>Период ещё не наступил</span>':'')+'</div><div class="ys-selected-cards"><div><span>'+data.year+'</span><strong>'+esc(money(m.current))+'</strong></div><div><span>'+data.previous_year+'</span><strong>'+esc(money(m.previous))+'</strong></div><div><span>К '+data.previous_year+'</span><strong>'+esc(changeLabel(m.current,m.previous))+'</strong></div></div></div>':'';
+ const details=m?'<div class="ys-selected"><div class="ys-selected-head"><strong>'+esc(monthLabel(m.month))+'</strong>'+(m.partial?'<span>Текущий месяц</span>':m.future?'<span>Период ещё не наступил</span>':'')+'</div><p class="cc-muted">'+esc(m.month+' / '+(m.previous_month||'—'))+'</p><div class="ys-selected-cards"><div><span>'+data.year+'</span><strong>'+esc(money(m.current))+'</strong></div><div><span>'+data.previous_year+'</span><strong>'+esc(money(m.previous))+'</strong></div><div><span>К '+data.previous_year+'</span><strong>'+esc(changeLabel(m.current,m.previous))+'</strong></div></div></div>':'';
  const cells=x=>'<td>'+esc(money(x.current))+'</td><td>'+esc(money(x.previous))+'</td><td>'+esc(changeLabel(x.current,x.previous))+'</td>';
  const breakdown=m?'<div class="cc-table-wrap"><table class="cc-table"><thead><tr><th>Продажи</th><th>'+data.year+', BYN</th><th>'+data.previous_year+', BYN</th><th>К '+data.previous_year+'</th></tr></thead><tbody>'+(m.managers||[]).filter(x=>state.scope==='all'||x.name===state.scope).map(x=>'<tr><td>'+esc(x.name)+'</td>'+cells(x)+'</tr>').join('')+(data.include_triovist&&(state.scope==='all'||state.scope==='Триовист')?'<tr><td>Триовист</td>'+cells({current:m.tri_current,previous:m.tri_previous})+'</tr>':'')+'</tbody></table></div>':'';
  return '<div class="ys-top"><div><span class="ys-kpi-label">'+esc(period(closedMonths))+' · '+data.year+'</span><strong>'+esc(money(s.closedCurrent))+'</strong></div><div><span class="ys-kpi-label">'+esc(period(closedMonths))+' · '+data.previous_year+'</span><strong>'+esc(money(s.closedPrevious))+'</strong></div><div><span class="ys-kpi-label">К '+data.previous_year+'</span><strong>'+esc(changeLabel(s.closedCurrent,s.closedPrevious))+'</strong></div></div>'+

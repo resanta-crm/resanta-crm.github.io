@@ -73,3 +73,8 @@
 #control-center-v1 .ys-month-name,#year-sales-dialog .ys-month-name{font-size:14px;font-weight:600}
 @media(max-width:760px){#control-center-v1 .ys-bars,#year-sales-dialog .ys-bars{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:420px){#control-center-v1 .ys-bars,#year-sales-dialog .ys-bars{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}#control-center-v1 .ys-column-pair,#year-sales-dialog .ys-column-pair{height:84px}}
+
+#control-center-v1 .ys-column-pair,#year-sales-dialog .ys-column-pair{position:relative}
+#control-center-v1 .ys-column,#year-sales-dialog .ys-column{position:absolute;inset-inline-start:10%;width:36%}
+#control-center-v1 .ys-column.ys-previous,#year-sales-dialog .ys-column.ys-previous{inset-inline-start:54%}
+#control-center-v1 .ys-zero,#year-sales-dialog .ys-zero{position:absolute;inset-inline:0;border-top:1px solid var(--sub,#65748a)}
