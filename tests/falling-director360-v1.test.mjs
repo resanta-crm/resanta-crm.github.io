@@ -155,10 +155,11 @@ test('client deep dive uses original client, ABC and AI guard handlers',()=>{
  assert.deepEqual(f.abcOpens,['client-1']);
  assert.deepEqual(f.aiOpens,['client-1']);
 });
-test('legacy card disclosure never deletes the original client list',()=>{
+test('Falling360 offers only the current client detail and hides the legacy list',()=>{
  const f=fixture();
  f.window.renderFallingClients();
- press(f,'button',{'data-f360-legacy':''});
- assert.equal(f.classes.has('f360-legacy-open'),true);
+ assert.ok(f.classes.has('f360-installed'));
+ assert.doesNotMatch(f.nodes['falling360-root'].innerHTML,/data-f360-legacy|Раскрыть прежние карточки/);
+ assert.match(src,/#page-falling\.f360-installed #falling-list\{display:none\}/);
  assert.equal(f.nodes['falling-list'].innerHTML,'EXISTING CLIENT DETAILS');
 });
