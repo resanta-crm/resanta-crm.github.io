@@ -176,7 +176,7 @@ test('Sales360 is the default renderer and reuses the scoped annual data',async(
  assert.ok(root.innerHTML.includes('Сравнение продаж'));
  assert.ok(root.innerHTML.includes('Директорский брифинг · Где теряем и растём'));
  assert.ok(root.innerHTML.includes('Матрица')||root.innerHTML.includes('Потенциал менеджеров'));
- assert.ok(root.innerHTML.includes('Ноябрь')||root.innerHTML.includes('Ноя'));
+ assert.doesNotMatch(root.innerHTML,/Годовая детализация|Выбранный месяц · продажи/);
  assert.ok(root.innerHTML.includes('Клиент &amp; Строй'));
  assert.ok(f.classes.has('s360-installed'));
  f.window.renderSales();
@@ -244,25 +244,16 @@ test('SQL RPC is authenticated and read-only; missing months are explicit',()=>{
  assert.doesNotMatch(sql,/\b(update|delete|insert|truncate)\s+public\./i);
 });
 
-test('unified month selector stays on top, exact BYN turnover on graph and live month focus',async()=>{
+test('selected periods share one graph with exact BYN and no old annual card',async()=>{
  const f=fixture();f.window.renderSales();await settle();
- const root=f.nodes['sales360-root'];
- assert.ok(root.innerHTML.indexOf('s360-month')<root.innerHTML.indexOf('s360-kpis'));
- assert.match(root.innerHTML,/Период 1/);
- assert.match(root.innerHTML,/Период в карточке/);
- assert.match(root.innerHTML,/Оборот BYN/);
- assert.match(root.innerHTML,/data-s360-point="2026-11"/);
- assert.match(root.innerHTML,/54\s*579 BYN/);
- assert.match(root.innerHTML,/data-s360-point="2026-11"/,'unfinished November is represented in the annual chart');
- assert.match(root.innerHTML,/Динамика выбранных периодов/);
- const oldCalls=f.calls.length;
- f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'month'},value:'2026-10'}:null}}});
- assert.equal(f.calls.length,oldCalls,'selecting month only focuses annual data');
- assert.match(root.innerHTML,/316\s*928 BYN/);
- assert.match(root.innerHTML,/Завершённый месяц/);
- f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Step:'-1'}}:null}}});
- assert.match(root.innerHTML,/Сен/);
+ const html=f.nodes['sales360-root'].innerHTML;
+ assert.ok(html.indexOf('Период 1')<html.indexOf('s360-kpis'));
+ assert.match(html,/Динамика выбранных периодов/);
+ assert.match(html,/Точные суммы/);
+ assert.match(html,/316\s*927,84 BYN/);
+ assert.doesNotMatch(html,/Годовая детализация|Период в карточке|Динамика с января/);
 });
+
 test('manager switch does not reveal native reports or stale numbers during loading',async()=>{
  const f=fixture();f.window.renderSales();await settle();
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
@@ -283,30 +274,7 @@ test('legacy reports open only by explicit action and return to the director vie
  assert.ok(f.navigation.includes('native-manager:all'));
  f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Legacy:''}}:null}}});
  assert.ok(f.classes.has('s360-installed'));
- assert.match(f.nodes['sales360-root'].innerHTML,/Динамика с января/);
-});
-test('keyboard selecting a graph point changes focus without RPC or opening native reports',async()=>{
- const f=fixture();f.window.renderSales();await settle();
- const start=f.calls.length;
- const p={dataset:{s360Point:'2026-10'}};
- f.events.keydown({key:'Enter',target:{closest(sel){return sel==='[data-s360-point]'?p:null}},preventDefault(){}});
- assert.equal(f.calls.length,start);
- assert.match(f.nodes['sales360-root'].innerHTML,/Завершённый месяц/);
- assert.ok(!f.navigation.some(x=>x.startsWith('native-month:')));
-});
-
-test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
- const f=fixture();f.window.renderSales();await settle();
- const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/Динамика с января/);
- assert.match(html,/390/,'wide chart SVG is at least 390px high');
- assert.match(html,/Выбранный/gi);
- assert.match(html,/2025/);
- assert.match(html,/2026/);
- assert.match(html,/275тыс/,'2025 Oct monthly value is labeled in grey');
- assert.match(html,/317тыс/,'2026 Oct value is labeled in blue');
- assert.match(html,/316\s*927,84 BYN/,'the active period card can show exact kopecks');
- assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('Директорский брифинг · Где теряем и растём'),'graph occupies own full-width row before briefing');
+ assert.match(f.nodes['sales360-root'].innerHTML,/Динамика выбранных периодов/);
 });
 test('one full-sales KPI only, no Triovist exclusion UI or separate sale totals',async()=>{
  const f=fixture();f.window.renderSales();await settle();

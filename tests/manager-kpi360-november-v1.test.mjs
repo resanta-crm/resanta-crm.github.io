@@ -37,11 +37,11 @@ test('pre-import November shows complete plan dashboard rather than a blank noti
  assert.match(src,/Последняя выгрузка 1С/);
  assert.match(html,/160-manager-kpi360-visual-v2\.js\?v=20261102-5/);
 });
-test('November stays selected and graphs use last uploaded October, not fake Nov zero values',()=>{
+test('November stays selected and export uses the last uploaded month for history',()=>{
  assert.doesNotMatch(src,/if\(!manuallySelected&&m>data\.latest_sales_month/);
  assert.match(src,/const historyPeriod=data\.latest_sales_month&&m>data\.latest_sales_month\?data\.latest_sales_month:m/);
  assert.match(src,/crm_manager_kpi360_history_v3/);
- assert.match(src,/historyMetric=button\.dataset\.metric/);
+ assert.match(src,/if\(client&&!data\.history\)await loadHistory/);
 });
 test('pre-import view has no new write privileges and keeps existing 1C fact distinction',()=>{
  assert.doesNotMatch(src,/\.from\('purchase_history'\)\.update\(/);

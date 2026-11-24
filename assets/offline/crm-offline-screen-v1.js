@@ -143,7 +143,7 @@
     if (active !== section) return;
     if (owner !== store.identity()) {location.reload(); return;}
     if (routes.has(section)) {
-      if (store.canRecord(owner) && !data.routes.some(route => route.own && !route.visited && client(route.clientId))) {
+      if (store.canRecord(owner,data) && !data.routes.some(route => route.own && !route.visited && client(route.clientId))) {
         content.append(button('Записать пробный визит',() => form({
           id:'test-route',address:'Тестирование офлайн-режима',own:true,demo:true,
           date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk'}).format(new Date()),
@@ -157,7 +157,7 @@
           pending.state === 'conflict' ? 'Нужна проверка в очереди' : 'Ожидает отправки'));
         else if (route.visited) entry.append(node('p','Посещена'));
         else if (point && route.own) entry.append(button('Записать визит',() => form(route)));
-        else if (point) entry.append(node('p','Маршрут другого сотрудника.'));
+        else if (point && store.canRecord(owner,data)) entry.append(node('p','Маршрут другого сотрудника.'));
         else entry.append(node('p','Карточка точки не загружена.'));
         return entry;
       },'На телефоне пока нет маршрута.');
@@ -217,7 +217,7 @@
       status.textContent = 'Данные на устройстве от ' + localTime(data.savedAt) + '.';
       navigation.hidden = false;
       const sections = Object.entries(data.menu || Object.fromEntries(legacySections));
-      if (store.canRecord(owner) && !sections.some(([key]) => key === 'queue')) sections.push(['queue','Очередь']);
+      if (store.canRecord(owner,data) && !sections.some(([key]) => key === 'queue')) sections.push(['queue','Очередь']);
       for (const [key,title] of sections) {
         const tab = button(title,() => open(key).catch(showError));
         tab.dataset.section = key;

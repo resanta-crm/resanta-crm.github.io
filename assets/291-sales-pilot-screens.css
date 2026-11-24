@@ -22,6 +22,7 @@
 #falling360-root .f360-period,#falling360-root .f360-pill{font-size:14px}
 #sales360-root .s360-btn,#falling360-root .f360-btn{font-size:14px}
 
-#page-vip #vip-period-info > .card-title,#page-vip #vip-period-info .v22717-version{display:none}
+#page-vip:has(#vip-date-range-v236434) #vip-period-info,
+#page-vip:has(#vip-date-range-v236434):not(.vip-exact-results) :is(#vip-list,#vip-empty,#vip-decliners-block){display:none!important}
 #page-vip #vip-range-host:empty{display:none}
 #page-falling.f360-installed > div:first-child > div:first-child:has(.page-title){display:none}

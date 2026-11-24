@@ -21,7 +21,7 @@ const viewer=()=>{try{return String(currentProfile?.id||currentProfile?.email||m
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage():$('app')?.dataset?.activePage}catch(_){return''}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date().getFullYear()}catch(_){return new Date().getFullYear()}};
-const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,fallbackReason:'',loading:false,error:'',data:null,selectedMonth:'',period1Start:'',period1End:'',period2Start:'',period2End:'',comparisonData:null,comparisonError:'',comparisonLoading:false,draft:false,chartExpanded:false,annualOpen:false,clientsOpen:true,clientSearch:'',clientOffset:0,clientKey:'',clientTab:'overview',clientFocusMonth:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',recoveryFocusCat:'',recoveryFocusSub:'',recoveryFocusData:null,recoveryFocusLoading:false,recoveryFocusError:'',clientRecoveryFilter:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0};
+const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,fallbackReason:'',loading:false,error:'',data:null,selectedMonth:'',period1Start:'',period1End:'',period2Start:'',period2End:'',comparisonData:null,comparisonError:'',comparisonLoading:false,draft:false,chartExpanded:false,clientsOpen:true,clientSearch:'',clientOffset:0,clientKey:'',clientTab:'overview',clientFocusMonth:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',recoveryFocusCat:'',recoveryFocusSub:'',recoveryFocusData:null,recoveryFocusLoading:false,recoveryFocusError:'',clientRecoveryFilter:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0,analysisOpen:false};
 let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,recoveryVersion=0,clientRecoveryVersion=0,recoveryFocusVersion=0,sourceRender=null;
 let salesScope='',annualLoadingKey='',comparisonKey='';
 const newDrill=()=>({category:'',subgroup:'',level:'subgroups',search:'',offset:0,loading:false,error:'',data:null,clientKey:''});
@@ -357,10 +357,12 @@ function mount(){
   root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Продажи · директорский контроль');
   page.insertAdjacentElement('afterbegin',root);
   root.addEventListener('click',onClick);
+  root.addEventListener('toggle',event=>{
+   if(event.target.matches?.('[data-s360-analysis]')&&root.contains(event.target))state.analysisOpen=event.target.open;
+  },true);
   root.addEventListener('change',onChange);
   root.addEventListener('keydown',onKeyDown);
   root.addEventListener('input',onInput);
-  root.addEventListener('toggle',e=>{if(e.target.matches?.('[data-s360-annual]'))state.annualOpen=e.target.open},true);
   mounted=true;
  }
  page.classList.toggle('s360-installed',!state.legacy);
@@ -1200,9 +1202,9 @@ function clientsPanel(d){
  '<button type="button" class="s360-btn" data-s360-client-page="1"'+(page>=pages?' disabled':'')+'>→</button></div></div>':'');
  return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><h3>Клиенты</h3><span class="s360-badge">'+esc(selectedSalesPeriods(d).p1.from)+' — '+esc(selectedSalesPeriods(d).p1.to)+'</span></div>'+
  '<div class="s360-client-list-full" id="s360-client-left">'+search+
- (state.clientError?'<div class="s360-warn">'+esc(state.clientError)+' <button type="button" class="s360-btn" data-s360-client-find>Повторить</button></div>':'')+
- (state.clientLoading?'<div class="s360-loading" role="status">Загружаю клиентов из 1С…</div>':
- '<div class="s360-client-list">'+(list||'<div class="s360-muted">По запросу клиентов нет.</div>')+'</div>')+
+ (state.clientError?'<div class="s360-warn" role="alert">'+esc(state.clientError)+' <button type="button" class="s360-btn" data-s360-client-find>Повторить</button></div>':
+ state.clientLoading?'<div class="s360-loading" role="status">Загружаю клиентов из 1С…</div>':
+ '<div class="s360-client-list">'+(list||(state.clientData?'<div class="s360-muted">По запросу клиентов нет.</div>':''))+'</div>')+
  paginator+'</div></div>';
 }
 function render(){
@@ -1220,10 +1222,9 @@ function render(){
   return;
  }
  const focus=focusedMonth(state.data);if(focus)state.selectedMonth=focus.month;
- const d=state.data,y=ytd(d);
+ const d=state.data;
  ensureSelectedSources(d);
  const chosen=selectedComparison(d),kpi=periodKpis(chosen);
- const periods=chartData(d,state.view);
  const comparison=chosen.pct===null?'—':(chosen.pct>0?'+':'')+chosen.pct.toFixed(1).replace('.',',')+'%';
  const colors=chosen.pct===null?'':chosen.pct<0?'s360-negative':'s360-positive';
  root.innerHTML=headerHtml(d)+filtersHtml(d)+
@@ -1233,26 +1234,11 @@ function render(){
  akbKpiCard(kpi)+
  planKpiCard(kpi)+'</div>'+
  selectedComparisonHtml(d)+
- selectedChartHtml(d)+clientsPanel(d)+
- '<details class="s360-annual-detail" data-s360-annual'+(state.annualOpen?' open':'')+'><summary>Годовая детализация</summary>'+
+ selectedChartHtml(d)+
  (num(d.unallocated_client_revenue)>0?'<p class="s360-muted">Без точной ТТ: '+esc(money(d.unallocated_client_revenue))+' · включено в оборот с начала года.</p>':'')+
- periodComparisonHtml(d)+
-
- '<div class="s360-panel s360-chart-panel'+(state.chartExpanded?' expanded':'')+'"><div class="s360-head-actions">'+
- '<div><h3>Динамика с января · '+d.year+' / '+d.previous_year+'</h3>'+
- '</div></div>'+
- '<button type="button" class="s360-btn" data-s360-chart-expand>'+(state.chartExpanded?'Обычный размер':'Увеличить график')+'</button></div>'+
- trendSvg(periods)+
- '<div class="s360-legend"><span><i style="background:var(--a,#185FA5)"></i>'+d.year+'</span>'+
- '<span><i style="background:#94a3b8"></i>'+d.previous_year+'</span></div>'+
- focusedHtml(d,periods)+
- '</div>'+
- brief(d)+
- '<div class="s360-grid"><div class="s360-panel" id="s360-managers"><h3>Менеджеры · Отгрузки с января</h3>'+managerBars(d)+
- '<p class="s360-muted" style="margin-top:12px">График использует текущее закрепление клиентской базы. Не распределённый по менеджеру оборот не приписывается сотруднику.</p></div>'+
- '<div class="s360-panel" id="s360-categories"><h3>Товарные группы · Рейтинг продаж</h3><div class="s360-minirows">'+categoryTable(d)+'</div></div></div>'+
- matrix(d)+'<div id="s360-drill-global-container" aria-live="polite">'+drillView('global')+'</div>'+
- '<div class="s360-foot"><button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div></details>';
+ clientsPanel(d)+
+ '<details class="s360-advanced" data-s360-analysis'+(state.analysisOpen?' open':'')+'><summary>Разбор потерь и товарных групп</summary>'+
+ brief(d)+matrix(d)+'<div id="s360-drill-global-container" aria-live="polite">'+drillView('global')+'</div></details>';
  if(state.clientsOpen&&$('s360-client-left'))$('s360-client-left').scrollTop=state.clientListScroll;
 }
 function activatePeriod(key){
@@ -1458,7 +1444,7 @@ function onClick(e){
  }
  if(a.s360ClientKey!==undefined){
   state.clientListScroll=$('s360-client-left')?.scrollTop||0;
-  state.clientsOpen=true;state.annualOpen=false;clearClientRecovery();resetDrill('client');
+  state.clientsOpen=true;clearClientRecovery();resetDrill('client');
   if(state.clientKey!==a.s360ClientKey){state.clientFocusMonth='';state.clientTab='overview'}
   state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;
   state.focusClientOnLoad=true;loadClients();return;
@@ -1500,7 +1486,7 @@ async function load(force=false){
  if(salesScope!==key){salesScope=key;comparisonKey='';state.comparisonData=null;}
  const serial=++requestVersion;
  const hit=cache.get(key);
- if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.fallbackReason='';state.loading=false;render();loadRecovery();if(state.clientsOpen&&!state.clientData)loadClients();return}
+ if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.fallbackReason='';state.loading=false;render();if(state.clientsOpen&&!state.clientData)loadClients();return}
  annualLoadingKey=key;state.data=null;state.error='';state.loading=true;render();
  try{
   let work=pending.get(key);
@@ -1520,7 +1506,7 @@ async function load(force=false){
  }catch(err){
   if(serial===requestVersion){state.error=String(err?.message||err);state.data=null;
    console.warn('Sales360 annual read-only request',err)}
- }finally{if(serial===requestVersion){annualLoadingKey='';state.loading=false;render();if(state.data)loadRecovery();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
+ }finally{if(serial===requestVersion){annualLoadingKey='';state.loading=false;render();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
 }
 async function loadClients(){
  if(!state.clientsOpen||!state.data||active()!=='sales')return;
@@ -1540,8 +1526,8 @@ async function loadClients(){
   if(!data||!Array.isArray(data.items))throw Error('Неполный ответ сервера по клиентам');
   state.clientData=data;
  }catch(err){
-  if(serial===clientVersion){state.clientError=String(err?.message||err);state.clientData=null;console.warn('Sales360 client scoped RPC',err)}
- }finally{if(serial===clientVersion){state.clientLoading=false;render();if(state.clientData?.detail){loadClientRecovery();focusSelectedClient();}}}
+  if(serial===clientVersion){state.clientError=state.clientKey?'Не удалось открыть клиента.':'Не удалось загрузить список клиентов.';state.clientData=null;console.warn('Sales360 client scoped RPC',err)}
+ }finally{if(serial===clientVersion){state.clientLoading=false;render();if(state.clientData?.detail){loadClientRecovery();focusSelectedClient();}else if(state.clientData)loadRecovery();}}
 }
 function recoveryArgs(clientKey=null){
  return {
@@ -1601,7 +1587,6 @@ async function fetchRecovery(clientKey=null){
 }
 function loadRecovery(){
  if(!state.data||active()!=='sales')return;
- const key=recoveryKey();
  if(state.recoveryData?.version==='sales360.recovery.4')return;
  if(state.recoveryLoading)return;
  void fetchRecovery();
