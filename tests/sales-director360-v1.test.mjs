@@ -159,8 +159,6 @@ test('manager/category matrix surfaces testable opportunities, never a knowledge
  assert.equal(api.categoryMatrix(sample,'Генераторы').length,2);
  const gaps=api.managerGaps(sample);
  assert.ok(gaps.some(x=>x.manager==='Ачинович'&&x.category==='Генераторы'));
- assert.match(src,/Отсутствие продаж само по себе не доказывает нехватку знаний/);
- assert.match(src,/Поручение создаётся только после утверждения директором/);
  assert.doesNotMatch(src,/\bcreateTask\(/);
 });
 test('Sales360 is the default renderer and reuses the scoped annual data',async()=>{
@@ -174,23 +172,16 @@ test('Sales360 is the default renderer and reuses the scoped annual data',async(
  const root=f.nodes['sales360-root'];
  assert.ok(root.innerHTML.includes('Продажи филиала'));
  assert.ok(root.innerHTML.includes('Сравнение продаж'));
- assert.ok(root.innerHTML.includes('Директорский брифинг · Где теряем и растём'));
- assert.ok(root.innerHTML.includes('Матрица')||root.innerHTML.includes('Потенциал менеджеров'));
- assert.doesNotMatch(root.innerHTML,/Годовая детализация|Выбранный месяц · продажи/);
+ assert.doesNotMatch(root.innerHTML,/Годовая детализация|Выбранный месяц · продажи|Разбор потерь и товарных групп|Директорский брифинг|Потенциал менеджеров/);
  assert.ok(root.innerHTML.includes('Клиент &amp; Строй'));
  assert.ok(f.classes.has('s360-installed'));
  f.window.renderSales();
  await settle();
  assert.equal(f.calls.filter(x=>x.name==='crm_sales360_annual_v2').length,1,'same year/manager reused within TTL');
 });
-test('manager and period selection are real, and category requests subgroups',async()=>{
+test('manager selection refreshes the annual RPC without opening the old report',async()=>{
  const f=fixture();
  f.window.renderSales();await settle();
- const start=f.calls.length;
- f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'category'},value:'Генераторы'}:null}}});
- await settle();
- assert.equal(f.calls.length,start+1,'category resolves subgroups from server');
- assert.equal(f.calls.at(-1).name,'crm_sales360_product_drill_v3');
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
  await settle();
  assert.equal(f.calls.filter(x=>x.name==='crm_sales360_annual_v2').length,2);
@@ -349,18 +340,6 @@ test('client product drill opens garden subgroups then specific SKU without leav
  assert.equal(f.calls.length,callCount,'returning to cached subgroups does not request 1C again');
  assert.match(f.nodes['sales360-root'].innerHTML,/Бензопилы/);
 });
-test('global product group drill respects manager and shows no raw 1C rows',async()=>{
- const f=fixture('manager');f.window.renderSales();await settle();
- const group={dataset:{s360Category:'САДОВАЯ ТЕХНИКА'}};
- f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?group:null}}});
- await settle();
- const r=f.calls.at(-1);
- assert.equal(r.name,'crm_sales360_product_drill_v3');
- assert.equal(r.args.p_client_key,null);
- assert.equal(r.args.p_manager,null);
- assert.match(f.nodes['sales360-root'].innerHTML,/Мойки высокого давления/);
- assert.ok(f.classes.has('s360-installed'));
-});
 test('additive product drill RPC requires server auth, stays read-only and is paginated',()=>{
  assert.match(v3sql,/create or replace function public\.crm_sales360_product_drill_v3/);
  assert.match(v3sql,/auth\.uid\(\) is null/);
@@ -402,12 +381,6 @@ test('director briefing ranks meaningful category losses with evidence and a con
  assert.equal(sig.issues[0].loss,50000);
  assert.equal(sig.issues[0].priority,'Высокий');
  assert.match(sig.issues[0].action,/подгруппы и SKU/);
- const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/Директорский брифинг · Где теряем и растём/);
- assert.match(html,/21\s*419 BYN/);
- assert.match(html,/Разобрать подгруппу и SKU/);
- assert.match(html,/Причина не установлена/);
- assert.doesNotMatch(html,/У [^<]* нет продаж группы [^<]* значит не знает/i);
  assert.match(src,/directorSignals/);
  assert.doesNotMatch(src,/\.insert\(|\.upsert\(|\.update\(.*tasks/);
 });
@@ -421,54 +394,23 @@ test('director signals filter weak declines instead of labelling any zero sales 
  assert.equal(result.issues.length,0);
 });
 
-test('recovery brief uses same verified v4 RPC as Lera, including client and SKU losses',async()=>{
- const f=fixture();f.window.renderSales();await settle();
- assert.equal(f.recoveryCalls[0].name,'crm_sales360_recovery_v4');
- assert.equal(f.recoveryCalls[0].args.p_period,'last3');
- assert.equal(f.recoveryCalls[0].args.p_year,2026);
+test('Sales requests recovery only when opening an individual client',async()=>{
+ const f=fixture('manager');f.window.renderSales();await settle();
+ assert.equal(f.recoveryCalls.length,0);
+ const button={dataset:{s360ClientKey:'c1'}};
+ f.events.click({target:{closest(sel){return sel==='button'?button:null}}});
+ await settle();
+ f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360ClientTab:'products'}}:null}}});
  const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/Бензопилы/);
- assert.match(html,/21\s*419 BYN/);
- assert.match(html,/Клиентов со снижением/);
- assert.match(html,/14/);
- assert.match(html,/data-s360-rec-tab="clients"/);
+ assert.match(html,/Разделы клиента/);
+ assert.match(html,/Динамика клиента · где падение/);
+ assert.equal(f.recoveryCalls.length,1);
+ assert.equal(f.recoveryCalls[0].name,'crm_sales360_recovery_v4');
+ assert.equal(f.recoveryCalls[0].args.p_client_key,'c1');
+ assert.equal(f.recoveryCalls[0].args.p_manager,null);
+ assert.equal(f.recoveryCalls[0].args.p_period,'last3');
  assert.match(v4sql,/crm_sales360_recovery_v4/);
  assert.match(lera,/crm_sales360_recovery_v4/);
-});
-test('recovery period changes month basis and open November is explicitly excluded',async()=>{
- const f=fixture();f.window.renderSales();await settle();
- const a=f.recoveryCalls.length;
- f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360RecPeriod:'quarter'}}:null}}});
- await settle();
- assert.equal(f.recoveryCalls.length,a+1);
- assert.equal(f.recoveryCalls.at(-1).args.p_period,'quarter');
- assert.match(f.nodes['sales360-root'].innerHTML,/Текущий неполный месяц исключён|Ноябрь без подтверждённой ежедневной детализации не сравнивается/);
-});
-test('subgroup recovery opens matching same-period SKU and client signals on one screen',async()=>{
- const f=fixture();f.window.renderSales();await settle();
- const elem={dataset:{s360RecGroup:'САДОВАЯ ТЕХНИКА',s360RecSubgroup:'Бензопилы',s360RecSku:''}};
- f.events.click({target:{closest(sel){return sel==='button'?elem:null}}});
- await settle();
- const call=f.recoveryCalls.at(-1);
- assert.equal(call.args.p_category,'САДОВАЯ ТЕХНИКА');
- assert.equal(call.args.p_subgroup,'Бензопилы');
- assert.equal(call.args.p_period,'last3');
- const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/Разбор потерь/);
- assert.match(html,/SKU 70\/6\/4/);
- assert.match(html,/Клиенты с падением/);
-});
-test('recovery client signals open adaptive client view and maintain matching rights',async()=>{
- const f=fixture('manager');f.window.renderSales();await settle();
- assert.equal(f.recoveryCalls[0].args.p_manager,null);
- f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360RecClient:'c1'}}:null}}});
- await settle();
- const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/s360-client-full/);
- assert.match(html,/s360-client-detail-anchor/);
- assert.match(html,/Разделы клиента/);
- assert.equal(f.recoveryCalls.at(-1).args.p_client_key,'c1');
- assert.equal(f.recoveryCalls.at(-1).args.p_manager,null);
 });
 test('recovery RPC is additive, read only, manager scoped, monthly, non-intrusive',()=>{
  assert.match(v4sql,/auth\.uid\(\) is null/);

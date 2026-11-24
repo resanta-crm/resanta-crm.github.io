@@ -6,7 +6,11 @@
 #vip-date-range-v236434 input{width:100%;min-width:0}
 #vip-date-range-v236434 .vip-range-actions{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 #vip-date-range-v236434 .vip-range-actions label{max-width:220px}
-#vip-date-status-v236434{font-size:14px;min-height:20px}
+#vip-date-status-v236434{font-size:14px}
+#vip-date-status-v236434:empty,#vip-date-totals-v236434[hidden]{display:none}
+#vip-date-totals-v236434 .vip-range-total{display:grid;gap:5px;padding:10px;border:1px solid var(--border,#d9e0e8);border-radius:10px}
+#vip-date-totals-v236434 .vip-range-total strong{font-size:20px}
+#vip-date-totals-v236434 .vip-range-total small{color:var(--sub)}
 @media(max-width:768px){#vip-date-range-v236434 .vip-range-pair{grid-template-columns:1fr}#vip-date-range-v236434 fieldset{flex-wrap:wrap}#vip-date-range-v236434 .vip-range-actions>*{flex:1}}
 #page-falling.f360-installed #falling-freshness{display:none!important}
 #page-falling #falling-extra-filters{grid-column:1/-1;border-top:1px solid var(--border,#d9e0e8);padding-top:8px}

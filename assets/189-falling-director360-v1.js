@@ -20,7 +20,7 @@ const fromYear=v=>String(Number(v.slice(0,4))-1)+v.slice(4);
 const money=v=>fmt(v)+' BYN';
 const isBoss=()=>{try{return currentProfile?.role==='boss'}catch(_){return false}};
 const asArray=v=>Array.isArray(v)?v:[];
-let wrapped=false,root=null,legacyOpen=false,segment='all',showMore=false,focus='',rendering=false;
+let wrapped=false,root=null,segment='all',showMore=false,focus='',rendering=false;
 const confirmedCache=new Map(),confirmedPending=new Map();
 let lastPaintKey='',lastList=null;
 let chartCache={source:null,length:0,rowsKey:'',end:'',data:null};
@@ -318,12 +318,9 @@ function render(){
    '<div class="f360-filterchips">'+[['all','Все'],['critical','Критические']].map(([k,t])=>'<button class="f360-chip'+(segment===k?' active':'')+'" type="button" data-f360-filter="'+k+'">'+t+'</button>').join('')+'</div>'+
    (hasSource?clientsTable(subset,end):'<p>Нет подтверждённых данных.</p>')+'</div>'+
    '<div class="f360-panel"><div class="f360-sectiontitle">Менеджеры · подтверждённый возврат <small>'+esc(monthName(p.end))+'</small></div>'+
-   managerCards(managers,p)+'</div>'+
-   '<div class="f360-footer">'+
-   '<button type="button" class="f360-btn" data-f360-legacy aria-expanded="'+String(legacyOpen)+'">'+(legacyOpen?'Скрыть старые карточки':'Раскрыть прежние карточки и комментарии')+'</button></div>';
+   managerCards(managers,p)+'</div>';
   const page=$(PAGE);
   page.classList.add('f360-installed');
-  page.classList.toggle('f360-legacy-open',legacyOpen);
   lastPaintKey=[p.start,p.end,rows.length,totalRows,segment].join('|');lastList=rows;
   return true;
  }catch(e){console.warn('Falling360 view failed; existing cards retained',e);$(PAGE)?.classList.remove('f360-installed');return false}
@@ -363,7 +360,6 @@ function onClick(event){
   if(area){const source=$('fall-note-'+node.getAttribute('data-f360-ai'));if(source)source.value=area.value;}
   openAI(node.getAttribute('data-f360-ai'));return;
  }
- if(node.hasAttribute('data-f360-legacy')){legacyOpen=!legacyOpen;$(PAGE)?.classList.toggle('f360-legacy-open',legacyOpen);node.setAttribute('aria-expanded',String(legacyOpen));node.textContent=legacyOpen?'Скрыть старые карточки':'Раскрыть прежние карточки и комментарии';}
 }
 function install(){
  if(wrapped)return true;
@@ -481,10 +477,8 @@ const styles=[
 '#'+ID+' .f360-noteedit label{font-size:11px;font-weight:740}',
 '#'+ID+' .f360-noteedit textarea{font:inherit;width:100%;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--card);color:var(--text);resize:vertical;font-size:12px}',
 '#'+ID+' .f360-noteedit button{justify-self:start}',
-'#'+ID+' .f360-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}',
 '#page-falling.f360-installed #falling-kpi,#page-falling.f360-installed #falling-period-note{display:none}',
 '#page-falling.f360-installed #falling-list{display:none}',
-'#page-falling.f360-installed.f360-legacy-open #falling-list{display:block}',
 '@media(max-width:1100px){#'+ID+' .f360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}#'+ID+' .f360-topgrid,#'+ID+' .f360-bottomgrid{grid-template-columns:1fr}}',
 '@media(max-width:650px){#'+ID+' .f360-kpis{grid-template-columns:1fr}#'+ID+' .f360-manager-cards{grid-template-columns:1fr}#'+ID+' h2{font-size:19px}#'+ID+' .f360-chartrow{grid-template-columns:58px minmax(65px,1fr) 86px;gap:5px}#'+ID+' .f360-clientrow{grid-template-columns:19px minmax(90px,1fr) 68px;gap:5px}#'+ID+' .f360-clientrow .f360-quiet{grid-column:2 / 4;justify-self:start}#'+ID+' .f360-dual,#'+ID+' .f360-detail-kpis{grid-template-columns:1fr}#'+ID+' .f360-product{grid-template-columns:1fr 1fr}}'
 ].join('\n');
