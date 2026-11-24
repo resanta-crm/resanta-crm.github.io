@@ -58,7 +58,8 @@
       return UUID.test(value?.user?.id ?? '') && typeof value?.access_token === 'string' ? value : null;
     } catch { return null; }
   }
-  const identity = () => session()?.user.id === enrolledOwner ? enrolledOwner : null;
+  const identity = () => session()?.user.id ?? null;
+  const canRecord = owner => !!owner && owner === enrolledOwner && owner === identity();
   async function readSnapshot(owner) {
     if (!owner || identity() !== owner) return null;
     const data = await operation('snapshots','readonly',store => store.get(owner));
@@ -70,13 +71,17 @@
     return operation('snapshots','readwrite',store => {
       const request = store.get(data.owner);
       request.onsuccess = () => {
-        if (identity() === data.owner) store.put({...data,reports:request.result?.reports ?? {}});
+        if (identity() !== data.owner) return;
+        const previous = request.result;
+        const reports = previous?.profileKey === data.profileKey ? previous?.reports ?? {} : {};
+        const scoped = Object.fromEntries(Object.entries(reports).filter(([key]) => !data.menu || data.menu[key]));
+        store.put({...data,reports:scoped});
       };
       return request;
     });
   }
   async function saveReport(owner, report) {
-    if (!await readSnapshot(owner)) throw Error('Сначала нажмите «Подготовить офлайн».');
+    if (!await readSnapshot(owner)) throw Error('Откройте CRM при наличии интернета.');
     return operation('snapshots','readwrite',store => {
       const request = store.get(owner);
       request.onsuccess = () => {
@@ -95,7 +100,7 @@
     return identity() === owner ? rows.sort((a,b) => a.queuedAt-b.queuedAt) : [];
   }
   async function enqueue(owner, visit, decisions, demo = false) {
-    if (!await readSnapshot(owner) || identity() !== owner) throw Error('Обновите офлайн-данные после входа в CRM.');
+    if (!canRecord(owner) || !await readSnapshot(owner)) throw Error('Обновите офлайн-данные после входа в CRM.');
     const record = {id:crypto.randomUUID(),owner,queuedAt:Date.now(),visit,decisions,state:demo?'demo':'pending'};
     await operation('visits','readwrite',store => store.add(record));
     return record;
@@ -105,7 +110,7 @@
     return operation('visits','readwrite',store => store.put({...record,state,reason}));
   }
   function synchronize(owner) {
-    if (syncFlight || !owner || identity() !== owner || location.origin !== production || !navigator.onLine) return syncFlight;
+    if (syncFlight || !canRecord(owner) || location.origin !== production || !navigator.onLine) return syncFlight;
     syncFlight = (async () => {
       const pending = (await queue(owner)).filter(record => record.state === 'pending');
       if (!pending.length) return;
@@ -130,5 +135,5 @@
     })().catch(() => {}).finally(() => {syncFlight = null;});
     return syncFlight;
   }
-  window.crmOfflineStore = Object.freeze({identity, readSnapshot, writeSnapshot, saveReport, removeSnapshot, queue, enqueue, synchronize});
+  window.crmOfflineStore = Object.freeze({identity, canRecord, readSnapshot, writeSnapshot, saveReport, removeSnapshot, queue, enqueue, synchronize});
 })();

@@ -5,14 +5,15 @@
   const status = document.getElementById('offline-status');
   const content = document.getElementById('offline-content');
   const navigation = document.getElementById('offline-navigation');
-  const sections = [
+  const legacySections = [
     ['routes','Маршрут'],['tasks','Задачи'],['clients','Клиенты'],['visits','История визитов'],['queue','Очередь'],
-    ['reports','Снимки разделов'],
+    ['dashboard','Центр управления'],
   ];
   const outcomes = ['✅ Заказ','🤝 Переговоры','❌ Не застал','📦 Мерчендайзинг','📚 Обучение','💬 Работа с ЛПР','📞 Звонок'];
   const owner = store.identity();
   let data;
-  let active = 'routes';
+  let active = '';
+  const routes = new Set(['routes','route','my-routes','routes-boss']);
   const node = (tag,text) => {
     const element = document.createElement(tag);
     if (text != null) element.textContent = text;
@@ -130,7 +131,7 @@
         send.disabled = false;
       }
     });
-    content.replaceChildren(button('К маршруту',() => open('routes')),panel);
+    content.replaceChildren(button('К маршруту',() => open(active)),panel);
     result.focus();
   }
 
@@ -141,8 +142,8 @@
     const records = await store.queue(owner);
     if (active !== section) return;
     if (owner !== store.identity()) {location.reload(); return;}
-    if (section === 'routes') {
-      if (!data.routes.some(route => route.own && !route.visited && client(route.clientId))) {
+    if (routes.has(section)) {
+      if (store.canRecord(owner) && !data.routes.some(route => route.own && !route.visited && client(route.clientId))) {
         content.append(button('Записать пробный визит',() => form({
           id:'test-route',address:'Тестирование офлайн-режима',own:true,demo:true,
           date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk'}).format(new Date()),
@@ -180,17 +181,7 @@
     } else if (section === 'visits') {
       list(data.visits,row => card(row.result || 'Визит',[row.date,client(row.clientId)?.name].filter(Boolean).join(' · ')),
         'На телефоне пока нет истории визитов.');
-    } else if (section === 'reports') {
-      list(Object.values(data.reports || {}), report => {
-        const entry = card(report.title,'Сохранено '+localTime(report.savedAt));
-        const copy = node('details');
-        const text = node('pre',report.text);
-        text.className = 'offline-report';
-        copy.append(node('summary','Открыть копию для чтения'),text);
-        entry.append(copy);
-        return entry;
-      },'Откройте нужный раздел при наличии сети и нажмите «Сохранить экран офлайн».');
-    } else {
+    } else if (section === 'queue') {
       list(records,record => {
         const summary = record.state==='demo'?'Тест · хранится на телефоне':record.state==='sent'?'Сохранено в CRM':record.state==='conflict'?
           'Нужна проверка · '+record.reason:'Ожидает отправки';
@@ -203,23 +194,38 @@
       }, 'Очередь пуста.');
       if (records.some(row => row.state === 'pending')) content.append(node('p',
         'CRM отправит записи при восстановлении связи. Если сессия истекла, откройте CRM онлайн и войдите снова.'));
+    } else {
+      const report = data.reports?.[section];
+      if (!report) {
+        content.append(node('p','Данные этого раздела ещё не успели загрузиться на устройство.'));
+        return;
+      }
+      const entry = card(report.title,'Данные от '+localTime(report.savedAt));
+      const text = node('pre',report.text);
+      text.className = 'offline-report';
+      entry.append(text);
+      content.append(entry);
     }
   }
   async function init() {
     try {
       data = await store.readSnapshot(owner);
       if (!data) {
-        status.textContent = 'Офлайн-данные недоступны. Войдите в CRM при наличии сети и нажмите «Подготовить офлайн».';
+        status.textContent = 'Данные на этом устройстве пока недоступны. Откройте CRM при наличии интернета.';
         return;
       }
-      status.textContent = 'Данные на телефоне от ' + localTime(data.savedAt) + '.';
+      status.textContent = 'Данные на устройстве от ' + localTime(data.savedAt) + '.';
       navigation.hidden = false;
+      const sections = Object.entries(data.menu || Object.fromEntries(legacySections));
+      if (store.canRecord(owner) && !sections.some(([key]) => key === 'queue')) sections.push(['queue','Очередь']);
       for (const [key,title] of sections) {
         const tab = button(title,() => open(key).catch(showError));
         tab.dataset.section = key;
         navigation.append(tab);
       }
-      await open('routes');
+      const requested = new URLSearchParams(location.search).get('section');
+      const initial = sections.some(([key]) => key===requested) ? requested : sections[0]?.[0];
+      if (initial) await open(initial);
       reconnect();
     } catch (error) { showError(error); }
   }

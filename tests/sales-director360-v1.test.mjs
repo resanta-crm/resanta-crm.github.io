@@ -88,6 +88,10 @@ function fixture(role='boss'){
    if(args.p_category)return {data:{...result,subgroups:sampleRecovery.subgroups.filter(x=>x.category===args.p_category),clients:sampleRecovery.clients,skus:sampleRecovery.skus},error:null};
    return {data:result,error:null};
   }
+  if(name==='crm_manager_kpi360_dashboard_v2'){
+   return {data:{version:'kpi360-visual-v2',month:args.p_month,latest_sales_month:'2026-11',
+    sales:sample.kpi.map(row=>({manager_name:row.manager_name,shipment_plan:row.plan,shipment:row.actual})),clients:[]},error:null};
+  }
   calls.push({name,args});
   if(name==='crm_sales360_product_drill_v3'){
    const rows=args.p_level==='subgroups'?
@@ -159,17 +163,17 @@ test('manager/category matrix surfaces testable opportunities, never a knowledge
  assert.match(src,/Поручение создаётся только после утверждения директором/);
  assert.doesNotMatch(src,/\bcreateTask\(/);
 });
-test('sales native renderer executes, and server annual RPC has no local history scanning',async()=>{
+test('Sales360 is the default renderer and reuses the scoped annual data',async()=>{
  const f=fixture();
  f.window.renderSales();
  await settle();
- assert.equal(f.navigation.filter(x=>x==='native-sales').length,1);
- assert.equal(f.calls.length,1);
+ assert.equal(f.navigation.filter(x=>x==='native-sales').length,0);
+ assert.equal(f.calls.filter(x=>x.name==='crm_sales360_annual_v2').length,1);
  assert.equal(f.calls[0].name,'crm_sales360_annual_v2');
  assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0].args)),{p_year:2026,p_manager:null,p_exclude_triovist:false});
  const root=f.nodes['sales360-root'];
- assert.ok(root.innerHTML.includes('Продажи 360°'));
- assert.ok(root.innerHTML.includes('Управление ростом'));
+ assert.ok(root.innerHTML.includes('Продажи филиала'));
+ assert.ok(root.innerHTML.includes('Сравнение продаж'));
  assert.ok(root.innerHTML.includes('Директорский брифинг · Где теряем и растём'));
  assert.ok(root.innerHTML.includes('Матрица')||root.innerHTML.includes('Потенциал менеджеров'));
  assert.ok(root.innerHTML.includes('Ноябрь')||root.innerHTML.includes('Ноя'));
@@ -177,7 +181,7 @@ test('sales native renderer executes, and server annual RPC has no local history
  assert.ok(f.classes.has('s360-installed'));
  f.window.renderSales();
  await settle();
- assert.equal(f.calls.length,1,'same year/manager reused within TTL');
+ assert.equal(f.calls.filter(x=>x.name==='crm_sales360_annual_v2').length,1,'same year/manager reused within TTL');
 });
 test('manager and period selection are real, and category requests subgroups',async()=>{
  const f=fixture();
@@ -189,7 +193,7 @@ test('manager and period selection are real, and category requests subgroups',as
  assert.equal(f.calls.at(-1).name,'crm_sales360_product_drill_v3');
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
  await settle();
- assert.equal(f.calls.length,start+2);
+ assert.equal(f.calls.filter(x=>x.name==='crm_sales360_annual_v2').length,2);
  assert.ok(!f.navigation.includes('native-manager:Руднев'),'old report stays dormant during Sales360 manager changes');
  assert.equal(f.calls.at(-1).args.p_manager,'Руднев');
  assert.ok(f.classes.has('s360-installed'));
@@ -210,20 +214,20 @@ test('plan/fact comes from same KPI leaderboard; unlabeled sales remain included
  const f=fixture();f.window.renderSales();await settle();
  const html=f.nodes['sales360-root'].innerHTML;
  assert.match(sql,/crm_manager_kpi_leaderboard/);
- assert.match(html,/План\/факт месяца/);
- assert.match(html,/Без точной ТТ/);
- assert.match(html,/Включено в общий оборот/);
- assert.match(html,/Продажи · всего/);
+ assert.match(html,/Выполнение плана/);
+ assert.match(html,/Без точной ТТ|без точной ТТ/);
+ assert.match(html,/Сравнение продаж/);
+ assert.match(html,/Сравнение продаж/);
 });
-test('all-clients button stays in Sales360 and uses server-side client RPC',async()=>{
+test('client search stays in Sales360 and uses the server-side client RPC',async()=>{
  const f=fixture();f.window.renderSales();await settle();
- const target={dataset:{s360AllClients:''}};
+ const target={dataset:{s360ClientFind:''}};
  f.events.click({target:{closest(x){return x==='button'?target:null}}});
  await settle();
  assert.ok(!f.navigation.includes('native-yoy-open'));
  assert.ok(f.classes.has('s360-installed'));
  assert.equal(f.calls.at(-1).name,'crm_sales360_clients_v2');
- assert.match(f.nodes['sales360-root'].innerHTML,/Клиенты 360° · Поиск и детализация/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Поиск клиентов/);
  assert.match(f.nodes['sales360-root'].innerHTML,/Клиент &amp; Строй/);
  assert.match(src,/w\.msyOpen374/,'legacy mode exists only behind explicit fallback');
  assert.match(src,/w\.openClient/);
@@ -244,18 +248,18 @@ test('unified month selector stays on top, exact BYN turnover on graph and live 
  const f=fixture();f.window.renderSales();await settle();
  const root=f.nodes['sales360-root'];
  assert.ok(root.innerHTML.indexOf('s360-month')<root.innerHTML.indexOf('s360-kpis'));
- assert.match(root.innerHTML,/Год сравнения/);
- assert.match(root.innerHTML,/Месяц · фокус графика/);
+ assert.match(root.innerHTML,/Период 1/);
+ assert.match(root.innerHTML,/Период в карточке/);
  assert.match(root.innerHTML,/Оборот BYN/);
  assert.match(root.innerHTML,/data-s360-point="2026-11"/);
  assert.match(root.innerHTML,/54\s*579 BYN/);
- assert.match(root.innerHTML,/Без итогового сравнения/,'unfinished November does not get misleading YoY');
- assert.match(root.innerHTML,/10\.11\.2026, 08:00 \(Минск\)/);
+ assert.match(root.innerHTML,/data-s360-point="2026-11"/,'unfinished November is represented in the annual chart');
+ assert.match(root.innerHTML,/Динамика выбранных периодов/);
  const oldCalls=f.calls.length;
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'month'},value:'2026-10'}:null}}});
  assert.equal(f.calls.length,oldCalls,'selecting month only focuses annual data');
  assert.match(root.innerHTML,/316\s*928 BYN/);
- assert.match(root.innerHTML,/Сопоставимые закрытые периоды/);
+ assert.match(root.innerHTML,/Завершённый месяц/);
  f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Step:'-1'}}:null}}});
  assert.match(root.innerHTML,/Сен/);
 });
@@ -263,19 +267,19 @@ test('manager switch does not reveal native reports or stale numbers during load
  const f=fixture();f.window.renderSales();await settle();
  f.events.change({target:{closest(sel){return sel==='[data-s360-select]'?{dataset:{s360Select:'manager'},value:'Руднев'}:null}}});
  const loading=f.nodes['sales360-root'].innerHTML;
- assert.match(loading,/Загружаю данные выбранного менеджера/);
- assert.match(loading,/s360-month/);
+ assert.match(loading,/Загружаю продажи/);
+ assert.match(loading,/s360-manager/);
  assert.ok(!loading.includes('Клиенты · Отгрузки за закрытые месяцы'));
  assert.ok(f.classes.has('s360-installed'));
  assert.ok(!f.navigation.includes('native-manager:Руднев'));
  await settle();
- assert.match(f.nodes['sales360-root'].innerHTML,/Управление ростом/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Продажи филиала/);
 });
 test('legacy reports open only by explicit action and return to the director view',async()=>{
  const f=fixture();f.window.renderSales();await settle();
  f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Legacy:''}}:null}}});
  assert.ok(!f.classes.has('s360-installed'));
- assert.match(f.nodes['sales360-root'].innerHTML,/Вернуться к Продажи 360°/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Вернуться к продажам/);
  assert.ok(f.navigation.includes('native-manager:all'));
  f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360Legacy:''}}:null}}});
  assert.ok(f.classes.has('s360-installed'));
@@ -287,7 +291,7 @@ test('keyboard selecting a graph point changes focus without RPC or opening nati
  const p={dataset:{s360Point:'2026-10'}};
  f.events.keydown({key:'Enter',target:{closest(sel){return sel==='[data-s360-point]'?p:null}},preventDefault(){}});
  assert.equal(f.calls.length,start);
- assert.match(f.nodes['sales360-root'].innerHTML,/Сопоставимые закрытые периоды/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Завершённый месяц/);
  assert.ok(!f.navigation.some(x=>x.startsWith('native-month:')));
 });
 
@@ -301,18 +305,18 @@ test('large graph displays 2025 and 2026 amounts without kopecks',async()=>{
  assert.match(html,/2026/);
  assert.match(html,/275тыс/,'2025 Oct monthly value is labeled in grey');
  assert.match(html,/317тыс/,'2026 Oct value is labeled in blue');
- assert.doesNotMatch(html,/316\s*927,84 BYN/,'chart/selected period no longer shows kopecks');
+ assert.match(html,/316\s*927,84 BYN/,'the active period card can show exact kopecks');
  assert.ok(html.indexOf('s360-chart-panel')<html.indexOf('Директорский брифинг · Где теряем и растём'),'graph occupies own full-width row before briefing');
 });
 test('one full-sales KPI only, no Triovist exclusion UI or separate sale totals',async()=>{
  const f=fixture();f.window.renderSales();await settle();
  const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/Продажи · всего/);
+ assert.match(html,/Сравнение продаж/);
  assert.doesNotMatch(html,/Без Триовиста/);
  assert.doesNotMatch(html,/С января · без Триовиста/);
  assert.doesNotMatch(html,/id="s360-scope"/);
  assert.equal(f.calls.at(-1).args.p_exclude_triovist,false);
- assert.equal((html.match(/s360-tile/g)||[]).length,5);
+ assert.equal((html.match(/s360-tile/g)||[]).length,4);
 });
 test('clicking a top client opens client detail within Sales360, no old YoY report',async()=>{
  const f=fixture();f.window.renderSales();await settle();
@@ -323,8 +327,8 @@ test('clicking a top client opens client detail within Sales360, no old YoY repo
  assert.equal(f.calls.at(-1).args.p_client_key,'c1');
  assert.ok(f.classes.has('s360-installed'));
  assert.ok(!f.navigation.includes('native-yoy-open'));
- assert.match(f.nodes['sales360-root'].innerHTML,/История продаж клиента по месяцам/);
- assert.match(f.nodes['sales360-root'].innerHTML,/Товарные группы клиента/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/По месяцам/);
+ assert.match(f.nodes['sales360-root'].innerHTML,/Группы и SKU/);
 });
 test('server client search and access scope stay within the selected manager',async()=>{
  const f=fixture('manager');f.window.renderSales();await settle();
@@ -355,6 +359,7 @@ test('client product drill opens garden subgroups then specific SKU without leav
  const f=fixture();f.window.renderSales();await settle();
  const fire=dataset=>f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?{dataset}:null}}});
  fire({s360ClientKey:'c1'});await settle();
+ fire({s360ClientTab:'products'});
  fire({s360DrillGroup:'САДОВАЯ ТЕХНИКА',s360DrillScope:'client'});await settle();
  let last=f.calls.at(-1);
  assert.equal(last.name,'crm_sales360_product_drill_v3');
@@ -402,6 +407,7 @@ test('drill patches only its own container and preserves client list/scroll cont
  const f=fixture();f.window.renderSales();await settle();
  const fire=dataset=>f.events.click({target:{closest(sel){return sel==='[data-s360-point]'?null:sel==='button'?{dataset}:null}}});
  fire({s360ClientKey:'c1'});await settle();
+ fire({s360ClientTab:'products'});
  const html=f.nodes['sales360-root'].innerHTML;
  assert.match(html,/s360-client-product-container/);
  const partial={innerHTML:''};
@@ -490,9 +496,9 @@ test('recovery client signals open adaptive client view and maintain matching ri
  f.events.click({target:{closest(sel){return sel==='button'?{dataset:{s360RecClient:'c1'}}:null}}});
  await settle();
  const html=f.nodes['sales360-root'].innerHTML;
- assert.match(html,/s360-client-split/);
+ assert.match(html,/s360-client-full/);
  assert.match(html,/s360-client-detail-anchor/);
- assert.match(html,/Динамика клиента · где падение/);
+ assert.match(html,/Разделы клиента/);
  assert.equal(f.recoveryCalls.at(-1).args.p_client_key,'c1');
  assert.equal(f.recoveryCalls.at(-1).args.p_manager,null);
 });

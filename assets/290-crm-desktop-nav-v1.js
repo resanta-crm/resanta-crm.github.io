@@ -136,8 +136,15 @@
  side.addEventListener('click',event=>{
   const node=event.target.closest('button');
   if(!node||!eligible())return;
-  if(node.dataset.group){group=node.dataset.group;draw();return}
-  rows().find(row=>row.id===node.dataset.source)?.source.click();
+  if(node.dataset.group){
+   group=node.dataset.group;
+   if(group==='Главная')rows().find(row=>row.id==='dashboard')?.source.click();
+   draw();
+   return;
+  }
+  const row=rows().find(entry=>entry.id===node.dataset.source);
+  row?.source.click();
+  if(row?.id==='sales')w.RESANTA_SALES360_V1?.show();
  });
  const observer=new MutationObserver(schedule);
  observer.observe(legacy,{subtree:true,childList:true,characterData:true,attributes:true,

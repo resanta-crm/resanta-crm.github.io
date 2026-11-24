@@ -1190,8 +1190,10 @@ function vipDefs22717(){
   }).filter(x=>x.primary);
   const p=nodes.map((_,i)=>i);const find=i=>p[i]===i?i:(p[i]=find(p[i]));const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)p[b]=a;};
   const first=new Map();nodes.forEach((n,i)=>n.keys.forEach(k=>{if(first.has(k))union(i,first.get(k));else first.set(k,i);}));
-  const buckets=new Map();nodes.forEach((n,i)=>{const k=key22717(n.primary),b=k.slice(0,6);if(!buckets.has(b))buckets.set(b,[]);buckets.get(b).push(i);});
-  buckets.forEach(ids=>{for(let a=0;a<ids.length;a++)for(let b=a+1;b<ids.length;b++){const x=nodes[ids[a]],y=nodes[ids[b]];if(near22717(x.primary,y.primary))union(ids[a],ids[b]);}});
+  // Identical normalized names and legal forms share one representative in the fuzzy pass.
+  // The exact-key pass above has already joined every corresponding source row.
+  const buckets=new Map();nodes.forEach((n,i)=>{const k=key22717(n.primary),b=k.slice(0,6),signature=k+'|'+form22717(n.primary);if(!buckets.has(b))buckets.set(b,new Map());if(!buckets.get(b).has(signature))buckets.get(b).set(signature,i);});
+  buckets.forEach(unique=>{const ids=[...unique.values()];for(let a=0;a<ids.length;a++)for(let b=a+1;b<ids.length;b++){const x=nodes[ids[a]],y=nodes[ids[b]];if(near22717(x.primary,y.primary))union(ids[a],ids[b]);}});
   const groups=new Map();nodes.forEach((n,i)=>{const r=find(i);if(!groups.has(r))groups.set(r,{nodes:[],names:new Set(),keys:new Set(),roots:[],department:n.department});const g=groups.get(r);g.nodes.push(n);n.names.forEach(x=>g.names.add(x));n.roots.forEach(x=>{g.roots.push(x);const k=key22717(x);if(k)g.keys.add(k);});if((!g.department||g.department==='Без подразделения')&&n.department)g.department=n.department;});
   const defs=[...groups.values()].map(g=>{
     const freq=new Map();g.roots.forEach(x=>{const k=key22717(x);freq.set(k,(freq.get(k)||0)+1);});
@@ -1337,7 +1339,22 @@ window.RESANTA_V22717=Object.freeze({version:VERSION,universalLegalEntityKey:tru
 (function(){
 'use strict';
 const VERSION='v22.7.22';
-const state={historyPromise:null,ready:false,loadedStamp:'',statusCheckedAt:0,remotePromise:null};
+const state={historyPromise:null,historyRows:null,historyViewer:'',ready:false,loadedStamp:'',statusCheckedAt:0,remotePromise:null};
+const historyViewer=()=>String(currentProfile?.id||currentProfile?.email||currentProfile?.name||'');
+function fullHistoryReady(){
+  return state.ready&&state.loadedStamp===historyStamp()&&state.historyViewer===historyViewer()&&
+    state.historyRows===allPurchaseHistory&&!!state.historyRows?.length;
+}
+function rememberFullHistory(rows,stamp,viewer){
+  allPurchaseHistory=rows;
+  state.historyRows=rows;
+  state.historyViewer=viewer;
+  state.ready=true;
+  state.loadedStamp=stamp;
+  v2273HistoryNeedsRefresh=false;
+  invalidate();
+  return rows;
+}
 const ANALYTICS=new Set(['vip','falling','abc','sales','managers']);
 
 function salesRow(){try{return typeof crmImportStatus==='function'?crmImportStatus('sales'):null;}catch(_){return null;}}
@@ -1376,22 +1393,27 @@ function applyRemoteStatus(row){if(!row)return;allImportStatus=(allImportStatus|
 window.v22722EnsureHistory=async function(options={}){
   const force=!!options.force,reason=options.reason||'page';
   if(state.historyPromise)return state.historyPromise;
-  const localStamp=historyStamp();
-  if(state.ready&&!force&&state.loadedStamp===localStamp&&(allPurchaseHistory||[]).length)return allPurchaseHistory;
+  const localStamp=historyStamp(),viewer=historyViewer();
+  const historyCacheKey='purchase_history:full:'+viewer;
+  if(state.ready&&!force&&state.loadedStamp===localStamp&&state.historyViewer===viewer&&state.historyRows?.length){
+    if(fullHistoryReady())return state.historyRows;
+    return rememberFullHistory(state.historyRows,localStamp,viewer);
+  }
   state.historyPromise=(async()=>{
     try{
       let stamp=localStamp;
       if(force||Date.now()-state.statusCheckedAt>=60000){const remote=await remoteStatus();if(remote){applyRemoteStatus(remote);stamp=historyStamp()||stamp;}}
       const masterPending=!!window.RESANTA_MASTERLIST_REFRESH_PENDING;
       if(!force&&!masterPending){
-        const cached=await v2273CacheGet('purchase_history');
+        const cached=await v2273CacheGet(historyCacheKey);
         const valid=!!(cached&&Array.isArray(cached.rows)&&cached.rows.length&&stamp&&cached.historyStamp===stamp);
-        if(valid){allPurchaseHistory=cached.rows;state.ready=true;state.loadedStamp=stamp;v2273HistoryNeedsRefresh=false;invalidate();console.info(VERSION,'history from IndexedDB',allPurchaseHistory.length,reason);return allPurchaseHistory;}
+        if(valid&&historyViewer()===viewer)return rememberFullHistory(cached.rows,stamp,viewer);
       }
       const rows=await loadAllRows('purchase_history');
       if(!Array.isArray(rows)||!rows.length)throw new Error('purchase_history вернулась пустой — текущие данные не заменены.');
-      allPurchaseHistory=rows;state.ready=true;state.loadedStamp=stamp||historyStamp();v2273HistoryNeedsRefresh=false;invalidate();
-      try{await v2273CacheSet('purchase_history',{rows,historyStamp:state.loadedStamp,salesStamp:salesStamp(salesRow()),repairStamp:salesStamp(repairRow()),stamp:allStamp(),savedAt:Date.now()});}catch(_){ }
+      if(historyViewer()!==viewer)throw new Error('Учётная запись изменилась во время загрузки истории');
+      rememberFullHistory(rows,stamp||historyStamp(),viewer);
+      try{await v2273CacheSet(historyCacheKey,{rows,historyStamp:state.loadedStamp,salesStamp:salesStamp(salesRow()),repairStamp:salesStamp(repairRow()),stamp:allStamp(),savedAt:Date.now()});}catch(_){ }
       if(window.RESANTA_MASTERLIST_REFRESH_PENDING){try{localStorage.setItem('resanta_masterlist_full_refresh_v2276','ok');}catch(_){ }window.RESANTA_MASTERLIST_REFRESH_PENDING=false;}
       // Обороты обновляются порциями и не задерживают показ аналитики.
       try{v2273ApplyRevenueFromHistory();}catch(_){ }
@@ -1401,7 +1423,7 @@ window.v22722EnsureHistory=async function(options={}){
   })();
   return state.historyPromise;
 };
-window.v22722HistoryReady=()=>state.ready&&(allPurchaseHistory||[]).length>0;
+window.v22722HistoryReady=fullHistoryReady;
 
 async function ensureForPage(page){
   if(!ANALYTICS.has(page))return true;
@@ -1411,7 +1433,7 @@ async function ensureForPage(page){
     if(page==='abc'&&!v2273FeatureState['tasks-stock']?.loaded)await v2273EnsureFeature('tasks-stock');
     pageStatus(page,'');
     return true;
-  }catch(e){pageStatus(page,'Не удалось загрузить аналитику: '+(e.message||e));console.warn(VERSION+' '+page,e);return false;}
+  }catch(e){pageStatus(page,page==='abc'?'Не удалось загрузить ABC для выбранных фильтров. Попробуйте обновить или выбрать более короткий период.':'Не удалось загрузить аналитику: '+(e.message||e));console.warn(VERSION+' '+page,e);return false;}
 }
 
 // Ни один аналитический render не запускает тяжёлый расчёт, пока общая история
@@ -1419,7 +1441,8 @@ async function ensureForPage(page){
 function guardRender(name,page,extra){
   const base=window[name]||globalThis[name];if(typeof base!=='function')return;
   const wrapped=function(){
-    if(state.ready&&(allPurchaseHistory||[]).length)return base.apply(this,arguments);
+    if(page==='abc'&&window.RESANTA_ABC360)return base.apply(this,arguments);
+    if((page==='abc'&&window.crmFastAbcCurrentReady?.())||fullHistoryReady())return base.apply(this,arguments);
     const args=arguments;pageStatus(page,'Загружаю аналитику 1С… Можно продолжать работу в других разделах.');
     ensureForPage(page).then(ok=>{if(ok&&currentPage()===page){try{base.apply(this,args);}catch(e){console.warn(VERSION+' render '+page,e);}}});
   };
@@ -2241,15 +2264,17 @@ const waitTurn=()=>new Promise(resolve=>setTimeout(resolve,0));
 const activePage=()=>{try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'');}catch(_){return '';}};
 const h=v=>{try{return typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}catch(_){return String(v??'');}};
 const money=v=>{try{return typeof fmt==='function'?fmt(Number(v)||0):new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(v)||0);}catch(_){return String(Number(v)||0);}};
-const currentMonth=()=>String(window.TODAY||new Date().toISOString().slice(0,10)).slice(0,7);
+const vipToday=()=>String(typeof TODAY==='string'?TODAY:new Date().toISOString().slice(0,10));
+const currentMonth=()=>vipToday().slice(0,7);
 const rowMonth=r=>String(r?.month||'').slice(0,7);
 const prevYearMonth=ym=>/^\d{4}-\d{2}$/.test(String(ym||''))?(Number(String(ym).slice(0,4))-1)+'-'+String(ym).slice(5,7):null;
 const canon=v=>{try{return typeof canonicalSalesClientName==='function'?canonicalSalesClientName(v):String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]/giu,'');}catch(_){return String(v||'').toLowerCase().replace(/[^a-zа-я0-9]/giu,'');}};
-function oneEditNear(a,b){
-  a=canon(a);b=canon(b);if(!a||!b)return false;if(a===b)return true;if(Math.min(a.length,b.length)<6||Math.abs(a.length-b.length)>1)return false;
+function oneEditNearKeys(a,b){
+  if(!a||!b)return false;if(a===b)return true;if(Math.min(a.length,b.length)<6||Math.abs(a.length-b.length)>1)return false;
   let i=0,j=0,d=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++d>1)return false;if(a.length>b.length)i++;else if(b.length>a.length)j++;else{i++;j++;}}
   if(i<a.length||j<b.length)d++;return d<=1;
 }
+function oneEditNear(a,b){return oneEditNearKeys(canon(a),canon(b));}
 function rowUniqueKey(r){return r?.id!=null?'id:'+String(r.id):[r?.client_id||'',r?.client_name||'',r?.month||'',r?.category||'',r?.subgroup||'',r?.sku||'',r?.product||'',r?.qty||'',r?.revenue||''].join('|');}
 function variantsOf(c){try{return typeof clientNameVariants==='function'?clientNameVariants(c):[c?.name||''];}catch(_){return [c?.name||''];}}
 
@@ -2344,21 +2369,21 @@ function vipPeriodFilterHtml(period){
 }
 function defAliases(def){return [...new Set([def?.client_name,def?.legal_name,...(def?.member_names||[])].filter(Boolean))];}
 function matchedClientsFor(def){
-  const aliases=defAliases(def),keys=new Set([...aliases.map(canon),...(def?._v22717_keys||[])].filter(Boolean)),cacheKey='clients:'+canon(def?.client_name||aliases[0]||'');
+  const aliases=defAliases(def),aliasKeys=aliases.map(canon),keys=new Set([...aliasKeys,...(def?._v22717_keys||[])].filter(Boolean)),cacheKey='clients:'+canon(def?.client_name||aliases[0]||'');
   if(vipPerf.entityCache.has(cacheKey))return vipPerf.entityCache.get(cacheKey);
   const rows=(allClients||[]).filter(c=>{
-    const vars=variantsOf(c);for(const v of vars){const k=canon(v);if(k&&keys.has(k))return true;for(const a of aliases)if(oneEditNear(v,a))return true;}return false;
+    const vars=variantsOf(c);for(const v of vars){const k=canon(v);if(k&&keys.has(k))return true;for(const a of aliasKeys)if(oneEditNearKeys(k,a))return true;}return false;
   });
   vipPerf.entityCache.set(cacheKey,rows);return rows;
 }
 function entityRows(def){
   const key='rows:'+canon(def?.client_name||'');if(vipPerf.entityCache.has(key))return vipPerf.entityCache.get(key);
-  const clients=matchedClientsFor(def),ids=new Set(clients.map(c=>String(c?.id||'')).filter(Boolean)),aliases=defAliases(def),nameKeys=new Set([...aliases.map(canon),...(def?._v22717_keys||[])].filter(Boolean)),groups=[];
+  const clients=matchedClientsFor(def),ids=new Set(clients.map(c=>String(c?.id||'')).filter(Boolean)),aliases=defAliases(def),nameKeys=new Set([...aliases.map(canon),...(def?._v22717_keys||[])].filter(Boolean)),fuzzyKeys=[...nameKeys].map(canon),groups=[];
   ids.forEach(id=>{const a=vipPerf.byId.get(id);if(a)groups.push(a);});
   nameKeys.forEach(k=>{const a=vipPerf.byName.get(k);if(a)groups.push(a);});
   // Поддерживаем старую страховку от опечатки в 1 символ, но сравниваем только
   // уникальные имена, а не заново все 39k строк для каждого ВИП.
-  for(const k of vipPerf.nameKeys){if(nameKeys.has(k))continue;let ok=false;for(const a of nameKeys){if(oneEditNear(k,a)){ok=true;break;}}if(ok)groups.push(vipPerf.byName.get(k));}
+  for(const k of vipPerf.nameKeys){if(nameKeys.has(k))continue;let ok=false;for(const a of fuzzyKeys){if(oneEditNearKeys(k,a)){ok=true;break;}}if(ok)groups.push(vipPerf.byName.get(k));}
   const out=[],seen=new Set();for(const g of groups||[])for(const r of g||[]){const rk=rowUniqueKey(r);if(!seen.has(rk)){seen.add(rk);out.push(r);}}
   vipPerf.entityCache.set(key,out);return out;
 }
@@ -2385,11 +2410,21 @@ async function buildVipSummaries(){
 }
 function monthLabel(ym){try{return typeof vipMonthLabel==='function'?vipMonthLabel(ym):String(ym||'—');}catch(_){return String(ym||'—');}}
 function amount(period,prev,cur){return period.comparable?(money(prev)+' → '+money(cur)+' BYN'):(money(cur)+' BYN');}
-function vipRenderSignature(list,period){return [vipPerf.renderToken,period.prev,period.cur,currentProfile?.role||'',currentProfile?.name||'',list.length,(allVipSales||[]).length].join('|');}
+function vipRenderSignature(list,period){return [vipPerf.renderToken,period.prev,period.cur,period.signature,currentProfile?.role||'',currentProfile?.name||'',list.length,(allVipSales||[]).length].join('|');}
 
 async function makeDetail(summary,cardId){
   if(vipPerf.details.has(cardId))return vipPerf.details.get(cardId);
   if(vipPerf.detailFlights.has(cardId))return vipPerf.detailFlights.get(cardId);
+  if(summary?.exactPeriod){
+    const categories=Object.values(summary.categories).map(category=>({
+      ...category,subgroups:new Map(Object.entries(category.subgroups).map(([key,subgroup])=>[
+        key,{...subgroup,items:new Map(subgroup.items.map((item,index)=>[index,item]))}
+      ]))
+    })).sort((a,b)=>b.revenue_cur-a.revenue_cur);
+    const detail={period:summary.exactPeriod,categories};
+    vipPerf.details.set(cardId,detail);
+    return detail;
+  }
   const p=(async()=>{
     const detailToken=vipPerf.renderToken,period=vipPeriod(),cats=new Map(),currentByCat=new Map();let currentTotal=0;const rows=summary?._perf_rows||[];
     for(let i=0;i<rows.length;i++){
@@ -2415,7 +2450,7 @@ function detailShell(summary,detail,cardId){
   const period=detail.period,cats=detail.categories;
   const catsHtml=cats.map((c,ci)=>'<div style="border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;padding:7px 8px 7px 0;cursor:pointer;gap:10px" onclick="v227316ToggleVipCategory(\''+cardId+'\','+ci+',this)"><span style="font-size:13px"><span class="mlcat-arrow" style="display:inline-block;margin-right:6px;font-size:10px">▸</span>'+h(c.category)+'</span><span style="font-size:13px;color:var(--sub);white-space:nowrap;display:flex;align-items:center;gap:6px">'+amount(period,c.revenue_prev,c.revenue_cur)+(period.comparable?targetTag(c.revenue_prev,c.revenue_cur):'')+'</span></div><div id="'+cardId+'_cat_'+ci+'" style="display:none"></div></div>').join('');
   let promo='';try{promo=typeof promotionVipLinkBlock==='function'?promotionVipLinkBlock(summary.client_name):'';}catch(_){promo='';}
-  return currentSalesHtml(detail)+catsHtml+promo;
+  return (period.exact?'':currentSalesHtml(detail))+catsHtml+promo;
 }
 window.v227316ToggleVipCategory=function(cardId,ci,head){
   const body=document.getElementById(cardId+'_cat_'+ci),detail=vipPerf.details.get(cardId),c=detail?.categories?.[ci];if(!body||!c)return;
@@ -2454,9 +2489,10 @@ function renderVipFast(list,period){
   const isBoss=currentProfile?.role==='boss',myName=currentProfile?.name;let clients=list;if(!isBoss)clients=clients.filter(g=>g.matched&&g.matched.manager_name===myName);clients=clients.slice().sort((a,b)=>b.revenue_cur-a.revenue_cur);
   const sig=vipRenderSignature(clients,period),root=document.getElementById('vip-list');if(!root)return;
   if(vipPerf.lastRenderSig===sig&&root.childElementCount)return;vipPerf.lastRenderSig=sig;setVipStatus('');
+  vipPerf.details.clear();
   const periodEl=document.getElementById('vip-period-info');if(periodEl){
     if(period.cur){
-      const curLabel=monthLabel(period.cur),prevLabel=monthLabel(period.prev),asOf=String(window.TODAY||'').split('-').reverse().join('.');
+      const curLabel=monthLabel(period.cur),prevLabel=monthLabel(period.prev),asOf=vipToday().split('-').reverse().join('.');
       periodEl.innerHTML=vipPeriodFilterHtml(period)
         +'<div class="card-title">Как считается ВИП</div>'
         +'<div style="font-size:13px;line-height:1.65"><b>Ориентир:</b> полный <b>'+h(prevLabel)+'</b> → '+(period.partial?'текущий':'полный')+' <b>'+h(curLabel)+'</b>'+(period.partial?' <span class="tag" style="background:var(--amb);color:var(--am)">факт на '+h(asOf)+'</span>':'')+'</div>'
@@ -2472,7 +2508,7 @@ function renderVipFast(list,period){
   const declBlock=document.getElementById('vip-decliners-block'),declRoot=document.getElementById('vip-decliners'),declTitle=declBlock?.querySelector('.card-title');if(declTitle)declTitle.textContent='🎯 Больше всего осталось до уровня '+monthLabel(period.prev)+' (топ-5)';
   const targets=clients.filter(g=>g.month_comparable&&(Number(g.revenue_prev)||0)>0&&g.target_gap>0).slice().sort((a,b)=>b.target_gap-a.target_gap).slice(0,5);if(declBlock)declBlock.style.display=targets.length?'block':'none';if(declRoot)declRoot.innerHTML=targets.map(g=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);gap:10px"><span style="cursor:pointer" data-vip-name="'+h(g.client_name)+'" onclick="v227316OpenVipTarget(this)">'+h(g.client_name)+(g.matched?' <span class="tag tag-gray">👤 '+h(g.matched.manager_name)+'</span>':'')+'</span><span style="display:flex;gap:7px;align-items:center;white-space:nowrap">'+targetTag(g.revenue_prev,g.revenue_cur)+'<b style="font-size:11px;color:var(--sub)">осталось '+money(g.target_gap)+' BYN</b></span></div>').join('');
   const byDept={};clients.forEach(g=>{(byDept[g.department||'Без подразделения']=byDept[g.department||'Без подразделения']||[]).push(g);});const depts=Object.keys(byDept).sort((a,b)=>byDept[b].length-byDept[a].length);let seq=0;vipPerf.cards=new Map();_vipCardIdByName={};
-  root.innerHTML=depts.map(dept=>{const arr=byDept[dept],gid='vipdept_perf_'+seq+'_'+canon(dept).slice(0,12),open=(()=>{try{return vipFoldersOpen.has(gid);}catch(_){return false;}})(),cards=arr.map(g=>{const cid='vipcard_perf_'+(seq++);_vipCardIdByName[g.client_name]=cid;vipPerf.cards.set(cid,g);const label=period.comparable?(monthLabel(period.prev)+' → '+monthLabel(period.cur)+(period.partial?' на '+String(window.TODAY||'').split('-').reverse().join('.'):'')):monthLabel(period.cur),gap=g.month_comparable&&g.revenue_prev>0?'<div style="font-size:10px;color:var(--sub);margin-top:4px">До уровня '+h(monthLabel(period.prev))+': <b>'+money(g.target_gap)+' BYN</b></div>':'',points=g._perf_points>1?'<div style="font-size:11px;color:var(--sub);margin-top:3px">Торговых точек / карточек в юрлице: '+g._perf_points+'</div>':'';return '<div class="card" style="margin-bottom:10px;content-visibility:auto;contain-intrinsic-size:96px"><div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:12px" onclick="v227316ToggleVipCard(\''+cid+'\')"><div><div style="font-size:14px;font-weight:600">'+h(g.client_name)+'</div>'+(g.matched?'<span class="tag tag-gray" style="margin-top:4px">👤 '+h(g.matched.manager_name)+'</span>':'<span class="tag tag-gray" style="margin-top:4px">не привязан к карточке клиента</span>')+points+'</div><div style="text-align:right"><div style="font-size:11px;color:var(--sub)">'+h(label)+'</div><div style="font-size:13px;font-weight:600">'+amount(period,g.revenue_prev,g.revenue_cur)+'</div>'+(g.month_comparable?targetTag(g.revenue_prev,g.revenue_cur):'<span class="tag tag-gray">нет базы прошлого года</span>')+gap+'</div></div><div id="'+cid+'" data-loaded="0" style="display:none;margin-top:12px"></div></div>';}).join('');const id=gid;try{if(open)vipFoldersOpen.add(id);}catch(_){ }return '<div class="card" style="margin-bottom:10px"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleVipFolder(\''+id+'\')"><div style="font-size:14px;font-weight:600">📁 '+h(dept)+' <span class="tag tag-gray">'+arr.length+' клиент'+(arr.length===1?'':arr.length<5?'а':'ов')+'</span></div><span style="font-size:13px;color:var(--sub)" id="'+id+'_arrow">'+(open?'▲':'▼')+'</span></div><div id="'+id+'" style="display:'+(open?'block':'none')+';margin-top:10px">'+cards+'</div></div>';}).join('');
+  root.innerHTML=depts.map(dept=>{const arr=byDept[dept],gid='vipdept_perf_'+seq+'_'+canon(dept).slice(0,12),open=(()=>{try{return vipFoldersOpen.has(gid);}catch(_){return false;}})(),cards=arr.map(g=>{const cid='vipcard_perf_'+(seq++);_vipCardIdByName[g.client_name]=cid;vipPerf.cards.set(cid,g);const label=period.comparable?(monthLabel(period.prev)+' → '+monthLabel(period.cur)+(period.partial?' на '+vipToday().split('-').reverse().join('.'):'')):monthLabel(period.cur),gap=g.month_comparable&&g.revenue_prev>0?'<div style="font-size:10px;color:var(--sub);margin-top:4px">До уровня '+h(monthLabel(period.prev))+': <b>'+money(g.target_gap)+' BYN</b></div>':'',points=g._perf_points>1?'<div style="font-size:11px;color:var(--sub);margin-top:3px">Торговых точек / карточек в юрлице: '+g._perf_points+'</div>':'';return '<div class="card" style="margin-bottom:10px;content-visibility:auto;contain-intrinsic-size:96px"><div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:12px" onclick="v227316ToggleVipCard(\''+cid+'\')"><div><div style="font-size:14px;font-weight:600">'+h(g.client_name)+'</div>'+(g.matched?'<span class="tag tag-gray" style="margin-top:4px">👤 '+h(g.matched.manager_name)+'</span>':'<span class="tag tag-gray" style="margin-top:4px">не привязан к карточке клиента</span>')+points+'</div><div style="text-align:right"><div style="font-size:11px;color:var(--sub)">'+h(label)+'</div><div style="font-size:13px;font-weight:600">'+amount(period,g.revenue_prev,g.revenue_cur)+'</div>'+(g.month_comparable?targetTag(g.revenue_prev,g.revenue_cur):'<span class="tag tag-gray">нет базы прошлого года</span>')+gap+'</div></div><div id="'+cid+'" data-loaded="0" style="display:none;margin-top:12px"></div></div>';}).join('');const id=gid;try{if(open)vipFoldersOpen.add(id);}catch(_){ }return '<div class="card" style="margin-bottom:10px"><div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleVipFolder(\''+id+'\')"><div style="font-size:14px;font-weight:600">📁 '+h(dept)+' <span class="tag tag-gray">'+arr.length+' клиент'+(arr.length===1?'':arr.length<5?'а':'ов')+'</span></div><span style="font-size:13px;color:var(--sub)" id="'+id+'_arrow">'+(open?'▲':'▼')+'</span></div><div id="'+id+'" style="display:'+(open?'block':'none')+';margin-top:10px">'+cards+'</div></div>';}).join('');
 }
 
 // Финальный authoritative render VIP: сразу отдаёт управление браузеру, затем
@@ -2480,20 +2516,35 @@ function renderVipFast(list,period){
 // одинаковая сигнатура не перестраивает DOM второй раз.
 const renderVipFastEntry=function(){
   if(activePage()!=='vip')return;
-  const token=vipPerf.renderToken;
   const run=async()=>{
+    if(activePage()!=='vip')return;
+    const now=()=>typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+    const started=now(),timings={started_at:new Date().toISOString(),history_ms:0,index_ms:0,summary_ms:0,render_ms:0,total_ms:0};
     try{
-      if(!(Array.isArray(allPurchaseHistory)&&allPurchaseHistory.length)){
+      const exact=window.RESANTA_VIP_DATE_RANGE_V236434?.snapshot();
+      if(exact){
+        for(const row of exact.list)row.exactPeriod=exact.period;
+        renderVipFast(exact.list,exact.period);
+        return;
+      }
+      if(!window.v22722HistoryReady?.()){
         setVipStatus('Загружаю аналитику 1С… Навигация остаётся доступной.');
         if(typeof window.v22722EnsureHistory!=='function')throw new Error('общий загрузчик истории 1С недоступен');
+        const stage=now();
         await window.v22722EnsureHistory({reason:'vip-v227316'});
+        timings.history_ms=Math.round(now()-stage);
       }
-      if(activePage()!=='vip')return;
+      if(activePage()!=='vip'||!window.v22722HistoryReady?.())return;
       if(vipDataChanged())resetVipPerf();
       setVipStatus('Подготавливаю ВИП-аналитику… Можно сразу перейти в другой раздел.');
-      await buildVipIndex();if(activePage()!=='vip')return;
-      const list=await buildVipSummaries();if(activePage()!=='vip')return;
+      let stage=now();
+      await buildVipIndex();if(activePage()!=='vip'||!window.v22722HistoryReady?.())return;
+      timings.index_ms=Math.round(now()-stage);stage=now();
+      const list=await buildVipSummaries();if(activePage()!=='vip'||!window.v22722HistoryReady?.())return;
+      timings.summary_ms=Math.round(now()-stage);stage=now();
       renderVipFast(list,vipPeriod());
+      timings.render_ms=Math.round(now()-stage);timings.total_ms=Math.round(now()-started);
+      window.RESANTA_VIP_LOAD_TIMINGS=Object.freeze(timings);
     }catch(e){if(activePage()==='vip')setVipStatus('Не удалось загрузить ВИП-аналитику: '+(e?.message||e));console.warn(VERSION+' VIP',e);}
   };
   // Важно: не начинаем даже лёгкую агрегацию в том же task, где обработан клик меню.

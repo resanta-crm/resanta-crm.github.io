@@ -21,8 +21,9 @@ const viewer=()=>{try{return String(currentProfile?.id||currentProfile?.email||m
 const active=()=>{try{return typeof crmActivePage==='function'?crmActivePage():$('app')?.dataset?.activePage}catch(_){return''}};
 const dbx=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db}};
 const currentYear=()=>{try{return Number(String(TODAY||'').slice(0,4))||new Date().getFullYear()}catch(_){return new Date().getFullYear()}};
-const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,loading:false,error:'',data:null,selectedMonth:'',draft:false,chartExpanded:false,clientsOpen:false,clientSearch:'',clientOffset:0,clientKey:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',recoveryFocusCat:'',recoveryFocusSub:'',recoveryFocusData:null,recoveryFocusLoading:false,recoveryFocusError:'',clientRecoveryFilter:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0};
+const state={year:currentYear(),manager:boss()?'all':managerMe(),view:'months',category:'all',detail:'clients',expanded:false,legacy:false,fallbackReason:'',loading:false,error:'',data:null,selectedMonth:'',period1Start:'',period1End:'',period2Start:'',period2End:'',comparisonData:null,comparisonError:'',comparisonLoading:false,draft:false,chartExpanded:false,annualOpen:false,clientsOpen:true,clientSearch:'',clientOffset:0,clientKey:'',clientTab:'overview',clientFocusMonth:'',clientData:null,clientError:'',clientLoading:false,focusClientOnLoad:false,recoveryPeriod:'last3',recoveryTab:'subgroups',recoveryExpanded:false,recoveryData:null,recoveryLoading:false,recoveryError:'',recoveryFocusCat:'',recoveryFocusSub:'',recoveryFocusData:null,recoveryFocusLoading:false,recoveryFocusError:'',clientRecoveryFilter:'',clientRecoveryData:null,clientRecoveryLoading:false,clientRecoveryError:'',clientListScroll:0};
 let mounted=false,wrapped=false,requestVersion=0,clientVersion=0,recoveryVersion=0,clientRecoveryVersion=0,recoveryFocusVersion=0,sourceRender=null;
+let salesScope='',annualLoadingKey='',comparisonKey='';
 const newDrill=()=>({category:'',subgroup:'',level:'subgroups',search:'',offset:0,loading:false,error:'',data:null,clientKey:''});
 const drillStates={global:newDrill(),client:newDrill()};
 const drillVersions={global:0,client:0};
@@ -34,7 +35,9 @@ function resetDrill(scope){
 function resetAllDrills(){resetDrill('global');resetDrill('client')}
 
 const cache=new Map(),pending=new Map(),TTL=180000;
-let rangeDraft=null,rangeResult=null,rangeScope='',rangeRevision=0;
+const kpiMonths=new Map(),kpiPeriods=new Map();
+const kpiManagerKey=name=>String(name||'').trim().toLowerCase();
+const fieldManagers=['Руднев','Ачинович','Шкуран'];
 const recoveryCache=new Map(),recoveryPending=new Map(),RECOVERY_TTL=300000;
 // Drill responses are aggregate-only; repeat navigation should never rescan 1C.
 const drillCache=new Map(),drillPending=new Map(),DRILL_TTL=300000,DRILL_MAX=60;
@@ -56,9 +59,9 @@ function clearRecovery(){
  recoveryFocusVersion++;state.recoveryFocusCat='';state.recoveryFocusSub='';state.recoveryFocusData=null;state.recoveryFocusLoading=false;state.recoveryFocusError='';
  clearClientRecovery();
 }
-function clearClientState(){clientVersion++;state.clientOffset=0;state.clientKey='';state.clientData=null;state.clientError='';state.clientLoading=false;state.focusClientOnLoad=false;clearClientRecovery();resetDrill('client');}
+function clearClientState(){clientVersion++;state.clientOffset=0;state.clientKey='';state.clientTab='overview';state.clientFocusMonth='';state.clientData=null;state.clientError='';state.clientLoading=false;state.focusClientOnLoad=false;clearClientRecovery();resetDrill('client');}
 const monthRows=d=>arr(d?.months).filter(x=>x?.has_current||(state.year<currentYear()&&x?.has_previous));
-const focusedMonth=d=>{const a=monthRows(d);return a.find(x=>x.month===state.selectedMonth)||a.filter(x=>x.has_current).slice(-1)[0]||a.slice(-1)[0]||null};
+const focusedMonth=d=>{const a=monthRows(d);return a.find(x=>x.month===state.selectedMonth)||a.filter(x=>x.closed&&x.has_current).slice(-1)[0]||a.filter(x=>x.has_current).slice(-1)[0]||a.slice(-1)[0]||null};
 function monthLabel(ym){const m=Number(String(ym||'').slice(5,7));return(MONTHS[m-1]||'—')+' '+String(ym||'').slice(0,4)}
 function freshLabel(f){
  if(!f?.last_success_at)return f?.report_date?String(f.report_date).slice(0,10):'дата не подтверждена';
@@ -85,7 +88,7 @@ function focusedHtml(d,periods){
  '<div><small>'+esc(d.year+' · оборот')+'</small><strong>'+esc(p.hasCurrent?whole(p.current):'Нет данных')+'</strong></div>'+
  '<div><small>'+esc(d.previous_year+' · оборот')+'</small><strong>'+esc(p.hasPrevious?whole(p.previous):'Нет данных')+'</strong></div>'+
  '<div><small>Разница</small><strong>'+esc(change)+'</strong></div></div>'+
- '<div class="s360-muted" style="margin-top:8px">'+(p.partial?'Период не закрыт. Нельзя сравнивать его с полным аналогичным периодом прошлого года.':'Сопоставимые закрытые периоды.')+' Нажмите на точку графика или выберите месяц.</div>';
+ '<div class="s360-muted" style="margin-top:8px">'+(p.partial?'Текущий месяц':'Завершённый месяц')+'</div>';
 }
 function monthControls(d){
  const list=monthRows(d),months=list.length?list.map(x=>x.month):Array.from({length:12},(_,i)=>state.year+'-'+String(i+1).padStart(2,'0'));
@@ -96,98 +99,16 @@ function monthControls(d){
  '<button type="button" class="s360-btn" data-s360-step="1"'+(index===months.length-1?' disabled':'')+' aria-label="Следующий месяц">→</button></div></div>';
 }
 function filtersHtml(d){
- const years=[currentYear(),currentYear()-1,currentYear()-2,currentYear()-3].filter(x=>x>=2023);
- return '<div class="s360-filters">'+
- '<div class="s360-field"><label for="s360-year">Год сравнения</label><select id="s360-year" data-s360-select="year">'+years.map(x=>'<option value="'+x+'"'+(state.year===x?' selected':'')+'>'+x+' / '+(x-1)+'</option>').join('')+'</select></div>'+
- monthControls(d)+showSelectorOptions(d)+
- '<div class="s360-field"><label for="s360-view">График</label><select id="s360-view" data-s360-select="view"><option value="months"'+(state.view==='months'?' selected':'')+'>Месяцы</option><option value="quarters"'+(state.view==='quarters'?' selected':'')+'>Кварталы</option></select></div>'+
- '<button type="button" class="s360-btn" data-s360-refresh>↻ Обновить</button></div>';
+ return '<div class="s360-panel s360-primary-filters"><div class="s360-filters">'+
+ periodFiltersHtml(d)+showSelectorOptions(d)+
+ '<button type="button" class="s360-btn" data-s360-refresh>Обновить</button></div></div>';
 }
 function headerHtml(d){
- return '<div class="s360-head"><div><h2>Продажи 360° · Управление ростом</h2><div class="s360-muted">1С · менеджеры · товарные группы · клиенты · с НДС</div></div>'+
- '<div class="s360-muted">Обновление 1С: '+esc(freshLabel(d?.freshness))+'</div></div>';
-}
-function salesMonthRange(from,to){
- const valid=value=>/^\d{4}-(0[1-9]|1[0-2])$/.test(value);
- if(!valid(from)||!valid(to)||from<'2023-01'||from>to||to>currentYear()+'-12')return [];
- const months=[];
- for(let month=from;month<=to;){
-  months.push(month);
-  const [year,index]=month.split('-').map(Number);
-  month=index===12?(year+1)+'-01':year+'-'+String(index+1).padStart(2,'0');
- }
- return months;
-}
-function rangeTotals(months,byYear){
- const rows=months.map(month=>arr(byYear.get(Number(month.slice(0,4)))?.months).find(row=>row.month===month));
- const available=rows.length>0&&rows.every(row=>row?.has_current);
- return {total:available?rows.reduce((sum,row)=>sum+num(row.current),0):null,
-  closed:available&&rows.every(row=>row.closed&&!row.partial),months:months.length};
-}
-function rangePanel(data){
- if(!data)return '';
- const scope=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
- if(scope!==rangeScope){rangeScope=scope;rangeDraft=null;rangeResult=null;}
- const year=Number(data.year)||state.year;
- const last=String(Math.max(1,num(data.closed_month)||1)).padStart(2,'0');
- const defaults={firstFrom:year+'-01',firstTo:year+'-'+last,secondFrom:(year-1)+'-01',secondTo:(year-1)+'-'+last};
- const input=(name,label)=>'<label class="s360-field"><span>'+label+'</span><input required type="month" name="'+name+'" min="2023-01" max="'+currentYear()+'-12" value="'+esc((rangeDraft||defaults)[name])+'"></label>';
- return '<details class="s360-panel s360-range"'+(rangeDraft?' open':'')+'><summary>Сравнить периоды продаж</summary>'+
-  '<form class="s360-range-form" data-s360-range><fieldset><legend>Основной период</legend>'+input('firstFrom','С')+input('firstTo','По')+
-  '</fieldset><fieldset><legend>Период сравнения</legend>'+input('secondFrom','С')+input('secondTo','По')+
-  '</fieldset><button type="submit" class="s360-btn">Сравнить</button></form><div data-s360-range-result aria-live="polite">'+(rangeResult||'')+'</div></details>';
-}
-async function compareRanges(form){
- const draft=Object.fromEntries(new FormData(form));
- rangeDraft=draft;
- const first=salesMonthRange(draft.firstFrom,draft.firstTo);
- const second=salesMonthRange(draft.secondFrom,draft.secondTo);
- const actor=viewer(),scope=rangeScope,manager=boss()&&state.manager!=='all'?state.manager:null,revision=++rangeRevision;
- const paint=markup=>{
-  if(revision!==rangeRevision||active()!=='sales'||rangeScope!==scope||viewer()!==actor||state.loading)return;
-  rangeResult=markup;
-  const result=$(ID)?.querySelector('[data-s360-range-result]');
-  if(result)result.innerHTML=markup;
- };
- if(!first.length||!second.length){paint('<p role="alert">Укажите начало и конец каждого периода.</p>');return;}
- paint('<p role="status">Загружаю продажи за выбранные месяцы…</p>');
- try{
-  const current=state.data;
-  const years=new Set([...first,...second].map(month=>Number(month.slice(0,4))));
-  const byYear=new Map([[Number(current.year),current]]);
-  for(const year of years){
-   if(revision!==rangeRevision||active()!=='sales'||rangeScope!==scope||viewer()!==actor) return;
-   if(byYear.has(year))continue;
-   const key=[actor,year,boss()?state.manager:managerMe()].join('|');
-   let entry=cache.get(key);
-   if(!entry||Date.now()-entry.at>=TTL){
-    const {data,error}=await dbx().rpc('crm_sales360_annual_v2',{p_year:year,p_manager:manager,p_exclude_triovist:false});
-    if(error||!Array.isArray(data?.months))throw error||Error('Неполный ответ сервера');
-    if(revision!==rangeRevision||viewer()!==actor||rangeScope!==scope)return;
-    entry={at:Date.now(),data};
-    cache.set(key,entry);
-    while(cache.size>16)cache.delete(cache.keys().next().value);
-   }
-   byYear.set(year,entry.data);
-  }
-  const main=rangeTotals(first,byYear),baseline=rangeTotals(second,byYear);
-  const delta=main.total===null||baseline.total===null?null:main.total-baseline.total;
-  const percent=delta!==null&&main.closed&&baseline.closed&&main.months===baseline.months&&baseline.total>0?delta/baseline.total*100:null;
-  const format=value=>value===null?'—':money(value);
-  const row=(label,value)=>'<tr><th scope="row">'+label+'</th><td>'+esc(value)+'</td></tr>';
-  paint('<div class="s360-tablewrap"><table aria-label="Суммы продаж за выбранные периоды"><tbody>'+
-   row('Основной период',format(main.total))+row('Период сравнения',format(baseline.total))+
-   row('Разница',delta>0?'+'+format(delta):format(delta))+
-   row('Изменение',percent===null?'—':(percent>0?'+':'')+percent.toFixed(1).replace('.',',')+'%')+
-   '</tbody></table></div>'+
-   (main.total===null||baseline.total===null?'<p class="s360-muted">За часть выбранных месяцев нет подтверждённых данных 1С.</p>':
-    !main.closed||!baseline.closed?'<p class="s360-muted">В выборке есть незакрытый месяц. Суммы предварительные.</p>':
-    main.months!==baseline.months?'<p class="s360-muted">Периоды содержат разное количество месяцев.</p>':''));
- }catch(error){paint('<p role="alert">Не удалось сравнить периоды. Повторите загрузку.</p>');}
+ return '<div class="s360-head"><div><h2>Продажи филиала</h2></div></div>';
 }
 function monthKpi(d){
- const k=arr(d?.kpi).filter(x=>num(x.plan)>0);
- return {plan:k.reduce((s,x)=>s+num(x.plan),0),actual:k.reduce((s,x)=>s+num(x.actual),0),count:k.length};
+ const planned=arr(d?.kpi).filter(row=>num(row.plan)>0);
+ return {plan:planned.reduce((total,row)=>total+num(row.plan),0),actual:planned.reduce((total,row)=>total+num(row.actual),0),count:planned.length};
 }
 function closedRows(d){
  return arr(d?.months).filter(x=>x.closed&&x.has_current);
@@ -253,7 +174,30 @@ function styles(){
  scope+' .s360-field label{font-size:10px;color:var(--sub);font-weight:600}',
  scope+' .s360-field select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:inherit;font-size:12px}',
  scope+' .s360-filters{display:flex;flex-wrap:wrap;gap:9px;align-items:end}',
- scope+' .s360-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}',
+ scope+' .s360-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}',
+ scope+' .s360-advanced,'+scope+' .s360-annual-detail{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--card)}',
+ scope+' .s360-advanced summary,'+scope+' .s360-annual-detail summary{font-size:16px;font-weight:700;cursor:pointer;color:var(--a)}',
+ scope+' .s360-advanced .s360-filters{margin-top:12px}',
+ scope+' .s360-annual-detail>*:not(summary){margin-top:12px}',
+ scope+' .s360-compare-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}',
+ scope+' .s360-compare-filters fieldset{display:flex;gap:10px;min-width:0;border:1px solid var(--border);border-radius:9px;padding:10px}',
+ scope+' .s360-compare-filters legend{font-size:15px;font-weight:700;padding:0 4px}',
+ scope+' .s360-compare-filters label{flex:1;font-size:14px}',
+ scope+' .s360-compare-filters input{width:100%;min-width:0;border:1px solid var(--border);border-radius:7px;padding:8px;font:inherit}',
+ scope+' .s360-compare-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}',
+ scope+' .s360-compare-card{display:grid;gap:6px;padding:10px;border:1px solid var(--border);border-radius:9px}',
+ scope+' .s360-compare-card span{font-size:14px;color:var(--sub)}',
+ scope+' .s360-compare-card strong{font-size:20px;overflow-wrap:anywhere}',
+ scope+' .s360-compare-bars{display:grid;grid-template-columns:20px 1fr;gap:7px;align-items:center;margin:12px 0}',
+ scope+' .s360-compare-bars>div{height:14px;background:var(--bg);border-radius:7px;overflow:hidden}',
+ scope+' .s360-compare-bars i{display:block;height:100%;background:var(--a,#185FA5);border-radius:7px}',
+ scope+' .s360-compare-bars i.previous{background:#94a3b8}',
+ scope+' .s360-compare-result{display:flex;gap:16px;flex-wrap:wrap;font-size:16px}',
+ scope+' .s360-period-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}',
+ scope+' .s360-period-value{display:grid;gap:5px;padding:12px;border:1px solid var(--border);border-radius:10px;min-width:0}',
+ scope+' .s360-period-value small{font-size:12px;color:var(--sub)}',
+ scope+' .s360-period-value strong{font-size:22px;overflow-wrap:anywhere}',
+ scope+' .s360-period-value span{font-size:12px;color:var(--sub);line-height:1.4}',
  scope+' .s360-tile,'+scope+' .s360-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;min-width:0}',
  scope+' .s360-tile small{display:block;font-size:11px;color:var(--sub)}',
  scope+' .s360-tile strong{display:block;font-size:23px;letter-spacing:-.6px;overflow-wrap:anywhere;margin:6px 0}',
@@ -280,9 +224,13 @@ function styles(){
  scope+' .s360-client-item.active{border-color:var(--a);background:var(--ab)}',
  scope+' .s360-client-detail{border:1px solid var(--border);background:var(--bg);border-radius:11px;padding:14px;margin-top:12px}',
  scope+' .s360-client-graph{display:grid;gap:6px;margin-top:10px}',
- scope+' .s360-client-month{display:grid;grid-template-columns:46px minmax(60px,1fr) 100px 100px;gap:8px;align-items:center;font-size:11px}',
- scope+' .s360-client-track{height:11px;border-radius:7px;background:var(--card);display:flex;overflow:hidden}',
- scope+' .s360-client-track i{height:11px;display:block;background:#2563eb}',
+ scope+' .s360-client-month{display:grid;grid-template-columns:52px minmax(100px,1fr) 160px 85px;gap:10px;align-items:center;font-size:14px}',
+ scope+' .s360-client-tracks,.s360-client-month-values{display:grid;gap:5px;min-width:0}',
+ scope+' .s360-client-month-values{font-variant-numeric:tabular-nums}',
+ scope+' .s360-client-month-percent{text-align:right;white-space:nowrap}',
+ scope+' .s360-client-track{height:10px;border-radius:7px;background:var(--bg);display:flex;overflow:hidden}',
+ scope+' .s360-client-track i{height:10px;display:block;background:var(--a,#185FA5)}',
+ scope+' .s360-client-track.previous i{background:#94a3b8}',
  scope+' .s360-client-split{display:grid;grid-template-columns:minmax(260px,0.83fr) minmax(430px,1.35fr);gap:12px;margin-top:14px;align-items:start}',
  scope+' .s360-client-left{border:1px solid var(--border);border-radius:10px;padding:10px;max-height:75vh;overflow:auto;min-width:0}',
  scope+' .s360-client-right{border:1px solid var(--border);border-radius:10px;padding:12px;min-height:220px;max-height:75vh;overflow-y:auto;min-width:0;scroll-margin-top:16px}',
@@ -316,22 +264,21 @@ function styles(){
  scope+' .s360-drill{margin-top:14px;border:1px solid var(--border);border-radius:11px;padding:14px;background:var(--card)}',
  scope+' .s360-drill-nav{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:12px}',
  scope+' .s360-drill-rows{display:grid;gap:6px;margin-top:10px}',
- scope+' .s360-drill-row{width:100%;display:grid;grid-template-columns:minmax(170px,2fr) minmax(90px,.85fr) minmax(90px,.85fr) minmax(90px,.85fr) minmax(50px,.5fr);gap:9px;align-items:center;text-align:right;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);padding:11px 10px;font:inherit}',
+ scope+' .s360-drill-row{width:100%;display:grid;grid-template-columns:minmax(210px,2fr) minmax(100px,.85fr) minmax(100px,.85fr) minmax(115px,.9fr);gap:12px;align-items:center;text-align:right;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);padding:12px;font:inherit;font-size:14px}',
  scope+' button.s360-drill-row{cursor:pointer}',
  scope+' button.s360-drill-row:hover{background:var(--bg)}',
  scope+' .s360-drill-row>:first-child{text-align:left;overflow-wrap:anywhere}',
- scope+' .s360-drill-row b{font-size:12px}',
- scope+' .s360-drill-row small{font-size:10px;color:var(--sub);display:block}',
+ scope+' .s360-drill-row b{font-size:14px}',
+ scope+' .s360-drill-row small{font-size:12px;color:var(--sub);display:block;margin-top:3px}',
+ scope+' .s360-drill-year{display:none!important}',
+ scope+' .s360-drill-row .s360-drill-change strong{font-size:16px}',
+ scope+' .s360-annual-detail[hidden]{display:none!important}',
  scope+' .s360-drill-footer{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}',
 
  scope+' .s360-month{min-width:220px}',
  scope+' .s360-month-nav{display:flex;align-items:center;gap:5px}',
  scope+' .s360-month-nav select{min-width:130px;flex:1}',
  scope+' .s360-btn:disabled{opacity:.45;cursor:not-allowed}',
- scope+' .s360-range summary{cursor:pointer;font-weight:700;color:var(--a)}',
- scope+' .s360-range-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:12px 0}',
- scope+' .s360-range-form fieldset{display:flex;flex-wrap:wrap;gap:8px;min-width:0;border:1px solid var(--border);border-radius:8px;padding:8px}',
- scope+' .s360-range-form input{font:inherit;max-width:100%;height:34px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);padding:3px 6px}',
  scope+' .s360-focus{display:grid;grid-template-columns:90px repeat(3,minmax(0,1fr));gap:12px;padding:12px;background:var(--bg);border-radius:9px;margin-top:10px}',
  scope+' .s360-focus small{display:block;color:var(--sub);font-size:10px}',
  scope+' .s360-focus strong{display:block;font-size:13px;overflow-wrap:anywhere;margin-top:4px}',
@@ -363,9 +310,43 @@ function styles(){
  scope+' .s360-loading{padding:35px 15px;border:1px solid var(--border);border-radius:12px;text-align:center;color:var(--sub)}',
  scope+' .s360-load-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}',
  scope+' .s360-load-kpis>div{border:1px solid var(--border);border-radius:12px;background:var(--card);min-height:88px;opacity:.6}',
+ scope+' .s360-primary-filters .s360-compare-filters{flex:1 1 100%;margin:0}',
+ scope+' .s360-primary-filters .s360-field{min-width:180px}',
+ scope+' .s360-kpi-detail summary{cursor:pointer;color:var(--a);font-size:13px}',
+ scope+' .s360-kpi-detail p{font-size:14px;line-height:1.5;margin:8px 0 0}',
+ scope+' .s360-explain{margin-top:8px;font-size:13px}',
+ scope+' .s360-explain summary{cursor:pointer;color:var(--a)}',
+ scope+' .s360-explain p{margin:7px 0 0;line-height:1.5}',
+ scope+' .s360-compare-months{display:grid;gap:2px;margin-top:10px}',
+ scope+' .s360-compare-month{display:grid;grid-template-columns:70px minmax(0,1fr) 85px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}',
+ scope+' .s360-compare-month-bars{display:grid;gap:4px;min-width:0}',
+ scope+' .s360-compare-month-bars>div{height:19px;background:var(--bg);border-radius:6px;position:relative;overflow:hidden}',
+ scope+' .s360-compare-month-bars i{display:block;height:100%;background:var(--a,#185FA5);border-radius:6px}',
+ scope+' .s360-compare-month-bars i.previous{background:#94a3b8}',
+ scope+' .s360-compare-month-bars span{position:absolute;right:6px;top:1px;font-size:12px;font-weight:700;text-shadow:0 1px white}',
+ scope+' .s360-compare-month strong{text-align:right}',
+ scope+' .s360-compare-month details{grid-column:2 / -1;font-size:13px}',
+ scope+' .s360-compare-month details summary{color:var(--a);cursor:pointer}',
+ scope+' .s360-client-list-full{margin-top:10px}',
+ scope+' .s360-client-full .s360-client-detail{padding:0;margin:0;border:0;background:transparent}',
+ scope+' .s360-client-full .s360-client-detail>.s360-head-actions{margin-bottom:14px}',
+ scope+' .s360-client-item{font-size:15px}',
+ scope+' .s360-client-item-amount small{font-size:13px}',
+ scope+' button.s360-client-month{width:100%;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);padding:9px;text-align:left;cursor:pointer;font:inherit;font-size:13px}',
+ scope+' button.s360-client-month.active{border-color:var(--a);background:var(--ab)}',
+ scope+' .s360-client-month-focus{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;padding:12px;background:var(--bg);border-radius:9px;font-size:14px}',
+ scope+' .s360-client-action{display:grid;gap:5px;margin-top:12px;padding:14px;border:1px solid var(--border);border-radius:9px;font-size:14px;line-height:1.5}',
+ scope+' .s360-product-level{border:1px solid var(--border);border-radius:9px;margin-top:8px;padding:10px}',
+ scope+' .s360-product-level summary{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer;font-size:14px}',
+ scope+' .s360-product-level summary span{color:var(--sub)}',
+ scope+' .s360-product-item{display:grid;grid-template-columns:minmax(150px,1fr) minmax(240px,1.6fr);gap:12px;border-top:1px solid var(--border);padding:12px 0;font-size:14px}',
+ scope+' .s360-product-item>div{display:grid;gap:4px}',
+ scope+' .s360-product-item small{font-size:12px;color:var(--sub)}',
  '@media(max-width:1050px){'+scope+' .s360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}'+scope+' .s360-grid{grid-template-columns:1fr}}',
+ '@media(max-width:640px){'+scope+' .s360-compare-month{grid-template-columns:45px minmax(0,1fr) 65px;gap:6px;font-size:12px}'+scope+' .s360-compare-month-bars span{font-size:11px}'+scope+' .s360-product-item{grid-template-columns:1fr}'+scope+' .s360-client-month{grid-template-columns:42px minmax(0,1fr) 72px;gap:7px}'+scope+' .s360-client-month-values{grid-column:2 / -1;grid-row:2;display:flex;justify-content:space-between;flex-wrap:wrap;font-size:13px}'+scope+' .s360-client-month-percent{grid-column:3;grid-row:1;font-size:13px}}',
+ '@media(max-width:640px){'+scope+' .s360-period-grid,'+scope+' .s360-compare-grid,'+scope+' .s360-compare-filters{grid-template-columns:1fr}'+scope+' .s360-compare-filters fieldset{flex-wrap:wrap}'+scope+' .s360-period-value strong{font-size:20px}}',
  '@media(max-width:1030px){'+scope+' .s360-client-split{grid-template-columns:1fr}'+scope+' .s360-client-left{max-height:330px}'+scope+' .s360-client-right{max-height:none;scroll-margin-top:12px}}',
- '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-split .s360-client-item span:first-child{grid-column:auto}'+scope+' .s360-client-month{grid-template-columns:42px 1fr 70px 70px}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}'+scope+' .s360-recovery-row{grid-template-columns:1fr auto 16px}'+scope+' .s360-recovery-values{display:none}}'
+ '@media(max-width:640px){'+scope+' .s360-focus{grid-template-columns:1fr 1fr}'+scope+' .s360-load-kpis{grid-template-columns:repeat(2,1fr)}'+scope+' .s360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}'+scope+' h2{font-size:19px}'+scope+' .s360-tile strong{font-size:19px}'+scope+' .s360-row{grid-template-columns:1fr 85px 85px}'+scope+' .s360-row span:last-child{grid-column:2 / 4;text-align:right}'+scope+' .s360-client-item{grid-template-columns:1fr 1fr}'+scope+' .s360-client-item span:first-child{grid-column:1 / -1}'+scope+' .s360-client-split .s360-client-item span:first-child{grid-column:auto}'+scope+' .s360-drill-row{grid-template-columns:1fr 1fr}'+scope+' .s360-drill-row>:first-child{grid-column:1 / -1}'+scope+' .s360-drill-header{display:none}'+scope+' .s360-drill-row .s360-drill-year{display:block!important}'+scope+' .s360-drill-change{grid-column:1 / -1;text-align:left;border-top:1px solid var(--border);padding-top:7px}'+scope+' .s360-brief-overview{grid-template-columns:1fr 1fr}'+scope+' .s360-recovery-row{grid-template-columns:1fr auto 16px}'+scope+' .s360-recovery-values{display:none}}'
  ].join('\n');
 }
 function mount(){
@@ -373,17 +354,13 @@ function mount(){
  let root=$(ID);
  if(!root){
   const st=d.createElement('style');st.id=CSS;st.textContent=styles();d.head.appendChild(st);
-  root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Продажи 360° · директорский контроль');
+  root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Продажи · директорский контроль');
   page.insertAdjacentElement('afterbegin',root);
   root.addEventListener('click',onClick);
   root.addEventListener('change',onChange);
   root.addEventListener('keydown',onKeyDown);
   root.addEventListener('input',onInput);
-  root.addEventListener('submit',event=>{
-   if(!event.target.matches('[data-s360-range]'))return;
-   event.preventDefault();
-   if(state.data)void compareRanges(event.target);
-  });
+  root.addEventListener('toggle',e=>{if(e.target.matches?.('[data-s360-annual]'))state.annualOpen=e.target.open},true);
   mounted=true;
  }
  page.classList.toggle('s360-installed',!state.legacy);
@@ -406,7 +383,7 @@ function trendSvg(items){
  }
  const si=items.findIndex(a=>a.key===selected);
  if(si>=0)svg+='<rect x="'+(x(si)-plotW/items.length/2).toFixed(1)+'" y="'+t+'" width="'+(plotW/items.length).toFixed(1)+'" height="'+plotH+'" fill="#dbeafe" opacity=".38"/>';
- for(const [key,color] of [['previous','#94a3b8'],['current','#2563eb']]){
+ for(const [key,color] of [['previous','#94a3b8'],['current','#185FA5']]){
   let seg=[];
   items.forEach((a,i)=>{
    const has=key==='current'?a.hasCurrent:a.hasPrevious;
@@ -427,7 +404,7 @@ function trendSvg(items){
    // Keep the value labels on opposite sides of the line, even when they nearly touch.
    const above=key==='current';
    const ty=above?Math.max(16,y(a[key])-17):Math.min(h-42,y(a[key])+22);
-   svg+='<text x="'+px+'" y="'+ty.toFixed(1)+'" text-anchor="middle" fill="'+(above?'#1d4ed8':'#64748b')+'" font-size="12" font-weight="700">'+esc(chartValue(a[key]))+'</text>';
+   svg+='<text x="'+px+'" y="'+ty.toFixed(1)+'" text-anchor="middle" fill="'+(above?'#185FA5':'#64748b')+'" font-size="12" font-weight="700">'+esc(chartValue(a[key]))+'</text>';
   });
  }
  svg+=items.map((a,i)=>'<text x="'+x(i).toFixed(1)+'" y="365" text-anchor="middle" fill="currentColor" font-size="13">'+esc(a.label)+'</text>').join('');
@@ -445,10 +422,225 @@ function showSelectorOptions(d){
 function kpiCard(label,value,desc,color=''){
  return'<div class="s360-tile"><small>'+esc(label)+'</small><strong'+(color?' class="'+color+'"':'')+'>'+esc(value)+'</strong><em>'+esc(desc)+'</em></div>';
 }
-function getKpi(d){
- const k=monthKpi(d);
- const actual=k.actual,plan=k.plan;
- return{k,display:plan>0?(actual/plan*100).toFixed(1).replace('.',',')+'%':'—',description:plan>0?'Факт '+short(actual)+' / план '+short(plan)+' BYN · '+(d.kpi_month||''):'План не подтверждён в KPI 360°'};
+function planKpiCard(kpi){
+ const plan=kpi?.plan;
+ const known=plan?.total>0;
+ const value=known?(plan.actual/plan.total*100).toFixed(1).replace('.',',')+'%':'—';
+ const scope=known&&plan.months.length<kpi.selectedCount
+  ? 'По утверждённым месяцам · '+plan.months.length+' из '+kpi.selectedCount
+  : 'Период 1 · план отгрузок';
+ const status=kpi?.status==='loading'?'Загружаю план…':kpi?.status==='error'?'Не удалось загрузить план':
+  'Для выбранного периода план не подтверждён';
+ return '<div class="s360-tile"><small>Выполнение плана</small><strong>'+esc(value)+'</strong>'+(
+  known?'<em>'+esc(scope)+'</em><details class="s360-kpi-detail"><summary>План, факт и остаток</summary><p>'+
+   esc(plan.months.map(monthLabel).join(', '))+'<br>План '+esc(money(plan.total))+' · факт '+esc(money(plan.actual))+
+   ' · осталось '+esc(money(Math.max(0,plan.total-plan.actual)))+'</p></details>':
+  '<em>'+esc(status)+'</em>')+'</div>';
+}
+function akbKpiCard(kpi){
+ const known=kpi?.akb!==null&&kpi?.akb!==undefined;
+ const description=known?'Уникальные клиенты с отгрузками · период 1':
+  kpi?.status==='loading'?'Загружаю отгрузки…':kpi?.status==='error'?'Не удалось загрузить АКБ':'Нет подтверждённых данных';
+ return kpiCard('АКБ',known?fmt(kpi.akb):'—',description);
+}
+function monthDashboard(month,actor){
+ const key=JSON.stringify([actor,month]),now=Date.now();
+ const hit=kpiMonths.get(key);
+ if(hit&&(hit.loading||now-hit.at<TTL))return hit.promise;
+ const entry={at:now,loading:true,promise:null};
+ entry.promise=Promise.resolve().then(()=>{
+  if(viewer()!==actor)throw Error('Сменилась учётная запись');
+  return dbx().rpc('crm_manager_kpi360_dashboard_v2',{p_month:month});
+ }).then(({data,error})=>{
+  if(error)throw error;
+  if(data?.version!=='kpi360-visual-v2'||data.month!==month||!Array.isArray(data.clients)||
+     !Array.isArray(data.managers)||!Array.isArray(data.sales))throw Error('Неполный ответ KPI за '+month);
+  entry.loading=false;
+  entry.at=Date.now();
+  return data;
+ }).catch(error=>{
+  if(kpiMonths.get(key)===entry)kpiMonths.delete(key);
+  throw error;
+ });
+ kpiMonths.set(key,entry);
+ while(kpiMonths.size>48)kpiMonths.delete(kpiMonths.keys().next().value);
+ return entry.promise;
+}
+function summarizePeriodKpis(months,responses,manager){
+ const keys=new Set();
+ const expected=manager==='all'?fieldManagers.map(kpiManagerKey):[kpiManagerKey(manager)];
+ const plan={months:[],total:0,actual:0};
+ let available=0,failed=0;
+ for(const [index,data] of responses.entries()){
+  const month=months[index];
+  if(!data){failed++;continue;}
+  if(!data.latest_sales_month||month>data.latest_sales_month)continue;
+  const permitted=new Set(data.managers.map(row=>kpiManagerKey(row.manager_name)));
+  if(!expected.every(name=>permitted.has(name))){failed++;continue;}
+  available++;
+  for(const row of data.clients){
+   if(expected.includes(kpiManagerKey(row.manager_name))&&row.client_key)keys.add(row.client_key);
+  }
+  const byManager=new Map(data.sales.map(row=>[kpiManagerKey(row.manager_name),row]));
+  const rows=expected.map(name=>byManager.get(name));
+  if(rows.some(row=>!(num(row?.shipment_plan)>0)))continue;
+  plan.months.push(month);
+  for(const row of rows){plan.total+=num(row.shipment_plan);plan.actual+=num(row.shipment);}
+ }
+ return {status:failed?'error':'ready',akb:available===months.length?keys.size:null,plan,selectedCount:months.length};
+}
+function periodKpis(comparison){
+ const months=comparison.one?.complete?comparison.one.rows.map(row=>row.month):[];
+ const manager=boss()?state.manager:managerMe(),actor=viewer();
+ if(!months.length||manager!=='all'&&!fieldManagers.some(name=>kpiManagerKey(name)===kpiManagerKey(manager)))return null;
+ const key=JSON.stringify([actor,manager,months]);
+ const hit=kpiPeriods.get(key);
+ if(hit&&(hit.status==='loading'||Date.now()-hit.at<TTL))return hit;
+ const loading={status:'loading'};
+ kpiPeriods.set(key,loading);
+ while(kpiPeriods.size>20)kpiPeriods.delete(kpiPeriods.keys().next().value);
+ const read=async()=>{
+  const responses=[];
+  for(let i=0;i<months.length;i+=2){
+   if(viewer()!==actor||active()!=='sales'||kpiPeriods.get(key)!==loading)break;
+   const pair=await Promise.allSettled(months.slice(i,i+2).map(month=>monthDashboard(month,actor)));
+   for(const result of pair)responses.push(result.status==='fulfilled'?result.value:null);
+  }
+  if(kpiPeriods.get(key)!==loading)return;
+  if(responses.length!==months.length){kpiPeriods.delete(key);return;}
+  kpiPeriods.set(key,{...summarizePeriodKpis(months,responses,manager),at:Date.now()});
+  if(active()==='sales'&&viewer()===actor&&state.data)render();
+ };
+ read().catch(error=>{
+  console.warn('Sales 360 period KPI',error);
+  if(kpiPeriods.get(key)===loading)kpiPeriods.set(key,{status:'error',at:Date.now()});
+  if(active()==='sales'&&viewer()===actor&&state.data)render();
+ });
+ return loading;
+}
+function selectedSalesPeriods(d){
+ const last=String(Math.max(1,num(d?.closed_month)||1)).padStart(2,'0');
+ const firstYear=String(d?.year||state.year),secondYear=String((d?.year||state.year)-1);
+ const p1={from:state.period1Start||firstYear+'-01',to:state.period1End||firstYear+'-'+last};
+ const p2={from:state.period2Start||secondYear+'-01',to:state.period2End||secondYear+'-'+last};
+ return {p1,p2};
+}
+function selectedMonths(data,from,to,side='current'){
+ if(!data||!/^\d{4}-\d{2}$/.test(from)||!/^\d{4}-\d{2}$/.test(to)||from>to||from.slice(0,4)!==to.slice(0,4))return null;
+ const year=Number(from.slice(0,4)),expected=side==='previous'?Number(data.previous_year):Number(data.year);
+ if(year!==expected)return null;
+ const rows=arr(data.months).filter(x=>{
+  const month=String(x.month||'').slice(5,7),ym=from.slice(0,4)+'-'+month;
+  return ym>=from&&ym<=to;
+ });
+ if(!rows.length)return null;
+ const has=side==='previous'?'has_previous':'has_current',amount=side==='previous'?'previous':'current';
+ const usable=rows.filter(x=>x[has]);
+ const expectedCount=Number(to.slice(5,7))-Number(from.slice(5,7))+1;
+ return {rows,usable,total:rows.reduce((sum,x)=>sum+num(x[amount]),0),
+  complete:usable.length===expectedCount,partial:side==='current'&&rows.some(x=>x.partial),
+  closed:side==='previous'||rows.every(x=>x.closed&&!x.partial)};
+}
+function selectedComparison(d){
+ const {p1,p2}=selectedSalesPeriods(d);
+ const one=selectedMonths(d,p1.from,p1.to,'current');
+ const y2=Number(p2.from.slice(0,4));
+ const source=y2===Number(d.year)?d:y2===Number(d.previous_year)?d:state.comparisonData;
+ const side=y2===Number(d.previous_year)?'previous':'current';
+ const two=selectedMonths(source,p2.from,p2.to,side);
+ const complete=!!(one?.complete&&two?.complete);
+ const sameSpan=!!(complete&&one.closed&&two.closed&&!one.partial&&!two.partial&&one.rows.length===two.rows.length);
+ const comparable=sameSpan&&two.total>0;
+ const delta=complete?one.total-two.total:null;
+ return {p1,p2,one,two,side2:side,complete,comparable,delta,pct:comparable?delta/two.total*100:null};
+}
+function periodFiltersHtml(d){
+ const {p1,p2}=selectedSalesPeriods(d),max=currentYear()+'-12';
+ const input=(key,label,value)=>'<label class="s360-field"><span>'+label+'</span><input type="month" data-s360-period="'+key+'" min="2023-01" max="'+max+'" value="'+esc(value)+'"></label>';
+ return '<div class="s360-compare-filters"><fieldset><legend>Период 1</legend>'+input('p1-from','С',p1.from)+input('p1-to','По',p1.to)+'</fieldset>'+
+ '<fieldset><legend>Период 2</legend>'+input('p2-from','С',p2.from)+input('p2-to','По',p2.to)+'</fieldset></div>';
+}
+function selectedComparisonHtml(d){
+ const x=selectedComparison(d),pct=x.pct===null?'—':(x.pct>0?'+':'')+x.pct.toFixed(1).replace('.',',')+'%';
+ const label=p=>p.from===p.to?monthLabel(p.from):monthLabel(p.from)+' — '+monthLabel(p.to);
+ const card=(title,period,part)=>'<div class="s360-compare-card"><span>'+esc(title)+' · '+esc(label(period))+'</span><strong>'+esc(part?.complete?money(part.total):'Нет подтверждённых данных')+'</strong></div>';
+ const direction=x.pct===null?'Нет сравнения':x.pct>0?'Рост':x.pct<0?'Падение':'Без изменений';
+ return '<div class="s360-panel s360-selected-comparison"><h3>Сравнение продаж</h3>'+
+ (state.comparisonLoading?'<p role="status">Загружаю второй период…</p>':'')+
+ (state.comparisonError?'<p role="alert">'+esc(state.comparisonError)+'</p>':'')+
+ '<div class="s360-compare-grid">'+card('Период 1',x.p1,x.one)+card('Период 2',x.p2,x.two)+
+ '<div class="s360-compare-card" title="'+esc(x.delta===null?'Точная разница не подтверждена':(x.delta>0?'+':'')+money(x.delta))+'"><span>'+direction+'</span><strong class="'+(x.pct<0?'s360-negative':x.pct>0?'s360-positive':'')+'">'+esc(pct)+'</strong></div></div>'+
+ (x.one?.partial||x.two?.partial?'<span class="s360-badge">Текущий месяц неполный</span>':'')+
+ '</div>';
+}
+function selectedChartHtml(d){
+ const x=selectedComparison(d),first=x.one?.rows||[],second=x.two?.rows||[];
+ if(!first.length||!second.length)return '';
+ const amount2=x.side2==='previous'?'previous':'current';
+ const both=first.map((row,i)=>({row,other:second[i]})).filter(x=>x.other);
+ const max=Math.max(1,...both.flatMap(({row,other})=>[Math.max(0,num(row.current)),Math.max(0,num(other[amount2]))]));
+ const card=({row,other})=>{
+  const a=num(row.current),b=num(other[amount2]),full=!!(row.closed&&!row.partial&&(x.side2==='previous'||other.closed&&!other.partial));
+  const secondaryMonth=x.side2==='previous'?x.p2.from.slice(0,4)+other.month.slice(4):other.month;
+  const pct=full&&b>0?(a-b)/b*100:null,mark=pct===null?'—':(pct>0?'+':'')+pct.toFixed(1).replace('.',',')+'%';
+  return '<div class="s360-compare-month" title="'+esc(monthLabel(row.month)+' / '+monthLabel(secondaryMonth)+': '+money(a)+' / '+money(b)+' · разница '+money(a-b))+'">'+
+   '<b>'+esc(monthLabel(row.month).split(' ')[0])+'</b><div class="s360-compare-month-bars">'+
+   '<div><i style="width:'+Math.max(0,a/max*100).toFixed(1)+'%"></i><span>'+esc(short(a))+'</span></div>'+
+   '<div><i class="previous" style="width:'+Math.max(0,b/max*100).toFixed(1)+'%"></i><span>'+esc(short(b))+'</span></div></div>'+
+   '<strong>'+esc(mark)+'</strong><details><summary>Точные суммы</summary><span>Период 1: '+esc(money(a))+' · период 2: '+esc(money(b))+' · разница: '+esc(money(a-b))+'</span></details></div>';
+ };
+ return '<div class="s360-panel"><h3>Динамика выбранных периодов</h3><div class="s360-legend"><span><i style="background:var(--a,#185FA5)"></i>Период 1</span><span><i style="background:#94a3b8"></i>Период 2</span></div><div class="s360-compare-months">'+both.map(card).join('')+'</div></div>';
+}
+function ensureSelectedSources(d){
+ const x=selectedSalesPeriods(d),otherYear=Number(x.p2.from.slice(0,4));
+ const expected=[viewer(),otherYear,boss()?state.manager:managerMe()].join('|');
+ if(comparisonKey!==expected){
+  comparisonKey=expected;
+  state.comparisonData=null;state.comparisonLoading=false;state.comparisonError='';
+ }
+ if(otherYear!==Number(d.year)&&otherYear!==Number(d.previous_year)&&!state.comparisonError&&
+   (!state.comparisonData||Number(state.comparisonData.year)!==otherYear)&&!state.comparisonLoading){
+  const key=[viewer(),otherYear,boss()?state.manager:managerMe()].join('|');
+  const hit=cache.get(key);
+  if(hit&&Date.now()-hit.at<TTL){state.comparisonData=hit.data;state.comparisonError='';return}
+  state.comparisonLoading=true;state.comparisonError='';
+  const requested=otherYear,manager=boss()&&state.manager!=='all'?state.manager:null;
+  Promise.resolve().then(()=>dbx().rpc('crm_sales360_annual_v2',{p_year:requested,p_manager:manager,p_exclude_triovist:false}))
+   .then(({data,error})=>{if(error)throw error;if(!Array.isArray(data?.months))throw Error('Неполный ответ сервера');
+    cache.set(key,{at:Date.now(),data});if(comparisonKey===key)state.comparisonData=data;
+   }).catch(e=>{if(comparisonKey===key){state.comparisonError=String(e?.message||e);state.comparisonData=null;}})
+   .finally(()=>{if(comparisonKey===key){state.comparisonLoading=false;if(active()==='sales')render()}});
+ }
+}
+function periodComparison(d){
+ const rows=monthRows(d),selected=focusedMonth(d);
+ if(!selected)return null;
+ const index=rows.findIndex(x=>x.month===selected.month);
+ let before=rows[index-1];
+ if(!before&&selected.month.endsWith('-01')){
+  const december=arr(d?.months).find(x=>x.month===d.year+'-12');
+  if(december?.has_previous)before={month:(d.year-1)+'-12',current:december.previous,has_current:true,closed:true,partial:false};
+ }
+ const closed=!!(selected.closed&&selected.has_current&&!selected.partial);
+ const yearReady=closed&&selected.has_previous&&num(selected.previous)>0;
+ const monthReady=closed&&before?.closed&&before.has_current&&!before.partial&&num(before.current)>0;
+ const pct=(value,base)=>(num(value)-num(base))/num(base)*100;
+ return {selected,before,yearPct:yearReady?pct(selected.current,selected.previous):null,
+  monthPct:monthReady?pct(selected.current,before.current):null};
+}
+function periodComparisonHtml(d){
+ const comparison=periodComparison(d);
+ if(!comparison)return'';
+ const {selected,before,yearPct,monthPct}=comparison;
+ const choices=monthRows(d).filter(x=>x.has_current);
+ const percent=value=>value===null?'—':(value>0?'+':'')+value.toFixed(1).replace('.',',')+'%';
+ const card=(label,value,detail)=>'<div class="s360-period-value"><small>'+esc(label)+'</small><strong>'+esc(value)+'</strong><span>'+esc(detail)+'</span></div>';
+ return '<div class="s360-panel s360-period" id="s360-period"><div class="s360-head-actions"><div><h3>Выбранный месяц · продажи</h3><div class="s360-muted">'+esc(selected.partial?'Текущий месяц':'Завершённый месяц')+'</div></div>'+
+ '<div class="s360-field"><label for="s360-card-month">Период в карточке</label><select id="s360-card-month" data-s360-select="month">'+choices.map(x=>'<option value="'+esc(x.month)+'"'+(selected.month===x.month?' selected':'')+'>'+esc(monthLabel(x.month))+(x.partial?' · текущий':'')+'</option>').join('')+'</select></div></div>'+
+ '<div class="s360-period-grid">'+card('Факт '+d.year,money(selected.current),monthLabel(selected.month))+
+ card('К '+d.previous_year,percent(yearPct),selected.has_previous?money(selected.previous):'Нет данных прошлого года')+
+ card('К предыдущему месяцу',percent(monthPct),before?.has_current?monthLabel(before.month)+' · '+money(before.current):'Нет сопоставимого месяца')+'</div>'+
+ '</div>';
 }
 // Director signals are evidence-backed, deterministic recommendations; not orders or AI diagnoses.
 function directorSignals(d){
@@ -663,7 +855,7 @@ function brief(d){
   '<small>Порог: не менее 5 000 BYN и 10% снижения при прошлогоднем обороте от 10 000 BYN.</small></div>';
  return '<div class="s360-panel" id="s360-director-brief">'+
   '<div class="s360-head-actions"><div><h3>✦ Директорский брифинг · Что требует решения</h3>'+
-  '<div class="s360-muted">По данным 1С · с января по '+esc(period)+' · только закрытые месяцы</div></div>'+
+  '<div class="s360-muted">С января по '+esc(period)+'</div></div>'+
   '<span class="s360-badge">Проверенные цифры, гипотезы отдельно</span></div>'+
   '<div class="s360-brief-overview"><div><small>Оборот</small><strong>'+esc(whole(y.current))+'</strong></div>'+
    '<div><small>Динамика</small><strong>'+esc(delta)+'</strong></div>'+
@@ -744,7 +936,7 @@ function drillView(scope){
  const st=drillStates[scope];
  if(!st?.category){
   if(scope==='client')return'';
-  return '<div class="s360-panel" id="s360-drill-global"><div class="s360-head-actions"><h3>Товарная детализация · Группа → Подгруппа → SKU</h3><span class="s360-badge">1С · только реальные данные</span></div>'+
+  return '<div class="s360-panel" id="s360-drill-global"><div class="s360-head-actions"><h3>Товарная детализация · Группа → Подгруппа → SKU</h3></div>'+
    '<div class="s360-muted">Выберите товарную группу в рейтинге или матрице выше, чтобы открыть подгруппы и конкретные SKU, сравнить оборот двух лет.</div></div>';
  }
  const result=st.data||{},items=arr(result.items),total=num(result.total),limit=50,page=Math.floor(st.offset/limit)+1,pages=Math.max(1,Math.ceil(total/limit));
@@ -759,10 +951,10 @@ function drillView(scope){
   const pct=num(x.previous_revenue)>0?
     (amount/num(x.previous_revenue)*100).toFixed(1).replace('.',',')+'%':
     num(x.current_revenue)>0?'Новый':'—';
-  const columns='<span>'+esc(whole(x.current_revenue))+'</span><span>'+esc(whole(x.previous_revenue))+'</span>'+
-   '<span class="'+(amount<0?'s360-negative':'s360-positive')+'"><b>'+esc((amount>0?'+':'')+whole(amount))+'</b>'+
-   '<small>'+esc(pct)+'</small></span>'+
-   '<span>'+esc(fmt(x.current_qty))+' шт.</span>';
+  const columns='<span title="'+esc(money(x.current_revenue))+'"><small class="s360-drill-year">'+state.year+'</small>'+esc(whole(x.current_revenue))+'<small>'+esc(fmt(x.current_qty))+' шт.</small></span>'+
+   '<span title="'+esc(money(x.previous_revenue))+'"><small class="s360-drill-year">'+(state.year-1)+'</small>'+esc(whole(x.previous_revenue))+'<small>'+esc(fmt(x.previous_qty))+' шт.</small></span>'+
+   '<span class="s360-drill-change '+(amount<0?'s360-negative':'s360-positive')+'"><strong>'+esc(pct)+'</strong>'+
+   '<small title="'+esc(money(amount))+'">'+esc((amount>0?'+':'')+whole(amount))+'</small></span>';
   return st.level==='subgroups'?
    '<button type="button" class="s360-drill-row" data-s360-drill-subgroup="'+esc(x.item_name)+'" data-s360-drill-scope="'+context+'">'+nameCell+columns+'</button>':
    '<div class="s360-drill-row">'+nameCell+columns+'</div>';
@@ -778,12 +970,12 @@ function drillView(scope){
  '<button type="button" class="s360-btn" data-s360-drill-find data-s360-drill-scope="'+context+'">Найти</button></div>'+
  (st.error?'<div class="s360-warn">'+esc(st.error)+'</div>':'')+
  (st.loading?'<div class="s360-loading" role="status">Загружаю детализацию из 1С…</div>':
- '<div class="s360-drill-rows"><div class="s360-drill-row" style="background:var(--bg);font-weight:700"><span>Подгруппа / товар</span><span>'+state.year+'</span><span>'+(state.year-1)+'</span><span>Разница</span><span>Количество</span></div>'+
+ '<div class="s360-drill-rows"><div class="s360-drill-row s360-drill-header" style="background:var(--bg);font-weight:700"><span>Товар</span><span>'+state.year+'</span><span>'+(state.year-1)+'</span><span>К '+(state.year-1)+'</span></div>'+
  (rows||'<div class="s360-muted">По этому уровню подтверждённых продаж нет.</div>')+'</div>')+
  (total>0?'<div class="s360-drill-footer"><span class="s360-muted">Позиций: '+total+' · страница '+page+' из '+pages+'</span>'+
  '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-drill-page="-1" data-s360-drill-scope="'+context+'"'+(page===1?' disabled':'')+'>← Назад</button>'+
  '<button type="button" class="s360-btn" data-s360-drill-page="1" data-s360-drill-scope="'+context+'"'+(page>=pages?' disabled':'')+'>Далее →</button></div></div>':'')+
- (st.level==='sku'?'<div class="s360-muted" style="margin-top:10px">При отсутствии артикула SKU товар группируется по наименованию, чтобы оборот не терялся. Количество — суммарные штуки по данным 1С (с учётом возвратов).</div>':'')+'</div>';
+ '</div>';
 }
 function openDrill(scope,category,subgroup='',skuSearch=''){
  if(!['client','global'].includes(scope)||!String(category||'').trim())return;
@@ -845,34 +1037,142 @@ function clientProductsHtml(detail){
   }).join('')+
   '</tbody></table></div>';
 }
+function clientAnnualProductsAvailable(detail,first,second){
+ const year=state.year,closed=Number(state.data?.closed_month||0),p=selectedSalesPeriods(state.data);
+ if(closed<1||closed>12||!first?.complete||!second?.complete)return false;
+ const end=String(closed).padStart(2,'0'),cats=arr(detail?.categories);
+ if(!cats.length||p.p1.from!==year+'-01'||p.p1.to!==year+'-'+end||
+    p.p2.from!==(year-1)+'-01'||p.p2.to!==(year-1)+'-'+end)return false;
+ return Math.abs(cats.reduce((s,x)=>s+num(x.current_revenue),0)-first.total)<=.02&&
+  Math.abs(cats.reduce((s,x)=>s+num(x.previous_revenue),0)-second.total)<=.02;
+}
+function verifiedClientHistory(client,annual){
+ if(!client?.client_id||!w.v22722HistoryReady?.())return null;
+ let candidate=null,history=[];
+ try{
+  candidate=allClients.find(x=>String(x.id)===String(client.client_id));
+  if(candidate&&typeof getClientHistFast==='function')history=arr(getClientHistFast(candidate));
+ }catch(_){return null}
+ if(!candidate)return null;
+ const closed=Number(state.data?.closed_month||0),year=Number(annual.year);
+ const sum=y=>history.reduce((total,row)=>{
+  const month=String(row.month||'').slice(0,7);
+  return Number(month.slice(0,4))===y&&Number(month.slice(5,7))<=closed?total+num(row.revenue):total;
+ },0);
+ if(Math.abs(sum(year)-num(client.current_revenue))>.02||Math.abs(sum(year-1)-num(client.previous_revenue))>.02)return null;
+ return history;
+}
+function historyPeriod(history,from,to){
+ return history.filter(row=>{const month=String(row.month||'').slice(0,7);return month>=from&&month<=to});
+}
+function selectedProductHtml(client,annual){
+ const history=verifiedClientHistory(client,annual),chosen=selectedSalesPeriods(state.data);
+ if(!history||![annual.year,annual.previous_year].includes(Number(chosen.p2.from.slice(0,4))))
+  return '<div class="s360-warn">Товарная детализация выбранных периодов не подтверждена. Годовые данные доступны в прежнем отчёте.</div>';
+ const groups=new Map(),add=(row,side)=>{
+  const group=String(row.category||'Без группы').trim(),sub=String(row.subgroup||'Без подгруппы').trim(),sku=String(row.sku||'').trim(),product=String(row.product||'Без наименования').trim();
+  const key=group+'\u0000'+sub+'\u0000'+(sku?'sku:'+sku:'product:'+product);
+  if(!groups.has(key))groups.set(key,{group,sub,sku,product,one:0,two:0,qtyOne:0,qtyTwo:0});
+  const item=groups.get(key);item[side]+=num(row.revenue);item[side==='one'?'qtyOne':'qtyTwo']+=num(row.qty);
+ };
+ historyPeriod(history,chosen.p1.from,chosen.p1.to).forEach(row=>add(row,'one'));
+ historyPeriod(history,chosen.p2.from,chosen.p2.to).forEach(row=>add(row,'two'));
+ const items=[...groups.values()],first=items.reduce((s,x)=>s+x.one,0),second=items.reduce((s,x)=>s+x.two,0);
+ const months=annual.months||[],source={year:annual.year,previous_year:annual.previous_year,months};
+ const p1=selectedMonths(source,chosen.p1.from,chosen.p1.to,'current');
+ const side2=Number(chosen.p2.from.slice(0,4))===Number(annual.year)?'current':'previous';
+ const p2=selectedMonths(source,chosen.p2.from,chosen.p2.to,side2);
+ if(!p1?.complete||!p2?.complete||Math.abs(first-p1.total)>.02||Math.abs(second-p2.total)>.02)
+  return '<div class="s360-warn">Сумма SKU не совпала с подтверждённым оборотом выбранных периодов. Детализация скрыта до сверки источника.</div>';
+ const tree=new Map();for(const item of items){
+  if(!tree.has(item.group))tree.set(item.group,new Map());
+  const subs=tree.get(item.group);if(!subs.has(item.sub))subs.set(item.sub,[]);subs.get(item.sub).push(item);
+ }
+ const metric=(a,b)=>{
+  const delta=a-b,pct=b>0?(delta/b*100).toFixed(1).replace('.',',')+'%':'—';
+  return esc(money(a))+' / '+esc(money(b))+' · '+esc((delta>0?'+':'')+money(delta))+' · '+esc(pct);
+ };
+ const comparable=!!(p1.closed&&p2.closed&&p1.rows.length===p2.rows.length);
+ const status=item=>!comparable?'Сравнение не завершено':item.two>0&&item.one<=0?'Перестал продаваться':item.two<=0&&item.one>0?'Новый':item.two>0&&item.one>0?'Продолжается':'Корректировка';
+ const content=[...tree].map(([group,subs])=>{
+  const all=[...subs.values()].flat(),a=all.reduce((s,x)=>s+x.one,0),b=all.reduce((s,x)=>s+x.two,0);
+  return '<details class="s360-product-level"><summary><b>'+esc(group)+'</b><span>'+metric(a,b)+'</span></summary>'+
+   [...subs].map(([sub,list])=>{
+    const ca=list.reduce((s,x)=>s+x.one,0),cb=list.reduce((s,x)=>s+x.two,0);
+    return '<details class="s360-product-level"><summary><b>'+esc(sub)+'</b><span>'+metric(ca,cb)+'</span></summary>'+
+     list.sort((x,y)=>Math.abs(y.one-y.two)-Math.abs(x.one-x.two)).map(item=>
+      '<div class="s360-product-item"><div><b>'+esc(item.product)+'</b><small>SKU: '+esc(item.sku||'не указан')+' · '+esc(status(item))+'</small></div>'+
+      '<div><span>Период 1: '+esc(money(item.one))+' · '+esc(fmt(item.qtyOne))+' шт.</span><span>Период 2: '+esc(money(item.two))+' · '+esc(fmt(item.qtyTwo))+' шт.</span><strong>'+metric(item.one,item.two)+'</strong></div></div>'
+     ).join('')+'</details>';
+   }).join('')+'</details>';
+ }).join('');
+ return '<div class="s360-products"><h3>Группы → подгруппы → SKU · было / стало</h3>'+content+'</div>';
+}
 function clientDetailHtml(detail){
  if(!detail?.client)return'';
  const c=detail.client,rows=arr(detail.months),cats=arr(detail.categories),yr=state.year,prev=yr-1;
- const limit=Math.max(1,...rows.flatMap(x=>[Math.max(0,num(x.current)),Math.max(0,num(x.previous))]));
- const bars=rows.filter(x=>x.has_current||x.has_previous).map(x=>
-  '<div class="s360-client-month"><b>'+esc(monthLabel(x.month).split(' ')[0])+(x.partial?'*':'')+'</b>'+
-  '<span class="s360-client-track" title="'+esc(whole(x.current))+'"><i style="width:'+Math.min(100,Math.max(0,num(x.current))/limit*100)+'%"></i></span>'+
-  '<span style="color:#2563eb">'+esc(x.has_current?whole(x.current):'—')+'</span>'+
-  '<span style="color:#64748b">'+esc(x.has_previous?whole(x.previous):'—')+'</span></div>'
- ).join('');
+ const chosen=selectedSalesPeriods(state.data),clientSource={year:yr,previous_year:prev,months:rows};
+ const first=selectedMonths(clientSource,chosen.p1.from,chosen.p1.to,'current');
+ const secondSide=Number(chosen.p2.from.slice(0,4))===yr?'current':'previous';
+ const second=selectedMonths(clientSource,chosen.p2.from,chosen.p2.to,secondSide);
+ const secondSupported=Number(chosen.p2.from.slice(0,4))===(secondSide==='current'?yr:prev);
+ const ready=!!(first?.complete&&second?.complete&&secondSupported&&first.closed&&second.closed&&first.rows.length===second.rows.length&&second.total>0);
+ const delta=first&&secondSupported&&second?first.total-second.total:null;
+ const tabs=[['overview','Обзор'],['months','По месяцам'],['products','Группы и SKU'],['tasks','Задачи']];
+ const tabbar='<div class="s360-tabs s360-client-tabs" role="tablist" aria-label="Разделы клиента">'+tabs.map(([key,label])=>
+  '<button type="button" role="tab" aria-selected="'+(state.clientTab===key)+'" class="s360-btn'+(state.clientTab===key?' active':'')+'" data-s360-client-tab="'+key+'">'+label+'</button>').join('')+'</div>';
+ const pairs=(first?.rows||[]).map((row,i)=>({row,other:second?.rows?.[i]})).filter(x=>x.other);
+ const focus=pairs.find(x=>x.row.month===state.clientFocusMonth)||pairs.at(-1);
+ const amount2=secondSide==='previous'?'previous':'current';
+ const limit=Math.max(1,...pairs.flatMap(x=>[Math.max(0,num(x.row.current)),Math.max(0,num(x.other[amount2]))]));
+ const bars=pairs.map(({row,other})=>{
+  const a=num(row.current),b=num(other[amount2]);
+  const comparable=row.closed&&!row.partial&&other.closed&&!other.partial;
+  const pct=comparable&&b>0?(a-b)/b*100:null;
+  const mark=pct===null?(comparable&&b===0&&a>0?'Новый':'—'):(pct>0?'+':'')+pct.toFixed(1).replace('.',',')+'%';
+  return '<button type="button" class="s360-client-month'+(row===focus?.row?' active':'')+'" data-s360-client-month="'+esc(row.month)+'" title="'+esc(monthLabel(row.month)+' / '+monthLabel(other.month)+': '+money(a)+' / '+money(b))+'"><b>'+esc(monthLabel(row.month).split(' ')[0])+(row.partial?'*':'')+'</b>'+
+   '<span class="s360-client-tracks"><span class="s360-client-track"><i style="width:'+Math.min(100,Math.max(0,a)/limit*100)+'%"></i></span><span class="s360-client-track previous"><i style="width:'+Math.min(100,Math.max(0,b)/limit*100)+'%"></i></span></span>'+
+   '<span class="s360-client-month-values"><span>'+esc(short(a))+'</span><span>'+esc(short(b))+'</span></span>'+
+   '<strong class="s360-client-month-percent '+(pct<0?'s360-negative':pct>0?'s360-positive':'')+'">'+esc(mark)+'</strong></button>';
+ }).join('');
+ const focusValue=focus?(()=>{
+  const a=num(focus.row.current),b=num(focus.other[amount2]),delta=a-b;
+  const comparable=focus.row.closed&&!focus.row.partial&&focus.other.closed&&!focus.other.partial&&b>0;
+  const pct=comparable?delta/b*100:null;
+  return '<div class="s360-client-month-focus"><b>'+esc(monthLabel(focus.row.month))+' / '+esc(monthLabel(focus.other.month))+'</b><span>'+esc(money(a))+' / '+esc(money(b))+'</span><strong>'+
+   esc(comparable?(delta>0?'Рост ':delta<0?'Падение ':'Без изменений '):'Разница ')+esc((delta>0?'+':'')+money(delta))+
+   (pct===null?'':' · '+esc((pct>0?'+':'')+pct.toFixed(1).replace('.',',')+'%'))+'</strong></div>';
+ })():'';
+ const comparison='<div class="s360-focus"><b>Оборот клиента</b><div><small>Период 1</small><strong>'+esc(first?.complete?money(first.total):'—')+'</strong></div>'+
+  '<div><small>Период 2</small><strong>'+esc(secondSupported&&second?.complete?money(second.total):'—')+'</strong></div>'+
+  '<div><small>Разница</small><strong>'+esc(delta===null?'—':(delta>0?'+':'')+money(delta))+'</strong></div><div><small>'+esc(ready?(delta>0?'Рост':delta<0?'Падение':'Без изменений'):'Сравнение')+'</small><strong>'+esc(ready?(delta>0?'+':'')+(delta/second.total*100).toFixed(1).replace('.',',')+'%':'—')+'</strong></div></div>';
+ const action=ready&&delta<0?'<div class="s360-client-action"><b>Лера · Рекомендации</b><span>Покупки сократились на '+esc(money(-delta))+'. Причина не подтверждена. Проверить потерянные SKU и обсудить следующий заказ. Ответственный: '+esc(c.manager_name||'не определён')+'.</span></div>':'';
+ const overview=comparison+action+'<div class="s360-tabs" style="margin-top:10px"><button type="button" class="s360-btn" data-s360-client-tab="months">По месяцам</button><button type="button" class="s360-btn" data-s360-client-tab="products">Группы и SKU</button></div>';
+ const monthly='<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента</h3><span class="s360-badge">Период 1 / Период 2</span></div><div class="s360-client-graph">'+(bars||'<span>Нет данных для выбранных периодов</span>')+'</div>'+focusValue;
+ const annualProducts=clientAnnualProductsAvailable(detail,first,second);
+ const products=(annualProducts?'<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>':selectedProductHtml(c,clientSource))+
+  '<details class="s360-annual-detail"><summary>Другие данные клиента</summary><div id="s360-client-recovery-container" aria-live="polite">'+clientRecoveryHtml()+'</div>'+
+  (annualProducts?'':'<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>')+'</details>';
+ const tasks='<div class="s360-head-actions"><p>Задачи и история клиента открываются в действующей карточке CRM.</p>'+
+  (c.client_id?'<button type="button" class="s360-btn primary" data-s360-client-card="'+esc(c.client_id)+'">Открыть карточку CRM</button>':'<span class="s360-muted">Точная карточка клиента не определена.</span>')+'</div>';
  return '<div class="s360-client-detail"><div class="s360-head-actions"><div><h3>'+esc(c.client_name)+'</h3>'+
-  '<div class="s360-muted">'+esc(c.manager_name||'Менеджер не определён')+' · Из 1С, с НДС</div></div>'+
+  '<div class="s360-muted">Ответственный: '+esc(c.manager_name||'не определён')+'</div></div>'+
   '<div class="s360-tabs">'+(c.client_id?'<button type="button" class="s360-btn" data-s360-client-card="'+esc(c.client_id)+'">Карточка CRM</button>':'')+
-  '<button type="button" class="s360-btn" data-s360-client-close>Закрыть детали</button></div></div>'+
-  '<div class="s360-focus"><b>Оборот по клиенту</b><div><small>'+yr+' · закрытые месяцы</small><strong>'+esc(whole(c.current_revenue))+'</strong></div>'+
-  '<div><small>'+prev+' · сопоставимые месяцы</small><strong>'+esc(whole(c.previous_revenue))+'</strong></div>'+
-  '<div><small>Изменение, BYN</small><strong>'+esc(whole(num(c.current_revenue)-num(c.previous_revenue)))+'</strong></div></div>'+
-  '<div class="s360-head-actions" style="margin-top:14px"><h3>История продаж клиента по месяцам</h3><span class="s360-badge">'+yr+' · синий / '+prev+' · серый</span></div>'+
-  '<div class="s360-client-graph">'+bars+'</div>'+
-  '<div id="s360-client-recovery-container" aria-live="polite">'+clientRecoveryHtml()+'</div>'+ 
- '<div id="s360-client-product-container" aria-live="polite">'+clientProductsHtml(detail)+'</div>'+
-  '<div class="s360-muted" style="margin-top:10px">* Текущий месяц неполный и не включён в итоговое сравнение с начала года.</div></div>';
+  '<button type="button" class="s360-btn" data-s360-client-close>К списку клиентов</button></div></div>'+
+  tabbar+
+  '<div role="tabpanel">'+({overview,months:monthly,products,tasks}[state.clientTab]||overview)+'</div></div>';
 }
 function clientsPanel(d){
  const preview=arr(d.top_clients).slice(0,7);
+ if(state.clientKey){
+  const detail=state.clientData?.detail;
+  return '<div class="s360-panel s360-client-full" id="s360-clients"><div id="s360-client-detail-anchor">'+
+   (detail?clientDetailHtml(detail):state.clientLoading?'<div role="status">Загружаю клиента…</div>':
+    '<div class="s360-warn">'+esc(state.clientError||'Не удалось открыть выбранного клиента')+'</div><button type="button" class="s360-btn" data-s360-client-close>К списку клиентов</button>')+
+   '</div></div>';
+ }
  if(!state.clientsOpen){
-  return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><h3>Клиенты 360° · Продажи с начала года</h3>'+
-  '<span class="s360-badge">1С · закрытые месяцы</span></div>'+
+ return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><h3>Клиенты · Продажи с начала года</h3></div>'+
   (preview.length?preview.map(x=>'<div class="s360-row"><button type="button" data-s360-client-key="'+esc(x.client_key)+'"><b>'+esc(x.client_name||'—')+'</b>'+
   (x.is_unallocated?'<span class="s360-muted"> · без точной ТТ</span>':'')+'</button><b>'+esc(whole(x.revenue))+'</b>'+
   '<span>'+esc(x.manager_name||'—')+'</span><span>Детали</span></div>').join(''):'<div class="s360-muted">Подтверждённых продаж нет.</div>')+
@@ -880,12 +1180,17 @@ function clientsPanel(d){
  }
  const result=state.clientData||{},rows=arr(result.items),total=num(result.total),pages=Math.max(1,Math.ceil(total/20)),page=Math.floor(state.clientOffset/20)+1;
  const list=rows.map(x=>{
-  const current=num(x.current_revenue),previous=num(x.previous_revenue),delta=current-previous;
-  const trend=previous>0?(delta/previous*100).toFixed(1).replace('.',',')+'%':current>0?'Новый клиент':'—';
+  const history=verifiedClientHistory(x,d),periods=selectedSalesPeriods(d);
+  const supported=!!history&&[d.year,d.previous_year].includes(Number(periods.p2.from.slice(0,4)));
+  const current=supported?historyPeriod(history,periods.p1.from,periods.p1.to).reduce((s,r)=>s+num(r.revenue),0):num(x.current_revenue);
+  const previous=supported?historyPeriod(history,periods.p2.from,periods.p2.to).reduce((s,r)=>s+num(r.revenue),0):num(x.previous_revenue);
+  const delta=current-previous;
+  const comparison=selectedComparison(d),valid=!!(comparison.one?.closed&&comparison.two?.closed&&comparison.one.rows.length===comparison.two.rows.length);
+  const trend=!valid?'Без итогового %':previous>0?(delta/previous*100).toFixed(1).replace('.',',')+'%':current>0?'Новый клиент':'—';
   return '<button type="button" class="s360-client-item'+(state.clientKey===x.client_key?' active':'')+'" data-s360-client-key="'+esc(x.client_key)+'" aria-current="'+(state.clientKey===x.client_key?'true':'false')+'">'+
   '<span><b>'+esc(x.client_name||'—')+'</b><small class="s360-muted" style="display:block">'+esc(x.manager_name||'Менеджер не определён')+'</small></span>'+
-  '<span class="s360-client-item-amount"><b class="'+(delta<0?'s360-negative':'s360-positive')+'">'+esc(trend)+'</b>'+
-  '<small>'+d.year+': '+esc(whole(current))+'</small><small>'+d.previous_year+': '+esc(whole(previous))+'</small></span></button>';
+  '<span class="s360-client-item-amount"><b class="'+(delta<0?'s360-negative':'s360-positive')+'">'+esc(supported?trend:'Годовой срез')+'</b>'+
+  '<small>'+esc(short(current))+' / '+esc(short(previous))+' BYN</small></span></button>';
  }).join('');
  const search='<div class="s360-client-search">'+
  '<input id="s360-client-search" data-s360-client-search value="'+esc(state.clientSearch)+'" placeholder="Название клиента или менеджер" aria-label="Поиск клиентов">'+
@@ -893,59 +1198,61 @@ function clientsPanel(d){
  const paginator=(total>0?'<div class="s360-head-actions" style="margin-top:12px"><span class="s360-muted">Найдено '+total+' · страница '+page+' из '+pages+'</span>'+
  '<div class="s360-tabs"><button type="button" class="s360-btn" data-s360-client-page="-1"'+(page===1?' disabled':'')+'>←</button>'+
  '<button type="button" class="s360-btn" data-s360-client-page="1"'+(page>=pages?' disabled':'')+'>→</button></div></div>':'');
- const details=result.detail?clientDetailHtml(result.detail):
- '<div class="s360-client-empty">Выберите клиента слева. Его оборот, динамика, падения по группам, подгруппам и SKU откроются здесь, без поиска внизу страницы.</div>';
- return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><div><h3>Клиенты 360° · Поиск и детализация</h3>'+
- '<div class="s360-muted">Единый адаптивный интерфейс · рост и падение по закрытым месяцам</div></div>'+
- '<button type="button" class="s360-btn" data-s360-all-clients>Свернуть список</button></div>'+
- '<div class="s360-client-split"><div class="s360-client-left" id="s360-client-left">'+search+
+ return '<div class="s360-panel" id="s360-clients"><div class="s360-head-actions"><h3>Клиенты</h3><span class="s360-badge">'+esc(selectedSalesPeriods(d).p1.from)+' — '+esc(selectedSalesPeriods(d).p1.to)+'</span></div>'+
+ '<div class="s360-client-list-full" id="s360-client-left">'+search+
  (state.clientError?'<div class="s360-warn">'+esc(state.clientError)+' <button type="button" class="s360-btn" data-s360-client-find>Повторить</button></div>':'')+
  (state.clientLoading?'<div class="s360-loading" role="status">Загружаю клиентов из 1С…</div>':
  '<div class="s360-client-list">'+(list||'<div class="s360-muted">По запросу клиентов нет.</div>')+'</div>')+
- paginator+'</div><div class="s360-client-right" id="s360-client-detail-anchor">'+details+'</div></div></div>';
+ paginator+'</div></div>';
 }
 function render(){
  const root=mount();if(!root)return;
  if(state.legacy){
-  root.innerHTML='<div class="s360-panel s360-head-actions"><div><h2>Исходные отчёты продаж</h2><div class="s360-muted">Режим подробных отчётов, новый директорский экран скрыт.</div></div>'+
-   '<button type="button" class="s360-btn primary" data-s360-legacy>← Вернуться к Продажи 360°</button></div>';
+  root.innerHTML='<div class="s360-panel s360-head-actions"'+(state.fallbackReason?' role="alert"':'')+'><div><h2>Исходные отчёты продаж</h2>'+
+   (state.fallbackReason?'<p class="s360-muted">Годовая аналитика сейчас не ответила. Показан действующий отчёт продаж.</p>':'')+'</div>'+
+   '<button type="button" class="s360-btn primary" data-s360-legacy>Вернуться к продажам</button></div>';
   return;
  }
  if(!state.data){
   root.innerHTML=headerHtml(null)+filtersHtml(null)+
-   (state.error?'<div class="s360-loading">Не удалось получить годовую аналитику: '+esc(state.error)+'<div style="margin-top:10px"><button type="button" class="s360-btn" data-s360-refresh>Повторить загрузку</button><button type="button" class="s360-btn" data-s360-legacy>Открыть исходный отчёт</button></div></div>':
-   '<div role="status" class="s360-loading">Загружаю данные выбранного менеджера из 1С. Старые отчёты скрыты.</div><div class="s360-load-kpis" aria-hidden="true">'+Array.from({length:5},()=>'<div></div>').join('')+'</div>');
+   (state.error?'<div class="s360-loading" role="alert">Годовая аналитика сейчас недоступна.<div style="margin-top:10px"><button type="button" class="s360-btn" data-s360-refresh>Повторить загрузку</button><button type="button" class="s360-btn" data-s360-legacy>Открыть исходный отчёт</button></div></div>':
+   '<div role="status" class="s360-loading">Загружаю продажи… <button type="button" class="s360-btn" data-s360-legacy>Открыть прежний отчёт</button></div><div class="s360-load-kpis" aria-hidden="true">'+Array.from({length:5},()=>'<div></div>').join('')+'</div>');
   return;
  }
  const focus=focusedMonth(state.data);if(focus)state.selectedMonth=focus.month;
- const d=state.data,y=ytd(d),kpi=getKpi(d);
+ const d=state.data,y=ytd(d);
+ ensureSelectedSources(d);
+ const chosen=selectedComparison(d),kpi=periodKpis(chosen);
  const periods=chartData(d,state.view);
- const comparison=y.delta===null?'—':(y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'%';
- const colors=y.delta===null?'':y.delta<0?'s360-negative':'s360-positive';
- root.innerHTML=headerHtml(d)+filtersHtml(d)+rangePanel(d)+
+ const comparison=chosen.pct===null?'—':(chosen.pct>0?'+':'')+chosen.pct.toFixed(1).replace('.',',')+'%';
+ const colors=chosen.pct===null?'':chosen.pct<0?'s360-negative':'s360-positive';
+ root.innerHTML=headerHtml(d)+filtersHtml(d)+
  '<div class="s360-kpis">'+
- kpiCard('Продажи · всего',whole(y.current),y.months+' закрытых месяцев · 1С, с НДС')+
- kpiCard('К прошлому году',comparison,'Сопоставимые закрытые месяцы',colors)+
- kpiCard('Покупателей',fmt(d.active_clients_ytd),'Уникальных с продажами по 1С')+
- kpiCard('План/факт месяца',kpi.display,kpi.description)+
- kpiCard('Без точной ТТ',whole(d.unallocated_client_revenue),'Включено в общий оборот')+'</div>'+
+ kpiCard('Продажи',chosen.one?.complete?money(chosen.one.total):'—','Период 1')+
+ kpiCard(chosen.pct===null?'Сравнение':chosen.pct>0?'Рост':chosen.pct<0?'Падение':'Без изменений',comparison,chosen.delta===null?'Нет сопоставимых периодов':(chosen.delta>0?'+':'')+money(chosen.delta),colors)+
+ akbKpiCard(kpi)+
+ planKpiCard(kpi)+'</div>'+
+ selectedComparisonHtml(d)+
+ selectedChartHtml(d)+clientsPanel(d)+
+ '<details class="s360-annual-detail" data-s360-annual'+(state.annualOpen?' open':'')+'><summary>Годовая детализация</summary>'+
+ (num(d.unallocated_client_revenue)>0?'<p class="s360-muted">Без точной ТТ: '+esc(money(d.unallocated_client_revenue))+' · включено в оборот с начала года.</p>':'')+
+ periodComparisonHtml(d)+
 
  '<div class="s360-panel s360-chart-panel'+(state.chartExpanded?' expanded':'')+'"><div class="s360-head-actions">'+
  '<div><h3>Динамика с января · '+d.year+' / '+d.previous_year+'</h3>'+
- '<div class="s360-muted">Все продажи · с НДС · сумма без копеек</div></div>'+
+ '</div></div>'+
  '<button type="button" class="s360-btn" data-s360-chart-expand>'+(state.chartExpanded?'Обычный размер':'Увеличить график')+'</button></div>'+
  trendSvg(periods)+
- '<div class="s360-legend"><span><i style="background:#2563eb"></i>'+d.year+'</span>'+
+ '<div class="s360-legend"><span><i style="background:var(--a,#185FA5)"></i>'+d.year+'</span>'+
  '<span><i style="background:#94a3b8"></i>'+d.previous_year+'</span></div>'+
  focusedHtml(d,periods)+
- '<div class="s360-muted" style="margin-top:10px">* Незакрытые периоды показаны справочно и исключены из годового процента роста.</div></div>'+
+ '</div>'+
  brief(d)+
  '<div class="s360-grid"><div class="s360-panel" id="s360-managers"><h3>Менеджеры · Отгрузки с января</h3>'+managerBars(d)+
  '<p class="s360-muted" style="margin-top:12px">График использует текущее закрепление клиентской базы. Не распределённый по менеджеру оборот не приписывается сотруднику.</p></div>'+
  '<div class="s360-panel" id="s360-categories"><h3>Товарные группы · Рейтинг продаж</h3><div class="s360-minirows">'+categoryTable(d)+'</div></div></div>'+
- matrix(d)+'<div id="s360-drill-global-container" aria-live="polite">'+drillView('global')+'</div>'+clientsPanel(d)+
- '<div class="s360-foot"><span class="s360-muted">ИИ-сигналы — гипотезы для проверки. Нельзя считать нулевые продажи доказательством незнания товара. Никакие задачи и экзамены автоматически не создаются.</span>'+
- '<button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div>';
+ matrix(d)+'<div id="s360-drill-global-container" aria-live="polite">'+drillView('global')+'</div>'+
+ '<div class="s360-foot"><button type="button" class="s360-btn" data-s360-legacy aria-expanded="'+String(state.legacy)+'">'+(state.legacy?'Скрыть прежние отчёты':'Раскрыть исходные отчёты и все фильтры')+'</button></div></details>';
  if(state.clientsOpen&&$('s360-client-left'))$('s360-client-left').scrollTop=state.clientListScroll;
 }
 function activatePeriod(key){
@@ -960,15 +1267,6 @@ function activatePeriod(key){
  if(month){state.selectedMonth=month.month;render()}
 }
 function onInput(e){
- const range=e.target.closest?.('[data-s360-range]');
- if(range){
-  rangeDraft=Object.fromEntries(new FormData(range));
-  rangeResult=null;
-  rangeRevision++;
-  const result=$(ID)?.querySelector('[data-s360-range-result]');
-  if(result)result.replaceChildren();
-  return;
- }
  const search=e.target.closest?.('[data-s360-client-search]');
  if(search)state.clientSearch=String(search.value||'').slice(0,120);
  const drill=e.target.closest?.('[data-s360-drill-input]');
@@ -987,20 +1285,46 @@ function onKeyDown(e){
  e.preventDefault();activatePeriod(p.dataset.s360Point);
 }
 function onChange(e){
+ const periodInput=e.target.closest?.('[data-s360-period]');
+ if(periodInput){
+  const value=String(periodInput.value||'');
+  if(!/^\d{4}-\d{2}$/.test(value))return;
+  const field={ 'p1-from':'period1Start','p1-to':'period1End','p2-from':'period2Start','p2-to':'period2End'}[periodInput.dataset.s360Period];
+  if(!field)return;
+  const pair=field.startsWith('period1')?'period1':'period2',other=field.endsWith('Start')?pair+'End':pair+'Start';
+  if(state[other]&&state[other].slice(0,4)!==value.slice(0,4))state[other]=value.slice(0,4)+state[other].slice(4);
+  state[field]=value;state.comparisonData=null;state.comparisonError='';
+  if(field==='period1Start'||field==='period1End'){
+   const year=Number(value.slice(0,4));
+   if(year!==state.year&&year>=2023&&year<=currentYear()){
+    const selectedClient=state.clientKey,wasOpen=state.clientsOpen;
+    state.year=year;state.selectedMonth='';clearClientState();state.clientsOpen=wasOpen;state.clientKey=selectedClient;
+    clearRecovery();resetDrill('global');invalidateDrillCache();load(false);return;
+   }
+  }
+  render();return;
+ }
  const t=e.target.closest?.('[data-s360-select]');if(!t)return;
  const v=t.value,k=t.dataset.s360Select;
  if(k==='year'){
   const y=Number(v);if(y>=2023&&y<=currentYear()){
-   state.year=y;state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);
+   state.year=y;state.period1Start='';state.period1End='';state.period2Start='';state.period2End='';
+   state.comparisonData=null;state.comparisonError='';
+   state.selectedMonth='';state.category='all';state.expanded=false;state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);
   }
  }
  if(k==='manager'){
   if(!boss())return;
-  state.manager=v;state.category='all';state.expanded=false;state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);
+  state.manager=v;state.comparisonData=null;state.comparisonError='';
+  state.category='all';state.expanded=false;state.draft=false;clearClientState();clearRecovery();resetDrill('global');invalidateDrillCache();load(false);
  }
  if(k==='month'){
   const choices=state.data?monthRows(state.data).map(x=>x.month):[];
   if(choices.includes(v)){state.selectedMonth=v;render()}
+ }
+ if(k==='client-month'){
+  const choices=arr(state.clientData?.detail?.months).filter(x=>x.has_current||x.has_previous).map(x=>x.month);
+  if(choices.includes(v)){state.clientFocusMonth=v;render()}
  }
  if(k==='view'&&['months','quarters'].includes(v)){state.view=v;render()}
  if(k==='category'){state.category=v;state.draft=false;openDrill('global',v)}
@@ -1019,7 +1343,12 @@ function onClick(e){
  if(point){activatePeriod(point.dataset.s360Point);return}
  const t=e.target.closest?.('button');if(!t)return;
  const a=t.dataset;
- if(a.s360Refresh!==undefined){clearClientState();clearRecovery();recoveryCache.clear();resetDrill('global');invalidateDrillCache();load(true);return}
+ if(a.s360ClientMonth!==undefined){state.clientFocusMonth=a.s360ClientMonth;render();return;}
+ if(a.s360ClientTab!==undefined){
+  if(['overview','months','products','tasks'].includes(a.s360ClientTab)){state.clientTab=a.s360ClientTab;render()}
+  return;
+ }
+ if(a.s360Refresh!==undefined){kpiMonths.clear();kpiPeriods.clear();state.comparisonData=null;state.comparisonError='';clearClientState();clearRecovery();recoveryCache.clear();resetDrill('global');invalidateDrillCache();load(true);return}
  if(a.s360ChartExpand!==undefined){state.chartExpanded=!state.chartExpanded;render();return}
  if(a.s360Step!==undefined){
   const months=monthRows(state.data).map(x=>x.month),i=months.indexOf(focusedMonth(state.data)?.month);
@@ -1129,23 +1458,24 @@ function onClick(e){
  }
  if(a.s360ClientKey!==undefined){
   state.clientListScroll=$('s360-client-left')?.scrollTop||0;
-  state.clientsOpen=true;clearClientRecovery();resetDrill('client');
+  state.clientsOpen=true;state.annualOpen=false;clearClientRecovery();resetDrill('client');
+  if(state.clientKey!==a.s360ClientKey){state.clientFocusMonth='';state.clientTab='overview'}
   state.clientKey=String(a.s360ClientKey).slice(0,300);state.clientOffset=0;
   state.focusClientOnLoad=true;loadClients();return;
  }
  if(a.s360ClientFind!==undefined){
   state.clientsOpen=true;state.clientSearch=String($('s360-client-search')?.value??state.clientSearch).slice(0,120);
-  state.clientOffset=0;state.clientKey='';clearClientRecovery();resetDrill('client');loadClients();return;
+  state.clientOffset=0;state.clientKey='';state.clientFocusMonth='';clearClientRecovery();resetDrill('client');loadClients();return;
  }
  if(a.s360ClientPage!==undefined){
   const count=num(state.clientData?.total);
   const next=state.clientOffset+Number(a.s360ClientPage)*20;
-  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';clearClientRecovery();resetDrill('client');loadClients()}
+  if(next>=0&&next<count){state.clientOffset=next;state.clientKey='';state.clientFocusMonth='';clearClientRecovery();resetDrill('client');loadClients()}
   return;
  }
- if(a.s360ClientClose!==undefined){state.clientKey='';clearClientRecovery();resetDrill('client');loadClients();return;}
+ if(a.s360ClientClose!==undefined){state.clientKey='';state.clientFocusMonth='';clearClientRecovery();resetDrill('client');loadClients();return;}
  if(a.s360Legacy!==undefined){
-  if(state.legacy){state.legacy=false;mount();render()}
+  if(state.legacy){state.legacy=false;state.fallbackReason='';mount();if(state.data)render();else load(true)}
   else originalReports(false);
   return;
  }
@@ -1161,12 +1491,17 @@ function onClick(e){
  if(a.s360Tasks!==undefined&&boss()&&typeof w.goPage==='function')w.goPage('tasks','Задачи ИИ');
 }
 async function load(force=false){
+ // The six-entry Sales menu is a navigation screen, not a hidden annual query.
+ if($(PAGE)?.classList?.contains?.('crm290-sales-entry-open')||(state.legacy&&!force))return;
  const root=mount();if(!root||active()!=='sales')return;
- const serial=++requestVersion;
+ if(boss()&&!state.manager)state.manager='all';
  const key=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
+ if(!force&&annualLoadingKey===key)return;
+ if(salesScope!==key){salesScope=key;comparisonKey='';state.comparisonData=null;}
+ const serial=++requestVersion;
  const hit=cache.get(key);
- if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.loading=false;render();loadRecovery();if(state.clientsOpen&&!state.clientData)loadClients();return}
- state.data=null;state.error='';state.loading=true;render();
+ if(!force&&hit&&Date.now()-hit.at<TTL){state.data=hit.data;state.error='';state.fallbackReason='';state.loading=false;render();loadRecovery();if(state.clientsOpen&&!state.clientData)loadClients();return}
+ annualLoadingKey=key;state.data=null;state.error='';state.loading=true;render();
  try{
   let work=pending.get(key);
   if(!work||force){
@@ -1180,11 +1515,12 @@ async function load(force=false){
   const result=await work;
   if(serial!==requestVersion||active()!=='sales')return;
   if(!result||!Array.isArray(result.months))throw Error('Сервер вернул неполную годовую аналитику');
-  state.data=result;state.error='';cache.set(key,{at:Date.now(),data:result});
+  state.data=result;state.error='';state.fallbackReason='';cache.set(key,{at:Date.now(),data:result});
   while(cache.size>16)cache.delete(cache.keys().next().value);
  }catch(err){
-  if(serial===requestVersion){state.error=String(err?.message||err);state.data=null;console.warn('Sales360 annual read-only request',err)}
-  }finally{if(serial===requestVersion){state.loading=false;render();if(state.data)loadRecovery();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
+  if(serial===requestVersion){state.error=String(err?.message||err);state.data=null;
+   console.warn('Sales360 annual read-only request',err)}
+ }finally{if(serial===requestVersion){annualLoadingKey='';state.loading=false;render();if(state.data)loadRecovery();if(state.clientsOpen&&state.data&&!state.clientData)loadClients()}}
 }
 async function loadClients(){
  if(!state.clientsOpen||!state.data||active()!=='sales')return;
@@ -1290,14 +1626,18 @@ function install(){
  if(typeof original!=='function')return;
  sourceRender=original;
  w.renderSales=function(){
-  const out=sourceRender.apply(this,arguments);
-  if(active()==='sales'){if(!mounted)mount();load(false);}
-  return out;
+  if(active()!=='sales'||state.legacy)return sourceRender.apply(this,arguments);
+  return load(false);
  };
+ try{renderSales=w.renderSales}catch(_){}
+ const app=$('app');
+ if(app&&w.MutationObserver)new w.MutationObserver(()=>{
+  if(active()==='sales'&&!mounted)load(false);
+ }).observe(app,{attributes:true,attributeFilter:['data-active-page']});
  wrapped=true;
  if(active()==='sales')load(false);
 }
-w.RESANTA_SALES360_V1=Object.freeze({version:'20261110.5',readOnly:true,annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',productRpc:'crm_sales360_product_drill_v3',ytd,chartData,categoryMatrix,managerGaps,monthKpi,directorSignals});
+w.RESANTA_SALES360_V1=Object.freeze({version:'20261123.sales.3',readOnly:true,show:()=>load(false),annualRpc:'crm_sales360_annual_v2',clientsRpc:'crm_sales360_clients_v2',productRpc:'crm_sales360_product_drill_v3',ytd,chartData,categoryMatrix,managerGaps,monthKpi,periodComparison,directorSignals});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});
 else install();
 })(window,document);

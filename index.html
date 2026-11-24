@@ -107,7 +107,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <script defer src="./assets/111-triovist-db-queue-v236251.js?v=23.6.257"></script>
 <script defer src="./assets/79-falling-task-period-v236106.js?v=23.6.106"></script>
 <script defer src="./assets/73-route-coverage-v23674.js?v=23.6.75"></script>
-<script defer src="./assets/04-business-analytics.js?v=23.6.202"></script>
+<script defer src="./assets/04-business-analytics.js?v=23.6.202&pilotScreen=20261124-1"></script>
 <script defer src="./assets/05-performance-core.js?v=20261116-air3-native-bootstrap-3&lifecycleRelease=20261117-1"></script>
 <script defer src="./assets/06-root-fixes.js?signalsMerge=20261113-v1&v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
@@ -132,7 +132,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <script defer src="./assets/113-analytics-aggregates-v236342.js?v=20261109-abc-manager-fix2&perf=20261109-3&pilotRollout=20261124-abc1"></script>
 <script defer src="./assets/70-vip-period-compare-v23662.js?v=23.6.433"></script>
 <script defer src="./assets/98-period-filters-v236198.js?v=23.6.277"></script>
-<script defer src="./assets/125-vip-date-range-v236434.js?v=23.6.437"></script>
+<script defer src="./assets/125-vip-date-range-v236434.js?v=23.6.437&pilotScreen=20261124-1"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--a:#185FA5;--ab:#E6F1FB;--at:#0C447C;--g:#27500A;--gb:#EAF3DE;--am:#854F0B;--amb:#FAEEDA;--r:#A32D2D;--rb:#FCEBEB;--border:#E5E7EB;--bg:#F9FAFB;--card:#fff;--text:#111827;--sub:#6B7280}
@@ -696,6 +696,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       </div>
       <div class="page" id="page-vip">
         <div class="page-title">💎 ВИП клиенты</div>
+        <div id="vip-range-host" class="card"></div>
         <div id="vip-period-info" class="card" style="margin-bottom:12px"></div>
         <div id="vip-empty" style="display:none;color:var(--sub);font-size:13px;padding:10px 0"></div>
         <div id="vip-decliners-block" style="display:none" class="card">
@@ -774,10 +775,44 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       </div>
 
       <div class="page" id="page-managers">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-          <div><div class="page-title" style="margin-bottom:3px">Менеджеры · KPI</div><div style="font-size:12px;color:var(--sub)">План вводит руководитель, факт считается автоматически из продаж 1С</div></div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="month" id="manager-kpi-month" class="form-input" style="width:auto" onchange="renderManagers()"><button class="btn-primary" onclick="openManagerPlanEditor()">🎯 Внести планы</button></div>
+        <div class="kv-page-head">
+          <div class="kv-heading">
+            <div class="page-title">Менеджеры · KPI</div>
+            <span class="kv-help">
+              <button type="button" class="kv-star" aria-label="Источник плана и факта" aria-describedby="kv-help-source">✱</button>
+              <span class="kv-tooltip" id="kv-help-source" role="tooltip">План вводит руководитель. Факт считается автоматически из продаж 1С.</span>
+            </span>
+          </div>
+          <div class="kv-page-controls">
+            <input type="month" id="manager-kpi-month" class="form-input" aria-label="Месяц KPI">
+            <button type="button" data-kv-month-open="main" aria-haspopup="dialog" aria-label="Месяц KPI" hidden><span></span></button>
+            <input type="hidden" id="manager-kpi-compare">
+            <button type="button" data-kv-month-open="compare" aria-haspopup="dialog" hidden><span>Сравнить с</span></button>
+            <input type="hidden" id="manager-kpi-base">
+            <button type="button" data-kv-month-open="base" aria-haspopup="dialog" hidden><span>Основной период</span></button>
+            <button class="btn-primary" onclick="openManagerPlanEditor()">Внести планы</button>
+            <button type="button" data-kv-lera>✦ Спросить Леру</button>
+            <span class="kv-help">
+              <button type="button" class="kv-star" aria-label="Чем поможет Лера" aria-describedby="kv-help-lera">✱</button>
+              <span class="kv-tooltip" id="kv-help-lera" role="tooltip">Лера объясняет KPI, помогает сравнить периоды, подготовить разговор с клиентом, письмо или список действий. Вопрос можно изменить или написать свой. Данные CRM доступны в пределах вашей роли.</span>
+            </span>
+          </div>
         </div>
+        <div class="kv-lera-status" data-kv-lera-status role="status" hidden></div>
+        <dialog class="kv-month-dialog" data-kv-month-dialog aria-labelledby="kv-month-title">
+          <h3 id="kv-month-title">Выберите месяц KPI</h3>
+          <p class="kv-month-preview" data-kv-month-preview aria-live="polite"></p>
+          <p class="kv-range-note" data-kv-range-note hidden></p>
+          <div class="kv-calendar-nav">
+            <button type="button" data-kv-year="-1" aria-label="Предыдущий год">‹</button>
+            <button type="button" data-kv-year="1" aria-label="Следующий год">›</button>
+          </div>
+          <div class="kv-years" data-kv-years></div>
+          <form method="dialog" class="kv-calendar-footer">
+            <button type="submit">Отмена</button>
+            <button type="button" data-kv-confirm>Выбрать</button>
+          </form>
+        </dialog>
         <div class="card" style="overflow-x:auto">
           <table class="tbl" style="min-width:1100px"><thead><tr><th>Менеджер</th><th>Регион</th><th>Визитов</th><th>Задач открыто</th><th>Просрочено</th><th>Клиентов</th><th>Отгрузка: план / факт</th><th>Выполнение</th><th>АКБ: план / факт</th><th>Выполнение</th><th>Новые клиенты: план / факт</th><th>Выполнение</th><th></th></tr></thead><tbody id="managers-table"></tbody></table>
         </div>
@@ -1904,7 +1939,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- KPI360 visual v2: read-only dashboard; existing plan editor retained. -->
 <!-- Sanitized MPP league; must load before the approved KPI dashboard. -->
 <script defer src="./assets/165-kpi360-mpp-competition-v1.js?v=20261102-1"></script>
-<script defer src="./assets/160-manager-kpi360-visual-v2.js?v=20261102-5&pilotRollout=20261124-kpi1"></script>
+<script defer src="./assets/160-manager-kpi360-visual-v2.js?v=20261102-5&pilotRollout=20261124-kpi1&pilotScreen=20261124-1"></script>
 <!-- Director-only Routes 360: read-only calendar dashboard with existing day approval/editor. -->
 <script defer src="./assets/166-route-director-360-v1.js?v=20261103-legal2"></script>
 <!-- Tasks 360 Uni A / Uni X: presentation only, existing approvals and task reports remain authoritative. -->
@@ -1920,9 +1955,9 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Isolated 1C receipts 360: existing payment import, ledger, filters and export remain unchanged. -->
 <script defer src="./assets/188-payments-director360-v1.js?v=20261109-payments360-1"></script>
 <!-- Falling clients Recovery 360: read-only director dashboard on established 1C/route/task engine. -->
-<script defer src="./assets/189-falling-director360-v1.js?v=20261109-falling360-1"></script>
+<script defer src="./assets/189-falling-director360-v1.js?v=20261109-falling360-1&pilotScreen=20261124-1"></script>
 <!-- Sales360: isolated read-only director dashboard; legacy reports remain available. -->
-<script defer src="./assets/190-sales-director360-v1.js?v=20261110-sales360-6&pilotRollout=20261124-sales1"></script>
+<script defer src="./assets/190-sales-director360-v1.js?v=20261110-sales360-6&pilotRollout=20261124-sales1&pilotScreen=20261124-1"></script>
 <!-- PDZ360: director/manager responsive daily snapshot, legacy 1C debt list preserved. -->
 <script defer src="./assets/193-pdz-director360-v1.js?v=20261111-pdz360-2"></script>
 <!-- Budgets 360 · read-only presentation and scoped existing budget audit/history. -->
@@ -1931,9 +1966,10 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <link rel="stylesheet" href="./assets/283-control-center-v1.css?v=20261114-1&pilotRollout=20261124-home1">
 <script defer src="./assets/283-control-center-v1.js?v=20261117-sales1&pilotRollout=20261124-home1"></script>
 <link rel="stylesheet" href="./assets/290-crm-desktop-nav-v1.css?v=20261124-1">
-<script defer src="./assets/290-crm-desktop-nav-v1.js?v=20261124-1"></script>
-<script defer src="./assets/offline/crm-offline-store-v1.js?v=20261124-1"></script>
-<script defer src="./assets/offline/crm-offline-bridge-v1.js?v=20261124-1"></script>
+<link rel="stylesheet" href="./assets/291-sales-pilot-screens.css?v=20261124-1">
+<script defer src="./assets/290-crm-desktop-nav-v1.js?v=20261124-1&pilotScreen=20261124-1"></script>
+<script defer src="./assets/offline/crm-offline-store-v1.js?v=20261124-1&pilotScreen=20261124-1"></script>
+<script defer src="./assets/offline/crm-offline-bridge-v1.js?v=20261124-1&pilotScreen=20261124-1"></script>
 <link rel="stylesheet" href="./assets/284-control-sales-year-v1.css?v=20261114-1&pilotRollout=20261124-year1">
 <script defer src="./assets/284-control-sales-year-v1.js?v=20261114-1&labelsRelease=20261117-1&pilotRollout=20261124-year1"></script>
 <script defer src="./assets/286-clients-legal-simple-v1.js?v=20261116-tt1"></script>
