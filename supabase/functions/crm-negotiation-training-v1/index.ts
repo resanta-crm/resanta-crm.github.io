@@ -67,6 +67,7 @@ const answerInstruction = `Ты тренер B2B. Оцени предложен�
 clarification только если менеджер задал уточняющий вопрос тренеру. Если reported_gap=true или ответ «не выявил», «не уточнил», «не знаю», менеджер сообщил о пробеле в работе. В таком случае верни improve и признай, чего сотрудник пока не знает. Спроси в followup, что именно и как он уточнит у этого клиента на следующем контакте. Не проси менеджера самому отвечать, какой товар ему нужен. При конкретном выполнимом решении с ожидаемым результатом и способом контроля верни accept, объясни почему и зафиксируй action, result и check; допускай альтернативы. Срок вводится отдельно после согласия.
 При неполном решении верни improve, точную подсказку и следующий вопрос followup. До третьей попытки не раскрывай готовый ответ. Если израсходована третья попытка, заполни action, result, check рекомендуемым решением, объясни почему и чему научиться.
 Предлагай действия в полномочиях менеджера. Не придумывай обязательства, цены, наличие или согласие клиента.`;
+const finalAttemptInstruction = `Это третья попытка. После оценки предложи план по тому же клиентскому случаю. Для improve обязательно заполни все три поля: action — что и как сделать, result — какой ответ или договорённость получить, check — какой факт в CRM подтвердит выполнение. Для accept заполни их на основе решения менеджера. Не оставляй action, result и check пустыми. Формулировка «задам вопрос» с содержанием вопроса — попытка решения, даже если вопрос нужно конкретизировать.`;
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin');
@@ -311,11 +312,16 @@ Deno.serve(async (req: Request) => {
         if (body.action === 'answer') {
           const answer = clean(body.answer, 2500);
           if (first?.id !== item.id || !answer) throw fail('answer_required');
-          const value = await coach(svc, actor.id, answerInstruction, {
+          const finalAttempt = item.attempts.length === 2;
+          const instruction = finalAttempt ? answerInstruction + ' ' + finalAttemptInstruction : answerInstruction;
+          const value = await coach(svc, actor.id, instruction, {
             issue: item.issue, question: item.followup || item.question, evidence: item.evidence, client_context: item.client_context,
             attempts: item.attempts, current_attempt: item.attempts.length + 1, reported_gap: isReportedGap(answer), answer,
-          }, 750);
-          const updated = {...applyAnswer(item, answer, value), last_answer_request:body.request_id};
+          }, finalAttempt ? 950 : 750);
+          let assessment;
+          try { assessment = applyAnswer(item, answer, value); }
+          catch { throw fail('ai_incomplete_answer', 422); }
+          const updated = {...assessment, last_answer_request:body.request_id};
           return {review: {...row.review, cases: row.review.cases.map((x: any) => x.id === item.id ? updated : x)}};
         }
         if (!row.client_id || !item.plan || !date(body.due) || body.due < localDate()) throw fail('task_details_required');
