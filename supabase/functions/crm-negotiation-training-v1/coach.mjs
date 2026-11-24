@@ -85,11 +85,12 @@ export function report(rows, tasks) {
   const grouped = new Map();
   for (const row of rows) {
     const entry = grouped.get(row.owner_id) ?? {
-      name: row.manager_name, reviewed: 0, waiting: 0, completed: 0, points: 0,
+      id: row.owner_id, name: row.manager_name, reviewed: 0, waiting: 0, waiting_records: 0, to_assign: 0, completed: 0, points: 0,
       quality_count: 0, quality_sum: 0, first: 0, second: 0, third: 0, assisted: 0, tasks: 0, done: 0,
     };
     if (row.review) {
       entry.reviewed++;
+      if (row.review.cases.some(item => item.score === null)) entry.waiting_records++;
       if (row.review.quality !== null) {
         entry.quality_count++;
         entry.quality_sum += row.review.quality;
@@ -102,6 +103,7 @@ export function report(rows, tasks) {
           entry.points += item.score;
           entry[{2: 'first', 1: 'second', 0.5: 'third', 0: 'assisted'}[item.score]]++;
         }
+        if (item.plan && !item.task_id) entry.to_assign++;
         if (item.task_id) {
           entry.tasks++;
           if (tasks.get(item.task_id)?.done === true) entry.done++;
@@ -115,5 +117,5 @@ export function report(rows, tasks) {
     const independence = rate === null ? null : Math.round(rate * 10) / 10;
     const category = entry.completed < 10 ? 'Недостаточно данных' : rate >= 80 ? 'Лидер' : rate >= 50 ? 'Средний уровень' : 'Нужна поддержка';
     return {...entry, independence, category, quality: entry.quality_count ? Math.round(entry.quality_sum / entry.quality_count) : null};
-  }).sort((a, b) => (b.independence ?? -1) - (a.independence ?? -1) || a.name.localeCompare(b.name, 'ru'));
+  }).sort((a, b) => b.waiting_records - a.waiting_records || b.to_assign - a.to_assign || a.name.localeCompare(b.name, 'ru'));
 }
