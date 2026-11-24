@@ -57,12 +57,12 @@ async function coach(svc: any, userId: string, instruction: string, evidence: un
   return result;
 }
 
-const initialInstruction = `Ты тренер B2B-продаж в торговой точке. Используй только данный диалог и указанную роль менеджера.
+const initialInstruction = `Ты тренер B2B-продаж в торговой точке. Используй только данный диалог и указанные группы голоса менеджера. Все выбранные группы принадлежат одному человеку.
 Верни JSON {"summary":"сильные стороны, что произошло, существенный риск или возможность","criteria":[{"score":2,"line":0,"reason":"основание"}],"cases":[{"line":0,"issue":"одна ситуация","question":"один вопрос менеджеру для самостоятельного решения"}]}.
 criteria содержит ровно 10 пунктов в порядке: контакт, выявление потребности, качество вопросов, знание продукта, коммерческое предложение, преимущества, работа с возражениями, дополнительные продажи, инициатива, следующий шаг.
 2 эффективно, 1 частично, 0 только если была наблюдаемая возможность, null если неприменимо или недостаточно данных. line — индекс реплики с основанием. Отказ клиента сам по себе не ошибка.
-cases от 0 до 3. Выбери существенные возможности для этого клиента. Ссылайся на реплику и задавай конкретный вопрос. Пока не раскрывай решение и не додумывай продажи, цены, наличие или согласованные условия.`;
-const answerInstruction = `Ты тренер B2B. Оцени новый ответ в контексте конкретной реплики и предыдущих попыток.
+cases от 0 до 3. Выбери существенные возможности для этого клиента. Для каждой ситуации вопрос адресован менеджеру как сотруднику после встречи. Спроси, как он проверит потребность или согласует следующий шаг, что сделает, и какой результат ожидает. Не обращайся к менеджеру как к покупателю и не задавай от его имени вопросы покупателю. Ссылайся на реплику. Пока не раскрывай решение и не додумывай продажи, цены, наличие или согласованные условия.`;
+const answerInstruction = `Ты тренер B2B. Оцени предложенный менеджером следующий шаг после переговоров в контексте конкретной реплики и предыдущих попыток. Менеджер — сотрудник, который продавал, а не покупатель.
 Ответ JSON {"verdict":"clarification|improve|accept","feedback":"конкретная обратная связь","action":"","result":"","check":""}.
 clarification только если менеджер задал вопрос без предложения решения. При конкретном выполнимом решении с ожидаемым результатом и способом контроля верни accept, объясни почему и зафиксируй action, result и check; допускай альтернативы. Срок вводится отдельно после согласия.
 При неполном решении верни improve и точную подсказку. До третьей попытки не раскрывай готовый ответ. Если израсходована третья попытка, заполни action, result, check рекомендуемым решением, объясни почему и чему научиться.
@@ -280,14 +280,17 @@ Deno.serve(async (req: Request) => {
     if (body.action === 'analyse') {
       if (row.review) return reply({row: outputRow(row)});
       if (row.audio_state !== 'ready' || !Array.isArray(row.transcript)) throw fail('transcript_pending', 409);
-      const speaker = row.transcript.find((line: any) => line.speaker && line.speaker === body.speaker)?.speaker;
-      if (!speaker) throw fail('speaker_required');
       const segments = row.transcript;
+      const available = new Set(segments.map((line: any) => line.speaker).filter(Boolean));
+      const speakers = [...new Set(Array.isArray(body.speakers) ? body.speakers : [body.speaker])];
+      if (!speakers.length || speakers.some(speaker => typeof speaker !== 'string' || !available.has(speaker))) {
+        throw fail('speaker_required');
+      }
       const payload = segments.map((line: any, index: number) => ({index, ...line}));
       if (JSON.stringify(payload).length > 150_000) throw fail('transcript_too_long', 422);
       return reply(await leased(async () => {
-        const value = await coach(svc, actor.id, initialInstruction, {manager_speaker: speaker, dialogue: payload}, 2400);
-        return {manager_speaker: speaker, review: initialReview(value, segments)};
+        const value = await coach(svc, actor.id, initialInstruction, {manager_speakers: speakers, dialogue: payload}, 2400);
+        return {manager_speaker: speakers[0], review: {...initialReview(value, segments), manager_speakers: speakers}};
       }));
     }
     if (body.action === 'answer' || body.action === 'task') {

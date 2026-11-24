@@ -236,35 +236,38 @@
     }
     const choices = node('fieldset', undefined, 'nt-speaker-choices');
     choices.append(node('legend', 'Какие реплики ваши?'));
-    const hint = node('p', 'Сравните примеры и выберите голос, которому принадлежат ваши фразы.', 'nt-muted');
+    const hint = node('p', 'Отметьте группы со своими фразами. Если ваш голос попал в две группы, отметьте обе.', 'nt-muted');
     hint.id = 'nt-speaker-hint';
     choices.setAttribute('aria-describedby', hint.id);
     choices.append(hint);
     const cards = node('div', undefined, 'nt-speaker-grid');
-    const analyse = button('Запустить разбор', () => operation(analyse, message, async () => {
-      const chosen = choices.querySelector('[name="nt-speaker"]:checked');
-      if (!chosen) return;
-      await api({action:'analyse', id, speaker:chosen.value});
+    const progress = status();
+    const analyse = button('Запустить разбор', () => operation(analyse, progress, async () => {
+      const speakers = [...choices.querySelectorAll('[name="nt-speaker"]:checked')].map(choice => choice.value);
+      if (!speakers.length) return;
+      await api({action:'analyse', id, speakers});
       if (ticket === layout) render();
     }), true);
     analyse.disabled = true;
     for (const [speaker, label] of labels) {
       const option = node('label', undefined, 'nt-speaker');
-      const radio = input('radio');
-      radio.name = 'nt-speaker';
-      radio.value = speaker;
-      radio.addEventListener('change', () => {analyse.disabled = false;});
+      const checkbox = input('checkbox');
+      checkbox.name = 'nt-speaker';
+      checkbox.value = speaker;
+      checkbox.addEventListener('change', () => {
+        analyse.disabled = !choices.querySelector('[name="nt-speaker"]:checked');
+      });
       const examples = lines.filter(line => line.speaker === speaker);
       const excerpts = examples.filter(line => line.text.length >= 18).slice(0, 2);
       const heading = node('span', label, 'nt-speaker-name');
-      option.append(radio, heading);
+      option.append(checkbox, heading);
       for (const line of excerpts.length ? excerpts : examples.slice(0, 2)) {
         const text = line.text.length > 180 ? line.text.slice(0, 177) + '…' : line.text;
         option.append(node('span', timeLabel(line.time) + ' · «' + text + '»', 'nt-speaker-quote'));
       }
       cards.append(option);
     }
-    choices.append(cards, analyse);
+    choices.append(cards, analyse, progress);
     box.append(choices);
   }
   async function renderDetail(ticket,id) {

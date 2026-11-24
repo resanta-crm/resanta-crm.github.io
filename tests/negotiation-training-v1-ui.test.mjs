@@ -74,6 +74,7 @@ test('New client sends audio with consent and can link to an existing card witho
   row.transcript = [
     {time:4,speaker:'SPEAKER_03',text:'Какие товары чаще спрашивают ваши покупатели?'},
     {time:12,speaker:'SPEAKER_02',text:'Нам нужно получить пробную партию до пятницы.'},
+    {time:16,speaker:'SPEAKER_01',text:'Уточню срок доставки и вернусь с предложением.'},
   ];
   window.crmNegotiations.open();
   await settle();
@@ -89,7 +90,10 @@ test('New client sends audio with consent and can link to an existing card witho
   selected.setAttribute('checked','');
   selected.dispatchEvent(new window.Event('change'));
   assert.equal(analyse.disabled,false);
+  const another = root.querySelector('input[value="SPEAKER_01"]');
+  another.setAttribute('checked','');
+  another.dispatchEvent(new window.Event('change'));
   analyse.click();
   await settle();
-  assert.equal(requests.find(r => r.action === 'analyse').payload.speaker, 'SPEAKER_03');
+  assert.deepEqual(requests.find(r => r.action === 'analyse').payload.speakers, ['SPEAKER_03','SPEAKER_01']);
 });
