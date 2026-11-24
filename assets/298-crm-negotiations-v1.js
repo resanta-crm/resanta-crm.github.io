@@ -1,7 +1,6 @@
 (() => {
   'use strict';
   const page = document.getElementById('page-negotiations');
-  const nav = document.getElementById('nav-negotiations');
   const dialog = document.getElementById('neg-training-dialog');
   const visitLinks = new Map();
   const audioTypes = {mp3:'audio/mpeg', m4a:'audio/mp4', mp4:'video/mp4', aac:'audio/aac',
@@ -547,30 +546,51 @@
     const address = context.address ? document.getElementById(context.address).textContent : '';
     begin({client_id:id, prospect_name:name.value || name.textContent, address, visitForm:form});
   }
-  window.addEventListener('resanta-negotiation-visit-saved',async ({detail}) => {
-    const draft = visitLinks.get(detail.form);
-    if (!draft || draft.client !== detail.visit.client_id || draft.owner !== currentUser?.id) return;
-    try {
-      await api({action:'link_visit',id:draft.id,visit_id:detail.visit.id});
-      visitLinks.delete(detail.form);
-    } catch {
-      // History retains the recording and offers manual attachment if the network was interrupted.
+  async function saveVisit(form, save) {
+    const draft = visitLinks.get(form);
+    if (!draft || draft.owner !== currentUser?.id) return save();
+    const before = new Set(allVisits.map(visit => visit.id));
+    const result = await save();
+    if (draft.owner !== currentUser?.id) return result;
+    const added = allVisits.filter(visit => !before.has(visit.id) &&
+      visit.client_id === draft.client && visit.manager_id === draft.owner);
+    if (added.length === 1) {
+      api({action:'link_visit', id:draft.id, visit_id:added[0].id})
+        .then(() => {if (visitLinks.get(form) === draft) visitLinks.delete(form);})
+        .catch(() => {}); // The history screen can attach it when the connection returns.
     }
-  });
-  window.addEventListener('resanta-negotiation-client-saved',async ({detail}) => {
+    return result;
+  }
+  async function saveClient(save) {
     const draft = pendingClient;
-    pendingClient = null;
-    if (!draft || draft.owner !== currentUser?.id) return;
-    try {await api({action:'link_client',id:draft.id,client_id:detail.id});}
-    catch {alert('Карточка клиента сохранена. Привяжите её к записи в разделе «Переговоры».');}
-  });
+    if (!draft || draft.owner !== currentUser?.id) return save();
+    const initial = new Set(allClients.map(client => client.id));
+    const name = document.getElementById('nc-name').value.trim();
+    const address = document.getElementById('nc-address').value.trim();
+    const result = await save();
+    if (draft.owner !== currentUser?.id) return result;
+    const made = allClients.filter(client => !initial.has(client.id) && client.name === name && client.address === address);
+    if (made.length === 1) {
+      pendingClient = null;
+      try { await api({action:'link_client', id:draft.id, client_id:made[0].id}); }
+      catch {alert('Карточка клиента сохранена. Привяжите её к записи в разделе «Переговоры».');}
+    }
+    return result;
+  }
+  for (const [form, modalId] of [['quick','modal-quick-visit'], ['visit','modal-visit']]) {
+    const modal = document.getElementById(modalId);
+    new MutationObserver(() => {
+      if (!modal.classList.contains('open')) return;
+      visitLinks.delete(form);
+      document.getElementById('nt-' + form + '-notice').textContent = '';
+    }).observe(modal, {attributes:true,attributeFilter:['class']});
+  }
   new MutationObserver(() => {
     if (!document.getElementById('modal-add-client').classList.contains('open')) pendingClient = null;
   }).observe(document.getElementById('modal-add-client'), {attributes:true,attributeFilter:['class']});
 
   function sync() {
     const visible = permitted();
-    nav.style.display = visible ? '' : 'none';
     for (const el of document.querySelectorAll('[data-nt-entry]')) el.hidden = !visible;
     const next = visible ? currentUser.id : null;
     if (next === userId) return;
@@ -582,6 +602,6 @@
   }
   new MutationObserver(sync).observe(document.getElementById('app'),{attributes:true,attributeFilter:['class','style','data-active-page']});
   new MutationObserver(sync).observe(document.getElementById('nav-sales'),{attributes:true,attributeFilter:['style','class']});
-  window.crmNegotiations = {open, recordVisit, resetVisit: form => visitLinks.delete(form)};
+  window.crmNegotiations = {open, recordVisit, saveVisit, saveClient};
   sync();
 })();

@@ -4641,9 +4641,6 @@ let qvRoutePlanId=null; // id конкретной строки route_plans (т�
                          // нужно, чтобы отмечать посещённой ТОЛЬКО эту точку, а не все точки с тем же именем клиента
 
 function openQuickVisit(clientId,visitDate,routePlanId){
-  window.crmNegotiations?.resetVisit('quick');
-  const negotiationNotice=document.getElementById('nt-quick-notice');
-  if(negotiationNotice)negotiationNotice.textContent='';
   qvVisitDate=visitDate||TODAY;
   qvRoutePlanId=routePlanId||null;
   // Ищем клиента — сначала в allClients, потом в routeClients (план маршрута)
@@ -4833,7 +4830,6 @@ async function saveQuickVisit(){
   if(!visit){alert('Сервер не вернул сохранённый визит. Обновите страницу и сообщите руководителю.');return;}
   if(!allVisits.some(x=>String(x.id)===String(visit.id)))allVisits.unshift(visit);
   v2264MergeReturnedTasks(saveBundle.tasks);
-  window.dispatchEvent(new CustomEvent('resanta-negotiation-visit-saved',{detail:{form:'quick',visit}}));
   if(qvGeo&&qvMatchedPlan?.physical_point_id && Number(qvGeo.accuracy)>0 && Number(qvGeo.accuracy)<=60){
     try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{detail:{
       route_plan_id:qvMatchedPlan.id,lat:qvGeo.lat,lng:qvGeo.lng,
@@ -5566,9 +5562,6 @@ function toggleVisitGroup(gid){
 
 let visitSelectionKeyV3=null;
 function openAddVisit(clientId){
-  window.crmNegotiations?.resetVisit('visit');
-  const negotiationNotice=document.getElementById('nt-visit-notice');
-  if(negotiationNotice)negotiationNotice.textContent='';
   visitSelectionKeyV3=null;
   visitClientId=clientId;
   document.getElementById('visit-modal-title').textContent=clientId?'Визит — '+(allClients.find(x=>x.id===clientId)?.name||''):'Записать визит';
@@ -5749,7 +5742,6 @@ async function saveVisit(){
   if(!visit){alert('Сервер не вернул сохранённый визит. Обновите страницу и сообщите руководителю.');return;}
   if(!allVisits.some(x=>String(x.id)===String(visit.id)))allVisits.unshift(visit);
   v2264MergeReturnedTasks(saveBundle.tasks);
-  window.dispatchEvent(new CustomEvent('resanta-negotiation-visit-saved',{detail:{form:'visit',visit}}));
   if(geo&&matchedVisitPlan?.physical_point_id && Number(geo.accuracy)>0 && Number(geo.accuracy)<=60){
     try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{detail:{
       route_plan_id:matchedVisitPlan.id,lat:geo.lat,lng:geo.lng,
@@ -5897,7 +5889,6 @@ async function saveNewClient(){
     window.__crmClientSearchQuery='';
     const search=document.getElementById('client-search');if(search)search.value='';
     delete button.dataset.signature;delete button.dataset.clientId;
-    window.dispatchEvent(new CustomEvent('resanta-negotiation-client-saved',{detail:{id:client.id}}));
     closeModal('modal-add-client');renderClients();
     try{openClient(client.id);}catch(e){console.warn('Client was saved, but its card could not open',e);}
     document.getElementById('nc-name').value='';document.getElementById('nc-address').value='';
