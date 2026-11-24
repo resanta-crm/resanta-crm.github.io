@@ -1919,6 +1919,7 @@ function gpsBlock(c){
 async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
   const c=allClients.find(x=>String(x.id)===String(clientId));
   if(!c)return;
+  const negotiationReminder=window.crmNegotiations?.beginCheckin(clientId,routePlanId,returnMode);
   const btn=sourceBtn||document.getElementById('checkin-btn');
   const oldText=btn?btn.textContent:'📍 Я на точке';
   if(btn){btn.disabled=true;btn.textContent='📍 Определяю...';}
@@ -1966,6 +1967,7 @@ async function checkinHere(clientId,sourceBtn,returnMode,routePlanId){
         accuracy:Number(geo.accuracy),taken_at:new Date().toISOString(),source:'checkin'}
     }));}catch(e){console.warn('Дополнительное подтверждение ТТ не открылось',e);}
   }
+  if(negotiationReminder?.())return;
   if(returnMode==='my-routes')renderMyRoutes();
   else if(returnMode==='route')renderRoute();
   else openClient(clientId);
@@ -4078,6 +4080,7 @@ async function openClient(id){
       +((isBoss||c.manager_name===currentProfile?.name)?'<button onclick="finishNew1CClient(\''+id+'\')" style="margin-top:8px;width:100%;padding:7px;border:1px solid var(--g);color:var(--g);background:#fff;border-radius:7px;cursor:pointer">✓ Завершить разбор карточки</button>':'')
       +'</div>':'')
     +addrBlock
+    +'<section id="nt-client-point" class="nt-point" hidden></section>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;margin-top:12px">'
       +'<div class="cc-stat" style="cursor:pointer" onclick="openEditContact(\''+id+'\')"><div class="cc-stat-label">Контакт (ЛПР) ✏️</div><div style="font-size:13px;font-weight:500">'+(c.contact||'—')+'</div></div>'
       +'<div class="cc-stat" style="cursor:pointer" onclick="openEditContact(\''+id+'\')"><div class="cc-stat-label">Телефон ✏️</div><div style="font-size:13px;font-weight:500">'+(c.phone||'—')+'</div></div>'
@@ -4111,6 +4114,7 @@ async function openClient(id){
       +'<button onclick="deleteClientFully(\''+id+'\')" style="padding:8px 14px;border:1px solid var(--r);color:var(--r);border-radius:8px;background:none;cursor:pointer;font-size:12px">🗑 Удалить клиента навсегда</button>'
       +'</div></div>':'');
   document.getElementById('modal-client').classList.add('open');
+  window.crmNegotiations?.mountPoint(id);
 }
 
 // ===== КАТЕГОРИИ ПО РЕГЛАМЕНТУ =====
@@ -4641,6 +4645,7 @@ let qvRoutePlanId=null; // id конкретной строки route_plans (т�
                          // нужно, чтобы отмечать посещённой ТОЛЬКО эту точку, а не все точки с тем же именем клиента
 
 function openQuickVisit(clientId,visitDate,routePlanId){
+  window.crmNegotiations?.resetVisit('quick');
   qvVisitDate=visitDate||TODAY;
   qvRoutePlanId=routePlanId||null;
   // Ищем клиента — сначала в allClients, потом в routeClients (план маршрута)
@@ -4830,6 +4835,7 @@ async function saveQuickVisit(){
   if(!visit){alert('Сервер не вернул сохранённый визит. Обновите страницу и сообщите руководителю.');return;}
   if(!allVisits.some(x=>String(x.id)===String(visit.id)))allVisits.unshift(visit);
   v2264MergeReturnedTasks(saveBundle.tasks);
+  if(!saveBundle.duplicate)window.dispatchEvent(new CustomEvent('resanta-negotiation-visit-saved',{detail:{form:'quick',visit}}));
   if(qvGeo&&qvMatchedPlan?.physical_point_id && Number(qvGeo.accuracy)>0 && Number(qvGeo.accuracy)<=60){
     try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{detail:{
       route_plan_id:qvMatchedPlan.id,lat:qvGeo.lat,lng:qvGeo.lng,
@@ -5562,6 +5568,7 @@ function toggleVisitGroup(gid){
 
 let visitSelectionKeyV3=null;
 function openAddVisit(clientId){
+  window.crmNegotiations?.resetVisit('visit');
   visitSelectionKeyV3=null;
   visitClientId=clientId;
   document.getElementById('visit-modal-title').textContent=clientId?'Визит — '+(allClients.find(x=>x.id===clientId)?.name||''):'Записать визит';
@@ -5742,6 +5749,7 @@ async function saveVisit(){
   if(!visit){alert('Сервер не вернул сохранённый визит. Обновите страницу и сообщите руководителю.');return;}
   if(!allVisits.some(x=>String(x.id)===String(visit.id)))allVisits.unshift(visit);
   v2264MergeReturnedTasks(saveBundle.tasks);
+  if(!saveBundle.duplicate)window.dispatchEvent(new CustomEvent('resanta-negotiation-visit-saved',{detail:{form:'visit',visit}}));
   if(geo&&matchedVisitPlan?.physical_point_id && Number(geo.accuracy)>0 && Number(geo.accuracy)<=60){
     try{window.dispatchEvent(new CustomEvent('resanta-gps360-store-check',{detail:{
       route_plan_id:matchedVisitPlan.id,lat:geo.lat,lng:geo.lng,
@@ -5884,6 +5892,7 @@ async function saveNewClient(){
     allClients=[client,...allClients.filter(c=>String(c.id)!==String(client.id))];
     _clientNameMatchCache=null;_phClientMatchCache=null;_phNameSet=null;
     window.dispatchEvent(new Event('resanta-client360-updated'));
+    window.dispatchEvent(new CustomEvent('resanta-negotiation-client-saved',{detail:{id:client.id}}));
     // A newly saved card must not disappear behind an earlier search/status/manager filter.
     regionFilter='all';managerFilter=currentProfile?.role==='manager'?'mine':'all';statusFilter='all';
     window.__crmClientSearchQuery='';

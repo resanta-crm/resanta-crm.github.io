@@ -27,10 +27,12 @@ test('director uses all 34 existing server-authorized read domains; no writes',(
  assert.ok(caps.surfaces.find(x=>x.id==='nav-sales').available_read_domains.includes('sales'));
 });
 
-test('all active CRM menu entries have explicit AI360 coverage entries',()=>{
+test('CRM menu coverage distinguishes the standalone Negotiations workspace',()=>{
  const source=fs.readFileSync('index.html','utf8');
  const nav=[...new Set([...source.matchAll(/id=["'](nav-[\w-]+)["']/g)].map(x=>x[1]))]
-  .filter(x=>x!=='nav-section-boss');
+  .filter(x=>!['nav-section-boss','nav-negotiations'].includes(x));
+ assert.match(source,/id="nav-negotiations"[^>]+window\.crmNegotiations\?\.open\(\)/);
+ assert.ok(!AGENT360_NAV_IDS.includes('nav-negotiations'));
  assert.equal(nav.length,24);
  assert.deepEqual([...nav].sort(),[...AGENT360_NAV_IDS].sort());
  assert.equal(new Set(AGENT360_SURFACES.map(x=>x.id)).size,AGENT360_SURFACES.length);

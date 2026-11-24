@@ -5,7 +5,7 @@
  if(!legacy)return;
  const groups=new Map([
   ['Главная',['dashboard','alerts']],
-  ['Продажи',['vip','sales','falling','abc','triovist','managers']],
+  ['Продажи',['vip','sales','falling','abc','triovist','managers','negotiations']],
   ['Клиенты',['clients','lpr-birthdays','lpr','networks','client360']],
   ['Рабочий день',['connect','meeting-planner','tasks','visits','my-routes','route','workday','control','gps-control','routes-boss','my-run']],
   ['Товары',['markdown','warehouse-control','receiving','orders','inventory','picking','warehouse-vitebsk360']],

@@ -2207,9 +2207,10 @@ window.RESANTA_FALLING_MANAGER_FIX=Object.freeze({version:'20.4.0',autoRefresh:t
 
   // Обновлённая кнопка «На точке»: при слабой связи пользователь получает
   // честное сообщение «сохранено на устройстве», а не пугающий Failed to fetch.
-  checkinHere=async function(clientId,sourceBtn,returnMode){
+  checkinHere=async function(clientId,sourceBtn,returnMode,routePlanId){
     const c=allClients.find(x=>String(x.id)===String(clientId));
     if(!c)return;
+    const negotiationReminder=window.crmNegotiations?.beginCheckin(clientId,routePlanId,returnMode);
     const btn=sourceBtn||document.getElementById('checkin-btn');
     const oldText=btn?btn.textContent:'📍 Я на точке';
     if(btn){btn.disabled=true;btn.textContent='📍 Определяю...';}
@@ -2248,6 +2249,7 @@ window.RESANTA_FALLING_MANAGER_FIX=Object.freeze({version:'20.4.0',autoRefresh:t
         +(chk.distance!=null?'\n\nРасстояние до текущей точки клиента: '+chk.distance+' м.':''));
     }
 
+    if(negotiationReminder?.())return;
     if(returnMode==='my-routes')renderMyRoutes();
     else if(returnMode==='route')renderRoute();
     else openClient(clientId);

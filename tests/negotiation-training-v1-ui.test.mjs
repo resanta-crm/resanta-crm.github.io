@@ -122,3 +122,46 @@ test('New client sends audio with consent and can link to an existing card witho
   assert(reviewText.indexOf('Что сделать дальше') < reviewText.indexOf('Ситуация 2 из 2'));
   assert.match(reviewText, /Подсказка ИИ.*Назначить следующее время визита/);
 });
+
+test('Production navigation and point reminder are scoped to field staff',async () => {
+  const html = readFileSync('index.html','utf8');
+  const source = readFileSync('assets/298-crm-negotiations-v1.js','utf8');
+  const {document,window} = parseHTML(html);
+  const actor = {id:'staff',name:'Руднев',role:'manager',access_scope:'standard',region:'Витебск'};
+  const profile = {...actor};
+  const host = document.createElement('section');
+  host.id = 'nt-client-point';
+  host.hidden = true;
+  document.getElementById('modal-client').append(host);
+  const requests = [];
+  runInNewContext(source, {
+    window,document,currentUser:actor,currentProfile:profile,location:{origin:'https://resanta-crm.by'},
+    navigator:{onLine:true}, allClients:[{id:'own',manager_name:actor.name},{id:'other',manager_name:'Другой'}],
+    allVisits:[],allRoutePlans:[],MutationObserver:window.MutationObserver,
+    SUPABASE_URL:'https://fixture.invalid',SUPABASE_KEY:'fixture',AbortSignal,Intl,clearTimeout,
+    db:{auth:{getSession:async () => ({data:{session:{user:actor,access_token:'fixture'}}})}},
+    fetch:async (url,options) => {
+      requests.push(JSON.parse(options.body));
+      return Response.json({previous:{date:'2026-11-20',recap:'Обсудили ассортимент.'},
+        last_review:{id:'review',created_at:'2026-11-20T12:00:00Z',action:'Уточнить остаток.'}});
+    },
+  });
+  assert.equal(document.getElementById('nav-negotiations').hidden,false);
+  assert.equal(document.getElementById('bn-negotiations').hidden,false);
+  assert.equal(window.crmNegotiations.beginCheckin('other',null,'client'),null);
+  assert.equal(requests.length,0);
+  window.crmNegotiations.mountPoint('own');
+  assert.match(host.textContent,/Записать разговор/);
+  const returnToCard = window.crmNegotiations.beginCheckin('own',null,'client');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(returnToCard(),false);
+  assert.deepEqual(requests,[{action:'visit_context',client_id:'own',route_plan_id:null}]);
+  assert.match(host.textContent,/Обсудили ассортимент/);
+  assert.match(host.textContent,/Уточнить остаток/);
+  profile.access_scope = 'triovist';
+  document.getElementById('app').dataset.activePage = 'dashboard';
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(document.getElementById('nav-negotiations').hidden,true);
+  assert.equal(document.getElementById('bn-negotiations').hidden,true);
+  assert.equal(host.hidden,true);
+});

@@ -7,7 +7,7 @@
   if (!store || !app || !main || !navigator.serviceWorker) return;
 
   // Settings, access administration and communications are deliberately kept online.
-  const excluded = new Set(['users','connect','support-v1','company-viewer']);
+  const excluded = new Set(['users','connect','support-v1','company-viewer','negotiations']);
   const routeSections = new Set(['routes-boss','my-routes','route']);
   const readable = new Set(['boss','manager','office_manager','service_manager','payment_executor']);
   let authorized;

@@ -31,6 +31,22 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
  // A CI-only PR may leave CRM core byte-identical to main. Normalize only
  // when the branch actually changed core; otherwise retain exact equality.
  if(core!==before){
+  // Negotiation UI reads check-in context and listens after a successful save.
+  // Ignore those exact notifications while retaining the visit transaction guard.
+  const negotiationHooks=[
+   '  const negotiationReminder=window.crmNegotiations?.beginCheckin(clientId,routePlanId,returnMode);',
+   '  if(negotiationReminder?.())return;',
+   '    +\'<section id="nt-client-point" class="nt-point" hidden></section>\'',
+   '  window.crmNegotiations?.mountPoint(id);',
+   "  window.crmNegotiations?.resetVisit('quick');",
+   "  window.crmNegotiations?.resetVisit('visit');",
+   "  if(!saveBundle.duplicate)window.dispatchEvent(new CustomEvent('resanta-negotiation-visit-saved',{detail:{form:'quick',visit}}));",
+   "  if(!saveBundle.duplicate)window.dispatchEvent(new CustomEvent('resanta-negotiation-visit-saved',{detail:{form:'visit',visit}}));",
+   "    window.dispatchEvent(new CustomEvent('resanta-negotiation-client-saved',{detail:{id:client.id}}));",
+  ];
+  for(const hook of negotiationHooks){
+   if(!before.includes(hook))normalized=normalized.replace(hook+'\n','');
+  }
   // Support #7 explicitly authorizes product labels in the pure route task
   // renderer. Keep every route, visit and task transaction under this guard.
   restore('function routeTaskHtml(','function toggleRouteTaskBlock(');
