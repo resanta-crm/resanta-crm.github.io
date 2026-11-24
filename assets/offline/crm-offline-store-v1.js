@@ -16,6 +16,7 @@
     ['OFFLINE_TASK_CHANGED','Задача изменилась после загрузки на телефон.'],
     ['OFFLINE_REQUEST_CHANGED','Данные этой записи изменились.'],
     ['OFFLINE_INVALID_INPUT','Проверьте данные визита.'],
+    ['OFFLINE_ACCESS_DENIED','Текущая роль не позволяет отправить этот визит.'],
   ]);
   let opening;
   let syncFlight;
@@ -59,7 +60,8 @@
     } catch { return null; }
   }
   const identity = () => session()?.user.id ?? null;
-  const canRecord = owner => !!owner && owner === enrolledOwner && owner === identity();
+  const canRecord = (owner,data) => !!owner && owner === identity() &&
+    (owner === enrolledOwner || (data?.owner === owner && data.role === 'manager' && data.accessScope === 'standard'));
   async function readSnapshot(owner) {
     if (!owner || identity() !== owner) return null;
     const data = await operation('snapshots','readonly',store => store.get(owner));
@@ -100,7 +102,8 @@
     return identity() === owner ? rows.sort((a,b) => a.queuedAt-b.queuedAt) : [];
   }
   async function enqueue(owner, visit, decisions, demo = false) {
-    if (!canRecord(owner) || !await readSnapshot(owner)) throw Error('Обновите офлайн-данные после входа в CRM.');
+    const data = await readSnapshot(owner);
+    if (!data || !canRecord(owner,data)) throw Error('Обновите офлайн-данные после входа в CRM.');
     const record = {id:crypto.randomUUID(),owner,queuedAt:Date.now(),visit,decisions,state:demo?'demo':'pending'};
     await operation('visits','readwrite',store => store.add(record));
     return record;
@@ -110,8 +113,9 @@
     return operation('visits','readwrite',store => store.put({...record,state,reason}));
   }
   function synchronize(owner) {
-    if (syncFlight || !canRecord(owner) || location.origin !== production || !navigator.onLine) return syncFlight;
+    if (syncFlight || !owner || owner !== identity() || location.origin !== production || !navigator.onLine) return syncFlight;
     syncFlight = (async () => {
+      if (!canRecord(owner,await readSnapshot(owner))) return;
       const pending = (await queue(owner)).filter(record => record.state === 'pending');
       if (!pending.length) return;
       const auth = session();

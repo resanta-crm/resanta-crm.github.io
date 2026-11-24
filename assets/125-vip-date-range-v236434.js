@@ -9,15 +9,14 @@ if(window.RESANTA_VIP_DATE_RANGE_V236434)return;
 const V='v23.6.437';
 const baseSummary=window.getVipClientSummary||globalThis.getVipClientSummary;
 const basePeriod=window.vipComparisonPeriod||globalThis.vipComparisonPeriod;
-const baseRender=window.renderVip||globalThis.renderVip;
-const S={owner:'',active:false,data:null,from:'',to:'',compareFrom:'',compareTo:'',mode:'yoy',loading:false,summary:new Map()};
+const S={owner:'',started:false,active:false,data:null,from:'',to:'',compareFrom:'',compareTo:'',loading:false,summary:new Map()};
 const $=id=>document.getElementById(id);
 const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const K=v=>String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/giu,'');
 const N=v=>Number.isFinite(Number(v))?Number(v):0;
 const day=v=>{const s=String(v||'');return /^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):s};
 const monthStart=v=>String(v||'').slice(0,7)+'-01';
-const monthEnd=v=>{const s=String(v||'').slice(0,7),y=+s.slice(0,4),m=+s.slice(5,7);return new Date(y,m,0).toISOString().slice(0,10)};
+const monthEnd=v=>{const s=String(v||'').slice(0,7),y=+s.slice(0,4),m=+s.slice(5,7);return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10)};
 function prof(){try{return typeof currentProfile!=='undefined'?currentProfile:null}catch(_){return null}}
 function profileKey(){const p=prof();return String(p?.id||p?.name||'')+'|'+String(p?.role||'');}
 function clients(){try{return Array.isArray(allClients)?allClients:[]}catch(_){return[]}}
@@ -57,7 +56,7 @@ function rangeSummary(){
     const g={...def,matched,
       period_prev:String(S.data.previous?.from||'').slice(0,7),
       period_cur:String(S.data.current?.from||'').slice(0,7),
-      period_partial:true,
+      period_partial:false,
       quarter_prev_code:'',quarter_cur_code:'',quarter_revenue_prev:0,quarter_revenue_cur:0,
       revenue_prev:0,revenue_cur:0,sku_prev:0,sku_cur:0,categories:{},
       _prevSku:new Set(),_curSku:new Set()
@@ -81,20 +80,17 @@ function rangePeriod(){
   return{
     prev:String(S.data.previous?.from||'').slice(0,7),
     cur:String(S.data.current?.from||'').slice(0,7),
-    partial:false,comparable:true,exact:true,
+    partial:false,comparable:S.data.exact_previous,exact:true,
+    currentLabel:day(S.from)+' — '+day(S.to), previousLabel:day(S.compareFrom)+' — '+day(S.compareTo),
     signature:[S.from,S.to,S.compareFrom,S.compareTo].join('|'),
     currentMonth:String(S.data.current?.to||'').slice(0,7),
     missingCurrent:false,
-    compareMode:S.mode
+    compareMode:'custom'
   };
 }
 window.getVipClientSummary=rangeSummary;try{getVipClientSummary=rangeSummary}catch(_){}
 window.vipComparisonPeriod=rangePeriod;try{vipComparisonPeriod=rangePeriod}catch(_){}
 
-function selectedMonth(){
-  const p=typeof basePeriod==='function'?basePeriod():{};
-  return String(p?.cur||'').slice(0,7);
-}
 function salesCut(){
   try{
     const st=typeof crmImportStatus==='function'?crmImportStatus('sales'):null;
@@ -106,12 +102,12 @@ function salesCut(){
   }catch(_){}
   try{return String(TODAY||'').slice(0,10)}catch(_){return new Date().toISOString().slice(0,10)}
 }
-function defaults(){
-  const m=selectedMonth()||salesCut().slice(0,7),cut=salesCut();
-  const from=m+'-01';
-  const to=m===cut.slice(0,7)?cut:monthEnd(m);
-  return{from,to,compareFrom:String(Number(m.slice(0,4))-1)+m.slice(4)+'-01',
-    compareTo:String(Number(to.slice(0,4))-1)+to.slice(4)};
+function defaults(closed=false){
+  const cut=salesCut();
+  const from=closed?shiftedDate(monthStart(cut),-1):monthStart(cut);
+  const to=closed?monthEnd(from):cut;
+  const compareFrom=shiftedDate(from,-12);
+  return {from,to,compareFrom,compareTo:closed?monthEnd(compareFrom):shiftedDate(to,-12)};
 }
 function shiftedDate(value,months){
   const [year,month,dayNumber]=String(value).split('-').map(Number);
@@ -119,12 +115,8 @@ function shiftedDate(value,months){
   const last=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();
   return first.getUTCFullYear()+'-'+String(first.getUTCMonth()+1).padStart(2,'0')+'-'+String(Math.min(dayNumber,last)).padStart(2,'0');
 }
-function compareMode(){
-  const el=document.querySelector('#vip-period-controls-v236198 select[onchange*="vipMode198"]');
-  const v=String(el?.value||'yoy');return ['yoy','mom'].includes(v)?v:'yoy';
-}
 function ensureControls(){
-  if(document.getElementById('vip-date-range-v236434'))return;
+  document.getElementById('vip-date-range-v236434')?.remove();
   const host=$('vip-range-host');
   if(!host)return;
   const d=defaults();
@@ -137,18 +129,27 @@ function ensureControls(){
     '<label>По<input id="vip-date-compare-to-v236434" type="date" class="form-input" value="'+E(S.compareTo||d.compareTo)+'"></label></fieldset></div>'+
     '<div class="vip-range-actions"><label>Быстрый выбор периода 2<select id="vip-date-preset-v236434" class="form-input"><option value="custom">Свои даты</option><option value="yoy">Год назад</option><option value="mom">Предыдущий месяц</option></select></label>'+
     '<button id="vip-date-apply-v236434" class="btn-primary" type="button">Сравнить периоды</button>'+
-    '<button id="vip-date-reset-v236434" class="btn-secondary" type="button">Обычный месяц</button></div>'+
+    '<button id="vip-date-reset-v236434" class="btn-secondary" type="button">Последний закрытый месяц</button></div>'+
     '<div id="vip-date-status-v236434" role="status"></div>';
   host.appendChild(box);
   box.querySelector('#vip-date-apply-v236434').addEventListener('click',apply);
-  box.querySelector('#vip-date-reset-v236434').addEventListener('click',()=>reset(true));
+  box.querySelector('#vip-date-reset-v236434').addEventListener('click',()=>{fill(defaults(true));void apply()});
   box.querySelector('#vip-date-preset-v236434').addEventListener('change',e=>{
     const months=e.target.value==='yoy'?-12:e.target.value==='mom'?-1:null;
     if(months===null)return;
     const from=$('vip-date-from-v236434')?.value,to=$('vip-date-to-v236434')?.value;
     if(from&&to){$('vip-date-compare-from-v236434').value=shiftedDate(from,months);$('vip-date-compare-to-v236434').value=shiftedDate(to,months)}
   });
-  if(S.active&&S.owner===profileKey())status('Точный период активен: '+day(S.from)+' — '+day(S.to),'ok');
+}
+function fill(d){
+  $('vip-date-from-v236434').value=d.from;
+  $('vip-date-to-v236434').value=d.to;
+  $('vip-date-compare-from-v236434').value=d.compareFrom;
+  $('vip-date-compare-to-v236434').value=d.compareTo;
+  $('vip-date-preset-v236434').value='custom';
+}
+function showResults(visible){
+  $('page-vip')?.classList.toggle('vip-exact-results',visible);
 }
 function status(text,kind='info'){
   const el=$('vip-date-status-v236434');if(!el)return;
@@ -158,81 +159,62 @@ async function apply(){
   if(S.loading)return;
   const from=$('vip-date-from-v236434')?.value||'',to=$('vip-date-to-v236434')?.value||'';
   const compareFrom=$('vip-date-compare-from-v236434')?.value||'',compareTo=$('vip-date-compare-to-v236434')?.value||'';
-  if(!from||!to||to<from||!compareFrom||!compareTo||compareTo<compareFrom){status('Проверьте даты обоих периодов.','bad');return}
+  const valid=(start,end)=>start&&end&&end>=start&&Date.parse(end)-Date.parse(start)<=730*86400000;
+  if(!valid(from,to)||!valid(compareFrom,compareTo)){
+    status('Укажите даты в правильном порядке. Каждый период может быть до 731 дня.','bad');
+    return;
+  }
   const owner=profileKey();
-  S.loading=true;const b=$('vip-date-apply-v236434');if(b)b.disabled=true;status('Считаю точный период по срезам 1С…');
+  S.loading=true;S.active=false;S.data=null;S.summary.clear();
+  showResults(false);
+  const buttons=[$('vip-date-apply-v236434'),$('vip-date-reset-v236434')];
+  buttons.forEach(button=>{if(button)button.disabled=true});
+  status('Загружаю продажи ВИП из 1С…');
   try{
     const d=typeof db!=='undefined'?db:window.db;
-    const [first,second]=await Promise.all([
-      d.rpc('vip_date_range_v236429',{p_from:from,p_to:to,p_compare_mode:'yoy'}),
-      d.rpc('vip_date_range_v236429',{p_from:compareFrom,p_to:compareTo,p_compare_mode:'yoy'})
-    ]);
-    if(owner!==profileKey())return;
-    if(first.error||second.error)throw first.error||second.error;
-    if(!first.data?.exact_current||!second.data?.exact_current){
-      const missing=[...(first.data?.current?.missing_snapshots||[]),...(second.data?.current?.missing_snapshots||[])].map(day).join(', ');
-      status('Для одного из периодов нет точного среза 1С'+(missing?' на '+missing:'')+'. Сравнение не изменено.','bad');return;
+    const read=(p_from,p_to)=>d.rpc('vip_date_range_v236429',{p_from,p_to,p_compare_mode:'none'});
+    const [first,second]=await Promise.allSettled([read(from,to),read(compareFrom,compareTo)]);
+    if(owner!==profileKey()||owner!==S.owner)return;
+    const current=first.value?.data,previous=second.value?.data;
+    if(first.value?.error||first.status==='rejected'||!current)throw first.value?.error||first.reason||Error('Нет ответа 1С');
+    if(!current.exact_current){
+      const missing=(current.current?.missing_snapshots||[]).map(day).join(', ');
+      status('Для периода 1 нет среза 1С'+(missing?' на '+missing:'')+'. Выберите другие даты или последний закрытый месяц.','bad');
+      return;
     }
-    S.owner=owner;S.active=true;S.data={current:first.data.current,previous:second.data.current,exact_previous:true};
-    S.from=from;S.to=to;S.compareFrom=compareFrom;S.compareTo=compareTo;S.mode='custom';
+    const exact=previous?.exact_current===true;
+    S.active=true;S.data={current:current.current,previous:exact?previous.current:{from:compareFrom,to:compareTo,rows:[]},exact_previous:exact};
+    Object.assign(S,{from,to,compareFrom,compareTo});
+    const dates=day(from)+' — '+day(to);
+    const missing=(previous?.current?.missing_snapshots||[]).map(day).join(', ');
+    status(exact?'Факт за '+dates+' · сравнение с '+day(compareFrom)+' — '+day(compareTo):
+      'Факт за '+dates+'. '+(missing?'Для периода 2 нет среза 1С на '+missing+'.':'Период 2 сейчас недоступен.')+
+      ' Для сравнения выберите другие даты или последний закрытый месяц.',exact?'ok':'info');
+    showResults(true);
     window.renderVip?.();
-  }catch(e){console.warn(V,e);status('Не удалось применить даты: '+String(e?.message||e),'bad')}
-  finally{S.loading=false;if(b)b.disabled=false}
+  }catch(e){
+    console.warn(V,e);
+    status('Не удалось загрузить продажи ВИП. Нажмите «Сравнить периоды», чтобы повторить.','bad');
+  }finally{
+    if(S.owner===owner)S.loading=false;
+    buttons.forEach(button=>{if(button)button.disabled=false});
+  }
 }
-function reset(rerender){
-  S.active=false;S.data=null;S.summary.clear();S.from='';S.to='';S.compareFrom='';S.compareTo='';
-  status('');
-  try{localStorage.removeItem('resanta_vip_date_range_v236434')}catch(_){}
-  if(rerender)window.renderVip?.();
+function enter(){
+  const owner=profileKey();
+  if(!prof()?.id&&!prof()?.name)return;
+  if(S.owner!==owner){
+    Object.assign(S,{owner,started:false,active:false,data:null,loading:false,from:'',to:'',compareFrom:'',compareTo:''});
+    S.summary.clear();
+  }
+  if(!$('vip-date-range-v236434')||!S.started){
+    ensureControls();
+    if(!$('vip-date-range-v236434'))return;
+    S.started=true;
+    showResults(false);
+    void apply();
+  }
 }
-function afterRender(){
-  ensureControls();
-  if(!S.active||!S.data||S.owner!==profileKey())return;
-  const cur=S.data.current,prev=S.data.previous;
-  const info=$('vip-period-info');
-  const compareOk=!!S.data.exact_previous;
-  if(info)info.innerHTML='<div class="card-title">Как считается ВИП</div>'+
-    '<div style="font-size:13px;line-height:1.65"><b>Точный период:</b> '+E(day(cur.from))+'—'+E(day(cur.to))+
-    (compareOk?' · сравнение: '+E(day(prev.from))+'—'+E(day(prev.to)):'')+'</div>'+
-    '<div style="font-size:12px;color:var(--sub);margin-top:4px">Источник: точные накопительные срезы продаж 1С. Никакой экстраполяции по дням.</div>'+
-    (!compareOk?'<div style="font-size:12px;color:var(--am);margin-top:5px">За сопоставимый период прошлого года точного дневного среза 1С нет — текущий период показан точно, процент сравнения не рассчитывается.</div>':'');
-  const dtitle=document.querySelector('#vip-decliners-block .card-title');
-  if(dtitle)dtitle.textContent='⚠️ Сильнее всего просели за выбранный период (топ-5)';
-  document.querySelectorAll('#vip-list [id^="vipdept_"] > .card').forEach(card=>{
-    const head=card.firstElementChild,right=head?.lastElementChild;
-    if(!right)return;
-    const ch=[...right.children];
-    const left=head?.firstElementChild;
-    const name=left?.firstElementChild?.textContent||'';
-    const sum=S.summary.get(K(name));
-    if(ch[0])ch[0].textContent=compareOk?(day(prev.from)+'—'+day(prev.to)+' → '+day(cur.from)+'—'+day(cur.to)):('Точный период '+day(cur.from)+'—'+day(cur.to));
-    if(!compareOk&&ch[1]&&sum)ch[1].textContent='— → '+N(sum.revenue_cur).toLocaleString('ru-RU',{maximumFractionDigits:2})+' BYN';
-    const last=ch[ch.length-1];
-    if(last&&/кв\.|квартал/i.test(last.textContent||''))last.style.display='none';
-    const body=card.querySelector('[id^="vipcard_"]');
-    if(body){
-      [...body.children].forEach(x=>{if(/📊 Продажи ·/i.test(x.textContent||''))x.style.display='none'});
-    }
-  });
-  status('Точный период активен: '+day(S.from)+' — '+day(S.to)+(compareOk?'':' · без точного YoY'),'ok');
-}
-if(typeof baseRender==='function'){
-  const wrapped=function(){
-    if(S.active){window.vipComparisonPeriod=rangePeriod;try{vipComparisonPeriod=rangePeriod}catch(_){}}
-    const out=baseRender.apply(this,arguments);setTimeout(afterRender,0);return out;
-  };
-  window.renderVip=wrapped;try{renderVip=wrapped}catch(_){}
-}
-document.addEventListener('change',e=>{
-  if(e.target.closest?.('#vip-period-controls-v236198 select, #vip-period-controls-native-v236202 select')&&S.active)reset(false);
-},true);
-function mount(){
-  ensureControls();
-  const list=$('vip-list');
-  if(list)new MutationObserver(()=>afterRender()).observe(list,{childList:true});
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
-
-window.RESANTA_VIP_DATE_RANGE_V236434=Object.freeze({version:'v23.6.437',exactSnapshots:true,noExtrapolation:true,
+window.RESANTA_VIP_DATE_RANGE_V236434=Object.freeze({version:'v23.6.438',exactSnapshots:true,noExtrapolation:true,enter,
   snapshot:()=>S.active&&S.data&&S.owner===profileKey()?{list:rangeSummary(),period:rangePeriod()}:null});
 })();

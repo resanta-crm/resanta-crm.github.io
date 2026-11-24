@@ -193,6 +193,27 @@ test('Other signed-in roles can read their own prepared data with no permission 
   assert.equal(await store.readSnapshot(other),null);
 });
 
+test('A standard manager can send their queued visit after reconnecting',async()=>{
+  const requests=[];
+  const env=setup(async (url,options)=>{
+    if(url.endsWith('/auth/v1/user'))return Response.json({id:other});
+    requests.push(JSON.parse(options.body).p_request_id);
+    return Response.json({visit_id:'fixture-receipt'});
+  });
+  env.as(other);
+  const store=env.start();
+  const data={...snapshot,owner:other,role:'manager',accessScope:'standard'};
+  await store.writeSnapshot({...data,accessScope:'triovist'});
+  await assert.rejects(store.enqueue(other,visit,[]),/Обновите офлайн-данные/);
+  await store.writeSnapshot(data);
+  const record=await store.enqueue(other,visit,[]);
+  assert.equal(record.state,'pending');
+  env.navigator.onLine=true;
+  await env.start().synchronize(other);
+  assert.deepEqual(requests,[record.id]);
+  assert.equal((await store.queue(other))[0].state,'sent');
+});
+
 test('Root navigation uses the offline renderer on a failed connection and keeps auth and other tools on the network',async()=>{
   const events=new Map(),offline=new Response('offline');
   let online=true;

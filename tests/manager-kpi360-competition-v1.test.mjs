@@ -60,10 +60,10 @@ test('secure SQL gives managers only own detailed rows and all-staff sanitized r
  assert.match(sql,/revoke all on function public\.crm_manager_kpi360_history_v4\(text\) from public,anon/);
  assert.doesNotMatch(sql,/\b(update|delete|insert|truncate)\s+(?:into\s+|from\s+)?public\.(?:purchase_history|clients|manager_kpi_plans)/i);
 });
-test('approved KPI view calls v4 with fallback and loads competition module first',()=>{
+test('KPI view keeps scoped history fallback for export without rendering a competition panel',()=>{
  assert.match(dashboard,/crm_manager_kpi360_history_v4/);
  assert.match(dashboard,/crm_manager_kpi360_history_v3/);
- assert.match(dashboard,/RESANTA_KPI360_LEAGUE_V1\?\.markup/);
+ assert.doesNotMatch(dashboard,/RESANTA_KPI360_LEAGUE_V1\?\.markup/);
  assert.ok(html.indexOf('165-kpi360-mpp-competition-v1.js')<html.indexOf('160-manager-kpi360-visual-v2.js'));
  assert.match(html,/160-manager-kpi360-visual-v2\.js\?v=20261102-5/);
 });

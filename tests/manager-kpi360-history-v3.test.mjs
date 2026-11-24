@@ -7,15 +7,15 @@ const visual=fs.readFileSync('assets/160-manager-kpi360-visual-v2.js','utf8');
 const sql=fs.readFileSync('supabase/migrations/20261102_manager_kpi360_history_v3.sql','utf8');
 const html=fs.readFileSync('index.html','utf8');
 
-test('approved KPI360 visual parses, retains all original director dashboard features',()=>{
+test('KPI visuals retain manager facts, client detail and export without the old ranking panels',()=>{
  new vm.Script(visual,{filename:'assets/160-manager-kpi360-visual-v2.js'});
  for(const must of [
-  'Продажи по менеджерам','Новые и вернувшиеся клиенты по менеджерам','Динамика продаж, АКБ и клиентов KPI',
+  'Продажи по менеджерам','Новые и вернувшиеся клиенты по менеджерам',
   'АКБ по менеджерам','Выполнение плана продаж','rank_overall','rank_sales','rank_akb','rank_bonus',
-  'Места в команде','function launchLera','function exportCsv',
-  'data-metric','data-manager','Вся АКБ','Клиенты менеджеров'
+  'function launchLera','function exportCsv',
+  'data-manager','Вся АКБ','Закрыть список'
  ])assert.ok(visual.includes(must),'missing UI '+must);
- assert.doesNotMatch(visual,/Задачи на сегодня/);
+ assert.doesNotMatch(visual,/Задачи на сегодня|Динамика за 6 месяцев|>Место<|Списки скрыты/);
  assert.ok(html.includes('160-manager-kpi360-visual-v2.js'));
  assert.match(html,/data-kv-lera[^>]*>✦ Спросить Леру/);
 });
@@ -39,11 +39,11 @@ test('six-month rank SQL is ownership scoped BEFORE exposing result and uses all
  assert.doesNotMatch(sql,/\b(insert|update|delete|truncate)\s+(?:into\s+|from\s+)?public\.(?:clients|purchase_history|manager_kpi_plans)/i);
 });
 
-test('client list is collapsed for directors until a manager is chosen',()=>{
- assert.match(visual,/if\(isBoss\(\)&&!selectedManager\)/);
- assert.match(visual,/Списки скрыты, чтобы не перегружать экран/);
+test('client list is hidden until a manager is chosen',()=>{
+ assert.match(visual,/host\.hidden=!target/);
+ assert.match(visual,/if\(!target\)\{host\.replaceChildren\(\);return/);
  assert.match(visual,/function openManager\(data,rows,name\)/);
- assert.match(visual,/managerPanel\(data,rows\);renderDetails\(data,rows\)/);
+ assert.match(visual,/selectedManager=name;clientFilter='bonus';\s+renderDetails\(data,rows\)/);
  assert.match(visual,/<button type="button" class="kv-manager-link" data-manager=/);
 });
 

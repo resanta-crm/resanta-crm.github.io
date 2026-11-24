@@ -45,8 +45,8 @@ test('Six-month premium rule, canonical IDs and temporal comparisons',()=>{
  assert.match(sql,/crm_manager_kpi_leaderboard\(p_month\)/);
  assert.match(index,/assets\/160-manager-kpi360-visual-v2\.js/);
 });
-test('Selected design has three KPIs, graphical views, Lera, client detail, export',()=>{
- for(const phrase of ['Продажи по менеджерам','Динамика продаж','АКБ по менеджерам','function launchLera','function exportCsv','Для KPI','Впервые','Вернувшиеся','Вся АКБ'])assert.ok(js.includes(phrase),phrase);
+test('Selected design has three KPIs, manager tables, Lera, client detail and export',()=>{
+ for(const phrase of ['Продажи по менеджерам','Новые и вернувшиеся клиенты по менеджерам','АКБ по менеджерам','function launchLera','function exportCsv','Для KPI','Впервые','Вернувшиеся','Вся АКБ'])assert.ok(js.includes(phrase),phrase);
  assert.doesNotMatch(js,/Задачи на сегодня/);
  assert.match(js,/serial!==generation|serial===generation/);
  assert.match(js,/clientFilter='bonus'/);

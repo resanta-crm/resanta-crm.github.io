@@ -4,7 +4,7 @@
   const store = window.crmOfflineStore;
   const app = document.getElementById('app');
   const main = document.getElementById('main-content');
-  if (!store || !app || !main || !navigator.serviceWorker || document.documentElement.classList.contains('native-app')) return;
+  if (!store || !app || !main || !navigator.serviceWorker) return;
 
   // Settings, access administration and communications are deliberately kept online.
   const excluded = new Set(['users','connect','support-v1','company-viewer']);
@@ -21,7 +21,7 @@
     const id = currentUser?.id;
     const p = currentProfile;
     if (!id || id !== store.identity() || id !== p?.id || !readable.has(p.role) || getComputedStyle(app).display === 'none') return null;
-    return {id, key:[p.role,p.region,p.access_scope].join('|')};
+    return {id, role:p.role, scope:p.access_scope, key:[p.role,p.region,p.access_scope].join('|')};
   }
   function pages() {
     const result = new Map();
@@ -42,12 +42,13 @@
     const routes = [...routeSections].some(key => menu[key]) ? ownRows(allRoutePlans) : [];
     const visits = menu.visits ? ownRows(allVisits) : [];
     const active = new Set(typeof canonicalActiveTasks === 'function' ? canonicalActiveTasks(tasks).map(row => row.id) : []);
+    const data = {owner:account.id, role:account.role, accessScope:account.scope};
     return {
-      owner:account.id, profileKey:account.key, menu, savedAt:Date.now(),
+      ...data, profileKey:account.key, menu, savedAt:Date.now(),
       routes:routes.filter(row => !row.removed && !['pending','rejected'].includes(row.review_status)).slice(-800).map(row => ({
         id:String(row.id),clientId:String(row.client_id??''),name:clean(row.client_name,240),date:row.visit_date,
         address:clean(row.address,220),visited:!!(row.visited||row.linked_visit_id),
-        own:store.canRecord(account.id) && clean(row.manager_name,240) === clean(currentProfile?.name,240)
+        own:store.canRecord(account.id,data) && clean(row.manager_name,240) === clean(currentProfile?.name,240)
       })).sort((a,b) => String(b.date).localeCompare(String(a.date))),
       tasks:tasks.slice(-1200).map(row => ({id:String(row.id),clientId:String(row.client_id??''),dueDate:row.due_date,
         done:row.done===true,reviewStatus:row.review_status,active:active.has(row.id),title:clean(row.title||row.text||'Задача',420)})),
@@ -88,6 +89,7 @@
       cachedSources=sources;
       savedAt=Date.now();
     }
+    void store.synchronize(account.id);
     const key=activePage();
     const page=document.getElementById('page-'+key);
     const title=menu[key];
