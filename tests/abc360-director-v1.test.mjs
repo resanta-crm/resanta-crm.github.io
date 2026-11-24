@@ -6,6 +6,7 @@ const index=read('index.html'),core=read('assets/01-crm-core.js');
 const agg=read('assets/113-analytics-aggregates-v236342.js');
 const dash=read('assets/187-abc-director360-v1.js');
 const sql=read('docs/abc360_fast_rpc_v1.sql');
+const filters=read('assets/186-abc-periods-v1.js');
 const gps=read('assets/124-gps-director-report-v236427.js');
 test('ABC 360 loads after core and server aggregate; unrelated navigations stay intact',()=>{
  assert.match(index,/assets\/187-abc-director360-v1\.js\?v=20261109-manager-tabs-fix2/);
@@ -25,10 +26,10 @@ test('ABC uses optimized live SQL function and safe prior-month normalization',(
  assert.match(sql,/GRANT EXECUTE ON FUNCTION .* TO authenticated,service_role/);
 });
 test('ABC SKU reconciliation displays R, and absent stock is not zero',()=>{
- assert.match(core,/g\.counts\.R/);
- assert.match(core,/if\(qty===undefined\).*нет данных об остатке/);
- assert.match(core,/function abcLatestVitebskStock/);
- assert.match(core,/window\.RESANTA_ABC360\?\.render\(\{scope,group,subgroup/);
+ assert.match(filters,/g\.counts\.R/);
+ assert.match(filters,/if\(qty===undefined\).*нет данных об остатке/);
+ assert.match(filters,/function abcLatestVitebskStock/);
+ assert.match(filters,/window\.RESANTA_ABC360\?\.render\(\{scope,group,subgroup/);
 });
 test('ABC 360 stays confined to ABC page and retains existing task approvals and export',()=>{
  assert.match(dash,/#page-abc\.abc360-on/);
