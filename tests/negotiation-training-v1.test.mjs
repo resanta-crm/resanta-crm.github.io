@@ -71,6 +71,27 @@ test('Clarifications remain free and only three proposed decisions affect traini
   }
 });
 
+test('The third proposal closes the case with a plan even if the model omits optional fields', () => {
+  const pending = {
+    ...makeCase(), attempts:['Не выявил', 'Выясню на следующем визите'],
+    followup:'Что вы спросите о нагрузке на генератор?',
+  };
+  const answer = 'Задам вопрос какие больше пользуются спросом';
+  const outcome = applyAnswer(pending, answer, {
+    verdict:'clarification', feedback:'Вопрос о спросе не уточняет требуемую нагрузку.',
+    followup:'Какие приборы покупатель хочет питать от генератора?',
+    action:'Уточнить, какие приборы клиент подключает к генератору, и согласовать дату следующего контакта.',
+    result:'',
+  });
+  assert.equal(outcome.attempts.length,3);
+  assert.equal(outcome.last_reply.text,answer);
+  assert.equal(outcome.score,0);
+  assert.match(outcome.plan.action,/какие приборы/);
+  assert.match(outcome.plan.result,/Срок поставки/);
+  assert.match(outcome.plan.check,/дата/);
+  assert.throws(() => applyAnswer(outcome,answer,{verdict:'improve',feedback:'Повтор'}),/case_completed/);
+});
+
 test('Pending answers do not lower the rating and documented CRM tasks govern completion', () => {
   const done = {...makeCase(),score:2,task_id:'task-1'};
   const row = {owner_id:'manager',manager_name:'Менеджер',review:{quality:75,cases:[

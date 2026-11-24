@@ -41,25 +41,43 @@ export function initialReview(value, segments, managerSpeakers, makeId = () => c
 export const isReportedGap = answer =>
   /^(?:не (?:выявил[аи]?|уточнил[аи]?|выяснил[аи]?|узнал[аи]?|спросил[аи]?)|не знаю)[.!\s]*$/iu.test(answer.trim());
 
+const isProposedAction = answer =>
+  /^(?:я\s+)?(?:задам|спрошу|уточню|проверю|выясню|позвоню|свяжусь|предложу|обсужу|договорюсь)(?=[\s,.!]|$)/iu.test(answer.trim());
+
 export function applyAnswer(situation, answer, value) {
+  if (situation.score !== null || situation.attempts.length >= scores.length) throw Error('case_completed');
+  let verdict = value?.verdict;
+  if (isReportedGap(answer) || (verdict === 'clarification' && isProposedAction(answer))) verdict = 'improve';
   const feedback = clean(value?.feedback, 600);
-  const verdict = isReportedGap(answer) ? 'improve' : value?.verdict;
   const followup = clean(value?.followup, 420);
-  const lastReply = {text: answer, status: verdict};
   if (!feedback || !['clarification', 'improve', 'accept'].includes(verdict)) throw Error('invalid_analysis');
-  if (situation.score !== null) throw Error('case_completed');
+  const lastReply = {text: answer, status: verdict};
   if (verdict === 'clarification') return {...situation, feedback, followup, last_reply: lastReply};
+
   const attempts = [...situation.attempts, answer];
-  const complete = verdict === 'accept' || attempts.length >= scores.length;
-  if (!complete) return {...situation, attempts, feedback, followup, last_reply: lastReply};
-  const action = clean(value?.action, 420);
-  const result = clean(value?.result, 350);
-  const check = clean(value?.check, 350);
-  if (!action || !result || !check) throw Error('invalid_analysis');
+  const finalAttempt = attempts.length === scores.length;
+  const plan = {
+    action: clean(value.action, 420),
+    result: clean(value.result, 350),
+    check: clean(value.check, 350),
+    source: verdict === 'accept' ? 'manager' : 'ai',
+  };
+  const hasPlan = plan.action && plan.result && plan.check;
+  if (!finalAttempt && (verdict !== 'accept' || !hasPlan)) {
+    return {...situation, attempts, feedback, followup, last_reply: {...lastReply, status:'improve'}};
+  }
+  if (!hasPlan) {
+    const question = clean(followup || situation.followup || situation.question, 240);
+    const issue = clean(situation.issue, 190);
+    plan.action ||= verdict === 'accept' ? clean(answer, 420)
+      : 'На следующем контакте уточнить детали по вопросу «' + question + '» и договориться о дальнейшем шаге.';
+    plan.result ||= 'Получен ответ клиента по ситуации «' + issue + '» и согласован следующий контакт.';
+    plan.check ||= 'В карточке клиента записаны его ответ и дата согласованного контакта.';
+  }
   return {
     ...situation, attempts, feedback, followup: '', last_reply: lastReply,
     score: verdict === 'accept' ? scores[attempts.length - 1] : 0,
-    plan: {action, result, check, source: verdict === 'accept' ? 'manager' : 'ai'},
+    plan,
   };
 }
 
