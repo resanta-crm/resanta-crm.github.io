@@ -1,4 +1,9 @@
 #control-center-v1 .ys-top,#year-sales-dialog .ys-top{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
+#control-center-v1 .ys-top>div,#year-sales-dialog .ys-top>div{min-width:0;display:grid;align-content:start;gap:7px}
+#control-center-v1 .ys-top strong,#year-sales-dialog .ys-top strong{overflow-wrap:anywhere;font-size:clamp(20px,2vw,28px);font-variant-numeric:tabular-nums}
+#control-center-v1 .ys-kpi-label,#year-sales-dialog .ys-kpi-label{font-size:16px;font-weight:600;line-height:1.4}
+#control-center-v1 .ys-month-pick,#year-sales-dialog .ys-month-pick{display:grid;gap:7px;max-width:320px;margin:14px 0;font-size:16px;font-weight:600}
+#control-center-v1 .ys-month-pick select,#year-sales-dialog .ys-month-pick select{min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
 #control-center-v1 .ys-controls,#year-sales-dialog .ys-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:14px 0}
 #control-center-v1 .ys-controls label,#year-sales-dialog .ys-controls label{display:grid;gap:5px;font-size:12px}
 #control-center-v1 #cc-year-chart svg,#year-sales-dialog svg{width:100%;height:auto;display:block}
@@ -23,3 +28,53 @@
 #year-sales-dialog table{width:100%;border-collapse:collapse;font-size:13px}
 #year-sales-dialog td,#year-sales-dialog th{padding:10px;text-align:left;border-bottom:1px solid var(--border)}
 @media(max-width:560px){#control-center-v1 .ys-top,#year-sales-dialog .ys-top{grid-template-columns:1fr}#year-sales-dialog{padding:6px}#year-sales-dialog .ys-dialog{padding:14px}#year-sales-dialog button,#year-sales-dialog select{min-height:44px}}
+#control-center-v1 .ys-top,#year-sales-dialog .ys-top{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;border-bottom:1px solid var(--border);padding-bottom:16px}
+#control-center-v1 .ys-top strong,#year-sales-dialog .ys-top strong{font-size:clamp(20px,2vw,32px);line-height:1.2}
+#control-center-v1 .ys-bars,#year-sales-dialog .ys-bars{display:grid;gap:0;margin:12px 0}
+#control-center-v1 .ys-month-row,#year-sales-dialog .ys-month-row{display:grid;grid-template-columns:60px minmax(0,1fr) 140px;gap:14px;align-items:center;border-bottom:1px solid var(--border);padding:10px 0}
+#control-center-v1 .ys-month-name,#year-sales-dialog .ys-month-name{font-size:16px}
+#control-center-v1 .ys-month-lines,#year-sales-dialog .ys-month-lines{display:grid;gap:5px;min-width:0}
+#control-center-v1 .ys-bar-line,#year-sales-dialog .ys-bar-line{display:grid;grid-template-columns:42px minmax(0,1fr) minmax(120px,auto);gap:8px;align-items:center;min-width:0;font-size:14px}
+#control-center-v1 .ys-bar-year,#year-sales-dialog .ys-bar-year{color:var(--sub)}
+#control-center-v1 .ys-bar-track,#year-sales-dialog .ys-bar-track{height:13px;border-radius:8px;background:#edf1f6;overflow:hidden;min-width:0}
+#control-center-v1 .ys-bar-fill,#year-sales-dialog .ys-bar-fill{display:block;height:100%;border-radius:8px;background:var(--a,#315cb6)}
+#control-center-v1 .ys-bar-fill.ys-previous,#year-sales-dialog .ys-bar-fill.ys-previous{background:#8b95a5}
+#control-center-v1 .ys-bar-line strong,#year-sales-dialog .ys-bar-line strong{text-align:right;white-space:nowrap;font-size:14px;font-variant-numeric:tabular-nums}
+#control-center-v1 .ys-month-change,#year-sales-dialog .ys-month-change{text-align:right;white-space:nowrap;font-size:15px}
+#control-center-v1 .ys-legend,#year-sales-dialog .ys-legend{font-size:14px;margin-top:12px}
+#control-center-v1 .ys-selected,#year-sales-dialog .ys-selected{margin-top:14px}
+#control-center-v1 .ys-selected-head,#year-sales-dialog .ys-selected-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+#control-center-v1 .ys-selected-head>span,#year-sales-dialog .ys-selected-head>span{color:var(--sub);font-size:14px}
+#control-center-v1 .ys-selected-cards,#year-sales-dialog .ys-selected-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#control-center-v1 .ys-selected-cards>div,#year-sales-dialog .ys-selected-cards>div{display:grid;gap:7px;padding:12px;border:1px solid var(--border);border-radius:10px;min-width:0}
+#control-center-v1 .ys-selected-cards span,#year-sales-dialog .ys-selected-cards span{font-size:14px;color:var(--sub)}
+#control-center-v1 .ys-selected-cards strong,#year-sales-dialog .ys-selected-cards strong{font-size:clamp(18px,1.7vw,25px);overflow-wrap:anywhere}
+#control-center-v1 .ys-extra,#year-sales-dialog .ys-extra{margin-top:16px}
+#control-center-v1 .ys-extra>summary,#year-sales-dialog .ys-extra>summary{cursor:pointer;color:var(--a,#315cb6);font-size:16px;font-weight:600;min-height:44px}
+#control-center-v1 .ys-controls label,#year-sales-dialog .ys-controls label{font-size:14px}
+@media(max-width:760px){#control-center-v1 .ys-top,#year-sales-dialog .ys-top{grid-template-columns:1fr 1fr}#control-center-v1 .ys-top>div:last-child,#year-sales-dialog .ys-top>div:last-child{grid-column:1/-1}#control-center-v1 .ys-month-row,#year-sales-dialog .ys-month-row{grid-template-columns:1fr;gap:4px}#control-center-v1 .ys-month-change,#year-sales-dialog .ys-month-change{text-align:left}#control-center-v1 .ys-selected-cards,#year-sales-dialog .ys-selected-cards{grid-template-columns:1fr}}
+@media(max-width:420px){#control-center-v1 .ys-bar-line,#year-sales-dialog .ys-bar-line{grid-template-columns:38px minmax(0,1fr);gap:4px}#control-center-v1 .ys-bar-line strong,#year-sales-dialog .ys-bar-line strong{grid-column:2;text-align:left;white-space:normal}}
+@media(max-width:560px){#control-center-v1 .ys-top,#year-sales-dialog .ys-top{grid-template-columns:1fr}#control-center-v1 .ys-top>div:last-child,#year-sales-dialog .ys-top>div:last-child{grid-column:auto}}
+#control-center-v1 .ys-month-row,#year-sales-dialog .ys-month-row{width:100%;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--border);border-radius:0}
+#control-center-v1 .ys-month-row:hover,#year-sales-dialog .ys-month-row:hover{background:var(--cc-tint,#f2f6fb)}
+#control-center-v1 .ys-month-row:focus-visible,#year-sales-dialog .ys-month-row:focus-visible{outline:2px solid var(--a,#315cb6);outline-offset:2px}
+#control-center-v1 .ys-bar-line,#year-sales-dialog .ys-bar-line{grid-template-columns:minmax(0,1fr) 86px;gap:10px}
+#control-center-v1 .ys-bar-line strong,#year-sales-dialog .ys-bar-line strong{font-size:14px}
+#control-center-v1 .ys-bar-track,#year-sales-dialog .ys-bar-track{height:17px}
+#control-center-v1 .ys-month-change,#year-sales-dialog .ys-month-change{font-size:17px;color:var(--a,#185fa5)}
+@media(max-width:420px){#control-center-v1 .ys-bar-line,#year-sales-dialog .ys-bar-line{grid-template-columns:minmax(0,1fr) 82px;gap:6px}#control-center-v1 .ys-bar-line strong,#year-sales-dialog .ys-bar-line strong{grid-column:auto;text-align:right;white-space:nowrap}}
+#control-center-v1 .ys-bars,#year-sales-dialog .ys-bars{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:8px;margin:16px 0 12px}
+#control-center-v1 .ys-month-row,#year-sales-dialog .ys-month-row{display:flex;flex-direction:column;justify-content:end;align-items:stretch;gap:8px;min-width:0;padding:8px 4px;border:1px solid transparent;border-radius:9px;text-align:center}
+#control-center-v1 .ys-month-row:hover,#year-sales-dialog .ys-month-row:hover{border-color:var(--border)}
+#control-center-v1 .ys-column-pair,#year-sales-dialog .ys-column-pair{display:flex;justify-content:center;align-items:flex-end;gap:5px;height:118px;min-width:0;border-bottom:1px solid var(--border)}
+#control-center-v1 .ys-column,#year-sales-dialog .ys-column{display:block;width:min(34%,26px);min-height:2px;border-radius:5px 5px 0 0;background:var(--a,#315cb6)}
+#control-center-v1 .ys-column.ys-previous,#year-sales-dialog .ys-column.ys-previous{background:#8b95a5}
+#control-center-v1 .ys-month-change,#year-sales-dialog .ys-month-change{min-height:21px;font-size:14px;text-align:center;white-space:nowrap}
+#control-center-v1 .ys-month-name,#year-sales-dialog .ys-month-name{font-size:14px;font-weight:600}
+@media(max-width:760px){#control-center-v1 .ys-bars,#year-sales-dialog .ys-bars{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:420px){#control-center-v1 .ys-bars,#year-sales-dialog .ys-bars{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}#control-center-v1 .ys-column-pair,#year-sales-dialog .ys-column-pair{height:84px}}
+
+#control-center-v1 .ys-column-pair,#year-sales-dialog .ys-column-pair{position:relative}
+#control-center-v1 .ys-column,#year-sales-dialog .ys-column{position:absolute;inset-inline-start:10%;width:36%}
+#control-center-v1 .ys-column.ys-previous,#year-sales-dialog .ys-column.ys-previous{inset-inline-start:54%}
+#control-center-v1 .ys-zero,#year-sales-dialog .ys-zero{position:absolute;inset-inline:0;border-top:1px solid var(--sub,#65748a)}
