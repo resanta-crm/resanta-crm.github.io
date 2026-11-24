@@ -1,0 +1,41 @@
+#page-negotiations .nt-card, #page-negotiations .nt-actions {margin:0 0 12px}
+#page-negotiations .nt-card .nt-card {margin-top:12px;background:var(--bg)}
+#page-negotiations h3, #neg-training-dialog h3 {font-size:1.15rem;margin:0 0 12px}
+#page-negotiations h4 {font-size:1rem;margin:14px 0 8px}
+#page-negotiations p, #neg-training-dialog p {line-height:1.45;margin:7px 0}
+#page-negotiations .nt-message:empty, #neg-training-dialog .nt-message:empty {display:none}
+#page-negotiations .nt-message, #neg-training-dialog .nt-message, #page-negotiations .nt-muted {color:var(--sub);overflow-wrap:anywhere}
+#page-negotiations .nt-actions, #neg-training-dialog .nt-actions {display:flex;flex-wrap:wrap;align-items:end;gap:8px}
+#page-negotiations .nt-tabs [aria-pressed="true"] {color:var(--a);background:var(--ab);border-color:var(--a);font-weight:700}
+#page-negotiations .nt-field, #neg-training-dialog .nt-field {display:grid;gap:5px;margin:0 0 8px;min-width:0;font-size:.88rem}
+#page-negotiations .nt-card > .nt-field {max-width:560px}
+#page-negotiations .nt-actions .nt-field, #neg-training-dialog .nt-actions .nt-field {margin:0}
+#page-negotiations .nt-row {display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--border);overflow-wrap:anywhere}
+#page-negotiations .nt-row > button {flex:none}
+#page-negotiations details {margin-top:10px}
+#page-negotiations summary {cursor:pointer;color:var(--a);font-weight:650}
+#page-negotiations blockquote {margin:8px 0;padding:8px 12px;border-left:3px solid var(--a);background:var(--card);overflow-wrap:anywhere}
+#page-negotiations .nt-transcript {max-height:340px;overflow:auto}
+.nt-visit-entry:not([hidden]) {margin:0 0 10px}
+.nt-visit-entry [role="status"] {font-size:.85rem;color:var(--sub)}
+#neg-training-dialog {margin:auto;max-width:min(540px,calc(100% - 24px));width:100%;border:1px solid var(--border);border-radius:14px;background:var(--card);color:var(--text);padding:18px}
+#neg-training-dialog::backdrop {background:#14203380}
+#neg-training-dialog .nt-agreement {display:flex;gap:8px;align-items:center;margin:12px 0;min-height:44px}
+#neg-training-dialog .nt-check {width:18px;height:18px}
+#neg-training-dialog .nt-actions:last-child {justify-content:flex-end;margin-top:14px}
+@media (max-width:600px) {
+  #page-negotiations .nt-report .nt-row {display:grid;align-items:start;gap:5px}
+  #page-negotiations button, #neg-training-dialog button {min-height:44px}
+  #page-negotiations .nt-actions .nt-field {max-width:100%}
+}
+[data-nt-entry][hidden] {display:none!important}
+
+#page-negotiations .nt-speaker-choices {border:0;margin:10px 0;padding:0;min-width:0}
+#page-negotiations .nt-speaker-choices legend {font-size:1rem;font-weight:700}
+#page-negotiations .nt-speaker-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:8px;margin:10px 0}
+#page-negotiations .nt-speaker {display:grid;grid-template-columns:auto 1fr;gap:7px 9px;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;align-items:start}
+#page-negotiations .nt-speaker:has(input:checked) {border-color:var(--a);background:var(--ab)}
+#page-negotiations .nt-speaker-name {font-weight:700}
+#page-negotiations .nt-speaker-quote {grid-column:2;color:var(--sub);overflow-wrap:anywhere}
+
+#page-managers .nt-kpi-entry:not([hidden]) {display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
