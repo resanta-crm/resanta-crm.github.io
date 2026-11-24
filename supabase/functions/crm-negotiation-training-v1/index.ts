@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
 import { applyAnswer, clean, initialReview, isReportedGap, report } from './coach.mjs';
-import { audioTypes, createScribe, fileLimit, normalizeTranscript } from './scribe.mjs';
+import { audioTypes, createScribe, fileLimit, normalizeBrandText, normalizeTranscript } from './scribe.mjs';
 
 const table = 'crm_negotiation_training_v1';
 const pilot = 'https://resanta-director-pilot-20261119.wigglybean257.chatgpt.site';
@@ -15,7 +15,19 @@ const now = () => new Date().toISOString();
 const after = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
 const localDate = () => new Intl.DateTimeFormat('sv-SE', {timeZone: 'Europe/Minsk'}).format(new Date());
 const check = ({data,error}: any) => { if (error) throw fail('storage_unavailable', 503); return data; };
-const outputRow = (row: any) => Object.fromEntries(Object.entries(row).filter(([key]) => !privateFields.includes(key)));
+const normalizedLine = (line: any) => typeof line?.text === 'string' ? {...line, text: normalizeBrandText(line.text)} : line;
+function outputRow(row: any) {
+  const safe = Object.fromEntries(Object.entries(row).filter(([key]) => !privateFields.includes(key)));
+  if (Array.isArray(row.transcript)) safe.transcript = row.transcript.map(normalizedLine);
+  if (row.review) safe.review = {
+    ...row.review,
+    criteria: row.review.criteria.map((item: any) => ({...item, evidence: normalizedLine(item.evidence)})),
+    cases: row.review.cases.map((item: any) => ({
+      ...item, evidence: normalizedLine(item.evidence), client_context: normalizedLine(item.client_context),
+    })),
+  };
+  return safe;
+}
 const date = (value: unknown) => typeof value === 'string' && /^20\d\d-\d\d-\d\d$/.test(value) &&
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 
@@ -110,14 +122,29 @@ Deno.serve(async (req: Request) => {
     if (!body || typeof body !== 'object') throw fail('invalid_input');
     const scribeKey = Deno.env.get('CRM_NEGOTIATION_SCRIBE_KEY');
     const scribe = createScribe(scribeKey);
-    const regionalOwners = leader && workspace === 'production'
-      ? check(await svc.from('users').select('id').eq('access_scope', 'standard').eq('region', actor.region)
-        .in('role', ['boss', 'manager'])).map((profile: any) => profile.id)
-      : null;
-    const scope = (query: any) => {
-      const scoped = query.eq('workspace', workspace);
-      return regionalOwners ? scoped.in('owner_id', regionalOwners) : scoped.eq('owner_id', actor.id);
+    const managers = leader && workspace === 'production'
+      ? check(await svc.from('users').select('id,name').eq('access_scope', 'standard').eq('region', actor.region)
+        .in('role', ['boss', 'manager']).order('name'))
+      : [{id: actor.id, name: actor.name}];
+    const ownerIds = managers.map((profile: {id: string}) => profile.id);
+    const scope = (query: any) => query.eq('workspace', workspace).in('owner_id', ownerIds);
+    const dates = (query: any) => {
+      if ((body.from && !date(body.from)) || (body.to && !date(body.to)) ||
+          (body.from && body.to && body.from > body.to)) throw fail('invalid_period');
+      if (body.from) query = query.gte('created_at', body.from + 'T00:00:00+03:00');
+      if (body.to) {
+        const end = new Date(Date.parse(body.to) + 864e5).toISOString().slice(0, 10);
+        query = query.lt('created_at', end + 'T00:00:00+03:00');
+      }
+      return query;
     };
+    const filtered = (query: any) => {
+      query = dates(scope(query));
+      if (!body.manager_id) return query;
+      if (!ownerIds.includes(body.manager_id)) throw fail('forbidden', 403);
+      return query.eq('owner_id', body.manager_id);
+    };
+
 
     async function client(id: unknown) {
       if (typeof id !== 'string' || !uuid.test(id)) throw fail('invalid_client');
@@ -129,10 +156,15 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.action === 'list') {
-      const page = Number.isInteger(body.page) && body.page >= 0 ? body.page : 0;
-      const rows = check(await scope(svc.from(table).select(shortFields)).order('created_at', {ascending: false})
-        .order('id').range(page * 30, page * 30 + 30));
-      return reply({rows: rows.slice(0, 30), more: rows.length > 30, recording: !!scribeKey});
+      const page = Number.isSafeInteger(body.page) && body.page >= 0 && body.page <= 30000 ? body.page : 0;
+      let query = filtered(svc.from(table).select(shortFields));
+      const search = clean(body.search, 120).replace(/[%_*\\]/g, '');
+      if (search) query = query.ilike('prospect_name', '%' + search + '%');
+      const rows = check(await query.order('created_at', {ascending: false}).order('id').range(page * 30, page * 30 + 30));
+      const items = rows.slice(0, 30).map((row: any) => ({
+        ...row, review: row.review ? {cases: row.review.cases.map((item: any) => ({score: item.score}))} : null,
+      }));
+      return reply({rows: items, more: rows.length > 30, managers, recording: !!scribeKey});
     }
     if (body.action === 'clients') {
       const term = clean(body.search, 120).replaceAll('%', '').replaceAll('_', '');
@@ -143,12 +175,10 @@ Deno.serve(async (req: Request) => {
     }
     if (body.action === 'report') {
       if (!date(body.from) || !date(body.to) || body.from > body.to || Date.parse(body.to) - Date.parse(body.from) > 366 * 864e5) throw fail('invalid_period');
-      const end = new Date(Date.parse(body.to) + 864e5).toISOString().slice(0, 10);
       const rows = [];
       for (let offset = 0; ; offset += 250) {
-        const page = check(await scope(svc.from(table).select('owner_id,manager_name,review')).not('review', 'is', null)
-          .gte('created_at', body.from + 'T00:00:00+03:00').lt('created_at', end + 'T00:00:00+03:00')
-          .order('created_at').order('id').range(offset, offset + 249));
+        const page = check(await filtered(svc.from(table).select('owner_id,manager_name,review'))
+          .not('review', 'is', null).order('created_at').order('id').range(offset, offset + 249));
         rows.push(...page);
         if (page.length < 250) break;
       }
@@ -157,7 +187,7 @@ Deno.serve(async (req: Request) => {
       for (let offset = 0; offset < ids.length; offset += 100) {
         for (const task of check(await svc.from('tasks').select('id,done').in('id', ids.slice(offset, offset + 100)))) tasks.set(task.id, task);
       }
-      return reply({report: report(rows, tasks)});
+      return reply({report: report(rows, tasks), managers});
     }
     if (!uuid.test(body.id ?? '')) throw fail('invalid_id');
 
@@ -283,7 +313,7 @@ Deno.serve(async (req: Request) => {
         row.review.cases.every((item: any) => item.score === null && !item.task_id);
       if (row.review && !replacing) return reply({row: outputRow(row)});
       if (row.audio_state !== 'ready' || !Array.isArray(row.transcript)) throw fail('transcript_pending', 409);
-      const segments = row.transcript;
+      const segments = row.transcript.map(normalizedLine);
       const available = new Set(segments.map((line: any) => line.speaker).filter(Boolean));
       const speakers = [...new Set(Array.isArray(body.speakers) ? body.speakers : [body.speaker])];
       if (!speakers.length || speakers.some(speaker => typeof speaker !== 'string' || !available.has(speaker))) {
@@ -315,7 +345,7 @@ Deno.serve(async (req: Request) => {
           const finalAttempt = item.attempts.length === 2;
           const instruction = finalAttempt ? answerInstruction + ' ' + finalAttemptInstruction : answerInstruction;
           const value = await coach(svc, actor.id, instruction, {
-            issue: item.issue, question: item.followup || item.question, evidence: item.evidence, client_context: item.client_context,
+            issue: item.issue, question: item.followup || item.question, evidence: normalizedLine(item.evidence), client_context: normalizedLine(item.client_context),
             attempts: item.attempts, current_attempt: item.attempts.length + 1, reported_gap: isReportedGap(answer), answer,
           }, finalAttempt ? 950 : 750);
           let assessment;

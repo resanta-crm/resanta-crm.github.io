@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyAnswer, initialReview, report } from '../supabase/functions/crm-negotiation-training-v1/coach.mjs';
-import { createScribe, normalizeTranscript } from '../supabase/functions/crm-negotiation-training-v1/scribe.mjs';
+import { createScribe, normalizeBrandText, normalizeTranscript } from '../supabase/functions/crm-negotiation-training-v1/scribe.mjs';
 
 const line = {time:2, speaker:'SPEAKER_00', text:'Рассмотрим пробную партию, если поставите до пятницы.'};
 const makeCase = () => initialReview({summary:'Условие поставки', criteria:[
@@ -100,6 +100,7 @@ test('Pending answers do not lower the rating and documented CRM tasks govern co
   const task = new Map([['task-1',{done:true}]]);
   const [before] = report([row],task);
   assert.equal(before.waiting,1);
+  assert.equal(before.waiting_records,1);
   assert.equal(before.completed,9);
   assert.equal(before.independence,100);
   assert.equal(before.category,'Недостаточно данных');
@@ -125,6 +126,11 @@ test('Transcriber protocol sends only authorized multipart requests and preserve
     ['POST','/api/v1/uploads'], ['POST','/api/v1/uploads/upload/parts/0'],
     ['POST','/api/v1/uploads/upload/complete'], ['GET','/api/v1/jobs/job/result'],['DELETE','/api/v1/jobs/job'],
   ]);
+  const prompt = JSON.parse(calls[0][1].body).prompt;
+  assert.match(prompt,/Ресанта, Хутер, Вихрь, Евролюкс/);
+  assert.equal(normalizeBrandText('У нас бренды Ресанто, Фитер, Вихрь, Евролюкс.'),
+    'У нас бренды Ресанта, Хутер, Вихрь, Евролюкс.');
+  assert.equal(normalizeBrandText('Проверить оборудование Фитер.'),'Проверить оборудование Фитер.');
   assert.equal(calls[1][1].body.get('chunk').size,4);
   assert.equal(calls[2][1].body.get('done'),'1');
   assert(calls.every(([,options]) => options.headers.Authorization === 'Bearer fixture-key' && options.redirect === 'error'));
