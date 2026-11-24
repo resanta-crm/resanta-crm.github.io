@@ -10,16 +10,44 @@ const makeCase = () => initialReview({summary:'Условие поставки',
 ],cases:[
   {line:0,issue:'Срок поставки',question:'Как проверите возможность доставки?'},
   {line:10,issue:'Несуществующая реплика',question:'Вопрос'},
-]}, [line]).cases[0];
+]}, [line], ['SPEAKER_00']).cases[0];
 const plan = {action:'Сверить срок и выслать предложение',result:'Ответ клиента на пробную партию',check:'Зафиксированный ответ клиента'};
 
 test('Quality only uses applicable criteria with a real source line', () => {
-  const review = initialReview({summary:'Вопрос о заказе',criteria:[{score:2,line:0},{score:0,line:0},{score:2,line:5}]},[line]);
+  const review = initialReview({summary:'Вопрос о заказе',criteria:[{score:2,line:0},{score:0,line:0},{score:2,line:5}]},[line],['SPEAKER_00']);
   assert.equal(review.quality, 50);
   assert.equal(review.criteria.length,10);
   assert.equal(review.criteria[2].score,null);
   assert.deepEqual(review.criteria[0].evidence,line);
   assert.equal(makeCase().evidence.text,line.text);
+});
+
+test('Customer turns are only allowed as context for a manager action', () => {
+  const buyer = {time:0,speaker:'SPEAKER_01',text:'Интересует генератор.'};
+  const manager = {time:5,speaker:'SPEAKER_00',text:'Да, хорошо. Обсудим.'};
+  const review = initialReview({summary:'Следующий шаг оставлен открытым',criteria:[
+    {score:2,line:0,reason:'Клиент назвал интерес'}, {score:0,line:1,reason:'Менеджер не подтвердил время'},
+  ],cases:[
+    {line:0,context_line:1,issue:'Оценка клиента',question:'Какой генератор нужен?'},
+    {line:1,context_line:0,issue:'Срок визита не согласован',question:'Как договоритесь о точном времени визита?'},
+  ]},[buyer,manager],['SPEAKER_00']);
+  assert.equal(review.criteria[0].score,null);
+  assert.equal(review.criteria[0].reason,'');
+  assert.equal(review.criteria[1].score,0);
+  assert.equal(review.cases.length,1);
+  assert.deepEqual(review.cases[0].evidence,manager);
+  assert.deepEqual(review.cases[0].client_context,buyer);
+});
+
+test('A manager reporting a gap receives a follow-up and the reply is visibly saved', () => {
+  const result = applyAnswer(makeCase(), 'Не выявил.', {
+    verdict:'clarification', feedback:'Неясно, для чего клиенту нужен генератор.',
+    followup:'Как вы выясните, какие приборы клиент хочет подключать?',
+  });
+  assert.deepEqual(result.attempts,['Не выявил.']);
+  assert.deepEqual(result.last_reply,{text:'Не выявил.',status:'improve'});
+  assert.match(result.followup,/какие приборы/);
+  assert.equal(result.score,null);
 });
 
 test('Clarifications remain free and only three proposed decisions affect training scores', () => {

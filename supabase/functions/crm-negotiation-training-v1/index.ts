@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.56.0';
-import { applyAnswer, clean, initialReview, report } from './coach.mjs';
+import { applyAnswer, clean, initialReview, isReportedGap, report } from './coach.mjs';
 import { audioTypes, createScribe, fileLimit, normalizeTranscript } from './scribe.mjs';
 
 const table = 'crm_negotiation_training_v1';
@@ -58,14 +58,14 @@ async function coach(svc: any, userId: string, instruction: string, evidence: un
 }
 
 const initialInstruction = `Ты тренер B2B-продаж в торговой точке. Используй только данный диалог и указанные группы голоса менеджера. Все выбранные группы принадлежат одному человеку.
-Верни JSON {"summary":"сильные стороны, что произошло, существенный риск или возможность","criteria":[{"score":2,"line":0,"reason":"основание"}],"cases":[{"line":0,"issue":"одна ситуация","question":"один вопрос менеджеру для самостоятельного решения"}]}.
+Каждая реплика уже помечена role: manager, client или unknown. Оценивай только менеджера. Верни JSON {"summary":"что менеджер сделал, что отработал хорошо, чего не выяснил или о чём не договорился","criteria":[{"score":2,"line":0,"reason":"основание"}],"cases":[{"line":0,"context_line":1,"issue":"конкретное действие или упущение менеджера","question":"практический вопрос о следующем действии менеджера"}]}.
 criteria содержит ровно 10 пунктов в порядке: контакт, выявление потребности, качество вопросов, знание продукта, коммерческое предложение, преимущества, работа с возражениями, дополнительные продажи, инициатива, следующий шаг.
-2 эффективно, 1 частично, 0 только если была наблюдаемая возможность, null если неприменимо или недостаточно данных. line — индекс реплики с основанием. Отказ клиента сам по себе не ошибка.
+2 эффективно, 1 частично, 0 только если была наблюдаемая возможность, null если неприменимо или недостаточно данных. line всегда индекс реплики с role=manager, в том числе подтверждающей, что менеджер ответил без уточнения. Если подходящей реплики нет, score=null. Реплики клиента — контекст, их индекс указывай только в context_line. Отказ клиента сам по себе не ошибка.
 cases от 0 до 3. Выбери существенные возможности для этого клиента. Для каждой ситуации вопрос адресован менеджеру как сотруднику после встречи. Спроси, как он проверит потребность или согласует следующий шаг, что сделает, и какой результат ожидает. Не обращайся к менеджеру как к покупателю и не задавай от его имени вопросы покупателю. Ссылайся на реплику. Пока не раскрывай решение и не додумывай продажи, цены, наличие или согласованные условия.`;
 const answerInstruction = `Ты тренер B2B. Оцени предложенный менеджером следующий шаг после переговоров в контексте конкретной реплики и предыдущих попыток. Менеджер — сотрудник, который продавал, а не покупатель.
-Ответ JSON {"verdict":"clarification|improve|accept","feedback":"конкретная обратная связь","action":"","result":"","check":""}.
-clarification только если менеджер задал вопрос без предложения решения. При конкретном выполнимом решении с ожидаемым результатом и способом контроля верни accept, объясни почему и зафиксируй action, result и check; допускай альтернативы. Срок вводится отдельно после согласия.
-При неполном решении верни improve и точную подсказку. До третьей попытки не раскрывай готовый ответ. Если израсходована третья попытка, заполни action, result, check рекомендуемым решением, объясни почему и чему научиться.
+Ответ JSON {"verdict":"clarification|improve|accept","feedback":"конкретная обратная связь","followup":"уточняющий вопрос менеджеру о его следующем действии либо пустая строка","action":"","result":"","check":""}.
+clarification только если менеджер задал уточняющий вопрос тренеру. Если reported_gap=true или ответ «не выявил», «не уточнил», «не знаю», менеджер сообщил о пробеле в работе. В таком случае верни improve и признай, чего сотрудник пока не знает. Спроси в followup, что именно и как он уточнит у этого клиента на следующем контакте. Не проси менеджера самому отвечать, какой товар ему нужен. При конкретном выполнимом решении с ожидаемым результатом и способом контроля верни accept, объясни почему и зафиксируй action, result и check; допускай альтернативы. Срок вводится отдельно после согласия.
+При неполном решении верни improve, точную подсказку и следующий вопрос followup. До третьей попытки не раскрывай готовый ответ. Если израсходована третья попытка, заполни action, result, check рекомендуемым решением, объясни почему и чему научиться.
 Предлагай действия в полномочиях менеджера. Не придумывай обязательства, цены, наличие или согласие клиента.`;
 
 Deno.serve(async (req: Request) => {
@@ -278,7 +278,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.action === 'analyse') {
-      if (row.review) return reply({row: outputRow(row)});
+      const replacing = body.refresh_review === true && row.review && row.review.coach_version !== 2 &&
+        row.review.cases.every((item: any) => item.score === null && !item.task_id);
+      if (row.review && !replacing) return reply({row: outputRow(row)});
       if (row.audio_state !== 'ready' || !Array.isArray(row.transcript)) throw fail('transcript_pending', 409);
       const segments = row.transcript;
       const available = new Set(segments.map((line: any) => line.speaker).filter(Boolean));
@@ -286,11 +288,17 @@ Deno.serve(async (req: Request) => {
       if (!speakers.length || speakers.some(speaker => typeof speaker !== 'string' || !available.has(speaker))) {
         throw fail('speaker_required');
       }
-      const payload = segments.map((line: any, index: number) => ({index, ...line}));
+      const selected = new Set(speakers);
+      const payload = segments.map((line: any, index: number) => ({
+        index, ...line, role: selected.has(line.speaker) ? 'manager' : line.speaker ? 'client' : 'unknown',
+      }));
       if (JSON.stringify(payload).length > 150_000) throw fail('transcript_too_long', 422);
       return reply(await leased(async () => {
         const value = await coach(svc, actor.id, initialInstruction, {manager_speakers: speakers, dialogue: payload}, 2400);
-        return {manager_speaker: speakers[0], review: {...initialReview(value, segments), manager_speakers: speakers}};
+        return {manager_speaker: speakers[0], review: {
+          ...initialReview(value, segments, speakers), manager_speakers: speakers, coach_version: 2,
+          ...(replacing ? {previous_review: row.review} : {}),
+        }};
       }));
     }
     if (body.action === 'answer' || body.action === 'task') {
@@ -304,8 +312,8 @@ Deno.serve(async (req: Request) => {
           const answer = clean(body.answer, 2500);
           if (first?.id !== item.id || !answer) throw fail('answer_required');
           const value = await coach(svc, actor.id, answerInstruction, {
-            issue: item.issue, question: item.question, evidence: item.evidence,
-            attempts: item.attempts, current_attempt: item.attempts.length + 1, answer,
+            issue: item.issue, question: item.followup || item.question, evidence: item.evidence, client_context: item.client_context,
+            attempts: item.attempts, current_attempt: item.attempts.length + 1, reported_gap: isReportedGap(answer), answer,
           }, 750);
           const updated = {...applyAnswer(item, answer, value), last_answer_request:body.request_id};
           return {review: {...row.review, cases: row.review.cases.map((x: any) => x.id === item.id ? updated : x)}};

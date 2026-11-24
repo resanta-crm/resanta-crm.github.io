@@ -68,9 +68,9 @@
     return el;
   }
   const errorText = e => errors[e.message] || 'Операция не выполнена. Попробуйте ещё раз.';
-  function operation(el, message, run) {
+  function operation(el, message, run, pending = 'Подождите…') {
     el.disabled = true;
-    message.textContent = 'Подождите…';
+    message.textContent = pending;
     Promise.resolve().then(run).catch(error => { message.textContent = errorText(error); })
       .finally(() => { el.disabled = false; });
   }
@@ -106,7 +106,7 @@
     el.append(node('h3', title));
     return el;
   }
-  function render() {
+  function render(focusTarget) {
     const ticket = ++layout;
     clearTimeout(pollTimer);
     page.replaceChildren();
@@ -120,7 +120,7 @@
     page.append(node('h2', 'Переговоры', 'page-title'), tabs);
     if (tab === 'new') renderNew();
     else if (tab === 'report') renderReport();
-    else if (selectedId) renderDetail(ticket, selectedId);
+    else if (selectedId) renderDetail(ticket, selectedId, focusTarget);
     else renderList(ticket);
   }
   function renderNew() {
@@ -229,7 +229,7 @@
     }
     return labels;
   }
-  function chooseSpeaker(id, lines, labels, box, message, ticket) {
+  function chooseSpeaker(id, lines, labels, box, message, ticket, previous = []) {
     if (!labels.size) {
       message.textContent = 'Транскрибатор не смог разделить голоса. Проверьте расшифровку.';
       return;
@@ -242,18 +242,20 @@
     choices.append(hint);
     const cards = node('div', undefined, 'nt-speaker-grid');
     const progress = status();
-    const analyse = button('Запустить разбор', () => operation(analyse, progress, async () => {
+    const refresh = previous.length > 0;
+    const analyse = button(refresh ? 'Обновить разбор' : 'Запустить разбор', () => operation(analyse, progress, async () => {
       const speakers = [...choices.querySelectorAll('[name="nt-speaker"]:checked')].map(choice => choice.value);
       if (!speakers.length) return;
-      await api({action:'analyse', id, speakers});
-      if (ticket === layout) render();
-    }), true);
-    analyse.disabled = true;
+      await api({action:'analyse', id, speakers, refresh_review:refresh});
+      if (ticket === layout) render('summary');
+    }, 'ИИ анализирует реплики менеджера…'), true);
+    analyse.disabled = !refresh;
     for (const [speaker, label] of labels) {
       const option = node('label', undefined, 'nt-speaker');
       const checkbox = input('checkbox');
       checkbox.name = 'nt-speaker';
       checkbox.value = speaker;
+      checkbox.checked = previous.includes(speaker);
       checkbox.addEventListener('change', () => {
         analyse.disabled = !choices.querySelector('[name="nt-speaker"]:checked');
       });
@@ -270,7 +272,7 @@
     choices.append(cards, analyse, progress);
     box.append(choices);
   }
-  async function renderDetail(ticket,id) {
+  async function renderDetail(ticket,id,focusTarget) {
     const box = card('Запись переговоров'), message = status();
     page.append(button('К истории',() => {selectedId = null; render();}), box);
     box.append(message); message.textContent = 'Загружаем…';
@@ -299,12 +301,24 @@
       if (row.audio_state === 'ready' || row.audio_state === 'error') {
         api({action:'poll',id}).catch(() => {});
       }
-      if (row.review) {message.textContent = ''; renderReview(row, box, owner);}
+      const canRefresh = owner && row.review && row.review.coach_version !== 2 && row.manager_speaker &&
+        row.review.cases.every(item => item.score === null && !item.task_id);
+      if (row.review) {
+        message.textContent = '';
+        if (canRefresh) {
+          const prior = node('details');
+          prior.append(node('summary', 'Предыдущий разбор'));
+          renderReview(row, prior, false);
+          box.append(prior);
+        } else renderReview(row, box, owner);
+      }
       if (row.transcript?.length) {
         const labels = speakerLabels(row.transcript);
-        if (owner && !row.review && row.audio_state === 'ready') {
+        if (owner && (!row.review || canRefresh) && row.audio_state === 'ready') {
           message.textContent = '';
-          chooseSpeaker(id, row.transcript, labels, box, message, ticket);
+          if (canRefresh) box.append(node('p', 'Обновите разбор, чтобы он опирался на реплики менеджера.', 'nt-muted'));
+          chooseSpeaker(id, row.transcript, labels, box, message, ticket,
+            canRefresh ? row.review.manager_speakers || [row.manager_speaker] : []);
         }
         const transcript = node('details');
         const lines = node('div', undefined, 'nt-transcript');
@@ -314,6 +328,14 @@
         }
         transcript.append(node('summary', 'Вся расшифровка'), lines);
         box.append(transcript);
+      }
+      if (focusTarget) {
+        const target = [...box.querySelectorAll('[data-nt-focus]')].find(el => el.dataset.ntFocus === focusTarget);
+        if (target) {
+          target.tabIndex = -1;
+          target.focus({preventScroll:true});
+          target.scrollIntoView?.({block:'nearest'});
+        }
       }
     } catch (error) {if (ticket === layout) message.textContent = errorText(error);}
   }
@@ -331,17 +353,32 @@
   }
   function renderReview(row,box,owner) {
     const review = row.review;
-    box.append(node('h4',review.quality === null ? 'Качество переговоров' : 'Качество переговоров · ' + review.quality + '%'),
-      node('p',review.summary));
+    const heading = node('h4', review.quality === null ? 'Разбор работы менеджера' : 'Качество переговоров менеджера · ' + review.quality + '%');
+    heading.dataset.ntFocus = 'summary';
+    box.append(heading, node('p', review.summary));
     const score = node('details');
     score.append(node('summary','Оценки и основания'));
-    for (const item of review.criteria) score.append(node('p',item.name + ' · ' + (item.score ?? 'Н/П') + (item.reason ? ' · ' + item.reason : '')));
+    for (const item of review.criteria) {
+      score.append(node('p',item.name + ' · ' + (item.score ?? 'Н/П') + (item.reason ? ' · ' + item.reason : '')));
+      if (item.evidence && review.coach_version === 2) {
+        score.append(node('blockquote', 'Менеджер · ' + timeLabel(item.evidence.time) + ' · ' + item.evidence.text));
+      }
+    }
     box.append(score);
     const pending = review.cases.find(item => item.score === null);
     if (pending) {
       const panel = card('Ждёт ответа');
-      panel.append(node('strong',pending.issue),node('blockquote',pending.evidence.text),node('p',pending.question));
-      if (pending.feedback) panel.append(node('p',pending.feedback,'nt-muted'));
+      panel.dataset.ntFocus = pending.id;
+      panel.append(node('strong',pending.issue),
+        node('blockquote', (review.coach_version === 2 ? 'Менеджер · ' + timeLabel(pending.evidence.time) + ' · ' : '') + pending.evidence.text));
+      if (pending.client_context) {
+        panel.append(node('p', 'Клиент · ' + timeLabel(pending.client_context.time) + ' · «' + pending.client_context.text + '»', 'nt-muted'));
+      }
+      if (pending.last_reply) {
+        panel.append(node('p', 'Ваш ответ сохранён · «' + pending.last_reply.text + '»', 'nt-muted'));
+      }
+      if (pending.feedback) panel.append(node('p', pending.feedback));
+      panel.append(node('p', pending.followup || pending.question));
       if (owner) {
         const answer = node('textarea');
         answer.rows = 3;
@@ -356,14 +393,15 @@
             requestId = crypto.randomUUID();
           }
           await api({action:'answer', id:row.id, case_id:pending.id,answer:text,request_id:requestId});
-          if (selectedId === row.id) render();
-        }),true);
+          if (selectedId === row.id) render(pending.id);
+        },'ИИ анализирует ваш ответ…'),true);
         panel.append(field('Ваш ответ · попытка ' + (pending.attempts.length + 1) + ' из 3',answer),send,message);
       }
       box.append(panel);
     }
     for (const item of review.cases.filter(entry => entry.plan)) {
       const panel = card(item.issue);
+      panel.dataset.ntFocus = item.id;
       const plan = item.plan;
       panel.append(node('p',item.feedback),node('p',plan.action),node('p','Ожидаемый результат · ' + plan.result),
         node('p','Как проверить · ' + plan.check));

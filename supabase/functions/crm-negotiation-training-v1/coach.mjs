@@ -7,25 +7,29 @@ export const criteria = [
 export const clean = (value, max) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const scores = [2, 1, 0.5];
 
-export function initialReview(value, segments, makeId = () => crypto.randomUUID()) {
+export function initialReview(value, segments, managerSpeakers, makeId = () => crypto.randomUUID()) {
+  const voices = new Set(managerSpeakers);
+  const managerLine = index => Number.isInteger(index) && voices.has(segments[index]?.speaker) ? segments[index] : null;
+  const clientLine = index => Number.isInteger(index) && segments[index]?.speaker && !voices.has(segments[index].speaker) ? segments[index] : null;
   const opinions = Array.isArray(value?.criteria) ? value.criteria : [];
   const marked = criteria.map((name, index) => {
     const item = opinions[index];
-    const segment = Number.isInteger(item?.line) ? segments[item.line] : null;
+    const segment = managerLine(item?.line);
     const score = segment && [0, 1, 2].includes(item.score) ? item.score : null;
-    return {name, score, evidence: score === null ? null : segment, reason: clean(item?.reason, 280)};
+    return {name, score, evidence: score === null ? null : segment, reason: score === null ? '' : clean(item?.reason, 280)};
   });
   const seen = new Set();
   const cases = (Array.isArray(value?.cases) ? value.cases : []).slice(0, 3).flatMap(item => {
-    const evidence = Number.isInteger(item?.line) ? segments[item.line] : null;
+    const evidence = managerLine(item?.line);
     const question = clean(item?.question, 420);
     const issue = clean(item?.issue, 260);
     if (!evidence || !question || !issue || seen.has(question)) return [];
     seen.add(question);
-    return [{id: makeId(), evidence, issue, question, attempts: [], feedback: '', score: null, plan: null}];
+    return [{id: makeId(), evidence, client_context: clientLine(item?.context_line),
+      issue, question, attempts: [], feedback: '', score: null, plan: null}];
   });
   const applicable = marked.filter(item => item.score !== null);
-  if (!applicable.length && !cases.length && !clean(value?.summary, 500)) throw Error('invalid_analysis');
+  if (!applicable.length && !cases.length) throw Error('invalid_analysis');
   return {
     summary: clean(value.summary, 500),
     criteria: marked,
@@ -34,21 +38,26 @@ export function initialReview(value, segments, makeId = () => crypto.randomUUID(
   };
 }
 
+export const isReportedGap = answer =>
+  /^(?:не (?:выявил[аи]?|уточнил[аи]?|выяснил[аи]?|узнал[аи]?|спросил[аи]?)|не знаю)[.!\s]*$/iu.test(answer.trim());
+
 export function applyAnswer(situation, answer, value) {
   const feedback = clean(value?.feedback, 600);
-  const verdict = value?.verdict;
+  const verdict = isReportedGap(answer) ? 'improve' : value?.verdict;
+  const followup = clean(value?.followup, 420);
+  const lastReply = {text: answer, status: verdict};
   if (!feedback || !['clarification', 'improve', 'accept'].includes(verdict)) throw Error('invalid_analysis');
   if (situation.score !== null) throw Error('case_completed');
-  if (verdict === 'clarification') return {...situation, feedback};
+  if (verdict === 'clarification') return {...situation, feedback, followup, last_reply: lastReply};
   const attempts = [...situation.attempts, answer];
   const complete = verdict === 'accept' || attempts.length >= scores.length;
-  if (!complete) return {...situation, attempts, feedback};
+  if (!complete) return {...situation, attempts, feedback, followup, last_reply: lastReply};
   const action = clean(value?.action, 420);
   const result = clean(value?.result, 350);
   const check = clean(value?.check, 350);
   if (!action || !result || !check) throw Error('invalid_analysis');
   return {
-    ...situation, attempts, feedback,
+    ...situation, attempts, feedback, followup: '', last_reply: lastReply,
     score: verdict === 'accept' ? scores[attempts.length - 1] : 0,
     plan: {action, result, check, source: verdict === 'accept' ? 'manager' : 'ai'},
   };
