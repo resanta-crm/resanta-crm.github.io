@@ -139,6 +139,9 @@ jobs:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: _site
 
+      - name: Allow uploaded Pages artifact to become visible
+        run: sleep 15
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
