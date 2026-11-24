@@ -773,15 +773,10 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
           <div><div class="page-title" style="margin-bottom:3px">Менеджеры · KPI</div><div style="font-size:12px;color:var(--sub)">План вводит руководитель, факт считается автоматически из продаж 1С</div></div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="month" id="manager-kpi-month" class="form-input" style="width:auto" onchange="renderManagers()"><button class="btn-primary" onclick="openManagerPlanEditor()">🎯 Внести планы</button></div>
         </div>
-        <div class="nt-kpi-entry nt-actions" data-nt-entry hidden>
-          <button type="button" class="btn-secondary" onclick="window.crmNegotiations?.open()">Переговоры</button>
-          <button type="button" class="btn-primary" onclick="window.crmNegotiations?.open('new')">Новый клиент</button>
-        </div>
         <div class="card" style="overflow-x:auto">
           <table class="tbl" style="min-width:1100px"><thead><tr><th>Менеджер</th><th>Регион</th><th>Визитов</th><th>Задач открыто</th><th>Просрочено</th><th>Клиентов</th><th>Отгрузка: план / факт</th><th>Выполнение</th><th>АКБ: план / факт</th><th>Выполнение</th><th>Новые клиенты: план / факт</th><th>Выполнение</th><th></th></tr></thead><tbody id="managers-table"></tbody></table>
         </div>
       </div>
-      <div class="page" id="page-negotiations"></div>
       <div class="page" id="page-sales">
         <div class="page-title">Продажи · Аналитика</div>
         <div id="sales-freshness"></div>
@@ -1029,10 +1024,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <button class="modal-close" onclick="closeModal('modal-quick-visit')">×</button>
     </div>
     <div id="qv-draft-notice" style="display:none;background:var(--ab);color:var(--at);font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:12px">↺ Восстановили несохранённые данные с прошлого раза (например, если приложение свернулось до нажатия "Сохранить")</div>
-    <div class="nt-visit-entry" data-nt-entry hidden>
-      <button type="button" class="btn-secondary" onclick="window.crmNegotiations?.recordVisit('quick')">Записать разговор</button>
-      <div id="nt-quick-notice" role="status"></div>
-    </div>
     <div id="qv-open-tasks" style="display:none;margin-bottom:14px"></div>
     <!-- Результат одной кнопкой -->
     <div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin-bottom:8px">Результат визита</div>
@@ -1080,7 +1071,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     </div>
     <div style="background:var(--bg);border-radius:8px;padding:9px 11px;margin-bottom:12px;font-size:11px;color:var(--sub)">Следующий маршрут и задачи назначает только руководитель.</div>
     <input type="hidden" id="qv-client-id">
-    <button class="btn-primary" style="width:100%;font-size:15px;padding:13px" onclick="window.crmNegotiations ? window.crmNegotiations.saveVisit('quick', () => saveQuickVisit()) : saveQuickVisit()">✓ Сохранить и перейти к следующей точке</button>
+    <button class="btn-primary" style="width:100%;font-size:15px;padding:13px" onclick="saveQuickVisit()">✓ Сохранить и перейти к следующей точке</button>
   </div>
 </div>
 
@@ -1109,10 +1100,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
   <div class="modal">
     <div class="modal-head"><div class="modal-title" id="visit-modal-title">Записать визит</div><button class="modal-close" onclick="closeModal('modal-visit')">×</button></div>
     <div id="visit-client-select"></div>
-    <div class="nt-visit-entry" data-nt-entry hidden>
-      <button type="button" class="btn-secondary" onclick="window.crmNegotiations?.recordVisit('visit')">Записать разговор</button>
-      <div id="nt-visit-notice" role="status"></div>
-    </div>
     <div id="v-client-tasks" style="display:none;max-height:160px;overflow-y:auto;margin-bottom:14px"></div>
     <div class="form-field"><label class="form-label">Что обсуждали / что сделали</label><textarea class="form-input" id="v-text" placeholder="Встретился с директором..."></textarea></div>
     <div class="form-field">
@@ -1163,7 +1150,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     </div>
 
     <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--sub);line-height:1.5">Задача после визита автоматически не создаётся. Руководитель проверит отчёт и при необходимости поставит следующую задачу вручную.</div>
-    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-visit')">Отмена</button><button class="btn-primary" onclick="window.crmNegotiations ? window.crmNegotiations.saveVisit('visit', () => saveVisit()) : saveVisit()">Сохранить визит</button></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-visit')">Отмена</button><button class="btn-primary" onclick="saveVisit()">Сохранить визит</button></div>
   </div>
 </div>
 
@@ -1181,7 +1168,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
     <div class="form-field"><label class="form-label">Код 1С</label><input class="form-input" type="text" id="nc-code" placeholder="00-00000001"></div>
     <div class="form-field"><label class="form-label">Оборот BYN</label><input class="form-input" type="number" id="nc-rev" placeholder="0"></div>
     <div id="nc-result" role="status" style="margin:10px 0;font-size:13px;line-height:1.5"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-add-client')">Отмена</button><button id="nc-save" class="btn-primary" onclick="window.crmNegotiations ? window.crmNegotiations.saveClient(() => saveNewClient()) : saveNewClient()">Добавить</button></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn-secondary" onclick="closeModal('modal-add-client')">Отмена</button><button id="nc-save" class="btn-primary" onclick="saveNewClient()">Добавить</button></div>
   </div>
 </div>
 
@@ -1930,9 +1917,6 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <script defer src="./assets/289-route-task-products-v1.js?v=20261116-1"></script>
 <link rel="stylesheet" href="./assets/288-support-v1.css?v=20261116-responsive-1">
 <script defer src="./assets/288-support-v1.js?v=20261116-responsive-1"></script>
-<dialog id="neg-training-dialog" aria-label="Записать разговор"></dialog>
-<link rel="stylesheet" href="./assets/298-crm-negotiations-v1.css?v=20261124-5">
-<script defer src="./assets/298-crm-negotiations-v1.js?v=20261124-5"></script>
 </body>
 </html>
 
