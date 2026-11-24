@@ -77,6 +77,10 @@
 #nav-alerts.cc-merged-signals,#bn-alerts.cc-merged-signals{display:none!important}
 #control-center-v1 .cc-checks{margin-top:20px;padding-top:18px;border-top:1px solid var(--border);display:grid;gap:12px}
 #control-center-v1 .cc-check-group{border:1px solid var(--border);border-radius:10px;padding:12px}
+#control-center-v1 .cc-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+#control-center-v1 .cc-check-indicator{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:16px}
+#control-center-v1 .cc-check-indicator strong{font-weight:600;overflow-wrap:anywhere}
+#control-center-v1 .cc-check-indicator span{color:var(--sub);white-space:nowrap}
 #control-center-v1 .cc-check-group summary{cursor:pointer;font-size:13px;font-weight:600}
 #control-center-v1 .cc-check-group summary span{float:right;font-weight:400;color:var(--sub);margin-left:8px}
 #control-center-v1 .cc-check-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);font-size:13px}
@@ -84,3 +88,49 @@
 #control-center-v1 .cc-check-row .cc-btn{flex-shrink:0}
 #control-center-v1 .cc-check-group>.cc-muted{margin:10px 0}
 #control-center-v1 .cc-checks button:disabled{cursor:wait;opacity:.65}
+@media(max-width:760px){#control-center-v1 .cc-check-grid{grid-template-columns:1fr}}
+
+/* Home-only presentation candidate: existing data, routing and calculations stay intact. */
+#control-center-v1 .cc-metrics{grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch}
+#control-center-v1 .cc-plan{gap:10px;border-color:#b7cbe7;background:var(--card,#fff)}
+#control-center-v1 .cc-plan .cc-plan-percent{font-size:48px;line-height:1.05;letter-spacing:-2px;color:var(--a,#185fa5)}
+#control-center-v1 .cc-plan .cc-plan-unknown{font-size:28px;letter-spacing:0}
+#control-center-v1 .cc-metrics .cc-stat:not(.cc-plan) strong{font-size:clamp(20px,1.8vw,28px);line-height:1.2}
+#control-center-v1 .cc-stat>span,#control-center-v1 .cc-stat small,#control-center-v1 .cc-muted{font-size:14px}
+#control-center-v1 .cc-btn,#control-center-v1 .cc-link,#control-center-v1 select{font-size:14px;min-height:44px}
+#control-center-v1 .cc-route-panel>details{display:none}
+#control-center-v1 .cc-route-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#control-center-v1 .cc-route-metrics>div{min-width:0;padding:12px;border:1px solid var(--border);border-radius:9px;display:grid;gap:6px}
+#control-center-v1 .cc-route-metrics span{font-size:14px;color:var(--sub)}
+#control-center-v1 .cc-route-metrics strong{font-size:24px;font-variant-numeric:tabular-nums}
+#control-center-v1 .cc-route-points{display:grid;gap:6px;margin-top:12px}
+#control-center-v1 .cc-route-points>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:14px}
+#control-center-v1 .cc-route-points span{min-width:0;overflow-wrap:anywhere}
+#control-center-v1 .cc-additional{padding:8px 14px;border:1px solid var(--border);border-radius:10px}
+#control-center-v1 .cc-additional>summary{font-size:15px;font-weight:600}
+#control-center-v1 .cc-data-status{margin-top:12px!important;padding:10px 12px;border-radius:8px;background:var(--bg);font-size:14px;line-height:1.45}
+#control-center-v1 details.cc-brief{display:block}
+#control-center-v1 .cc-brief>summary{font-size:16px;font-weight:600}
+#control-center-v1 .cc-brief>p{margin:12px 0;font-size:14px}
+#control-center-v1 .cc-home-help{margin:0}
+#control-center-v1 .cc-home-help>summary{position:fixed;right:24px;bottom:18px;z-index:150;display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 16px;list-style:none;border:1px solid var(--border,#d9e0e8);border-radius:12px;background:var(--card,#fff);color:var(--a,#185fa5);font-size:14px;box-shadow:0 3px 12px #17212f12}
+#control-center-v1 .cc-home-help>summary::-webkit-details-marker{display:none}
+#control-center-v1 .cc-home-help>summary>span{font-size:20px;font-weight:700}
+#control-center-v1 .cc-help-content{position:fixed;right:24px;bottom:76px;z-index:150;width:min(560px,calc(100vw - 32px));max-height:70vh;overflow:auto;padding:24px;background:var(--card,#fff);border:1px solid var(--border,#d9e0e8);border-radius:12px;box-shadow:0 8px 24px #17212f1a;color:var(--text);font-size:14px;line-height:1.6}
+#control-center-v1 .cc-help-content h3{margin-bottom:10px}
+#control-center-v1 .cc-help-content p{margin:0 0 14px}
+#control-center-v1 .cc-help-content .cc-sources{margin-top:18px}
+@media(max-width:760px){#control-center-v1 .cc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#control-center-v1 .cc-plan .cc-plan-percent{font-size:44px}#control-center-v1 .cc-plan .cc-plan-unknown{font-size:28px}#control-center-v1 .cc-home-help>summary{position:static;width:max-content;margin-left:auto}#control-center-v1 .cc-help-content{position:static;width:auto;max-height:none;margin-top:12px}}
+@media(max-width:560px){#control-center-v1 .cc-route-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}#control-center-v1 .cc-route-metrics>div{padding:8px}#control-center-v1 .cc-route-metrics span{font-size:12px}#control-center-v1 .cc-route-metrics strong{font-size:20px}}
+#control-center-v1 .cc-year-panel{margin-bottom:16px}
+#control-center-v1 .cc-sales-plan{margin-bottom:16px}
+#control-center-v1 .cc-sales-detail{margin-top:16px;border-top:1px solid var(--border);padding-top:12px}
+#control-center-v1 .cc-sales-detail>summary{cursor:pointer;color:var(--a,#315cb6);font-size:16px;font-weight:600;min-height:44px}
+#control-center-v1 .cc-sales-detail .cc-btn{margin-top:12px}
+#control-center-v1 .cc-bar-row{grid-template-columns:110px minmax(50px,1fr) 78px;font-size:15px;gap:14px}
+#control-center-v1 .cc-bar-pct{text-align:right;font-size:17px;color:var(--a,#185fa5);font-variant-numeric:tabular-nums}
+#control-center-v1 .cc-chart-track{height:12px;margin:4px 0}
+@media(max-width:560px){#control-center-v1 .cc-bar-row{grid-template-columns:84px minmax(40px,1fr) 64px;gap:6px;font-size:14px}#control-center-v1 .cc-bar-pct{font-size:15px}}
+#control-center-v1 button.cc-bar-row{width:100%;padding:5px 0;border:0;background:transparent;color:var(--text);text-align:left}
+#control-center-v1 button.cc-bar-row:hover{background:var(--cc-tint)}
+#control-center-v1 button.cc-bar-row .cc-chart-track{display:block;height:15px;background:var(--bg);margin:0}

@@ -66,17 +66,20 @@ function checksBlock(){
   {label:'Падение продаж ВИП',keys:['vip','sales'],rows:arr(truth?.vipDrops),page:'vip',row:x=>({title:x.matched?.name||x.client_name,note:[x.period_cur,'к '+x.period_prev,'изменение '+x.growth_pct+'%'].filter(Boolean).join(' · '),client:x.matched?.id})},
   {label:'Отклонения по акциям',keys:['promotions','photos','sales'],rows:arr(truth?.promotionIssues),page:'promotions',row:x=>({title:[x.promotion?.title||x.promotion?.name,x.promotion?.client_name].filter(Boolean).join(' — ')||'Акция',note:x.metric?.reason,client:x.promotion?.client_id,promotion:x.promotion?.id})},
   {label:'Частично выполненные задачи',keys:['partial'],rows:arr(truth?.partialReviews),page:'tasks',row:x=>({title:x.manager_name||'Задача',note:[x.fact_result,x.reason].filter(Boolean).join(' · '),review:x.id})},
-  {label:'Качество данных',keys:[],rows:[...arr(truth?.unassigned).map(x=>({...x,checkNote:'Клиент с оборотом не закреплён за менеджером'})),...arr(truth?.noMaster).map(x=>({...x,checkNote:'Строки маст-листа не сопоставились; требуется проверить 1С'}))],page:'clients',row:x=>({title:x.name,note:x.checkNote,client:x.id})}
+  {label:'Клиенты с продажами без ответственного',keys:['sales'],rows:arr(truth?.unassigned).filter(x=>x.id&&x.name),page:'clients',row:x=>({title:x.name,note:'Без ответственного · назначить в карточке клиента',client:x.id})},
+  {label:'Клиенты с оборотом без сопоставленной истории',keys:['sales'],rows:arr(truth?.noMaster).filter(x=>x.id&&x.name),page:'clients',key:'noMaster',row:x=>({title:x.name,note:'Проверить строки маст-листа в 1С',client:x.id})}
  ];
- const header='<div class="cc-panel-head"><h4>Дополнительные проверки</h4><button type="button" class="cc-btn" data-cc-checks'+(checks.status==='loading'?' disabled':'')+'>'+(checks.status==='loading'?'Проверяю…':snap?'Повторить проверку':'Проверить ВИП, акции и разборы')+'</button></div>';
- const notice=checks.status==='error'?checks.error:checks.status==='loading'?'Проверяю источники. Это не мешает работе с главной.':snap?'Проверено '+stamp(snap.at)+'. Текущие обязательства; ВИП — за последний закрытый месяц.':'Проверки из прежнего раздела «Сигналы». Загружаются по кнопке, отдельно от главной.';
+ const header='<div class="cc-panel-head"><h4>Проверка источников</h4><button type="button" class="cc-btn" data-cc-checks'+(checks.status==='loading'?' disabled':'')+'>'+(checks.status==='loading'?'Проверяю…':snap?'Проверить снова':'Проверить')+'</button></div>';
+ const notice=checks.status==='error'?checks.error:checks.status==='loading'?'Проверяю…':!snap?'Не проверено. Проверка запускается вручную.':'';
  const html=groups.map(g=>{
-  const checked=Boolean(snap)&&ready(g.keys),confirmed=checked&&(g.page!=='clients'||snap.historyChecked),rows=checked?g.rows:[],limit=checks.limits?.[g.page]||10;
+  const checked=Boolean(snap)&&ready(g.keys),confirmed=checked&&(g.page!=='clients'||snap.historyChecked),rows=confirmed?g.rows:[],limit=checks.limits?.[g.key||g.page]||10;
+  if(!rows.length&&confirmed)return '';
   const count=!snap?'Не проверено':confirmed?String(rows.length):'Проверено частично';
-  const items=rows.slice(0,limit).map(x=>{const r=g.row(x);return '<div class="cc-check-row"><div><strong>'+esc(r.title)+'</strong><p class="cc-muted">'+esc(r.note)+'</p></div>'+action(r.review&&boss()?'Разобрать задачу':'Открыть',g.page,{...r,review:boss()?r.review:null})+'</div>';}).join('');
-  return '<details class="cc-check-group"'+(limit>10?' open':'')+'><summary>'+esc(g.label)+' <span>'+esc(count)+'</span></summary>'+(items||'<p class="cc-muted">'+esc(!snap?'Нажмите «Проверить».':confirmed?'По проверенным источникам отклонений не найдено.':'Источник недоступен. Отсутствие замечаний не подтверждено.')+'</p>')+(rows.length>limit?'<button type="button" class="cc-btn" data-cc-more="'+g.page+'">Показать ещё · '+limit+' из '+rows.length+'</button>':'')+(snap?action('Открыть раздел',g.page):'')+'</details>';
+  const unavailable=!snap?'Нажмите «Проверить».':'Источник недоступен. Отсутствие замечаний не подтверждено.';
+  const items=rows.slice(0,limit).map(x=>{const r=g.row(x);return '<div class="cc-check-row"><div><strong>'+esc(r.title)+'</strong><p class="cc-muted">'+esc(r.note)+'</p></div>'+action(r.review&&boss()?'Разобрать задачу':'Открыть проблему',g.page,{...r,review:boss()?r.review:null})+'</div>';}).join('');
+  return '<details class="cc-check-group"'+(limit>10?' open':'')+'><summary>'+esc(g.label)+' <span>'+esc(count)+'</span></summary>'+ (items||'<p class="cc-muted">'+esc(unavailable)+'</p>')+(rows.length>limit?'<button type="button" class="cc-btn" data-cc-more="'+(g.key||g.page)+'">Показать ещё · '+limit+' из '+rows.length+'</button>':'')+action('Открыть раздел',g.page)+'</details>';
  }).join('');
- return '<div class="cc-checks" id="cc-extra-checks">'+header+'<p class="cc-muted" role="status">'+esc(notice)+'</p>'+html+'<p class="cc-muted">Качество данных — не оценка менеджера. '+(snap&&!snap.historyChecked?'Сопоставление маст-листа не проверено: история продаж не загружена. ':'')+'Просроченные задачи и маршруты уже показаны выше и повторно не добавляются.</p></div>';
+ return '<div class="cc-checks" id="cc-extra-checks">'+header+(notice?'<p class="cc-muted" role="status">'+esc(notice)+'</p>':'')+(html?'<div class="cc-check-grid">'+html+'</div>':'')+(snap&&!snap.historyChecked?'<p class="cc-muted">Сопоставление маст-листа не проверено.</p>':'')+'</div>';
 }
 function syncSignalsNav(){for(const id of ['nav-alerts','bn-alerts'])d.getElementById(id)?.classList.toggle('cc-merged-signals',allowed());}
 function scheduleRender(){if(renderQueued)return;renderQueued=true;const run=()=>{renderQueued=false;if(active())render();};if(typeof w.requestAnimationFrame==='function')w.requestAnimationFrame(run);else Promise.resolve().then(run);}
@@ -150,10 +153,39 @@ function slotMessage(name){const s=slots()[name];return s?.error?'Данные �
 function actionId(label,page,extra={}){const key=encodeURIComponent(JSON.stringify([page,label,extra.client||'',extra.filter||'',extra.scroll||'',extra.review||'',extra.promotion||'']));actions.set(key,{page,...extra});return key;}
 function action(label,page,extra={}){return '<button type="button" class="cc-btn" data-cc-action="'+actionId(label,page,extra)+'">'+esc(label)+'</button>';}
 function card(label,value,note,page){return '<button type="button" class="cc-stat" data-cc-action="'+actionId(label,page,page==='tasks'?{filter:'overdue'}:{})+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(note)+'</small></button>';}
+function planCard(amount,plan,ready){
+ const calculated=n(amount)!==null&&n(plan)>0,remaining=calculated?Math.max(0,plan-amount):null,over=calculated?Math.max(0,amount-plan):null;
+ const value=ready?pct(amount,plan):'—',note=!ready?'Неполные данные · итог не рассчитан':!n(plan)?'План задан не для всех строк':n(amount)===null?'Факт не подтверждён':over>0?'Сверх плана '+money(over):'';
+ return '<button type="button" class="cc-stat cc-plan" data-cc-action="'+actionId('Продажи · план / факт','sales')+'"><span>Выполнение плана</span><strong class="cc-plan-percent'+(calculated?'':' cc-plan-unknown')+'">'+esc(value)+'</strong>'+(note?'<small>'+esc(note)+'</small>':'')+'</button>'+
+ card('Факт продаж',money(amount),'BYN','sales')+card('План продаж',money(plan),'BYN','sales')+card('Осталось до плана',money(remaining),'BYN','sales');
+}
+function homeHelp(data){
+ const route=routeBlock(data).match(/<details>([\s\S]*?)<\/details>/)?.[1]?.replace(/<summary>[\s\S]*?<\/summary>/,'')||'';
+ return '<details class="cc-home-help" id="cc-home-help"><summary title="Методика, периоды и источники · нажмите или Enter" aria-label="Справка по Главной"><span aria-hidden="true">?</span> Справка</summary><div class="cc-help-content"><h3>План и факт</h3><p>Выполнение — факт / положительный план × 100%. Осталось — максимум из разницы плана и факта и нуля. Сверх плана показано отдельно. При отсутствии факта или плана итог не подменяется нулём.</p><p>Продажи относятся к выбранному месяцу. Годовой итог и столбцы сравнивают только одинаковые завершённые месяцы двух лет. Текущий ноябрь показан отдельно: его процент к полному ноябрю 2025 справочный до закрытия месяца. Проценты менеджеров считаются от их плана, а в годовой подробной таблице — от того же месяца 2025. План, факт и остаток менеджера доступны при наведении на полосу и в разделе «Продажи». ПДЗ — к дате своего отчёта, маршруты — к текущей неделе до сегодняшней даты. Дневной план не рассчитывается.</p><h3>Дополнительные проверки</h3><p>По кнопке отдельно проверяются ВИП, акции, частично выполненные задачи и качество данных. Если проверка источника или истории продаж неполная, отсутствие замечаний не подтверждено. Конкретные клиенты с продажами без ответственного показываются лишь при подтверждённой истории и ведут в карточку клиента. Результат ВИП относится к последнему закрытому месяцу.</p>'+checksBlock()+'<h3>Прямые входы</h3>'+action('Открыть KPI','managers')+' <button type="button" class="cc-link" data-cc-legacy>Исходная сводка и подробные списки</button><h3>Маршруты</h3>'+route+'<p class="cc-muted">Источник задач: '+(data.tasksReady?'прочитан':'не подтверждён')+'. Источник маршрутов: '+(data.routesReady?'прочитан':'не подтверждён')+'. Неполные источники не доказывают отсутствие проблем.</p>'+sourceNotes()+'</div></details>';
+}
+function toggleHomeHelp(help){
+ const pinned=help.dataset.pinned==='true';help.dataset.pinned=String(!pinned);help.dataset.suppressPreview=String(pinned);help.open=!pinned;
+}
+function bindHomeHelp(root){
+ const helpFor=e=>e.target.closest?.('#cc-home-help');
+ const enter=e=>{const help=helpFor(e);if(!help||e.pointerType==='touch')return;w.clearTimeout(help.__closeTimer);help.dataset.hovered='true';if(!help.contains(e.relatedTarget)){help.dataset.suppressPreview='false';help.open=true;}};
+ const leave=e=>{const help=helpFor(e);if(!help||help.contains(e.relatedTarget))return;help.dataset.hovered='false';help.__closeTimer=w.setTimeout(()=>{if(help.dataset.pinned!=='true'&&help.dataset.hovered!=='true'&&!help.contains(d.activeElement))help.open=false;},150);};
+ root.addEventListener('pointerover',enter);root.addEventListener('pointerout',leave);
+ root.addEventListener('focusin',e=>{const help=helpFor(e);if(help&&help.dataset.suppressPreview!=='true')help.open=true;});
+ root.addEventListener('focusout',e=>{const help=helpFor(e);if(help&&!help.contains(e.relatedTarget)){help.dataset.suppressPreview='false';if(help.dataset.pinned!=='true'&&help.dataset.hovered!=='true')help.open=false;}});
+ root.addEventListener('keydown',e=>{
+  const help=helpFor(e);if(!help)return;
+  if(e.key==='Escape'){help.dataset.pinned='false';help.dataset.suppressPreview='true';help.open=false;help.querySelector('summary')?.focus();e.preventDefault();}
+  else if((e.key==='Enter'||e.key===' ')&&e.target===help.querySelector('summary')){toggleHomeHelp(help);e.preventDefault();}
+ });
+}
 function planChart(rows){
  if(!rows.length)return '<p class="cc-muted">'+esc(slotMessage('sales'))+'</p>';
- const max=Math.max(1,...rows.flatMap(x=>[x.actual||0,x.plan||0]));
- return '<div class="cc-legend"><span><i class="cc-key"></i>Факт</span><span><i class="cc-key cc-key-plan"></i>План месяца</span><span>BYN</span></div><div class="cc-bars" role="img" aria-label="План и факт продаж по менеджерам и Триовисту">'+rows.map(x=>'<div class="cc-bar-row"><span>'+esc(x.name)+'</span><div><div class="cc-track cc-chart-track"><i style="width:'+Math.max(0,Math.min(100,100*(x.actual||0)/max))+'%"></i></div><div class="cc-track cc-chart-track"><i class="cc-plan-fill" style="width:'+Math.max(0,Math.min(100,100*(x.plan||0)/max))+'%"></i></div></div><span>'+esc(compact(x.actual))+' / '+esc(compact(x.plan))+'</span></div>').join('')+'</div>';
+ return '<div class="cc-bars" aria-label="Выполнение плана продаж по менеджерам и Триовисту">'+rows.map(x=>{
+  const done=n(x.actual),target=n(x.plan),percent=pct(x.actual,x.plan),width=done!==null&&target>0?Math.max(0,Math.min(100,done/target*100)):0;
+  const hint=x.name+': факт '+money(x.actual)+'; план '+money(x.plan)+'; осталось '+(done!==null&&target>0?money(Math.max(0,target-done)):'—');
+  return '<button type="button" class="cc-bar-row" data-cc-action="'+actionId('Продажи '+x.name,'sales')+'" title="'+esc(hint)+'" aria-label="'+esc(hint)+'"><span>'+esc(x.name)+'</span><span class="cc-track cc-chart-track"><i style="width:'+width+'%"></i></span><strong class="cc-bar-pct">'+esc(percent)+'</strong></button>';
+ }).join('')+'</div>';
 }
 function debtChart(data){
  const rows=arr(data?.series).filter(x=>n(x.total)!==null&&/^\d{4}-\d\d-\d\d$/.test(x.report_date)).sort((a,b)=>a.report_date.localeCompare(b.report_date));
@@ -164,13 +196,17 @@ function debtChart(data){
  return '<svg class="cc-line" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Динамика просроченной задолженности по подтверждённым датам отчётов, BYN"><text x="0" y="17">BYN</text>'+[0,.5,1].map(t=>'<line x1="58" x2="505" y1="'+(145-111*t)+'" y2="'+(145-111*t)+'"/><text x="0" y="'+(149-111*t)+'">'+esc(compact(max*t))+'</text>').join('')+'<polyline fill="none" points="'+rows.map(x=>px(x)+','+py(x)).join(' ')+'"/>'+rows.map(x=>'<circle cx="'+px(x)+'" cy="'+py(x)+'" r="3"><title>'+esc(dateLabel(x.report_date)+': '+money(x.total))+'</title></circle>').join('')+'<text x="58" y="177">'+esc(dateLabel(rows[0].report_date))+'</text><text x="505" y="177" text-anchor="end">'+esc(dateLabel(rows.at(-1).report_date))+'</text></svg><p class="cc-muted">Только даты отчётов 1С. Изменение ПДЗ не считается поступлением денег.</p>';
 }
 function routeBlock(data){
- const r=data.routes,ok=data.routesReady,done=ok?r.verifiedDue.length:null,total=ok?r.duePlans.length:null,pending=ok?Math.max(0,total-done):null;
+ const r=data.routes,ok=data.routesReady,done=ok?r.verifiedDue.length:null,total=ok?r.duePlans.length:null;
+ const missed=ok?r.overdue.filter(x=>x.visit_date>=r.wb.start&&x.visit_date<day()):[],gps=ok?r.markedOnlyWeek.filter(x=>x.visit_date<=day()):[];
+ const managers=[...new Set(missed.map(x=>x.manager_name).filter(Boolean))];
  const wb=ok?r.wb:null;
  return '<section class="cc-panel"><div class="cc-panel-head"><h3>Маршруты недели</h3><span class="cc-muted">'+(wb?esc(dateLabel(wb.start)+' — '+dateLabel(wb.end)):'Текущая неделя')+'</span></div>'+
- '<div class="cc-between"><span>Выполнено к текущей дате</span><strong>'+esc(ok?done+' / '+total:'— / —')+'</strong></div>'+
+ '<div class="cc-route-metrics"><div><span>Подтверждено</span><strong>'+esc(ok?done:'—')+'</strong></div><div><span>Пропущено</span><strong>'+esc(ok?missed.length:'—')+'</strong></div><div><span>Проверить GPS</span><strong>'+esc(ok?gps.length:'—')+'</strong></div></div>'+
+ '<div class="cc-between"><span>По плану до сегодня</span><strong>'+esc(ok?done+' / '+total:'— / —')+'</strong></div>'+
  (ok&&total>0?'<div class="cc-track" role="progressbar" aria-label="Выполнение маршрутов" aria-valuemin="0" aria-valuemax="'+total+'" aria-valuenow="'+done+'"><i style="width:'+Math.min(100,done/total*100)+'%"></i></div>':'')+
- '<p class="cc-muted">'+esc(ok?(total?pending+' точек требуют проверки. Будущие дни не включены.':'На текущую дату согласованных точек нет. Будущие дни не включены.'):coreMessage(['visits','routes','absences']))+'</p>'+
- '<div class="cc-panel-head cc-lower">'+action('Открыть маршруты',boss()?'routes-boss':'my-routes')+(ok?'<span class="cc-muted">Внеплановых за неделю: '+r.offRouteWeek.length+'</span>':'')+'</div>'+
+ '<p class="cc-muted">'+esc(ok?(missed.length?('Ответственные: '+(managers.join(', ')||'смотрите маршрут')):'Нарушений по наступившим датам не подтверждено.'):coreMessage(['visits','routes','absences']))+'</p>'+
+ (missed.length?'<div class="cc-route-points">'+missed.slice(0,3).map(x=>{let matches=[];try{matches=allClients.filter(c=>c.name===x.client_name)}catch(_){}const id=x.client_id||(matches.length===1?matches[0].id:null);return '<div><span><strong>'+esc(x.client_name||'Торговая точка')+'</strong> · '+esc(x.manager_name||'Ответственный не указан')+' · '+esc(dateLabel(x.visit_date))+'</span>'+(id?action('Открыть точку','clients',{client:id}):action('Открыть маршрут',boss()?'routes-boss':'my-routes'))+'</div>';}).join('')+'</div>':'')+
+ '<div class="cc-panel-head cc-lower">'+action('Открыть маршруты',boss()?'routes-boss':'my-routes')+(ok?'<span class="cc-muted">'+Math.max(0,total-done)+' точек требуют проверки · Внеплановых за неделю: '+r.offRouteWeek.length+'</span>':'')+'</div>'+
  '<details><summary>Как считается · дополнительные сведения</summary><p class="cc-muted">Согласованные точки текущей недели до сегодняшней даты. Подтверждение — по действующим связям визитов с маршрутами. Отпуска и больничные учитываются по действующему регламенту.</p>'+(ok?'<p class="cc-muted">Отмечено «Был» без подтверждения за неделю: '+r.markedOnlyWeek.length+'. Исторических пропусков с '+esc(typeof ROUTE_CONTROL_START_LABEL!=='undefined'?ROUTE_CONTROL_START_LABEL:'начала контроля')+': '+r.overdue.length+'.</p>':'')+'</details></section>';
 }
 function problems(data,rows,pdz){
@@ -180,14 +216,14 @@ function problems(data,rows,pdz){
  if(tri){
   if(tri.actual===null)list.push({title:'Триовист: нет продаж за выбранный месяц',note:'План '+money(tri.plan)+' · требуется проверить импорт в исходном разделе',amount:'Нет факта',page:'triovist'});
   else if(!tri.plan)list.push({title:'Триовист: план месяца не задан',note:'Факт '+money(tri.actual)+' · проверьте сохранённые планы',amount:'Без плана',page:'triovist'});
-  else if(tri.actual<tri.plan)list.push({title:'Триовист: проверить выполнение плана',note:'Интернет-магазин · '+pct(tri.actual,tri.plan)+' месячного плана. Причина не установлена.',amount:'До плана '+money(tri.plan-tri.actual),page:'triovist'});
+ // A monthly target below 100% before month end is not evidence of a missed target.
  }
  const overdue=overdueTasks(data);
  if(overdue.length)list.push({title:'Разобрать просроченные обязательства',note:'Действующие рабочие задачи · на '+dateLabel(day()),amount:overdue.length+' задач',page:'tasks',filter:'overdue'});
- if(data.routesReady&&data.routes.duePlans.length>data.routes.verifiedDue.length)list.push({title:'Проверить незакрытые точки маршрута',note:'Текущая неделя, только до сегодняшней даты',amount:(data.routes.duePlans.length-data.routes.verifiedDue.length)+' точек',page:boss()?'routes-boss':'my-routes'});
+ if(data.routesReady){const missed=data.routes.overdue.filter(x=>x.visit_date>=data.routes.wb.start&&x.visit_date<day());if(missed.length)list.push({title:'Проверить пропущенные точки маршрута',note:'Согласованные даты до сегодня · ответственные в маршрутах',amount:missed.length+' точек',page:boss()?'routes-boss':'my-routes'});}
  return list;
 }
-function sourceNotes(){return '<details class="cc-sources"><summary>Источники и актуальность данных</summary>'+['sales','triovist','pdz','receipts'].filter(k=>k!=='triovist'||triAllowed()).map(k=>{const s=slots()[k],names={sales:'План продаж · KPI 360°',triovist:'Триовист · сохранённые продажи и планы',pdz:'ПДЗ · отчёты 1С',receipts:'Поступления · документы 1С'};return '<p class="cc-muted">'+names[k]+': '+esc(s?.error?'не удалось прочитать':s?.loading?'обновляется':s?.data?'прочитано '+stamp(s.at):'ожидание загрузки')+'</p>';}).join('')+'<p class="cc-muted">Продажи — по действующей методике KPI 360°. Триовист — отдельный источник, одна строка в плане. ПДЗ и маршруты всегда показывают свой текущий период независимо от выбранного месяца продаж. Дневной план не рассчитывается.</p></details>';}
+function sourceNotes(){return '<details class="cc-sources"><summary>Источники и актуальность данных</summary>'+['sales','triovist','pdz','receipts'].filter(k=>k!=='triovist'||triAllowed()).map(k=>{const s=slots()[k],names={sales:'План продаж · KPI',triovist:'Триовист · сохранённые продажи и планы',pdz:'ПДЗ · отчёты 1С',receipts:'Поступления · документы 1С'};return '<p class="cc-muted">'+names[k]+': '+esc(s?.error?'не удалось прочитать':s?.loading?'обновляется':s?.data?'прочитано '+stamp(s.at):'ожидание загрузки')+'</p>';}).join('')+'<p class="cc-muted">Продажи — по действующей методике KPI. Триовист — отдельный источник, одна строка в плане. ПДЗ и маршруты всегда показывают свой текущий период независимо от выбранного месяца продаж. Дневной план не рассчитывается.</p></details>';}
 function paint(root,html){
  // Patch only changed top-level blocks (and the two chart panels). Keep the
  // month picker, focus and opened route details when unrelated data arrives.
@@ -205,8 +241,7 @@ function refreshNotice(){
  const errors=Object.keys(slots()).filter(k=>slots()[k].error);
  const names={sales:'Продажи',triovist:'Триовист',pdz:'ПДЗ',receipts:'Поступления'};
  if(!stale.length&&!errors.length&&!state.coreTimedOut)return '';
- const at=stale.map(k=>slots()[k].at).filter(Boolean).sort((a,b)=>a-b)[0];
- return '<div class="cc-panel cc-refresh-note" role="status">'+(stale.length?'<span>Показаны последние данные · прочитано '+esc(stamp(at))+(errors.length?'. Обновить не удалось.':'. Обновляю…')+'</span>':'')+(errors.length||state.coreTimedOut?'<span>'+esc(errors.map(k=>names[k]).concat(state.coreTimedOut?['Задачи и маршруты']:[]).join(', '))+': источник временно недоступен. </span><button type="button" class="cc-btn" data-cc-refresh>Повторить загрузку</button>':'')+'</div>';
+ return '<div class="cc-panel cc-refresh-note" role="status">'+(stale.length?'<span>Показаны последние данные'+(errors.length?'. Обновить не удалось.':'. Обновляю…')+'</span>':'')+(errors.length||state.coreTimedOut?'<span>'+esc(errors.map(k=>names[k]).concat(state.coreTimedOut?['Задачи и маршруты']:[]).join(', '))+': источник временно недоступен. </span><button type="button" class="cc-btn" data-cc-refresh>Повторить загрузку</button>':'')+'</div>';
 }
 function render(){
  if(!active())return;resetActor();const root=mount();if(!root)return;
@@ -215,43 +250,47 @@ function render(){
  actions=new Map();
  const data=localData(),kpi=slots().sales?.data,tri=triAllowed()?slots().triovist?.data:null,pdz=slots().pdz?.data,receipt=slots().receipts?.data;
  const rows=salesRows(kpi,tri,state.month,boss()?'':profile().name),sum=totals(rows),allSalesReady=Boolean(kpi)&&(!triAllowed()||Boolean(tri));
- const overdue=overdueTasks(data),issues=problems(data,rows,pdz);
+ const issues=problems(data,rows,pdz);
  const amount=allSalesReady?sum.actual:null,plan=allSalesReady?sum.plan:null;
- const coverage=triAllowed()?'Команда Витебска и Триовист':'Команда Витебска · в пределах ваших прав';
+ const coverage=triAllowed()?'Команда Витебска и Триовист':boss()?'Команда Витебска · в пределах ваших прав':'Мои результаты · '+profile().name;
  const dates=Array.from({length:12},(_,i)=>{const dt=new Date(monthNow()+'-01T12:00:00');dt.setMonth(dt.getMonth()-i);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');});
- const metrics=card('Продажи · план / факт',compact(amount),allSalesReady?(plan?'План '+money(plan)+' · '+pct(amount,plan):'План задан не для всех строк'):'Загружаю / проверяю источники','sales')+
- card('Поступления · '+monthLabel(state.month),compact(receipt?.amount),receipt?(receipt.count?'BYN · последний документ '+dateLabel(String(receipt.latest).slice(0,10)):'За выбранный месяц документов нет'):slotMessage('receipts'),'payments')+
- card('Просроченная задолженность',compact(pdz?.report_date?pdz.metrics?.amount:null),pdz?.report_date?'BYN · отчёт '+dateLabel(pdz.report_date):pdz?.no_data?'Отчётов ПДЗ пока нет':slotMessage('pdz'),'debt')+
- card('Просроченные задачи',data.tasksReady?String(overdue.length):'—',data.tasksReady?'Рабочие задачи на '+dateLabel(day()):coreMessage(['tasks','absences']),'tasks');
+ const metrics=planCard(amount,plan,allSalesReady);
+ const overdue=overdueTasks(data),triRow=rows.find(x=>x.kind==='triovist');
+ const workMetrics=card('Просроченные задачи',data.tasksReady?String(overdue.length):'—',data.tasksReady?'Рабочие задачи на '+dateLabel(day()):coreMessage(['tasks','absences']),'tasks')+
+  card('Поступления · '+monthLabel(state.month),compact(receipt?.amount),receipt?(receipt.count?'BYN · последний документ '+dateLabel(String(receipt.latest).slice(0,10)):'За выбранный месяц документов нет'):slotMessage('receipts'),'payments')+
+  card('Просроченная задолженность',compact(pdz?.report_date?pdz.metrics?.amount:null),pdz?.report_date?'BYN · отчёт '+dateLabel(pdz.report_date):pdz?.no_data?'Отчётов ПДЗ пока нет':slotMessage('pdz'),'debt');
+ const tierDetails=triRow&&triRow.actual!==null&&n(triRow.plan)>0
+  ?'<div class="cc-panel-head"><span class="cc-muted">Триовист · Интернет-магазин</span>'+action('Триовист: проверить выполнение плана','triovist')+'</div>':'';
+
  const brief=[];
  if(allSalesReady&&n(amount)!==null&&plan)brief.push('Продажи: '+pct(amount,plan)+' месячного плана.');
  if(pdz?.report_date)brief.push('ПДЗ: '+money(pdz.metrics?.amount)+' по отчёту '+dateLabel(pdz.report_date)+'.');
  if(issues.length)brief.push('Внимания требуют '+issues.length+' вопросов — ниже собраны подтверждённые отклонения.');
  if(!brief.length)brief.push('Проверяю источники. Сводка появится по мере загрузки данных.');
- const salesTable=rows.length?'<div class="cc-table-wrap"><table class="cc-table"><thead><tr><th>Продажи</th><th>Факт / план, BYN</th><th>Выполнение</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><strong>'+esc(x.name)+'</strong>'+(x.kind==='triovist'?'<div class="cc-muted">Интернет-магазин</div>':'')+'</td><td>'+esc(money(x.actual)+' / '+money(x.plan))+'</td><td>'+esc(pct(x.actual,x.plan))+'</td></tr>').join('')+'<tr><td><strong>Всего'+(!allSalesReady?' · неполные данные':'')+'</strong></td><td>'+esc(money(amount)+' / '+money(plan))+'</td><td>'+esc(pct(amount,plan))+'</td></tr></tbody></table></div>':'';
- const issuesHTML=issues.length?issues.map((x,i)=>'<div class="cc-issue"><span class="cc-rank">'+String(i+1).padStart(2,'0')+'</span><div><h4>'+esc(x.title)+'</h4><p class="cc-muted">'+esc(x.note)+'</p></div><div><strong>'+esc(x.amount)+'</strong>'+action('Разобрать →',x.page,x)+'</div></div>').join(''):'<p class="cc-muted">'+esc(data.tasksReady&&kpi&&pdz&&(!triAllowed()||tri)?'Подтверждённых вопросов по доступным источникам нет.':'Проверяю доступные источники…')+'</p>';
- const team=arr(kpi?.sales).filter(x=>FIELD.includes(x.manager_name)&&(boss()||x.manager_name===profile().name));
- const teamHTML=team.length?'<div class="cc-table-wrap"><table class="cc-table"><thead><tr><th>Менеджер</th><th>План продаж</th><th>Просрочено задач</th></tr></thead><tbody>'+team.map(x=>'<tr><td>'+esc(x.manager_name)+'</td><td>'+esc(pct(rows.find(r=>r.name===x.manager_name)?.actual,x.shipment_plan))+'</td><td>'+(data.tasksReady?overdue.filter(t=>{let client;try{client=allClients.find(c=>c.id===t.client_id)}catch(_){}return (t.manager_name||client?.manager_name)===x.manager_name;}).length:'—')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="cc-muted">'+esc(slotMessage('sales'))+'</p>';
- const html='<header class="cc-head"><div><div class="cc-kicker">Обзор работы</div><h2>Центр управления</h2><p class="cc-muted">'+esc(coverage)+'</p></div><div class="cc-controls"><label for="cc-month">Продажи и поступления<select id="cc-month" data-cc-month>'+dates.map(m=>'<option value="'+m+'"'+(m===state.month?' selected':'')+'>'+esc(monthLabel(m))+'</option>').join('')+'</select></label><button class="cc-btn" type="button" data-cc-refresh>Обновить</button></div></header>'+
- '<div class="cc-metrics">'+metrics+'</div>'+routeBlock(data)+'<section class="cc-brief"><strong>✦ Брифинг Леры</strong><p>'+esc(brief.join(' '))+'</p>'+action('Открыть разбор','dashboard',{scroll:'cc-issues'})+'<span class="cc-muted">Сводка по данным CRM · без автоматических действий</span></section>'+
- '<div class="cc-columns"><section class="cc-panel"><div class="cc-panel-head"><h3>План и факт продаж</h3><span class="cc-muted">'+esc(monthLabel(state.month))+'</span></div>'+planChart(rows)+salesTable+'<p class="cc-muted">План месяца, не дневной. '+esc(kpi?.latest_sales_month&&state.month>kpi.latest_sales_month?'Продажи команды за выбранный месяц ещё не загружены.':'Действующая методика KPI 360°. При отсутствии плана процент не рассчитывается.')+'</p>'+action('Открыть продажи','sales')+'</section>'+
- '<section class="cc-panel"><div class="cc-panel-head"><h3>Продажи с начала года</h3><span class="cc-muted">'+state.month.slice(0,4)+' / '+(Number(state.month.slice(0,4))-1)+'</span></div><div id="cc-year-chart" data-year="'+state.month.slice(0,4)+'"><p class="cc-muted">Загружаю годовую динамику…</p></div></section></div>'+
- '<section class="cc-panel" id="cc-issues"><div class="cc-panel-head"><h3>Требует решения</h3><span class="cc-muted">'+issues.length+' вопросов · текущие обязательства и выбранный месяц</span></div>'+issuesHTML+checksBlock()+'</section>'+
- '<section class="cc-panel"><div class="cc-panel-head"><h3>'+(boss()?'Команда':'Мои результаты')+'</h3>'+action('Открыть KPI','managers')+'</div>'+teamHTML+'</section>'+sourceNotes()+'<div class="cc-bottom"><button type="button" class="cc-link" data-cc-legacy>Исходная сводка и подробные списки</button><span class="cc-muted">Центр управления · v1</span></div>';
+ const issuesHTML=issues.length?issues.map((x,i)=>'<div class="cc-issue"><span class="cc-rank">'+String(i+1).padStart(2,'0')+'</span><div><h4>'+esc(x.title)+'</h4><p class="cc-muted">'+esc(x.note)+'</p></div><div><strong>'+esc(x.amount)+'</strong>'+action('Разобрать →',x.page,x)+'</div></div>').join(''):'<p class="cc-muted">Подтверждённых вопросов пока нет. Полнота источников — в справке «?».</p>';
+ const html='<header class="cc-head"><div><div class="cc-kicker">Обзор работы</div><h2>Центр управления</h2><p class="cc-muted">'+esc(coverage)+'</p></div><div class="cc-controls"><label for="cc-month">Продажи<select id="cc-month" data-cc-month>'+dates.map(m=>'<option value="'+m+'"'+(m===state.month?' selected':'')+'>'+esc(monthLabel(m))+'</option>').join('')+'</select></label><button class="cc-btn" type="button" data-cc-refresh>Обновить</button></div></header>'+
+ '<div class="cc-metrics">'+metrics+'</div>'+
+ '<section class="cc-panel cc-year-panel"><div class="cc-panel-head"><h3>Продажи с начала года · '+state.month.slice(0,4)+' / '+(Number(state.month.slice(0,4))-1)+'</h3></div><div id="cc-year-chart" data-year="'+state.month.slice(0,4)+'"><p class="cc-muted">Загружаю годовую динамику…</p></div></section>'+
+ '<section class="cc-panel cc-sales-plan"><div class="cc-panel-head"><h3>План и факт продаж</h3><span class="cc-muted">'+esc(monthLabel(state.month))+'</span></div>'+planChart(rows)+(kpi?.latest_sales_month&&state.month>kpi.latest_sales_month?'<p class="cc-muted">Продажи за выбранный месяц ещё не загружены.</p>':'')+(!allSalesReady?'<p class="cc-muted">Всего · неполные данные</p>':'')+tierDetails+action('Открыть продажи','sales')+'</section>'+
+ '<div class="cc-metrics cc-work-metrics">'+workMetrics+'</div>'+
+ '<section class="cc-panel" id="cc-issues"><div class="cc-panel-head"><h3>Требует решения</h3><span class="cc-muted">'+issues.length+' подтверждённых вопросов</span></div>'+issuesHTML+'</section>'+
+ routeBlock(data).replace('class="cc-panel"','class="cc-panel cc-route-panel"')+
+ homeHelp(data);
  paint(root,html);w.RESANTA_YEAR_SALES_V1?.mount(d.getElementById('cc-year-chart'),Number(state.month.slice(0,4)));let notice=d.getElementById('cc-refresh-status');if(!notice){notice=d.createElement('div');notice.id='cc-refresh-status';notice.addEventListener('click',onClick);root.insertAdjacentElement?.('beforebegin',notice);}notice.hidden=false;notice.innerHTML=refreshNotice();
  const tt=d.getElementById('topbar-title');if(tt)tt.textContent='Центр управления';
 }
 function mount(){
  const page=d.getElementById('page-dashboard');if(!page)return null;
  let root=d.getElementById(ID);
- if(!root){root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Центр управления');page.prepend(root);root.addEventListener('click',onClick);root.addEventListener('change',onChange);}
+ if(!root){root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Центр управления');page.prepend(root);root.addEventListener('click',onClick);root.addEventListener('change',onChange);bindHomeHelp(root);}
  return root;
 }
 function onClick(e){
+ const helpSummary=e.target.closest?.('#cc-home-help > summary');if(helpSummary?.tagName==='SUMMARY'&&active()){e.preventDefault();toggleHomeHelp(helpSummary.parentElement);return;}
  const b=e.target.closest?.('button');if(!b||!active())return;
  if(b.hasAttribute('data-cc-refresh')){void w.RESANTA_TASKS_ROUTE_V4?.refresh?.();load(true);return;}
  if(b.hasAttribute('data-cc-checks')){void loadChecks();return;}
- if(b.hasAttribute('data-cc-more')){const key=b.dataset.ccMore;if(!['vip','promotions','tasks','clients'].includes(key))return;checks.limits=checks.limits||{};checks.limits[key]=(checks.limits[key]||10)+10;scheduleRender();return;}
+ if(b.hasAttribute('data-cc-more')){const key=b.dataset.ccMore;if(!['vip','promotions','tasks','clients','noMaster'].includes(key))return;checks.limits=checks.limits||{};checks.limits[key]=(checks.limits[key]||10)+10;scheduleRender();return;}
  if(b.hasAttribute('data-cc-legacy')){state.legacy=!state.legacy;painted.clear();if(state.legacy)legacyBuild?.();render();return;}
  if(!b.hasAttribute('data-cc-action'))return;
  const a=actions.get(b.dataset.ccAction);if(!a)return;
@@ -294,7 +333,7 @@ function install(){
   syncSignalsNav();if(page!=='alerts'||!allowed())return navigate.apply(this,arguments);
   state.legacy=false;const out=navigate.call(this,'dashboard','Центр управления');
   Promise.resolve(out).then(()=>{if(!active())return;resetActor();render();
-   d.getElementById('cc-extra-checks')?.scrollIntoView({behavior:'smooth',block:'start'});
+   const extra=d.getElementById('cc-extra-checks');if(extra){const help=d.getElementById('cc-home-help');if(help){help.open=true;help.dataset.pinned='true';}extra.scrollIntoView({behavior:'smooth',block:'nearest'});}
    if(checks.status==='idle')void loadChecks();
   });return out;
  };}
@@ -317,6 +356,6 @@ function install(){
  if(allowed()&&d.getElementById('page-alerts')?.classList.contains('active'))w.goPage?.('alerts','Сигналы');
 }
 w.addEventListener?.('crm-tasks-updated',()=>{operationCache=null;scheduleRender();});
-w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261114.1',readOnly:true,signalsMerged:allowed,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
+w.RESANTA_CONTROL_CENTER_V1=Object.freeze({version:'20261118.home.1',readOnly:true,signalsMerged:allowed,install,salesRows,totals,prepareAgentRequest,refresh:()=>load(true)});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(window,document);
