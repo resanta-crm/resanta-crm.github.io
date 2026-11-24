@@ -17,12 +17,15 @@
     client_not_available:'Карточка клиента недоступна вашему аккаунту.',
     busy:'Операция уже выполняется. Повторите через несколько секунд.',
     transcript_too_long:'Диалог слишком длинный для одного разбора.',
-    invalid_period:'Укажите даты по порядку. Период может быть до одного года.',
+    invalid_period:'Проверьте порядок дат. В сводке можно выбрать период до года.',
     task_details_required:'Сначала привяжите карточку клиента и укажите срок.',
   };
   let userId, tab = 'history', listPage = 0, layout = 0, pollTimer, selectedId;
   let capture;
   let pendingClient;
+  let people = [];
+  let historyFilter = {};
+  let reportFilter = {};
 
   const permitted = () => !!currentUser?.id && currentProfile?.id === currentUser.id &&
     currentProfile.access_scope === 'standard' && currentProfile.region === 'Витебск' &&
@@ -134,14 +137,51 @@
     box.append(field('Название',name), field('Город',city), field('Адрес торговой точки',address), save, message);
     page.append(box);
   }
+  function filters(form, selection, apply, {search = false, reset = null} = {}) {
+    const from = input('date', 0, selection.from || '');
+    const to = input('date', 0, selection.to || '');
+    const manager = node('select');
+    const text = input('search', 120, selection.search || '');
+    const bar = group();
+    bar.classList.add('nt-filters');
+    const managerField = field('Менеджер', manager);
+    const updatePeople = () => {
+      const choices = [{id:'',name:'Все менеджеры'}, ...people].map(person => {
+        const option = node('option', person.name);
+        option.setAttribute('value', person.id);
+        option.selected = person.id === (selection.manager_id || '');
+        return option;
+      });
+      manager.replaceChildren(...choices);
+      managerField.hidden = currentProfile?.role !== 'boss' && people.length < 2;
+    };
+    updatePeople();
+    if (search) bar.append(field('Клиент или торговая точка', text));
+    bar.append(managerField, field('Дата с', from), field('Дата по', to));
+    const submit = node('button','Показать','btn-primary');
+    submit.type = 'submit';
+    bar.append(submit);
+    if (reset) bar.append(button('Сбросить', reset));
+    form.append(bar);
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      apply({from:from.value, to:to.value, manager_id:manager.value, ...(search ? {search:text.value.trim()} : {})});
+    });
+    return updatePeople;
+  }
+
   function renderList(ticket) {
-    const box = card('История переговоров'), message = status();
-    box.append(message);
+    const box = card('История переговоров'), message = status(), form = node('form');
+    const populate = filters(form, historyFilter, selection => {
+      historyFilter = selection; listPage = 0; render();
+    }, {search:true, reset:() => {historyFilter = {}; listPage = 0; render();}});
+    box.append(form, message);
     message.textContent = 'Загружаем…';
     page.append(box);
-    api({action:'list', page:listPage}).then(({rows,more}) => {
+    api({action:'list', page:listPage, ...historyFilter}).then(({rows, more, managers}) => {
       if (ticket !== layout) return;
-      message.textContent = rows.length ? '' : 'Переговоров пока нет.';
+      if (Array.isArray(managers)) {people = managers; populate();}
+      message.textContent = rows.length ? '' : 'По выбранным условиям переговоров нет.';
       for (const item of rows) {
         const remaining = item.review?.cases.filter(entry => entry.score === null).length || 0;
         const state = item.review ? remaining ? 'Ждёт ответа · ' + remaining : 'Разбор завершён' : statuses[item.audio_state];
@@ -155,42 +195,69 @@
       if (listPage > 0 || more) {
         const controls = group();
         if (listPage > 0) controls.append(button('Назад', () => { listPage--; render(); }));
+        controls.append(node('span', 'Страница ' + (listPage + 1), 'nt-muted'));
         if (more) controls.append(button('Далее', () => { listPage++; render(); }));
         box.append(controls);
       }
     }).catch(error => { if (ticket === layout) message.textContent = errorText(error); });
   }
+
+  function historyFromReport(managerId, dates) {
+    historyFilter = {from:dates.from, to:dates.to, manager_id:managerId};
+    tab = 'history';
+    selectedId = null;
+    listPage = 0;
+    render();
+  }
+
+  function reportMetric(label, value) {
+    const metric = node('div', undefined, 'nt-metric');
+    metric.append(node('strong', String(value)), node('span', label, 'nt-muted'));
+    return metric;
+  }
+
   function renderReport() {
     const box = card('Сводка обучения');
     const today = localDate();
-    const from = input('date', 0, today.slice(0,7) + '-01'), to = input('date', 0, today);
+    if (!reportFilter.from) reportFilter = {from:today.slice(0,7) + '-01', to:today};
+    const form = node('form');
+    const populate = filters(form, reportFilter, selection => {reportFilter = selection; render();});
+    for (const input of form.querySelectorAll('input[type=date]')) input.required = true;
     const results = node('div', undefined, 'nt-report'), message = status();
-    const load = button('Показать', () => operation(load, message, async () => {
-      const data = await api({action:'report', from:from.value, to:to.value});
-      results.replaceChildren();
+    const ticket = layout;
+    box.append(form, message, results);
+    page.append(box);
+    message.textContent = 'Загружаем…';
+    const dates = {...reportFilter};
+    api({action:'report', ...dates}).then(data => {
+      if (ticket !== layout) return;
+      if (Array.isArray(data.managers)) {people = data.managers; populate();}
       message.textContent = data.report.length ? '' : 'За этот период разборов пока нет.';
       for (const item of data.report) {
-        const row = node('div', undefined, 'nt-row');
-        const scores = node('div');
-        scores.append(node('div', 'Качество переговоров ' + (item.quality === null ? '—' : item.quality + '%')),
-          node('div', 'Самостоятельность ' + (item.independence === null ? '—' : item.independence + '%')),
-          node('div', 'Ждут ответа ' + item.waiting + ' · Задачи выполнены ' + item.done + ' из ' + item.tasks),
-          node('div', 'Разборов ' + item.reviewed + ' · Ситуаций завершено ' + item.completed +
-            ' · С первой попытки ' + item.first + ' · Со второй ' + item.second +
-            ' · С третьей ' + item.third + ' · С подсказкой ИИ ' + item.assisted));
-        const manager = node('div');
-        manager.append(node('strong',item.name), node('div',item.category,'nt-muted'));
-        row.append(manager, scores);
-        results.append(row);
+        const panel = card(item.name);
+        const metrics = node('div', undefined, 'nt-report-metrics');
+        metrics.append(
+          reportMetric('Разобрано разговоров',item.reviewed),
+          reportMetric('Качество переговоров',item.quality === null ? '—' : item.quality + '%'),
+          reportMetric('Переговоров ждут ответа',item.waiting_records ?? item.waiting),
+          reportMetric('Действий ожидают задачи',item.to_assign || 0),
+          reportMetric('Задач выполнено',item.tasks ? item.done + ' из ' + item.tasks : 'Пока нет задач'),
+        );
+        const details = node('details');
+        details.append(node('summary','Ответы и подсказки'),
+          node('p', 'Завершено ситуаций ' + item.completed + ' · С подсказкой ИИ ' + item.assisted),
+          node('p', 'Самостоятельность · ' + (item.completed < 10 ? item.completed + ' из 10 ситуаций для оценки' : item.independence + '%')),
+          node('p', 'Удачные решения · с первой попытки ' + item.first + ', со второй ' + item.second + ', с третьей ' + item.third));
+        panel.append(metrics,button('Открыть переговоры',() => historyFromReport(item.id, dates)),details);
+        results.append(panel);
       }
-    }));
-    box.append(group(field('С',from), field('По',to), load), message, results);
-    page.append(box);
-    load.click();
+    }).catch(error => {if (ticket === layout) message.textContent = errorText(error);});
   }
   function clientLink(row, box) {
     if (row.client_id || row.owner_id !== currentUser?.id) return;
-    const title = node('h4','Карточка клиента');
+    const details = node('details');
+    details.id = 'nt-link-client';
+    details.append(node('summary','Карточка клиента'));
     const search = input('search',120,row.prospect_name);
     const matches = node('div'), message = status();
     const connect = button('Найти в CRM', () => operation(connect,message,async () => {
@@ -215,7 +282,8 @@
       });
       matches.append(create);
     }));
-    box.append(title,group(field('Название в CRM',search),connect),message,matches);
+    details.append(group(field('Название в CRM',search),connect),message,matches);
+    box.append(details);
   }
   function timeLabel(value) {
     const seconds = Math.floor(value);
@@ -282,7 +350,6 @@
       box.insertBefore(node('p',[stamp(row.created_at),row.city,row.address].filter(Boolean).join(' · '),'nt-muted'),message);
       message.textContent = statuses[row.audio_state] || '';
       const owner = row.owner_id === currentUser?.id;
-      clientLink(row,box);
       if (owner && ['draft','error','uploading'].includes(row.audio_state)) {
         box.append(button('Записать разговор',() => begin({id:row.id,prospect_name:row.prospect_name}),true));
       }
@@ -328,6 +395,7 @@
         transcript.append(node('summary', 'Вся расшифровка'), lines);
         box.append(transcript);
       }
+      clientLink(row,box);
       if (focusTarget) {
         const target = [...box.querySelectorAll('[data-nt-focus]')].find(el => el.dataset.ntFocus === focusTarget);
         if (target) {
@@ -364,9 +432,36 @@
       }
     }
     box.append(score);
+    const completed = review.cases.filter(entry => entry.plan);
+    if (completed.length) box.append(node('h4', 'Что сделать дальше'));
+    for (const item of completed) {
+      const panel = card(item.plan.source === 'ai' ? 'Подсказка ИИ' : 'Согласованное действие');
+      panel.dataset.ntFocus = item.id;
+      const plan = item.plan;
+      panel.classList.add('nt-next-step');
+      panel.append(node('p',item.issue,'nt-muted'),node('strong',plan.action),
+        node('p','Ожидаемый результат · ' + plan.result), node('p','Как проверить · ' + plan.check));
+      if (item.task_id) panel.append(node('p','Задача создана · срок ' + item.due_date,'nt-muted'));
+      else if (owner && row.client_id) {
+        const due = input('date'); due.min = localDate();
+        const message = status();
+        const add = button('Согласовать и создать задачу',() => operation(add,message,async () => {
+          if (!due.value || due.value < due.min) {message.textContent = 'Укажите срок выполнения.'; return;}
+          await api({action:'task',id:row.id,case_id:item.id,due:due.value});
+          if (selectedId === row.id) render();
+        }),true);
+        panel.append(group(field('Срок',due),add),message);
+      } else if (owner) {
+        panel.append(button('Привязать клиента для задачи',() => {
+          const details = box.querySelector('#nt-link-client');
+          if (details) {details.open = true; details.scrollIntoView?.({block:'nearest'});}
+        }));
+      }
+      box.append(panel);
+    }
     const pending = review.cases.find(item => item.score === null);
     if (pending) {
-      const panel = card('Ждёт ответа');
+      const panel = card('Ситуация ' + (review.cases.indexOf(pending) + 1) + ' из ' + review.cases.length + ' · ждёт ответа');
       panel.dataset.ntFocus = pending.id;
       panel.append(node('strong',pending.issue),
         node('blockquote', (review.coach_version === 2 ? 'Менеджер · ' + timeLabel(pending.evidence.time) + ' · ' : '') + pending.evidence.text));
@@ -396,25 +491,6 @@
         },'ИИ анализирует ваш ответ…'),true);
         panel.append(field('Ваш ответ · попытка ' + (pending.attempts.length + 1) + ' из 3',answer),send,message);
       }
-      box.append(panel);
-    }
-    for (const item of review.cases.filter(entry => entry.plan)) {
-      const panel = card(item.issue);
-      panel.dataset.ntFocus = item.id;
-      const plan = item.plan;
-      panel.append(node('p',item.feedback),node('p',plan.action),node('p','Ожидаемый результат · ' + plan.result),
-        node('p','Как проверить · ' + plan.check));
-      if (item.task_id) panel.append(node('p','Задача создана · срок ' + item.due_date,'nt-muted'));
-      else if (owner && row.client_id) {
-        const due = input('date'); due.min = localDate();
-        const message = status();
-        const add = button('Согласовать и создать задачу',() => operation(add,message,async () => {
-          if (!due.value || due.value < due.min) {message.textContent = 'Укажите срок выполнения.'; return;}
-          await api({action:'task',id:row.id,case_id:item.id,due:due.value});
-          if (selectedId === row.id) render();
-        }),true);
-        panel.append(group(field('Срок',due),add),message);
-      } else if (owner) panel.append(node('p','Привяжите карточку клиента, чтобы поставить задачу.','nt-muted'));
       box.append(panel);
     }
   }
@@ -596,7 +672,7 @@
     if (next === userId) return;
     userId = next; ++layout;
     clearTimeout(pollTimer);
-    visitLinks.clear(); pendingClient = null; selectedId = null;
+    visitLinks.clear(); pendingClient = null; selectedId = null; people = []; historyFilter = {}; reportFilter = {};
     page.replaceChildren();
     if (dialog.open) dialog.close();
   }
