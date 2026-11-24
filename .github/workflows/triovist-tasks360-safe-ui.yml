@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -31,7 +33,12 @@ jobs:
         run: node --test tests/triovist-tasks360-ux-v1.test.mjs tests/triovist-summary-360-v1.test.mjs
       - name: Parser files untouched
         run: |
+          set -o pipefail
+          git fetch origin main
           test -s assets/80-triovist-21vek-control-v236107.js
           test -s assets/106-triovist-competitors-v236218.js
           git diff --name-only origin/main...HEAD | tee /tmp/ui-only-files
+          if [ "${GITHUB_HEAD_REF:-}" = "release/triovist-pilot-20261124" ]; then
+            node tests/triovist-production-rollout-scope-v1.mjs /tmp/ui-only-files
+          fi
           ! grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)\.js$|^supabase/|^\.github/workflows/triovist-21vek)' /tmp/ui-only-files

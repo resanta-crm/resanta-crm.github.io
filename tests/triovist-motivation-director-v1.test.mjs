@@ -26,8 +26,8 @@ function mock(role='boss',options={}){
  const snapshot=m=>{if(!monthState.has(m))monthState.set(m,createSnap(m));return monthState.get(m)};
  const calls=[],listeners={},planSaves=[],style=[],errors=[];
  let confirmValue=false,failSnapshot=!!options.failSnapshot;
- const body={innerHTML:''};
- const host={dataset:{},classList:{add(){}},querySelector:q=>q==='[data-mbody]'?body:null,addEventListener(name,fn){listeners[name]=fn}};
+ const body={innerHTML:''},ratesHelp={innerHTML:''};
+ const host={dataset:{},classList:{add(){}},querySelector:q=>q==='[data-mbody]'?body:q==='[data-trmot-rates]'?ratesHelp:null,addEventListener(name,fn){listeners[name]=fn}};
  const doc={getElementById:id=>id==='page-triovist'?{classList:{contains:v=>v==='active'}}:null,
   querySelector:q=>q==='#tr14-shell [data-tr14].on'?{dataset:{tr14:'motivation'}}:null,
   createElement:()=>({id:'',textContent:''}),head:{appendChild:st=>style.push(st)}};
@@ -51,6 +51,7 @@ function mock(role='boss',options={}){
    if(name==='triovist_ai_demand_preview_v20261105'){
     return {data:{version:'uni-demand-20261105-v1',month:args.p_month.slice(0,7),sources:{
       history_complete:true,partner_date:'2026-11-04',vitebsk_date:'2026-11-04',chekhov_date:'2026-11-04',
+      ...(args.p_month==='2026-12-01'?{last_year_month:'2025-12',baseline_month:'2026-10',calendar_previous_month:'2026-11'}:{}),
       transit_warning:'Transit not verified'
     },groups:[
      {group:'Инструмент',manager_email:M[0],last_year:235732.57,previous_month:562611.56,season_ratio:0.6,proposed:309334.52,partner_free:200,vitebsk_qty:50,chekhov_qty_reference:100,readiness:'review',action:'Проверить листинг'},
@@ -79,7 +80,7 @@ function mock(role='boss',options={}){
   const t={...data,closest:q=>q===selector?t:null};
   listeners[name]?.({target:t});
  };
- return {w,api,host,body,calls,planSaves,compare,fire,
+ return {w,api,host,body,ratesHelp,calls,planSaves,compare,fire,
   updateSnap:(m,manager,amount)=>{
    const x=snapshot(m);x.selected_month_plans=x.selected_month_plans.filter(z=>z.manager_email!==manager);
    x.selected_month_plans.push({manager_email:manager,plan_amount:amount});
@@ -103,15 +104,18 @@ test('UI compiles, keeps original server payroll RPC and never runs heavy parser
  assert.match(original,/window\.triovistSavePlans=async function/);
  assert.match(original,/triovist_set_plan/);
 });
-test('director screen includes four KPI, explanation, real manager rates and 4 actual components',async()=>{
+test('director screen keeps manager rates and moves four summary KPI and methodology into help',async()=>{
  const x=mock();assert.equal(x.paint(),true);await tick();
  let h=x.body.innerHTML;
- assert.equal((h.match(/class="trmot-kpi"/g)||[]).length,4);
- assert.match(h,/Базовая ставка/);assert.match(h,/Дополнительный KPI/);
- assert.match(h,/Планы на месяц/);assert.match(h,/Короткий директорский брифинг/);
+ assert.doesNotMatch(h,/class="trmot-kpi"|Короткий директорский брифинг/);
+ assert.match(x.ratesHelp.innerHTML,/Базовая ставка.*Дополнительный KPI.*Текущая ставка.*Планы на месяц/);
+ assert.match(x.api.reportHelp(),/role="tooltip".*Месяц и сравнение с предыдущим месяцем/);
+ assert.match(h,/id="trmot-plan-tip" role="tooltip">ИИ предлагает суммы/);
  assert.match(h,/Александренко/);assert.match(h,/Кришталь/);
  assert.match(h,/−0,30 п.п.|-0,30 п.п./);
- assert.match(h,/Подтверждённые задачи/);assert.match(h,/Рост к прошлому году/);
+ assert.match(h,/id="trmot-manager-tip-0" role="tooltip">.*Ход работы по задачам/);
+ assert.match(h,/Рост к прошлому году/);
+ assert.doesNotMatch(h,/trmot-parts|Расшифровка премии и сравнение/);
  assert.match(h,/План не задан/);
  assert.match(h,/trmot-track/);
  assert.match(h,/Продажи: 10[ \u00a0\u202f]?000,00 BYN · план: План не задан/);
@@ -145,6 +149,18 @@ test('AI button produces drafts only after explicit second click; without user a
  x.fire('click','[data-trmot-use]');await tick();
  assert.match(x.body.innerHTML,/value="309334\.52"/);
  assert.match(x.body.innerHTML,/value="153414\.10"/);
+ assert.equal(x.planSaves.length,0);
+});
+test('future-month proposal shows the closed baseline and applies amounts only to its own draft',async()=>{
+ const x=mock();x.paint();await tick();
+ x.fire('change','[data-trmot-month]',{value:'2026-12'});await tick();
+ x.fire('click','[data-trmot-calc]');await tick();
+ assert.deepEqual(x.calls.find(c=>c.name==='triovist_ai_demand_preview_v20261105').args,{p_month:'2026-12-01'});
+ assert.match(x.body.innerHTML,/декабрь 2025 и октябрь 2026/);
+ x.fire('click','[data-trmot-use]');await tick();
+ assert.match(x.body.innerHTML,/value="309334\.52"/);
+ x.fire('change','[data-trmot-month]',{value:'2026-11'});await tick();
+ assert.doesNotMatch(x.body.innerHTML,/value="309334\.52"/);
  assert.equal(x.planSaves.length,0);
 });
 test('save requires confirm, uses exact target period and original protected RPC; after confirmation saved values refresh',async()=>{
@@ -198,7 +214,7 @@ test('manager isolation, no backdating, clear percentage points, correct source 
  assert.equal(x.api.parseAmount('0'),null);
  assert.match(ui,/planMonth<currentMonth\(\)/);
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
- assert.match(loader,/20261105-motivation-director-1/);
- assert.match(index,/175-triovist-motivation-director-v1\.js\?v=20261105-uni-demand-v2/);
+ assert.match(loader,/20261123-bonus-controls/);
+ assert.match(index,/175-triovist-motivation-director-v1\.js\?v=20261123-closed-baseline1/);
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
 });

@@ -23,11 +23,47 @@ test('Existing own parser, Card 21vek and business screens stay lazy and isolate
 test('Listing is exact depth 120, evidence-aware, with no made-up causal claims',()=>{
  assert.match(ui,/position_depth|depth:120|№120/);
  assert.match(ui,/p176-sku/);
- assert.match(ui,/Проверенных|Подтверждённого|Причинно-следственная|Причина|фактора/);
+ assert.match(ui,/Движение позиции само по себе не объясняет причину/);
  assert.match(ui,/triovist_own_hourly_dashboard_v1/);
  assert.match(ui,/triovist_own_hourly_history_v1/);
  assert.match(ui,/p_manager_email/);
  assert.match(ui,/p_card_key/);
+});
+test('priorities are short, use fresh declines and give an action grounded in observed stock or price',()=>{
+ const w={};
+ vm.runInNewContext(ui.replace(/\}\)\(\);?\s*$/, 'window.fixture={priority};})();'),{
+  window:w,document:{addEventListener(){}},setTimeout(){},setInterval(){}
+ });
+ const now=Date.parse('2026-11-23T11:00:00Z');
+ const row={card_key:'card1',manager_email:'manager',sku:'74/3/27',keyword:'Пневматический краскопульт',
+  movement:'exited',previous_position:118,position:null,observed_at:'2026-11-23T10:53:00Z',
+  observed_stock:false,previous_observed_stock:true};
+ const html=w.fixture.priority([row,{...row,sku:'старый',observed_at:'2026-11-23T04:53:00Z'},
+  {...row,sku:'небольшое снижение',movement:'down',position_delta:-8}],now);
+ assert.match(html,/74\/3\/27/);
+ assert.match(html,/№118 → Вне TOP-120/);
+ assert.match(html,/Наличие в выдаче сменилось на «нет». Сверить остаток/);
+ assert.doesNotMatch(html,/старый|небольшое снижение/);
+ assert.equal(w.fixture.priority([{...row,observed_at:'2026-11-23T04:53:00Z'}],now),'');
+});
+test('daily source and MRC technical metadata are tooltip content, independent of hourly view',()=>{
+ const daily=read('assets/80-triovist-21vek-control-v236107.js');
+ assert.match(daily,/snapshotHelp=help\('tri21-snapshot-tip'/);
+ assert.match(daily,/help\('tri21-mrc-tip','Источник МРЦ и цен'/);
+ assert.match(daily,/Удалённые страницы товаров/);
+ assert.match(daily,/dailyBody\(root\)\.innerHTML/);
+ assert.match(daily,/Promise\.allSettled\(\[status\(force\),mrcStatus\(force\)\]\)/);
+ assert.match(ui,/Позиции и история SKU/);
+ assert.match(ui,/hint\('p176-list-tip'[^\n]+\n\s*listingInfo/);
+ assert.match(ui,/hint\('p176-method'[^\n]+\n\s*freshness/);
+ assert.doesNotMatch(ui,/Почему упали и что делать|Обновить брифинг|overviewBars/);
+});
+test('daily collection stays above hourly search and the old navigation stays hidden',()=>{
+ const daily=read('assets/80-triovist-21vek-control-v236107.js');
+ const router=read('assets/34-triovist-root-v23614.js');
+ assert.match(daily,/root\.insertBefore\(body,root\.querySelector\(':scope > #p176'\)\)/);
+ assert.match(ui,/root\.appendChild\(el\);render\(\)/);
+ assert.match(router,/#page-triovist\[data-triovist-view\] #tri-v22728-tabs\{display:none!important\}/);
 });
 test('Hourly workflow is isolated, budgeted and never scrapes on PR checks',()=>{
  assert.match(flow,/cron: '23 \* \* \* \*'/);

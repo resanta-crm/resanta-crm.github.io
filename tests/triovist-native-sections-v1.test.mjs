@@ -66,9 +66,7 @@ test('native group module owns the complete dashboard; generic overlay never dup
  assert.equal(f.api.mount('groups',f.ctx),false);
  assert.equal(f.creations.length,0);
  assert.equal(f.roots.groups.box,null);
- assert.match(groups,/function renderPriorities\(\)/);
  assert.match(groups,/function renderKpis\(\)/);
- assert.match(groups,/function renderManagers\(\)/);
  assert.match(groups,/function renderChart\(\)/);
  assert.match(groups,/data-trgd-details/);
  assert.doesNotMatch(groups,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh\?\.\('groups'\)/);
@@ -114,9 +112,9 @@ test('router contains only active native-section mount after successful navigati
 });
 test('UI does not expose developer jargon and existing parser/business handlers are preserved',()=>{
  assert.doesNotMatch(script,/\bUI\/UX\b|Uni X Director/);
- for(const x of ['anp','si','budget','price'])assert.match(router,new RegExp("'"+x+"'"));
+ for(const x of ['anp','si','budget'])assert.match(router,new RegExp("'"+x+"'"));
  assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
- assert.match(lazy,/20261105-groups-single-1/);
+ assert.match(lazy,/20261123-groups-sticky/);
  assert.match(groups,/readOnlySnapshot/);
  assert.match(motivation,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.refresh/);
 });

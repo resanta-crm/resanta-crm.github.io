@@ -41,6 +41,9 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD > /tmp/gps360-changed
+          if [ "${GITHUB_HEAD_REF:-}" = "release/triovist-pilot-20261124" ]; then
+            node tests/triovist-production-rollout-scope-v1.mjs /tmp/gps360-changed
+          fi
           cat /tmp/gps360-changed
           ! grep -E '^tools/triovist_21vek.*[.]py$' /tmp/gps360-changed
           ! (grep '^supabase/migrations/' /tmp/gps360-changed | grep -v '^supabase/migrations/20261109_gps360_director_decisions_recheck_v1[.]sql$')

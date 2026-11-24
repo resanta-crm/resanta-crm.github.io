@@ -46,7 +46,14 @@ async function motivation(force=false){
  if(!triActive()||tab()!=='motivation')return;
  const h=host();if(!h)return;
  const m=selected(),opts=months().map(x=>'<option value="'+x+'" '+(x===m?'selected':'')+'>'+E(label(x))+'</option>').join('');
- h.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:end;flex-wrap:wrap"><div><b style="font-size:16px">🏆 Контроль мотивации</b><div style="font-size:11px;color:#64748b">Месяц и сравнение с предыдущим месяцем. Расчёт 1,5% + KPI до 0,5%.</div></div><div style="display:flex;gap:6px;align-items:end"><button type="button" class="btn-secondary" data-mprev>←</button><div><label class="form-label">Месяц</label><select class="form-input" data-mmonth>'+opts+'</select></div><button type="button" class="btn-secondary" data-mnext '+(m>=currentMonth()?'disabled':'')+'>→</button><button type="button" class="btn-secondary" data-mrefresh>↻ Обновить</button></div></div><div data-mbody style="margin-top:10px;color:#64748b">Считаю…</div>';
+ const help=window.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1?.reportHelp?.()||'';
+ if(help)h.classList.add('trmot175');
+ h.innerHTML='<header class="trmot-head"><div class="trmot-title"><h2>Бонусы и план</h2>'+help+'</div>'+
+ '<div class="trmot-controls"><button type="button" class="btn-secondary trmot-btn" data-mprev aria-label="Предыдущий месяц" '+(m<='2026-08'?'disabled':'')+'>‹</button>'+
+ '<label>Месяц отчёта<select class="form-input" data-mmonth>'+opts+'</select></label>'+
+ '<button type="button" class="btn-secondary trmot-btn" data-mnext aria-label="Следующий месяц" '+(m>=currentMonth()?'disabled':'')+'>›</button>'+
+ '<button type="button" class="btn-secondary trmot-btn" data-mrefresh>Обновить</button></div></header>'+
+ '<div data-mbody><p class="trmot-note" role="status">Загружаю бонусы и планы…</p></div>';
  if(!force&&lastData&&lastMonth===m&&Date.now()-lastAt<60000){paintMotivation(h,m,lastData);return lastData}
  if(flight){await flight;if(lastMonth!==m)return motivation(true);return lastData}
  flight=(async()=>{

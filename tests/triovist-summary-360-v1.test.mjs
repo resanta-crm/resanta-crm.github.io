@@ -82,13 +82,13 @@ test('fallback keeps old KPIs if runtime has no authenticated sales snapshot',as
  assert.equal(await env.window.RESANTA_TRIOVIST_SUMMARY360_V1.open(),false);
  assert.equal(env.page.classList.contains('tri360-ready'),false);
 });
-test('existing Work and all four Commerce actions stay in original router',()=>{
- for(const token of ["'anp','🧾 АНП'","'si','🛠 Компенсация СИ'","'budget','💼 Бюджет'","'price','🧮 Расчёт цены'","'tasks','🤖 Задачи ИИ'"])
+test('existing Work and the three Commerce actions stay in original router',()=>{
+ for(const token of ["'anp','🧾 АНП'","'si','🛠 Компенсация СИ'","'budget','💼 Бюджет'","'tasks','🤖 Задачи ИИ'"])
   assert.ok(base.includes(token),'missing '+token);
  assert.match(base,/home:\['triovist-warning','tri-period-mode','tri-kpis','tri-manager-cards','tri-overview-360'\]/);
  assert.match(base,/await window\.RESANTA_TRIOVIST_SUMMARY360_V1\?\.open/);
  assert.match(old,/dashboard:triDashboard\?/);
- assert.match(html,/168-triovist-summary-360-v1\.js\?v=20261104-3/);
+ assert.match(html,/168-triovist-summary-360-v1\.js\?v=20261123-parser-link1/);
 });
 test('read-only summary never submits tasks, changes plans or budgets',()=>{
  assert.doesNotMatch(mod,/\.insert\(|\.upsert\(|\.update\(|\.delete\(|\.from\(/);

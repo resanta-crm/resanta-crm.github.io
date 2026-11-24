@@ -1,12 +1,12 @@
 /* Triovist Motivation Director 360: source-backed UI and approval-only AI sales plan.
  * Existing RPCs triovist_motivation_compare_v236199, triovist_get_dashboard and triovist_set_plan are authoritative.
- * No AI model/LLM call: deterministic legacy 21vek AI-plan recommendation (LY x 1.30, current pace).
+ * Demand preview is calculated by the existing server RPC from closed sales periods and seasonality.
  * No automatic writes, policy changes, parser calls, 1C import, or new RPC definitions.
  */
 (function(w){
 'use strict';
 if(w.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1)return;
-const VERSION='2026.11.05.2-demand-v2',ID='trmot175-css';
+const VERSION='2026.11.23.2-closed-baseline',ID='trmot175-css';
 const MANAGERS=[{email:'aleksandrenko_av@resanta.ru',name:'Александренко'},{email:'krishtal_na@resanta.ru',name:'Кришталь'}];
 const BOSSES=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -33,50 +33,59 @@ const key=(month,manager)=>month+'|'+manager;
 function css(){
  if(document.getElementById(ID))return;
  const st=document.createElement('style');st.id=ID;st.textContent=[
- '#tri-mot-compare-v236200.trmot175{background:#f8fafd!important;border:1px solid #dce6f1!important;border-radius:14px!important;padding:15px!important}',
- '#tri-mot-compare-v236200 .trmot-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:11px 0}',
- '#tri-mot-compare-v236200 .trmot-kpi{padding:12px;border:1px solid #dbe5f0;background:white;border-radius:11px;min-width:0}',
- '#tri-mot-compare-v236200 .trmot-kpi small{display:block;font-size:10px;color:#71849b;line-height:1.4;min-height:28px}',
- '#tri-mot-compare-v236200 .trmot-kpi b{display:block;font-size:20px;margin:6px 0;color:#1a557f;overflow-wrap:anywhere}',
- '#tri-mot-compare-v236200 .trmot-kpi p{font-size:10px;color:#8594a7;margin:0}',
- '#tri-mot-compare-v236200 .trmot-panel{border:1px solid #dce6f0;background:white;border-radius:11px;padding:14px;margin:11px 0}',
- '#tri-mot-compare-v236200 .trmot-panel h4{font-size:14px;color:#164b78;margin:0 0 9px}',
- '#tri-mot-compare-v236200 .trmot-brief{border-color:#cbdcf3;background:linear-gradient(125deg,#edf5ff,#fff)}',
- '#tri-mot-compare-v236200 .trmot-brief p{font-size:11px;color:#4e6680;line-height:1.6;margin:5px 0}',
- '#tri-mot-compare-v236200 .trmot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:11px 0}',
- '#tri-mot-compare-v236200 .trmot-manager{border:1px solid #dce5ef;background:white;border-radius:12px;padding:13px;min-width:0}',
- '#tri-mot-compare-v236200 .trmot-manager-head{display:flex;justify-content:space-between;align-items:start;gap:8px;flex-wrap:wrap}',
- '#tri-mot-compare-v236200 .trmot-manager h4{font-size:14px;color:#254461;margin:0}',
- '#tri-mot-compare-v236200 .trmot-rate{font-size:25px;color:#176aab;font-weight:850}',
- '#tri-mot-compare-v236200 .trmot-parts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:11px 0}',
- '#tri-mot-compare-v236200 .trmot-part{background:#f5f8fc;padding:10px;border-radius:9px}',
- '#tri-mot-compare-v236200 .trmot-part small{font-size:10px;color:#75869d;display:block}',
- '#tri-mot-compare-v236200 .trmot-part b{font-size:13px;color:#294763;display:block;margin-top:6px}',
- '#tri-mot-compare-v236200 .trmot-note{font-size:10px;color:#70839c;line-height:1.55;margin:5px 0}',
- '#tri-mot-compare-v236200 .trmot-warn{border:1px solid #eed4ab;background:#fff8ed;border-radius:9px;color:#8f5d24;padding:10px;font-size:11px;line-height:1.55;margin:9px 0}',
- '#tri-mot-compare-v236200 .trmot-error{border:1px solid #f0a9af;background:#fff4f4;border-radius:9px;color:#9c2a34;padding:10px;font-size:11px;line-height:1.6;margin:9px 0}',
- '#tri-mot-compare-v236200 .trmot-success{border:1px solid #a4d7bd;background:#ecfaf3;border-radius:9px;color:#176b48;padding:10px;font-size:11px;line-height:1.5;margin:9px 0}',
- '#tri-mot-compare-v236200 .trmot-track{height:10px;border-radius:9px;background:#e9eef5;margin:6px 0 11px;overflow:hidden}',
- '#tri-mot-compare-v236200 .trmot-fill{height:100%;background:#3689c8;border-radius:9px}',
- '#tri-mot-compare-v236200 .trmot-fill.previous{background:#9aafc6}',
- '#tri-mot-compare-v236200 .trmot-barlabel{display:flex;justify-content:space-between;gap:8px;color:#59728b;font-size:11px}',
- '#tri-mot-compare-v236200 .trmot-editor{border:1px solid #cbdff2;border-radius:12px;background:#f2f7ff;padding:13px;margin:12px 0}',
- '#tri-mot-compare-v236200 .trmot-editor h4{font-size:14px;color:#174a78;margin:0 0 9px}',
- '#tri-mot-compare-v236200 .trmot-options{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:10px 0}',
- '#tri-mot-compare-v236200 .trmot-options label{font-size:10px;color:#627c94;display:block;margin-bottom:4px}',
- '#tri-mot-compare-v236200 .trmot-options input{border:1px solid #c9d8e7;border-radius:8px;padding:8px;background:white;color:#29455f;font-size:11px}',
- '#tri-mot-compare-v236200 .trmot-editor input[data-trmot-input]{display:block;border:1px solid #cbd9e9;border-radius:8px;padding:9px 10px;font-size:13px;max-width:100%;width:100%;background:white;margin:7px 0}',
- '#tri-mot-compare-v236200 .trmot-editor input:disabled{background:#eef0f5;color:#8291a5}',
- '#tri-mot-compare-v236200 .trmot-btn{border:1px solid #a9cbe9;border-radius:8px;background:white;color:#175d9a;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer}',
- '#tri-mot-compare-v236200 .trmot-btn.primary{background:#1d6eae;color:white;border-color:#1d6eae}',
- '#tri-mot-compare-v236200 .trmot-btn:disabled{opacity:.5;cursor:not-allowed}',
- '#tri-mot-compare-v236200 .trmot-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:11px 0}',
- '#tri-mot-compare-v236200 details.trmot-details{margin:10px 0;border:1px solid #cbdff1;background:#f1f7ff;padding:12px;border-radius:10px}',
- '#tri-mot-compare-v236200 details.trmot-details summary{cursor:pointer;font-size:11px;font-weight:800;color:#175b97}',
- '#tri-mot-compare-v236200 details.trmot-details>div{font-size:11px;line-height:1.6;padding-top:9px;color:#526c86}',
- '@media(max-width:950px){#tri-mot-compare-v236200 .trmot-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}',
- '@media(max-width:680px){#tri-mot-compare-v236200 .trmot-grid{grid-template-columns:1fr}}'
+ '#tri-mot-compare-v236200.trmot175{background:var(--bg)!important;border:1px solid var(--border)!important;border-radius:12px!important;padding:16px!important;color:var(--text)}',
+ '#tri-mot-compare-v236200 .trmot-head,#tri-mot-compare-v236200 .trmot-manager-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+ '#tri-mot-compare-v236200 .trmot-head h2{margin:0;font-size:25px;line-height:1.2;font-weight:700;letter-spacing:-.6px}',
+ '#tri-mot-compare-v236200 .trmot-title{display:flex;gap:8px;align-items:center;position:relative;max-width:100%}',
+ '#tri-mot-compare-v236200 .trmot-controls,#tri-mot-compare-v236200 .trmot-options,#tri-mot-compare-v236200 .trmot-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap}',
+ '#tri-mot-compare-v236200 :is(.trmot-controls,.trmot-options) label{display:grid;gap:5px;color:var(--sub);font-size:14px}',
+ '#tri-mot-compare-v236200 :is(select,input){box-sizing:border-box;max-width:100%;min-height:44px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font:inherit;font-size:15px}',
+ '#tri-mot-compare-v236200 .trmot-editor input[data-trmot-input]{display:block;width:100%;margin:6px 0 0}',
+ '#tri-mot-compare-v236200 :is(button,select,input,summary):focus-visible{outline:2px solid var(--a);outline-offset:2px}',
+ '#tri-mot-compare-v236200 :is(.trmot-panel,.trmot-editor,.trmot-manager){border:1px solid var(--border);background:var(--card);border-radius:12px;padding:16px;min-width:0}',
+ '#tri-mot-compare-v236200 :is(.trmot-panel,.trmot-editor){margin:12px 0}',
+ '#tri-mot-compare-v236200 :is(.trmot-panel,.trmot-editor,.trmot-manager) h4{font-size:16px;color:var(--text);margin:0}',
+ '#tri-mot-compare-v236200 .trmot-panel h4{margin-bottom:12px}',
+ '#tri-mot-compare-v236200 .trmot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}',
+ '#tri-mot-compare-v236200 .trmot-rate{font-size:25px;color:var(--a);font-weight:650;font-variant-numeric:tabular-nums}',
+ '#tri-mot-compare-v236200 .trmot-note{font-size:14px;color:var(--sub);line-height:1.5}',
+ '#tri-mot-compare-v236200 .trmot-note{margin:5px 0}',
+ '#tri-mot-compare-v236200 .trmot-warn,#tri-mot-compare-v236200 .trmot-error,#tri-mot-compare-v236200 .trmot-success{border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:14px;line-height:1.5;margin:9px 0}',
+ '#tri-mot-compare-v236200 .trmot-warn{background:var(--amb);color:var(--am)}',
+ '#tri-mot-compare-v236200 .trmot-error{background:var(--rb);color:var(--r)}',
+ '#tri-mot-compare-v236200 .trmot-success{background:var(--gb);color:var(--g)}',
+ '#tri-mot-compare-v236200 .trmot-track{height:8px;border-radius:6px;background:var(--bg);margin:6px 0 11px;overflow:hidden}',
+ '#tri-mot-compare-v236200 .trmot-fill{height:100%;background:var(--a);border-radius:6px}',
+ '#tri-mot-compare-v236200 .trmot-fill.previous{background:var(--sub);opacity:.5}',
+ '#tri-mot-compare-v236200 .trmot-barlabel{display:flex;justify-content:space-between;gap:8px;color:var(--sub);font-size:14px}',
+ '#tri-mot-compare-v236200 .trmot-editor .trmot-manager{background:var(--bg)}',
+ '#tri-mot-compare-v236200 .trmot-options,#tri-mot-compare-v236200 .trmot-actions{margin-top:12px}',
+ '#tri-mot-compare-v236200 .trmot-btn{min-height:44px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);padding:8px 12px;font:inherit;font-size:14px;font-weight:550;cursor:pointer}',
+ '#tri-mot-compare-v236200 .trmot-btn:not(:disabled):hover{background:var(--bg)}',
+ '#tri-mot-compare-v236200 .trmot-btn.primary,#tri-mot-compare-v236200 .trmot-btn.primary:not(:disabled):hover{background:var(--a);color:white;border-color:var(--a)}',
+ '#tri-mot-compare-v236200 :is(button,input):disabled{opacity:.55;cursor:not-allowed}',
+ '#tri-mot-compare-v236200 details.trmot-details{margin:10px 0;border:1px solid var(--border);background:var(--card);padding:11px 14px;border-radius:10px}',
+ '#tri-mot-compare-v236200 details.trmot-details summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--a)}',
+ '#tri-mot-compare-v236200 details.trmot-details>div{font-size:14px;line-height:1.55;padding-top:9px;color:var(--sub)}',
+ '#tri-mot-compare-v236200 .trmot-help{display:inline-flex}',
+ '#tri-mot-compare-v236200 .trmot-help button{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;color:var(--a);background:var(--card);font:inherit;font-size:17px;font-weight:700;cursor:pointer}',
+ '#tri-mot-compare-v236200 .trmot-tip{display:none;pointer-events:none;position:absolute;top:calc(100% + 5px);left:0;z-index:8;width:min(380px,calc(100vw - 64px));box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);font-size:13px;line-height:1.5;box-shadow:0 6px 18px #17212f1a}',
+ '#tri-mot-compare-v236200 .trmot-tip span{display:block;margin-top:4px}',
+ '#tri-mot-compare-v236200 .trmot-manager{position:relative}',
+ '#tri-mot-compare-v236200 .trmot-manager-head .trmot-title{position:static}',
+ '#tri-mot-compare-v236200 .trmot-manager-head .trmot-tip{top:calc(100% - 8px);left:16px;width:min(380px,calc(100% - 32px))}',
+ '#tri-mot-compare-v236200 .trmot-help:is(:hover,:focus-within) .trmot-tip{display:block}',
+ '@media(max-width:680px){#tri-mot-compare-v236200 .trmot-grid{grid-template-columns:1fr}#tri-mot-compare-v236200 .trmot-head h2{font-size:22px}}'
  ].join('\n');document.head.appendChild(st);
+}
+function help(id,label,content){
+ return '<span class="trmot-help"><button type="button" aria-label="'+esc(label)+'" aria-describedby="'+id+'">*</button>'+
+ '<span class="trmot-tip" id="'+id+'" role="tooltip">'+content+'</span></span>';
+}
+function reportHelp(){
+ css();
+ return help('trmot-report-tip','Как считаются бонусы и планы',
+  'Месяц и сравнение с предыдущим месяцем. Расчёт 1,5% + KPI до 0,5%.<span data-trmot-rates></span>');
 }
 function snapshotAmount(s,manager){
  const row=(s?.selected_month_plans||[]).find(x=>String(x.manager_email||'').toLowerCase()===manager);
@@ -120,26 +129,29 @@ function forecast(data,month,manager){
  return {manager,month,amount,
   prior:finite(row.last_year),previousMonth:finite(row.previous_month),
   included:finite(row.included_groups),total:finite(row.total_groups),
-  groups,requiresReview:!!row.requires_review,
-  sources:data.sources||{},growth:0.15,
+  groups,growth:0.15,
   reliable:row.requires_review?'есть неподтверждённые группы':'история и сезонность подтверждены'};
 }
 function recommendationCards(month){
  const rec=recommendations.get(month);
- if(!rec)return '<div class="trmot-note">ИИ ещё не рассчитал предложение. Планы и премии не изменяются автоматически.</div>';
- if(rec.loading)return '<div class="trmot-note">Проверяю продажи 21vek, свободный остаток, Витебск и сезонность…</div>';
+ if(!rec)return '';
+ if(rec.loading)return '<div class="trmot-note" role="status">Проверяю продажи 21vek, свободный остаток, Витебск и сезонность…</div>';
  if(rec.error)return '<div class="trmot-error">'+esc(rec.error)+'</div>';
  const source=rec.sources||{};
- return '<div class="trmot-grid">'+MANAGERS.map(m=>{
+ const history=ym(source.last_year_month),baseline=ym(source.baseline_month),calendar=ym(source.calendar_previous_month);
+ const fromLastClosed=baseline&&calendar&&baseline!==calendar;
+ const periodNote=fromLastClosed?'<p class="trmot-note">База расчёта · '+esc(mlabel(history))+' и '+esc(mlabel(baseline))+
+  '. '+esc(mlabel(baseline).replace(/^./,c=>c.toUpperCase()))+' — последний закрытый месяц с данными для расчёта.</p>':'';
+ return periodNote+'<div class="trmot-grid">'+MANAGERS.map(m=>{
   const r=rec.data?.[m.email];
   return '<div class="trmot-manager"><h4>'+esc(m.name)+'</h4>'+
    (r?'<div class="trmot-rate">'+money(r.amount)+'</div>'+
-   '<p class="trmot-note">Аналогичный месяц прошлого года: '+money(r.prior)+
-   ' · предыдущий месяц: '+money(r.previousMonth)+
+   '<p class="trmot-note">'+esc(history?mlabel(history):'Аналогичный месяц прошлого года')+': '+money(r.prior)+
+   ' · '+esc(baseline?mlabel(baseline):'предыдущий закрытый месяц')+': '+money(r.previousMonth)+
    ' · рост к прогнозному спросу: +15%.</p>'+
    '<p class="trmot-note">Проверено групп: '+r.included+' из '+r.total+'. '+esc(r.reliable)+'.</p>'+
    '<details class="trmot-details"><summary>Показать формулу, группы и ограничения</summary><div>'+
-   'Сезонно скорректированный прогноз = (60% × продажи аналогичного месяца прошлого года + 40% × предыдущий месяц × сезонный коэффициент) × 1,15. Коэффициент — из истории CRM, ограничен интервалом 0,20–2,50. Чехов в план не прибавляется.'+
+   'Сезонно скорректированный прогноз = (60% × продажи аналогичного месяца прошлого года + 40% × продажи базового закрытого месяца × сезонный коэффициент) × 1,15. Коэффициент — отношение сезонности планового месяца к базовому, в интервале 0,20–2,50. Чехов указан справочно.'+
    r.groups.map(g=>'<p>'+esc(g.group)+': '+(g.proposed==null?'не хватает данных':money(g.proposed))+
     ' · коэффициент '+(g.season_ratio==null?'—':Number(g.season_ratio).toFixed(2))+
     ' · 21vek свободно '+Number(g.partner_free||0).toLocaleString('ru-RU')+' шт.'+
@@ -164,18 +176,21 @@ function editor(month){
    '<label for="trmot-input-'+m.email.split('@')[0]+'">План руководителя, BYN</label>'+
    '<input id="trmot-input-'+m.email.split('@')[0]+'" data-trmot-input="'+m.email+'" type="text" inputmode="decimal" autocomplete="off" placeholder="Введите сумму, BYN" value="'+esc(value)+'" '+(locked||!allow||saving?'disabled':'')+'/></div>';
  }).join('');
- return '<section class="trmot-editor"><h4>🤖 ИИ · Рассчитать план продаж</h4>'+
- '<p class="trmot-note">ИИ предлагает суммы по прошлому году, прошлому месяцу, сезонности и остаткам с целевым ростом +15%. Ты проверяешь, при необходимости меняешь и только потом утверждаешь.</p>'+
- '<div class="trmot-options"><div><label for="trmot-plan-month">Месяц плана (не месяц отчёта)</label>'+
- '<input type="month" id="trmot-plan-month" data-trmot-month value="'+esc(month)+'" min="2026-08" max="'+esc(shift(currentMonth(),2))+'"/></div>'+
- '<div class="trmot-note">'+esc(snapshotStatus(month))+'</div></div>'+
+ const rec=recommendations.get(month);
+ const explanation='ИИ предлагает суммы по аналогичному месяцу прошлого года и закрытому месяцу с учётом сезонности и целевого роста +15%. Остатки помогают проверить, насколько предложение выполнимо. Руководитель утверждает суммы.'+
+  '<span>Месяц плана выбирается отдельно от месяца отчёта. '+esc(snapshotStatus(month))+'.</span>'+
+  '<span>'+(rec?'':'ИИ ещё не рассчитал предложение. ')+'Планы и премии не изменяются автоматически.</span>';
+ return '<section class="trmot-editor"><div class="trmot-title"><h4>Рассчитать план продаж</h4>'+
+ help('trmot-plan-tip','Как рассчитывается и утверждается план',explanation)+'</div>'+
+ '<div class="trmot-options"><div><label for="trmot-plan-month">Месяц плана</label>'+
+ '<input type="month" id="trmot-plan-month" data-trmot-month value="'+esc(month)+'" min="2026-08" max="'+esc(shift(currentMonth(),2))+'"/></div></div>'+
  (locked?'<div class="trmot-warn">Прошлый месяц — только просмотр: архивные планы не переписываются из этого экрана.</div>':'')+
  '<div class="trmot-grid">'+form+'</div>'+
  '<div class="trmot-actions">'+
  (sourceCache.get(month)?.error?'<button type="button" class="trmot-btn" data-trmot-retry>↻ Повторить проверку планов</button>':'')+
- '<button type="button" class="trmot-btn" data-trmot-calc '+(locked||saving||!allow?'disabled':'')+'>✨ ИИ · Рассчитать планы</button>'+
+ '<button type="button" class="trmot-btn" data-trmot-calc '+(locked||saving||loading||!allow?'disabled':'')+'>✨ ИИ · Рассчитать планы</button>'+
  '<button type="button" class="trmot-btn" data-trmot-use '+(!recommendations.get(month)?.data||locked||saving?'disabled':'')+'>Подставить предложение ИИ</button>'+
- '<button type="button" class="trmot-btn primary" data-trmot-save '+(locked||saving||!s||!allow?'disabled':'')+'>'+(saving?'Сохраняю…':'Утвердить и сохранить')+'</button></div>'+
+ '<button type="button" class="trmot-btn primary" data-trmot-save '+(locked||saving||loading||!s||!allow?'disabled':'')+'>'+(saving?'Сохраняю…':'Утвердить и сохранить')+'</button></div>'+
  recommendationCards(month)+(error?'<div class="trmot-error">'+esc(error)+'</div>':'')+
  (status?'<div class="trmot-success">'+esc(status)+'</div>':'')+'</section>';
 }
@@ -184,13 +199,20 @@ function managerCard(row,previous,planSnapshot){
  const known=!!planSnapshot,failed=!known&&!!sourceCache.get(ym(row.month))?.error;
  const planStatus=failed?'Не удалось проверить план':!known?'Проверяю план…':amount===null?'План не задан':money(amount);
  const planPercent=failed?'Проверка недоступна':!known?'Проверяется':amount===null?'Не задан':amount>0?pct(num(row.fact)/amount*100):'План 0 BYN';
- const ratePart=(label,val,sub)=>'<div class="trmot-part"><small>'+label+'</small><b>'+rate(val)+'</b><div class="trmot-note">'+esc(sub)+'</div></div>';
  const delta=pp(row.total_rate,previous?.total_rate);
- return '<article class="trmot-manager"><div class="trmot-manager-head"><div><h4>'+esc(row.manager_name||'Менеджер')+'</h4><p class="trmot-note">Продажи: '+money(row.fact)+' · план: '+planStatus+'</p></div><div style="text-align:right"><div class="trmot-rate">'+rate(row.total_rate)+'</div><div class="trmot-note">К прошлому месяцу: '+delta+'</div></div></div>'+
- '<p class="trmot-note">Выполнение плана: <b>'+planPercent+'</b> · динамика г/г: <b>'+pct(row.growth_pct)+'</b>. '+(ym(row.month)===currentMonth()?'Месяц не завершён: сравнение с полным прошлым годом предварительное.':'Фактический закрытый период.')+'</p>'+
- '<div class="trmot-parts">'+ratePart('Выполнение плана',row.plan_rate,planPercent)+ratePart('Рост к прошлому году',row.growth_rate,pct(row.growth_pct))+
- ratePart('Подтверждённые задачи',row.task_rate,pct(row.task_score))+ratePart('Общий результат',row.team_rate,pct(row.team_pct))+'</div>'+
- '<details class="trmot-details"><summary>▤ Расшифровка премии и сравнение</summary><div>Базовая ставка: '+rate(row.base_rate)+'. Надбавки рассчитывает штатная функция CRM; экран их не пересчитывает. Текущий итог: '+rate(row.total_rate)+'. Предыдущий месяц: '+(previous?rate(previous.total_rate):'нет данных')+'. Изменение: '+delta+'.</div></details></article>';
+ const name=row.manager_name||'Менеджер';
+ const tip=[
+  'Базовая ставка · '+rate(row.base_rate),
+  'Выполнение плана · '+planPercent+' · надбавка '+rate(row.plan_rate),
+  'Рост к прошлому году · '+pct(row.growth_pct)+' · надбавка '+rate(row.growth_rate),
+  'Ход работы по задачам · '+pct(row.task_score)+' · надбавка '+rate(row.task_rate),
+  'Общий результат · '+pct(row.team_pct)+' · надбавка '+rate(row.team_rate),
+  'К прошлому месяцу · '+delta,
+  ym(row.month)===currentMonth()?'Ставка и сравнение за открытый месяц предварительные.':''
+ ].filter(Boolean).map(line=>'<span>'+esc(line)+'</span>').join('');
+ return '<article class="trmot-manager"><div class="trmot-manager-head"><div><div class="trmot-title"><h4>'+esc(name)+'</h4>'+
+ help('trmot-manager-tip-'+MANAGERS.findIndex(manager=>manager.email===String(row.manager_email||'').toLowerCase()),'Расшифровка премии · '+name,tip)+
+ '</div><p class="trmot-note">Продажи: '+money(row.fact)+' · план: '+planStatus+'</p></div><div class="trmot-rate">'+rate(row.total_rate)+'</div></div></article>';
 }
 function comparisonChart(rows,previousRows){
  const max=.02;
@@ -218,23 +240,18 @@ function render(host,month,data){
  const source=snapshotState(month);
  const approved=source?cur.filter(x=>snapshotAmount(source,String(x.manager_email||'').toLowerCase())!==null).length:null;
  const rmin=Math.min(...cur.map(x=>num(x.total_rate))),rmax=Math.max(...cur.map(x=>num(x.total_rate)));
- const kpi=(label,v,sub)=>'<div class="trmot-kpi"><small>'+label+'</small><b>'+v+'</b><p>'+sub+'</p></div>';
- const cards='<div class="trmot-kpis">'+
- kpi('Базовая ставка',rate(cur[0].base_rate),'Не уменьшается')+
- kpi('Дополнительный KPI','до 0,50%','По действующей политике')+
- kpi('Текущая ставка',rmin===rmax?rate(rmin):rate(rmin)+' – '+rate(rmax),'Предварительно')+
- kpi('Планы на месяц',approved===null?'Проверяю…':approved+' / '+cur.length,'Сохранённые суммы')+'</div>';
- const missing=source?cur.filter(x=>snapshotAmount(source,String(x.manager_email||'').toLowerCase())===null):[];
- const brief='<section class="trmot-panel trmot-brief"><h4>✨ Короткий директорский брифинг</h4><p>'+
- (source&&missing.length?'Планы не установлены: '+missing.map(x=>esc(x.manager_name||'менеджер')).join(', ')+'. ':'')+
- (ym(month)===currentMonth()?'Месяц ещё не завершён. Годовую динамику не считать окончательным итогом. ':'')+
- 'Проверьте выполнение плана, подтверждённые задачи и общий результат. Основание каждой надбавки показано в карточках менеджеров.</p>'+
- '<p>Ставки и четыре составляющие премии — из действующей функции расчёта CRM. ИИ предлагает только сумму плана и не влияет на премию до утверждения.</p></section>';
+ const rates=host.querySelector('[data-trmot-rates]');
+ if(rates)rates.innerHTML=[
+  ['Базовая ставка',rate(cur[0].base_rate),'Не уменьшается'],
+  ['Дополнительный KPI','до 0,50%','По действующей политике'],
+  ['Текущая ставка',rmin===rmax?rate(rmin):rate(rmin)+' – '+rate(rmax),month===currentMonth()?'Предварительно':''],
+  ['Планы на месяц',approved===null?'Проверяю…':approved+' / '+cur.length,'Сохранённые суммы']
+ ].map(([label,value,note])=>'<span>'+esc(label)+' · <b>'+esc(value)+'</b>'+(note?'. '+esc(note):'')+'</span>').join('');
  const owner=planMonth||month;
  const editorHtml=isBoss()?editor(owner):'<div class="trmot-panel"><h4>План продаж</h4><p class="trmot-note">Утверждённые суммы видны в карточке. Изменять планы могут только руководители.</p></div>';
- area.innerHTML=cards+brief+editorHtml+'<div class="trmot-grid">'+cur.map(x=>managerCard(x,previous.find(y=>y.manager_email===x.manager_email),source)).join('')+'</div>'+
+ area.innerHTML=editorHtml+'<div class="trmot-grid">'+cur.map(x=>managerCard(x,previous.find(y=>y.manager_email===x.manager_email),source)).join('')+'</div>'+
  comparisonChart(cur,previous)+
- '<details class="trmot-details"><summary>▤ Методика начисления премии и источник данных</summary><div>1,50% базовая ставка + четыре KPI в пределах действующего лимита 0,50%. Подтверждённые задачи, продажи и командные показатели рассчитывает штатная серверная функция. Изменение ставки — в п.п. План создаёт руководитель после проверки рекомендации. Никаких автоматических корректировок закрытых месяцев.</div></details>';
+ '<details class="trmot-details"><summary>▤ Методика начисления премии и источник данных</summary><div>1,50% базовая ставка + четыре KPI в пределах действующего лимита 0,50%. Продажи, ход работы по задачам и командные показатели рассчитывает штатная серверная функция. Изменение ставки — в п.п. План создаёт руководитель после проверки рекомендации. Никаких автоматических корректировок закрытых месяцев.</div></details>';
  bind(host);
  const c=sourceCache.get(month);
  if(!c?.data&&!c?.flight&&!c?.error)loadSource(month);
@@ -279,12 +296,20 @@ async function generate(){
   if(token!==nonce||month!==planMonth)return false;
   const rec=Object.fromEntries(MANAGERS.map(x=>[x.email,forecast(preview,month,x.email)]));
   const count=Object.values(rec).filter(Boolean).length;
-  if(!count)throw Error('Недостаточно подтверждённой истории и сезонности; не создаём план из непроверенных данных.');
+  if(!count){
+   const src=preview.sources||{};
+   const missing=[
+    src.last_year_imported===false?ym(src.last_year_month):'',
+    src.baseline_imported===false?ym(src.baseline_month):''
+   ].filter(Boolean).map(mlabel);
+   throw Error(missing.length?'Нет подтверждённых продаж за '+missing.join(' и ')+'.':
+    'Для выбранного месяца не хватает подтверждённых продаж или коэффициентов сезонности.');
+  }
   recommendations.set(month,{data:rec,sources:preview.sources,calculatedAt:Date.now()});
   status='Uni AI подготовил '+count+' рекомендации по продажам, сезонности и остаткам. Ничего не сохранено.';
   return true;
  }catch(e){if(token===nonce&&month===planMonth){recommendations.set(month,{error:e?.message||String(e)})}return false}
- finally{loading=false;if(token===nonce)refresh()}
+ finally{loading=false;if(recommendations.get(month)?.loading)recommendations.delete(month);refresh()}
 }
 function apply(){
  if(!isBoss()||saving||planMonth<currentMonth())return false;
@@ -334,7 +359,7 @@ async function save(){
  }finally{saving=false;refresh()}
 }
 w.RESANTA_TRIOVIST_MOTIVATION_DIRECTOR_V1=Object.freeze({
- version:VERSION,paint:render,forecast,parseAmount,sourcePlan:snapshotAmount,readOnlyPayroll:true,
+ version:VERSION,paint:render,reportHelp,forecast,parseAmount,sourcePlan:snapshotAmount,readOnlyPayroll:true,
  existingPlanRpc:true,manualApproval:true,noAutoSave:true,approvedOnly:true,sourceBasedDemand:true,noNewDatabaseObjects:false,
  getState:()=>({reportMonth,planMonth,saving,error,status})
 });

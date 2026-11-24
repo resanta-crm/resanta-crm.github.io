@@ -20,14 +20,16 @@ function loadRefreshGuard(){
 function loadGroupFix(){
   if(window.RESANTA_TRIOVIST_GROUP_DYNAMICS_FIXES_V236121||document.querySelector('script[data-trgd-fix-v236121]')){loadRefreshGuard();return;}
   const f=document.createElement('script');
-  f.src='./assets/83-triovist-group-dynamics-fixes-v236121.js?v='+encodeURIComponent(cv);
+  f.src='./assets/83-triovist-group-dynamics-fixes-v236121.js?v='+encodeURIComponent(cv)+'&groups=20261123-sticky';
   f.async=false;f.dataset.trgdFixV236121='1';
   f.onload=loadRefreshGuard;
   f.onerror=()=>{console.error('Triovist group dynamics fixes v23.6.121 failed to load; base analytics remains available.');loadRefreshGuard();};
   document.head.appendChild(f);
 }
-if(window.RESANTA_TRIOVIST_ROOT_V23614?.version==='v23.6.401'&&window.RESANTA_TRIOVIST_ROOT_V23614?.infographicPayushinOnly===true){loadGroupFix();return;}if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
+if(window.RESANTA_TRIOVIST_ROOT_V23614?.directWorkspaceRouter===true&&window.RESANTA_TRIOVIST_ROOT_V23614?.infographicPayushinOnly===true){loadGroupFix();return;}if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
 const stale=document.querySelector('script[data-triovist-root-v23614]');
+const bundledRoot=[...document.scripts].some(script=>!script.dataset.triovistRootV23614&&script.src.includes('/34-triovist-root-v23614.js'));
+if(window.RESANTA_TRIOVIST_ROOT_BOOTING_V23614||bundledRoot){loadGroupFix();return;}
 if(stale){const age=Date.now()-Number(stale.dataset.triovistStartedAt||0);if(stale.dataset.triovistStartedAt&&age<5000){loadGroupFix();return;}stale.remove();}
 const s=document.createElement('script');
 s.src='./assets/34-triovist-root-v23614.js?v='+encodeURIComponent(cv)+'&factory=5.0.2-archived';

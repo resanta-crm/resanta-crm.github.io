@@ -12,7 +12,7 @@ if(window.RESANTA_PERFORMANCE_ROOT_V23657)return;
 // Keep this marker aligned with data/app-version.json; tests enforce parity.
 const FRONTEND_VERSION='23.7.12';
 const V=(()=>{try{return new URL(document.currentScript?.src||'',location.href).searchParams.get('v')||'23.6.122'}catch(_){return'23.6.122'}})().replace(/^v/,''),flights=new Map(),contractFlights=new Map();
-const VERSIONED_GUARDS=Object.freeze({RESANTA_ROUTE_VISIT_EVIDENCE_V23629:'v23.6.264',RESANTA_TRIOVIST_21VEK_CONTROL_V236107:'v23.6.379',RESANTA_PROMOTIONS_CLOSE_V23656:'v23.6.361',RESANTA_PROMOTIONS_STABLE_RENDER_V23671:'v23.6.364',RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.320',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.320',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.155',RESANTA_WAREHOUSE_ORDERS_V1:'v23.6.242',RESANTA_WAREHOUSE_ORDERS_TAB_V1:'v23.6.177',RESANTA_MARKDOWN_V23687:'v23.6.245',RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651:'v23.6.380',RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551:'v23.6.249',RESANTA_TRIOVIST_AUTH_EXPORT_V236221:'v23.6.326',RESANTA_TRIOVIST_ROOT_V23614:'v23.6.401',RESANTA_TRIOVIST_COMPETITORS_V236218:'v23.6.384'});
+const VERSIONED_GUARDS=Object.freeze({RESANTA_ROUTE_VISIT_EVIDENCE_V23629:'v23.6.264',RESANTA_TRIOVIST_21VEK_CONTROL_V236107:'v23.6.403-parser-workspace',RESANTA_PROMOTIONS_CLOSE_V23656:'v23.6.361',RESANTA_PROMOTIONS_STABLE_RENDER_V23671:'v23.6.364',RESANTA_TRIOVIST_AI_PLANS_V2348:'v23.6.103',RESANTA_WAREHOUSE_COMPACT_V23637:'v23.6.320',RESANTA_WAREHOUSE_CONTROL_V23620:'v23.6.320',RESANTA_WAREHOUSE_INVENTORY_V236139:'v23.6.153',RESANTA_WAREHOUSE_RECEIVING_V236154:'v23.6.155',RESANTA_WAREHOUSE_ORDERS_V1:'v23.6.242',RESANTA_WAREHOUSE_ORDERS_TAB_V1:'v23.6.177',RESANTA_MARKDOWN_V23687:'v23.6.245',RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651:'v23.6.382-decisions360-fact-v1',RESANTA_TRIOVIST_STOCK_UPLOAD_TRUTH_V23551:'v23.6.249',RESANTA_TRIOVIST_AUTH_EXPORT_V236221:'v23.6.326',RESANTA_TRIOVIST_COMPETITORS_V236218:'v23.6.414-position-reply'});
 
 function activePage(){
   try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}
@@ -51,7 +51,7 @@ function waitGuard(guard,ms=1400){
 function inject(path,marker,guard){
   return new Promise(resolve=>{
     const s=document.createElement('script');
-    s.src='./'+path+'?v='+(path==='assets/39-office-manager-payments-only-v23624.js'?'20261115-calendar-v2':path==='assets/21-gps-control-performance-v2357.js'?'20261106-manager-feedback':path==='assets/51-warehouse-compact-days-v23637.js'?'20261109-warehouse-abc-excel2':V);
+    s.src='./'+path+'?v='+(path==='assets/39-office-manager-payments-only-v23624.js'?'20261115-calendar-v2':path==='assets/21-gps-control-performance-v2357.js'?'20261106-manager-feedback':path==='assets/51-warehouse-compact-days-v23637.js'?'20261109-warehouse-abc-excel2':path==='assets/82-triovist-group-dynamics-v236120.js'?'20261123-groups-sticky':path==='assets/32-triovist-v23611.js'?'20261123-single-router':path==='assets/80-triovist-21vek-control-v236107.js'?'20261123-parser-order1':path==='assets/106-triovist-competitors-v236218.js'?'20261124-position-reply1':path==='assets/61-triovist-task-month-safe-v23651.js'?'20261123-task-focus1':V);
     s.async=false;
     s.setAttribute(attrName(marker),'1');
     s.onload=async()=>resolve(await waitGuard(guard,1400));
@@ -203,7 +203,7 @@ async function loadTriovist(){
   await Promise.all([
     load('assets/11-triovist-ai-plans-v2348.js','perf-tri-ai-v23671','RESANTA_TRIOVIST_AI_PLANS_V2348'),
     load('assets/13-triovist-seasonal-stock-v2350.js','perf-tri-stock-v23671','RESANTA_TRIOVIST_SEASONAL_STOCK_V2350'),
-    load('assets/32-triovist-v23611.js','perf-tri-root-v23671','RESANTA_TRIOVIST_ROOT_V23614'),
+    load('assets/32-triovist-v23611.js','perf-tri-root-v23671','RESANTA_TRIOVIST_SINGLE_V23611'),
     load('assets/61-triovist-task-month-safe-v23651.js','perf-tri-month-v23671','RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651'),
     load('assets/78-triovist-hide-recommendations-v23699.js','perf-tri-hide-recs-v23699','RESANTA_TRIOVIST_RECOMMENDATIONS_HIDDEN_V23699'),
     load('assets/80-triovist-21vek-control-v236107.js','perf-tri-21vek-control-v236107','RESANTA_TRIOVIST_21VEK_CONTROL_V236107'),

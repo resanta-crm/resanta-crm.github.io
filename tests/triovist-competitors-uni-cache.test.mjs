@@ -11,14 +11,14 @@ test('competitor and lazy modules compile safely',()=>{
  assert.doesNotThrow(()=>new vm.Script(market));
 });
 test('competitor script gets precisely one new version query, no old double query',()=>{
- assert.match(loader,/path==='assets\/106-triovist-competitors-v236218\.js'\?'20261111-actionable-overview1'/);
+ assert.match(loader,/path==='assets\/106-triovist-competitors-v236218\.js'\?'20261124-position-reply1'/);
  assert.match(loader,/load\('assets\/106-triovist-competitors-v236218\.js','RESANTA_TRIOVIST_COMPETITORS_V236218'\)/);
  assert.doesNotMatch(loader,/load\('assets\/106-triovist-competitors-v236218\.js\?v=/);
- assert.match(market,/v23\.6\.399-uni1/);
+ assert.match(market,/v23\.6\.414-position-reply/);
 });
 test('index invalidates the old loader URL, retaining the existing navigation and other modules',()=>{
  assert.match(index,/100-safe-upgrades-loader-v236272\.js\?v=20261112-stands360-feedback-v3/);
  assert.match(index,/173-triovist-native-sections-v1\.js/);
  assert.match(index,/34-triovist-root-v23614\.js/);
- assert.match(loader,/20261105-groups-single-121/);
+ assert.match(loader,/path==='assets\/82-triovist-group-dynamics-v236120\.js'\?'20261123-groups-sticky'/);
 });
