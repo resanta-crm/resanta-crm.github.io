@@ -6,6 +6,7 @@ const index=read('index.html'),core=read('assets/01-crm-core.js');
 const agg=read('assets/113-analytics-aggregates-v236342.js');
 const dash=read('assets/187-abc-director360-v1.js');
 const sql=read('docs/abc360_fast_rpc_v1.sql');
+const filters=read('assets/186-abc-periods-v1.js');
 const gps=read('assets/124-gps-director-report-v236427.js');
 test('ABC 360 loads after core and server aggregate; unrelated navigations stay intact',()=>{
  assert.match(index,/assets\/187-abc-director360-v1\.js\?v=20261109-manager-tabs-fix2/);
@@ -25,12 +26,10 @@ test('ABC uses optimized live SQL function and safe prior-month normalization',(
  assert.match(sql,/GRANT EXECUTE ON FUNCTION .* TO authenticated,service_role/);
 });
 test('ABC SKU reconciliation displays R, and absent stock is not zero',()=>{
- assert.match(dash,/g\.counts\.R/);
- assert.match(dash,/нет данных об остатке/);
- assert.match(dash,/Number\.isFinite\(Number\(st\.avail\)\)/);
- assert.match(dash,/syncFromLegacy/);
- assert.deepEqual({A:61,B:34,C:28,N:6,R:4}, {A:61,B:34,C:28,N:6,R:4});
- assert.equal(61+34+28+6+4,133);
+ assert.match(filters,/g\.counts\.R/);
+ assert.match(filters,/if\(qty===undefined\).*нет данных об остатке/);
+ assert.match(filters,/function abcLatestVitebskStock/);
+ assert.match(filters,/window\.RESANTA_ABC360\?\.render\(\{scope,group,subgroup/);
 });
 test('ABC 360 stays confined to ABC page and retains existing task approvals and export',()=>{
  assert.match(dash,/#page-abc\.abc360-on/);
@@ -39,7 +38,7 @@ test('ABC 360 stays confined to ABC page and retains existing task approvals and
  assert.match(dash,/readOnly:true/);
  assert.doesNotMatch(dash,/db\.(?:from|rpc|insert|update|delete)\(/);
  assert.match(core,/function exportABCToCsv\(\)/);
- assert.match(dash,/goPage\('tasks','Задачи ИИ'\)/);
+ assert.match(index,/goPage\('tasks','Задачи ИИ'\)/);
  assert.match(index,/window\.abc360DebouncedSearch\?abc360DebouncedSearch\(\):renderABC\(\)/);
 });
 
@@ -50,7 +49,7 @@ test('All managers returns a real dataset and manager filter is indexed by sale 
  assert.match(agg,/pending=new Map\(\)/);
  assert.match(agg,/if\(pending\.has\(k\)\)return pending\.get\(k\)/);
  assert.match(agg,/requestId!==abcRequestVersion/);
- assert.match(dash,/data-abc-action="manager"/);
+ assert.match(index,/id="abc-manager"/);
  assert.match(dash,/abcScopeChanged\(false\)/);
 });
 test('Sidarovich GPS director uses resilient delegated click without changing access controls',()=>{
@@ -71,8 +70,9 @@ test('ABC fast filter transitions reuse compiled snapshots and do not call the R
  assert.match(agg,/abcCompiled=new Map/);
  assert.match(dash,/installCatalogGenerationGuard/);
  assert.match(dash,/window\.abcBuildCatalogSkuMap=wrapper/);
- assert.match(dash,/\['abc-period','abc-scope','abc-manager'\]/);
- assert.match(dash,/e\.stopPropagation\(\)/);
+ assert.match(dash,/'abc-period-from','abc-period-to','abc-scope','abc-manager'/);
+ assert.match(dash,/event\.stopPropagation\(\)/);
+ assert.match(dash,/if\(window\.crmFastAbcCurrentReady\?\.\(\)\)\{renderABC\(\);return;\}/);
  assert.match(dash,/clearTimeout\(filterTimer\)/);
  assert.match(dash,/if\(id==='abc-client-search'\)/);
  assert.doesNotMatch(core,/installCatalogGenerationGuard/);

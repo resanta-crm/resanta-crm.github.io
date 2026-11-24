@@ -9,6 +9,7 @@ const V='v23.6.342-abc360-20261109-speed3', TTL=90000, ABC_TTL=300000;
 const baseEnsure=window.v22722EnsureHistory;
 const cache=new Map(),pending=new Map(),abcCompiled=new Map();
 let abcRequestVersion=0,lastAbcKey='',lastAbcRows=null;
+let lastAbcScope=null;
 
 function active(){try{return typeof crmActivePage==='function'?crmActivePage():(document.getElementById('app')?.dataset?.activePage||'')}catch(_){return''}}
 function keyName(v){try{return typeof canonicalSalesClientName==='function'?canonicalSalesClientName(v):String(v||'').toLowerCase().replace(/[^a-zа-я0-9]+/gi,'')}catch(_){return String(v||'').toLowerCase()}}
@@ -48,8 +49,81 @@ function abcParams(){
   if(currentProfile?.role!=='boss')manager=currentProfile?.name||manager;
   const clientId=document.getElementById('abc-client-id')?.value||null;
   const cur=typeof abcPeriodMonths==='function'?abcPeriodMonths(mode,0):[];
-  const prev=typeof abcPeriodMonths==='function'?abcPeriodMonths(mode,1):[];
+  // Previous-period rows are used only for a selected client's lost-SKU advice.
+  const prev=scope==='client'&&typeof abcPeriodMonths==='function'?abcPeriodMonths(mode,1):[];
   return{mode,scope,manager,clientId,cur,prev};
+}
+function abcAddressParent(card){
+  const match=String(card?.name||'').match(/^(.+?)\s*\(([^()]*)\)\s*$/);
+  if(!match||!card.city||!card.address)return '';
+  return keyName(match[2])===keyName(card.city+' '+card.address)?match[1].trim():'';
+}
+function abcIdentity(selected,registry,detail){
+  const members=detail?.members?.length?detail.members:[selected];
+  const ids=new Set(members.map(card=>String(card.id)));
+  const base=abcAddressParent(selected)||selected.name;
+  if(!selected.entity_id&&!detail?.entity){
+    const sameManager=registry.filter(card=>card.manager_name===selected.manager_name);
+    const parents=sameManager.filter(card=>keyName(card.name)===keyName(base));
+    if(parents.length===1&&!parents[0].entity_id){
+      ids.add(String(parents[0].id));
+      for(const card of sameManager){
+        if(!card.entity_id&&keyName(abcAddressParent(card))===keyName(base))ids.add(String(card.id));
+      }
+    }
+  }
+  const candidates=new Map();
+  const excluded=new Set();
+  for(const card of [...allClients,...members,...registry]){
+    const names=[card.name,...clientNameVariants(card)];
+    for(const name of names){
+      const key=keyName(name);
+      if(!key)continue;
+      if(ids.has(String(card.id))){
+        if(!candidates.has(key))candidates.set(key,new Set());
+        candidates.get(key).add(name);
+      }
+      else excluded.add(key);
+    }
+  }
+  if(detail?.entity?.name&&!detail.partial_scope){
+    const key=keyName(detail.entity.name);
+    if(!candidates.has(key))candidates.set(key,new Set());
+    candidates.get(key).add(detail.entity.name);
+  }
+  const keys=new Set([...candidates.keys()].filter(key=>key&&!excluded.has(key)));
+  const names=[...keys].flatMap(key=>[...candidates.get(key)]);
+  return {ids,keys,names,name:detail?.entity?.name||(ids.size>1?base:selected.name)};
+}
+async function abcClientIdentity(p,viewer,stamp,force){
+  return cached('abc|identity|'+[viewer,stamp,p.clientId].join('|'),async()=>{
+    const selected=allClients.find(card=>String(card.id)===String(p.clientId));
+    if(!selected)throw new Error('Карточка клиента отсутствует в доступном списке');
+    let registry=[];
+    if(currentProfile?.role==='boss'){
+      const {data,error}=await db.rpc('client360_catalog_v1',{p_query:(abcAddressParent(selected)||selected.name).slice(0,120)});
+      if(error)throw error;
+      registry=data?.clients||[];
+    }
+    const card=registry.find(row=>String(row.id)===String(selected.id))||selected;
+    let detail;
+    if(card.entity_id||!registry.some(row=>String(row.id)===String(selected.id))){
+      const {data,error}=await db.rpc('crm_clients_detail_v1',{p_client_id:p.clientId,p_month:TODAY.slice(0,7)});
+      if(error)throw error;
+      if(!Array.isArray(data?.members))throw new Error('Не получен состав карточек клиента');
+      detail=data;
+    }
+    return abcIdentity(card,registry,detail);
+  },force);
+}
+async function abcClientRows(p,identity){
+  const {data,error}=await db.rpc('crm_falling_detail_v236342',{
+    p_current_months:p.cur,p_previous_months:p.prev,
+    p_client_ids:[...identity.ids],p_client_names:identity.names
+  });
+  if(error)throw error;
+  if(!Array.isArray(data?.rows))throw new Error('Не получены продажи клиента');
+  return data.rows.filter(row=>row.client_id?identity.ids.has(String(row.client_id)):identity.keys.has(keyName(row.client_name)));
 }
 function abcSynthetic(data,p){
   const out=[];
@@ -63,43 +137,92 @@ function abcSynthetic(data,p){
   });
   return out;
 }
+function abcMergeSlices(parts){
+  const merged=new Map();
+  for(const part of parts)for(const row of part?.rows||[]){
+    const key=JSON.stringify([row.client_id||'',row.client_name||'',row.category||'',row.subgroup||'',row.product||'',row.sku||'']);
+    let item=merged.get(key);
+    if(!item){item={...row,current_revenue:0,current_qty:0,previous_revenue:0,previous_qty:0,last_current_month:null,last_previous_month:null};merged.set(key,item);}
+    for(const name of ['current_revenue','current_qty','previous_revenue','previous_qty'])item[name]+=Number(row[name])||0;
+    for(const name of ['last_current_month','last_previous_month'])if(row[name]&&(!item[name]||row[name]>item[name]))item[name]=row[name];
+    if(row.first_month&&(!item.first_month||row.first_month<item.first_month))item.first_month=row.first_month;
+  }
+  return {ok:true,rows:[...merged.values()]};
+}
+async function abcSlice(p,cur,prev){
+  const {data,error}=await db.rpc('crm_abc_slice_v20261109',{
+    p_scope:p.scope,p_manager:p.scope==='manager'&&p.manager!=='all'?p.manager:null,
+    p_client_id:p.scope==='client'?p.clientId:null,
+    p_current_months:cur,p_previous_months:prev
+  });
+  if(error)throw error;
+  if(data?.ok===false)throw new Error('Сервер не подтвердил расчёт ABC');
+  return data||{rows:[]};
+}
+async function abcScopeData(p,viewer,stamp,force){
+  const managerKey=p.scope==='branch'?'all':p.manager;
+  const parts=[];
+  for(let i=0;i<p.cur.length;i+=3){
+    const cur=p.cur.slice(i,i+3),prev=p.prev.slice(i,i+3);
+    const partKey='abc|slice|'+[viewer,stamp,p.scope,managerKey,p.clientId||'',cur.join(','),prev.join(',')].join('|');
+    parts.push(await cached(partKey,()=>abcSlice(p,cur,prev),force));
+  }
+  return abcMergeSlices(parts);
+}
+function abcDatasetKey(p,viewer,stamp){
+  const manager=p.scope==='branch'?'all':p.manager;
+  return 'abc|'+[viewer,stamp,p.scope,manager,p.clientId||'',p.cur.join(','),p.prev.join(',')].join('|');
+}
 async function prepareAbc(force=false){
   const requestId=++abcRequestVersion,p=abcParams();
   const viewer=String(currentProfile?.id||currentProfile?.email||currentProfile?.name||'');
   let importStamp='';
   try{importStamp=String(crmImportStatus('sales')?.last_success_at||'')}catch(_){}
-  // A manager selection must not invalidate the branch-wide cache.
-  const managerKey=p.scope==='branch'?'all':p.manager;
-  const k='abc|'+[viewer,importStamp,p.scope,managerKey,p.clientId||'',p.cur.join(','),p.prev.join(',')].join('|');
+  const k=abcDatasetKey(p,viewer,importStamp);
   if(p.scope==='client'&&!p.clientId){
     if(lastAbcKey!=='abc:empty'||allPurchaseHistory!==lastAbcRows){
-      lastAbcRows=[];lastAbcKey='abc:empty';setRows(lastAbcRows,'ABC no client');
+      lastAbcRows=[];lastAbcKey='abc:empty';lastAbcScope=null;setRows(lastAbcRows,'ABC no client');
     }
     return true;
   }
   // Reopening ABC or changing group/class/search never needs to rebuild history.
   if(!force&&k===lastAbcKey&&allPurchaseHistory===lastAbcRows)return true;
   const data=await cached(k,async()=>{
-    const {data,error}=await db.rpc('crm_abc_slice_v20261109',{
-      p_scope:p.scope,
-      p_manager:p.scope==='manager'&&p.manager!=='all'?p.manager:null,
-      p_client_id:p.scope==='client'?p.clientId:null,
-      p_current_months:p.cur,
-      p_previous_months:p.prev
-    });
-    if(error)throw error;return data||{};
+    if(p.scope!=='client')return abcScopeData(p,viewer,importStamp,force);
+    const branch={...p,scope:'branch',clientId:null,prev:[]};
+    const [customer,branchData]=await Promise.all([
+      abcClientIdentity(p,viewer,importStamp,force).then(async identity=>({identity,rows:await abcClientRows(p,identity)})),
+      abcScopeData(branch,viewer,importStamp,force)
+    ]);
+    return {
+      identity:customer.identity,
+      clientRows:customer.rows,
+      branchRows:abcSynthetic(branchData,branch).map(row=>({...row,_abcBranchOnly:true}))
+    };
   },force);
-  if(requestId!==abcRequestVersion||active()!=='abc')return false;
+  const currentViewer=String(currentProfile?.id||currentProfile?.email||currentProfile?.name||'');
+  if(requestId!==abcRequestVersion||active()!=='abc'||viewer!==currentViewer||abcDatasetKey(abcParams(),viewer,importStamp)!==k)return false;
   const prior=abcCompiled.get(k);
-  const rows=!force&&prior&&prior.data===data?prior.rows:abcSynthetic(data,p);
+  const rows=!force&&prior&&prior.data===data?prior.rows:
+    p.scope==='client'?[...data.clientRows,...data.branchRows]:abcSynthetic(data,p);
   if(!prior||prior.data!==data){
     abcCompiled.delete(k);abcCompiled.set(k,{data,rows});
     while(abcCompiled.size>8)abcCompiled.delete(abcCompiled.keys().next().value);
   }
-  lastAbcKey=k;lastAbcRows=rows;
+  lastAbcKey=k;lastAbcRows=rows;lastAbcScope={scope:p.scope,clientId:p.clientId,identity:data.identity};
   if(allPurchaseHistory!==rows)setRows(rows,'ABC aggregate');
   return true;
 }
+window.crmFastAbcSnapshot=function(){
+  if(allPurchaseHistory!==lastAbcRows||!window.crmFastAbcCurrentReady())return null;
+  return lastAbcScope;
+};
+window.crmFastAbcCurrentReady=function(){
+  const p=abcParams(),viewer=String(currentProfile?.id||currentProfile?.email||currentProfile?.name||'');
+  let stamp='';try{stamp=String(crmImportStatus('sales')?.last_success_at||'')}catch(_){}
+  const key=abcDatasetKey(p,viewer,stamp);
+  return (p.scope==='client'&&!p.clientId)||key===lastAbcKey&&allPurchaseHistory===lastAbcRows;
+};
 function fallingPeriod(){
   try{return v20FallingPeriod()}catch(_){
     const m=String(TODAY||new Date().toISOString()).slice(0,7);

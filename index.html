@@ -128,7 +128,8 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <script defer src="./assets/69-data-freshness-v23660.js?v=23.6.338"></script>
 <script defer src="./assets/77-sales-freshness-alert-v23698.js?v=23.6.167"></script>
 <script defer src="./assets/112-sales-fast-v236338.js?v=23.6.338"></script>
-<script defer src="./assets/113-analytics-aggregates-v236342.js?v=20261109-abc-manager-fix2&perf=20261109-3"></script>
+<script defer src="./assets/186-abc-periods-v1.js?v=20261124-1"></script>
+<script defer src="./assets/113-analytics-aggregates-v236342.js?v=20261109-abc-manager-fix2&perf=20261109-3&pilotRollout=20261124-abc1"></script>
 <script defer src="./assets/70-vip-period-compare-v23662.js?v=23.6.433"></script>
 <script defer src="./assets/98-period-filters-v236198.js?v=23.6.277"></script>
 <script defer src="./assets/125-vip-date-range-v236434.js?v=23.6.437"></script>
@@ -465,6 +466,10 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 
 <style>
 .abc-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:10px}
+#abc-period-range{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr));gap:7px;margin-top:7px}
+#abc-period-range input{min-width:0;width:100%;font-family:inherit}
+#abc-period-range[hidden],#abc-subgroup-wrap[hidden]{display:none}
+#page-abc .abc-rec-note{font-size:12px;color:var(--sub);margin:0 0 8px}
 .abc-group-card{margin-bottom:12px}
 .abc-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px}
 .abc-badge{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:25px;padding:0 8px;border-radius:7px;font-size:12px;font-weight:800}
@@ -817,27 +822,43 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <div class="page" id="page-abc">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
           <div>
-            <div class="page-title" style="margin-bottom:3px">🅰️ ABC-анализ</div>
-            <div style="font-size:12px;color:var(--sub);line-height:1.45">Автоматически из продаж 1С с НДС. Каждая товарная группа рассчитывается отдельно.</div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <div class="page-title" style="margin-bottom:0">🅰️ ABC-анализ</div>
+              <details id="abc-help" style="font-size:14px;color:var(--sub)">
+                <summary aria-label="Источник и методика ABC-анализа" title="Источник и методика ABC-анализа" style="cursor:pointer;list-style:none;color:var(--a);font-weight:800;padding:4px 9px;border:1px solid var(--border);border-radius:8px">*</summary>
+                <div style="max-width:min(720px,calc(100vw - 64px));line-height:1.5;padding:12px;margin-top:8px;background:var(--card);border:1px solid var(--border);border-radius:9px">
+                  <div>Автоматически из продаж 1С с НДС. Каждая товарная группа рассчитывается отдельно.</div>
+                  <div id="abc-freshness"></div>
+                  <div id="abc-period-note"></div>
+                  <div id="abc360-help-extra"></div>
+                  <div id="abc-quality-details"></div>
+                </div>
+              </details>
+            </div>
           </div>
-          <button class="btn-secondary" onclick="exportABCToCsv()">⬇️ Выгрузить CSV</button>
+          <div class="btn-row">
+            <button type="button" class="btn-secondary" onclick="goPage('tasks','Задачи ИИ')">Задачи ИИ</button>
+            <button type="button" class="btn-secondary" onclick="exportABCToCsv()">⬇️ Выгрузить CSV</button>
+          </div>
         </div>
         <div id="abc-freshness"></div>
         <div class="card" style="margin-bottom:12px">
           <div class="abc-filter-grid">
-            <div><label class="form-label">Период</label><select class="form-input" id="abc-period" onchange="renderABC()"><option value="90">Оперативный: текущий + 2 предыдущих месяца</option><option value="12">Стратегический: последние 12 месяцев</option></select></div>
+            <div><label class="form-label">Период</label><select class="form-input" id="abc-period" onchange="renderABC()"><option value="90">Текущий и 2 предыдущих месяца</option></select><div id="abc-period-range" hidden><label class="form-label">С месяца<input class="form-input" type="month" id="abc-period-from" onchange="renderABC()"></label><label class="form-label">По месяц<input class="form-input" type="month" id="abc-period-to" onchange="renderABC()"></label></div></div>
             <div><label class="form-label">Группа товара</label><select class="form-input" id="abc-group" onchange="renderABC()"><option value="all">Все 14 групп</option></select></div>
+            <div id="abc-subgroup-wrap" hidden><label class="form-label" for="abc-subgroup">Подгруппа товара</label><select class="form-input" id="abc-subgroup" onchange="renderABC()"><option value="">Все подгруппы</option></select></div>
             <div><label class="form-label">Уровень анализа</label><select class="form-input" id="abc-scope" onchange="abcScopeChanged()"><option value="branch">Филиал</option><option value="manager">Менеджер</option><option value="client">Клиент</option></select></div>
             <div id="abc-manager-wrap"><label class="form-label">Менеджер</label><select class="form-input" id="abc-manager" onchange="abcManagerChanged()"><option value="all">Все менеджеры</option></select></div>
             <div id="abc-client-wrap" style="display:none"><label class="form-label">Клиент</label><input class="form-input" id="abc-client-search" list="abc-client-datalist" placeholder="Начните вводить название" onchange="abcResolveClient()" oninput="abcResolveClient(false)"><datalist id="abc-client-datalist"></datalist><input type="hidden" id="abc-client-id"></div>
             <div><label class="form-label">Класс / поиск</label><div style="display:flex;gap:6px"><select class="form-input" id="abc-class" onchange="renderABC()" style="max-width:110px"><option value="all">Все</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="N">N</option><option value="R">Возврат</option></select><input class="form-input" id="abc-search" placeholder="SKU или товар" oninput="window.abc360DebouncedSearch?abc360DebouncedSearch():renderABC()"></div></div>
           </div>
-          <div id="abc-period-note" style="font-size:11px;color:var(--sub);margin-top:9px"></div>
         </div>
+        <p id="abc-period-note" style="font-size:12px;color:var(--sub);margin-bottom:10px"></p>
         <div class="kpi-row" id="abc-kpi"></div>
-        <div id="abc-client-actions" style="display:none"></div>
+        <p id="abc-quality-details" style="font-size:12px;color:var(--sub)"></p>
         <div id="abc-quality"></div>
         <div id="abc-results"></div>
+        <div id="abc-client-actions" style="display:none"></div>
       </div>
       <div class="page" id="page-route">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -1883,7 +1904,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- KPI360 visual v2: read-only dashboard; existing plan editor retained. -->
 <!-- Sanitized MPP league; must load before the approved KPI dashboard. -->
 <script defer src="./assets/165-kpi360-mpp-competition-v1.js?v=20261102-1"></script>
-<script defer src="./assets/160-manager-kpi360-visual-v2.js?v=20261102-5"></script>
+<script defer src="./assets/160-manager-kpi360-visual-v2.js?v=20261102-5&pilotRollout=20261124-kpi1"></script>
 <!-- Director-only Routes 360: read-only calendar dashboard with existing day approval/editor. -->
 <script defer src="./assets/166-route-director-360-v1.js?v=20261103-legal2"></script>
 <!-- Tasks 360 Uni A / Uni X: presentation only, existing approvals and task reports remain authoritative. -->
@@ -1895,13 +1916,13 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Notice-only release guard: never reload a live CRM tab automatically. -->
 <script defer src="./assets/186-crm-release-guard-v1.js?v=20261106-1"></script>
 <!-- Isolated ABC 360: read-only, uses original ABC engine and CSV export. -->
-<script defer src="./assets/187-abc-director360-v1.js?v=20261109-manager-tabs-fix2&perf=20261109-3"></script>
+<script defer src="./assets/187-abc-director360-v1.js?v=20261109-manager-tabs-fix2&perf=20261109-3&pilotRollout=20261124-abc1"></script>
 <!-- Isolated 1C receipts 360: existing payment import, ledger, filters and export remain unchanged. -->
 <script defer src="./assets/188-payments-director360-v1.js?v=20261109-payments360-1"></script>
 <!-- Falling clients Recovery 360: read-only director dashboard on established 1C/route/task engine. -->
 <script defer src="./assets/189-falling-director360-v1.js?v=20261109-falling360-1"></script>
 <!-- Sales360: isolated read-only director dashboard; legacy reports remain available. -->
-<script defer src="./assets/190-sales-director360-v1.js?v=20261110-sales360-6"></script>
+<script defer src="./assets/190-sales-director360-v1.js?v=20261110-sales360-6&pilotRollout=20261124-sales1"></script>
 <!-- PDZ360: director/manager responsive daily snapshot, legacy 1C debt list preserved. -->
 <script defer src="./assets/193-pdz-director360-v1.js?v=20261111-pdz360-2"></script>
 <!-- Budgets 360 · read-only presentation and scoped existing budget audit/history. -->
@@ -1909,6 +1930,10 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Approved home only: authenticated reads, unchanged route/task engines. -->
 <link rel="stylesheet" href="./assets/283-control-center-v1.css?v=20261114-1&pilotRollout=20261124-home1">
 <script defer src="./assets/283-control-center-v1.js?v=20261117-sales1&pilotRollout=20261124-home1"></script>
+<link rel="stylesheet" href="./assets/290-crm-desktop-nav-v1.css?v=20261124-1">
+<script defer src="./assets/290-crm-desktop-nav-v1.js?v=20261124-1"></script>
+<script defer src="./assets/offline/crm-offline-store-v1.js?v=20261124-1"></script>
+<script defer src="./assets/offline/crm-offline-bridge-v1.js?v=20261124-1"></script>
 <link rel="stylesheet" href="./assets/284-control-sales-year-v1.css?v=20261114-1&pilotRollout=20261124-year1">
 <script defer src="./assets/284-control-sales-year-v1.js?v=20261114-1&labelsRelease=20261117-1&pilotRollout=20261124-year1"></script>
 <script defer src="./assets/286-clients-legal-simple-v1.js?v=20261116-tt1"></script>

@@ -34,6 +34,7 @@ function resetDrill(scope){
 function resetAllDrills(){resetDrill('global');resetDrill('client')}
 
 const cache=new Map(),pending=new Map(),TTL=180000;
+let rangeDraft=null,rangeResult=null,rangeScope='',rangeRevision=0;
 const recoveryCache=new Map(),recoveryPending=new Map(),RECOVERY_TTL=300000;
 // Drill responses are aggregate-only; repeat navigation should never rescan 1C.
 const drillCache=new Map(),drillPending=new Map(),DRILL_TTL=300000,DRILL_MAX=60;
@@ -105,6 +106,84 @@ function filtersHtml(d){
 function headerHtml(d){
  return '<div class="s360-head"><div><h2>Продажи 360° · Управление ростом</h2><div class="s360-muted">1С · менеджеры · товарные группы · клиенты · с НДС</div></div>'+
  '<div class="s360-muted">Обновление 1С: '+esc(freshLabel(d?.freshness))+'</div></div>';
+}
+function salesMonthRange(from,to){
+ const valid=value=>/^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+ if(!valid(from)||!valid(to)||from<'2023-01'||from>to||to>currentYear()+'-12')return [];
+ const months=[];
+ for(let month=from;month<=to;){
+  months.push(month);
+  const [year,index]=month.split('-').map(Number);
+  month=index===12?(year+1)+'-01':year+'-'+String(index+1).padStart(2,'0');
+ }
+ return months;
+}
+function rangeTotals(months,byYear){
+ const rows=months.map(month=>arr(byYear.get(Number(month.slice(0,4)))?.months).find(row=>row.month===month));
+ const available=rows.length>0&&rows.every(row=>row?.has_current);
+ return {total:available?rows.reduce((sum,row)=>sum+num(row.current),0):null,
+  closed:available&&rows.every(row=>row.closed&&!row.partial),months:months.length};
+}
+function rangePanel(data){
+ if(!data)return '';
+ const scope=[viewer(),state.year,boss()?state.manager:managerMe()].join('|');
+ if(scope!==rangeScope){rangeScope=scope;rangeDraft=null;rangeResult=null;}
+ const year=Number(data.year)||state.year;
+ const last=String(Math.max(1,num(data.closed_month)||1)).padStart(2,'0');
+ const defaults={firstFrom:year+'-01',firstTo:year+'-'+last,secondFrom:(year-1)+'-01',secondTo:(year-1)+'-'+last};
+ const input=(name,label)=>'<label class="s360-field"><span>'+label+'</span><input required type="month" name="'+name+'" min="2023-01" max="'+currentYear()+'-12" value="'+esc((rangeDraft||defaults)[name])+'"></label>';
+ return '<details class="s360-panel s360-range"'+(rangeDraft?' open':'')+'><summary>Сравнить периоды продаж</summary>'+
+  '<form class="s360-range-form" data-s360-range><fieldset><legend>Основной период</legend>'+input('firstFrom','С')+input('firstTo','По')+
+  '</fieldset><fieldset><legend>Период сравнения</legend>'+input('secondFrom','С')+input('secondTo','По')+
+  '</fieldset><button type="submit" class="s360-btn">Сравнить</button></form><div data-s360-range-result aria-live="polite">'+(rangeResult||'')+'</div></details>';
+}
+async function compareRanges(form){
+ const draft=Object.fromEntries(new FormData(form));
+ rangeDraft=draft;
+ const first=salesMonthRange(draft.firstFrom,draft.firstTo);
+ const second=salesMonthRange(draft.secondFrom,draft.secondTo);
+ const actor=viewer(),scope=rangeScope,manager=boss()&&state.manager!=='all'?state.manager:null,revision=++rangeRevision;
+ const paint=markup=>{
+  if(revision!==rangeRevision||active()!=='sales'||rangeScope!==scope||viewer()!==actor||state.loading)return;
+  rangeResult=markup;
+  const result=$(ID)?.querySelector('[data-s360-range-result]');
+  if(result)result.innerHTML=markup;
+ };
+ if(!first.length||!second.length){paint('<p role="alert">Укажите начало и конец каждого периода.</p>');return;}
+ paint('<p role="status">Загружаю продажи за выбранные месяцы…</p>');
+ try{
+  const current=state.data;
+  const years=new Set([...first,...second].map(month=>Number(month.slice(0,4))));
+  const byYear=new Map([[Number(current.year),current]]);
+  for(const year of years){
+   if(revision!==rangeRevision||active()!=='sales'||rangeScope!==scope||viewer()!==actor) return;
+   if(byYear.has(year))continue;
+   const key=[actor,year,boss()?state.manager:managerMe()].join('|');
+   let entry=cache.get(key);
+   if(!entry||Date.now()-entry.at>=TTL){
+    const {data,error}=await dbx().rpc('crm_sales360_annual_v2',{p_year:year,p_manager:manager,p_exclude_triovist:false});
+    if(error||!Array.isArray(data?.months))throw error||Error('Неполный ответ сервера');
+    if(revision!==rangeRevision||viewer()!==actor||rangeScope!==scope)return;
+    entry={at:Date.now(),data};
+    cache.set(key,entry);
+    while(cache.size>16)cache.delete(cache.keys().next().value);
+   }
+   byYear.set(year,entry.data);
+  }
+  const main=rangeTotals(first,byYear),baseline=rangeTotals(second,byYear);
+  const delta=main.total===null||baseline.total===null?null:main.total-baseline.total;
+  const percent=delta!==null&&main.closed&&baseline.closed&&main.months===baseline.months&&baseline.total>0?delta/baseline.total*100:null;
+  const format=value=>value===null?'—':money(value);
+  const row=(label,value)=>'<tr><th scope="row">'+label+'</th><td>'+esc(value)+'</td></tr>';
+  paint('<div class="s360-tablewrap"><table aria-label="Суммы продаж за выбранные периоды"><tbody>'+
+   row('Основной период',format(main.total))+row('Период сравнения',format(baseline.total))+
+   row('Разница',delta>0?'+'+format(delta):format(delta))+
+   row('Изменение',percent===null?'—':(percent>0?'+':'')+percent.toFixed(1).replace('.',',')+'%')+
+   '</tbody></table></div>'+
+   (main.total===null||baseline.total===null?'<p class="s360-muted">За часть выбранных месяцев нет подтверждённых данных 1С.</p>':
+    !main.closed||!baseline.closed?'<p class="s360-muted">В выборке есть незакрытый месяц. Суммы предварительные.</p>':
+    main.months!==baseline.months?'<p class="s360-muted">Периоды содержат разное количество месяцев.</p>':''));
+ }catch(error){paint('<p role="alert">Не удалось сравнить периоды. Повторите загрузку.</p>');}
 }
 function monthKpi(d){
  const k=arr(d?.kpi).filter(x=>num(x.plan)>0);
@@ -249,6 +328,10 @@ function styles(){
  scope+' .s360-month-nav{display:flex;align-items:center;gap:5px}',
  scope+' .s360-month-nav select{min-width:130px;flex:1}',
  scope+' .s360-btn:disabled{opacity:.45;cursor:not-allowed}',
+ scope+' .s360-range summary{cursor:pointer;font-weight:700;color:var(--a)}',
+ scope+' .s360-range-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:12px 0}',
+ scope+' .s360-range-form fieldset{display:flex;flex-wrap:wrap;gap:8px;min-width:0;border:1px solid var(--border);border-radius:8px;padding:8px}',
+ scope+' .s360-range-form input{font:inherit;max-width:100%;height:34px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);padding:3px 6px}',
  scope+' .s360-focus{display:grid;grid-template-columns:90px repeat(3,minmax(0,1fr));gap:12px;padding:12px;background:var(--bg);border-radius:9px;margin-top:10px}',
  scope+' .s360-focus small{display:block;color:var(--sub);font-size:10px}',
  scope+' .s360-focus strong{display:block;font-size:13px;overflow-wrap:anywhere;margin-top:4px}',
@@ -296,6 +379,11 @@ function mount(){
   root.addEventListener('change',onChange);
   root.addEventListener('keydown',onKeyDown);
   root.addEventListener('input',onInput);
+  root.addEventListener('submit',event=>{
+   if(!event.target.matches('[data-s360-range]'))return;
+   event.preventDefault();
+   if(state.data)void compareRanges(event.target);
+  });
   mounted=true;
  }
  page.classList.toggle('s360-installed',!state.legacy);
@@ -834,7 +922,7 @@ function render(){
  const periods=chartData(d,state.view);
  const comparison=y.delta===null?'—':(y.delta>=0?'+':'')+y.delta.toFixed(1).replace('.',',')+'%';
  const colors=y.delta===null?'':y.delta<0?'s360-negative':'s360-positive';
- root.innerHTML=headerHtml(d)+filtersHtml(d)+
+ root.innerHTML=headerHtml(d)+filtersHtml(d)+rangePanel(d)+
  '<div class="s360-kpis">'+
  kpiCard('Продажи · всего',whole(y.current),y.months+' закрытых месяцев · 1С, с НДС')+
  kpiCard('К прошлому году',comparison,'Сопоставимые закрытые месяцы',colors)+
@@ -872,6 +960,15 @@ function activatePeriod(key){
  if(month){state.selectedMonth=month.month;render()}
 }
 function onInput(e){
+ const range=e.target.closest?.('[data-s360-range]');
+ if(range){
+  rangeDraft=Object.fromEntries(new FormData(range));
+  rangeResult=null;
+  rangeRevision++;
+  const result=$(ID)?.querySelector('[data-s360-range-result]');
+  if(result)result.replaceChildren();
+  return;
+ }
  const search=e.target.closest?.('[data-s360-client-search]');
  if(search)state.clientSearch=String(search.value||'').slice(0,120);
  const drill=e.target.closest?.('[data-s360-drill-input]');

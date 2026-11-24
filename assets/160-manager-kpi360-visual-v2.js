@@ -5,7 +5,7 @@
 'use strict';
 if(w.RESANTA_KPI360_VISUAL_V2)return;
 const ID='kpi360-visual-v2', months=['','Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
-let generation=0,shown=null,selectedManager='',clientFilter='bonus',manuallySelected=false,historyMetric='sales';
+let generation=0,shown=null,shownActor='',selectedManager='',clientFilter='bonus',manuallySelected=false,historyMetric='sales';
 const n=x=>Number.isFinite(Number(x))?Number(x):0;
 const money=x=>n(x).toLocaleString('ru-RU',{maximumFractionDigits:0});
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -19,6 +19,96 @@ const role=()=>w.currentProfile?.role, isBoss=()=>role()==='boss';
 const nameMonth=v=>months[Number(String(v).slice(5,7))]+' '+String(v).slice(0,4);
 const dbc=()=>{try{return typeof db!=='undefined'?db:w.db}catch(_){return w.db||null}};
 const icon=(x)=>({sales:'↗',bonus:'◎',akb:'▣'}[x]||'•');
+const compareInput=()=>document.getElementById('manager-kpi-compare');
+const baseInput=()=>document.getElementById('manager-kpi-base');
+function dateRange(value){
+ const [from,to=from]=String(value||'').split('|');
+ return validMonth(from)&&validMonth(to)&&from<=to?{from,to}:null;
+}
+const rangeValue=range=>range?range.from+'|'+range.to:'';
+const rangeLabel=range=>range.from===range.to?nameMonth(range.from):nameMonth(range.from)+' — '+nameMonth(range.to);
+const currentRange=()=>dateRange(baseInput()?.value)||dateRange(month());
+const comparisonRange=()=>dateRange(compareInput()?.value);
+const validMonth=value=>/^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+const actorKey=()=>{const p=w.currentProfile;return JSON.stringify([w.currentUser?.id,p?.id,p?.email,p?.role,p?.region,p?.access_scope,p?.name]);};
+const amount=new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
+const byn=x=>amount.format(n(x))+' BYN';
+const monthIndex=value=>Number(value.slice(0,4))*12+Number(value.slice(5,7))-1;
+const comparisonMonths=new Map();
+function bindMonthPicker(page,input){
+ const dialog=page.querySelector('[data-kv-month-dialog]');
+ if(typeof dialog?.showModal!=='function')return;
+ const fullMonth=new Intl.DateTimeFormat('ru-RU',{month:'long',year:'numeric',timeZone:'UTC'});
+ const fullName=value=>fullMonth.format(new Date(value+'-01T12:00:00Z'));
+ let target=input,draft,firstYear=0,anchor='';
+ function paint(){
+  const rangeMode=target!==input;
+  dialog.querySelector('[data-kv-month-preview]').textContent=rangeMode?rangeLabel(draft):fullName(draft.from);
+  const note=dialog.querySelector('[data-kv-range-note]');
+  note.hidden=!rangeMode;
+  note.textContent=anchor?'Выберите последний месяц или подтвердите один месяц.':'Нажмите на первый и последний месяцы диапазона.';
+  dialog.querySelector('[data-kv-years]').innerHTML=[firstYear,firstYear+1].map(year=>
+   '<section><h4>'+year+'</h4><div class="kv-months">'+months.slice(1).map((name,index)=>{
+    const value=year+'-'+String(index+1).padStart(2,'0'),edge=value===draft.from||value===draft.to;
+    return '<button type="button" data-kv-month="'+value+'" aria-label="'+esc(fullName(value))+'" aria-pressed="'+
+     (value>=draft.from&&value<=draft.to)+'"'+(edge?' class="kv-month-edge"':'')+'>'+name+'</button>';
+   }).join('')+'</div></section>').join('');
+  dialog.querySelector('[data-kv-year="-1"]').disabled=firstYear===2023;
+  dialog.querySelector('[data-kv-year="1"]').disabled=firstYear>=new Date().getFullYear();
+ }
+ const configs=[
+  [input,'main','Месяц KPI','Выберите месяц KPI'],
+  [compareInput(),'compare','Сравнить с','Выберите период сравнения'],
+  [baseInput(),'base','Основной период','Выберите основной период']
+ ];
+ for(const [field,selector,caption,label] of configs){
+  const trigger=page.querySelector('[data-kv-month-open="'+selector+'"]');
+  if(!field||!trigger)continue;
+  const text=trigger.querySelector('span');
+  const sync=()=>{
+   const range=dateRange(field.value);
+   text.textContent=field===input?(range?fullName(range.from):caption):
+    (range?caption+' · '+rangeLabel(range):caption);
+   trigger.setAttribute('aria-label',text.textContent);
+   trigger.hidden=selector==='base'&&!comparisonRange();
+  };
+  field.addEventListener('change',sync);
+  if(selector==='base')compareInput()?.addEventListener('change',sync);
+  trigger.addEventListener('click',()=>{
+   target=field;
+   anchor='';
+   draft=dateRange(field.value)||dateRange(month()||new Date().toISOString().slice(0,7));
+   const start=Number(draft.from.slice(0,4)),end=Number(draft.to.slice(0,4));
+   firstYear=Math.max(2023,start<end?start:start-1);
+   dialog.querySelector('h3').textContent=label;
+   paint();
+   dialog.showModal();
+   dialog.querySelector('.kv-month-edge')?.focus();
+  });
+  sync();
+  field.hidden=true;
+ }
+ dialog.addEventListener('click',event=>{
+  const selected=event.target.closest('[data-kv-month]');
+  const step=event.target.closest('[data-kv-year]');
+  if(selected){
+   const value=selected.dataset.kvMonth;
+   draft=anchor?{from:anchor<value?anchor:value,to:anchor>value?anchor:value}:{from:value,to:value};
+   anchor=target!==input&&!anchor?value:'';
+   paint();
+   dialog.querySelector('[data-kv-month="'+value+'"]')?.focus();
+  }else if(step){
+   firstYear+=Number(step.dataset.kvYear);
+   paint();
+  }else if(event.target.closest('[data-kv-confirm]')){
+   dialog.close();
+   const value=target===input?draft.from:rangeValue(draft);
+   if(target.value===value)return;
+   target.value=value;
+   target.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+ });
+}
 function latestData(v){return !!v?.latest_sales_month&&v.month<=v.latest_sales_month}
 function mapped(v){
  const s=Array.isArray(v.sales)?v.sales:[],m=Array.isArray(v.managers)?v.managers:[],p=Array.isArray(v.prior_sales)?v.prior_sales:[];
@@ -96,7 +186,42 @@ function styles(){
  '#kpi360-visual-v2 .kv-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:#1669dd}',
  '@media(max-width:850px){#kpi360-visual-v2 .kv-charts{grid-template-columns:1fr}#kpi360-visual-v2 .kv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#kpi360-visual-v2 .kv-rank-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}',
  '@media(max-width:540px){#kpi360-visual-v2 .kv-grid{grid-template-columns:1fr}#kpi360-visual-v2 .kv-bar{grid-template-columns:70px minmax(0,1fr) 64px}}',
- '@media(max-width:600px){#kpi360-visual-v2 .kv-table{font-size:10px}#kpi360-visual-v2 .kv-card{padding:11px}#kpi360-visual-v2 .kv-bar{grid-template-columns:66px minmax(0,1fr) 58px}}'
+ '@media(max-width:600px){#kpi360-visual-v2 .kv-table{font-size:10px}#kpi360-visual-v2 .kv-card{padding:11px}#kpi360-visual-v2 .kv-bar{grid-template-columns:66px minmax(0,1fr) 58px}}',
+ '#page-managers button[data-kv-month-open][hidden],#page-managers input#manager-kpi-month[hidden]{display:none!important}',
+ '#kpi360-visual-v2 .kv-compare{margin:14px 0 0}',
+ '#kpi360-visual-v2 .kv-green{color:var(--g,#27500a)}#kpi360-visual-v2 .kv-red{color:var(--r,#a32d2d)}#kpi360-visual-v2 .kv-blue{color:var(--a,#185fa5)}',
+ '#kpi360-visual-v2 .kv-period-note{margin:0 0 10px}',
+ '#kpi360-visual-v2 .kv-period-value small{font-size:11px;font-weight:500;color:var(--sub)}',
+ '#kpi360-visual-v2 .kv-period-value{display:grid;gap:3px;text-align:right;line-height:1.3}',
+ '#kpi360-visual-v2 :is([data-kv-monthly],[data-kv-period-rankings],[data-kv-comparison])[hidden]{display:none!important}',
+ '#page-managers .kv-calendar-footer button{padding:7px 12px}',
+ '#page-managers .kv-calendar-footer{justify-content:flex-end;margin-top:14px}',
+ '#page-managers .kv-calendar-nav button:disabled{opacity:.45;cursor:default}',
+ '#page-managers .kv-calendar-nav button{width:38px;font-size:20px}',
+ '#page-managers .kv-calendar-nav,#page-managers .kv-calendar-footer{display:flex;justify-content:space-between;gap:8px}',
+ '#page-managers .kv-month-dialog button:is(.kv-month-edge,[data-kv-confirm]){background:var(--a);border-color:var(--a);color:#fff;font-weight:650}',
+ '#page-managers .kv-month-dialog button[aria-pressed="true"]:not(.kv-month-edge){background:var(--ab);border-color:var(--a);color:var(--at,#0c447c);font-weight:650}',
+ '#page-managers .kv-month-dialog h3{margin:0;font-size:18px}',
+ '#page-managers .kv-month-dialog::backdrop{background:#11182766}',
+ '#page-managers .kv-month-dialog{margin:auto;width:min(560px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text)}',
+ '#page-managers .kv-month-preview{margin:8px 0 4px;color:var(--a);font-weight:650;text-transform:capitalize}',
+ '#page-managers .kv-months button{padding:5px 1px}',
+ '#page-managers .kv-months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}',
+ '#page-managers .kv-range-note{margin:0 0 12px;color:var(--sub);font-size:13px}',
+ '#page-managers .kv-years h4{margin:4px 0 8px;text-align:center;font-size:15px}',
+ '#page-managers .kv-years{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}',
+ '#page-managers :is(button[data-kv-month-open],.kv-month-dialog button):focus-visible{outline:2px solid var(--a);outline-offset:2px}',
+ '#page-managers :is(button[data-kv-month-open],.kv-month-dialog button){background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;font:inherit;min-height:38px;cursor:pointer}',
+ '#page-managers button[data-kv-month-open]{min-width:155px;padding:8px 14px;text-align:left;text-transform:capitalize}',
+ '#kpi360-visual-v2 .kv-work{display:grid;gap:12px;margin:12px 0}',
+ '#kpi360-visual-v2 .kv-compare .kv-chart-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px}',
+ '#kpi360-visual-v2 .kv-work-table{width:100%;table-layout:fixed;border-collapse:collapse;font-variant-numeric:tabular-nums}',
+ '#kpi360-visual-v2 .kv-work-table :is(td,th){padding:9px 5px;text-align:left;border-bottom:1px solid var(--border);overflow-wrap:anywhere}',
+ '#kpi360-visual-v2 .kv-work-table :is(td,th):first-child{width:30%}',
+ '#kpi360-visual-v2 .kv-work-table th{color:var(--sub);font-weight:500}',
+ '#kpi360-visual-v2 .kv-work-table .kv-number{text-align:right}',
+ '#kpi360-visual-v2 .kv-period-value .kv-green{color:var(--g,#27500a)}#kpi360-visual-v2 .kv-period-value .kv-red{color:var(--r,#a32d2d)}',
+ '@media(max-width:620px){#kpi360-visual-v2 .kv-work-table :is(td,th){padding:8px 4px;font-size:12px}}',
  ].join('\n');document.head.appendChild(el);
 }
 function card(title,value,sub,foot,kind,completion){
@@ -284,7 +409,201 @@ function launchLera(){
  }
  prefill();
 }
-// Pre-import months are still a useful PLANNING workspace. Do not turn missing 1C facts into zero KPIs.
+const planTableMetrics={
+ sales:{title:'Продажи по менеджерам',column:'Продажи',fact:'shipment',plan:'shipment_plan',format:byn},
+ akb:{title:'АКБ по менеджерам',column:'АКБ',fact:'akb',plan:'akb_plan',format:money}
+};
+const comparisonPanel='<section class="kv-card kv-compare" data-kv-comparison hidden></section><div class="kv-work" data-kv-period-rankings hidden></div>';
+function monthsInRange({from,to}){
+ const first=monthIndex(from),last=monthIndex(to);
+ return Array.from({length:last-first+1},(_,i)=>{
+  const m=first+i;
+  return String(Math.floor(m/12)).padStart(4,'0')+'-'+String(m%12+1).padStart(2,'0');
+ });
+}
+function countPeriodClients(clients){
+ if(!clients)return {akb:null,first:null,returned:null,bonus:null};
+ const active=new Set(),first=new Set(),returned=new Set();
+ for(const client of clients){
+  if(!client.client_key)continue;
+  active.add(client.client_key);
+  if(client.type==='first')first.add(client.client_key);
+  if(client.type==='returned')returned.add(client.client_key);
+ }
+ for(const key of first)returned.delete(key);
+ return {akb:active.size,first:first.size,returned:returned.size,bonus:first.size+returned.size};
+}
+function summarizePeriod(range,snapshots){
+ const label=rangeLabel(range),monthCount=monthIndex(range.to)-monthIndex(range.from)+1;
+ if(snapshots.length!==monthCount||snapshots.some(s=>!latestData(s)))return {label,monthCount,available:false,rows:[],totals:null};
+ const rowsByManager=new Map(),monthly=snapshots.map(mapped);
+ for(const rows of monthly)for(const row of rows){
+  const key=norm(row.manager_name);
+  if(!rowsByManager.has(key))rowsByManager.set(key,[]);
+  rowsByManager.get(key).push(row);
+ }
+ const agrees=(counts,expected)=>['akb','first','returned','bonus']
+  .every(field=>expected[field]!=null&&counts[field]===n(expected[field]));
+ const allClients=snapshots.every((snapshot,i)=>{
+  const clients=snapshot.clients;
+  return Array.isArray(clients)&&clients.every(client=>client.client_key)&&
+   agrees(countPeriodClients(clients),snapshot.summary||{})&&monthly[i].every(row=>
+    agrees(countPeriodClients(clients.filter(client=>norm(client.manager_name)===norm(row.manager_name))),row));
+ })?snapshots.flatMap(snapshot=>snapshot.clients):null;
+ const sum=(rows,field)=>rows.reduce((total,row)=>total+n(row[field]),0);
+ const completePlan=(rows,field)=>rows.length===snapshots.length&&rows.every(row=>n(row[field])>0)?sum(rows,field):null;
+ const rows=[...rowsByManager].map(([key,list])=>{
+  const counts=snapshots.length===1?list[0]:countPeriodClients(allClients?.filter(c=>norm(c.manager_name)===key));
+  return {manager_name:list[0].manager_name,shipment:sum(list,'shipment'),shipment_plan:completePlan(list,'shipment_plan'),
+   akb:counts.akb??null,akb_for_plan:sum(list,'akb'),akb_plan:completePlan(list,'akb_plan'),
+   first:counts.first??null,returned:counts.returned??null,bonus:counts.bonus??null,
+   new_clients_plan:completePlan(list,'new_clients_plan')};
+ });
+ const clientTotals=snapshots.length===1?totals(snapshots[0]):countPeriodClients(allClients);
+ const teamPlan=rows.length&&rows.every(r=>r.shipment_plan!==null)?sum(rows,'shipment_plan'):null;
+ return {label,monthCount,available:true,rows,totals:{...clientTotals,sales:sum(rows,'shipment'),sales_plan:teamPlan}};
+}
+function comparisonKey(){
+ return actorKey()+'|'+rangeValue(currentRange())+'|'+rangeValue(comparisonRange());
+}
+function deltaText(a,b,format){
+ if(a===null||b===null)return '—';
+ const delta=Math.round((a-b)*100)/100;
+ const tone=delta>0?'kv-green':delta<0?'kv-red':'';
+ return '<span class="'+tone+'">'+(delta>0?'+':'')+esc(format(delta))+'</span>';
+}
+function comparisonMarkup(main,baseline){
+ const fields=[
+  ['Продажи','sales',byn,byn],
+  ['Выполнение плана','completion',x=>x+'%',x=>x+' п. п.'],
+  ['АКБ','akb',money,money],['Новые клиенты','first',money,money],['Вернувшиеся клиенты','returned',money,money]
+ ];
+ const value=(period,key)=>key==='completion'?percent(period.totals?.sales,period.totals?.sales_plan):period.totals?.[key]??null;
+ const unavailable=[...new Set([main,baseline].filter(p=>!p.available).map(p=>p.label))];
+ const incompleteClients=[main,baseline].some(p=>p.available&&p.totals.akb===null);
+ return '<table class="kv-work-table kv-compare-table" aria-label="Сравнение периодов">'+
+  '<thead><tr><th scope="col">Показатель</th><th scope="col" class="kv-number">'+esc(main.label)+'</th>'+
+  '<th scope="col" class="kv-number">'+esc(baseline.label)+'</th><th scope="col" class="kv-number">Основной − сравнение</th></tr></thead><tbody>'+
+  fields.map(([label,key,format,deltaFormat])=>{
+   const a=value(main,key),b=value(baseline,key);
+   return '<tr><td>'+label+'</td><td class="kv-number">'+(a===null?'—':esc(format(a)))+'</td>'+
+    '<td class="kv-number">'+(b===null?'—':esc(format(b)))+'</td><td class="kv-number">'+deltaText(a,b,deltaFormat)+'</td></tr>';
+  }).join('')+'</tbody></table>'+
+  (main.monthCount!==baseline.monthCount?'<div class="kv-note">Разная длительность периодов · '+main.monthCount+' и '+baseline.monthCount+' мес.</div>':'')+
+  (unavailable.length?'<div class="kv-note">Факт 1С за весь период недоступен · '+esc(unavailable.join(', '))+'</div>':'')+
+  (incompleteClients?'<div class="kv-note">Данные об уникальных клиентах за весь период недоступны.</div>':'');
+}
+function periodManagersTable(main,baseline,kind){
+ const metric=planTableMetrics[kind];
+ const title=metric?.title||'Новые и вернувшиеся клиенты по менеджерам';
+ const indexed=rows=>new Map(rows.map(row=>[norm(row.manager_name),row]));
+ const current=indexed(main.rows),previous=indexed(baseline.rows);
+ const keys=[...new Set([...current.keys(),...previous.keys()])];
+ keys.sort((a,b)=>(current.get(a)||previous.get(a)).manager_name.localeCompare((current.get(b)||previous.get(b)).manager_name,'ru'));
+ const completion=row=>row&&metric?percent(row[kind==='akb'?'akb_for_plan':metric.fact],row[metric.plan]):null;
+ const showCompletion=metric&&[...current.values(),...previous.values()].some(row=>completion(row)!==null);
+ const fields=metric?[[metric.column,metric.fact,metric.format,metric.format],
+  ...(showCompletion?[['Выполнение','completion',x=>x+'%',x=>x+' п. п.']]:[])]
+  :[['Новые','first',money,money],['Вернулись','returned',money,money],['Всего','bonus',money,money]];
+ const explanation=kind==='akb'
+  ? 'АКБ — уникальные активные клиенты за период. Выполнение учитывает сумму месячных фактов и планов.'
+  : kind==='sales'?'Продажи — сумма отгрузок за период.'
+  :'Новые и вернувшиеся считаются по первой и повторной отгрузке из 1С. Каждый клиент учитывается один раз за период. Первая покупка имеет приоритет.';
+ return '<div class="kv-card"><div class="kv-heading kv-chart-head"><h3>'+title+'</h3>'+
+  '</div><p class="kv-note">'+esc(explanation)+'</p>'+
+  '<p class="kv-note kv-period-note">'+esc(main.label)+' · сравнение с '+esc(baseline.label)+'</p>'+
+  '<table class="kv-work-table kv-work-table-personal" aria-label="'+title+'"><thead><tr><th scope="col">Менеджер</th>'+
+  fields.map(([label])=>'<th scope="col" class="kv-number">'+label+'</th>').join('')+'</tr></thead><tbody>'+
+  keys.map(key=>{
+   const a=current.get(key),b=previous.get(key);
+   const cells=fields.map(([,field,format,deltaFormat])=>{
+    const now=(field==='completion'?completion(a):a?.[field])??null;
+    const before=(field==='completion'?completion(b):b?.[field])??null;
+    return '<td class="kv-number"><div class="kv-period-value"><strong>'+(now===null?'—':esc(format(now)))+'</strong>'+
+     (before===null?'':'<small>Было '+esc(format(before))+'</small>')+
+     (now!==null&&before!==null?'<small>'+deltaText(now,before,deltaFormat)+'</small>':'')+'</div></td>';
+   }).join('');
+   return '<tr><td>'+esc((a||b).manager_name)+'</td>'+cells+'</tr>';
+  }).join('')+'</tbody></table></div>';
+}
+async function readComparisonMonth(client,actor,period){
+ const key=actor+'|'+period;
+ let entry=comparisonMonths.get(key);
+ if(!entry||Date.now()-entry.started>60000){
+  entry={started:Date.now(),promise:fetchDashboard(client,period)};
+  comparisonMonths.set(key,entry);
+  if(comparisonMonths.size>24)comparisonMonths.delete(comparisonMonths.keys().next().value);
+ }
+ try{return await entry.promise;}
+ catch(error){
+  if(comparisonMonths.get(key)===entry)comparisonMonths.delete(key);
+  throw error;
+ }
+}
+async function renderComparison(data,el){
+ const host=el.querySelector('[data-kv-comparison]');
+ const rankings=el.querySelector('[data-kv-period-rankings]');
+ const monthly=el.querySelector('[data-kv-monthly]');
+ const base=currentRange(),baseline=comparisonRange();
+ if(!host||!rankings||!monthly)return;
+ host.hidden=!baseline;
+ monthly.hidden=false;
+ rankings.hidden=true;
+ rankings.innerHTML='';
+ if(!baseline){host.innerHTML='';return;}
+ host.innerHTML='<div class="kv-heading kv-chart-head"><h3>Сравнение периодов</h3><button type="button" data-kv-clear-compare>Убрать сравнение</button></div>'+
+  '<div data-kv-compare-result aria-live="polite"></div>';
+ host.querySelector('[data-kv-clear-compare]').addEventListener('click',()=>{
+  baseInput().value='';
+  compareInput().value='';
+  baseInput().dispatchEvent(new Event('change',{bubbles:true}));
+  compareInput().dispatchEvent(new Event('change',{bubbles:true}));
+  document.querySelector('[data-kv-month-open="compare"]')?.focus();
+ });
+ const result=host.querySelector('[data-kv-compare-result]');
+ const key=comparisonKey(),actor=actorKey();
+ const isCurrent=()=>active()&&month()===data.month&&comparisonKey()===key&&shown===data&&host.contains(result);
+ try{
+  const client=dbc();
+  if(!client)throw Error('Нет подключения к Supabase');
+  const complete=period=>data.latest_sales_month&&period.to<=data.latest_sales_month?monthsInRange(period):[];
+  const first=complete(base),second=complete(baseline),needed=[...new Set([...first,...second])];
+  const loaded=new Map([[data.month,data]]);
+  const remaining=needed.filter(m=>!loaded.has(m));
+  for(let i=0;i<remaining.length;i+=2){
+   if(!isCurrent())return;
+   result.textContent='Загружается сравнение · '+i+' из '+remaining.length+' мес.';
+   const batch=await Promise.all(remaining.slice(i,i+2).map(m=>readComparisonMonth(client,actor,m)));
+   for(const snapshot of batch)loaded.set(snapshot.month,snapshot);
+  }
+  if(!isCurrent())return;
+  const main=summarizePeriod(base,first.map(m=>loaded.get(m)));
+  const previous=summarizePeriod(baseline,second.map(m=>loaded.get(m)));
+  result.innerHTML=comparisonMarkup(main,previous);
+  if(main.available||previous.available){
+   rankings.innerHTML=['sales','akb','clients'].map(kind=>periodManagersTable(main,previous,kind)).join('');
+   monthly.hidden=true;
+   rankings.hidden=false;
+  }
+ }catch(error){
+  if(!isCurrent())return;
+  result.innerHTML='<span>Не удалось загрузить период сравнения.</span> <button type="button" data-kv-retry-compare>Повторить</button>';
+  result.querySelector('[data-kv-retry-compare]').addEventListener('click',()=>renderComparison(data,el));
+ }
+}
+async function fetchDashboard(client,m){
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const {data,error}=await client.rpc('crm_manager_kpi360_dashboard_v2',{p_month:m});
+   if(error)throw error;
+   if(!data||data.version!=='kpi360-visual-v2'||data.month!==m||!Array.isArray(data.sales))throw Error('Неверный ответ сервиса KPI');
+   return data;
+  }catch(error){
+   if(attempt||!/fetch|network|timeout/i.test(String(error?.message||error)))throw error;
+   await new Promise(done=>setTimeout(done,450));
+  }
+ }
+}
 function planSnapshot(data){
  const rows=mapped(data),sum=key=>rows.reduce((total,r)=>total+n(r[key]),0);
  return {rows,sales:sum('shipment_plan'),akb:sum('akb_plan'),
@@ -316,7 +635,7 @@ function renderAwaitingImport(data,el){
  const historyBlock=history.length?trendChart(data):
   '<div class="kv-card" style="margin-top:12px"><h3>История продаж</h3>'+
   '<div class="kv-note">История за последний загруженный месяц временно недоступна.</div></div>';
- el.innerHTML=header+
+ el.innerHTML=header+comparisonPanel+'<div data-kv-monthly>'+
  '<div class="kv-hint" style="margin:0 0 12px"><b>Планы на '+esc(nameMonth(data.month))+' доступны.</b> '+
  'Последняя выгрузка 1С — '+esc(recent?nameMonth(recent):'ещё не определена')+
  '. Факта продаж за выбранный месяц пока нет. Нули и выполнение плана не рассчитываем.</div>'+
@@ -333,16 +652,17 @@ function renderAwaitingImport(data,el){
  '<div class="kv-hint"><h3>◉ Коротко о месяце</h3>'+
  '<div>Планы показаны без подмены фактов предыдущего периода. Динамика выше относится к последним месяцам с данными 1С. '+
  'Когда появится первая выгрузка за '+esc(nameMonth(data.month))+', карточки, проценты, рейтинг и клиенты обновятся автоматически.</div></div>'+
- '<div class="kv-note" style="margin-top:12px">Права сохранены: менеджер видит только свои планы и историю, руководитель — доступную ему команду.</div>';
+ '<div class="kv-note" style="margin-top:12px">Права сохранены: менеджер видит только свои планы и историю, руководитель — доступную ему команду.</div></div>';
  el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
  el.querySelector('[data-lastmonth]')?.addEventListener('click',()=>{
    const picker=document.getElementById('manager-kpi-month');
    if(!picker||!recent)return;
-   manuallySelected=true;picker.value=recent;selectedManager='';void load(true);
+   picker.value=recent;picker.dispatchEvent(new Event('change',{bubbles:true}));
  });
  el.querySelectorAll('[data-metric]').forEach(b=>b.addEventListener('click',()=>{
    historyMetric=b.dataset.metric;render(data);
  }));
+ void renderComparison(data,el);
 }
 
 function render(data){
@@ -373,8 +693,8 @@ function render(data){
  '<td><button data-manager="'+esc(r.manager_name)+'">Подробнее →</button></td></tr>').join('')+
  '<tr style="background:#edf4ff;font-weight:800"><td>ИТОГО</td><td>'+money(t.sales)+' / '+money(t.sales_plan)+
  '</td><td>'+n(t.akb)+'</td><td>'+n(t.bonus)+'</td><td>—</td></tr></tbody></table></div></div>':'';
- el.innerHTML=header+cards+(w.RESANTA_KPI360_LEAGUE_V1?.markup(data,w.currentProfile)||'')+chart+trendChart(data)+'<section id="'+ID+'-manager-panel"></section>'+narr+mgr+'<section id="'+ID+'-detail"></section>'+
- '<div class="kv-note" style="margin:12px 0">Правило премии: первая отгрузка либо 6 полных месяцев без положительных отгрузок. АКБ филиала — уникальные клиенты, не сумма АКБ менеджеров. Клиенты с неоднозначными связями не объединяются автоматически.</div>';
+ el.innerHTML=header+cards+comparisonPanel+'<div data-kv-monthly>'+(w.RESANTA_KPI360_LEAGUE_V1?.markup(data,w.currentProfile)||'')+chart+trendChart(data)+'<section id="'+ID+'-manager-panel"></section>'+narr+mgr+'<section id="'+ID+'-detail"></section>'+
+ '<div class="kv-note" style="margin:12px 0">Правило премии: первая отгрузка либо 6 полных месяцев без положительных отгрузок. АКБ филиала — уникальные клиенты, не сумма АКБ менеджеров. Клиенты с неоднозначными связями не объединяются автоматически.</div></div>';
  el.querySelector('[data-refresh]')?.addEventListener('click',()=>load(true));
  el.querySelector('[data-export]')?.addEventListener('click',()=>exportCsv(data,rows,t));
  el.querySelector('[data-lera]')?.addEventListener('click',launchLera);
@@ -389,19 +709,18 @@ function render(data){
   historyMetric=b.dataset.metric;render(data);
  }));
  managerPanel(data,rows);renderDetails(data,rows);
+ void renderComparison(data,el);
 }
 async function load(force=false){
  if(!active()||!['boss','manager'].includes(role()))return;
  styles();let el=root();if(!el)return;
- const m=month(),serial=++generation;
+ const m=month(),serial=++generation,actor=actorKey();
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m))return;
  el.innerHTML='<div class="kv-card kv-note">Загружаю KPI за '+esc(nameMonth(m))+'…</div>';
  try{
   const client=dbc();if(!client)throw Error('Нет подключения к Supabase');
-  let response;for(let i=0;i<2;i++){try{response=await client.rpc('crm_manager_kpi360_dashboard_v2',{p_month:m});if(response.error)throw response.error;break}catch(e){if(i===1||!/fetch|network|timeout/i.test(String(e?.message||e)))throw e;await new Promise(done=>setTimeout(done,450));}}
-  if(serial!==generation||!active()||month()!==m)return;
-  const data=response.data;
-  if(!data||data.version!=='kpi360-visual-v2'||!Array.isArray(data.sales))throw Error('Неверный ответ сервиса KPI');
+  const data=await fetchDashboard(client,m);
+  if(serial!==generation||!active()||month()!==m||actorKey()!==actor)return;
   // Preserve the explicitly selected month (including November before any 1C import).
   // History RPC has its own permission checks. Do not let its failure erase valid KPIs.
   try{
@@ -416,8 +735,8 @@ async function load(force=false){
     console.warn('KPI360 manager rank history unavailable',historyError);
     data.history={rows:[],unavailable:true};
   }
-  if(serial!==generation||!active()||month()!==m)return;
-  shown=data;selectedManager='';clientFilter='bonus';historyMetric='sales';render(data);
+  if(serial!==generation||!active()||month()!==m||actorKey()!==actor)return;
+  shownActor=actor;shown=data;selectedManager='';clientFilter='bonus';historyMetric='sales';render(data);
  }catch(e){if(serial===generation&&active())el.innerHTML='<div class="kv-card" style="color:#b42318">Не удалось загрузить KPI: '+esc(e?.message||e)+'. <button data-retry>Повторить</button></div>';
  el.querySelector('[data-retry]')?.addEventListener('click',()=>load(true));}
 }
@@ -425,11 +744,40 @@ function boot(){
  if(!document.getElementById('page-managers'))return;
  styles();
  const inp=document.getElementById('manager-kpi-month');
- if(inp&&!inp.dataset.k2){inp.dataset.k2='1';inp.addEventListener('change',()=>{manuallySelected=true;selectedManager='';load(true)})}
+ if(inp&&!inp.dataset.k2){
+  inp.dataset.k2='1';
+  const page=inp.closest('#page-managers');
+  page.insertAdjacentHTML('beforeend',` <dialog class="kv-month-dialog" data-kv-month-dialog aria-labelledby="kv-month-title">
+          <h3 id="kv-month-title">Выберите месяц KPI</h3>
+          <p class="kv-month-preview" data-kv-month-preview aria-live="polite"></p>
+          <p class="kv-range-note" data-kv-range-note hidden></p>
+          <div class="kv-calendar-nav">
+            <button type="button" data-kv-year="-1" aria-label="Предыдущий год">‹</button>
+            <button type="button" data-kv-year="1" aria-label="Следующий год">›</button>
+          </div>
+          <div class="kv-years" data-kv-years></div>
+          <form method="dialog" class="kv-calendar-footer">
+            <button type="submit">Отмена</button>
+            <button type="button" data-kv-confirm>Выбрать</button>
+          </form>
+        </dialog>`);
+  if(typeof page.querySelector('[data-kv-month-dialog]')?.showModal==='function'){
+   inp.insertAdjacentHTML('afterend','<button type="button" data-kv-month-open="main"><span>Месяц KPI</span></button>'+
+    '<input type="hidden" id="manager-kpi-compare"><button type="button" data-kv-month-open="compare"><span>Сравнить с</span></button>'+
+    '<input type="hidden" id="manager-kpi-base"><button type="button" data-kv-month-open="base" hidden><span>Основной период</span></button>');
+   bindMonthPicker(page,inp);
+   for(const field of [compareInput(),baseInput()])field.addEventListener('change',()=>{
+    const el=document.getElementById(ID);
+    if(el&&shown?.month===month()&&active()&&shownActor===actorKey())void renderComparison(shown,el);
+   });
+  }
+  inp.addEventListener('change',()=>{manuallySelected=true;selectedManager='';load(true)});
+  inp.removeAttribute('onchange');
+ }
  // The page uses this stable legacy entry point. Hide the older dashboard only after this module loads.
  w.renderManagers=()=>load();try{renderManagers=w.renderManagers}catch(_){}
  if(active())load();
 }
-w.RESANTA_KPI360_VISUAL_V2={load:()=>load(true),mapped,totals,planSnapshot,version:'2.1'};
+w.RESANTA_KPI360_VISUAL_V2={load:()=>load(true),mapped,totals,planSnapshot,summarizePeriod,version:'2.1'};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })(window);
