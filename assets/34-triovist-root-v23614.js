@@ -1,11 +1,13 @@
 /* RESANTA CRM v23.6.377 · TRIOVIST ROOT · direct workspace router + stable access */
 (function(){
 'use strict';
-const V='v23.6.407-shares360-20261106',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
+const V='v23.6.415-triovist-commerce',STORE='resanta_triovist_root_v23614_tab',LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']),INFOGRAPHIC_OWNER='payushin_ar@resanta.ru';
 if(window.RESANTA_TRIOVIST_ROOT_V23614?.version===V)return;
+if(window.RESANTA_TRIOVIST_ROOT_BOOTING_V23614===V)return;
+window.RESANTA_TRIOVIST_ROOT_BOOTING_V23614=V;
 if(window.RESANTA_TRIOVIST_ROOT_V23614){try{delete window.RESANTA_TRIOVIST_ROOT_V23614}catch(_){try{window.RESANTA_TRIOVIST_ROOT_V23614=null}catch(__){}}}
-const WORK=['home','sales','groups','shares','stock','tasks','motivation','cards','parser','competitors','infographics'],COMM=['anp','si','budget','price'];
-let ctx=null,shell=null,panel=null,active='home',unixHealthy=false,busy=false,refreshBusy=false,navEpoch=0,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',price={q:'',only:false,offset:0,limit:50,last:null};
+const WORK=['home','sales','groups','shares','stock','tasks','motivation','parser','competitors','infographics'],COMM=['anp','si','budget'];
+let ctx=null,shell=null,panel=null,active='home',unixHealthy=false,busy=false,refreshBusy=false,navEpoch=0,mo=null,salesChannel=null,pendingSalesRefresh=false,lastSalesStamp='',commerceRequest=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(Number(v)||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
 const budgetDt=v=>{if(!v)return'';const d=new Date(v);if(Number.isNaN(d.getTime()))return String(v);return d.toLocaleString('ru-RU',{timeZone:'Europe/Minsk',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});};
@@ -26,7 +28,48 @@ function nonTriovistProfileReady(){
  let p=null;try{p=(typeof currentProfile!=='undefined'&&currentProfile)||window.currentProfile||null}catch(_){p=window.currentProfile||null}
  return !!(p?.email&&p?.role&&!localCtx());
 }
-function css(){let old=document.getElementById('tr14-css');if(old?.dataset.tr14Version===V)return;if(old)old.remove();const s=document.createElement('style');s.id='tr14-css';s.dataset.tr14Version=V;s.textContent=`#tr14-shell [data-tr14=\"sales\"]{display:none!important}#tr14-shell{display:none;position:relative;top:auto;z-index:2;background:#f9fafbfa;border:1px solid #d9e3ef;border-radius:14px;padding:10px 12px;margin-bottom:14px;box-shadow:0 6px 20px #0f172a12}#tr14-panel{display:none;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:16px}.tr14-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}.tr14-head b{color:#0c447c}.tr14-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tr14-head span,.tr14-note{font-size:11px;color:#64748b}.tr14-refresh{border:1px solid #cbd5e1;background:#fff;color:#0c447c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}.tr14-refresh:hover{background:#eff6ff}.tr14-refresh:disabled{opacity:.6;cursor:default}.tr14-g{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:9px}.tr14-box{min-width:0;border-radius:10px;padding:8px;background:#f8fafc;border:1px solid #e5e7eb}.tr14-box.c{background:#f5f3ff;border-color:#ddd6fe}.tr14-label{font-size:10px;font-weight:800;color:#64748b;margin:0 0 6px 2px}.tr14-row{display:flex;flex-wrap:wrap;gap:6px;overflow:visible}.tr14-row button{flex:none;border:1px solid #d8e0ea;background:#fff;border-radius:9px;padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap}.tr14-row button.on{background:#e6f1fb;border-color:#60a5fa;color:#0c447c}.tr14-box.c button.on{background:#ede9fe;border-color:#a78bfa;color:#5b21b6}.tr14-sec{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}.tr14-sec h3{margin:0}.tr14-k{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:9px;margin:12px 0}.tr14-k>div{background:#f8fafc;border-radius:10px;padding:12px}.tr14-k span{display:block;font-size:10px;color:#64748b;text-transform:uppercase}.tr14-k b{display:block;font-size:18px;margin-top:4px}.tr14-form{display:grid;grid-template-columns:160px 180px minmax(220px,1fr) auto;gap:9px;align-items:end;margin:12px 0}.tr14-info,.tr14-warn{padding:10px 12px;border-radius:10px;font-size:12px;margin:10px 0}.tr14-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.tr14-warn{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}.tr14-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.tr14-tools button,.tr14-tools select{border:1px solid #d8e0ea;background:#fff;border-radius:8px;padding:7px 10px}.tr14-tools .hot{background:#fff7ed;border-color:#f59e0b;color:#9a3412;font-weight:800}.tr14-tools .hot.on{background:#ffedd5}.tr14-table{width:100%;border-collapse:collapse;font-size:12px}.tr14-table th,.tr14-table td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left}.tr14-table th{background:#f8fafc;color:#64748b}.tr14-bad{background:#fef2f2!important;color:#b91c1c;font-weight:800}.tr14-private{background:#f5f3ff;border:1px solid #c4b5fd;border-radius:12px;padding:13px;margin-top:12px}#tri-v23612-shell,#tri-v23612-panel,#tri-v23611-shell,#tri-v23611-panel,#tri-v2369-shell,#tri-v2369-panel,#tri-manager-shell-v2367,#tri-manager-budget-v2367,#tri-commercial-panel-v2366{display:none!important}@media(max-width:900px){.tr14-g{grid-template-columns:1fr}.tr14-k{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.tr14-form,.tr14-k{grid-template-columns:1fr}#tr14-shell{top:auto}}`;document.head.appendChild(s)}
+const COMMERCE_STYLES=`
+.tr14-commerce{display:grid;gap:14px;min-width:0;color:var(--text)}
+.tr14-commerce *{box-sizing:border-box}
+.tr14-commerce h2,.tr14-commerce h3,.tr14-commerce p{margin:0}
+.tr14-commerce h2{font-size:25px;font-weight:700;line-height:1.2;letter-spacing:-.6px}
+.tr14-commerce h3{font-size:16px;font-weight:650}
+.tr14-commerce .tr14-note{color:var(--sub);font-size:13px;line-height:1.5}
+.tr14-commerce .tr14-sec{align-items:center;gap:12px}
+.tr14-commerce .tr14-k{grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));margin:0}
+.tr14-commerce .tr14-k>div,.tr14-commerce-card{min-width:0;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px}
+.tr14-commerce .tr14-k span{color:var(--sub);font-size:13px;text-transform:none}
+.tr14-commerce .tr14-k b,.tr14-budget-value strong{font-size:clamp(20px,2vw,27px);font-weight:650;letter-spacing:-.4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.tr14-budget-value{display:grid;gap:6px;justify-items:start}
+.tr14-budget-value.over{color:var(--r);background:var(--rb)}
+.tr14-commerce :is(.form-input,.btn-primary,.btn-secondary){min-height:38px;border-radius:8px;font-size:14px}
+.tr14-commerce .form-input{max-width:100%;border-color:var(--border);background:var(--card);color:var(--text)}
+.tr14-commerce .btn-secondary{display:inline-flex;align-items:center;border:1px solid var(--border);background:var(--card);color:var(--a)}
+.tr14-commerce .btn-primary{background:var(--a);color:var(--card);border-color:var(--a)}
+.tr14-commerce .tr14-form>div{min-width:0}
+.tr14-commerce .tr14-form .form-label{color:var(--sub)}
+.tr14-commerce .tr14-table{color:var(--text);font-size:14px}
+.tr14-commerce .tr14-table th{background:var(--bg);font-weight:550;color:var(--sub)}
+.tr14-commerce .tr14-table :is(th,td){border-color:var(--border);overflow-wrap:anywhere}
+.tr14-commerce .tr14-table b{font-variant-numeric:tabular-nums}
+.tr14-commerce .tr14-table-wrap{overflow:auto;margin-top:10px}
+.tr14-commerce .tr14-table{min-width:540px}
+.tr14-commerce .tr14-form{grid-template-columns:minmax(130px,.8fr) minmax(120px,.8fr) minmax(180px,1.4fr) auto;margin-bottom:4px}
+.tr14-commerce .tr14-budget-base .tr14-form{grid-template-columns:minmax(130px,.8fr) minmax(200px,1.6fr) auto}
+.tr14-budget-base>summary{cursor:pointer;color:var(--a);font-weight:600}
+.tr14-budget-heading{position:relative;display:flex;align-items:center;gap:9px}
+.tr14-budget-help{display:inline-flex;flex:none}
+.tr14-budget-help button{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--a);font:700 20px/1 system-ui;cursor:pointer}
+.tr14-budget-help :is(button,aside):focus-visible,.tr14-budget-base>summary:focus-visible{outline:3px solid var(--a);outline-offset:3px}
+.tr14-budget-help:hover button,.tr14-budget-help button[aria-expanded=true]{background:var(--ab)}
+.tr14-budget-popover{display:none;position:absolute;z-index:7;inset-block-start:100%;inset-inline-start:0;width:min(560px,calc(100vw - 4rem));max-height:min(55vh,430px);overflow:auto;overscroll-behavior:contain;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);box-shadow:0 6px 22px #11182726;color:var(--text);font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.tr14-budget-help:not([data-dismissed]):is(:hover,:focus-within,[data-open]) .tr14-budget-popover{display:block}
+.tr14-budget-popover p+p{margin-top:8px}
+.tr14-budget-comment{white-space:pre-wrap}
+@media(max-width:880px){.tr14-commerce .tr14-form,.tr14-commerce .tr14-budget-base .tr14-form{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:530px){.tr14-commerce .tr14-form,.tr14-commerce .tr14-budget-base .tr14-form{grid-template-columns:minmax(0,1fr)}}
+`;
+function css(){let old=document.getElementById('tr14-css');if(old?.dataset.tr14Version===V)return;if(old)old.remove();const s=document.createElement('style');s.id='tr14-css';s.dataset.tr14Version=V;s.textContent=`#page-triovist[data-triovist-view] #tri-v22728-tabs{display:none!important}#tr14-shell [data-tr14=\"sales\"]{display:none!important}#tr14-shell{display:none;position:relative;top:auto;z-index:2;background:#f9fafbfa;border:1px solid #d9e3ef;border-radius:14px;padding:10px 12px;margin-bottom:14px;box-shadow:0 6px 20px #0f172a12}#tr14-panel{display:none;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:16px}.tr14-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}.tr14-head b{color:#0c447c}.tr14-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tr14-head span,.tr14-note{font-size:11px;color:#64748b}.tr14-refresh{border:1px solid #cbd5e1;background:#fff;color:#0c447c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}.tr14-refresh:hover{background:#eff6ff}.tr14-refresh:disabled{opacity:.6;cursor:default}.tr14-g{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:9px}.tr14-box{min-width:0;border-radius:10px;padding:8px;background:#f8fafc;border:1px solid #e5e7eb}.tr14-box.c{background:var(--card);border-color:var(--border)}.tr14-label{font-size:10px;font-weight:800;color:#64748b;margin:0 0 6px 2px}.tr14-row{display:flex;flex-wrap:wrap;gap:6px;overflow:visible}.tr14-row button{flex:none;border:1px solid #d8e0ea;background:#fff;border-radius:9px;padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap}.tr14-row button.on{background:#e6f1fb;border-color:#60a5fa;color:#0c447c}.tr14-box.c button.on{background:var(--ab);border-color:var(--a);color:var(--at)}.tr14-sec{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}.tr14-sec h3{margin:0}.tr14-k{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:9px;margin:12px 0}.tr14-k>div{background:#f8fafc;border-radius:10px;padding:12px}.tr14-k span{display:block;font-size:10px;color:#64748b;text-transform:uppercase}.tr14-k b{display:block;font-size:18px;margin-top:4px}.tr14-form{display:grid;grid-template-columns:160px 180px minmax(220px,1fr) auto;gap:9px;align-items:end;margin:12px 0}.tr14-info,.tr14-warn{padding:10px 12px;border-radius:10px;font-size:12px;margin:10px 0}.tr14-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}.tr14-warn{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}.tr14-table{width:100%;border-collapse:collapse;font-size:12px}.tr14-table th,.tr14-table td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left}.tr14-table th{background:#f8fafc;color:#64748b}#tri-v23612-shell,#tri-v23612-panel,#tri-v23611-shell,#tri-v23611-panel,#tri-v2369-shell,#tri-v2369-panel,#tri-manager-shell-v2367,#tri-manager-budget-v2367,#tri-commercial-panel-v2366{display:none!important}@media(max-width:900px){.tr14-g{grid-template-columns:1fr}.tr14-k{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.tr14-form,.tr14-k{grid-template-columns:1fr}#tr14-shell{top:auto}}`+COMMERCE_STYLES;document.head.appendChild(s)}
 function legacy(k){const p=page(),rx={home:/Сводка/i,sales:/Продажи\s*$/i,stock:/Остатки(?:\s+и\s+заказ)?/i,tasks:/Задачи\s*ИИ/i,motivation:/Мотивация/i,cards:/Карточки\s*21vek/i}[k];return p&&rx?[...p.querySelectorAll('button')].find(b=>rx.test(text(b)))||null:null}
 const DIRECT_WORK_IDS=Object.freeze({
  home:['triovist-warning','tri-period-mode','tri-kpis','tri-manager-cards','tri-overview-360'],
@@ -66,7 +109,7 @@ function showDirectWork(k){
  const head=p.firstElementChild;if(head)allow.add(head);
  for(const id of (DIRECT_WORK_IDS[k]||[])){const top=topPageChild(document.getElementById(id));if(top)allow.add(top)}
  for(const el of directWorkRoots())if(!allow.has(el))hideDirectWork(el);
- if(['stock','tasks','cards','parser'].includes(k)){
+ if(['stock','tasks','parser'].includes(k)){
    for(const id of (DIRECT_WORK_IDS[k]||[])){
      const top=topPageChild(document.getElementById(id));
      if(top)top.style.setProperty('display','block','important');
@@ -91,10 +134,6 @@ async function prepareDirectWork(k){
    window.RESANTA_TRIOVIST_TASKS360_V1?.enhance?.();
    await window.RESANTA_TRIOVIST_DEMAND_AI_V1?.open?.();
  }
- if(k==='cards'){
-   try{window.triovistContentRender?.()}catch(_){}
-   if(typeof window.triovistContentEnsureLoaded==='function')await window.triovistContentEnsureLoaded();
- }
  if(k==='stock'){
    if(typeof window.triovistStockEnsureLoaded==='function')await window.triovistStockEnsureLoaded();
    else if(typeof window.renderTriovistStock==='function')window.renderTriovistStock();
@@ -104,14 +143,14 @@ async function prepareDirectWork(k){
    try{await window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh?.()}catch(e){console.warn('Triovist parser refresh',e)}
  }
 }
-function hideOld(){const p=page();if(!p||!p.classList.contains('active')||(active==='home'&&unixHealthy))return;const legacyHead=p.firstElementChild;if(legacyHead&&/Триовист\s*\/\s*21vek\.by/i.test(text(legacyHead)))legacyHead.style.setProperty('display','none','important');const bars=[];for(const b of p.querySelectorAll('button')){const t=text(b);if(/Отгрузки\s*1С|Новинки/i.test(t))b.style.setProperty('display','none','important');if(!/Сводка/i.test(t))continue;const x=b.parentElement,all=x?[...x.querySelectorAll(':scope > button')].map(text).join('|'):'';if(/Продажи/i.test(all)&&/Остатки/i.test(all))bars.push(x)}bars.forEach(x=>x.style.setProperty('display','none','important'))}
+function hideOld(){const p=page();if(!p||!p.classList.contains('active')||(active==='home'&&unixHealthy))return;const legacyHead=p.firstElementChild;if(legacyHead&&/Триовист\s*\/\s*21vek\.by/i.test(text(legacyHead)))legacyHead.style.setProperty('display','none','important');const bars=[];for(const b of p.querySelectorAll('button')){const t=text(b);if(/Отгрузки\s*1С|Новинки|Карточки\s*21vek/i.test(t))b.style.setProperty('display','none','important');if(!/Сводка/i.test(t))continue;const x=b.parentElement,all=x?[...x.querySelectorAll(':scope > button')].map(text).join('|'):'';if(/Продажи/i.test(all)&&/Остатки/i.test(all))bars.push(x)}bars.forEach(x=>x.style.setProperty('display','none','important'))}
 function choose(k){active=k;const pg=page();if(pg)pg.dataset.triovistView=k;window.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1?.show?.(k==='home'&&unixHealthy&&!!pg?.classList.contains('active'));shell?.querySelectorAll('[data-tr14]').forEach(b=>b.classList.toggle('on',b.dataset.tr14===k));try{localStorage.setItem(STORE+'|'+(ctx?.email||''),k)}catch(_){}}
 function canSeeInfographics(){return String(ctx?.email||'').trim().toLowerCase()===INFOGRAPHIC_OWNER}
 function visibleWorkKeys(){return WORK.filter(k=>k!=='infographics')}
-function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''));if(k==='infographics'&&!canSeeInfographics())return'home';return[...visibleWorkKeys(),...COMM].includes(k)?k:'home'}catch(_){return'home'}}
+function remembered(){try{const k=localStorage.getItem(STORE+'|'+(ctx?.email||''));if(k==='cards')return'parser';if(k==='infographics'&&!canSeeInfographics())return'home';return[...visibleWorkKeys(),...COMM].includes(k)?k:'home'}catch(_){return'home'}}
 function shellComplete(el=shell){if(!el?.isConnected)return false;const need=[...visibleWorkKeys(),...COMM],keys=[...el.querySelectorAll('[data-tr14]')].map(b=>b.dataset.tr14),got=new Set(keys);return keys.length===need.length&&need.every(k=>got.has(k))}
 function repairShell(){const el=shell?.isConnected?shell:document.getElementById('tr14-shell');if(!el)return false;const orphan=el!==shell;if(orphan||!shellComplete(el)){el.remove();const pp=panel?.isConnected?panel:document.getElementById('tr14-panel');pp?.remove();shell=null;panel=null;return true}return false}
-function dom(){const p=page(),h=host();if(!p||!h)return false;repairShell();if(!shell?.isConnected){shell=document.createElement('div');shell.id='tr14-shell';const w=[['home','📊 Сводка 360°'],['sales','💰 Продажи'],['groups','📈 Группы и категории'],['shares','📊 Доли 21vek'],['stock','📦 Остатки и заказ'],['tasks','🤖 Задачи ИИ'],['motivation','🏆 Бонусы и план'],['cards','🧩 Карточки 21vek'],['parser','🌐 Парсер 21vek'],['competitors','⚔️ Конкуренты 21vek'],...[]],c=[['anp','🧾 АНП'],['si','🛠 Компенсация СИ'],['budget','💼 Бюджет'],['price','🧮 Расчёт цены']],r=a=>a.map(x=>`<button type="button" data-tr14="${x[0]}">${x[1]}</button>`).join('');shell.innerHTML=`<div class="tr14-head"><b>РЕСАНТА CRM · Триовист (21vek.by)</b><div class="tr14-head-actions"><span>${esc(ctx?.name||ctx?.email||'')}</span><button type="button" class="tr14-refresh" data-tr14-refresh>↻ Обновить</button></div></div><div class="tr14-g"><div class="tr14-box"><div class="tr14-label">РАБОТА</div><div class="tr14-row">${r(w)}</div></div><div class="tr14-box c"><div class="tr14-label">КОММЕРЦИЯ</div><div class="tr14-row">${r(c)}</div></div></div>`;shell.onclick=e=>{const rb=e.target.closest('[data-tr14-refresh]');if(rb){e.preventDefault();refreshCurrent();return}const b=e.target.closest('[data-tr14]');if(b)activate(b.dataset.tr14,true).catch(error)};h.insertBefore(shell,h.firstChild)}if(!panel?.isConnected){panel=document.createElement('div');panel.id='tr14-panel';shell.insertAdjacentElement('afterend',panel);bind()}hideOld();sync();return true}
+function dom(){const p=page(),h=host();if(!p||!h)return false;repairShell();if(!shell?.isConnected){shell=document.createElement('div');shell.id='tr14-shell';const w=[['home','📊 Сводка 360°'],['sales','💰 Продажи'],['groups','📈 Группы и категории'],['shares','📊 Доли 21vek'],['stock','📦 Остатки и заказ'],['tasks','🤖 Задачи ИИ'],['motivation','🏆 Бонусы и план'],['parser','🌐 Парсер 21vek'],['competitors','⚔️ Конкуренты 21vek'],...[]],c=[['anp','🧾 АНП'],['si','🛠 Компенсация СИ'],['budget','💼 Бюджет']],r=a=>a.map(x=>`<button type="button" data-tr14="${x[0]}">${x[1]}</button>`).join('');shell.innerHTML=`<div class="tr14-head"><b>Триовист (21vek.by)</b><div class="tr14-head-actions"><span>${esc(ctx?.name||ctx?.email||'')}</span><button type="button" class="tr14-refresh" data-tr14-refresh>↻ Обновить</button></div></div><div class="tr14-g"><div class="tr14-box"><div class="tr14-label">РАБОТА</div><div class="tr14-row">${r(w)}</div></div><div class="tr14-box c"><div class="tr14-label">КОММЕРЦИЯ</div><div class="tr14-row">${r(c)}</div></div></div>`;shell.onclick=e=>{const rb=e.target.closest('[data-tr14-refresh]');if(rb){e.preventDefault();refreshCurrent();return}const b=e.target.closest('[data-tr14]');if(b)activate(b.dataset.tr14,true).catch(error)};h.insertBefore(shell,h.firstChild)}if(!panel?.isConnected){panel=document.createElement('div');panel.id='tr14-panel';shell.insertAdjacentElement('afterend',panel);bind()}hideOld();sync();return true}
 async function refreshCurrent(){
  if(refreshBusy)return;
  const b=shell?.querySelector('[data-tr14-refresh]'),label=b?.textContent||'↻ Обновить',k=active;
@@ -129,7 +168,6 @@ async function refreshCurrent(){
      else throw Error('Функция обновления остатков Triovist ещё не готова');
    }else if(k==='tasks')await window.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651?.render?.(true);
    else if(k==='motivation')await window.RESANTA_SAFE_TRIOVIST_V236200?.refresh?.();
-   else if(k==='cards')await window.triovistContentReload?.(true);
    else if(k==='parser')await window.RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh?.();
    else if(k==='groups'){
      const mod=window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120;
@@ -145,7 +183,6 @@ async function refreshCurrent(){
    }
    else if(k==='anp'||k==='si')await expense(k,document.querySelector(`[data-tr14-month="${k}"]`)?.value||month());
    else if(k==='budget')await budget(document.querySelector('[data-tr14-month="budget"]')?.value||month());
-   else if(k==='price')await prices();
    if(active===k){sync();window.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1?.mount?.(k,ctx)}
  }catch(e){console.error('Triovist refresh',e);alert('Не удалось обновить Triovist: '+(e?.message||e))}
  finally{refreshBusy=false;if(b?.isConnected){b.disabled=false;b.textContent=label}}
@@ -241,6 +278,7 @@ async function loadInfographics(){
  throw Error('Модуль «Инфографика» не загрузился. Другие разделы работают, повторите попытку.');
 }
 async function activate(k,save=false){
+ if(k==='cards')k='parser';
  if(k==='infographics'&&!canSeeInfographics())k='home';
  if(![...visibleWorkKeys(),...COMM].includes(k))k='home';
  const token=++navEpoch;
@@ -312,7 +350,6 @@ async function activate(k,save=false){
    choose(k);page().style.setProperty('display','none','important');panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загрузка…</div>';
    if(k==='anp'||k==='si')await expense(k,month());
    else if(k==='budget')await budget(month());
-   else{price={q:'',only:false,offset:0,limit:50,last:null};await prices()}
  }
  if(token!==navEpoch||active!==k)return;
  if(save)choose(k);
@@ -320,12 +357,45 @@ async function activate(k,save=false){
  if(page()?.classList.contains('active'))window.RESANTA_TRIOVIST_NATIVE_SECTIONS_V1?.mount?.(k,ctx);
 }
 async function getMonth(m){return rpc('triovist_commercial_get_month',{p_month:first(m)})}
-const monthInput=(k,m)=>`<div><label class="form-label">Месяц</label><input class="form-input" type="month" data-tr14-month="${k}" value="${esc(String(m||month()).slice(0,7))}"></div>`;
+const monthInput=(k,m)=>`<div><label class="form-label" for="tr14-month-${k}">Месяц</label><input id="tr14-month-${k}" class="form-input" type="month" data-tr14-month="${k}" value="${esc(String(m||month()).slice(0,7))}"></div>`;
 function docs(r,write){const x=(r.documents||[]).map(d=>`<button class="btn-secondary" data-tr14-doc="${esc(d.storage_path)}">📎 ${esc(d.file_name)}</button>`).join('')||'<span class="tr14-note">нет документа</span>';return x+(write?` <label class="btn-secondary" style="cursor:pointer">＋ документ<input hidden type="file" data-tr14-attach="${esc(r.id)}"></label>`:'')}
-async function expense(kind,m){const d=await getMonth(m),rows=(d.expenses||[]).filter(x=>x.expense_type===kind),sum=rows.reduce((s,x)=>s+Number(x.amount||0),0),write=!!d.can_write_expenses;panel.innerHTML=`<div class="tr14-sec"><div><h3>${kind==='anp'?'🧾 АНП':'🛠 Компенсация СИ'}</h3><div class="tr14-note">${write?'Внесение расходов и документов.':'Просмотр.'}</div></div>${monthInput(kind,d.month)}</div><div class="tr14-k"><div><span>${kind==='anp'?'АНП':'СИ'} за месяц</span><b>${money(sum)}</b></div><div><span>АНП + СИ факт</span><b>${money(d.expenses_total)}</b></div><div><span>Документов</span><b>${Number(d.documents_count||0)}</b></div><div><span>Доступ</span><b>${write?'Внесение':'Просмотр'}</b></div></div>${write?`<div class="tr14-form"><div><label class="form-label">Дата</label><input id="tr14-date" class="form-input" type="date" value="${esc(String(d.month).slice(0,7)+'-01')}"></div><div><label class="form-label">Сумма, BYN</label><input id="tr14-amount" class="form-input" type="number" min="0" step="0.01"></div><div><label class="form-label">Комментарий</label><input id="tr14-comment" class="form-input"></div><button class="btn-primary" data-tr14-save="${kind}">Сохранить</button></div>`:'<div class="tr14-info">Без права изменения.</div>'}<div style="overflow:auto"><table class="tr14-table"><thead><tr><th>Дата</th><th>Сумма</th><th>Комментарий</th><th>Кто внёс</th><th>Документы</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr><td>${esc(r.expense_date)}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.comment||'—')}</td><td>${esc(r.created_by||'—')}</td><td>${docs(r,write)}</td></tr>`).join(''):'<tr><td colspan="5">За выбранный месяц расходов нет.</td></tr>'}</tbody></table></div>`}
+async function expense(kind,m){
+ if(active!==kind)return;
+ const request=++commerceRequest,token=navEpoch;
+ const d=await getMonth(m);
+ if(request!==commerceRequest||token!==navEpoch||active!==kind)return;
+ const rows=(d.expenses||[]).filter(x=>x.expense_type===kind);
+ const sum=rows.reduce((total,row)=>total+Number(row.amount||0),0);
+ const write=!!d.can_write_expenses;
+ const title=kind==='anp'?'АНП':'Компенсация СИ';
+ panel.innerHTML=`
+  <section class="tr14-commerce">
+    <header class="tr14-sec"><div><h2>${title}</h2>
+      <p class="tr14-note">${write?'Внесение расходов и документов.':'Просмотр.'}</p></div>${monthInput(kind,d.month)}</header>
+    <div class="tr14-k">
+      <div><span>${kind==='anp'?'АНП':'СИ'} за месяц</span><b>${money(sum)}</b></div>
+      <div><span>АНП + СИ факт</span><b>${money(d.expenses_total)}</b></div>
+      <div><span>Документов</span><b>${Number(d.documents_count||0)}</b></div>
+      <div><span>Доступ</span><b>${write?'Внесение':'Просмотр'}</b></div>
+    </div>
+    ${write?`<div class="tr14-form">
+      <div><label class="form-label" for="tr14-date">Дата</label><input id="tr14-date" class="form-input" type="date" value="${esc(String(d.month).slice(0,7)+'-01')}"></div>
+      <div><label class="form-label" for="tr14-amount">Сумма, BYN</label><input id="tr14-amount" class="form-input" type="number" min="0" step="0.01"></div>
+      <div><label class="form-label" for="tr14-comment">Комментарий</label><input id="tr14-comment" class="form-input"></div>
+      <button class="btn-primary" type="button" data-tr14-save="${kind}">Сохранить</button>
+    </div>`:'<p class="tr14-note">Без права изменения.</p>'}
+    <div class="tr14-commerce-card tr14-table-wrap"><table class="tr14-table">
+      <thead><tr><th>Дата</th><th>Сумма</th><th>Комментарий</th><th>Кто внёс</th><th>Документы</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr><td>${esc(r.expense_date)}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.comment||'—')}</td><td>${esc(r.created_by||'—')}</td><td>${docs(r,write)}</td></tr>`).join(''):'<tr><td colspan="5">За выбранный месяц расходов нет.</td></tr>'}</tbody>
+    </table></div>
+  </section>`;
+}
 async function budget(m){
-  const d=await getMonth(m),
-        net=Number(d.sales_revenue_ex_vat||Number(d.sales_revenue||0)/1.2),
+  if(active!=='budget')return;
+  const request=++commerceRequest,token=navEpoch;
+  const d=await getMonth(m);
+  if(request!==commerceRequest||token!==navEpoch||active!=='budget')return;
+  const net=Number(d.sales_revenue_ex_vat||Number(d.sales_revenue||0)/1.2),
         accrual=Number(d.budget_month_accrual??(Math.round(net*.015*100)/100)),
         opening=Number(d.budget_opening_balance??d.budget_amount??0),
         spent=Number(d.budget_expenses_month_total||0),
@@ -340,11 +410,12 @@ async function budget(m){
         todayMinsk=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Minsk'}),
         dayForInput=todayMinsk.slice(0,7)===ym?todayMinsk:new Date(Date.UTC(Number(ym.slice(0,4)),Number(ym.slice(5,7)),0)).toISOString().slice(0,10),
         canAdd=!!d.is_leader&&!!d.budget_exists&&dayForInput<=todayMinsk,
-        audit=d.budget_exists
-          ?(carried
-            ?`<div class="tr14-info">↪️ <b>Базовый остаток перенесён автоматически.</b> База: ${money(Number(d.budget_anchor_amount||0))} с ${esc(anchorLabel)}; последнее изменение: ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}${spentBefore>0?'<br>Ранее внесённые списания бюджета: '+money(spentBefore)+'.':''}</div>`
-            :`<div class="tr14-info">🕒 <b>Последнее изменение базового остатка:</b> ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}</div>`)
-          :`<div class="tr14-warn">⚠️ <b>Базовый остаток бюджета ещё не задан.</b></div>`;
+        base=Number(d.budget_anchor_amount??d.budget_amount??opening);
+  const audit=d.budget_exists
+    ?`<p><b>${carried?'Базовый остаток перенесён автоматически.':'Базовый остаток.'}</b>
+       ${money(base)} · ${esc(anchorLabel)}<br>Последнее изменение · ${esc(budgetDt(d.budget_updated_at))} · ${esc(who)}.</p>
+       ${spentBefore>0?'<p>Ранее внесённые списания бюджета · '+money(spentBefore)+'.</p>':''}`
+    :'';
   const rowsHtml=rows.map(r=>{
     const cancelled=!!r.voided_at;
     return `<tr${cancelled?' style="opacity:.65"':''}>
@@ -357,53 +428,57 @@ async function budget(m){
   }).join('');
 
   panel.innerHTML=`
-    <div class="tr14-sec">
-      <div>
-        <h3>💼 Бюджет Triovist</h3>
-        <div class="tr14-note">Остаток переносится автоматически. Новые списания из этого раздела уменьшают доступный бюджет.</div>
+    <section class="tr14-commerce" aria-labelledby="tr14-budget-title">
+      <header class="tr14-sec">
+        <div class="tr14-budget-heading">
+          <h2 id="tr14-budget-title">Бюджет Triovist</h2>
+          <div class="tr14-budget-help">
+            <button type="button" aria-label="Расчёт и история бюджета" aria-controls="tr14-budget-popover" aria-expanded="false" data-tr14-budget-help>*</button>
+            <aside id="tr14-budget-popover" class="tr14-budget-popover" tabindex="0" aria-label="Расчёт и история бюджета">
+              <p>Остаток переносится автоматически. Новые списания из этого раздела уменьшают доступный бюджет.</p>
+              <p><b>Расчёт за месяц</b><br>${money(opening)} перенесено + ${money(accrual)} начислено (1,5%) − ${money(spent)} списано.</p>
+              ${audit}
+              ${d.budget_comment?`<p><b>Комментарий к базовому остатку</b><br><span class="tr14-budget-comment">${esc(d.budget_comment)}</span></p>`:''}
+              ${carried?'<p><b>Ручной перенос не требуется.</b> CRM уже перенесла остаток автоматически.</p>':''}
+              <p>Затраты из бюджета ведутся в отдельном журнале. Расходы, уже учтённые в базовом остатке, и записи в АНП и СИ повторно автоматически не списываются.</p>
+            </aside>
+          </div>
+        </div>
+        ${monthInput('budget',d.month)}
+      </header>
+      <div class="tr14-commerce-card tr14-budget-value${total<0?' over':''}">
+        <span>${total<0?'Перерасход бюджета':'Доступный остаток'}</span>
+        <strong>${money(Math.abs(total))}</strong>
       </div>
-      ${monthInput('budget',d.month)}
-    </div>
-    <div class="${total<0?'tr14-warn':'tr14-info'}" style="font-size:19px;padding:16px 18px;border-width:2px">
-      <b>${total<0?'🔴 ПЕРЕРАСХОД БЮДЖЕТА: '+money(Math.abs(total)):'💰 РЕАЛЬНО ОСТАЛОСЬ НА БЮДЖЕТЕ: '+money(total)}</b><br>
-      <span style="font-size:13px">${money(opening)} перенесено + ${money(accrual)} начислено (1,5%) − ${money(spent)} списано в этом месяце</span>
-    </div>
-    <div class="tr14-k">
-      <div><span>Доступный остаток</span><b>${money(total)}</b></div>
-      <div><span>Перенесено с прошлого месяца</span><b>${money(opening)}</b></div>
-      <div><span>Начислено за месяц 1,5%</span><b>${money(accrual)}</b></div>
-      <div><span>Затраты за этот месяц</span><b>${money(spent)}</b></div>
-    </div>
-    ${audit}
-    <div class="tr14-info"><b>Комментарий к базовому остатку:</b><br>${esc(d.budget_comment||'—')}</div>
-    ${d.is_leader&&!carried?`
-      <div class="tr14-form" style="grid-template-columns:220px 1fr auto">
-        <div><label class="form-label">Базовый остаток, BYN</label><input id="tr14-budget-amount" class="form-input" type="number" min="0" step="0.01" value="${Number(d.budget_anchor_amount??opening).toFixed(2)}"></div>
-        <div><label class="form-label">Комментарий</label><input id="tr14-budget-comment" class="form-input" value="${esc(d.budget_comment||'')}"></div>
-        <button class="btn-primary" data-tr14-budget-save>Сохранить базу</button>
-      </div>`:d.is_leader&&carried?`<div class="tr14-note" style="margin:8px 0"><b>Ручной перенос не требуется:</b> CRM уже перенесла остаток автоматически.</div>`:''}
-    <div style="margin-top:17px;border-top:1px solid #e5e7eb;padding-top:13px">
-      <h3 style="margin-bottom:5px">📋 Затраты из бюджета · ${esc(ym)}</h3>
-      <div class="tr14-note">Это отдельный журнал списаний. Ранее учтённые в базовых 54 420 BYN расходы и записи в АНП/СИ не списываются повторно автоматически.</div>
-      ${canAdd?`
-        <div class="tr14-form" style="grid-template-columns:155px 180px minmax(230px,1fr) auto">
-          <div><label class="form-label">Дата расхода</label><input class="form-input" id="tr14-budget-expense-date" type="date" min="${esc(ym)}-01" max="${esc(todayMinsk)}" value="${esc(dayForInput)}"></div>
-          <div><label class="form-label">Сумма, BYN</label><input class="form-input" id="tr14-budget-expense-amount" type="number" step="0.01" min="0.01" placeholder="0,00"></div>
-          <div><label class="form-label">На что потратили</label><input class="form-input" id="tr14-budget-expense-description" maxlength="1000" placeholder="Например, подарок клиенту или акция"></div>
-          <button class="btn-primary" type="button" data-tr14-budget-expense-save>− Внести затрату</button>
-        </div>`:
-        d.is_leader?`<div class="tr14-note" style="margin-top:9px">Для списания выберите месяц с действующим базовым остатком, не позже текущего.</div>`:''}
-      <div class="tri-table-wrap" style="overflow-x:auto;margin-top:12px">
-        <table class="tr14-table"><thead><tr><th>Дата</th><th>Сумма</th><th>Назначение</th><th>Кто и когда внёс</th><th>Действие</th></tr></thead>
-          <tbody>${rowsHtml||'<tr><td colspan="5" class="tr14-note">Затрат по бюджету за выбранный месяц ещё нет.</td></tr>'}</tbody>
-        </table>
-      </div>
-    </div>
+      ${d.budget_exists?'':'<p class="tr14-warn" role="status">Базовый остаток бюджета ещё не задан.</p>'}
+      ${d.is_leader&&!carried?`
+        <details class="tr14-commerce-card tr14-budget-base">
+          <summary>${d.budget_exists?'Изменить базовый остаток':'Задать базовый остаток'}</summary>
+          <div class="tr14-form">
+            <div><label class="form-label" for="tr14-budget-amount">Базовый остаток, BYN</label><input id="tr14-budget-amount" class="form-input" type="number" min="0" step="0.01" value="${base.toFixed(2)}"></div>
+            <div><label class="form-label" for="tr14-budget-comment">Комментарий</label><input id="tr14-budget-comment" class="form-input" value="${esc(d.budget_comment||'')}"></div>
+            <button class="btn-primary" type="button" data-tr14-budget-save>Сохранить базу</button>
+          </div>
+        </details>`:''}
+      <section class="tr14-commerce-card" aria-labelledby="tr14-budget-journal">
+        <h3 id="tr14-budget-journal">Затраты из бюджета · ${esc(ym)}</h3>
+        ${canAdd?`
+          <div class="tr14-form">
+            <div><label class="form-label" for="tr14-budget-expense-date">Дата расхода</label><input class="form-input" id="tr14-budget-expense-date" type="date" min="${esc(ym)}-01" max="${esc(todayMinsk)}" value="${esc(dayForInput)}"></div>
+            <div><label class="form-label" for="tr14-budget-expense-amount">Сумма, BYN</label><input class="form-input" id="tr14-budget-expense-amount" type="number" step="0.01" min="0.01" placeholder="0,00"></div>
+            <div><label class="form-label" for="tr14-budget-expense-description">На что потратили</label><input class="form-input" id="tr14-budget-expense-description" maxlength="1000"></div>
+            <button class="btn-primary" type="button" data-tr14-budget-expense-save>Внести затрату</button>
+          </div>`:
+          d.is_leader?`<p class="tr14-note">Для списания выберите месяц с действующим базовым остатком, не позже текущего.</p>`:''}
+        <div class="tr14-table-wrap">
+          <table class="tr14-table"><thead><tr><th>Дата</th><th>Сумма</th><th>Назначение</th><th>Кто и когда внёс</th><th>Действие</th></tr></thead>
+            <tbody>${rowsHtml||'<tr><td colspan="5" class="tr14-note">Затрат по бюджету за выбранный месяц ещё нет.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </section>
+    </section>
   `;
 }
-const range=d=>Number(d.total_filtered||0)?`${Number(d.offset||0)+1}–${Number(d.offset||0)+(d.items||[]).length} из ${Number(d.total_filtered)}`:'0 из 0';
-async function prices(){const d=await rpc('triovist_price_search_v23612',{p_query:price.q,p_only_suspect:price.only,p_offset:price.offset,p_limit:price.limit});price.last=d;price.offset=Number(d.offset||0);price.limit=Number(d.limit||price.limit);const rows=d.items||[],prev=price.offset>0,next=price.offset+rows.length<Number(d.total_filtered||0);panel.innerHTML=`<div class="tr14-sec"><div><h3>🧮 Расчёт цены Triovist</h3><div class="tr14-note">1С «Мелкий опт 2 с НДС», скидка Triovist 5%. Доступно ${Number(d.total_all||0)} SKU.</div></div></div><div class="tr14-form" style="grid-template-columns:1fr auto"><input id="tr14-q" class="form-input" placeholder="Артикул или товар" value="${esc(price.q)}"><button class="btn-primary" data-tr14-search>Найти</button></div><div class="tr14-tools"><button class="hot ${price.only?'on':''}" data-tr14-only>⚠ Только сильные отклонения (${Number(d.suspect_count||0)})</button><select data-tr14-limit><option value="50" ${price.limit===50?'selected':''}>50</option><option value="100" ${price.limit===100?'selected':''}>100</option><option value="500" ${price.limit>=500?'selected':''}>Все</option></select><button data-tr14-prev ${!prev?'disabled':''}>←</button><span class="tr14-note"><b>${range(d)}</b></span><button data-tr14-next ${!next?'disabled':''}>→</button></div><div style="overflow:auto"><table class="tr14-table"><thead><tr><th>Артикул</th><th>Товар</th><th>Мелкий опт 2 с НДС</th><th>Triovist −5%</th><th>Цена 21vek</th></tr></thead><tbody>${rows.map(r=>`<tr data-tr14-sku="${esc(r.sku)}"><td><b>${esc(r.sku)}</b></td><td>${esc(r.product)}</td><td><b>${money(r.list_price)}</b></td><td>${money(r.triovist_price)}</td><td class="${r.price_21vek_suspect?'tr14-bad':''}">${r.price_21vek==null?'—':(r.price_21vek_suspect?'⚠ ':'')+money(r.price_21vek)}${r.price_21vek_suspect&&r.price_21vek_previous!=null?`<div class="tr14-note">ранее ${money(r.price_21vek_previous)}</div>`:''}</td></tr>`).join('')}</tbody></table></div><div id="tr14-detail"></div>`}
-async function detail(sku){const root=document.getElementById('tr14-detail'),d=await rpc('triovist_price_search_v23612',{p_query:sku,p_only_suspect:false,p_offset:0,p_limit:20}),r=(d.items||[]).find(x=>String(x.sku)===String(sku));if(!root||!r)return;let priv='';if(ctx.is_leader){const p=await rpc('triovist_price_calc_private',{p_sku:sku,p_point_zero:null}),has=Number(p.point_zero||0)>0,diff=Number(p.difference_to_required||0);priv=`<div class="tr14-private"><b>🔒 Только руководитель</b><div class="tr14-k"><div><span>Точка 0</span><b>${has?money(p.point_zero):'—'}</b></div><div><span>Минимальная отпускная</span><b>${p.required_list_price==null?'—':money(p.required_list_price)}</b></div><div><span>Фактическая</span><b>${money(p.list_price)}</b></div><div><span>Отклонение</span><b>${has?(diff>=0?'+':'−')+money(Math.abs(diff)):'—'}</b></div></div><div class="tr14-form" style="grid-template-columns:200px auto"><input id="tr14-zero" class="form-input" type="number" step="0.01" value="${has?Number(p.point_zero).toFixed(2):''}"><button class="btn-secondary" data-tr14-zero="${esc(sku)}">Сохранить точку 0</button></div></div>`}root.innerHTML=`<div class="tr14-info"><b>${esc(r.sku)} · ${esc(r.product)}</b><br>Мелкий опт 2: ${money(r.list_price)} · Triovist: ${money(r.triovist_price)} · 21vek: ${r.price_21vek==null?'—':money(r.price_21vek)}</div>${priv}`}
 async function saveExpense(kind){const d=document.getElementById('tr14-date')?.value,a=Number(document.getElementById('tr14-amount')?.value),c=document.getElementById('tr14-comment')?.value||'';if(!d||!(a>=0))throw Error('Укажите дату и сумму');await rpc('triovist_commercial_save_expense',{p_id:null,p_type:kind,p_expense_date:d,p_amount:a,p_comment:c});await expense(kind,document.querySelector(`[data-tr14-month="${kind}"]`)?.value||month())}
 function storagePath(id,f){let ext=(String(f.name||'').toLowerCase().match(/\.([a-z0-9]{1,10})$/)||[])[1];if(!ext)ext=({'application/pdf':'pdf','image/jpeg':'jpg','image/png':'png','image/webp':'webp','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx','application/vnd.ms-excel':'xls','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx','application/msword':'doc'}[f.type]||'bin');return `${id}/${Date.now()}_${Math.random().toString(36).slice(2,9)}_document.${ext}`}
 async function attach(id,input){const f=input.files?.[0];if(!f)return;if(f.size>25*1024*1024)throw Error('Файл больше 25 МБ');const d=dbx(),path=storagePath(id,f),up=await d.storage.from('triovist-expense-docs').upload(path,f,{upsert:false,contentType:f.type||'application/octet-stream'});if(up.error)throw up.error;try{await rpc('triovist_commercial_attach_document',{p_expense_id:id,p_storage_path:path,p_file_name:f.name||'document',p_mime_type:f.type||null,p_size_bytes:f.size})}catch(e){try{await d.storage.from('triovist-expense-docs').remove([path])}catch(_){}throw e}await expense(active,document.querySelector(`[data-tr14-month="${active}"]`)?.value||month())}
@@ -441,8 +516,54 @@ async function voidBudgetExpense(id){
  }finally{budgetExpenseBusy=false}
 }
 async function saveBudget(){const a=Number(document.getElementById('tr14-budget-amount')?.value),c=document.getElementById('tr14-budget-comment')?.value||'',m=document.querySelector('[data-tr14-month="budget"]')?.value||month();if(!(a>=0))throw Error('Проверьте сумму');await rpc('triovist_commercial_set_budget',{p_month:first(m),p_amount:a,p_comment:c});await budget(m)}
-async function zero(sku){const z=Number(document.getElementById('tr14-zero')?.value);if(!(z>0))throw Error('Укажите Точку 0');await rpc('triovist_price_set_point_zero',{p_sku:sku,p_point_zero:z});await detail(sku)}
-function bind(){if(panel.dataset.bound)return;panel.dataset.bound='1';panel.addEventListener('change',async e=>{try{const m=e.target.closest('[data-tr14-month]');if(m){m.dataset.tr14Month==='budget'?await budget(m.value):await expense(m.dataset.tr14Month,m.value);return}const a=e.target.closest('[data-tr14-attach]');if(a){await attach(a.dataset.tr14Attach,a);a.value='';return}const l=e.target.closest('[data-tr14-limit]');if(l){price.limit=Number(l.value);price.offset=0;await prices()}}catch(x){alert(x.message||x)}});panel.addEventListener('click',async e=>{try{const s=e.target.closest('[data-tr14-save]');if(s){await saveExpense(s.dataset.tr14Save);return}const d=e.target.closest('[data-tr14-doc]');if(d){await openDoc(d.dataset.tr14Doc);return}if(e.target.closest('[data-tr14-budget-expense-save]')){await addBudgetExpense();return}const vb=e.target.closest('[data-tr14-budget-void]');if(vb){await voidBudgetExpense(vb.dataset.tr14BudgetVoid);return}if(e.target.closest('[data-tr14-budget-save]')){await saveBudget();return}if(e.target.closest('[data-tr14-search]')){price.q=document.getElementById('tr14-q')?.value||'';price.offset=0;await prices();return}if(e.target.closest('[data-tr14-only]')){price.only=!price.only;price.offset=0;await prices();return}if(e.target.closest('[data-tr14-prev]')){price.offset=Math.max(0,price.offset-price.limit);await prices();return}if(e.target.closest('[data-tr14-next]')){price.offset+=price.limit;await prices();return}const r=e.target.closest('[data-tr14-sku]');if(r){await detail(r.dataset.tr14Sku);return}const z=e.target.closest('[data-tr14-zero]');if(z)await zero(z.dataset.tr14Zero)}catch(x){alert(x.message||x)}})}
+function bind(){
+ if(panel.dataset.bound)return;
+ panel.dataset.bound='1';
+ panel.addEventListener('change',async e=>{
+  try{
+   const m=e.target.closest('[data-tr14-month]');
+   if(m){const kind=m.dataset.tr14Month;if(kind==='budget')await budget(m.value);else await expense(kind,m.value);return}
+   const a=e.target.closest('[data-tr14-attach]');
+   if(a){await attach(a.dataset.tr14Attach,a);a.value=''}
+  }catch(error){alert(error.message||error)}
+ });
+ panel.addEventListener('click',async e=>{
+  const tip=e.target.closest('[data-tr14-budget-help]');
+  if(tip){setBudgetHelp(tip,tip.getAttribute('aria-expanded')!=='true');return}
+  try{
+   const s=e.target.closest('[data-tr14-save]');
+   if(s){await saveExpense(s.dataset.tr14Save);return}
+   const doc=e.target.closest('[data-tr14-doc]');
+   if(doc){await openDoc(doc.dataset.tr14Doc);return}
+   if(e.target.closest('[data-tr14-budget-expense-save]')){await addBudgetExpense();return}
+   const v=e.target.closest('[data-tr14-budget-void]');
+   if(v){await voidBudgetExpense(v.dataset.tr14BudgetVoid);return}
+   if(e.target.closest('[data-tr14-budget-save]'))await saveBudget();
+  }catch(error){alert(error.message||error)}
+ });
+ panel.addEventListener('keydown',e=>{
+  const help=e.target.closest('.tr14-budget-help');
+  if(e.key!=='Escape'||!help||help.hasAttribute('data-dismissed'))return;
+  e.preventDefault();
+  const tip=help.querySelector('[data-tr14-budget-help]');
+  setBudgetHelp(tip,false);
+  tip.focus();
+ });
+ panel.addEventListener('focusout',e=>{
+  const help=e.target.closest('.tr14-budget-help');
+  if(help&&!help.contains(e.relatedTarget))help.removeAttribute('data-dismissed');
+ });
+ panel.addEventListener('pointerover',e=>{
+  const help=e.target.closest('.tr14-budget-help');
+  if(help&&!help.contains(e.relatedTarget))help.removeAttribute('data-dismissed');
+ });
+}
+function setBudgetHelp(button,open){
+ const help=button.parentElement;
+ button.setAttribute('aria-expanded',String(open));
+ help.toggleAttribute('data-open',open);
+ help.toggleAttribute('data-dismissed',!open);
+}
 async function ensure(){if(busy)return false;busy=true;try{if(!ctx){ctx=await context();if(!ctx)return false}css();return dom()}finally{busy=false}}
 // Observe only the Triovist navigation state, never unrelated CRM DOM churn.
 let observedPage=null;
@@ -487,7 +608,7 @@ function resumeView(){
  if(document.hidden||!page()?.classList.contains('active')||!panel?.isConnected)return false;
  sync();return true;
 }
-async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await activate('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,fullPricePaging:true,anomalyFilter:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,directWorkspaceRouter:true,instantTabSwitch:true,sectionRefreshIsolation:true,navigationEpoch:true,lazyDataByTab:true,fastMonthlyTasks:true,singleMotivationSurface:true,forcedDirectCardVisibility:true,nonStickyMenu:true,separateSalesWorkspace:true,noLegacyButtonDependency:true,salesRealtimeRefresh:true,noSalesPolling:true,infographicPayushinOnly:true,infographicArchived:true,readOnlyResume:true,resumeView});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
+async function start(){if(!await ensure())return false;watch();subscribeSalesImport();const preferred=remembered();active=preferred;try{await activate(preferred)}catch(e){console.warn('Triovist '+V+' saved tab failed, fallback to summary',e);try{localStorage.removeItem(STORE+'|'+(ctx?.email||''))}catch(_){}active='home';await activate('home')}sync();window.RESANTA_TRIOVIST_ROOT_V23614=Object.freeze({version:V,singleOwner:true,shellOutsidePage:true,asciiStorageKeys:true,originalFileNamePreserved:true,budgetExVat:true,managerTabRecovery:true,managerTabVisibilityRecovery:true,parserTab:true,directWorkspaceRouter:true,instantTabSwitch:true,sectionRefreshIsolation:true,navigationEpoch:true,lazyDataByTab:true,fastMonthlyTasks:true,singleMotivationSurface:true,forcedDirectCardVisibility:true,nonStickyMenu:true,separateSalesWorkspace:true,noLegacyButtonDependency:true,salesRealtimeRefresh:true,noSalesPolling:true,infographicPayushinOnly:true,infographicArchived:true,readOnlyResume:true,resumeView});console.info('RESANTA Triovist '+V+' ROOT',ctx);return true}
 // Only one initialization (including the home RPC) may run at a time.
 let n=0,bootPending=false;
 const t=setInterval(async()=>{
@@ -495,10 +616,14 @@ const t=setInterval(async()=>{
  bootPending=true;
  n++;
  try{
-  if(nonTriovistProfileReady()){clearInterval(t);return}
-  if(await start()||n>240)clearInterval(t)
+  if(nonTriovistProfileReady()){finishBoot();return}
+  if(await start()||n>240)finishBoot()
  }catch(e){
-  if(n>240)clearInterval(t);
+  if(n>240)finishBoot();
  }finally{bootPending=false}
 },250);
+function finishBoot(){
+ clearInterval(t);
+ if(window.RESANTA_TRIOVIST_ROOT_BOOTING_V23614===V)delete window.RESANTA_TRIOVIST_ROOT_BOOTING_V23614;
+}
 })();

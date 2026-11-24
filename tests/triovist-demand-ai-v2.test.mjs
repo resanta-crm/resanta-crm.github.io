@@ -20,7 +20,7 @@ const managers=[
  {email:A,name:'Александренко',active_tasks:0,declining_subgroups:66,offered:30},
  {email:K,name:'Кришталь',active_tasks:0,declining_subgroups:15,offered:15}
 ];
-function fixture({email='payushin_ar@resanta.ru',role='boss',confirm=false,oversized=false}={}){
+function fixture({email='payushin_ar@resanta.ru',role='boss',confirm=false,oversized=false,refreshOk=true}={}){
  let node=null,confirmed=confirm,refreshCount=0; const confirmations=[];
  const handlers={},rpcCalls=[];
  const parent={prepend(e){node=e}};
@@ -44,7 +44,7 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',confirm=false,overs
  const w={
   currentProfile:{role,email,access_scope:role==='boss'?'all':'triovist'},
   confirm:(text)=>{confirmations.push(text);return confirmed;}, 
-  RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651:{getMonth:m,async render(){refreshCount++}},
+  RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651:{getMonth:m,async render(){refreshCount++;return refreshOk}},
   RESANTA_TRIOVIST_TASKS360_V1:{enhance(){}},
   TRIOVIST_DATA_HUB_V227315:{invalidate(){}},
   db:{rpc:async(name,args)=>{
@@ -85,12 +85,16 @@ test('browser module parses, cannot generate on open and has no SKU-level API',(
  assert.doesNotMatch(src,/setInterval\(|location\.reload\(/);
  const f=fixture();assert.equal(f.api.open(),true);assert.equal(f.rpcCalls.length,0);
  assert.match(f.node().innerHTML,/Сформировать задачи ИИ/);
+ assert.match(f.node().innerHTML,/<h3>Выставление задач<\/h3>/);
+ assert.match(f.node().innerHTML,/id="ab-tip-workflow" class="ab-tip" role="tooltip".*Месяц.*до 30/);
 });
 test('explicit brainstorm proposes only declining subgroups and no DB writes',async()=>{
  const f=fixture();await f.api.brainstorm();
  assert.equal(f.rpcCalls.length,1);
  assert.equal(f.rpcCalls[0].name,'triovist_ai_brainstorm_preview_v20261105');
  assert.match(f.node().innerHTML,/Перфораторы Ресанта/);
+ assert.match(f.node().innerHTML,/Предложения готовы: 2/);
+ assert.match(f.node().innerHTML,/id="ab-tip-basis" class="ab-tip" role="tooltip".*2025-10-31.*2026-11-04/);
  assert.match(f.node().innerHTML,/44[\s\u00a0\u202f]?647,49 BYN/);
  assert.match(f.node().innerHTML,/27[\s\u00a0\u202f]?514,09 BYN/);
  assert.match(f.node().innerHTML,/Подтверждённые позиции/);assert.match(f.node().innerHTML,/21vek: нет в наличии/);assert.match(f.node().innerHTML,/ранее №11/);
@@ -127,9 +131,9 @@ test('approve is per subgroup only after explicit confirm; can manually edit tar
 });
 test('past month tasks, old parser and approved plans are not touched',()=>{
  const html=read('index.html');
- assert.match(html,/179-triovist-demand-ai-v1\.js\?v=20261105-subgroup-listing-fix3/);
- assert.match(html,/61-triovist-task-month-safe-v23651\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261109-decisions360-fact1)/);
- assert.match(html,/169-triovist-tasks360-ux-v1\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261109-decisions360-motivation1)/);
+ assert.match(html,/179-triovist-demand-ai-v1\.js\?v=20261123-task-assignment1/);
+ assert.match(html,/61-triovist-task-month-safe-v23651\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261123-task-focus1)/);
+ assert.match(html,/169-triovist-tasks360-ux-v1\.js\?v=(?:20261105-subgroup-brainstorm-v2|20261123-task-focus1)/);
  const task=read('assets/61-triovist-task-month-safe-v23651.js');
  assert.match(task,/isBrainstormTask/);
  assert.match(task,/triovist_ai_brainstorm_verify_v20261105/);
@@ -169,4 +173,13 @@ test('new server audit preserves manual target without typed comment and shows h
  assert.match(listing,/not_in_fresh_registry/);
  assert.match(listing,/out_of_stock/);
  assert.match(listing,/order_no<=24/);
+});
+
+test('confirmed assignment remains successful if refreshing the month fails',async()=>{
+ const f=fixture({confirm:true,refreshOk:false});
+ await f.api.brainstorm();
+ const id=[A,'Инструмент Ресанта','Перфораторы Ресанта'].map(x=>x.toLocaleLowerCase('ru')).join('|');
+ f.click('[data-ab-approve]',{abApprove:id});await tick();
+ assert.match(f.node().innerHTML,/Задача назначена.*Список месяца пока не обновился/);
+ assert.equal(f.rpcCalls.filter(x=>x.name==='triovist_ai_brainstorm_approve_v20261105').length,1);
 });

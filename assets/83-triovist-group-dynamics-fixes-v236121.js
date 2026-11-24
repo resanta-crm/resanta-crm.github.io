@@ -80,7 +80,8 @@ async function exportExcel(h,ctx){
     try{
       const s=read(h);if(!valid(s))throw Error('Сначала выберите корректные периоды');save(h,ctx);
       const [XLSX,d]=await Promise.all([loadXlsx(),(async()=>{const dbase=dbx();if(!dbase)throw Error('Нет соединения с базой');const r=await dbase.rpc('triovist_group_dynamics_export_v1',{p_from_month:monthDate(s.from),p_to_month:monthDate(s.to),p_compare_from_month:monthDate(s.cfrom),p_compare_to_month:monthDate(s.cto),p_manager_email:s.manager||null});if(r.error)throw r.error;return r.data||{}})()]);
-      const rows=Array.isArray(d.items)?d.items:[];if(!rows.length)throw Error('Нет данных для выбранного периода');
+      const classify=window.RESANTA_TRIOVIST_GROUP_DYNAMICS_V236120?.classifyUnmatchedSku;
+      const rows=Array.isArray(d.items)?(classify?d.items.map(classify):d.items):[];if(!rows.length)throw Error('Нет данных для выбранного периода');
       const wb=XLSX.utils.book_new();
       const managers=agg(rows,['manager_name']);const groups=agg(rows,['manager_name','group']);const subgroups=agg(rows,['manager_name','group','subgroup']);
       const total=agg(rows,[])[0]||{};

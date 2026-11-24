@@ -14,8 +14,8 @@ const liveSales={
  ],
  period_plans:[{manager_email:'aleksandrenko_av@resanta.ru',plan_amount:543000},{manager_email:'krishtal_na@resanta.ru',plan_amount:138000}]
 };
-function fixture(role='boss',failedSales=false,slowParser=false){
- const calls=[],clicked=[],elements=new Map();let releaseParser=null;
+function fixture(role='boss',failedSales=false,sales=liveSales){
+ const calls=[],clicked=[],elements=new Map();
  const shell={classList:{keys:new Set(),add(k){this.keys.add(k)},contains(k){return this.keys.has(k)}},children:[],appendChild(x){this.children.push(x);elements.set(x.id,x);x.parentElement=this},
   insertBefore(x,ref){this.children.splice(Math.max(0,this.children.indexOf(ref)),0,x);elements.set(x.id,x);x.parentElement=this},
   querySelector(s){return {click(){clicked.push(s)}}}};
@@ -27,22 +27,24 @@ function fixture(role='boss',failedSales=false,slowParser=false){
  const w={};
  const d={rpc:async(name,args)=>{
   calls.push({name,args});
-  if(name==='triovist_get_dashboard')return failedSales?{error:{message:'Нет подтверждения 1С'}}:{data:{...liveSales,end_month:args.p_end_month},error:null};
-  if(name==='triovist_tasks_get_dashboard_month_v23648')return {data:{tasks:[
-   {title:'Проверить карточки',manager_email:'aleksandrenko_av@resanta.ru',status:'in_progress',due_date:'2026-11-07'},
-   {title:'Заказать садовую технику',manager_email:'krishtal_na@resanta.ru',status:'pending_approval',due_date:'2026-11-08'}
-  ]},error:null};
-  if(name==='triovist_partner_stock_state_v236207')return {data:{snapshot_date:'2026-10-13'},error:null};
-  if(name==='triovist_21vek_status_v236107')return slowParser?new Promise(resolve=>{releaseParser=resolve}):{data:{working:{completed_at:'2026-11-03T14:05:00+03:00'}},error:null};
+  if(name==='triovist_get_dashboard')return failedSales?{error:{message:'Нет подтверждения 1С'}}:{data:{...sales,end_month:args.p_end_month},error:null};
   throw new Error('unexpected request '+name);
  }};
  const ctx={is_leader:role==='boss',is_manager:role==='manager',email:role==='boss'?'payushin_ar@resanta.ru':'aleksandrenko_av@resanta.ru'};
  vm.runInNewContext(unix,{window:w,document,db:d,console,Date,Intl,Promise,setTimeout});
- return {api:w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1,ctx,calls,clicked,elements,root:()=>elements.get('tr14-unix-home'),releaseParser:()=>releaseParser?.({data:{working:{completed_at:'2026-11-03T14:05:00+03:00'}},error:null})};
+ return {api:w.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1,ctx,calls,clicked,elements,root:()=>elements.get('tr14-unix-home')};
 }
 test('Uni X script and original router are JavaScript syntax-valid',()=>{
  assert.doesNotThrow(()=>new vm.Script(unix));
  assert.doesNotThrow(()=>new vm.Script(router));
+});
+test('direct entry to a detail section has the shared shell styling without a sales request',()=>{
+ const f=fixture();
+ f.api.show(false);
+ assert.equal(f.root().dataset.visible,'false');
+ assert.equal(f.elements.get('tr14-shell').classList.contains('ux-director-shell'),true);
+ assert.equal(f.elements.get('tr14-unix-back').dataset.visible,'true');
+ assert.deepEqual(f.calls,[]);
 });
 test('main dashboard computes only source-backed October sales and previous year',()=>{
  const {api}=fixture();
@@ -53,39 +55,48 @@ test('main dashboard computes only source-backed October sales and previous year
  assert.equal(m.plan,681000);
  assert.equal(m.groups.length,2);
 });
-test('manager overview never renders another manager revenue or tasks',async()=>{
+test('manager overview never renders another manager revenue or plan',async()=>{
  const f=fixture('manager');
  assert.equal(await f.api.open(f.ctx),true);
  const page=f.root().innerHTML.replace(/\u00a0/g,' ');
  assert.match(page,/562 611,56/);
- assert.doesNotMatch(page,/235 863,98|Заказать садовую технику|Кришталь/);
- const args=f.calls.find(c=>c.name==='triovist_tasks_get_dashboard_month_v23648').args;
- assert.equal(args.p_manager_email,'aleksandrenko_av@resanta.ru');
+ assert.doesNotMatch(page,/235 863,98|Кришталь|138 000,00/);
 });
-test('director receives one unified screen with KPIs, chart, cards, risks and controls',async()=>{
+test('director summary contains only three sales KPIs and manager sales with plan tooltips',async()=>{
  const f=fixture();assert.equal(await f.api.open(f.ctx),true);
- const out=f.root().innerHTML;
- for(const phrase of ['Сводка 360°','Продажи','Товарные группы','Карточки 21vek','Конкуренты 21vek','Ключевые задачи','Финансовый итог','Заказы и остатки','Короткий ИИ-брифинг'])assert.ok(out.includes(phrase),phrase);
+ const out=f.root().innerHTML.replace(/\u00a0/g,' ');
+ assert.match(out,/<h2 class="ux-brand">Триовист<\/h2>/);
+ assert.equal([...out.matchAll(/class="ux-tile"/g)].length,3);
+ for(const phrase of ['Товарные группы','Карточки 21vek','Конкуренты 21vek','Ключевые задачи','Финансовый итог','Заказы и остатки','Короткий ИИ-брифинг','Свежесть','Задачи ИИ'])assert.ok(!out.includes(phrase),phrase);
+ assert.match(out,/role="tooltip">Факт 1С · импорт: 2026-11-03<\/span>/);
+ assert.match(out,/role="tooltip">Выполнение 117,3%<\/span>/);
+ assert.match(out,/Александренко<\/th><td><strong>562 611,56 BYN<\/strong>.*ux-execution">103,6%<\/strong>.*role="tooltip">План на месяц · 543 000,00 BYN<\/span>/);
+ assert.match(out,/Кришталь<\/th><td><strong>235 863,98 BYN<\/strong>.*ux-execution">170,9%<\/strong>.*role="tooltip">План на месяц · 138 000,00 BYN<\/span>/);
+ assert.match(f.elements.get('tr14-unix-css').textContent,/\.ux-help:is\(:hover,:focus-within\) \.ux-tooltip\{display:block\}/);
  assert.equal(f.root().dataset.visible,'true');
  assert.ok(f.elements.get('tr14-unix-back'));
 });
-test('drill-down dispatches existing links, never reimplements write handlers',async()=>{
+test('sales details still dispatch the existing route',async()=>{
  const f=fixture();await f.api.open(f.ctx);
- const el=f.root();const click=el.listeners.click;
- for(const area of ['sales','groups','stock','tasks','cards','competitors','motivation','anp','si','budget','price']){
-  click({target:{closest:()=>({dataset:{uxGo:area}})}});
-  assert.ok(f.clicked.at(-1).includes('data-tr14="'+area+'"'),area);
- }
+ f.root().listeners.click({target:{closest:selector=>selector==='[data-ux-sales]'?{}:null}});
+ assert.equal(f.clicked.at(-1),'[data-tr14="sales"]');
  assert.doesNotMatch(unix,/\.insert\(|\.update\(|\.upsert\(|\.delete\(|\.storage\.from\(/);
 });
-test('open current month never draws previous complete month as comparable bars',async()=>{
+test('current month keeps both comparison explanations in tooltips',async()=>{
  const f=fixture();await f.api.open(f.ctx);
  const p=f.root(),month=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Minsk',month:'2-digit',year:'numeric'}).formatToParts(new Date());
  const now=month.find(x=>x.type==='year').value+'-'+month.find(x=>x.type==='month').value;
- p.listeners.change({target:{dataset:{uxMonth:''},value:now}});
+ assert.match(p.innerHTML,new RegExp('data-ux-month max="'+now+'" value="'+now+'"'));
+ assert.equal(f.calls.length,1);
+ assert.match(p.innerHTML,/role="tooltip">Текущий месяц не завершён\./);
+ assert.match(p.innerHTML,/role="tooltip">Месяц ещё не закрыт<\/span>/);
+ assert.match(p.innerHTML,/<strong>Не считаем<\/strong>/);
+ assert.equal(f.calls.at(-1).args.p_end_month,now);
+ const old=new Date(Date.UTC(Number(now.slice(0,4)),Number(now.slice(5,7))-2,1)).toISOString().slice(0,7);
+ p.listeners.change({target:{dataset:{uxMonth:''},value:old}});
  await new Promise(resolve=>setTimeout(resolve,0));
- assert.match(p.innerHTML,/Текущий месяц не завершён/);
- assert.doesNotMatch(p.innerHTML,/ux-track prev/);
+ assert.equal(f.calls.at(-1).args.p_end_month,old);
+ assert.match(p.innerHTML,new RegExp('value="'+old+'"'));
 });
 test('failed authoritative sales query keeps empty state; no made-up KPI',async()=>{
  const f=fixture('boss',true);assert.equal(await f.api.open(f.ctx),false);
@@ -95,14 +106,14 @@ test('failed authoritative sales query keeps empty state; no made-up KPI',async(
 test('root selects new Home and hides legacy page, while detail paths and Commerce remain',()=>{
  assert.match(router,/if\(k==='home'&&window\.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.open/);
  assert.match(router,/unixHealthy&&window\.RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.open/);
- for(const section of ["'anp','🧾 АНП'","'si','🛠 Компенсация СИ'","'budget','💼 Бюджет'","'price','🧮 Расчёт цены'","'parser','🌐 Парсер 21vek'","'competitors','⚔️ Конкуренты 21vek'"]){
+ for(const section of ["'anp','🧾 АНП'","'si','🛠 Компенсация СИ'","'budget','💼 Бюджет'","'parser','🌐 Парсер 21vek'","'competitors','⚔️ Конкуренты 21vek'"]){
   assert.ok(router.includes(section),section);
  }
  assert.match(unix,/\[data-tr14="infographics"\]\{display:none!important\}/);
  assert.match(router,/RESANTA_TRIOVIST_UNIX_DIRECTOR_V1\?\.show/);
 });
 test('script cache version, loading order and unchanged parser integration',()=>{
- assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261104-unix4-fast-ui'));
+ assert.ok(index.includes('171-triovist-unix-director-v1.js?v=20261124-market-work1'));
  assert.ok(index.indexOf('171-triovist-unix-director-v1.js')<index.indexOf('34-triovist-root-v23614.js'));
  assert.ok(router.includes("RESANTA_TRIOVIST_21VEK_CONTROL_V236107?.refresh"));
  assert.ok(router.includes('RESANTA_TRIOVIST_COMPETITORS_V236218'));
@@ -118,21 +129,8 @@ test('new overview has an explicit fallback instead of hiding a broken workspace
 test('ordinary CRM employees are not subjected to Triovist authorization retry storms',()=>{
  assert.ok(router.includes('if(!local)return null;'));
  assert.ok(router.includes('nonTriovistProfileReady()'));
- assert.ok(router.includes('clearInterval(t);return'));
-});
-
-test('fast-first home shows sales before slow parser and fills source freshness later',async()=>{
- const f=fixture('boss',false,true);
- const open=f.api.open(f.ctx);
- let result;
- try{
-  result=await Promise.race([open,new Promise(resolve=>setTimeout(()=>resolve('slow-parser-blocked'),100))]);
-  assert.equal(result,true,'sales dashboard must not wait for the parser');
-  assert.match(f.root().innerHTML,/798[\s\u00a0]475,54/);
-  assert.match(f.root().innerHTML,/TOP: Нет даты/);
- }finally{f.releaseParser()}
- await new Promise(resolve=>setTimeout(resolve,0));
- assert.match(f.root().innerHTML,/TOP: 2026-11-03/);
+ assert.match(router,/if\(nonTriovistProfileReady\(\)\)\{finishBoot\(\);return\}/);
+ assert.match(router,/function finishBoot\(\)\{\s*clearInterval\(t\)/);
 });
 
 test('Triovist navigation observer is scoped, initialization never overlaps and title stays clean',()=>{
@@ -140,29 +138,23 @@ test('Triovist navigation observer is scoped, initialization never overlaps and 
  assert.doesNotMatch(router,/mo\.observe\(document\.documentElement/);
  assert.match(router,/if\(bootPending\)return;/);
  assert.match(router,/finally\{bootPending=false\}/);
- assert.match(router,/РЕСАНТА CRM · Триовист \(21vek\.by\)<\/b>/);
+ assert.match(router,/<b>Триовист \(21vek\.by\)<\/b>/);
  assert.doesNotMatch(router,/Триовист \(21vek\.by\) · Uni X Director<\/b>/);
 });
-test('same identity and month reuse in-flight sales RPC instead of racing',async()=>{
- const f=fixture('boss',false,true);
+test('the summary shares a sales request and does not load data for the hidden panels',async()=>{
+ const f=fixture();
  const [a,b]=await Promise.all([f.api.open(f.ctx),f.api.open(f.ctx)]);
- assert.equal(a,true);assert.equal(b,true);
- assert.equal(f.calls.filter(c=>c.name==='triovist_get_dashboard').length,1);
- assert.equal(f.calls.filter(c=>c.name==='triovist_partner_stock_state_v236207').length,1);
- f.releaseParser();
+ assert.equal(a,true);
+ assert.equal(b,true);
+ assert.deepEqual(f.calls.map(c=>c.name),['triovist_get_dashboard']);
 });
-test('auxiliary sources update independently and preserve source-scoped UI',async()=>{
- const f=fixture('manager',false,true);
- assert.equal(await f.api.open(f.ctx),true);
- await new Promise(resolve=>setTimeout(resolve,0));
- assert.match(f.root().innerHTML,/Рабочие: 1/);
- assert.match(f.root().innerHTML,/Нет даты/);
- f.releaseParser();
- await new Promise(resolve=>setTimeout(resolve,0));
- assert.match(f.root().innerHTML,/TOP: 2026-11-03/);
- assert.doesNotMatch(f.root().innerHTML,/Заказать садовую технику|235[\s\u00a0]863/);
- assert.match(unix,/function renderAux\(/);
- assert.doesNotMatch(unix,/Promise\.allSettled\(/);
+test('an absent manager plan keeps sales visible and does not produce a percentage',async()=>{
+ const f=fixture('boss',false,{...liveSales,period_plans:liveSales.period_plans.slice(0,1)});
+ await f.api.open(f.ctx);
+ const html=f.root().innerHTML;
+ assert.match(html,/План на месяц не задан<\/span>/);
+ assert.match(html,/Кришталь<\/th><td><strong>235[\s\u00a0]863,98 BYN<\/strong>.*ux-execution">—<\/strong>/);
+ assert.match(html,/<strong>Не задан<\/strong>/);
 });
 
 test('rolled-back action center never loads outside the Triovist page',()=>{
@@ -186,11 +178,52 @@ test('Triovist Work and Commerce navigation is anchored above all page content',
  assert.match(router,/shell\.insertAdjacentElement\('afterend',panel\)/);
 });
 
-test('Navigation fix loads a fresh router asset and preserves all original tabs',()=>{
- assert.match(index,/34-triovist-root-v23614\.js\?v=(?:20261105-uni-demand-nav2|20261106-shares360-1)/);
- for(const key of ['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','anp','si','budget','price']){
+test('Navigation removes the duplicate card tab and restores a saved card route in the parser',()=>{
+ assert.match(index,/34-triovist-root-v23614\.js\?v=20261124-commerce1/);
+ for(const key of ['home','sales','groups','stock','tasks','motivation','parser','competitors','anp','si','budget']){
   assert.ok(router.includes("["+String.fromCharCode(39)+key+String.fromCharCode(39)+","),"Missing navigation key "+key);
  }
+ assert.doesNotMatch(router,/\['cards','🧩 Карточки 21vek'\]/);
+ assert.match(router,/function remembered\(\)\{[^\n]*if\(k==='cards'\)return'parser'/);
+ assert.match(router,/async function activate\(k,save=false\)\{\s*if\(k==='cards'\)k='parser'/);
  assert.match(router,/shell\.onclick=e=>/);
  assert.match(router,/activate\(b\.dataset\.tr14,true\)/);
+});
+
+test('commerce retains three routes, and a stored price route falls back to the overview',()=>{
+ assert.match(router,/COMM=\['anp','si','budget'\]/);
+ assert.doesNotMatch(router,/Расчёт цены|triovist_price_search_v23612|data-tr14-zero/);
+ const remembered=router.slice(router.indexOf('function remembered('),router.indexOf('function shellComplete('));
+ const ctx={localStorage:{getItem:()=> 'price'},STORE:'route',ctx:{email:'fixture'},COMM:['anp','si','budget'],visibleWorkKeys:()=>['home','parser']};
+ vm.runInNewContext(remembered+';globalThis.remembered=remembered;',ctx);
+ assert.equal(ctx.remembered(),'home');
+});
+
+test('budget shows the balance and journal and keeps the live calculation, carryover and complete comment in help',async()=>{
+ const panel={innerHTML:''};
+ const data={month:'2026-11-01',is_leader:true,budget_exists:true,budget_is_carried:true,
+  budget_anchor_amount:50000,budget_anchor_month:'2026-08-01',budget_opening_balance:70000,budget_month_accrual:10000,
+  budget_expenses_month_total:30000,budget_expenses_previous_total:9000,budget_available_total:50000,budget_comment:'Первый абзац\nВторой <отчёт>',
+  budget_expense_rows:[{id:'entry',expense_date:'2026-11-01',amount:100,description:'Запись журнала'}]};
+ const start=router.indexOf('async function budget('),end=router.indexOf('async function saveExpense(',start);
+ const ctx={panel,commerceRequest:0,navEpoch:1,active:'budget',monthInput:()=>'',getMonth:async()=>data,
+  money:v=>v+' BYN',budgetDt:()=>'',esc:v=>String(v??'').replaceAll('<','&lt;').replaceAll('>','&gt;')};
+ vm.runInNewContext(router.slice(start,end)+';globalThis.budget=budget;',ctx);
+ await ctx.budget('2026-11');
+ const main=panel.innerHTML.replace(/<aside[\s\S]*?<\/aside>/,'');
+ const help=panel.innerHTML.match(/<aside[\s\S]*?<\/aside>/)?.[0];
+ assert.match(main,/Доступный остаток/);
+ assert.match(main,/Запись журнала/);
+ assert.match(main,/data-tr14-budget-expense-save/);
+ assert.doesNotMatch(main,/переносится автоматически|30000 BYN|Первый абзац/);
+ assert.match(help,/70000 BYN перенесено \+ 10000 BYN начислено \(1,5%\) − 30000 BYN списано/);
+ assert.match(help,/9000 BYN/);
+ assert.match(help,/Первый абзац\nВторой &lt;отчёт&gt;/);
+ assert.doesNotMatch(main,/data-tr14-budget-save/);
+ data.budget_is_carried=false;
+ data.budget_available_total=-500;
+ await ctx.budget('2026-11');
+ assert.match(panel.innerHTML,/Перерасход бюджета/);
+ assert.match(panel.innerHTML,/<details class="tr14-commerce-card tr14-budget-base">/);
+ assert.match(panel.innerHTML,/data-tr14-budget-save/);
 });

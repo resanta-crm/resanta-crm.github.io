@@ -4,7 +4,7 @@
  */
 (function(){
 'use strict';
-const V='v23.6.399-uni1',TTL=30000;
+const V='v23.6.414-position-reply',TTL=30000;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218?.version===V)return;
 if(window.RESANTA_TRIOVIST_COMPETITORS_V236218){try{delete window.RESANTA_TRIOVIST_COMPETITORS_V236218}catch(_){try{window.RESANTA_TRIOVIST_COMPETITORS_V236218=null}catch(__){}}}
 let flight=null,last=null,lastAt=0,
@@ -124,20 +124,25 @@ async function loadCompetitorPositionHistory(scope,product,force=false){
 function positionLabel(r){
  const w=r?.__positionWatch;
  if(w?.listing_state==='outside_top120')return '>120';
- const p=N(w?.position??r?.position);return p==null?'—':'#'+p;
+ const p=N(w?.position??r?.position);return p>0?'№'+p:'—';
 }
 function livePosition(r){
  const w=r?.__positionWatch;
  if(w?.listing_state==='outside_top120')return null;
- return N(w?.position??r?.position);
+ const p=N(w?.position??r?.position);return p>0?p:null;
 }
 function positionMovementText(r){
  const w=r?.__positionWatch;if(!w)return positionHistoryTextLegacy(r);
  const d=N(w.position_delta),m=String(w.movement||'');
- if(m==='up')return '↑ +'+Math.abs(d||0)+' к прошлой проверке';
- if(m==='down')return '↓ '+Math.abs(d||0)+' к прошлой проверке';
- if(m==='entered')return '↑ вернулся в TOP-120';
- if(m==='exited')return '↓ вышел из TOP-120';
+ const previous=w.previous_state==='outside_top120'?'Вне TOP-120':w.previous_position!=null?'№'+w.previous_position:'';
+ const current=w.listing_state==='outside_top120'?'Вне TOP-120':w.position!=null?'№'+w.position:'';
+ const transition=previous&&current?previous+' → '+current:'';
+ if(m==='up'||m==='down'){
+  const delta=(m==='up'?'↑ ':'↓ ')+Math.abs(d||0);
+  return transition?transition+' · '+delta:delta+' к прошлой проверке';
+ }
+ if(m==='entered')return transition||'↑ вернулся в TOP-120';
+ if(m==='exited')return transition||'↓ вышел из TOP-120';
  if(m==='same')return '→ без изменений';
  if(m==='outside')return '→ остаётся вне TOP-120';
  if(m==='new')return 'новая точка контроля';
@@ -2913,56 +2918,150 @@ function rowHtml(r,ownMap,days,priceDays){
    +'<div><small>Итог</small><b class="'+sc+'">'+sl+'</b><span>'+(priceMissing?'сравнение цены невозможно':'цена к конкуренту '+pct(r.price_delta_pct))+'</span>'+(r.data_incomplete?'<span class="warn">предварительно · часть характеристик не подтверждена</span>':'')+'</div>'))
   +'</div>'+(r.__detailLoaded?details(r,lp):lazyDetails(r))+'</div>';
 }
+const REVIEW_PROFILES={
+ humidifier:{value:humidifierValue,fields:[
+  ['device_type','Тип увлажнителя'],['area_m2','Площадь'],['output_mlh','Расход воды'],['tank_l','Объём бака']]},
+ rotary_hammer:{value:rotaryHammerValue,fields:[
+  ['chuck_type','Тип патрона'],['input_power_w','Мощность'],['impact_energy_j','Энергия удара'],['max_rpm','Макс. обороты']]},
+ construction_heat_gun:{value:constructionHeatGunValue,fields:[
+  ['input_power_w','Мощность'],['airflow_lmin','Воздушный поток'],['heating_time_sec','Время нагрева']]}
+};
+function reviewPosition(r){
+ const n=N(r.snapshotPosition);
+ return n>0?n:null;
+}
+function reviewOrder(rows){
+ return [...rows].sort((a,b)=>(reviewPosition(a)??Infinity)-(reviewPosition(b)??Infinity));
+}
+function reviewDecision(r){
+ return analysisState(r)==='confirmed_gap'
+  ?'Сверьте характеристики с нашей матрицей. Если подходящего SKU действительно нет, зафиксируйте модель и предложите её к рассмотрению.'
+  :'Уточните недостающие параметры по карточке 21vek или паспорту модели и приложите источник. Затем вернитесь к сравнению.';
+}
+function reviewModel(r){return String(r.model||r.brand||'Товар конкурента')}
+function reviewRankAndPrice(r){
+ return [reviewPosition(r)?'№'+reviewPosition(r)+' в выдаче на момент снимка':'Позиция в снимке неизвестна',
+  N(r.snapshotPrice)>0?money(r.snapshotPrice):'Цена в снимке неизвестна'].join(' · ');
+}
+function reviewFields(r){
+ const profile=REVIEW_PROFILES[r.profile_key];
+ if(!profile)return '';
+ const ours=r.our_specs||{},market=r.competitor_specs||{};
+ const cell=(data,key)=>data[key]==null||data[key]===''?'Уточнить':profile.value(key,data[key]);
+ return '<div class="tm224-conv-table"><table><thead><tr><th scope="col">Параметр</th><th scope="col">Конкурент</th>'+
+  (r.our_sku?'<th scope="col">Наш кандидат</th>':'')+'</tr></thead><tbody>'+
+  profile.fields.map(([key,label])=>'<tr><th scope="row">'+E(label)+'</th><td>'+cell(market,key)+'</td>'+
+   (r.our_sku?'<td>'+cell(ours,key)+'</td>':'')+'</tr>').join('')+'</tbody></table></div>';
+}
+function reviewEvidence(r,l){
+ const summary=reviewFields(r);
+ const full=details(r,l).replace('<summary>Характеристики и аргументы</summary>','<summary>Полное сравнение и источники</summary>');
+ return (summary||'<p class="tm224-note">Параметры для сверки доступны в полном сравнении.</p>')+
+  '<p>'+E(reviewDecision(r))+'</p>'+
+  '<div class="tm224-actions"><button type="button" class="tr14-refresh" data-tm224-copy>Скопировать для проверки</button>'+
+  '<span class="tm224-note" data-tm224-copy-status role="status"></span></div>'+full;
+}
+function reviewDetails(r,l,open){
+ return '<details class="tm224-details" data-tm224-review-detail'+(r.__detailLoaded?'':' data-tm224-detail')+
+  ' data-scope="'+E(r.scope_key)+'" data-product="'+E(r.product_key)+'"'+(open?' open':'')+'><summary>Что сверить по товару</summary>'+
+  '<div class="tm224-review-evidence" data-detail-body>'+(r.__detailLoaded?reviewEvidence(r,l):'<p role="status">Загружаю характеристики…</p>')+'</div></details>';
+}
+function priorityReviewRow(r,listing,open){
+ const l=r.our_sku?listing.get(listingKey(r.scope_key,r.our_sku)):null;
+ return '<article class="tm224-row tm224-review-row" data-tm224-product="'+E(r.product_key||'')+'">'+
+  '<div class="tm224-review-product"><div><b>'+E(reviewModel(r))+'</b>'+
+  '<div class="tm224-note">'+E(reviewRankAndPrice(r))+'</div>'+
+  '<div class="tm224-note">'+(r.our_sku?'Наш кандидат · '+E(r.our_sku)+' '+E(r.our_product_name||''):'Наш кандидат в снимке не указан')+'</div>'+
+  '</div>'+(r.product_url?'<a href="'+E(r.product_url)+'" target="_blank" rel="noopener">Карточка на 21vek</a>':'')+'</div>'+
+  reviewDetails(r,l,open)+'</article>';
+}
+function reviewText(r,subgroup){
+ return [
+  'Подгруппа · '+subgroup,
+  'Товар конкурента · '+reviewModel(r),
+  reviewRankAndPrice(r),
+  r.our_sku?'Наш кандидат · '+r.our_sku+' '+(r.our_product_name||''):'',
+  r.product_url||'',
+  reviewDecision(r)
+ ].filter(Boolean).join('\n');
+}
 function css(){
  if(document.getElementById('tm224-css'))return;
  const s=document.createElement('style');s.id='tm224-css';s.textContent=`
- .tm224-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}.tm224-note{font-size:11px;color:#64748b;line-height:1.45;max-width:900px}.tm224-actions{display:flex;gap:7px;flex-wrap:wrap}
- .tm224-kpi{display:grid;grid-template-columns:repeat(9,minmax(95px,1fr));gap:7px;margin:12px 0}.tm224-kpi>div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px}.tm224-kpi span{font-size:8px;color:#64748b;text-transform:uppercase;display:block}.tm224-kpi b{font-size:16px;display:block;margin-top:3px}
- .tm224-filters{display:grid;grid-template-columns:repeat(4,minmax(155px,1fr));gap:8px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;margin-bottom:10px}.tm224-filters select,.tm224-filters input{min-height:38px;border:1px solid #cbd5e1;border-radius:8px;padding:7px;background:#fff}
- .tm224-toggles{display:flex;gap:12px;flex-wrap:wrap;grid-column:1/-1;font-size:11px}.tm224-toggles label{display:flex;gap:5px;align-items:center}
+ .tm224-workspace{display:grid;gap:14px;color:var(--text);min-width:0}
+ .tm224-workspace *{box-sizing:border-box}
+ .tm224-head,.tm224-heading,.tm224-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .tm224-head{justify-content:space-between;gap:12px}
+ .tm224-heading{position:relative}
+ .tm224-heading h2{margin:0;font-size:25px;font-weight:700;line-height:1.2;letter-spacing:-.6px}
+ .tm224-heading h3,.tm225 h3{margin:0;font-size:16px;font-weight:650}
+ .tm224-note{font-size:14px;color:var(--sub);line-height:1.5}
+ .tm224-help{display:inline-flex;flex:none}
+ .tm224-help button{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;color:var(--a);background:var(--card);font:inherit;font-weight:700;cursor:pointer}
+ .tm224-tip{display:none;pointer-events:none;position:absolute;top:calc(100% + 5px);left:0;z-index:8;width:min(440px,calc(100vw - 64px));padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);font-size:14px;line-height:1.5;box-shadow:0 6px 18px #17212f1a}
+ .tm224-tip>span{display:block;margin:5px 0}
+ .tm224-help:is(:hover,:focus-within) .tm224-tip{display:block}
+ .tm224-workspace :is(button,summary,select,input):focus-visible{outline:2px solid var(--a);outline-offset:2px}
+ .tm224-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+ .tm224-kpi>div,.tm224-results,.tm224-disclosure,.tm225{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px;min-width:0}
+ .tm224-kpi span{font-size:14px;color:var(--sub);display:block}
+ .tm224-kpi b{font-size:clamp(20px,2vw,28px);display:block;margin-top:4px;font-variant-numeric:tabular-nums}
+ .tm224-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:8px}
+ .tm224-disclosure>.tm224-filters{margin-top:10px}
+ .tm224-filters :is(select,input:not([type=checkbox])){min-width:0;min-height:44px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--card);color:var(--text);font:inherit;font-size:14px}
+ .tm224-toggles{display:flex;align-items:center;gap:12px;flex-wrap:wrap;grid-column:1/-1;font-size:14px}
+ .tm224-toggles label{display:flex;gap:5px;align-items:center}
+ .tm224-disclosure>summary,.tm224-details summary{color:var(--a);cursor:pointer;font-size:15px;font-weight:650}
+ .tm224-results{scroll-margin-top:70px}
+ .tm224-results [data-tm224-rows]{min-width:0;margin-top:10px}
+ .tm224-review-note{margin:10px 0;background:var(--bg);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;line-height:1.45}
+ .tm224-review-note p{margin:5px 0}
+ .tm224-review-evidence{font-size:14px;line-height:1.45}
+ .tm224-review-evidence>textarea{display:block;width:100%;margin:8px 0}
+ .tm224-review-evidence .tm224-actions{margin-bottom:8px}
+ .tm224-review-evidence tr th[scope=row]{background:var(--card);font-weight:600}
+ .tm224-review-note[hidden]{display:none}
+ .tm224-workspace .tm224-review-back{margin-left:auto}
+ .tm224-review-back[hidden]{display:none!important}
+ .tm224-review-product{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;padding:11px}
+ .tm224-review-product a{font-size:14px;color:var(--a)}
+ .tm224-review-row{scroll-margin-top:70px}
+ .tm225>details>summary{cursor:pointer;color:var(--a);font-size:15px;font-weight:650}
+ [data-f-scope-hint]{grid-column:1/-1;font-size:13px;color:var(--sub)}
+ [data-f-scope-hint]:empty{display:none}
+ [data-tm224-active-filters]{color:var(--sub);font-size:13px}
  .tm224-scope{border:1px solid #dbe4ee;border-radius:12px;padding:10px;margin:10px 0;background:#fbfdff}.tm224-scope-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.tm224-scope-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tm224-scope-actions button{min-height:34px}.tm224-brands{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.tm224-brand{font-size:10px;padding:5px 7px;border-radius:99px;background:#fff;border:1px solid #dbe4ee}.tm224-brand b{color:#0c447c}
  .tm224-row{border:1px solid #e5e7eb;border-radius:12px;margin:9px 0;background:#fff;overflow:hidden}.tm224-row.gap{border-color:#fbbf24;background:#fffdf5}.tm224-row.incomplete{border-color:#fdba74;background:#fffaf5}.tm224-sku-group{border:1px solid #dbe4ee;border-radius:12px;margin:10px 0;background:#fff;overflow:hidden}.tm224-sku-group.gap{border-color:#fbbf24;background:#fffdf5}.tm224-sku-group.incomplete{border-color:#fdba74;background:#fffaf5}.tm224-sku-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:11px;background:#f8fafc;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}.tm224-sku-head b{font-size:13px}.tm224-sku-head span{display:block;font-size:10px;color:#64748b;margin-top:3px}.tm224-sku-list{padding:4px 11px}.tm224-sku-competitor{display:grid;grid-template-columns:70px minmax(180px,1.6fr) 120px 120px 140px minmax(150px,1fr);gap:8px;padding:9px 0;border-bottom:1px solid #eef2f7;align-items:start}.tm224-sku-competitor:last-child{border-bottom:0}.tm224-sku-competitor small{display:block;color:#64748b;font-size:8px;text-transform:uppercase}.tm224-sku-competitor b,.tm224-sku-competitor span{display:block;font-size:10px}.tm224-sku-competitor a{font-size:9px;color:#185fa5;text-decoration:none}.tm224-main{display:grid;grid-template-columns:85px minmax(220px,1.8fr) 150px minmax(220px,1.6fr) 165px 130px 145px;gap:9px;padding:11px;align-items:start}.tm224-main small{display:block;color:#64748b;font-size:8px;text-transform:uppercase;margin-bottom:3px}.tm224-main b{display:block;font-size:11px}.tm224-main span{display:block;font-size:9px;color:#64748b;margin-top:3px}.tm224-main a{font-size:10px;color:#185fa5;text-decoration:none;display:inline-block;margin-top:4px}.tm224-gapbox{grid-column:4/8}
- .tm224-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:7px 11px}.tm224-details summary{cursor:pointer;font-size:10px;font-weight:800;color:#0c447c}.tm224-fresh{font-weight:800!important}.tm224-fresh.fresh{color:#166534!important}.tm224-fresh.aging{color:#92400e!important}.tm224-fresh.stale{color:#b91c1c!important}.tm224-comp-pos-history{margin-top:8px;padding:8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;font-size:10px}.tm224-comp-pos-summary{margin:5px 0;color:#334155}.tm224-comp-pos-points{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}.tm224-comp-pos-points span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-compare,.tm224-ab{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}.tm224-compare>div,.tm224-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:8px}.tm224-compare span{display:block;font-size:10px;margin:2px 0}.tm224-ab{font-size:10px}.tm224-ab ul{margin:5px 0 0 16px}.tm224-conv-table{overflow:auto;margin-top:8px}.tm224-conv-table table{width:100%;border-collapse:collapse;background:#fff;font-size:10px}.tm224-conv-table th,.tm224-conv-table td{padding:7px;border:1px solid #e5e7eb;text-align:left;vertical-align:top}.tm224-conv-table th{background:#f8fafc}.tm224-ref{margin-top:7px;padding:7px 8px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:10px}.tm224-own-pos{margin-top:5px!important;color:#0c447c!important}.tm224-listing-history{margin-top:8px;padding:8px;border:1px solid #dbeafe;background:#f8fbff;border-radius:8px;font-size:10px}.tm224-listing-history>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.tm224-listing-history span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-own-summary{font-size:10px;margin-top:6px;color:#334155}.tm224-main-badge,.tm224-market-badge{display:inline-block!important;width:max-content;padding:2px 6px;border-radius:999px;font-size:8px!important;font-weight:800;margin-top:4px!important}.tm224-main-badge{background:#fef3c7;color:#92400e!important;border:1px solid #fcd34d}.tm224-market-badge{background:#f1f5f9;color:#475569!important;border:1px solid #cbd5e1}.tm224-market-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#f8fafc;border:1px solid #cbd5e1;font-size:10px;color:#475569}.tm224-rec{margin-top:8px;padding:8px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;font-size:10px}.tm224-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}.tm224-meta{font-size:9px;color:#64748b;margin-top:9px}
- .good{color:#166534!important}.warn{color:#92400e!important}.bad{color:#b91c1c!important}
- @media(max-width:1250px){.tm224-kpi{grid-template-columns:repeat(4,1fr)}.tm224-filters{grid-template-columns:repeat(3,minmax(150px,1fr))}.tm224-main{grid-template-columns:repeat(3,minmax(0,1fr))}.tm224-gapbox{grid-column:auto}}
- @media(max-width:760px){.tm224-kpi,.tm224-filters,.tm224-main,.tm224-compare,.tm224-ab,.tm224-sku-competitor{grid-template-columns:1fr}.tm224-toggles{grid-column:auto}}
-
-  /* Only competitor screen; native 173 briefing no longer hides old listing. */
-  #tr14-panel > .tx7{display:none!important}
-  #tr14-panel.tx7-hide-competitors [data-tm224-rows]{display:block!important}
-  .tm225{border:1px solid #d2dff1;border-radius:14px;background:linear-gradient(135deg,#eaf4ff,#fff);padding:15px;margin-bottom:12px;color:#17395c}
-  .tm225 *{box-sizing:border-box}.tm225-title{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-  .tm225 h3{font-size:17px;margin:0;color:#124875}.tm225 h4{font-size:13px;margin:0 0 9px}
-  .tm225-title small,.tm225-title p,.tm225-foot{font-size:10px;color:#64748b}
-  .tm225-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
-  .tm225-kpi{border:1px solid #dfe8f3;background:#fff;border-radius:10px;padding:11px;min-width:0}
-  .tm225-kpi small,.tm225-kpi span{display:block;font-size:10px;color:#64748b}
-  .tm225-kpi strong{display:block;margin:5px 0;font-size:19px;overflow-wrap:anywhere}
-  .tm225-body{display:grid;grid-template-columns:minmax(0,2fr) minmax(210px,1fr);gap:10px}
-  .tm225-item,.tm225-body aside{border:1px solid #dfe8f3;background:white;border-radius:9px;padding:10px;margin:6px 0}
-  .tm225-item.bad{border-left:3px solid #d35a5a}.tm225-item.warn{border-left:3px solid #daa044}
-  .tm225-item b{font-size:12px;color:#183c62}.tm225-item p{font-size:11px;margin:4px 0;line-height:1.4;color:#486079}
-  .tm225-item small,.tm225-body aside p{font-size:10px;color:#64748b}
-  .tm225-item button{display:inline-block;margin-left:8px;border:1px solid #bfd8f1;border-radius:8px;padding:6px 10px;background:#f3f8ff;color:#174f84;cursor:pointer}
-  .tm225-overview{grid-template-columns:minmax(0,1.5fr) minmax(245px,.9fr);align-items:start}
-  .tm225-overview .tm225-item{padding:10px 12px;margin:6px 0}
-  .tm225-overview .tm225-item-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .tm225-overview .tm225-item-top strong{font-size:18px;color:#183c62}
-  .tm225-item-kind{font-size:10px;font-weight:750;color:#617a93;margin-top:3px}
-  .tm225-overview .tm225-item small{display:block;line-height:1.5;margin-top:4px}
-  .tm225-overview .tm225-item button{margin:9px 0 0;padding:8px 12px;font-size:11px;font-weight:750}
-  .tm225-overview-note{font-size:12px;line-height:1.5;padding:11px 13px;background:#fff;border:1px solid #dce6f2;border-radius:10px;margin:3px 0 11px}
-  .tm225-breakdown{margin:11px 0}.tm225-breakdown div{display:flex;justify-content:space-between;align-items:start;gap:10px;font-size:12px}
-  .tm225-breakdown div span{max-width:85%;overflow-wrap:anywhere}.tm225-breakdown div b{font-size:12px}
-  .tm225-breakdown>i{display:block;height:9px;background:#ebf2fa;border-radius:999px;overflow:hidden;margin-top:5px}
-  .tm225-breakdown>i>span{display:block;height:100%;background:#d56b60;border-radius:999px}
-  .tm225-overview-help,.tm225-empty{margin-top:15px;font-size:11px;line-height:1.55;padding:12px;background:#f2f7ff;border-radius:9px;color:#365572}
-  @media(max-width:900px){.tm225-overview{grid-template-columns:1fr}}
-  .tm225-bar{margin:14px 0}.tm225-bar span{display:block;font-size:11px;margin-bottom:4px}
-  .tm225-bar i{height:11px;border-radius:5px;background:#209a79;display:block}.tm225-bar i.down{background:#d36969}
-  [data-f-scope-hint]{font-size:10px;color:#64748b}
-  @media(max-width:900px){.tm225-body{grid-template-columns:1fr}.tm225-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media(max-width:650px){.tm225-kpis{grid-template-columns:1fr}}
+ .tm224-details{border-top:1px solid #e5e7eb;background:#fbfdff;padding:7px 11px}.tm224-details summary{cursor:pointer;font-size:10px;font-weight:800;color:#0c447c}.tm224-fresh{font-weight:800!important}.tm224-fresh.fresh{color:#166534!important}.tm224-fresh.aging{color:#92400e!important}.tm224-fresh.stale{color:#b91c1c!important}.tm224-comp-pos-history{margin-top:8px;padding:8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;font-size:10px}.tm224-comp-pos-summary{margin:5px 0;color:#334155}.tm224-comp-pos-points{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}.tm224-comp-pos-points span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-compare,.tm224-ab{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}.tm224-compare>div,.tm224-ab>div{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:8px}.tm224-compare span{display:block;font-size:10px;margin:2px 0}.tm224-ab{font-size:10px}.tm224-ab ul{margin:5px 0 0 16px}.tm224-conv-table{overflow:auto;margin-top:8px}.tm224-conv-table table{width:100%;border-collapse:collapse;background:#fff;font-size:10px}.tm224-conv-table th,.tm224-conv-table td{padding:7px;border:1px solid #e5e7eb;text-align:left;vertical-align:top}.tm224-conv-table th{background:#f8fafc}.tm224-ref{margin-top:7px;padding:7px 8px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:10px}.tm224-own-pos{margin-top:5px!important;color:#0c447c!important}.tm224-listing-history{margin-top:8px;padding:8px;border:1px solid #dbeafe;background:#f8fbff;border-radius:8px;font-size:10px}.tm224-listing-history>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.tm224-listing-history span{padding:4px 6px;border:1px solid #dbe4ee;border-radius:999px;background:#fff}.tm224-own-summary{font-size:10px;margin-top:6px;color:#334155}.tm224-main-badge,.tm224-market-badge{display:inline-block!important;width:max-content;padding:2px 6px;border-radius:999px;font-size:8px!important;font-weight:800;margin-top:4px!important}.tm224-main-badge{background:#fef3c7;color:#92400e!important;border:1px solid #fcd34d}.tm224-market-badge{background:#f1f5f9;color:#475569!important;border:1px solid #cbd5e1}.tm224-market-note{margin-top:7px;padding:7px 8px;border-radius:8px;background:#f8fafc;border:1px solid #cbd5e1;font-size:10px;color:#475569}.tm224-rec{margin-top:8px;padding:8px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;font-size:10px}.tm224-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;text-align:center}
+ .tm224-workspace .good{color:var(--g)!important}
+ .tm224-workspace .warn{color:var(--am)!important}
+ .tm224-workspace .bad{color:var(--r)!important}
+ .tm224-workspace :is(.tm224-scope,.tm224-sku-head,.tm224-details,.tm224-market-note){background:var(--bg);border-color:var(--border)}
+ .tm224-workspace :is(.tm224-main,.tm224-sku-competitor)>div{min-width:0;overflow-wrap:anywhere}
+ .tm224-workspace :is(.tm224-main,.tm224-sku-competitor) small{font-size:12px;text-transform:none;color:var(--sub)}
+ .tm224-workspace :is(.tm224-main,.tm224-sku-competitor) b,.tm224-workspace .tm224-sku-head b{font-size:15px}
+ .tm224-workspace :is(.tm224-main,.tm224-sku-competitor) span,.tm224-workspace .tm224-sku-head span{font-size:13px;color:var(--sub)}
+ .tm224-workspace :is(.tm224-main,.tm224-sku-competitor) a{font-size:13px;color:var(--a)}
+ .tm224-workspace :is(.tm224-brand,.tm224-own-summary,.tm224-comp-pos-history,.tm224-compare span,.tm224-ab,.tm224-conv-table table,.tm224-ref,.tm224-rec,.tm224-listing-history,.tm224-market-note){font-size:13px}
+ .tm224-workspace .tm224-details summary{font-size:14px;color:var(--a);font-weight:650}
+ .tm224-workspace .tm224-main-badge,.tm224-workspace .tm224-market-badge{font-size:11px!important;max-width:100%}
+ .tm224-main{grid-template-columns:minmax(110px,.9fr) minmax(150px,1.2fr) minmax(125px,1fr) minmax(170px,1.3fr) repeat(3,minmax(110px,1fr))}
+ .tm224-sku-competitor{grid-template-columns:minmax(105px,.8fr) minmax(150px,1.3fr) repeat(4,minmax(120px,1fr))}
+ .tm224-workspace :is(.tm224-empty,.tm224-brand){border-color:var(--border);color:var(--sub)}
+ .tm224-workspace .tm224-empty{border-style:solid;background:var(--bg)}
+ .tm224-workspace .tr14-refresh,.tm225-item button{border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--a);padding:8px 12px;min-height:44px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+ .tm224-workspace button:not(:disabled):hover{background:var(--bg)}
+ .tm225[hidden]{display:none}
+ .tm225-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--border);font-size:14px}
+ .tm225-item:first-of-type{margin-top:8px}
+ .tm225-item b{color:var(--text)}
+ .tm225-item p{color:var(--sub);margin:3px 0;line-height:1.45}
+ @media(max-width:1200px){.tm224-main,.tm224-sku-competitor{grid-template-columns:repeat(3,minmax(0,1fr))}.tm224-gapbox{grid-column:auto}}
+ @media(max-width:760px){.tm224-kpi,.tm224-main,.tm224-sku-competitor{grid-template-columns:repeat(2,minmax(0,1fr))}.tm224-compare,.tm224-ab{grid-template-columns:1fr}}
+ @media(max-width:490px){.tm224-filters,.tm225-item{grid-template-columns:1fr}.tm225-item button{justify-self:start}.tm224-filters :is(select,input:not([type=checkbox])){font-size:16px}}
+ /* The existing native summary must not cover the market listing. */
+ #tr14-panel > .tx7{display:none!important}
+ #tr14-panel.tx7-hide-competitors [data-tm224-rows]{display:block!important}
  `;document.head.appendChild(s);
 }
 function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
@@ -2972,8 +3071,8 @@ function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
  const subtitle=isGap?'Матрица проверена, лучший кандидат ниже порога':isIncomplete?'Данных недостаточно для подтверждения аналога или пробела':(first.our_product_name||lp?.product_name||'');
  const items=rows.map(r=>{
    const pt=competitorPriceTrend(r,priceDays),[asl,asc]=analysisStateLabel(r),[sl,sc]=rowStatus(r);
-   return '<div class="tm224-sku-competitor">'
-    +'<div><small>Позиция</small><b>'+E(positionLabel(r))+'</b></div>'
+   return '<div class="tm224-sku-competitor" data-tm224-product="'+E(r.product_key||'')+'">'
+    +'<div><small>Позиция</small><b>'+E(positionLabel(r))+'</b><span>'+E(positionMovementText(r))+'</span></div>'
     +'<div><small>Конкурент</small><b>'+E(r.brand||'—')+' '+E(r.model||'')+'</b>'+(r.product_url?'<a target="_blank" rel="noopener" href="'+E(r.product_url)+'">21vek ↗</a>':'')+'</div>'
     +'<div><small>Цена</small><b>'+money(r.competitor_price)+'</b><span class="'+E(pt.className)+'">'+E(pt.text)+'</span></div>'
     +'<div><small>Сопоставимость</small><b>'+E(N(r.similarity_score??r.best_similarity)==null?'—':N(r.similarity_score??r.best_similarity).toFixed(1).replace('.',',')+'%')+'</b></div>'
@@ -2988,74 +3087,24 @@ function ourSkuCardHtml(key,rows,ownMap,days,priceDays){
 
 /* Uni AI / Uni X: read-only facts sourced from the current scope and existing RPC.
    No extra parser requests, no task creation, no automatic cause/discount claims. */
-function uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays){
+function marketHelp(id,label,lines){
+ return '<span class="tm224-help"><button type="button" aria-label="'+E(label)+'" aria-describedby="'+id+'">*</button>'+
+  '<span class="tm224-tip" id="'+id+'" role="tooltip">'+lines.filter(Boolean).map(line=>'<span>'+E(line)+'</span>').join('')+'</span></span>';
+}
+function marketCount(v){return v==null||v===''||N(v)==null?'—':N(v).toLocaleString('ru-RU')}
+function marketMetrics(s){
+ return [
+  ['Товары конкурентов',s.products,''],['Аналог найден',s.analog_found,'good'],
+  ['Подтверждённые пробелы',s.confirmed_gaps??s.gaps,'bad'],['Недостаточно данных',s.insufficient_data,'warn']
+ ].map(([label,value,tone])=>'<div><span>'+E(label)+'</span><b class="'+tone+'">'+marketCount(value)+'</b></div>').join('');
+}
+function uniCompetitorBrief(panel,d,scope,rows,listing,priceDays,review){
  const node=panel.querySelector('[data-tm225]');if(!node)return;
- const scopes=Array.isArray(d.scopes)?d.scopes:[],meta=scopes.find(x=>String(x.scope_key||'')===scope)||{},stats=scope?meta:(d.summary||{});
- const fmt=v=>v==null||v===''||N(v)==null?'—':N(v).toLocaleString('ru-RU');
- // All-category snapshot contains aggregate counts only. It has no per-SKU position history:
- // show actionable aggregate evidence, not a fake empty movement chart.
- if(!scope){
-  const groups=scopes.filter(x=>x&&String(x.scope_key||''));
-  const gaps=x=>Math.max(0,N(x?.confirmed_gaps??x?.gaps)||0);
-  const missing=x=>Math.max(0,N(x?.insufficient_data)||0);
-  const quantity=x=>Math.max(0,N(x?.competitors)||0);
-  const topGaps=[...groups].filter(x=>gaps(x)>0).sort((a,b)=>gaps(b)-gaps(a)||String(a.subgroup||'').localeCompare(String(b.subgroup||''),'ru'));
-  const topMissing=[...groups].filter(x=>missing(x)>0).sort((a,b)=>missing(b)-missing(a)||String(a.subgroup||'').localeCompare(String(b.subgroup||''),'ru'));
-  const seen=new Set(),picks=[];
-  const take=(x,kind)=>{
-   const key=String(x.scope_key||'');
-   if(!key||seen.has(key)||picks.length>=5)return;
-   seen.add(key);picks.push({x,kind});
-  };
-  topGaps.slice(0,3).forEach(x=>take(x,'gap'));
-  topMissing.forEach(x=>{if(picks.filter(y=>y.kind==='missing').length<2)take(x,'missing')});
-  topGaps.forEach(x=>take(x,'gap'));
-  topMissing.forEach(x=>take(x,'missing'));
-  const blocks=picks.map(({x,kind},i)=>{
-   const count=kind==='gap'?gaps(x):missing(x);
-   const title=String(x.subgroup||'Подгруппа');
-   const share=quantity(x)?Math.round(100*count/quantity(x)):null;
-   const type=kind==='gap'?'Подтверждённые пробелы':'Неполное сопоставление';
-   const why=kind==='gap'
-    ?'По текущей проверке '+fmt(count)+' из '+fmt(quantity(x))+' товаров имеют статус «подтверждённый пробел».'
-    :'По '+fmt(count)+' из '+fmt(quantity(x))+' товаров ещё нельзя подтвердить наличие или отсутствие нашего аналога.';
-   const action=kind==='gap'
-    ?'Проверить эти товары, сопоставимые SKU и ассортимент. Не считать пробел автоматически потерянной продажей.'
-    :'Уточнить характеристики и источник, затем повторить сопоставление. Не записывать это в подтверждённые пробелы.';
-   const filter=kind==='gap'?'confirmed_gap':'insufficient_data';
-   return '<article class="tm225-item '+(kind==='gap'?'bad':'warn')+'"><div class="tm225-item-top"><b>'+E(i+1)+'. '+E(title)+'</b><strong>'+E(fmt(count))+'</strong></div>'+
-     '<div class="tm225-item-kind">'+E(type)+(share===null?'':' · '+E(share)+'% товаров подгруппы')+'</div>'+
-     '<p>'+E(why)+'</p><small><b>Решение:</b> '+E(action)+'</small>'+
-     '<button type="button" data-tm225-scope="'+E(x.scope_key)+'" data-tm225-filter="'+E(filter)+'">Показать '+E(fmt(count))+' '+(kind==='gap'?'пробелов':'товаров')+' ↗</button></article>';
-  }).join('');
-  const max=Math.max(1,...topGaps.slice(0,5).map(gaps));
-  const bars=topGaps.slice(0,5).map(x=>
-   '<div class="tm225-breakdown"><div><span>'+E(x.subgroup||'Подгруппа')+'</span><b>'+E(fmt(gaps(x)))+'</b></div>'+
-   '<i><span style="width:'+Math.round(100*gaps(x)/max)+'%"></span></i></div>').join('');
-  const totals=d.summary||{};
-  const affected=topGaps.length;
-  const kpi=(name,value,desc)=>'<div class="tm225-kpi"><small>'+E(name)+'</small><strong>'+E(value)+'</strong><span>'+E(desc)+'</span></div>';
-  node.innerHTML='<div class="tm225-title"><div><h3>Конкуренты 21vek · Что делать сегодня</h3>'+
-   '<p>Приоритеты рассчитаны по подтверждённым данным. Нажми на проблему — откроются соответствующие товары.</p></div>'+
-   '<small>Снимок рынка: '+E(dt(d.last_run?.finished_at||d.last_run?.started_at))+'</small></div>'+
-   '<div class="tm225-kpis">'+
-   kpi('Товаров конкурентов',fmt(totals.products),'Последний снимок рынка')+
-   kpi('Подтверждённых пробелов',fmt(totals.confirmed_gaps??totals.gaps),'Проверить ассортимент')+
-   kpi('Недостаточно данных',fmt(totals.insufficient_data),'Сначала уточнить сопоставимость')+
-   kpi('Подгрупп с пробелами',fmt(affected),'Из '+fmt(groups.length)+' в снимке')+'</div>'+
-   '<div class="tm225-overview-note"><b>Главное:</b> подтверждённые пробелы и неполные данные — разные задачи. Нельзя считать '+E(fmt(totals.insufficient_data))+' непроверенных позиций доказанными потерями продаж.</div>'+
-   '<div class="tm225-body tm225-overview"><section><h4>С чего начать · '+E(picks.length)+' приоритетов</h4>'+
-   (blocks||'<div class="tm225-empty">В последнем снимке нет подтверждённых пробелов или товаров с недостаточными данными. Проверка закончена.</div>')+
-   '</section><aside><h4>Где больше пробелов</h4>'+
-   (bars||'<div class="tm225-empty">Подтверждённых пробелов пока нет.</div>')+
-   '<p>Сравнение подгрупп в одном снимке, а не динамика во времени. История позиций появится после выбора подгруппы, если есть сопоставимые наблюдения.</p>'+
-   '<div class="tm225-overview-help"><b>Как работать:</b> нажми «Показать товары», проверь конкретные строки, цену, наличие и наш аналог. Если данные неполные — сначала собери подтверждения.</div></aside></div>'+
-   '<div class="tm225-foot">Данные и цифры взяты из действующего снимка 21vek. Рекомендации не меняют цены, планы, задачи и ассортимент автоматически. Падение позиции не доказывает причину.</div>';
-  return;
- }
+ const wasExpanded=node.querySelector?.('details')?.open;
+ if(!scope||review){node.hidden=true;node.innerHTML='';return}
  const cards=[];
- const add=(title,fact,action,key,product,tone)=>{if(cards.length<5)cards.push({title,fact,action,key,product,tone})};
- if(scope&&!d.__scopeLoading){
+ const add=(title,fact,action,key,product,tone)=>{if(cards.length<3)cards.push({title,fact,action,key,product,tone})};
+ if(!d.__scopeLoading){
   const used=new Set(),ownMap=listingRowsMap(listing);
   const addRow=(r,title,fact,action,tone)=>{
    const id=String(r.product_key||'');if(used.has(id))return;used.add(id);
@@ -3067,11 +3116,11 @@ function uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays){
     addRow(r,'Наш SKU '+r.our_sku+' · снижение в выдаче','Текущая позиция: '+listingPos(l)+'. '+listingTrendText(l,N(listing?.period_days)||7)+'.','Проверить карточку, цену, остаток и сравнить с конкурентом.','bad');
    if(cards.length>=2)break;
   }
-  for(const r of rows.filter(x=>['up','entered'].includes(x.__positionWatch?.movement)).sort((a,b)=>Math.abs(N(b.__positionWatch?.position_delta)||0)-Math.abs(N(a.__positionWatch?.position_delta)||0))){
-   addRow(r,'Конкурент растёт: '+(r.brand||'')+' '+(r.model||''),'Позиция '+positionLabel(r)+' · '+positionMovementText(r)+' · '+dt(r.__positionWatch?.observed_at)+'.','Проверить историю позиции и сопоставимый SKU.','warn');
+  for(const r of rows.filter(x=>x.__positionWatch?.freshness==='fresh'&&['up','entered'].includes(x.__positionWatch.movement)).sort((a,b)=>Math.abs(N(b.__positionWatch?.position_delta)||0)-Math.abs(N(a.__positionWatch?.position_delta)||0))){
+   addRow(r,'Конкурент растёт: '+(r.brand||'')+' '+(r.model||''),'Позиция '+positionMovementText(r)+' · '+dt(r.__positionWatch?.observed_at)+'.','Проверить историю позиции и сопоставимый SKU.','warn');
   }
   for(const r of rows.filter(x=>competitorPriceTrend(x,priceDays).kind==='down')){
-   addRow(r,'Снижение цены: '+(r.brand||'')+' '+(r.model||''),competitorPriceTrend(r,priceDays).text+'. Само по себе не подтверждает акцию.','Проверить условия на странице 21vek.','warn');
+   addRow(r,r.model||r.brand||'Товар конкурента',money(competitorPriceTrend(r,priceDays).past)+' → '+money(r.competitor_price)+' · '+pct(competitorPriceTrend(r,priceDays).pct)+' за '+priceDays+' дн.','Сверить текущую цену и условия на 21vek.','warn');
   }
   for(const r of rows.filter(x=>analysisState(x)==='confirmed_gap')){
    addRow(r,'Подтверждённый пробел: '+(r.brand||'')+' '+(r.model||''),'Статус из действующего алгоритма сопоставимости.','Проверить ассортимент и характеристики.','bad');
@@ -3079,21 +3128,11 @@ function uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays){
   for(const r of rows.filter(x=>analysisState(x)==='insufficient_data')){
    addRow(r,'Недостаточно данных: '+(r.brand||'')+' '+(r.model||''),'Без подтверждённых характеристик аналог или пробел не определён.','Сверить характеристики и источник.','warn');
   }
- }else{
-  for(const x of [...scopes].sort((a,b)=>(N(b.confirmed_gaps??b.gaps)||0)-(N(a.confirmed_gaps??a.gaps)||0)||(N(b.insufficient_data)||0)-(N(a.insufficient_data)||0)).slice(0,5))
-   add(x.subgroup||'Подгруппа','Товаров: '+fmt(x.competitors)+' · пробелов: '+fmt(x.confirmed_gaps??x.gaps)+' · недостаточно данных: '+fmt(x.insufficient_data)+'.','Открыть подгруппу и проверить её листинг.',String(x.scope_key||''),'','');
  }
- while(cards.length<5)add('Ожидаем подтверждённые события','Недостаточно данных для следующего вывода.','Проверить свежесть снимков.','','','');
- const known=rows.filter(r=>r.__positionWatch),up=known.filter(r=>['up','entered'].includes(r.__positionWatch.movement)).length,down=known.filter(r=>['down','exited'].includes(r.__positionWatch.movement)).length,total=up+down;
- const kpi=(name,value,desc)=>'<div class="tm225-kpi"><small>'+E(name)+'</small><strong>'+E(value)+'</strong><span>'+E(desc)+'</span></div>';
- node.innerHTML='<div class="tm225-title"><div><h3>✦ Uni AI + Uni X · Конкуренты 21vek</h3><p>'+E(scope?(meta.subgroup||'Подгруппа'):'Все группы товаров')+' · подтверждённые данные, 5 приоритетов</p></div><small>Полный снимок: '+E(dt(d.last_run?.finished_at||d.last_run?.started_at))+'</small></div>'
-  +'<div class="tm225-kpis">'+kpi('Товаров конкурентов',fmt(scope?(meta.competitors??base.length):stats.products),'Рыночный снимок')
-  +kpi('Подтверждённых пробелов',fmt(stats.confirmed_gaps??stats.gaps),'Не смешивать с неполными данными')
-  +kpi('Недостаточно данных',fmt(stats.insufficient_data),'Требуется проверка сопоставимости')
-  +kpi('Движение позиций',scope?(known.length?'↑ '+fmt(up)+' / ↓ '+fmt(down):'—'):'По выбранной подгруппе','Последний доступный контроль')+'</div>'
-  +'<div class="tm225-body"><section><h4>ИИ · 5 проверяемых приоритетов</h4>'+cards.map((c,i)=>'<article class="tm225-item '+E(c.tone||'')+'"><b>'+(i+1)+'. '+E(c.title)+'</b><p>'+E(c.fact)+'</p><small>Что сделать: '+E(c.action)+'</small>'+(c.key?'<button type="button" data-tm225-scope="'+E(c.key)+'" data-tm225-product="'+E(c.product||'')+'">Открыть ↗</button>':'')+'</article>').join('')+'</section>'
-  +'<aside><h4>Динамика конкурентов</h4><div class="tm225-bar"><span>Рост '+fmt(known.length?up:null)+'</span><i style="width:'+(total?Math.round(100*up/total):0)+'%"></i></div><div class="tm225-bar"><span>Падение '+fmt(known.length?down:null)+'</span><i class="down" style="width:'+(total?Math.round(100*down/total):0)+'%"></i></div><p>Последняя проверка позиций, не недельная динамика. Недельные изменения и цены — в строках листинга ниже.</p></aside></div>'
-  +'<div class="tm225-foot">Цена, наличие и позиции имеют собственные даты. Падение позиции не доказывает причину; снижение цены не доказывает акцию. Брифинг не создаёт поручения и не изменяет данные.</div>';
+ node.hidden=!cards.length;
+ node.innerHTML=cards.length?'<details'+(wasExpanded?' open':'')+'><summary>Изменения в подгруппе</summary>'+cards.map(c=>
+  '<article class="tm225-item '+E(c.tone||'')+'"><div><b>'+E(c.title)+'</b><p>'+E(c.fact)+'</p><p>'+E(c.action)+'</p></div>'+
+  '<button type="button" data-tm225-scope="'+E(c.key)+'" data-tm225-product="'+E(c.product)+'">К товару</button></article>').join('')+'</details>':'';
 }
 
 function scopeSearchNorm(v){return String(v||'').toLowerCase().replace(/ё/g,'е').replace(/[^0-9a-zа-я]+/g,' ').trim()}
@@ -3176,20 +3215,41 @@ function applyFilters(panel,d,listing){
   }
   return true;
  });
- panel.querySelectorAll('[data-scope-card]').forEach(x=>{const key=x.getAttribute('data-scope-card'),meta=(d.scopes||[]).find(z=>String(z.scope_key)===key),group=panel.querySelector('[data-f-category]')?.value||'',query=panel.querySelector('[data-f-scope-search]')?.value||'';x.style.display=(scope?key===scope:(!group||meta?.category===group)&&(!query||scopeMatchesSearch(meta,query)))?'':'none'});
+ const category=panel.querySelector('[data-f-category]')?.value||'',query=panel.querySelector('[data-f-scope-search]')?.value||'';
+ const scopes=Array.isArray(d.scopes)?d.scopes:[];
+ const visibleScopes=scopes.filter(meta=>scope?String(meta.scope_key)===scope:(!category||meta.category===category)&&(!query||scopeMatchesSearch(meta,query)));
+ const visibleKeys=new Set(visibleScopes.map(meta=>String(meta.scope_key)));
+ panel.querySelectorAll('[data-scope-card]').forEach(x=>x.hidden=!visibleKeys.has(x.getAttribute('data-scope-card')));
+ const review=scope&&view==='market'&&(analysis==='confirmed_gap'||analysis==='insufficient_data');
+ const reviewRows=review?reviewOrder(rows):rows;
+ const results=panel.querySelector('.tm224-results');
+ results.hidden=!scope;
+ const note=panel.querySelector('[data-tm224-review-note]');
+ const activeScope=scopes.find(meta=>String(meta.scope_key)===scope);
+ panel.querySelector('[data-tm224-result-name]').textContent=activeScope?.subgroup||'Позиции и сравнение';
+ note.hidden=!review;
+ panel.querySelector('[data-tm224-priorities]').hidden=!review;
+ if(review)note.innerHTML='<strong>'+(analysis==='confirmed_gap'?'Проверка пробелов':'Сверка характеристик')+'</strong><p>'+
+  (analysis==='confirmed_gap'
+   ?'Сверьте модель конкурента с нашей матрицей. Если подходящий SKU есть, запишите артикул. Если пробел подтвердится, предложите модель к рассмотрению.'
+   :'Проверьте недостающие параметры по карточке 21vek или паспорту модели. Запишите значения и ссылку на источник.')+
+  '</p><p>Начните с первых пяти по месту в выдаче. Это порядок проверки по снимку 21vek.</p>';
  const holder=panel.querySelector('[data-tm224-rows]');
- uniCompetitorBrief(panel,d,scope,rows,base,listing,priceDays);
+ const countLine=panel.querySelector('#tm224-results-tip > span');
+ const activeFilters=panel.querySelector('[data-tm224-active-filters]');
+ const numberOfFilters=[brand,status,sku,competitorKind!=='all',trend,days!==7,priceTrend,priceDays!==7,top10,gaps,mrc].filter(Boolean).length;
+ activeFilters.textContent=numberOfFilters?' ('+numberOfFilters+')':'';
+ uniCompetitorBrief(panel,d,scope,rows,listing,priceDays,review);
  if(!scope){
-   holder.innerHTML='<div class="tm224-empty"><b>Выберите подгруппу.</b><br>Карточки конкурентов, наш листинг и история загрузятся только для выбранной категории — без тяжёлой загрузки всего рынка.</div>';
-   panel.querySelector('[data-tm224-count]').textContent='Выберите подгруппу';
+   holder.innerHTML='';
    return;
  }
  if(d.__scopeLoading===scope){
    holder.innerHTML='<div class="tr14-info">Загружаю выбранную подгруппу…</div>';
-   panel.querySelector('[data-tm224-count]').textContent='Загрузка…';
+   countLine.textContent='Загрузка…';
    return;
  }
- const limit=Math.max(60,Number(panel.dataset.tm224Limit||120)||120),visible=rows.slice(0,limit);
+ const step=review?5:120,limit=Number(panel.dataset.tm224Limit)||step,visible=reviewRows.slice(0,limit);
  if(view==='ours'){
    const groups=new Map();
    for(const r of rows){
@@ -3199,12 +3259,13 @@ function applyFilters(panel,d,listing){
    const rank=k=>k==='__gap__'?2:k==='__incomplete__'?1:0;
    const ordered=[...groups.entries()].sort((a,b)=>rank(a[0])-rank(b[0])||String(a[0]).localeCompare(String(b[0]),'ru',{numeric:true}));
    holder.innerHTML=ordered.length?ordered.map(([k,x])=>ourSkuCardHtml(k,x,ownMap,days,priceDays)).join(''):'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
-   panel.querySelector('[data-tm224-count]').textContent='Наших групп '+ordered.length+' · конкурентов '+rows.length+' · в подгруппе '+base.length;
+   countLine.textContent='Наших групп '+ordered.length+' · конкурентов '+rows.length+' · в подгруппе '+base.length;
  }else{
+   const expanded=new Set([...holder.querySelectorAll('[data-tm224-review-detail][open]')].map(el=>detailKey(el.dataset.scope,el.dataset.product)));
    holder.innerHTML=rows.length
-    ?visible.map(r=>rowHtml(r,ownMap,days,priceDays)).join('')+(rows.length>visible.length?'<div class="tm224-more"><button type="button" class="tr14-refresh" data-tm224-more>Показать ещё '+Math.min(120,rows.length-visible.length)+' из '+(rows.length-visible.length)+'</button></div>':'')
+    ?visible.map(r=>review?priorityReviewRow(r,ownMap,expanded.has(detailKey(r.scope_key,r.product_key))):rowHtml(r,ownMap,days,priceDays)).join('')+(rows.length>visible.length?'<div class="tm224-more"><button type="button" class="tr14-refresh" data-tm224-more="'+step+'">Показать ещё '+Math.min(step,rows.length-visible.length)+' из '+(rows.length-visible.length)+'</button></div>':'')
     :'<div class="tm224-empty">По выбранным фильтрам ничего нет.</div>';
-   panel.querySelector('[data-tm224-count]').textContent='Показано '+visible.length+' из '+rows.length+' · в подгруппе '+base.length;
+   countLine.textContent='Показано '+visible.length+' из '+rows.length+' · в подгруппе '+base.length;
  }
 }
 function loadXlsx(){
@@ -3236,15 +3297,29 @@ function render(panel,d,listing){
  const s=d.summary||{},scopes=Array.isArray(d.scopes)?d.scopes:[],rows=Array.isArray(d.rows)?d.rows:[],run=d.last_run||{},summaryMap=listingSummaryMap(listing);
  const brands=[...new Set(rows.map(r=>String(r.brand||'')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
  const pd=N(listing?.period_days)||7,categories=[...new Set(scopes.map(x=>String(x.category||'')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
- panel.innerHTML='<section class="tm225" data-tm225 aria-label="Uni AI и Uni X"></section><div class="tm224-head"><div><h3 style="margin:0">⚔️ Конкуренты 21vek · рынок TOP-2</h3><div class="tm224-note">Позиции конкурентов и наших товаров снимаются из одного и того же листинга 21vek по популярности. <b>Паюшин, Сидорович, Александренко и Кришталь видят одинаковый полный рынок без ограничения по зонам менеджеров.</b> Для бензопил основной конкурентный вывод строится только по отмеченным прямым конкурентам; остальные бренды остаются видимыми как ориентир рынка.</div></div><div class="tm224-actions"><button class="tr14-refresh" data-tm224-export>📥 Выгрузить конкурентный анализ Excel</button><button class="tr14-refresh" data-tm224-refresh>↻ Обновить</button></div></div>'
-  +'<div class="tm224-kpi"><div><span>Категорий</span><b>'+E(s.scopes??0)+'</b></div><div><span>Товаров конкурентов</span><b>'+E(s.products??0)+'</b></div><div><span>Брендов</span><b>'+E(s.brands??0)+'</b></div><div><span>Аналог найден</span><b class="good">'+E(s.analog_found??0)+'</b></div><div><span>Недостаточно данных</span><b class="warn">'+E(s.insufficient_data??0)+'</b></div><div><span>Подтв. пробел</span><b class="bad">'+E(s.confirmed_gaps??s.gaps??0)+'</b></div><div><span>Мы сильнее</span><b class="good">'+E(s.ours_stronger??0)+'</b></div><div><span>Конкурент сильнее</span><b class="bad">'+E(s.competitor_stronger??0)+'</b></div><div><span>Ниже МРЦ</span><b class="'+((s.below_mrc||0)>0?'bad':'good')+'">'+E(s.below_mrc??0)+'</b></div></div>'
-  +'<div class="tm224-filters"><select data-f-category><option value="">Все группы товаров</option>'+categories.map(x=>'<option value="'+E(x)+'">'+E(x)+'</option>').join('')+'</select><input type="search" data-f-scope-search placeholder="🔎 Найти подгруппу…"><select data-f-scope><option value="">Выберите подгруппу</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-view><option value="market">По позициям 21vek</option><option value="ours">По нашим SKU</option></select><select data-f-sku><option value="">Все наши SKU</option><option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option></select><select data-f-analysis-state><option value="">Все статусы данных</option><option value="analog_found">Аналог найден</option><option value="insufficient_data">Недостаточно данных</option><option value="confirmed_gap">Подтверждённый пробел</option></select><select data-f-brand><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><button type="button" class="tr14-refresh" data-f-reset>Сбросить фильтры</button><small data-f-scope-hint></small><b data-tm224-count></b></div></div>'
-  +scopes.map(x=>scopeHtml(x,summaryMap)).join('')+'<div data-tm224-rows></div>'
-  +'<div class="tm224-meta">Последний полный анализ: <b>'+E(run.status||'ещё не запускался')+'</b> · '+dt(run.finished_at||run.started_at)+' · конкурентных товаров '+E(run.competitor_count??0)+' · сравнений '+E(run.comparison_count??0)+' · подтверждённых пробелов '+E(run.gap_count??0)+' · ошибок '+E(run.error_count??0)+'. <b>Позиции конкурентов обновляются отдельным лёгким монитором каждые 3 часа реальным запросом к 21vek.</b> 🟢 до 4 ч · 🟡 4–8 ч · 🔴 старше 8 ч. Глубина — первые 120 позиций.</div>';
+ const source=marketHelp('tm224-source-tip','Снимок рынка и методика',[
+  run.finished_at||run.started_at?'Снимок рынка: '+dt(run.finished_at||run.started_at)+' по Минску. Ошибок сбора: '+marketCount(run.error_count)+'.':'Дата полного сбора пока недоступна.',
+  'Подгрупп: '+marketCount(s.scopes)+'. Брендов: '+marketCount(s.brands)+'. Мы сильнее: '+marketCount(s.ours_stronger)+'. Конкурент сильнее: '+marketCount(s.competitor_stronger)+'. Ниже МРЦ: '+marketCount(s.below_mrc)+'.',
+  'Сравнение использует первые две страницы выдачи 21vek по популярности. Для бензопил сравнение с нашей матрицей строится по прямым конкурентам. Остальные бренды видны в полном рынке.',
+  'Монитор позиций проверяет первые 120 мест отдельно. Зелёный статус — до 4 часов, жёлтый — от 4 до 8 часов, красный — старше 8 часов.',
+  'Подтверждённый пробел означает, что в нашей матрице не найден сопоставимый товар при достаточных данных. При неполных данных сначала уточните характеристики.',
+  'Снижение цены само по себе не подтверждает акцию. Падение позиции не доказывает причину.'
+ ]);
+ panel.innerHTML='<div class="tm224-workspace"><header class="tm224-head"><div class="tm224-heading"><h2>Конкуренты 21vek</h2>'+source+'</div><div class="tm224-actions"><button type="button" class="tr14-refresh" data-tm224-export>Выгрузить Excel</button><button type="button" class="tr14-refresh" data-tm224-refresh>Обновить данные</button></div></header>'
+  +'<div class="tm224-kpi" aria-label="Весь рынок">'+marketMetrics(s)+'</div>'
+  +'<div class="tm224-filters"><select data-f-category aria-label="Группа товаров"><option value="">Все группы товаров</option>'+categories.map(x=>'<option value="'+E(x)+'">'+E(x)+'</option>').join('')+'</select><input type="search" data-f-scope-search placeholder="Найти подгруппу" aria-label="Найти подгруппу"><select data-f-scope aria-label="Подгруппа"><option value="">Выберите подгруппу</option>'+scopes.map(x=>'<option value="'+E(x.scope_key)+'">'+E(x.subgroup)+'</option>').join('')+'</select><select data-f-view aria-label="Вид сравнения"><option value="market">По позициям 21vek</option><option value="ours">По нашим SKU</option></select><select data-f-analysis-state aria-label="Статус сопоставления"><option value="">Все статусы данных</option><option value="analog_found">Аналог найден</option><option value="insufficient_data">Недостаточно данных</option><option value="confirmed_gap">Подтверждённый пробел</option></select><small data-f-scope-hint aria-live="polite"></small></div>'
+  +'<details class="tm224-disclosure" data-tm224-extra><summary>Дополнительные фильтры<span data-tm224-active-filters></span></summary><div class="tm224-filters"><select data-f-sku aria-label="Наш SKU"><option value="">Все наши SKU</option><option value="__incomplete__">Недостаточно данных</option><option value="__gap__">Нет нашего аналога / пробел</option></select><select data-f-brand aria-label="Бренд конкурента"><option value="">Все бренды</option>'+brands.map(x=>'<option>'+E(x)+'</option>').join('')+'</select><select data-f-status aria-label="Итог сравнения"><option value="">Любой итог</option><option value="ours_stronger">Мы сильнее</option><option value="parity">Паритет</option><option value="competitor_stronger">Конкурент сильнее</option></select><select data-f-competitor-kind aria-label="Тип конкурентов"><option value="all">Все конкуренты</option><option value="main">Только основные</option><option value="market">Остальной рынок</option></select><select data-f-price-days aria-label="Период истории цен"><option value="3">Цена: 3 дня</option><option value="7" selected>Цена: 7 дней</option><option value="10">Цена: 10 дней</option><option value="14">Цена: 14 дней</option><option value="20">Цена: 20 дней</option><option value="30">Цена: 30 дней</option></select><select data-f-price-trend aria-label="Изменение цены конкурента"><option value="">Цена конкурента: все</option><option value="down">🔻 Снизил цену</option><option value="up">🔺 Поднял цену</option><option value="stable">→ Без изменений</option><option value="no_history">Нет истории цены</option></select><select data-f-days aria-label="Период нашего листинга"><option value="1">Наш листинг: 1 день</option><option value="3">Наш листинг: 3 дня</option><option value="7">Наш листинг: 7 дней</option><option value="14">Наш листинг: 14 дней</option><option value="30">Наш листинг: 30 дней</option></select><select data-f-trend aria-label="Изменение нашего листинга"><option value="">Наш листинг: все</option><option value="up">Растём</option><option value="down">Падаем</option><option value="stable">Без изменений</option><option value="outside">Вне TOP-120</option><option value="new">Новый в TOP-120</option></select><div class="tm224-toggles"><label><input type="checkbox" data-f-top10> только TOP-10 конкурентов</label><label><input type="checkbox" data-f-gaps> только пробелы</label><label><input type="checkbox" data-f-mrc> только ниже МРЦ</label><button type="button" class="tr14-refresh" data-f-reset>Сбросить фильтры</button></div></div></details>'
+  +'<section class="tm225" data-tm225 hidden></section>'
+  +'<details class="tm224-disclosure" data-tm224-directory'+(scopes.length?'':' hidden')+'><summary>Обзор подгрупп</summary>'+scopes.map(x=>scopeHtml(x,summaryMap)).join('')+'</details>'
+  +'<section class="tm224-results" tabindex="-1" hidden><div class="tm224-heading"><h3 data-tm224-result-name>Позиции и сравнение</h3>'+
+  marketHelp('tm224-results-tip','Справка по позициям и сравнению',['Выберите подгруппу.','Откройте «Характеристики и аргументы» для сравнения товаров и истории позиций.'])+
+  '<button type="button" class="tr14-refresh tm224-review-back" data-tm224-priorities hidden>Все подгруппы</button>'+
+  '</div><div class="tm224-review-note" data-tm224-review-note hidden></div><div data-tm224-rows></div></section>'
+  +'<details class="tm224-disclosure" data-tm266-container><summary>Разбор изменений с ИИ</summary><section data-tm266 class="tm266" aria-label="Расследования позиций 21vek"></section></details></div>';
  const daySel=panel.querySelector('[data-f-days]');if(daySel)daySel.value=String(pd);
  refreshBrandOptions(panel,{...d,rows});refreshSkuOptions(panel,{...d,rows},listing);
  applyFilters(panel,{...d,rows},listing);
- let scopeEpoch=0,searchTimer=null;
+ let scopeEpoch=0,searchTimer=null,reviewJump='';
  const scopeSearch=panel.querySelector('[data-f-scope-search]');
  if(scopeSearch){
    scopeSearch.addEventListener('input',e=>{
@@ -3277,37 +3352,48 @@ function render(panel,d,listing){
    const comp=panel.querySelector('[data-f-competitor-kind]');if(comp)comp.value='all';
    for(const key of ['[data-f-top10]','[data-f-gaps]','[data-f-mrc]']){const el=panel.querySelector(key);if(el)el.checked=false}
    for(const key of ['[data-f-price-days]','[data-f-days]']){const el=panel.querySelector(key);if(el)el.value='7'}
+   const extra=panel.querySelector('[data-tm224-extra]');if(extra)extra.open=false;
    if(scopeSearch)scopeSearch.value='';const hint=panel.querySelector('[data-f-scope-hint]');if(hint)hint.textContent='';
    filterScopeSelect(panel,scopes,'');const sel=panel.querySelector('[data-f-scope]');if(sel){sel.value='';sel.dispatchEvent(new Event('change',{bubbles:true}))}
  });
  panel.querySelector('[data-tm225]')?.addEventListener('click',e=>{
    const btn=e.target.closest?.('[data-tm225-scope]'),sel=panel.querySelector('[data-f-scope]');if(!btn||!sel)return;
    const scope=btn.dataset.tm225Scope||'';
-   const proofFilter=btn.dataset.tm225Filter||'';
-   const proofSelect=panel.querySelector('[data-f-analysis-state]');
-   if(proofFilter&&proofSelect)proofSelect.value=proofFilter;
    if(sel.value!==scope){
-     // A priority may point outside an active category/search filter.
-     const category=panel.querySelector('[data-f-category]');if(category)category.value='';
-     if(scopeSearch)scopeSearch.value='';
-     filterScopeSelect(panel,scopes,'');
+     if(![...sel.options].some(option=>option.value===scope)){
+       const category=panel.querySelector('[data-f-category]');if(category)category.value='';
+       if(scopeSearch)scopeSearch.value='';
+       filterScopeSelect(panel,scopes,'');
+     }
+     reviewJump=scope;
      sel.value=scope;sel.dispatchEvent(new Event('change',{bubbles:true}));return
    }
    const product=btn.dataset.tm225Product||'';
    if(product){panel.dataset.tm224Limit='10000';applyFilters(panel,d,listing);const target=[...panel.querySelectorAll('[data-tm224-product]')].find(x=>x.getAttribute('data-tm224-product')===product);target?.scrollIntoView?.({behavior:'smooth',block:'center'});}
-   else panel.querySelector('[data-tm224-rows]')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+   else{
+     applyFilters(panel,d,listing);
+     panel.querySelector('[data-tm224-rows]')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+   }
  });
  panel.querySelector('[data-f-scope]')?.addEventListener('change',async e=>{
    const scope=String(e.currentTarget.value||'').trim(),ticket=++scopeEpoch,root=panel.querySelector('[data-tm225]');
+   const jump=reviewJump===scope;reviewJump='';
+   const directory=panel.querySelector('[data-tm224-directory]');
+   if(directory)directory.open=false;
    const current=()=>panel.isConnected&&ticket===scopeEpoch&&panel.querySelector('[data-tm225]')===root&&panel.querySelector('[data-f-scope]')?.value===scope;
-   panel.dataset.tm224Limit='120';d.rows=[];listing=emptyListing(scope,N(panel.querySelector('[data-f-days]')?.value)||7);d.__scopeLoading=scope||null;
+   delete panel.dataset.tm224Limit;d.rows=[];listing=emptyListing(scope,N(panel.querySelector('[data-f-days]')?.value)||7);d.__scopeLoading=scope||null;
    refreshBrandOptions(panel,d);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing);
    if(!scope){d.__scopeLoading=null;return}
    try{
      const sd=await loadScopeRows(scope,false);
      if(!current())return;
-     d.rows=Array.isArray(sd?.rows)?sd.rows:[];d.__scopeLoading=null;
+     d.rows=Array.isArray(sd?.rows)?sd.rows.map(r=>({...r,snapshotPosition:r.position,snapshotPrice:r.competitor_price})):[];d.__scopeLoading=null;
      refreshBrandOptions(panel,d);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing);
+     if(jump){
+       const results=panel.querySelector('.tm224-results');
+       results?.focus({preventScroll:true});
+       results?.scrollIntoView?.({behavior:'smooth',block:'start'});
+     }
      // Stagger secondary data so one click never floods PostgREST with 4 heavy calls.
      setTimeout(()=>{if(!current())return;loadListing(scope,N(panel.querySelector('[data-f-days]')?.value)||7,false)
        .then(x=>{if(!current())return;listing=x||emptyListing(scope,7);updateScopeOwnSummary(panel,scope,listing);refreshSkuOptions(panel,d,listing);applyFilters(panel,d,listing)})
@@ -3325,7 +3411,7 @@ function render(panel,d,listing){
      if(holder)holder.innerHTML='<div class="tr14-warn"><b>Не удалось загрузить выбранную подгруппу.</b><br>'+E(err?.message||err)+'</div>';
    }
  });
- panel.querySelectorAll('[data-f-view],[data-f-brand],[data-f-status],[data-f-analysis-state],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener('change',()=>{panel.dataset.tm224Limit='120';applyFilters(panel,d,listing)}));
+ panel.querySelectorAll('[data-f-view],[data-f-brand],[data-f-status],[data-f-analysis-state],[data-f-competitor-kind],[data-f-sku],[data-f-trend],[data-f-price-trend],[data-f-top10],[data-f-gaps],[data-f-mrc]').forEach(x=>x.addEventListener('change',()=>{delete panel.dataset.tm224Limit;applyFilters(panel,d,listing)}));
  panel.querySelector('[data-f-price-days]')?.addEventListener('change',async e=>{
    const scope=panel.querySelector('[data-f-scope]')?.value||'',days=N(e.currentTarget.value)||7,ticket=scopeEpoch;if(!scope)return;
    e.currentTarget.disabled=true;
@@ -3343,9 +3429,16 @@ function render(panel,d,listing){
  panel.querySelector('[data-tm224-refresh]')?.addEventListener('click',async()=>{
    last=null;lastAt=0;scopeCache.clear();scopeFlights.clear();listingCache.clear();listingFlights.clear();
    historyCache.clear();historyFlights.clear();detailCache.clear();positionCache.clear();positionFlights.clear();
-   positionHistoryCache.clear();stateCountsCache=null;stateCountsFlight=null;panel.dataset.tm224Limit='120';await open(panel,null,true)
+   positionHistoryCache.clear();stateCountsCache=null;stateCountsFlight=null;delete panel.dataset.tm224Limit;await open(panel,null,true)
  });
  panel.querySelector('[data-tm224-export]')?.addEventListener('click',e=>exportExcel(e.currentTarget));
+ panel.querySelector('[data-tm224-priorities]')?.addEventListener('click',()=>{
+   const sel=panel.querySelector('[data-f-scope]');
+   panel.querySelector('[data-f-analysis-state]').value='';
+   sel.value='';sel.dispatchEvent(new Event('change',{bubbles:true}));
+   sel.focus({preventScroll:true});
+   sel.scrollIntoView({behavior:'smooth',block:'center'});
+ });
  panel.querySelectorAll('[data-tm224-check-scope]').forEach(btn=>btn.addEventListener('click',async()=>{
    const scope=btn.dataset.tm224CheckScope||'';
    try{
@@ -3356,10 +3449,34 @@ function render(panel,d,listing){
  }));
 
  if(panel.__tm224MoreHandler)panel.removeEventListener('click',panel.__tm224MoreHandler);
- panel.__tm224MoreHandler=e=>{
+ panel.__tm224MoreHandler=async e=>{
+   const copy=e.target.closest?.('[data-tm224-copy]');
+   if(copy){
+     const el=copy.closest('[data-tm224-review-detail]');
+     const row=d.rows.find(r=>detailKey(r.scope_key,r.product_key)===detailKey(el.dataset.scope,el.dataset.product));
+     if(!row)return;
+     const label=scopes.find(x=>x.scope_key===row.scope_key)?.subgroup||'Подгруппа';
+     const brief=reviewText(row,label);
+     const status=el.querySelector('[data-tm224-copy-status]');
+     try{
+       await navigator.clipboard.writeText(brief);
+       status.textContent='Скопировано';
+     }catch(_){
+       status.textContent='Выделите и скопируйте текст';
+       let field=el.querySelector('[data-tm224-copy-text]');
+       if(!field){
+         field=document.createElement('textarea');field.dataset.tm224CopyText='';field.readOnly=true;field.rows=5;
+         field.setAttribute('aria-label','Текст для проверки');
+         el.querySelector('[data-detail-body]').appendChild(field);
+       }
+       field.value=brief;field.focus();field.select();
+     }
+     return;
+   }
    const more=e.target.closest?.('[data-tm224-more]');
    if(!more)return;
-   panel.dataset.tm224Limit=String((Number(panel.dataset.tm224Limit)||120)+120);
+   const step=Number(more.dataset.tm224More)||120;
+   panel.dataset.tm224Limit=String((Number(panel.dataset.tm224Limit)||step)+step);
    applyFilters(panel,d,listing);
  };
  panel.addEventListener('click',panel.__tm224MoreHandler);
@@ -3378,16 +3495,21 @@ function render(panel,d,listing){
      try{posHistory=await loadCompetitorPositionHistory(scope,product,false)}catch(err){console.warn('История позиции конкурента недоступна отдельно',err)}
      Object.assign(row,detail||{}, {__detailLoaded:true,__positionWatchHistory:posHistory||{}});
      const lp=listingRowsMap(listing).get(listingKey(row.scope_key,row.our_sku));
-     const box=document.createElement('div');box.innerHTML=details(row,lp);
-     const fresh=box.firstElementChild;
-     if(fresh){fresh.open=true;el.replaceWith(fresh)}
+     if(!el.isConnected)return;
+     if(el.hasAttribute('data-tm224-review-detail')){
+       el.removeAttribute('data-tm224-detail');
+       if(body)body.innerHTML=reviewEvidence(row,lp);
+     }else{
+       const box=document.createElement('div');box.innerHTML=details(row,lp);
+       const fresh=box.firstElementChild;
+       if(fresh){fresh.open=el.open;el.replaceWith(fresh)}
+     }
    }catch(err){
      el.dataset.loading='0';
      if(body)body.textContent='Не удалось загрузить характеристики: '+(err?.message||err);
    }
  };
  panel.addEventListener('toggle',panel.__tm224DetailHandler,true);
-
 }
 async function open(panel,ctx,force=false){
  if(!panel)return;panel.style.setProperty('display','block','important');panel.innerHTML='<div class="tr14-info">Загружаю конкурентный анализ 21vek…</div>';

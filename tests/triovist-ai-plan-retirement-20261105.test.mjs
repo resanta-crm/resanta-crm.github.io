@@ -11,7 +11,7 @@ test('old 8/10/12/15 AI plan buttons and rules are not displayed',()=>{
  assert.match(ui,/#tri-task-generate-btn/);
  assert.match(ui,/#tri-task-plan-size-wrap/);
  assert.match(ui,/button.disabled=true/);
- assert.match(ui,/className='tm360-generator-pause'/);
+ assert.doesNotMatch(ui,/className='tm360-generator-pause'/);
  assert.doesNotMatch(ui,/Сформировать план ИИ/);
  assert.doesNotMatch(ui,/Генератор 8 \/ 10 \/ 12 \/ 15 задач/);
 });
@@ -23,7 +23,7 @@ test('server refuses abandoned generator even through legacy alias',()=>{
  assert.doesNotMatch(sql,/INSERT INTO public\.triovist_ai_tasks|DELETE FROM public\.triovist_ai_tasks/i);
 });
 test('new UI version is loaded without modifying competitors or parser',()=>{
- assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261105-retire-old-plan1/);
+ assert.match(index,/169-triovist-tasks360-ux-v1\.js\?v=20261123-task-focus1/);
  assert.match(index,/173-triovist-native-sections-v1\.js/);
  assert.match(index,/106-triovist-competitors-v236218\.js|100-safe-upgrades-loader-v236272\.js/);
 });

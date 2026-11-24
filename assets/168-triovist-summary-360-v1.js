@@ -128,7 +128,7 @@ function mount(){
   box.addEventListener('click',ev=>{
    const b=ev.target.closest('button[data-tri360]');if(!b)return;
    if(b.dataset.tri360==='mode'){state.mode=b.dataset.value==='managers'?'managers':'groups';render();return}
-   if(b.dataset.tri360==='section'){const key=b.dataset.value;if(!['tasks','sales','groups','stock','parser','cards','competitors'].includes(key))return;
+   if(b.dataset.tri360==='section'){const key=b.dataset.value;if(!['tasks','sales','groups','stock','parser','competitors'].includes(key))return;
     document.querySelector('#tr14-shell [data-tr14="'+key+'"]')?.click();return}
    if(b.dataset.tri360==='refresh'){void loadSources(true).then(render)}
   });
@@ -180,7 +180,7 @@ function sourcePanel(d){
  '<div>Продажи 1С<small>'+esc(String(d.imported||'Не определено').slice(0,16).replace('T',' '))+'</small></div>'+
  '<div>Остатки партнёра<small>'+esc(stock||'Дата недоступна')+(stock?' · '+age(stock)+' дн.':'')+'</small></div>'+
  '<div>21vek парсер<small>'+esc(parser?String(parser).slice(0,16).replace('T',' '):'Откройте раздел Парсер 21vek')+'</small></div></div>'+
- '<div class="t360-actions" style="margin-top:10px"><button data-tri360="section" data-value="stock">Остатки и заказ</button><button data-tri360="section" data-value="parser">Парсер 21vek</button><button data-tri360="section" data-value="cards">Карточки</button><button data-tri360="section" data-value="competitors">Конкуренты</button></div></div>';
+ '<div class="t360-actions" style="margin-top:10px"><button data-tri360="section" data-value="stock">Остатки и заказ</button><button data-tri360="section" data-value="parser">Парсер 21vek</button><button data-tri360="section" data-value="competitors">Конкуренты</button></div></div>';
 }
 function render(){
  const root=mount(),p=page();if(!root||!p)return false;

@@ -4,9 +4,9 @@
 (function(w,d){
 'use strict';
 if(w.RESANTA_TRIOVIST_DEMAND_AI_V1)return;
-const VERSION='2026.11.05.brainstorm-v3-manual-target-and-listing',ID='tri-ai179',STYLE='tri-ai179-style';
+const VERSION='2026.11.23-task-assignment',ID='tri-ai179',STYLE='tri-ai179-style';
 const A='aleksandrenko_av@resanta.ru',K='krishtal_na@resanta.ru';
-let selected=A,snapshot=null,loadedMonth='',busy=false,message='',expanded=new Set(),rejected=new Set(),drafts=new Map();
+let selected=A,snapshot=null,loadedMonth='',busy=false,message='',messageKind='',messageTarget='',expanded=new Set(),rejected=new Set(),drafts=new Map();
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=x=>Number.isFinite(Number(x))?Number(x):0;
 const money=x=>n(x).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' BYN';
@@ -23,42 +23,62 @@ const key=x=>[x.manager_email,x.group,x.subgroup].map(z=>String(z||'').toLocaleL
 function styles(){
  if(d.getElementById(STYLE))return;
  const s=d.createElement('style');s.id=STYLE;
- s.textContent=[
- '#tri-ai179{border:1px solid #c9dcee;background:#f4f8ff;padding:15px;border-radius:14px;margin:11px 0 15px;color:#163b60}',
- '#tri-ai179 *{box-sizing:border-box}#tri-ai179 h3{margin:0 0 5px;font-size:19px;color:#144e7f}',
- '#tri-ai179 .ab-note{font-size:11px;line-height:1.6;color:#657b92}',
- '#tri-ai179 .ab-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:10px 0}',
- '#tri-ai179 select,#tri-ai179 input,#tri-ai179 textarea{padding:9px 10px;border:1px solid #c9d8e9;background:white;border-radius:8px;color:#1a3a5b;font-size:12px;font-family:inherit}',
- '#tri-ai179 input,#tri-ai179 textarea{width:100%}#tri-ai179 textarea{resize:vertical;min-height:70px}',
- '#tri-ai179 button{cursor:pointer;background:#f5faff;border:1px solid #bdd2e7;border-radius:8px;padding:9px 12px;font-size:11px;font-weight:800;color:#205989}',
- '#tri-ai179 button.primary{background:#215fe2;border-color:#215fe2;color:white}',
- '#tri-ai179 button.approve{background:#136f53;border-color:#136f53;color:white}',
- '#tri-ai179 button:disabled{opacity:.55;cursor:not-allowed}',
- '#tri-ai179 .ab-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:13px 0}',
- '#tri-ai179 .ab-stat,#tri-ai179 .ab-panel{background:white;border:1px solid #dce6f2;padding:12px;border-radius:10px;min-width:0}',
- '#tri-ai179 .ab-stat small,#tri-ai179 .ab-stat span{display:block;font-size:10px;color:#6b7e93}#tri-ai179 .ab-stat strong{font-size:20px;color:#154b79}',
- '#tri-ai179 .ab-panel{margin:9px 0}#tri-ai179 .ab-panel h4{font-size:13px;color:#134f82;margin:0 0 5px}',
- '#tri-ai179 .ab-tag{font-size:10px;border-radius:999px;padding:4px 8px;background:#edf4fc;color:#205781;font-weight:750}',
- '#tri-ai179 .ab-tag.bad{background:#fff1ee;color:#bd4b38}',
- '#tri-ai179 .ab-cols{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0}',
- '#tri-ai179 .ab-sect{background:#f7fafe;border:1px solid #e0e8f1;border-radius:9px;padding:11px;font-size:11px;line-height:1.6}',
- '#tri-ai179 .ab-sect b{color:#154d7d}#tri-ai179 .ab-sect p{margin:5px 0;color:#496783}',
- '#tri-ai179 .ab-skus{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0}',
- '#tri-ai179 .ab-skus span{background:white;border:1px solid #d7e3ee;border-radius:7px;padding:5px 7px;font-size:10px}',
- '#tri-ai179 .ab-edit{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;border:1px solid #c9d8e8;border-radius:9px;background:#f9fcff}',
- '#tri-ai179 .ab-edit label{font-size:11px;font-weight:750;color:#254965;display:block}',
- '#tri-ai179 .ab-edit input,#tri-ai179 .ab-edit textarea{margin-top:5px}',
- '#tri-ai179 .ab-wide{grid-column:1/-1}#tri-ai179 .ab-warn{border:1px solid #edca9a;background:#fffaeb;padding:10px;border-radius:8px;color:#825f28;font-size:11px;line-height:1.5;margin:11px 0}',
- '#tri-ai179 .ab-success{border:1px solid #a3ddc5;background:#effcf6;padding:9px;border-radius:8px;color:#16704b;font-size:11px}',
- '@media(max-width:800px){#tri-ai179 .ab-cols,#tri-ai179 .ab-edit{grid-template-columns:1fr}#tri-ai179 .ab-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}'
- ].join('\n');
+ s.textContent=`
+#tri-ai179{border:1px solid var(--border);background:var(--card);padding:15px;border-radius:12px;margin:0 0 12px;color:var(--text)}
+#tri-ai179 *{box-sizing:border-box}
+#tri-ai179 h3{margin:0;font-size:22px;line-height:1.25}
+#tri-ai179 .ab-note{font-size:13px;line-height:1.5;color:var(--sub)}
+#tri-ai179 :is(.ab-heading,.ab-row){display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#tri-ai179 .ab-heading{position:relative;margin-bottom:12px}
+#tri-ai179 .ab-row{margin:10px 0}
+#tri-ai179 .ab-form{padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:10px}
+#tri-ai179 .ab-form label{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--sub)}
+#tri-ai179 :is(select,input,textarea,button){min-height:36px;padding:7px 10px;border:1px solid var(--border);background:var(--card);border-radius:8px;color:var(--text);font:inherit}
+#tri-ai179 :is(button,select,input,textarea,summary):focus-visible{outline:2px solid var(--a);outline-offset:2px}
+#tri-ai179 :is(input,textarea){width:100%}
+#tri-ai179 textarea{resize:vertical;min-height:64px}
+#tri-ai179 button{cursor:pointer;font-weight:600;color:var(--a)}
+#tri-ai179 button:not(:disabled):hover{background:var(--ab)}
+#tri-ai179 button:is(.primary,.approve){background:var(--a);border-color:var(--a);color:#fff}
+#tri-ai179 button:is(.primary,.approve):not(:disabled):hover{background:var(--at)}
+#tri-ai179 button:disabled{opacity:.55;cursor:default}
+#tri-ai179 .ab-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:8px;margin:12px 0}
+#tri-ai179 :is(.ab-stat,.ab-panel){background:var(--card);border:1px solid var(--border);padding:12px;border-radius:10px;min-width:0}
+#tri-ai179 .ab-stat small,#tri-ai179 .ab-stat span{display:block;font-size:12px;color:var(--sub)}
+#tri-ai179 .ab-stat strong{font-size:clamp(16px,2vw,22px);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#tri-ai179 .ab-panel{margin:9px 0;scroll-margin-top:70px}
+#tri-ai179 .ab-panel h4{font-size:16px;margin:0}
+#tri-ai179 .ab-tag{font-size:12px;border-radius:99px;padding:3px 8px;background:var(--ab);color:var(--at);font-weight:600}
+#tri-ai179 .ab-tag.bad{background:var(--rb);color:var(--r)}
+#tri-ai179 .ab-cols,#tri-ai179 .ab-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:10px 0}
+#tri-ai179 :is(.ab-sect,.ab-edit){background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:11px;font-size:13px;line-height:1.5}
+#tri-ai179 .ab-sect p{margin:5px 0}
+#tri-ai179 .ab-sect summary{cursor:pointer;color:var(--a);font-weight:600}
+#tri-ai179 .ab-skus{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0}
+#tri-ai179 .ab-skus span{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:5px 7px;font-size:12px}
+#tri-ai179 .ab-edit label{font-weight:600;display:block}
+#tri-ai179 .ab-edit :is(input,textarea){margin-top:4px}
+#tri-ai179 .ab-wide{grid-column:1/-1}
+#tri-ai179 .ab-status{padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin:9px 0;background:var(--bg);font-size:13px}
+#tri-ai179 .ab-success{background:var(--gb);color:var(--g)}
+#tri-ai179 .ab-warn{background:var(--amb);color:var(--am)}
+#tri-ai179 .ab-error{background:var(--rb);color:var(--r)}
+#tri-ai179 .ab-help{display:inline-flex}
+#tri-ai179 .ab-help button{width:28px;min-height:28px;padding:0;font-size:17px}
+#tri-ai179 .ab-tip{display:none;pointer-events:none;position:absolute;inset:100% auto auto 0;z-index:6;width:min(440px,100%);padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);box-shadow:0 4px 14px #11182720;color:var(--text);font-size:13px;line-height:1.5;font-weight:400}
+#tri-ai179 .ab-help:is(:hover,:focus-within) .ab-tip{display:block}
+#tri-ai179 .ab-tip p{margin:0}
+#tri-ai179 .ab-tip p+p{margin-top:6px}
+#tri-ai179 :is([data-ab-result],[data-ab-status]){scroll-margin-top:75px}
+@media(max-width:800px){#tri-ai179 :is(.ab-cols,.ab-edit){grid-template-columns:1fr}}
+`;
  d.head.appendChild(s);
 }
 function host(){
  if(!director()||!active())return null;
  const parent=d.getElementById('tri-task-card');if(!parent)return null;
  styles();let el=d.getElementById(ID);
- if(!el){el=d.createElement('section');el.id=ID;el.setAttribute('aria-label','Мозговой штурм ИИ');parent.prepend(el)}
+ if(!el){el=d.createElement('section');el.id=ID;el.setAttribute('aria-label','Выставление задач');parent.prepend(el)}
  return el;
 }
 function listingText(x){
@@ -76,7 +96,7 @@ function stat(name,value,detail){
  return '<div class="ab-stat"><small>'+esc(name)+'</small><strong>'+esc(value)+'</strong><span>'+esc(detail)+'</span></div>';
 }
 function proposalHtml(x){
- const id=key(x),edit=expanded.has(id),draft=draftOf(x);
+ const id=key(x),edit=expanded.has(id),draft=draftOf(x),pending=busy&&messageTarget===id;
  const samples=Array.isArray(x.listing_skus)?x.listing_skus:[],
        known=samples.filter(t=>t.position!=null),
        unknown=samples.filter(t=>t.position==null);
@@ -115,52 +135,75 @@ function proposalHtml(x){
  '<p>SKU '+qty(x.sku_count)+', известные позиции '+qty(x.positions_known)+
  ', ниже TOP-60 '+qty(x.outside_top60)+', без подтверждения '+qty(x.rank_unknown)+
  ', замечания карточек '+qty(x.card_issues)+'.</p>'+
- '<div class="ab-skus">'+sku+'</div>'+
+ '<details><summary>Позиции по SKU</summary>'+sku+'</details>'+
  '<p>Менеджер документирует проверку. Нет товара, отсутствие в свежем реестре и неподтверждённая позиция — разные причины; историческую позицию нельзя считать текущей.</p></section></div>'+
- editor+
+ editor+(messageTarget===id?statusHtml():'')+
  '<div class="ab-row"><button type="button" data-ab-edit="'+esc(id)+'">'+(edit?'Свернуть':'✎ Изменить')+'</button>'+
- '<button type="button" class="approve" data-ab-approve="'+esc(id)+'" '+(busy?'disabled':'')+'>✓ Согласовать и назначить</button>'+
+ '<button type="button" class="approve" data-ab-approve="'+esc(id)+'" '+(busy?'disabled':'')+'>'+(pending?'Назначаю…':'Согласовать и назначить')+'</button>'+
  '<button type="button" data-ab-reject="'+esc(id)+'">Отклонить</button></div></article>';
+}
+function help(id,label,body){
+ const tip='ab-tip-'+id;
+ return '<span class="ab-help"><button type="button" aria-label="'+esc(label)+'" aria-describedby="'+tip+'">*</button>'+
+ '<span id="'+tip+'" class="ab-tip" role="tooltip">'+body+'</span></span>';
+}
+function setMessage(kind,text='',target=''){
+ message=text;messageKind=kind;messageTarget=target;
+}
+function statusHtml(){
+ return '<div data-ab-status tabindex="-1" role="'+(messageKind==='error'?'alert':'status')+
+  '" class="ab-status ab-'+messageKind+'">'+esc(message)+'</div>';
+}
+function resultHelp(data){
+ const period=data.timeframe||{},q=data.quality||{};
+ return help('basis','Сравнимые продажи и остатки',
+ '<p><b>Сравнимые продажи.</b> '+esc(period.last_year_start||'—')+' — '+esc(period.last_year_end||'—')+
+ ' против '+esc(period.current_start||'—')+' — '+esc(period.current_end||'—')+
+ '.</p><p>Ориентир на выбранный месяц — продажи того же месяца прошлого года ×1,15. Сумму можно откорректировать перед утверждением.</p>'+
+ '<p><b>Остатки.</b> 21vek '+esc(q.partner_date||'—')+' · Витебск '+esc(q.vitebsk_date||'—')+
+ ' · Чехов справочно '+esc(q.chekhov_date||'—')+'. '+esc(q.transit_note||'')+'</p>');
+}
+function reveal(selector,region){
+ const root=host();
+ const scope=region?Array.from(root?.querySelectorAll?.('[data-ab-proposal]')||[]).find(el=>el.dataset.abProposal===region):root;
+ const node=scope?.querySelector?.(selector);
+ node?.focus?.({preventScroll:true});
+ node?.scrollIntoView?.({block:'nearest'});
 }
 function render(){
  const root=host();if(!root)return false;
  const m=month(),archive=!current();
  if(loadedMonth&&loadedMonth!==m){
-  snapshot=null;loadedMonth='';message='';expanded.clear();rejected.clear();drafts.clear();
+  snapshot=null;loadedMonth='';setMessage('');expanded.clear();rejected.clear();drafts.clear();
  }
  const arr=(snapshot?.proposals||[]).filter(x=>!rejected.has(key(x)));
- const summary=snapshot?.managers||[],q=snapshot?.quality||{};
+ const summary=snapshot?.managers||[];
  const opts='<option value="'+A+'" '+(selected===A?'selected':'')+'>Александренко</option>'+
  '<option value="'+K+'" '+(selected===K?'selected':'')+'>Кришталь</option>'+
  '<option value="all" '+(selected==='all'?'selected':'')+'>Оба менеджера</option>';
- root.innerHTML='<h3>🧠 Мозговой штурм ИИ</h3>'+
- '<p class="ab-note">Ты запускаешь анализ, читаешь и редактируешь предложения <b>по товарным подгруппам</b>. До 30 на менеджера, но не заполняем количество искусственно. Только ты утверждаешь задачи.</p>'+
- '<div class="ab-row"><label>Менеджер <select data-ab-manager '+(busy?'disabled':'')+'>'+opts+'</select></label>'+
- '<button class="primary" type="button" data-ab-start '+(busy||archive?'disabled':'')+'>'+(busy?'Сравниваю продажи…':'🧠 Сформировать задачи ИИ')+'</button>'+
- '<span class="ab-note">Месяц: '+esc(m)+(archive?' · архив (только просмотр)':'')+'</span></div>'+
- (archive?'<div class="ab-warn">Архивный месяц: новые задачи не создаются. Вернись к текущему месяцу.</div>':'')+
- (message?'<div role="status" class="'+(message.startsWith('✓')?'ab-success':'ab-warn')+'">'+esc(message)+'</div>':'')+
- (!snapshot?'<p class="ab-note">До нажатия «Сформировать задачи ИИ» ничего не формируется и не назначается.</p>':
- '<div class="ab-stats">'+stat('Предложений',arr.length,'Только падающие подгруппы')+
- stat('Сумма потерь',money(arr.reduce((s,x)=>s+n(x.loss),0)),'Потери по предложенным подгруппам')+
- stat('Лимит','30','Максимум на одного менеджера')+
- stat('В работе',summary.map(x=>esc(x.name)+': '+n(x.active_tasks)).join(' · '),'С учётом существующих задач')+'</div>'+
- '<div class="ab-warn"><b>Сравнимые продажи:</b> '+esc(snapshot.timeframe?.last_year_start)+' — '+esc(snapshot.timeframe?.last_year_end)+
- ' против '+esc(snapshot.timeframe?.current_start)+' — '+esc(snapshot.timeframe?.current_end)+
- '. Ноябрь не планируется прямым переносом октября. Ориентир суммы — ноябрь прошлого года ×1,15, с твоей корректировкой.'+
- ' <b>Остатки:</b> 21vek '+esc(q.partner_date)+'; Витебск '+esc(q.vitebsk_date)+'; Чехов справочно '+esc(q.chekhov_date)+'. '+esc(q.transit_note||'')+'</div>'+
- '<div class="ab-row"><b>Предложения на твоё утверждение</b>'+
+ root.innerHTML='<div class="ab-heading"><h3>Выставление задач</h3>'+
+ help('workflow','Как выставлять задачи',
+  '<p><b>Месяц.</b> '+esc(m)+'</p><p>После нажатия «Сформировать задачи ИИ» CRM проанализирует товарные подгруппы и предложит до 30 обоснованных задач на менеджера. Предложения можно отредактировать. Для назначения каждой задачи нужно отдельное утверждение руководителя.</p>')+'</div>'+
+ '<div class="ab-row ab-form"><label>Менеджер <select data-ab-manager '+(busy?'disabled':'')+'>'+opts+'</select></label>'+
+ '<button class="primary" type="button" data-ab-start aria-busy="'+(busy&&!messageTarget)+'" '+(busy||archive?'disabled':'')+'>'+
+ (busy&&!messageTarget?'Анализирую данные…':'Сформировать задачи ИИ')+'</button></div>'+
+ (archive?'<p class="ab-note">Архивный месяц. Для выставления задач откройте текущий месяц.</p>':'')+
+ (message&&!messageTarget?statusHtml():'')+
+ (snapshot?'<div class="ab-stats">'+stat('Предложений',arr.length,'Падающие подгруппы')+
+ stat('Сумма потерь',money(arr.reduce((sum,x)=>sum+n(x.loss),0)),'По предложенным подгруппам')+
+ stat('Лимит','30','На одного менеджера')+
+ stat('В работе',summary.map(x=>x.name+': '+n(x.active_tasks)).join(' · '),'Существующие задачи')+'</div>'+
+ '<div class="ab-heading"><h3 data-ab-result tabindex="-1">Предложения к утверждению</h3>'+resultHelp(snapshot)+
  (rejected.size?'<button type="button" data-ab-undo>Вернуть отклонённые</button>':'')+'</div>'+
- (arr.length?arr.map(proposalHtml).join(''):'<p class="ab-note">Подтверждённых новых проблемных подгрупп нет.</p>')+
- '<p class="ab-note">Мозговой штурм — только чтение данных. Только твоё отдельное подтверждение создаёт одну рабочую задачу. Полное выполнение: денежный результат + проверенный тобой отчёт по листингу.</p>');
+ (arr.length?arr.map(proposalHtml).join(''):'<p class="ab-note">Предложений к утверждению нет.</p>'):'');
  d.querySelector('.tm360-generator-pause')?.style?.setProperty?.('display','none');
  return true;
 }
 async function brainstorm(){
  if(!director()||busy||!current()||!active())return false;
- const cli=dbx();if(!cli?.rpc){message='Соединение с CRM недоступно';render();return false}
+ const cli=dbx();if(!cli?.rpc){setMessage('error','Соединение с CRM недоступно');render();return false}
  const m=month(),owner=selected;
- busy=true;message='ИИ сверяет продажи, подгруппы, листинг и остатки…';render();
+ busy=true;setMessage('pending','Сверяю продажи, подгруппы, листинг и остатки…');render();
  try{
   const r=await cli.rpc('triovist_ai_brainstorm_preview_v20261105',{p_month:m+'-01',p_manager_email:owner==='all'?null:owner});
   if(r?.error)throw r.error;
@@ -168,43 +211,48 @@ async function brainstorm(){
   if(!Array.isArray(r.data.proposals)||[A,K].some(email=>r.data.proposals.filter(x=>x.manager_email===email).length>30))throw Error('Превышен лимит 30 предложений');
   if(month()!==m||selected!==owner)return false;
   snapshot=r.data;loadedMonth=m;expanded.clear();rejected.clear();drafts.clear();
-  message='✓ Мозговой штурм готов. Задачи ещё не назначены.';
+  setMessage('success','Предложения готовы: '+qty(snapshot.proposals.length)+'. '+(snapshot.proposals.length?'Проверьте предложения и согласуйте нужные задачи.':'Подходящих подгрупп для новых задач нет.'));
   return true;
- }catch(e){message='Мозговой штурм не завершён: '+String(e?.message||e);return false}
- finally{busy=false;render()}
+ }catch(e){if(month()===m)setMessage('error','Не удалось подготовить предложения: '+String(e?.message||e));return false}
+ finally{busy=false;if(month()!==m)setMessage('');render();if(month()===m)reveal(messageKind==='success'&&snapshot?.proposals?.length?'[data-ab-result]':'[data-ab-status]')}
 }
 async function approve(id){
  if(!director()||busy||!snapshot||!current())return false;
+ const m=month(),approvedSnapshot=snapshot;
  const x=snapshot.proposals.find(p=>key(p)===id);if(!x||rejected.has(id))return false;
  const f=draftOf(x),target=Number(String(f.target).replace(',','.'));
- if(!Number.isFinite(target)||target<=0||target>100000000){message='Для '+x.subgroup+' нужна положительная денежная цель.';expanded.add(id);render();return false}
- if(String(f.listing).trim().length<15){message='Заполни действия по листингу, минимум 15 символов.';expanded.add(id);render();return false}
+ if(!Number.isFinite(target)||target<=0||target>100000000){setMessage('error','Укажите положительную денежную цель до 100 000 000 BYN.',id);expanded.add(id);render();reveal('[data-ab-status]',id);return false}
+ if(String(f.listing).trim().length<15){setMessage('error','Опишите действия по листингу, минимум 15 символов.',id);expanded.add(id);render();reveal('[data-ab-status]',id);return false}
  // An explicit leader confirmation is the decision; a second typed note is optional.
  // Server records AI baseline, actual approved amount and automatic audit explanation.
- if(String(f.note).length>2000){message='Комментарий слишком длинный (максимум 2000 символов).';expanded.add(id);render();return false;}
+ if(String(f.note).length>2000){setMessage('error','Комментарий слишком длинный (максимум 2000 символов).',id);expanded.add(id);render();reveal('[data-ab-status]',id);return false;}
  const baseline=x.suggested_target==null?null:Number(x.suggested_target),
   raised=baseline>0&&target>baseline*1.5;
  const warning=raised?'\n⚠ Цель выше предложения ИИ в '+(target/baseline).toFixed(1)+' раза ('+money(baseline)+' → '+money(target)+'). Решение будет сохранено в истории.':'';
  if(!w.confirm?.('СОГЛАСОВАТЬ И НАЗНАЧИТЬ одну задачу?\n'+x.manager_name+' · '+x.group+' / '+x.subgroup+
  '\nОбъём '+money(target)+warning+'\nЛистинг: '+f.listing.slice(0,170)))return false;
- busy=true;message='Проверяю данные и записываю только эту задачу…';render();
+ busy=true;setMessage('pending','Проверяю и назначаю задачу…',id);render();
  try{
   const r=await dbx().rpc('triovist_ai_brainstorm_approve_v20261105',{
-   p_month:month()+'-01',p_manager_email:x.manager_email,
+   p_month:m+'-01',p_manager_email:x.manager_email,
    p_group:x.group,p_subgroup:x.subgroup,p_target_revenue:target,
    p_listing_text:f.listing,p_task_note:f.note,p_title:f.title,p_due_date:f.due
   });
   if(r?.error)throw r.error;if(!r?.data?.ok||r.data.status!=='new')throw Error('Утверждение не подтверждено базой');
-  snapshot.proposals=snapshot.proposals.filter(y=>key(y)!==id);
-  const row=snapshot.managers?.find(y=>y.email===x.manager_email);if(row)row.active_tasks=n(row.active_tasks)+1;
+  approvedSnapshot.proposals=approvedSnapshot.proposals.filter(y=>key(y)!==id);
+  const row=approvedSnapshot.managers?.find(y=>y.email===x.manager_email);if(row)row.active_tasks=n(row.active_tasks)+1;
   expanded.delete(id);drafts.delete(id);
-  message='✓ Утверждено: '+x.subgroup+' · '+money(target)+'. Назначена одна рабочая задача.';
+  setMessage('success','Задача назначена. '+x.manager_name+' · '+x.subgroup+' · '+money(target)+'.');
   w.TRIOVIST_DATA_HUB_V227315?.invalidate?.('tasks');
-  await w.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651?.render?.(true);
-  w.RESANTA_TRIOVIST_TASKS360_V1?.enhance?.();
+  if(month()!==m)return true;
+  try{
+   const refreshed=await w.RESANTA_TRIOVIST_TASK_MONTH_SAFE_V23651?.render?.(true);
+   if(refreshed===false)setMessage('warn',message+' Список месяца пока не обновился.');
+   w.RESANTA_TRIOVIST_TASKS360_V1?.enhance?.();
+  }catch(_){setMessage('warn',message+' Список месяца пока не обновился.')}
   return true;
- }catch(e){message='Задача не назначена: '+String(e?.message||e);return false}
- finally{busy=false;render()}
+ }catch(e){if(month()===m)setMessage('error','Задача не назначена: '+String(e?.message||e),id);return false}
+ finally{busy=false;if(month()!==m)setMessage('');render();if(month()===m)reveal('[data-ab-status]',messageTarget)}
 }
 function click(e){
  const t=e.target;
@@ -217,7 +265,8 @@ function click(e){
 function updateField(e){
  const t=e.target;
  if(t.matches?.('[data-ab-manager]')){
-  selected=t.value;snapshot=null;message='Выбран другой менеджер. Нажми «Сформировать задачи ИИ».';
+  if(t.value===selected)return;
+  selected=t.value;snapshot=null;setMessage('');
   expanded.clear();rejected.clear();drafts.clear();render();return;
  }
  if(!t.matches?.('[data-ab-field]'))return;
@@ -226,7 +275,7 @@ function updateField(e){
 }
 d.addEventListener('click',e=>{
  if(e.target.closest?.('#'+ID))click(e);
- if(e.target.closest?.('[data-tm51],[data-tr14="tasks"]'))setTimeout(open,160);
+ if(e.target.closest?.('[data-tm51="prev"],[data-tm51="next"],[data-tm51="now"],[data-tr14="tasks"]'))setTimeout(open,160);
 },true);
 d.addEventListener('input',e=>{if(e.target.closest?.('#'+ID))updateField(e)},true);
 d.addEventListener('change',e=>{if(e.target.closest?.('#'+ID))updateField(e)},true);

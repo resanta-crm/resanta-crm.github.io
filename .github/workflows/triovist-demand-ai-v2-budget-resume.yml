@@ -57,6 +57,9 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD | tee /tmp/changes
+          if [ "${GITHUB_HEAD_REF:-}" = "release/triovist-pilot-20261124" ]; then
+            node tests/triovist-production-rollout-scope-v1.mjs /tmp/changes
+          fi
           node --test tests/gps360-complete-one-time-geo-v1.test.mjs
           node tests/route-change-scope-v1.mjs
           ! grep -E '^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218|173-triovist-native-sections-v1)[.]js$' /tmp/changes

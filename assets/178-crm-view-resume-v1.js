@@ -5,9 +5,9 @@
 (function(w,d){
  'use strict';
  if(w.RESANTA_CRM_VIEW_RESUME_V1)return;
- const V='2026.11.05.2',KEY='resanta_crm_view_resume_v1';
+ const V='2026.11.23.1',KEY='resanta_crm_view_resume_v1';
  const TRI_LEADERS=new Set(['payushin_ar@resanta.ru','sidarovich_kn@resanta.ru']);
- const TABS=new Set(['home','sales','groups','stock','tasks','motivation','cards','parser','competitors','infographics','anp','si','budget','price']);
+ const TABS=new Set(['home','sales','groups','shares','stock','tasks','motivation','cards','parser','competitors','infographics','anp','si','budget']);
  let resumeSeq=0,lastNavClick=0,restoreBusy=false,lastRepairAt=0;
  const profile=()=>{
   let p=null;
@@ -67,13 +67,13 @@
     if(active!==s.tab){
      // Existing Triovist router is the sole owner of access and section switching.
      button?.click?.();
-    }else if(['anp','si','budget','price','groups','competitors'].includes(s.tab)){
+    }else if(['anp','si','budget','groups','shares','competitors'].includes(s.tab)){
      // The video bug: the active tab remains "Budget", but its working pane becomes
      // display:none after visibility lifecycle. Reconcile layout first (no RPC).
      const panel=d.getElementById('tr14-panel');
      const hidden=!!panel && panel.style?.getPropertyValue?.('display')==='none';
      if(hidden)w.RESANTA_TRIOVIST_ROOT_V23614?.resumeView?.();
-     const finance=['anp','si','budget','price'].includes(s.tab);
+     const finance=['anp','si','budget'].includes(s.tab);
      const incomplete=finance && !!panel && !panel.querySelector?.('.tr14-sec') &&
        !panel.querySelector?.('.tr14-info');
      // Reopen only if content was actually detached. Never wipe a healthy form.

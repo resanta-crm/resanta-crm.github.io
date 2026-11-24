@@ -90,17 +90,20 @@ test('missing access never draws a briefing and never contacts Supabase',async()
  assert.equal(f.root().dataset.open,'false');
  assert.equal(f.calls.length,0);
 });
-test('menu remains above motivation and action-center slot in one parent',async()=>{
+test('retired action-center fixture preserves its order while the active menu mounts motivation natively',async()=>{
  const f=fixture();f.api.show('home',f.ctx);await flush();
  const c=f.root();assert.equal(f.shell.parentElement.children.indexOf(c),1);
- assert.match(motivation,/if\(h\.previousElementSibling!==shell\)shell\.insertAdjacentElement/);
- assert.match(router,/RESANTA_TRIOVIST_ACTION_CENTER_V1\?\.show/);
+ assert.match(motivation,/shell\.insertAdjacentElement\('afterend',h\)/);
+ assert.match(motivation,/tab\(\)==='motivation'\?'block':'none'/);
+ assert.match(router,/RESANTA_TRIOVIST_NATIVE_SECTIONS_V1\?\.mount/);
+ assert.doesNotMatch(index,/<script[^>]+172-triovist-action-center-v1\.js/);
  assert.match(script,/data-tr14="sales"/,'Sales route is hidden visually but retained for drill-down');
 });
-test('only action-center-specific scripts updated; parsers and database stay unchanged',()=>{
- assert.match(index,/172-triovist-action-center-v1\.js\?v=20261104-action-center-1/);
- assert.match(index,/34-triovist-root-v23614\.js\?v=20261104-action-center-406/);
- assert.match(index,/171-triovist-unix-director-v1\.js\?v=20261104-action-center-5/);
+test('rolled-back action center stays unloaded while accepted native sections and parser remain',()=>{
+ assert.doesNotMatch(index,/<script[^>]+172-triovist-action-center-v1\.js/);
+ assert.match(index,/34-triovist-root-v23614\.js\?v=20261124-commerce1/);
+ assert.match(index,/171-triovist-unix-director-v1\.js\?v=20261124-market-work1/);
+ assert.match(index,/173-triovist-native-sections-v1\.js\?v=20261105-motivation-director-1/);
  assert.doesNotMatch(script,/setInterval|MutationObserver|service_role/);
 });
 

@@ -13,9 +13,12 @@ function fixture(){
  const logs={},styles=[];
  const card={classList:{add(){}},contains:el=>el===meta||el===root,querySelector:selector=>selector==='.card-title'?title:null};
  const note={textContent:''};
- const title={textContent:'',parentElement:{querySelector:()=>note}};
+ const title={dataset:{},innerHTML:'',parentElement:{querySelector:()=>note}};
  const elem=()=>({dataset:{},innerHTML:'',textContent:'',listeners:{},addEventListener(t,fn){this.listeners[t]=fn}});
  const meta=elem(),root=elem(),busy=elem();
+ const classes=new Set(['trst-compact']);
+ const wrap={scrollLeft:20,classList:{toggle(cls,on){if(on)classes.add(cls);else classes.delete(cls)}}};
+ root.querySelector=selector=>selector==='.trst-table-wrap'?wrap:null;
  const doc={getElementById:id=>id==='trst174-css'?null:id==='tri-stock-card'?card:null,
   querySelector:q=>q==='#tri-stock-card [data-trst-loading]'?busy:null,
   createElement:()=>({id:'',textContent:''}),head:{appendChild:e=>styles.push(e)}};
@@ -35,8 +38,9 @@ function fixture(){
   let el={dataset:elementData};
   el.closest=s=>s===key?el:null;
   host.listeners.click({target:el});
+  return el;
  };
- return {api,meta,root,doc,window,opts,render,click,logs,sample,styles};
+ return {api,meta,root,doc,window,opts,render,click,logs,sample,styles,title,note,classes,wrap};
 }
 test('new module compiles and never writes to database, starts parser or imports files',()=>{
  assert.doesNotThrow(()=>new vm.Script(source));
@@ -44,36 +48,47 @@ test('new module compiles and never writes to database, starts parser or imports
  assert.doesNotMatch(source,/\.rpc\(|\.insert\(|\.upsert\(|fetch\(|setInterval\(/);
  assert.doesNotMatch(source,/main-content|MutationObserver/);
 });
-test('director KPI, source dates, chart, manager priorities and one SKU detail render natively',()=>{
+test('stock overview uses the common theme, contextual tooltips and compact SKU details',()=>{
  const x=fixture();assert.equal(x.render(),true);
- assert.match(x.meta.innerHTML,/Риск дефицита/);
- assert.match(x.meta.innerHTML,/2 SKU/);
- assert.match(x.meta.innerHTML,/Отгрузить из Витебска/);
- assert.match(x.meta.innerHTML,/9 ед/);
- assert.match(x.meta.innerHTML,/Заказать из Чехова/);
- assert.match(x.meta.innerHTML,/6 ед/);
- assert.match(x.meta.innerHTML,/Остаётся не покрыто/);
- assert.match(x.meta.innerHTML,/5 ед/);
- assert.match(x.meta.innerHTML,/21\.xlsx|ch\.xlsx/);
- assert.match(x.meta.innerHTML,/Приоритеты менеджеров/);
- assert.match(x.meta.innerHTML,/Александренко/);
- assert.match(x.meta.innerHTML,/Кришталь/);
- assert.match(x.meta.innerHTML,/trst-track/);
- assert.match(x.root.innerHTML,/data-trst-details/);
- assert.match(x.root.innerHTML,/Генераторы|Генератор/);
+ assert.equal(x.note.hidden,true);
+ assert.match(x.title.innerHTML,/Остатки и заказ.*role="tooltip".*Потребность по расчёту CRM/);
+ assert.match(x.meta.innerHTML,/id="trst-sources-tip" role="tooltip".*21\.xlsx.*2026-11-05.*ch\.xlsx/);
+ assert.match(x.meta.innerHTML,/id="trst-legacy-tip" role="tooltip".*старым парсером.*truth-v23\.5\.5/);
+ assert.doesNotMatch(x.meta.innerHTML,/Короткий директорский брифинг|Приоритеты менеджеров|Риск дефицита|trst-track|trst-kpis|trst-source"/);
+ assert.match(x.meta.innerHTML,/Александренко.*Кришталь/);
+ assert.match(x.styles[0].textContent,/var\(--card\)/);
+ assert.match(x.styles[0].textContent,/position:sticky;top:0/);
+ assert.match(x.styles[0].textContent,/#tri-stock-truth-note-v2355\.tri-warning\{display:none\}/);
+ assert.match(x.root.innerHTML,/data-trst-details.*open/);
+ assert.match(x.root.innerHTML,/trst-table-wrap trst-compact/);
+ assert.match(x.root.innerHTML,/Генератор/);
+ assert.equal((x.root.innerHTML.match(/<th scope="col">/g)||[]).length,14);
+ assert.match(x.root.innerHTML,/<td>Александренко<\/td><td>Генераторы<\/td><td><b>A-1<\/b>/);
+ const toggle=x.click(x.root,'[data-trst-mode]',{});
+ assert.equal(toggle.textContent,'Основные показатели');
+ assert.equal(x.classes.has('trst-full'),true);
+ assert.equal(x.classes.has('trst-compact'),false);
+ assert.equal(x.wrap.scrollLeft,0);
+ x.click(x.root,'[data-trst-mode]',{});
+ assert.equal(x.classes.has('trst-compact'),true);
+});
+test('an updated snapshot clears the legacy warning while the source tooltip remains',()=>{
+ const x=fixture();x.opts.imports.partner.source_file='[truth-v23.5.5] 21.xlsx';x.render();
+ assert.doesNotMatch(x.meta.innerHTML,/trst-preliminary|старым парсером/);
+ assert.match(x.meta.innerHTML,/role="tooltip".*21\.xlsx/);
 });
 test('manager role cannot see another manager, even if untrusted calling code supplies extra records',()=>{
  const x=fixture();x.opts.isBoss=false;x.opts.isManager=true;x.opts.actorEmail='aleksandrenko_av@resanta.ru';
  assert.equal(x.render(),true);
  assert.doesNotMatch(x.meta.innerHTML+x.root.innerHTML,/Кришталь|K-1|Триммер/);
- assert.match(x.meta.innerHTML,/Александренко/);
- assert.match(x.meta.innerHTML,/3 ед/);
+ assert.match(x.root.innerHTML,/Александренко/);
+ assert.match(x.root.innerHTML,/<td class="tri-uncovered">3<\/td>/);
 });
 test('missing dates are labelled as unverified instead of invented freshness',()=>{
  const x=fixture();x.opts.imports={partner:{},own:{},chekhov:{}};
  x.render();
- assert.match(x.meta.innerHTML,/отсутствует дата снимка/);
- assert.match(x.meta.innerHTML,/не загружена/);
+ assert.match(x.meta.innerHTML,/Дата снимка отсутствует/);
+ assert.match(x.meta.innerHTML,/Формат снимка 21vek не подтверждён/);
 });
 test('API handles backend failure: no stale KPIs, safe retry button',()=>{
  const x=fixture();x.render();x.opts.error='Test RPC timeout <server>';
@@ -98,7 +113,7 @@ test('table supports more than 500 rows with pagination rather than losing data'
 test('director manager filter scopes visible KPIs and detailed SKU',()=>{
  const x=fixture();x.render();
  x.meta.listeners.change({target:{id:'tri-stock-director-manager',value:'krishtal_na@resanta.ru'}});
- assert.match(x.meta.innerHTML,/2 ед/);
+ assert.match(x.root.innerHTML,/<td class="tri-uncovered">2<\/td>/);
  assert.doesNotMatch(x.root.innerHTML,/A-1|Генератор/);
  assert.match(x.root.innerHTML,/K-1|Триммер/);
 });
@@ -120,7 +135,7 @@ test('errors are retryable and real stock data cannot leave the manager scope',(
 });
 test('legacy stock stays fallback and six other tabs are untouched by overlay removal',()=>{
  assert.match(native,/if\(k==='groups'\|\|k==='stock'\|\|k==='tasks'\|\|k==='motivation'\)return false/);
- assert.match(index,/174-triovist-stock-director-v1\.js\?v=20261105-stock-director-1/);
+ assert.match(index,/174-triovist-stock-director-v1\.js\?v=20261123-stock-control1/);
  assert.match(index,/03-triovist-routes\.js\?v=20261116-route-atomic-2/);
  assert.match(routes,/Triovist stock native director fallback/);
  assert.match(routes,/const shown=rows\.slice\(0,500\)/); // emergency legacy fallback remains

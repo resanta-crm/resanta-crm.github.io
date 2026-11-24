@@ -35,6 +35,9 @@ jobs:
         run: |
           git fetch origin main
           git diff --name-only origin/main...HEAD > /tmp/trio-diff
+          if [ "${GITHUB_HEAD_REF:-}" = "release/triovist-pilot-20261124" ]; then
+            node tests/triovist-production-rollout-scope-v1.mjs /tmp/trio-diff
+          fi
           cat /tmp/trio-diff
           ! grep -E '(^assets/(80-triovist-21vek-control-v236107|173-triovist-native-sections-v1)[.]js$|^tools/|^assets/.*card.*21vek)' /tmp/trio-diff
           # Reviewed client metadata/RPC migrations, Lera screen reader and optional AIR3 speech container.

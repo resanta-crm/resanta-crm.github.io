@@ -52,6 +52,9 @@ jobs:
       - name: Ensure parser and database unchanged by this PR
         run: |
           git diff --name-only origin/main...HEAD > /tmp/changed-files
+          if [ "${GITHUB_HEAD_REF:-}" = "release/triovist-pilot-20261124" ]; then
+            node tests/triovist-production-rollout-scope-v1.mjs /tmp/changed-files
+          fi
           cat /tmp/changed-files
           # Keep this older scope gate specific to its own feature branch; tests still run.
           if [ "$GITHUB_HEAD_REF" = "fix/manager-feedback-20261106" ]; then exit 0; fi

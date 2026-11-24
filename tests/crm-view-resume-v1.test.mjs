@@ -15,7 +15,7 @@ function fixture({email='payushin_ar@resanta.ru',role='boss',scope='all',section
  const title={textContent:'Триовист / 21vek.by'};
  const pages=['dashboard','triovist','clients','routes-boss','tasks'].map(n=>({id:'page-'+n,style:{},dataset:{triovistView:n==='triovist'?tab:''}}));
  const navs=pages.map(p=>({id:'nav-'+p.id.slice(5),style:{display:'flex'}}));
- const buttons=['home','competitors','tasks','cards','groups','budget'].map(n=>({dataset:{tr14:n},classList:{contains:c=>c==='on'&&tab===n},click(){tab=n;content=true;visible=true;pages.find(p=>p.id==='page-triovist').dataset.triovistView=n;clicks++}}));
+ const buttons=['home','competitors','tasks','cards','groups','shares','budget'].map(n=>({dataset:{tr14:n},classList:{contains:c=>c==='on'&&tab===n},click(){tab=n;content=true;visible=true;pages.find(p=>p.id==='page-triovist').dataset.triovistView=n;clicks++}}));
  const panel={style:{getPropertyValue:k=>k==='display'?(visible?'block':'none'):''},querySelector:q=>q==='.tr14-sec'?(content?{}:null):null};
  const byId=id=>id==='app'?app:id==='login-wrap'?login:id==='topbar-title'?title:id==='tr14-panel'?panel:pages.find(p=>p.id===id)||navs.find(p=>p.id===id)||null;
  const document={
@@ -97,7 +97,7 @@ test('Triovist pages are refused for unrelated roles even with sessionStorage ma
 });
 test('only one isolated versioned script is added and core routes remain unchanged',()=>{
  const index=read('index.html');
- assert.match(index,/178-crm-view-resume-v1\.js\?v=20261105-budgets-resume2/);
+ assert.match(index,/178-crm-view-resume-v1\.js\?v=20261123-single-router/);
  assert.match(index,/03-triovist-routes\.js/);
  assert.match(index,/34-triovist-root-v23614\.js/);
  assert.match(index,/169-triovist-tasks360-ux-v1\.js/);
@@ -119,4 +119,34 @@ test('video repro: genuinely detached Budget content reopens once through the ex
  f.emit('visibilitychange',{hidden:false});f.flush();
  assert.equal(f.panelHasContent,true);
  assert.equal(f.clicks,1,'repair is one-time, not an infinite data refresh');
+});
+
+
+test('returning to the Doli subsection restores its hidden panel without switching views',()=>{
+ const f=fixture({subtab:'shares',hiddenPanel:true});
+ f.emit('visibilitychange',{hidden:true});
+ f.emit('visibilitychange',{hidden:false});f.flush();
+ assert.equal(f.tab,'shares');
+ assert.equal(f.panelVisible,true);
+ assert.equal(f.clicks,0);
+});
+
+test('bundled and deferred Triovist loaders only start one workspace router',()=>{
+ const root=read('assets/34-triovist-root-v23614.js');
+ const loader=read('assets/32-triovist-v23611.js');
+ const injected=[], intervals=[];
+ const document={
+  currentScript:{src:'https://site.example/assets/32-triovist-v23611.js'},
+  scripts:[{src:'https://site.example/assets/34-triovist-root-v23614.js',dataset:{}}],
+  querySelector:()=>null,
+  createElement:()=>({dataset:{}}),
+  head:{appendChild:script=>injected.push(script)}
+ };
+ const sandbox=vm.createContext({window:{},document,URL,location:{href:'https://site.example'},setInterval:fn=>intervals.push(fn)});
+ vm.runInContext(loader,sandbox);
+ assert.equal(injected.length,1);
+ assert.match(injected[0].src,/83-triovist-group-dynamics-fixes/);
+ vm.runInContext(root,sandbox);
+ vm.runInContext(root,sandbox);
+ assert.equal(intervals.length,1);
 });
