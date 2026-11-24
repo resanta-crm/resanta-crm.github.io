@@ -21,6 +21,7 @@ const money=v=>fmt(v)+' BYN';
 const isBoss=()=>{try{return currentProfile?.role==='boss'}catch(_){return false}};
 const asArray=v=>Array.isArray(v)?v:[];
 let wrapped=false,root=null,legacyOpen=false,segment='all',showMore=false,focus='',rendering=false;
+const confirmedCache=new Map(),confirmedPending=new Map();
 let lastPaintKey='',lastList=null;
 let chartCache={source:null,length:0,rowsKey:'',end:'',data:null};
 function sourceRows(){try{return Array.isArray(v20FallingRows)?v20FallingRows:[]}catch(_){return[]}}
@@ -52,7 +53,7 @@ function visible(rows){
  return rows.filter(x=>(sev==='all'||x.severity===sev)&&(!search||norm((x.client?.name||'')+' '+(x.client?.region||'')+' '+(x.client?.manager_name||'')).includes(search)));
 }
 function filtered(rows){
- if(segment==='critical')return rows.filter(x=>x.severity==='critical');
+ if(segment==='critical')return rows.filter(x=>x.pct>30);
  if(segment==='no-recovery')return rows.filter(x=>!x.recoveryTask);
  if(segment==='with-recovery')return rows.filter(x=>!!x.recoveryTask);
  return rows;
@@ -65,6 +66,32 @@ function groupManagers(rows){
   s.count++;s.loss+=n(x.loss);if(!x.recoveryTask)s.without++;
  }
  return [...m.values()].sort((a,b)=>b.loss-a.loss);
+}
+function confirmedKey(p){let stamp='';try{stamp=String(crmImportStatus('sales')?.last_success_at||'')}catch(_){}return String(currentProfile?.id||currentProfile?.name||'')+'|'+p.end+'|'+p.mode+'|'+($('falling-manager')?.value||'all')+'|'+stamp}
+function confirmedFor(p){
+ return confirmedCache.get(confirmedKey(p))||{status:'loading'};
+}
+function loadConfirmed(p){
+ if(!/^[0-9]{4}-[0-9]{2}$/.test(p.end))return;
+ const key=confirmedKey(p);if(confirmedPending.has(key))return;
+ const client=typeof db!=='undefined'?db:w.db;
+ if(confirmedCache.has(key)){
+  if(confirmedCache.get(key).status!=='error'||!client?.rpc)return;
+  confirmedCache.delete(key);
+ }
+ if(!client?.rpc){confirmedCache.set(key,{status:'error'});return}
+ const selected=$('falling-manager')?.value||'all';
+ const manager=isBoss()?(selected==='all'?null:selected):String(currentProfile?.name||'');
+ const flight=client.rpc('crm_manager_new_clients_detail_v236135',{p_month:p.end,p_manager:manager}).then(async returns=>{
+  if(returns.error)throw returns.error;
+  const rows=asArray(returns.data?.rows).filter(x=>x.type==='reactivated');
+  const names=isBoss()?(manager?[manager]:[...new Set([...($('falling-manager')?.options||[])].map(x=>x.value).filter(x=>x&&x!=='all'))]):[manager];
+  const akbResults=await Promise.all(names.map(name=>client.rpc('crm_sales_month_dashboard_v236374',{p_month:p.end+'-01',p_manager:name})));
+  const akb=new Map(names.map((name,i)=>[name,akbResults[i]?.error?null:akbResults[i]?.data?.active_clients??null]));
+  confirmedCache.set(key,{status:'ok',rows,akb,manager});
+ }).catch(e=>{console.warn('Falling confirmed manager metrics',e);confirmedCache.set(key,{status:'error'})})
+ .finally(()=>{confirmedPending.delete(key);if($(PAGE)?.classList.contains('active'))render()});
+ confirmedPending.set(key,flight);
 }
 function monthsFor(end){
  if(!/^\d{4}-\d{2}$/.test(end))return[];
@@ -107,13 +134,24 @@ function openAI(id){
  if(typeof w.v2274OpenFallingAi==='function')w.v2274OpenFallingAi(id);
  else alert('Механизм согласования ИИ-задач недоступен.');
 }
+function compactFilters(){
+ const grid=$('falling-period-mode')?.closest?.('.v20-filter-grid');
+ if(!grid||grid.querySelector('#falling-extra-filters'))return;
+ const extra=d.createElement('details');extra.id='falling-extra-filters';
+ const title=d.createElement('summary');title.textContent='Дополнительные фильтры';extra.append(title);
+ for(const id of ['falling-severity','falling-search']){
+  const field=$(id)?.parentElement;if(field)extra.append(field);
+ }
+ grid.append(extra);
+}
 function mount(){
  const page=$(PAGE),pivot=$('falling-kpi'),list=$('falling-list');
  if(!page||!pivot||!list)return null;
+ compactFilters();
  root=$(ID);
  if(!root){
   if(!$(CSS)){const style=d.createElement('style');style.id=CSS;style.textContent=styles;d.head.appendChild(style)}
-  root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Возврат продаж 360°');
+  root=d.createElement('section');root.id=ID;root.setAttribute('aria-label','Падающие клиенты');
   pivot.parentElement.insertBefore(root,pivot);
   root.addEventListener('click',onClick);
   root.addEventListener('input',onInput);
@@ -149,21 +187,70 @@ function managerBars(groups){
   '<span><b>'+esc(short(g.loss))+'</b><small>'+g.count+' клиентов</small></span></div>'
  ).join('');
 }
+function managerCards(groups,p){
+ const confirmed=confirmedFor(p);
+ if(confirmed.status==='loading')return '<p class="f360-muted" role="status">Загружаю подтверждённый возврат за '+esc(monthName(p.end))+'…</p>';
+ if(confirmed.status==='error')return '<p class="f360-muted" role="alert">Данные возврата за '+esc(monthName(p.end))+' недоступны. Нажмите «Обновить».</p>';
+ const selected=$('falling-manager')?.value||'all';
+ const available=isBoss()?[...($('falling-manager')?.options||[])].map(x=>x.value).filter(x=>x&&x!=='all'&&(selected==='all'||x===selected)):[String(currentProfile?.name||'')];
+ const names=[...new Set([...available,...groups.map(x=>x.name),...asArray(confirmed.rows).map(x=>x.manager_name)])].filter(x=>x&&(selected==='all'||x===selected));
+ if(!names.length)return '<p class="f360-muted">Нет менеджеров в выбранной выборке.</p>';
+ return '<div class="f360-manager-cards">'+names.map(name=>{
+  const returned=asArray(confirmed.rows).filter(x=>x.manager_name===name);
+  const shipments=returned.reduce((sum,x)=>sum+n(x.current_revenue),0);
+  const known=confirmed.status==='ok';
+  const value=known?String(returned.length):'—';
+  const revenue=known?money(shipments):'—';
+  const akb=known?(confirmed.akb?.get(name)??'—'):'—';
+  return '<details class="f360-manager-card"><summary><b>'+esc(name)+'</b><span>Возвращено: <strong>'+value+'</strong></span>'+
+   '<span>Отгрузки после возврата: <strong>'+esc(revenue)+'</strong></span><span>АКБ: <strong>'+esc(akb)+'</strong></span></summary>'+
+   '<div class="f360-manager-body"><b>Период: '+esc(monthName(p.end))+'</b>'+
+   (returned.map(x=>'<div class="f360-returned"><button type="button" data-f360-client="'+esc(x.client_id||'')+'"'+(!x.client_id?' disabled':'')+'>'+esc(x.client_name||'Клиент')+'</button><b>'+esc(money(x.current_revenue))+'</b></div>').join('')||'<p>Подтверждённых возвратов за выбранный месяц нет.</p>')+
+   (isBoss()&&allowedManager(name)?'<button type="button" class="f360-btn" data-f360-manager="'+esc(name)+'">Падающие клиенты менеджера</button>':'')+'</div></details>';
+ }).join('')+'</div>';
+}
 function questionsFor(x){
- const top=asArray(x.breakdown?.cats)[0],items=asArray(x.breakdown?.items);
- const q=[
-  'Почему снизились закупки'+(top?' группы «'+top.name+'»':'')+'? Подтверждена ли причина у ЛПР?',
-  'Есть ли потребность в потерянных SKU класса A/B и доступный остаток на складе Витебск?',
-  'Влияют ли цены, конкуренты, сезонность или ПДЗ? Подтвердить источником.',
-  'Какое следующее действие и какую сумму заказа реально согласовал клиент?'
+ const top=asArray(x.breakdown?.cats)[0],item=asArray(x.breakdown?.items)[0];
+ return [
+  'Подтверждено снижение оборота на '+money(x.loss)+(top?' по группе «'+top.name+'»':'')+'.',
+  item?'Проверить с клиентом отсутствие повторной покупки «'+item.label+'» и доступный остаток.':'Уточнить ассортимент и причину снижения у клиента.',
+  'Причина по истории продаж не установлена. Зафиксировать ответ клиента и согласовать конкретное следующее действие.'
  ];
- if(!items.length)q[1]='В истории нет детализации товарного падения — проверить продажи и товарные группы перед рекомендацией.';
- return q;
+}
+function periodProducts(x,p){
+ let history=[];
+ try{if(typeof getClientHistFast==='function')history=asArray(getClientHistFast(x.client))}catch(_){}
+ if(!history.length)return '<div class="f360-muted">Подтверждённая товарная история недоступна.</div>';
+ const first=new Set(asArray(p.current)),second=new Set(asArray(p.previous));
+ const sum=set=>history.reduce((v,r)=>v+(set.has(ymd(r.month))?n(r.revenue):0),0);
+ if(Math.abs(sum(first)-n(x.cur))>.02||Math.abs(sum(second)-n(x.prev))>.02)
+  return '<div class="f360-muted">Товарные суммы не совпали с итогом клиента. Детализация скрыта до сверки.</div>';
+ const items=new Map();
+ for(const row of history){const month=ymd(row.month),side=first.has(month)?'cur':second.has(month)?'prev':null;if(!side)continue;
+  const group=String(row.category||'Без группы').trim(),sub=String(row.subgroup||'Без подгруппы').trim(),sku=String(row.sku||'').trim(),product=String(row.product||'Без наименования').trim();
+  const key=group+'\u0000'+sub+'\u0000'+(sku?'sku:'+sku:'product:'+product);
+  if(!items.has(key))items.set(key,{group,sub,sku,product,cur:0,prev:0});items.get(key)[side]+=n(row.revenue);
+ }
+ const groups=new Map();for(const item of items.values()){
+  if(!groups.has(item.group))groups.set(item.group,new Map());
+  const subs=groups.get(item.group);if(!subs.has(item.sub))subs.set(item.sub,[]);subs.get(item.sub).push(item);
+ }
+ const comparison=(cur,prev)=>{
+  const delta=cur-prev,label=delta>0?'Рост':delta<0?'Падение':'Без изменений';
+  const pct=prev>0?(delta/prev*100).toFixed(1).replace('.',',')+'%':cur>0?'новый':'—';
+  return label+' '+(delta>0?'+':'')+money(delta)+' · '+pct;
+ };
+ return '<div class="f360-products"><h4>Группа → подгруппа → SKU</h4>'+[...groups].map(([group,subs])=>
+  '<details><summary><b>'+esc(group)+'</b><span>'+esc(comparison([...subs.values()].flat().reduce((s,x)=>s+x.cur,0),[...subs.values()].flat().reduce((s,x)=>s+x.prev,0)))+'</span></summary>'+[...subs].map(([sub,list])=>
+   '<details><summary><b>'+esc(sub)+'</b><span>'+esc(comparison(list.reduce((s,x)=>s+x.cur,0),list.reduce((s,x)=>s+x.prev,0)))+'</span></summary>'+list.sort((a,b)=>(b.prev-b.cur)-(a.prev-a.cur)).map(item=>
+    '<div class="f360-product"><b>'+esc(item.product)+'<small>SKU '+esc(item.sku||'не указан')+'</small></b><span>Было: '+esc(money(item.prev))+'</span><span>Стало: '+esc(money(item.cur))+'</span><strong>'+esc(comparison(item.cur,item.prev))+'</strong></div>'
+   ).join('')+'</details>'
+  ).join('')+'</details>'
+ ).join('')+'</div>';
 }
 function focusDetails(x,end){
  if(!x)return'';
- const cats=asArray(x.breakdown?.cats).slice(0,4),items=asArray(x.breakdown?.items).slice(0,4);
- const st=status(x),qs=questionsFor(x);
+ const qs=questionsFor(x);
  const noteSource=$('fall-note-'+String(x.client?.id||''));
  const priorNote=noteSource?String(noteSource.value||''):'';
  const monthTrend=trendFor([x],end);
@@ -171,16 +258,15 @@ function focusDetails(x,end){
   '<div class="f360-detail-head"><div><b>'+esc(x.client?.name||'Клиент')+'</b><div class="f360-muted">'+esc(x.client?.manager_name||'—')+' · '+esc(x.client?.region||'—')+'</div></div>'+
   '<button class="f360-quiet" type="button" data-f360-close>Свернуть ×</button></div>'+
   '<div class="f360-detail-kpis"><div><span>Было год назад</span><b>'+esc(money(x.prev))+'</b></div><div><span>Текущий период</span><b>'+esc(money(x.cur))+'</b></div><div><span>Снижение</span><b class="f360-red">−'+esc(money(x.loss))+'</b></div></div>'+
-  '<div class="f360-dual"><div><h4>Потерянные группы</h4>'+(cats.length?cats.map(g=>'<div class="f360-minirow"><span>'+esc(g.name)+'</span><b>−'+esc(short(g.loss))+'</b></div>').join(''):'<p class="f360-muted">Нет подтверждённой детализации</p>')+
-  '<h4>Товары с потерей</h4>'+(items.length?items.map(it=>'<div class="f360-minirow"><span>'+esc(it.label||it.group)+'</span><b>−'+esc(short(it.loss))+'</b></div>').join(''):'<p class="f360-muted">Нет подтверждённых SKU</p>')+'</div>'+
-  '<div><h4>ИИ · Мозговой штурм</h4><p class="f360-muted">Это вопросы и гипотезы для проверки, не установленные причины.</p>'+
+  '<div><h4>Лера · Рекомендации</h4>'+
   qs.map((q,i)=>'<div class="f360-question"><span>'+(i+1)+'.</span><span>'+esc(q)+'</span></div>').join('')+
-  '<div class="f360-detailtrend"><h4>Продажи клиента по месяцам</h4>'+trendChart(monthTrend)+'</div></div></div>'+
+  '<div class="f360-detailtrend"><h4>Продажи клиента по месяцам</h4>'+trendChart(monthTrend)+'</div></div>'+
+  periodProducts(x,period()||{current:[],previous:[]})+
   (isBoss()?'<div class="f360-noteedit"><label for="f360-note-edit">Комментарий руководителя для ИИ-задачи</label><textarea id="f360-note-edit" data-f360-note="'+esc(x.client?.id||'')+'" rows="2" placeholder="Что проверить, предложить или проконтролировать">'+esc(priorNote)+'</textarea><button type="button" class="f360-btn" data-f360-save="'+esc(x.client?.id||'')+'" data-f360-name="'+esc(x.client?.name||'')+'">Сохранить комментарий</button></div>':'')+
   '<div class="f360-buttons"><button type="button" class="f360-btn" data-f360-client="'+esc(x.client?.id||'')+'">Открыть клиента</button>'+
   '<button type="button" class="f360-btn" data-f360-abc="'+esc(x.client?.id||'')+'">ABC клиента</button>'+
   (isBoss()?'<button type="button" class="f360-btn primary" data-f360-ai="'+esc(x.client?.id||'')+'">Сформировать ИИ-задачу</button>':'')+'</div>'+
-  '<p class="f360-muted">'+esc(st.label)+'. Согласование задачи, комментарий руководителя, проверка маршрута и запрет дублей выполняются действующим механизмом CRM.</p></div>';
+  '</div>';
 }
 function clientsTable(rows,end){
  const ordered=[...rows].sort((a,b)=>n(b.loss)-n(a.loss));
@@ -195,48 +281,45 @@ function clientsTable(rows,end){
    (selected?focusDetails(x,end):'');
  }).join('')+'</div>'+(!showMore&&ordered.length>shown.length?'<button class="f360-btn" data-f360-more type="button">Показать остальных ('+(ordered.length-shown.length)+')</button>':'');
 }
-function brief(rows,filteredRows){
- const critical=rows.filter(x=>x.severity==='critical');
- const noRecovery=rows.filter(x=>!x.recoveryTask);
- const unlinked=rows.filter(x=>x.relatedTask&&!x.recoveryTask);
- const largest=[...rows].sort((a,b)=>n(b.loss)-n(a.loss))[0];
- return '<div class="f360-brief"><div class="f360-sectiontitle"><span>✦ ИИ · Утренний директорский брифинг</span><small>Проверяемые сигналы по 1С и CRM</small></div>'+
- '<div class="f360-briefitem"><b>1. Приоритет возврата</b><p>'+critical.length+' критических клиентов;'+(largest?' наибольшее снижение у «'+esc(largest.client?.name||'')+'» — '+esc(money(largest.loss))+'.':' оцените размер потерь.')+'</p></div>'+
- '<div class="f360-briefitem"><b>2. Контроль поручений</b><p>'+noRecovery.length+' клиентов без подтверждённой активной задачи именно по возврату продаж.'+(unlinked.length?' У '+unlinked.length+' есть задачи другого типа — это не план восстановления.':'')+'</p></div>'+
- '<div class="f360-briefitem"><b>3. Что проверить менеджерам</b><p>Потерянные товарные группы A/B, доступность на складе Витебск, последнюю работу с ЛПР, ПДЗ и будущий согласованный маршрут. Причины не назначаются автоматически.</p></div>'+
- '<div class="f360-footnote">Брифинг сформирован правилами на подтверждённых данных CRM. ИИ-задачи создаются отдельно и только после согласования руководителем.</div></div>';
+function brief(rows){
+ const prioritized=[...rows].sort((a,b)=>n(b.loss)-n(a.loss)).slice(0,3);
+ if(!prioritized.length)return '';
+ return '<div class="f360-brief"><div class="f360-sectiontitle">Лера · Кого вернуть</div>'+
+ prioritized.map(x=>{
+  const lost=asArray(x.breakdown?.cats)[0],name=x.client?.name||'Клиент',manager=x.client?.manager_name||'Ответственный не назначен';
+  return '<div class="f360-briefitem"><b>'+esc(name)+' · −'+esc(money(x.loss))+'</b>'+
+   '<p>'+esc(lost?'Снизились покупки группы «'+lost.name+'». Причина не установлена.':'Причина по доступным данным не подтверждена.')+' Проверить у клиента и согласовать следующий шаг. Ответственный: '+esc(manager)+'.</p>'+
+   '<button type="button" class="f360-btn" data-f360-focus="'+esc(x.client?.id||'')+'">Разобрать клиента</button></div>';
+ }).join('')+'</div>';
 }
 function render(){
  const container=mount();if(!container||rendering)return false;
  rendering=true;
  try{
   const all=clientData(sourceRows()),rows=visible(all),subset=filtered(rows),p=period()||{start:'',end:'',label:'—',previousLabel:'—'},end=p.end||'';
-  const managers=groupManagers(rows),loss=rows.reduce((a,x)=>a+n(x.loss),0),critical=rows.filter(x=>x.severity==='critical').length;
-  const without=rows.filter(x=>!x.recoveryTask).length,working=rows.filter(x=>!!x.recoveryTask).length;
+  const managers=groupManagers(rows),loss=rows.reduce((a,x)=>a+n(x.loss),0),critical=rows.filter(x=>x.pct>30).length;
   if(focus&&!rows.some(x=>String(x.client?.id||'')===focus))focus='';
-  const trend=trendFor(rows,end),totalRows=sourceRows().length;
+  // A successful past import alone does not prove that this page's current
+  // read-only aggregate finished loading. Never turn an unavailable source into zero.
+  const totalRows=sourceRows().length,hasSource=salesRows().length>0;
+  loadConfirmed(p);
   const currentMonth=(typeof TODAY!=='undefined'?String(TODAY).slice(0,7):new Date().toISOString().slice(0,7));
   const partial=p.current?.includes(currentMonth) || p.end===currentMonth;
   const note=partial?'<span class="f360-pill warn">Текущий месяц неполный — не сравнивайте с полным прошлым</span>':'<span class="f360-pill">Сопоставимые календарные периоды</span>';
   container.innerHTML=
-   '<div class="f360-head"><div><h2>Клиенты · Возврат продаж 360°</h2><div class="f360-muted">Директорский контроль · Юрлица и торговые точки · Продажи 1С с НДС</div></div>'+
-   '<span class="f360-pill">По доступным данным CRM</span></div>'+
+   '<div class="f360-head"><div><h2>Падающие клиенты</h2></div><button type="button" class="f360-btn" data-f360-refresh>Обновить</button></div>'+
    '<div class="f360-period">Сравнение <b>'+esc(p.label||'—')+'</b> / <b>'+esc(p.previousLabel||'—')+'</b> '+note+'</div>'+
-   '<div class="f360-kpis">'+makeCard('Падающие клиенты',String(rows.length),'Крупные и небольшие потери','','all')+
-    makeCard('Снижение оборота',short(loss)+' BYN','Факт к аналогу прошлого года','f360-red','all')+
-    makeCard('Критично',String(critical),'Падение от 30%','f360-red','critical')+
-    makeCard('Без задачи возврата',String(without),'Проверить план действий','f360-amber','no-recovery')+
-    makeCard('В работе по возврату',String(working),'Профильные задачи в CRM','f360-green','with-recovery')+'</div>'+
-   '<div class="f360-topgrid">'+brief(rows,subset)+
-   '<div class="f360-panel"><div class="f360-sectiontitle"><span>Динамика по месяцам</span><small>Текущие падающие юрлица</small></div>'+
-   trendChart(trend)+'<div class="f360-footnote">Сравнение по одним и тем же клиентам. Показаны подтверждённые продажи текущего и прошлого года, а не прогноз возвращённой выручки.</div></div></div>'+
-   '<div class="f360-bottomgrid"><div class="f360-panel"><div class="f360-sectiontitle"><span>Приоритетные клиенты</span><small>'+subset.length+' в выбранном списке</small></div>'+
-   '<div class="f360-filterchips">'+[['all','Все'],['critical','Критические'],['no-recovery','Без задачи возврата'],['with-recovery','В работе']].map(([k,t])=>'<button class="f360-chip'+(segment===k?' active':'')+'" type="button" data-f360-filter="'+k+'">'+t+'</button>').join('')+'</div>'+
-   clientsTable(subset,end)+'</div>'+
-   '<div class="f360-panel"><div class="f360-sectiontitle"><span>Ответственность менеджеров</span><small>По текущему периоду</small></div>'+
-   managerBars(managers)+'<div class="f360-footnote">Потери считаются по текущему фильтру. Нажатие на имя использует штатный фильтр менеджеров CRM.</div>'+
-   '<div class="f360-safety"><b>Контроль возврата</b><p>Клиент, вышедший из списка падения, ещё не считается подтверждённо восстановленным. Для результата нужна проверка фактических отгрузок 1С и закрытие задачи.</p></div></div></div>'+
-   '<div class="f360-footer"><span class="f360-muted">Источники: 1С, карточки юрлиц, действующие задачи и маршруты CRM. Без демонстрационных значений.</span>'+
+   (!hasSource?'<div class="f360-panel" role="status">Продажи за выбранный период недоступны. Повторите загрузку.</div>':'')+
+   '<div class="f360-kpis">'+makeCard('Падающие клиенты',hasSource?String(rows.length):'—','Сравнимые продажи','','all')+
+    makeCard('Критические клиенты',hasSource?String(critical):'—','Снижение более 30%','f360-red','critical')+
+    makeCard('Потерянный оборот',hasSource?short(loss)+' BYN':'—','Текущий период к сопоставимому','f360-red','all')+'</div>'+
+   (hasSource?brief(rows):'')+
+   '<div class="f360-panel"><div class="f360-sectiontitle">Клиенты с падением</div>'+
+   '<div class="f360-filterchips">'+[['all','Все'],['critical','Критические']].map(([k,t])=>'<button class="f360-chip'+(segment===k?' active':'')+'" type="button" data-f360-filter="'+k+'">'+t+'</button>').join('')+'</div>'+
+   (hasSource?clientsTable(subset,end):'<p>Нет подтверждённых данных.</p>')+'</div>'+
+   '<div class="f360-panel"><div class="f360-sectiontitle">Менеджеры · подтверждённый возврат <small>'+esc(monthName(p.end))+'</small></div>'+
+   managerCards(managers,p)+'</div>'+
+   '<div class="f360-footer">'+
    '<button type="button" class="f360-btn" data-f360-legacy aria-expanded="'+String(legacyOpen)+'">'+(legacyOpen?'Скрыть старые карточки':'Раскрыть прежние карточки и комментарии')+'</button></div>';
   const page=$(PAGE);
   page.classList.add('f360-installed');
@@ -254,6 +337,7 @@ function onInput(event){
 }
 function onClick(event){
  const node=event.target.closest?.('button');if(!node)return;
+ if(node.hasAttribute('data-f360-refresh')){confirmedCache.delete(confirmedKey(period()||{}));if(typeof w.renderFallingClients==='function')w.renderFallingClients();return}
  if(node.hasAttribute('data-f360-filter')){
   const next=node.getAttribute('data-f360-filter');if(['all','critical','no-recovery','with-recovery'].includes(next)){segment=next;showMore=false;focus='';render();}return;
  }
@@ -304,7 +388,7 @@ const styles=[
 '#'+ID+' .f360-period b{color:var(--text)}',
 '#'+ID+' .f360-pill{border:1px solid var(--border);border-radius:100px;padding:6px 10px;background:var(--card);font-size:11px;color:var(--sub)}',
 '#'+ID+' .f360-pill.warn{background:var(--amb,#fffbeb);border-color:#fcd34d;color:var(--am,#92400e)}',
-'#'+ID+' .f360-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}',
+'#'+ID+' .f360-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}',
 '#'+ID+' .f360-kpi{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;min-width:0;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer}',
 '#'+ID+' .f360-kpi.selected{border-color:var(--a);background:var(--ab)}',
 '#'+ID+' .f360-kpi>span{font-size:11px;color:var(--sub)}',
@@ -328,14 +412,14 @@ const styles=[
 '#'+ID+' .f360-month{font-size:11px;font-weight:650}',
 '#'+ID+' .f360-duobars{min-height:23px;display:grid;align-content:center;gap:3px}',
 '#'+ID+' .f360-bar{height:9px;border-radius:3px;min-width:0}',
-'#'+ID+' .f360-bar.current{background:var(--a,#2563eb)}',
+'#'+ID+' .f360-bar.current{background:var(--a,#185FA5)}',
 '#'+ID+' .f360-bar.previous{background:#b1b7c8}',
 '#'+ID+' .f360-chartvalue{font-size:10px;text-align:right;font-weight:650}',
 '#'+ID+' .f360-chartvalue small{display:block;font-weight:500;color:var(--sub)}',
 '#'+ID+' .f360-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;margin-top:12px;color:var(--sub)}',
 '#'+ID+' .f360-legend span{display:flex;align-items:center;gap:5px}',
 '#'+ID+' .f360-swatch{display:inline-block;width:10px;height:10px;border-radius:2px}',
-'#'+ID+' .f360-swatch.current{background:var(--a,#2563eb)}',
+'#'+ID+' .f360-swatch.current{background:var(--a,#185FA5)}',
 '#'+ID+' .f360-swatch.previous{background:#b1b7c8}',
 '#'+ID+' .f360-filterchips,.f360-buttons{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}',
 '#'+ID+' .f360-chip,#'+ID+' .f360-btn,#'+ID+' .f360-quiet{border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:11px;font-weight:660;padding:8px 10px;cursor:pointer}',
@@ -358,10 +442,27 @@ const styles=[
 '#'+ID+' .f360-managertrack i{height:100%;background:var(--a);display:block;border-radius:4px}',
 '#'+ID+' .f360-managerline>span:last-child{text-align:right;font-size:11px}',
 '#'+ID+' .f360-managerline>span:last-child small{display:block;color:var(--sub);font-size:9px}',
+'#'+ID+' .f360-manager-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}',
+'#'+ID+' .f360-manager-card{border:1px solid var(--border);border-radius:10px;padding:12px;min-width:0}',
+'#'+ID+' .f360-manager-card summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;cursor:pointer;list-style:none}',
+'#'+ID+' .f360-manager-card summary>b{grid-column:1/-1;font-size:17px}',
+'#'+ID+' .f360-manager-card summary span{font-size:14px;line-height:1.4}',
+'#'+ID+' .f360-manager-card summary strong{display:block;font-size:18px}',
+'#'+ID+' .f360-manager-body{padding-top:12px;font-size:14px;line-height:1.5}',
+'#'+ID+' .f360-returned{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border)}',
+'#'+ID+' .f360-returned button{border:0;background:none;color:var(--a);font:inherit;cursor:pointer;text-align:left}',
 '#'+ID+' .f360-safety{margin-top:16px;padding:12px;border-radius:9px;border:1px solid var(--border);background:var(--bg)}',
 '#'+ID+' .f360-safety b{font-size:12px}',
 '#'+ID+' .f360-safety p{font-size:11px;line-height:1.5;color:var(--sub);margin:5px 0 0}',
 '#'+ID+' .f360-detail{padding:15px;border:1px solid var(--a);border-radius:9px;margin:11px 0;background:var(--card)}',
+'#'+ID+' .f360-clientrow>.f360-detail{grid-column:1/-1;width:100%}',
+'#'+ID+' .f360-products{margin-top:14px;font-size:14px}',
+'#'+ID+' .f360-products details{border:1px solid var(--border);border-radius:8px;padding:10px;margin:7px 0}',
+'#'+ID+' .f360-products summary{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer;font-weight:700}',
+'#'+ID+' .f360-products summary span{font-weight:600;color:var(--sub)}',
+'#'+ID+' .f360-product{display:grid;grid-template-columns:minmax(150px,1fr) auto auto auto;gap:10px;padding:10px 0;border-top:1px solid var(--border);overflow-wrap:anywhere}',
+'#'+ID+' .f360-product small{display:block;font-weight:500;color:var(--sub)}',
+'#'+ID+' .f360-product span{color:var(--sub)}',
 '#'+ID+' .f360-detail-head{display:flex;align-items:center;justify-content:space-between;gap:10px}',
 '#'+ID+' .f360-detail-head b{font-size:15px}',
 '#'+ID+' .f360-detail-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}',
@@ -385,7 +486,7 @@ const styles=[
 '#page-falling.f360-installed #falling-list{display:none}',
 '#page-falling.f360-installed.f360-legacy-open #falling-list{display:block}',
 '@media(max-width:1100px){#'+ID+' .f360-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}#'+ID+' .f360-topgrid,#'+ID+' .f360-bottomgrid{grid-template-columns:1fr}}',
-'@media(max-width:650px){#'+ID+' .f360-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#'+ID+' h2{font-size:19px}#'+ID+' .f360-chartrow{grid-template-columns:58px minmax(65px,1fr) 86px;gap:5px}#'+ID+' .f360-clientrow{grid-template-columns:19px minmax(90px,1fr) 68px;gap:5px}#'+ID+' .f360-clientrow .f360-quiet{grid-column:2 / 4;justify-self:start}#'+ID+' .f360-dual,#'+ID+' .f360-detail-kpis{grid-template-columns:1fr}}'
+'@media(max-width:650px){#'+ID+' .f360-kpis{grid-template-columns:1fr}#'+ID+' .f360-manager-cards{grid-template-columns:1fr}#'+ID+' h2{font-size:19px}#'+ID+' .f360-chartrow{grid-template-columns:58px minmax(65px,1fr) 86px;gap:5px}#'+ID+' .f360-clientrow{grid-template-columns:19px minmax(90px,1fr) 68px;gap:5px}#'+ID+' .f360-clientrow .f360-quiet{grid-column:2 / 4;justify-self:start}#'+ID+' .f360-dual,#'+ID+' .f360-detail-kpis{grid-template-columns:1fr}#'+ID+' .f360-product{grid-template-columns:1fr 1fr}}'
 ].join('\n');
 w.RESANTA_FALLING360_V1=Object.freeze({version:'20261109.1',readOnly:true,usesLegacyFallingEngine:true,isRecoveryTask,monthsFor,taskOpen});
 if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',install,{once:true});

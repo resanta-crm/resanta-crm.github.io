@@ -10,13 +10,14 @@ const html=fs.readFileSync('index.html','utf8');
 test('approved KPI360 visual parses, retains all original director dashboard features',()=>{
  new vm.Script(visual,{filename:'assets/160-manager-kpi360-visual-v2.js'});
  for(const must of [
-  'Продажи по менеджерам','Клиенты для KPI по менеджерам','Динамика продаж, АКБ и клиентов KPI',
-  'Коротко за месяц','Зона внимания','rank_overall','rank_sales','rank_akb','rank_bonus',
-  'Места в команде','Спросить Леру','function exportCsv',
+  'Продажи по менеджерам','Новые и вернувшиеся клиенты по менеджерам','Динамика продаж, АКБ и клиентов KPI',
+  'АКБ по менеджерам','Выполнение плана продаж','rank_overall','rank_sales','rank_akb','rank_bonus',
+  'Места в команде','function launchLera','function exportCsv',
   'data-metric','data-manager','Вся АКБ','Клиенты менеджеров'
  ])assert.ok(visual.includes(must),'missing UI '+must);
  assert.doesNotMatch(visual,/Задачи на сегодня/);
  assert.ok(html.includes('160-manager-kpi360-visual-v2.js'));
+ assert.match(html,/data-kv-lera[^>]*>✦ Спросить Леру/);
 });
 
 test('six-month rank SQL is ownership scoped BEFORE exposing result and uses all 3 plan metrics',()=>{
@@ -43,7 +44,7 @@ test('client list is collapsed for directors until a manager is chosen',()=>{
  assert.match(visual,/Списки скрыты, чтобы не перегружать экран/);
  assert.match(visual,/function openManager\(data,rows,name\)/);
  assert.match(visual,/managerPanel\(data,rows\);renderDetails\(data,rows\)/);
- assert.match(visual,/event\.key==='Enter'\|\|event\.key===' '/);
+ assert.match(visual,/<button type="button" class="kv-manager-link" data-manager=/);
 });
 
 test('no cross-manager data access from client; old plan editor and premium rules unchanged',()=>{
@@ -52,7 +53,7 @@ test('no cross-manager data access from client; old plan editor and premium rule
  assert.match(visual,/if\(!isBoss\(\)&&!rows\.some/);
  assert.match(visual,/plans\.style\.display=isBoss\(\)\?'inline-flex':'none'/);
  assert.match(visual,/data\.history=\{rows:\[\],unavailable:true\}/);
- assert.match(visual,/serial!==generation\|\|!active\(\)\|\|month\(\)!==m/);
+ assert.match(visual,/serial===generation&&requestKey\(\)===key/);
  assert.match(visual,/6 полных месяцев/);
  assert.match(visual,/function launchLera\(\)/);
  assert.match(visual,/input\.value=question/);

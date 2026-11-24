@@ -92,9 +92,9 @@ test('isolated view loads after the established falling engine and task guards',
 test('does not write sales, tasks, client records, routes, or invent recovered amounts',()=>{
  assert.doesNotMatch(src,/\b(?:db|supabase)\.(?:from|rpc|insert|update|delete)\s*\(/);
  assert.doesNotMatch(src,/\bfetch\s*\(/);
- assert.match(src,/Брифинг сформирован правилами/);
- assert.match(src,/Клиент, вышедший из списка падения, ещё не считается подтверждённо восстановленным/);
- assert.match(src,/Сравнение по одним и тем же клиентам/);
+ assert.match(src,/Причина не установлена/);
+ assert.match(src,/Подтверждённых возвратов за выбранный месяц нет/);
+ assert.match(src,/Сопоставимые календарные периоды/);
 });
 test('falling-task detection distinguishes unrelated client tasks',()=>{
  const f=fixture();
@@ -113,18 +113,17 @@ test('director dashboard renders exact KPI values and both years from known clie
  assert.equal(f.window.renderFallingClients(),'legacy-rendered');
  const html=f.nodes['falling360-root'].innerHTML;
  assert.equal(f.baseCalls(),1,'original engine executes once');
- assert.match(html,/Возврат продаж 360°/);
+ assert.match(html,/Лера · Кого вернуть/);
  assert.match(html,/Падающие клиенты/);
- assert.match(html,/Снижение оборота/);
+ assert.match(html,/Потерянный оборот/);
  assert.match(html,/2,4 тыс. BYN/);
- assert.match(html,/Критично/);
- assert.match(html,/Без задачи возврата/);
- assert.match(html,/f360-swatch current/);
- assert.match(html,/>2026<\/span>/);
- assert.match(html,/>2025<\/span>/);
+ assert.match(html,/Критические клиенты/);
+ assert.match(html,/Снижение более 30%/);
+ assert.match(html,/янв — окт 2026/);
+ assert.match(html,/янв — окт 2025/);
  assert.match(html,/Тестовый Клиент А/);
  assert.match(html,/Тестовый Клиент Б/);
- assert.match(html,/У 1 есть задачи другого типа/);
+ assert.match(html,/Менеджеры · подтверждённый возврат/);
  assert.ok(f.classes.has('f360-installed'));
  assert.equal(f.nodes['falling-list'].innerHTML,'EXISTING CLIENT DETAILS');
  assert.equal(f.nodes['falling-kpi'].innerHTML,'EXISTING KPI');
@@ -145,9 +144,9 @@ test('client deep dive uses original client, ABC and AI guard handlers',()=>{
  f.window.renderFallingClients();
  press(f,'button',{'data-f360-focus':'client-1'});
  const html=f.nodes['falling360-root'].innerHTML;
- assert.match(html,/Потерянные группы/);
+ assert.match(html,/Лера · Рекомендации/);
  assert.match(html,/Перфоратор А/);
- assert.match(html,/Мозговой штурм/);
+ assert.match(html,/Причина по истории продаж не установлена/);
  assert.match(html,/Комментарий руководителя для ИИ-задачи/);
  press(f,'button',{'data-f360-client':'client-1'});
  press(f,'button',{'data-f360-abc':'client-1'});

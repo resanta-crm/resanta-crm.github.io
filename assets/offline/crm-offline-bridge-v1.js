@@ -2,163 +2,133 @@
 
 (() => {
   const store = window.crmOfflineStore;
-  const production = 'https://resanta-crm.by';
-  const director = '544fb1e2-ef70-44de-bc62-e0e1596a4bfc';
-  if (location.origin !== production || !store) return;
   const app = document.getElementById('app');
-  const name = document.getElementById('user-name');
-  const reportNames = new Map([
-    ['dashboard','Центр управления'],['sales','Продажи'],['managers','Менеджеры · KPI'],
-    ['abc','ABC-анализ'],['vip','ВИП клиенты'],['falling','Падающие клиенты'],
-    ['workday','Рабочий день'],['triovist','Триовист / 21vek'],['promotions','Акции'],
-    ['markdown','Уценка'],['stands','Стенды'],
-  ]);
-  let actor;
-  let controls;
+  const main = document.getElementById('main-content');
+  if (!store || !app || !main || !navigator.serviceWorker || document.documentElement.classList.contains('native-app')) return;
 
-  function owner() {
+  // Settings, access administration and communications are deliberately kept online.
+  const excluded = new Set(['users','connect','support-v1','company-viewer']);
+  const routeSections = new Set(['routes-boss','my-routes','route']);
+  const readable = new Set(['boss','manager','office_manager','service_manager','payment_executor']);
+  let authorized;
+  let timer;
+  let worker;
+  let savedAt=0;
+  let menuKey='';
+
+  function profile() {
     const id = currentUser?.id;
-    return getComputedStyle(app).display !== 'none' && !document.documentElement.classList.contains('native-app') &&
-      id === director && currentProfile?.id === id && currentProfile.role === 'boss' &&
-      currentProfile.access_scope === 'standard' && store.identity() === id ? id : null;
+    const p = currentProfile;
+    if (!id || id !== store.identity() || id !== p?.id || !readable.has(p.role) || getComputedStyle(app).display === 'none') return null;
+    return {id, key:[p.role,p.region,p.access_scope].join('|')};
   }
-  async function verify(id) {
-    const {data,error} = await db.auth.getUser();
-    if (error || data.user?.id !== id || owner() !== id) throw Error('Сессия CRM не подтверждена.');
+  function pages() {
+    const result = new Map();
+    for (const element of app.querySelectorAll('.sidebar .nav-item[id],.bottom-nav .bn-item[id]')) {
+      const key = element.id.replace(/^(nav|bn)-/,'');
+      if (excluded.has(key) || element.hidden || element.disabled || element.getAttribute('aria-hidden') === 'true' ||
+          getComputedStyle(element).display === 'none' || !document.getElementById('page-'+key)) continue;
+      const title = element.textContent.trim().replace(/\s+/g,' ').slice(0,100);
+      if (title && !result.has(key)) result.set(key,title);
+    }
+    return Object.fromEntries(result);
   }
-  const selected = value => String(value ?? '').trim();
-  const same = (a,b) => selected(a).toLowerCase() === selected(b).toLowerCase();
-  const limitText = (value,limit) => selected(value).slice(0,limit);
-
-  async function capture(id) {
-    await verify(id);
-    if (!navigator.serviceWorker) throw Error('На этом устройстве офлайн-открытие недоступно.');
-    if (!window.crmCoreGetV22733) throw Error('Дождитесь загрузки CRM.');
-    const [tasks,visits,routes] = await Promise.all(['tasks','visits','routes'].map(key => window.crmCoreGetV22733(key,true)));
-    if (owner() !== id) throw Error('Учётная запись изменилась.');
-    if (![tasks,routes,visits,allClients].every(Array.isArray)) throw Error('Данные CRM ещё не загружены.');
-    const me = currentProfile.name;
-    const active = new Set(canonicalActiveTasks(tasks).map(row => row.id));
-    const data = {
-      owner:id,savedAt:Date.now(),
-      routes:routes.filter(row => !row.removed && !['pending','rejected'].includes(row.review_status))
-        .map(row => ({
-          id:String(row.id),clientId:row.client_id,name:limitText(row.client_name,240),date:row.visit_date,
-          address:limitText(row.address,220),visited:!!(row.visited || row.linked_visit_id),own:same(row.manager_name,me),
-        })).sort((a,b) => String(b.date).localeCompare(String(a.date))),
-      tasks:tasks.map(row => ({
-        id:String(row.id),clientId:row.client_id,dueDate:row.due_date,done:row.done===true,reviewStatus:row.review_status,
-        active:active.has(row.id),title:limitText(row.title || row.text || 'Задача',420),
-      })),
-      visits:visits.filter(row => !row.is_duplicate).map(row => ({
-        date:row.date,clientId:row.client_id,result:limitText(row.result,150),
-      })),
-      clients:allClients.map(row => ({
-        id:String(row.id),name:limitText(row.name,240),address:limitText([row.city,row.address].filter(Boolean).join(', '),280),
-      })),
+  const clean = (text,max) => String(text ?? '').trim().slice(0,max);
+  function snapshot(account,menu) {
+    const clients = menu.clients ? allClients : [];
+    const ownRows = rows => currentProfile.role==='manager' ? rows.filter(row=>row.manager_name===currentProfile.name) : rows;
+    const tasks = menu.tasks ? ownRows(allTasks) : [];
+    const routes = [...routeSections].some(key => menu[key]) ? ownRows(allRoutePlans) : [];
+    const visits = menu.visits ? ownRows(allVisits) : [];
+    const active = new Set(typeof canonicalActiveTasks === 'function' ? canonicalActiveTasks(tasks).map(row => row.id) : []);
+    return {
+      owner:account.id, profileKey:account.key, menu, savedAt:Date.now(),
+      routes:routes.filter(row => !row.removed && !['pending','rejected'].includes(row.review_status)).slice(-800).map(row => ({
+        id:String(row.id),clientId:String(row.client_id??''),name:clean(row.client_name,240),date:row.visit_date,
+        address:clean(row.address,220),visited:!!(row.visited||row.linked_visit_id),
+        own:store.canRecord(account.id) && clean(row.manager_name,240) === clean(currentProfile?.name,240)
+      })).sort((a,b) => String(b.date).localeCompare(String(a.date))),
+      tasks:tasks.slice(-1200).map(row => ({id:String(row.id),clientId:String(row.client_id??''),dueDate:row.due_date,
+        done:row.done===true,reviewStatus:row.review_status,active:active.has(row.id),title:clean(row.title||row.text||'Задача',420)})),
+      visits:visits.filter(row=>!row.is_duplicate).slice(-700).map(row=>({date:row.date,clientId:String(row.client_id??''),result:clean(row.result,150)})),
+      clients:clients.slice(0,3500).map(row=>({id:String(row.id),name:clean(row.name,240),address:clean([row.city,row.address].filter(Boolean).join(', '),280)}))
     };
-    await store.writeSnapshot(data);
-    const registration = await navigator.serviceWorker.register('./assets/offline/sw.js',{scope:'./assets/offline/'});
-    const installed = registration.installing || registration.waiting;
-    if (installed && installed.state !== 'activated') {
-      await new Promise((resolve,reject) => {
-        const timer = setTimeout(() => reject(Error('Подготовка офлайн-экрана заняла слишком много времени.')),15000);
-        installed.addEventListener('statechange',() => {
-          if (installed.state === 'activated') {clearTimeout(timer);resolve();}
-          if (installed.state === 'redundant') {clearTimeout(timer);reject(Error('Не удалось подготовить офлайн-экран.'));}
-        });
-      });
-    }
-    if (!(await navigator.serviceWorker.getRegistration('./assets/offline/'))?.active) throw Error('Не удалось подготовить офлайн-экран.');
   }
-
-  async function sync() {
-    await store.synchronize(owner());
-    await status();
+  function activePage() {
+    return app.dataset.activePage || main.querySelector(':scope > .page.active')?.id.slice(5) || 'dashboard';
   }
-  async function status() {
-    const id = owner();
-    if (!id || !controls) return;
-    const queue = await store.queue(id);
-    if (!owner()) return;
-    const pending = queue.filter(row => row.state === 'pending').length;
-    const conflicts = queue.filter(row => row.state === 'conflict').length;
-    controls.open.textContent = ['Офлайн',pending ? 'В очереди '+pending : '',conflicts ? 'На проверке '+conflicts : ''].filter(Boolean).join(' · ');
+  async function registerWorker() {
+    await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
+    const previous = await navigator.serviceWorker.getRegistration('/assets/offline/');
+    if (previous && new URL(previous.scope).pathname === '/assets/offline/') {
+      // The former opt-in worker remains a safe fallback until the root worker activates.
+      const current = await navigator.serviceWorker.getRegistration('/');
+      if (current?.active) await previous.unregister();
+    }
   }
-
-  async function saveView(id) {
-    const key = app.dataset.activePage;
-    const title = reportNames.get(key);
-    const page = document.getElementById('page-'+key);
-    if (!title || !page?.classList.contains('active')) throw Error('Откройте нужный отчёт.');
-    const text = page.innerText?.trim() || '';
-    if (!text) throw Error('Дождитесь загрузки отчёта.');
-    if (text.length > 80000) throw Error('Отчёт слишком большой. Уточните фильтры.');
-    await store.saveReport(id,{key,title,text,savedAt:Date.now()});
+  async function save() {
+    const account=profile();
+    if (!account || !navigator.onLine || document.getElementById('loading-overlay')?.style.display === 'flex') return;
+    if (!worker) worker=registerWorker().catch(() => {worker=null;});
+    if (authorized?.id!==account.id || authorized?.key!==account.key) {
+      const {data,error}=await db.auth.getUser();
+      if(error||data.user?.id!==account.id||profile()?.key!==account.key||profile()?.id!==account.id)return;
+      if(authorized?.id&&authorized.id!==account.id)await store.removeSnapshot(authorized.id);
+      authorized=account;
+      savedAt=0;
+    }
+    const menu=pages();
+    if(!Object.keys(menu).length)return;
+    const scope=JSON.stringify(menu);
+    if(scope!==menuKey||Date.now()-savedAt>60000){
+      await store.writeSnapshot(snapshot(account,menu));
+      menuKey=scope;
+      savedAt=Date.now();
+    }
+    const key=activePage();
+    const page=document.getElementById('page-'+key);
+    const title=menu[key];
+    if(!title||!page?.classList.contains('active')||key==='tasks'||key==='clients'||key==='visits'||routeSections.has(key))return;
+    if(page.querySelector('[aria-busy=true],.s360-loading,.v22722-page-loading'))return;
+    const content=clean(page.innerText,60000);
+    if(content.length>title.length+15&&!/^(.*\n)?(?:Загружа|Не удалось загрузить)/u.test(content))
+      await store.saveReport(account.id,{key,title,text:content,savedAt:Date.now()});
   }
-
-  function mount() {
-    const id = owner();
-    if (!id) {
-      if (actor) store.removeSnapshot(actor).catch(() => {});
-      actor = null;
-      if (controls) controls.panel.hidden = true;
-      return;
-    }
-    if (actor === id && controls) {
-      controls.save.hidden = !reportNames.has(app.dataset.activePage);
-      return;
-    }
-    actor = id;
-    if (!controls) {
-      const panel = document.createElement('span');
-      panel.style.cssText = 'display:inline-flex;gap:5px;flex-wrap:wrap';
-      const prepare = document.createElement('button');
-      prepare.type = 'button';
-      prepare.className = 'btn-secondary';
-      prepare.textContent = 'Подготовить офлайн';
-      const open = document.createElement('a');
-      open.className = 'btn-secondary';
-      open.href = './assets/offline/';
-      open.textContent = 'Офлайн';
-      const message = document.createElement('span');
-      message.setAttribute('role','status');
-      const save = document.createElement('button');
-      save.type = 'button';
-      save.className = 'btn-secondary';
-      save.textContent = 'Сохранить экран офлайн';
-      save.addEventListener('click',async () => {
-        try {await saveView(owner()); message.textContent = 'Копия экрана сохранена.';}
-        catch (error) {message.textContent = error.message || 'Не удалось сохранить экран.';}
-      });
-      prepare.addEventListener('click',async () => {
-        const user = owner();
-        if (!user) return;
-        prepare.disabled = true;
-        message.textContent = 'Сохраняем данные…';
-        try {await capture(user);message.textContent = 'Данные готовы для работы без сети.';await sync();}
-        catch (error) {message.textContent = error.message || 'Не удалось подготовить данные.';}
-        finally {prepare.disabled = false;}
-      });
-      panel.append(prepare,open,save,message);
-      name?.after(panel);
-      controls = {panel,open,save};
-    }
-    controls.panel.hidden = false;
-    controls.save.hidden = !reportNames.has(app.dataset.activePage);
-    status().catch(() => {});
-    sync().catch(() => {});
+  let writing=false,pending=false;
+  function schedule(){
+    if(!navigator.onLine)return;
+    clearTimeout(timer);
+    timer=setTimeout(async()=>{
+      if(writing){pending=true;return;}
+      writing=true;
+      try{await save();}catch(error){console.debug('CRM offline cache:',error?.message);}
+      finally{writing=false;if(pending){pending=false;schedule();}}
+    },900);
   }
-  new MutationObserver(mount).observe(app,{attributes:true,attributeFilter:['style','data-active-page']});
-  new MutationObserver(mount).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
-  window.addEventListener('online',()=>sync().catch(() => {}));
-  window.addEventListener('focus',()=>{mount();sync().catch(() => {});});
-  db.auth.onAuthStateChange(event => setTimeout(() => {
-    if (event === 'SIGNED_OUT' && actor) {
-      store.removeSnapshot(actor).catch(() => {});
-      if (controls) controls.panel.hidden = true;
-      actor = null;
-    }
+  function openOffline(){
+    const account=profile();
+    if(!account)return;
+    location.replace('/assets/offline/?section='+encodeURIComponent(activePage()));
+  }
+  const pageObserver=new MutationObserver(schedule);
+  function update(){
+    pageObserver.disconnect();
+    const page=document.getElementById('page-'+activePage());
+    if(page)pageObserver.observe(page,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-busy']});
+    schedule();
+  }
+  new MutationObserver(update).observe(app,{attributes:true,attributeFilter:['style','data-active-page']});
+  const loader=document.getElementById('loading-overlay');
+  if(loader)new MutationObserver(schedule).observe(loader,{attributes:true,attributeFilter:['style']});
+  db.auth.onAuthStateChange(event=>setTimeout(()=>{
+    if(event==='SIGNED_OUT'){
+      if(authorized)void store.removeSnapshot(authorized.id).catch(()=>{});
+      authorized=null;
+      savedAt=0;
+    }else if (event==='SIGNED_IN') schedule();
   },0));
-  mount();
+  window.addEventListener('offline',openOffline);
+  window.addEventListener('online',schedule);
+  window.addEventListener('focus',schedule);
+  update();
 })();

@@ -109,7 +109,7 @@ test('Saved report survives refreshing the route snapshot and stays within the s
   assert.equal(result.tasks.length,1);
   env.as(other);
   assert.equal(await store.readSnapshot(owner),null);
-  await assert.rejects(store.saveReport(owner,report),/Подготовить офлайн/);
+  await assert.rejects(store.saveReport(owner,report),/Откройте CRM/);
 });
 
 test('A lost response preserves the same request; a successful retry confirms only once',async () => {
@@ -175,4 +175,43 @@ test('The worker serves only the offline page and its local assets',()=>{
   assert.equal(request(origin+'/'),undefined);
   assert.equal(request('https://sample.supabase.co/auth/v1/user','cors'),undefined);
   assert.equal(request(scope, 'navigate','POST'),undefined);
+});
+
+test('Other signed-in roles can read their own prepared data with no permission to queue writes',async()=>{
+  const env=setup();
+  env.as(other);
+  const store=env.start();
+  const prepared={...snapshot,owner:other,profileKey:'manager',menu:{sales:'Продажи'}};
+  await store.writeSnapshot(prepared);
+  assert.equal((await store.readSnapshot(other)).owner,other);
+  await store.saveReport(other,{key:'sales',title:'Продажи',text:'Отгрузки',savedAt:Date.now()});
+  await store.writeSnapshot({...prepared,profileKey:'office_manager',menu:{tasks:'Задачи'}});
+  assert.equal(Object.keys((await store.readSnapshot(other)).reports).length,0);
+  await assert.rejects(store.enqueue(other,visit,[]),/Обновите офлайн-данные/);
+  assert.equal(store.synchronize(other),undefined);
+  env.as(owner);
+  assert.equal(await store.readSnapshot(other),null);
+});
+
+test('Root navigation uses the offline renderer on a failed connection and keeps auth and other tools on the network',async()=>{
+  const events=new Map(),offline=new Response('offline');
+  let online=true;
+  runInNewContext(readFileSync(new URL('../service-worker.js',import.meta.url),'utf8'),{
+    self:{location:{origin},addEventListener:(name,fn)=>events.set(name,fn)},
+    URL,fetch:async()=>{if(!online)throw Error('disconnected');return new Response('live');},
+    caches:{open:async()=>({match:async()=>offline})}
+  });
+  const request=(path,mode='navigate',method='GET')=>{
+    let response;
+    events.get('fetch')({request:{url:new URL(path,origin).href,mode,method},respondWith:value=>{response=value;}});
+    return response;
+  };
+  assert.equal(await (await request('/')).text(),'live');
+  online=false;
+  assert.equal(await request('/'),offline);
+  assert.equal(await request('/assets/offline/?section=sales'),offline);
+  assert.equal(request('/?code=one-use-auth'),undefined);
+  assert.equal(request('https://sample.supabase.co/auth/v1/user','cors'),undefined);
+  assert.equal(request('/tsd/'),undefined);
+  assert.equal(request('/','navigate','POST'),undefined);
 });

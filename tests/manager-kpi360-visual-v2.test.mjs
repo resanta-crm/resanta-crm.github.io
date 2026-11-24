@@ -46,7 +46,7 @@ test('Six-month premium rule, canonical IDs and temporal comparisons',()=>{
  assert.match(index,/assets\/160-manager-kpi360-visual-v2\.js/);
 });
 test('Selected design has three KPIs, graphical views, Lera, client detail, export',()=>{
- for(const phrase of ['Продажи по менеджерам','Динамика продаж','Коротко за месяц','Спросить Леру','function exportCsv','Для KPI','Впервые','Вернувшиеся','Вся АКБ'])assert.ok(js.includes(phrase),phrase);
+ for(const phrase of ['Продажи по менеджерам','Динамика продаж','АКБ по менеджерам','function launchLera','function exportCsv','Для KPI','Впервые','Вернувшиеся','Вся АКБ'])assert.ok(js.includes(phrase),phrase);
  assert.doesNotMatch(js,/Задачи на сегодня/);
  assert.match(js,/serial!==generation|serial===generation/);
  assert.match(js,/clientFilter='bonus'/);

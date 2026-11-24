@@ -31,8 +31,8 @@ test('pre-import November shows complete plan dashboard rather than a blank noti
  assert.match(src,/План продаж по менеджерам/);
  assert.match(src,/Планы по клиентам/);
  assert.match(src,/Факт: ожидаем импорт 1С/);
- assert.match(src,/Нули и выполнение плана не рассчитываем/);
- assert.match(src,/Синие полосы показывают только утверждённые планы, а не факт/);
+ assert.match(src,/Факт продаж за выбранный месяц ожидает выгрузки/);
+ assert.match(src,/Синие полосы показывают утверждённые планы продаж/);
  assert.match(src,/Открыть /);
  assert.match(src,/Последняя выгрузка 1С/);
  assert.match(html,/160-manager-kpi360-visual-v2\.js\?v=20261102-5/);
@@ -41,11 +41,11 @@ test('November stays selected and graphs use last uploaded October, not fake Nov
  assert.doesNotMatch(src,/if\(!manuallySelected&&m>data\.latest_sales_month/);
  assert.match(src,/const historyPeriod=data\.latest_sales_month&&m>data\.latest_sales_month\?data\.latest_sales_month:m/);
  assert.match(src,/crm_manager_kpi360_history_v3/);
- assert.match(src,/historyMetric=b\.dataset\.metric;render\(data\)/);
+ assert.match(src,/historyMetric=button\.dataset\.metric/);
 });
 test('pre-import view has no new write privileges and keeps existing 1C fact distinction',()=>{
  assert.doesNotMatch(src,/\.from\('purchase_history'\)\.update\(/);
  assert.doesNotMatch(src,/\.from\('manager_kpi_plans'\)\.update\(/);
- assert.match(src,/Права сохранены: менеджер видит только свои планы/);
+ assert.match(src,/Менеджеру доступны его планы и история/);
  assert.match(src,/plans\.style\.display=isBoss\(\)\?'inline-flex':'none'/);
 });

@@ -1,0 +1,27 @@
+#vip-date-range-v236434{display:grid;gap:12px}
+#vip-date-range-v236434 .vip-range-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#vip-date-range-v236434 fieldset{border:1px solid var(--border,#d9e0e8);border-radius:10px;padding:10px;display:flex;gap:10px;min-width:0}
+#vip-date-range-v236434 legend{font-size:16px;font-weight:700;padding:0 5px}
+#vip-date-range-v236434 label{display:grid;gap:5px;font-size:14px;flex:1;min-width:0}
+#vip-date-range-v236434 input{width:100%;min-width:0}
+#vip-date-range-v236434 .vip-range-actions{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+#vip-date-range-v236434 .vip-range-actions label{max-width:220px}
+#vip-date-status-v236434{font-size:14px;min-height:20px}
+@media(max-width:768px){#vip-date-range-v236434 .vip-range-pair{grid-template-columns:1fr}#vip-date-range-v236434 fieldset{flex-wrap:wrap}#vip-date-range-v236434 .vip-range-actions>*{flex:1}}
+#page-falling.f360-installed #falling-freshness{display:none!important}
+#page-falling #falling-extra-filters{grid-column:1/-1;border-top:1px solid var(--border,#d9e0e8);padding-top:8px}
+#page-falling #falling-extra-filters summary{cursor:pointer;color:var(--a,#185fa5);font-size:14px;font-weight:700}
+#page-falling #falling-extra-filters[open]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#page-falling #falling-extra-filters[open] summary{grid-column:1/-1}
+@media(max-width:768px){#page-falling #falling-extra-filters[open]{grid-template-columns:1fr}}
+#sales360-root,#falling360-root{font-size:16px}
+#sales360-root .s360-muted,#falling360-root .f360-muted{font-size:14px}
+#sales360-root .s360-field label,#sales360-root .s360-field select,
+#sales360-root .s360-tile small,#sales360-root .s360-tile em,
+#falling360-root .f360-kpi>span,#falling360-root .f360-kpi small,
+#falling360-root .f360-period,#falling360-root .f360-pill{font-size:14px}
+#sales360-root .s360-btn,#falling360-root .f360-btn{font-size:14px}
+
+#page-vip #vip-period-info > .card-title,#page-vip #vip-period-info .v22717-version{display:none}
+#page-vip #vip-range-host:empty{display:none}
+#page-falling.f360-installed > div:first-child [onclick*="export"]{visibility:visible}
