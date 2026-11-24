@@ -26,7 +26,12 @@
   let people = [];
   let historyFilter = {};
   let reportFilter = {};
+  let pointContext;
 
+  const allowedOrigins = new Set([
+    'https://resanta-crm.by', 'https://www.resanta-crm.by',
+    'https://resanta-director-pilot-20261119.wigglybean257.chatgpt.site',
+  ]);
   const permitted = () => !!currentUser?.id && currentProfile?.id === currentUser.id &&
     currentProfile.access_scope === 'standard' && currentProfile.region === 'Витебск' &&
     ['manager', 'boss'].includes(currentProfile.role);
@@ -102,6 +107,95 @@
     selectedId = null;
     listPage = 0;
     render();
+  }
+
+  function openReview(id) {
+    if (!permitted()) return;
+    closeModal('modal-client');
+    goPage('negotiations', 'Переговоры');
+    tab = 'history';
+    selectedId = id;
+    listPage = 0;
+    render();
+  }
+
+  function labelled(label, text) {
+    const item = node('p');
+    item.append(node('strong', label + ' · '), document.createTextNode(text));
+    return item;
+  }
+
+  function renderPoint(host, context) {
+    const heading = node('h3', 'Лера · к этому визиту');
+    const content = node('div');
+    const message = status();
+    const record = button('Записать разговор', () => {
+      const route = allRoutePlans.find(item => item.id === context.routePlanId);
+      closeModal('modal-client');
+      openQuickVisit(context.clientId, route?.visit_date || TODAY, context.routePlanId);
+      recordVisit('quick');
+    }, true);
+    host.hidden = false;
+    host.replaceChildren(heading, content, group(record), message);
+    message.textContent = 'Загружаем историю точки…';
+    context.request.then(data => {
+      if (pointContext !== context || !host.contains(content) || !host.isConnected) return;
+      message.textContent = '';
+      const {previous, last_review:review, task} = data;
+      if (context.routePlanId && data.address) content.append(node('p',[data.city,data.address].filter(Boolean).join(' · '),'nt-muted'));
+      if (previous) content.append(labelled('Прошлый визит · ' + previous.date.split('-').reverse().join('.'),
+        previous.recap || 'Визит сохранён.'));
+      if (review) {
+        content.append(labelled('ИИ-разбор · ' + stamp(review.created_at), review.recap || 'Разбор сохранён.'));
+        if (review.open) content.append(labelled('Осталось уточнить', review.open));
+        if (review.action) content.append(labelled('Сегодня', review.action));
+        if (review.phrase) content.append(node('blockquote', '«' + review.phrase + '»'));
+        record.parentElement.append(button('Прошлый разбор', () => openReview(review.id)));
+      } else if (previous?.open) content.append(labelled('Открытый вопрос', previous.open));
+      if (task) content.append(labelled('Задача по клиенту' + (task.due_date ? ' · до ' + task.due_date : ''), task.title));
+      if (!previous && !review && !task) content.append(node('p','У этой точки пока нет сохранённых визитов или разборов.','nt-muted'));
+    }).catch(error => {
+      if (host.contains(message) && pointContext === context) message.textContent = 'История точки недоступна. ' + errorText(error);
+    });
+  }
+
+  function canRecordClient(clientId) {
+    if (!permitted()) return false;
+    const client = allClients.find(item => String(item.id) === String(clientId));
+    return !!client && (currentProfile.role === 'boss' || client.manager_name === currentProfile.name);
+  }
+
+  function mountPoint(clientId) {
+    if (pointContext && pointContext.clientId !== clientId) pointContext = null;
+    const host = document.getElementById('nt-client-point');
+    if (!host || !canRecordClient(clientId)) return;
+    if (pointContext) {
+      renderPoint(host, pointContext);
+      return;
+    }
+    host.hidden = false;
+    host.replaceChildren(button('Записать разговор', () => {
+      closeModal('modal-client');
+      openQuickVisit(clientId, TODAY);
+      recordVisit('quick');
+    }));
+  }
+
+  function beginCheckin(clientId, routePlanId, returnMode) {
+    if (!allowedOrigins.has(location.origin) || !canRecordClient(clientId) || !navigator.onLine) return null;
+    const isCard = returnMode === 'client';
+    const context = {clientId, routePlanId, request:api({action:'visit_context',client_id:clientId,route_plan_id:routePlanId})};
+    context.request.catch(() => {});
+    pointContext = context;
+    if (isCard) mountPoint(clientId);
+    return () => {
+      if (pointContext !== context || !permitted()) return false;
+      if (isCard) return false;
+      if (!['my-routes','route'].includes(returnMode) || !document.getElementById('page-' + returnMode)?.classList.contains('active')) return false;
+      if (routePlanId && !allRoutePlans.some(route => String(route.id) === String(routePlanId))) return false;
+      openClient(clientId);
+      return true;
+    };
   }
   function card(title) {
     const el = node('section', undefined, 'card nt-card');
@@ -367,7 +461,7 @@
       if (row.audio_state === 'ready' || row.audio_state === 'error') {
         api({action:'poll',id}).catch(() => {});
       }
-      const canRefresh = owner && row.review && row.review.coach_version !== 2 && row.manager_speaker &&
+      const canRefresh = owner && row.review && (row.review.coach_version ?? 0) < 2 && row.manager_speaker &&
         row.review.cases.every(item => item.score === null && !item.task_id);
       if (row.review) {
         message.textContent = '';
@@ -420,18 +514,31 @@
   }
   function renderReview(row,box,owner) {
     const review = row.review;
-    const heading = node('h4', review.quality === null ? 'Разбор работы менеджера' : 'Качество переговоров менеджера · ' + review.quality + '%');
-    heading.dataset.ntFocus = 'summary';
-    box.append(heading, node('p', review.summary));
-    const score = node('details');
-    score.append(node('summary','Оценки и основания'));
-    for (const item of review.criteria) {
-      score.append(node('p',item.name + ' · ' + (item.score ?? 'Н/П') + (item.reason ? ' · ' + item.reason : '')));
-      if (item.evidence && review.coach_version === 2) {
-        score.append(node('blockquote', 'Менеджер · ' + timeLabel(item.evidence.time) + ' · ' + item.evidence.text));
+    const brief = review.visit_brief;
+    if (brief || (owner && row.manager_speaker && row.audio_state === 'ready')) {
+      const panel = card('К следующему визиту');
+      panel.classList.add('nt-next-step');
+      panel.dataset.ntFocus = 'summary';
+      if (brief) {
+        panel.append(labelled('Что произошло', brief.recap));
+        if (brief.open) panel.append(labelled('Осталось уточнить', brief.open));
+        panel.append(labelled('Что сделать', brief.action));
+        if (brief.phrase) panel.append(node('blockquote','Можно сказать · «' + brief.phrase + '»'));
+        const evidence = node('details');
+        evidence.append(node('summary','Реплики, на которых основана подсказка'));
+        if (brief.client_evidence) evidence.append(labelled('Клиент · ' + timeLabel(brief.client_evidence.time), brief.client_evidence.text));
+        if (brief.manager_evidence) evidence.append(labelled('Менеджер · ' + timeLabel(brief.manager_evidence.time), brief.manager_evidence.text));
+        if (brief.client_evidence || brief.manager_evidence) panel.append(evidence);
+      } else {
+        const message = status();
+        const prepare = button('Подготовить подсказку', () => operation(prepare,message,async () => {
+          await api({action:'prepare_visit_brief',id:row.id});
+          if (selectedId === row.id) render('summary');
+        }, 'Разбираем ход переговоров…'));
+        panel.append(prepare,message);
       }
+      box.append(panel);
     }
-    box.append(score);
     const completed = review.cases.filter(entry => entry.plan);
     if (completed.length) box.append(node('h4', 'Что сделать дальше'));
     for (const item of completed) {
@@ -459,15 +566,35 @@
       }
       box.append(panel);
     }
+    const heading = node('h4', review.quality === null ? 'Разбор работы менеджера' : 'Качество переговоров менеджера · ' + review.quality + '%');
+    if (!box.querySelector('[data-nt-focus="summary"]')) heading.dataset.ntFocus = 'summary';
+    box.append(heading, node('p', review.summary));
+    const modeLabel = {first_visit:'Первая встреча', repeat_visit:'Повторный визит', deescalation:'Реакция на напряжение или отказ'}[review.mode];
+    if (modeLabel) heading.after(node('p', modeLabel, 'nt-muted'));
+    if (review.strength?.evidence) {
+      box.append(node('h4','Что получилось'), node('p', review.strength.observation),
+        node('blockquote','Менеджер · ' + timeLabel(review.strength.evidence.time) + ' · ' + review.strength.evidence.text));
+    }
+    const score = node('details');
+    score.append(node('summary','Оценки и основания'));
+    for (const item of review.criteria) {
+      score.append(node('p',item.name + ' · ' + (item.score ?? 'Н/П') + (item.reason ? ' · ' + item.reason : '')));
+      if (item.evidence && review.coach_version >= 2) {
+        score.append(node('blockquote', 'Менеджер · ' + timeLabel(item.evidence.time) + ' · ' + item.evidence.text));
+      }
+    }
+    box.append(score);
     const pending = review.cases.find(item => item.score === null);
     if (pending) {
+      if (review.mode) box.append(node('h4','Что улучшить'));
       const panel = card('Ситуация ' + (review.cases.indexOf(pending) + 1) + ' из ' + review.cases.length + ' · ждёт ответа');
       panel.dataset.ntFocus = pending.id;
       panel.append(node('strong',pending.issue),
-        node('blockquote', (review.coach_version === 2 ? 'Менеджер · ' + timeLabel(pending.evidence.time) + ' · ' : '') + pending.evidence.text));
+        node('blockquote', (review.coach_version >= 2 ? 'Менеджер · ' + timeLabel(pending.evidence.time) + ' · ' : '') + pending.evidence.text));
       if (pending.client_context) {
         panel.append(node('p', 'Клиент · ' + timeLabel(pending.client_context.time) + ' · «' + pending.client_context.text + '»', 'nt-muted'));
       }
+      if (pending.reason) panel.append(node('p',pending.reason));
       if (pending.last_reply) {
         panel.append(node('p', 'Ваш ответ сохранён · «' + pending.last_reply.text + '»', 'nt-muted'));
       }
@@ -607,6 +734,7 @@
   };
   function recordVisit(form) {
     const context = visitContext[form];
+    if (!permitted() || !context) return;
     const id = document.getElementById(context.client).value;
     const name = document.getElementById(context.title);
     if (!/^[a-f0-9-]{36}$/i.test(id)) {
@@ -620,47 +748,26 @@
       return;
     }
     const address = context.address ? document.getElementById(context.address).textContent : '';
-    begin({client_id:id, prospect_name:name.value || name.textContent, address, visitForm:form});
+    begin({client_id:id, prospect_name:name.value || name.textContent, address,
+      route_plan_id:form === 'quick' ? qvRoutePlanId : null, visitForm:form});
   }
-  async function saveVisit(form, save) {
-    const draft = visitLinks.get(form);
-    if (!draft || draft.owner !== currentUser?.id) return save();
-    const before = new Set(allVisits.map(visit => visit.id));
-    const result = await save();
-    if (draft.owner !== currentUser?.id) return result;
-    const added = allVisits.filter(visit => !before.has(visit.id) &&
-      visit.client_id === draft.client && visit.manager_id === draft.owner);
-    if (added.length === 1) {
-      api({action:'link_visit', id:draft.id, visit_id:added[0].id})
-        .then(() => {if (visitLinks.get(form) === draft) visitLinks.delete(form);})
-        .catch(() => {}); // The history screen can attach it when the connection returns.
+  window.addEventListener('resanta-negotiation-visit-saved',async ({detail}) => {
+    const draft = visitLinks.get(detail?.form);
+    if (!draft || !detail.visit?.id || draft.client !== detail.visit.client_id || draft.owner !== currentUser?.id) return;
+    try {
+      await api({action:'link_visit',id:draft.id,visit_id:detail.visit.id});
+      if (visitLinks.get(detail.form) === draft) visitLinks.delete(detail.form);
+    } catch {
+      // History retains the recording and offers manual attachment if the network was interrupted.
     }
-    return result;
-  }
-  async function saveClient(save) {
+  });
+  window.addEventListener('resanta-negotiation-client-saved',async ({detail}) => {
     const draft = pendingClient;
-    if (!draft || draft.owner !== currentUser?.id) return save();
-    const initial = new Set(allClients.map(client => client.id));
-    const name = document.getElementById('nc-name').value.trim();
-    const address = document.getElementById('nc-address').value.trim();
-    const result = await save();
-    if (draft.owner !== currentUser?.id) return result;
-    const made = allClients.filter(client => !initial.has(client.id) && client.name === name && client.address === address);
-    if (made.length === 1) {
-      pendingClient = null;
-      try { await api({action:'link_client', id:draft.id, client_id:made[0].id}); }
-      catch {alert('Карточка клиента сохранена. Привяжите её к записи в разделе «Переговоры».');}
-    }
-    return result;
-  }
-  for (const [form, modalId] of [['quick','modal-quick-visit'], ['visit','modal-visit']]) {
-    const modal = document.getElementById(modalId);
-    new MutationObserver(() => {
-      if (!modal.classList.contains('open')) return;
-      visitLinks.delete(form);
-      document.getElementById('nt-' + form + '-notice').textContent = '';
-    }).observe(modal, {attributes:true,attributeFilter:['class']});
-  }
+    pendingClient = null;
+    if (!draft || draft.owner !== currentUser?.id) return;
+    try {await api({action:'link_client',id:draft.id,client_id:detail.id});}
+    catch {alert('Карточка клиента сохранена. Привяжите её к записи в разделе «Переговоры».');}
+  });
   new MutationObserver(() => {
     if (!document.getElementById('modal-add-client').classList.contains('open')) pendingClient = null;
   }).observe(document.getElementById('modal-add-client'), {attributes:true,attributeFilter:['class']});
@@ -672,12 +779,19 @@
     if (next === userId) return;
     userId = next; ++layout;
     clearTimeout(pollTimer);
-    visitLinks.clear(); pendingClient = null; selectedId = null; people = []; historyFilter = {}; reportFilter = {};
+    visitLinks.clear(); pendingClient = null; selectedId = null; pointContext = null; people = []; historyFilter = {}; reportFilter = {};
+    const point = document.getElementById('nt-client-point');
+    if (point) {point.hidden = true; point.replaceChildren();}
     page.replaceChildren();
     if (dialog.open) dialog.close();
   }
   new MutationObserver(sync).observe(document.getElementById('app'),{attributes:true,attributeFilter:['class','style','data-active-page']});
   new MutationObserver(sync).observe(document.getElementById('nav-sales'),{attributes:true,attributeFilter:['style','class']});
-  window.crmNegotiations = {open, recordVisit, saveVisit, saveClient};
+  function resetVisit(form) {
+    visitLinks.delete(form);
+    const notice = document.getElementById('nt-' + form + '-notice');
+    if (notice) notice.textContent = '';
+  }
+  window.crmNegotiations = {open, recordVisit, beginCheckin, mountPoint, resetVisit};
   sync();
 })();

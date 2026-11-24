@@ -38,8 +38,6 @@
 #page-negotiations .nt-speaker-name {font-weight:700}
 #page-negotiations .nt-speaker-quote {grid-column:2;color:var(--sub);overflow-wrap:anywhere}
 
-#page-managers .nt-kpi-entry:not([hidden]) {display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-
 #page-negotiations .nt-filters {margin-top:8px}
 #page-negotiations .nt-filters [hidden] {display:none}
 #page-negotiations .nt-report {margin-top:12px}
@@ -47,3 +45,17 @@
 #page-negotiations .nt-metric {padding:10px;background:var(--bg);border-radius:8px;display:grid;gap:3px}
 #page-negotiations .nt-metric strong {font-size:1.2rem}
 #page-negotiations .nt-next-step {border-left:3px solid var(--a)}
+
+.nt-point:not([hidden]) {
+  margin:0 0 12px;padding:14px;border:1px solid var(--border);
+  border-left:3px solid var(--a);border-radius:10px;background:var(--card);
+  overflow-wrap:anywhere;
+}
+.nt-point h3 {font-size:1rem;margin:0 0 8px}
+.nt-point p {font-size:.9rem;line-height:1.4;margin:6px 0}
+.nt-point .nt-muted,.nt-point .nt-message {color:var(--sub)}
+.nt-point .nt-muted {white-space:pre-line}
+.nt-point blockquote {margin:8px 0;padding:8px 10px;background:var(--ab);border-radius:6px}
+.nt-point .nt-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.nt-point button {min-height:44px}
+.nt-point .nt-message:empty {display:none}
