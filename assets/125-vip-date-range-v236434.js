@@ -181,6 +181,7 @@ async function apply(){
 }
 function reset(rerender){
   S.active=false;S.data=null;S.summary.clear();S.from='';S.to='';S.compareFrom='';S.compareTo='';
+  status('');
   try{localStorage.removeItem('resanta_vip_date_range_v236434')}catch(_){}
   if(rerender)window.renderVip?.();
 }
@@ -223,8 +224,7 @@ if(typeof baseRender==='function'){
   window.renderVip=wrapped;try{renderVip=wrapped}catch(_){}
 }
 document.addEventListener('change',e=>{
-  if(e.target.closest?.('#vip-period-controls-v236198 select[onchange*="vipMonth198"]')&&S.active)reset(false);
-  if(e.target.closest?.('#vip-period-controls-v236198 select[onchange*="vipMode198"]')&&S.active){setTimeout(apply,0)}
+  if(e.target.closest?.('#vip-period-controls-v236198 select, #vip-period-controls-native-v236202 select')&&S.active)reset(false);
 },true);
 function mount(){
   ensureControls();

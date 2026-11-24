@@ -15,6 +15,7 @@
   let worker;
   let savedAt=0;
   let menuKey='';
+  let cachedSources=[];
 
   function profile() {
     const id = currentUser?.id;
@@ -35,8 +36,8 @@
   }
   const clean = (text,max) => String(text ?? '').trim().slice(0,max);
   function snapshot(account,menu) {
-    const clients = menu.clients ? allClients : [];
     const ownRows = rows => currentProfile.role==='manager' ? rows.filter(row=>row.manager_name===currentProfile.name) : rows;
+    const clients = menu.clients ? ownRows(allClients) : [];
     const tasks = menu.tasks ? ownRows(allTasks) : [];
     const routes = [...routeSections].some(key => menu[key]) ? ownRows(allRoutePlans) : [];
     const visits = menu.visits ? ownRows(allVisits) : [];
@@ -80,9 +81,11 @@
     const menu=pages();
     if(!Object.keys(menu).length)return;
     const scope=JSON.stringify(menu);
-    if(scope!==menuKey||Date.now()-savedAt>60000){
+    const sources=[allClients,allTasks,allRoutePlans,allVisits].flatMap(rows=>[rows,rows.length]);
+    if(scope!==menuKey||Date.now()-savedAt>60000||sources.some((value,index)=>cachedSources[index]!==value)){
       await store.writeSnapshot(snapshot(account,menu));
       menuKey=scope;
+      cachedSources=sources;
       savedAt=Date.now();
     }
     const key=activePage();

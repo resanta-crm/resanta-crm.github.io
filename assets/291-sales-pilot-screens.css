@@ -24,4 +24,4 @@
 
 #page-vip #vip-period-info > .card-title,#page-vip #vip-period-info .v22717-version{display:none}
 #page-vip #vip-range-host:empty{display:none}
-#page-falling.f360-installed > div:first-child [onclick*="export"]{visibility:visible}
+#page-falling.f360-installed > div:first-child > div:first-child:has(.page-title){display:none}
