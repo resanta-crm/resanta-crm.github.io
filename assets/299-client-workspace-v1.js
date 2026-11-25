@@ -3,12 +3,24 @@
   const app = doc.getElementById('app');
   const sidebar = app?.querySelector('.layout > .sidebar');
   if (!sidebar) return;
-  const sections = [
-    ['clients', 'Клиенты'],
-    ['lpr-birthdays', 'ЛПР и дни рождения'],
-    ['networks', 'Сети'],
+  const groups = [
+    { label: 'Разделы клиентов', sections: [
+      ['clients', 'Клиенты'],
+      ['lpr-birthdays', 'ЛПР и дни рождения'],
+      ['networks', 'Сети'],
+    ] },
+    { label: 'Разделы рабочего дня', sections: [
+      ['connect', 'Чаты'],
+      ['meeting-planner', 'Календарь и совещания'],
+      ['tasks', 'Задачи'],
+      ['visits', 'Визиты'],
+      ['gps-control', 'GPS-контроль'],
+      ['routes-boss', 'Маршруты'],
+      ['my-routes', 'Мой маршрут'],
+      ['route', 'Маршрут дня'],
+    ] },
   ];
-  const owners = new Map(sections);
+  const owners = new Map(groups.flatMap(group => group.sections.map(([id]) => [id, group])));
   let scheduled = false;
 
   function permitted(id) {
@@ -22,11 +34,12 @@
   function render() {
     scheduled = false;
     const active = app.dataset.activePage;
-    if (!owners.has(active)) return;
+    const group = owners.get(active);
+    if (!group) return;
     const page = doc.getElementById('page-' + active);
     if (!page) return;
-    let nav = page.querySelector(':scope > .crm-client-tabs');
-    const tabs = sections.filter(([id]) => permitted(id));
+    let nav = page.querySelector(':scope > .crm-workspace-tabs');
+    const tabs = group.sections.filter(([id]) => permitted(id));
     if (tabs.length < 2 || !tabs.some(([id]) => id === active)) {
       nav?.remove();
       return;
@@ -35,8 +48,8 @@
     if (nav?.dataset.sections === key) return;
     if (!nav) {
       nav = doc.createElement('nav');
-      nav.className = 'crm-client-tabs';
-      nav.setAttribute('aria-label', 'Разделы клиентов');
+      nav.className = 'crm-workspace-tabs';
+      nav.setAttribute('aria-label', group.label);
       page.prepend(nav);
     }
     nav.dataset.sections = key;
