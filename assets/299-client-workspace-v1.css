@@ -1,11 +1,11 @@
-:is(#page-clients,#page-lpr-birthdays,#page-networks) {
-  --client-accent: var(--a,#185fa5);
-  --client-tint: var(--ab,#e6f1fb);
+:is(#page-clients,#page-lpr-birthdays,#page-networks,#page-connect,#page-meeting-planner,
+    #page-tasks,#page-visits,#page-gps-control,#page-routes-boss,#page-my-routes,#page-route) {
+  --workspace-accent: var(--a,#185fa5);
+  --workspace-tint: var(--ab,#e6f1fb);
   color: var(--text);
 }
-:is(#page-clients,#page-lpr-birthdays,#page-networks) .crm-client-tabs,
-#page-clients.uc-installed > .crm-client-tabs {
-  display: flex !important;
+.crm-workspace-tabs {
+  display: flex;
   flex-wrap: wrap;
   gap: 7px;
   margin-bottom: 16px;
@@ -14,7 +14,11 @@
   border: 1px solid var(--border);
   border-radius: 12px;
 }
-.crm-client-tabs button {
+/* These pages hide direct children of their original layouts in their current view. */
+#app .page:is(#page-clients,#page-tasks,#page-routes-boss) > nav.crm-workspace-tabs {
+  display: flex !important;
+}
+.crm-workspace-tabs button {
   min-height: 44px;
   padding: 8px 13px;
   background: transparent;
@@ -25,36 +29,44 @@
   font-weight: 600;
   cursor: pointer;
 }
-.crm-client-tabs button[aria-current="page"], .crm-client-tabs button:hover {
-  background: var(--client-tint);
-  color: var(--client-accent);
-  border-color: color-mix(in srgb,var(--client-accent) 28%,var(--border));
+.crm-workspace-tabs button[aria-current="page"], .crm-workspace-tabs button:hover {
+  background: var(--workspace-tint);
+  color: var(--workspace-accent);
+  border-color: color-mix(in srgb,var(--workspace-accent) 28%,var(--border));
 }
-.crm-client-tabs button:focus-visible {
-  outline: 2px solid var(--client-accent);
+.crm-workspace-tabs button:focus-visible {
+  outline: 2px solid var(--workspace-accent);
   outline-offset: 2px;
 }
-:is(#page-clients .page-title,#page-lpr-birthdays .page-title,#page-networks .page-header h1) {
+:is(#page-clients,#page-lpr-birthdays,#page-connect,#page-tasks,#page-visits,#page-gps-control,
+    #page-routes-boss,#page-my-routes,#page-route) .page-title,
+#page-networks .page-header h1,
+#page-meeting-planner .cmp-head h2,
+#page-tasks #tasks-route-v4 h2 {
   color: var(--text);
   font-size: 25px;
   font-weight: 700;
   letter-spacing: -.5px;
 }
 :is(#page-clients .client-card,#page-lpr-birthdays #lpr-view-v1 .card,#page-lpr-birthdays #lpr-view-v1 .lpr-stat,
-    #page-networks .net-card,#page-networks .net-kpi) {
+    #page-networks .net-card,#page-networks .net-kpi),
+#page-connect .c126-grid,
+#page-meeting-planner :is(.cmp-head,.cmp-panel,.cmp-kpis > div),
+#page-tasks #tasks-route-v4 .tr-panel,
+#page-routes-boss #route-director-360 .rd-panel {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--card);
   box-shadow: none;
 }
 :is(#page-lpr-birthdays #lpr-view-v1 .lpr-stat strong,#page-networks .net-kpi b) {
-  color: var(--client-accent);
+  color: var(--workspace-accent);
   font-variant-numeric: tabular-nums;
 }
 :is(#page-clients .chip.active,#page-lpr-birthdays #lpr-view-v1 [data-lpr-tab][aria-pressed="true"]) {
-  border-color: color-mix(in srgb,var(--client-accent) 38%,var(--border));
-  background: var(--client-tint);
-  color: var(--client-accent);
+  border-color: color-mix(in srgb,var(--workspace-accent) 38%,var(--border));
+  background: var(--workspace-tint);
+  color: var(--workspace-accent);
   font-weight: 600;
 }
 :is(#page-networks .net-toolbar,#page-lpr-birthdays #lpr-view-v1 .lpr-controls) {
@@ -64,8 +76,8 @@
   background: var(--card);
 }
 #page-lpr-birthdays #lpr-view-v1 [data-lpr-action="new"] {
-  background: var(--client-accent);
-  border-color: var(--client-accent);
+  background: var(--workspace-accent);
+  border-color: var(--workspace-accent);
   color: #fff;
 }
 :is(#page-clients,#page-networks,#page-lpr-birthdays) :is(.form-input,.search-input,.btn-primary,.btn-secondary) {
@@ -73,7 +85,32 @@
   max-width: 100%;
   border-radius: 8px;
 }
+#page-connect .c126-room.active,
+#page-meeting-planner .cmp-notice {
+  background: var(--workspace-tint);
+  color: var(--workspace-accent);
+}
+#page-connect .c126-btn.primary,
+#page-meeting-planner .cmp-btn.strong,
+#page-routes-boss #route-director-360 :is(.rd-active,.rd-primary) {
+  background: var(--workspace-accent);
+  border-color: var(--workspace-accent);
+  color: #fff;
+}
+#page-tasks #tasks-route-v4 {
+  --tr-blue: var(--workspace-accent);
+  --tr-soft: var(--workspace-tint);
+  --tr-line: var(--border);
+  --tr-ink: var(--text);
+}
+#page-gps-control #gps360-director-v1 :is(.g-card:not(.attention),.g-box),
+:is(#page-visits,#page-my-routes,#page-route) > .card {
+  border-color: var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: none;
+}
 @media (max-width: 600px) {
-  .crm-client-tabs button { flex: 1 1 auto; }
+  .crm-workspace-tabs button { flex: 1 1 auto; }
   #page-lpr-birthdays #lpr-view-v1 .lpr-controls label { min-width: min(100%, 140px); }
 }
