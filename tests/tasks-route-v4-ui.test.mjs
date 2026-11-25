@@ -25,6 +25,22 @@ test('route client shows explicit SKU plan/fact and has no manual fulfillment',a
 test('assigned manager sees own route, not another manager',async()=>{const h=harness('manager');await h.settle();assert.doesNotMatch(h.document.getElementById('tasks-route-v4').textContent,/ЧУЖОЙ КЛИЕНТ/);});
 test('voice transcript is reviewed before shelf is saved with route and client',async()=>{const h=harness();await h.settle();await h.click('shelf');h.input('transcript','75/6/1 две штуки');await h.click('parse-shelf');assert.equal(h.calls.filter(c=>c.name==='crm_shelf_save_v4').length,0);await h.click('save-shelf');const call=h.calls.find(c=>c.name==='crm_shelf_save_v4');assert.equal(call.args.p_client,cid);assert.equal(call.args.p_route,rid);assert.equal(call.args.p_items[0].reserve_qty,null);});
 test('manager report keeps next action/date and never closes shipment',async()=>{const h=harness('manager');await h.settle();await h.click('report');h.input('fact','Закупщик согласовал часть заказа');h.input('next','Уточнить вторую позицию');h.input('nextDate','2026-11-19');await h.click('save-report');const c=h.calls.find(c=>c.name==='crm_task_report_v4');assert.equal(c.args.p_next,'Уточнить вторую позицию');assert.equal(c.args.p_next_date,'2026-11-19');assert.ok(!Object.hasOwn(c.args,'done'));});
+test('a legacy visit mark leaves the prospect completion available until the stage is recorded',async()=>{
+ const h=harness('manager');
+ h.data.crm_task_contracts_v4.length=0;
+ const assignment=h.data.crm_task_assignments_v5[0];
+ assignment.kind='potential';
+ h.ctx.allClients[0].client_status='Потенциальный';
+ h.data.tasks[0].done=true;
+ await h.settle();
+ await h.api.refresh();
+ assert.equal(h.api.visitTaskKind(h.data.tasks[0]),'potential');
+ await h.click('report');
+ assert.ok(h.document.querySelector('[data-tr="complete-potential"]'));
+ assignment.completed_at='2026-11-15T12:00:00Z';
+ await h.api.refresh();
+ assert.equal(h.document.querySelector('[data-tr="complete-potential"]'),null);
+});
 test('ordinary Lera context is scoped to selected client',async()=>{const h=harness();await h.settle();assert.equal(h.api.context().client_id,cid);assert.equal(h.api.context().route_id,rid);h.document.getElementById('page-tasks').classList.remove('active');assert.equal(h.api.context(),null);});
 test('draft survives switching between shelf and task',async()=>{const h=harness();await h.settle();await h.click('shelf');h.input('transcript','75/6/1 две штуки');await h.click('shipment');await h.click('shelf');assert.equal(h.document.querySelector('[data-tr-field="transcript"]').value,'75/6/1 две штуки');});
 test('before Friday deadline outstanding work is not called failure',async()=>{const h=harness();await h.settle();await h.click('view','control');assert.doesNotMatch(h.document.querySelector('.tr-list').textContent,/Не выполнено|Просрочено/);assert.match(h.document.body.textContent,/Контроль выполнения/);});
