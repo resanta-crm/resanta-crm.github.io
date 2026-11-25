@@ -29,6 +29,17 @@ function visitTaskKind(t){
  if(assigned?.kind==='work'||contract(t)||(t?.source==='must_list'&&work(t)&&client(t.client_id)?.region==='Витебск'))return 'work';
  return '';
 }
+function visitSkuPlan(t,date){
+ if(!allowed()||!t||!['approved',null,undefined].includes(t.review_status)||t.closed_by==='Проверка 1С')return null;
+ const c=contract(t);
+ const workingTask=t.source==='must_list'&&t.criteria==='Автоматическая сверка SKU и количеств с дневными реализациями 1С';
+ if((!c&&!workingTask)||['cancelled','verified'].includes(c?.state))return null;
+ const week=c?.week_start||(t.due_date?monday(t.due_date):'');
+ if(!week||(date&&monday(date)!==week))return null;
+ const items=(c?.targets||t.ai_stock_items||[]).filter(x=>x?.sku&&Number(x.qty)>0)
+  .map(({sku,product,qty})=>({sku,product,qty}));
+ return items.length?{taskId:String(t.id),week,items,progress:c?.baseline_ready===false||c?.check_issue?[]:c?.progress||[]}:null;
+}
 const network=r=>!!(r.is_network_point||r.network_point_id);
 const routeIds=r=>[...new Set([r.client_id,...(r.linked_client_ids||[])].filter(Boolean))];
 function currentRoutes(){return values('routes').filter(r=>r.visit_date>=S.week&&r.visit_date<=plus(S.week,6)&&!r.removed&&!r.is_office_day&&(r.approved||r.review_status==='approved')&&ownManager(r)&&(!S.manager||r.manager_name===S.manager));}
@@ -146,7 +157,16 @@ async function refresh(){if(!allowed()||S.busy)return;S.busy=true;const token=++
 function listFilters(){return '<div class="tr-row tr-list-filters"><label>Период списка<select data-tr-range><option value="all"'+(S.range==='all'?' selected':'')+'>Все даты</option><option value="week"'+(S.range==='week'?' selected':'')+'>Выбранная неделя</option></select></label><label>Состояние<select data-tr-status>'+[['','Все'],['unfinished','Незавершённые'],['open','В работе'],['overdue','Просрочено'],['partial','Частично'],['done','Выполнено'],['check','Проверить данные'],['pending','Ожидает утверждения'],['review','Требует разбора'],['cancelled','Отменено'],['replaced','Заменено другой задачей']].map(([v,n])=>'<option value="'+v+'"'+(v===S.status?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Поиск по клиенту или задаче<input type="search" placeholder="Клиент, задача или артикул" data-tr-search value="'+esc(S.search)+'"></label>'+button('Сбросить фильтры','clear-filters')+'</div>';}
 function controlTable(){const es=entries();return '<div class="tr-table-wrap"><table><thead><tr><th>Менеджер</th><th>Задач</th><th>Выполнено</th><th>Частично</th><th>Просрочено</th></tr></thead><tbody>'+[...new Set(es.map(e=>e.t.manager_name))].map(name=>{const rows=es.filter(e=>e.t.manager_name===name),done=rows.filter(e=>stateOf(e)==='done').length;return '<tr><td>'+esc(name)+'</td><td>'+rows.length+'</td><td>'+done+' · '+Math.round(done/rows.length*100)+'%</td><td>'+rows.filter(e=>stateOf(e)==='partial').length+'</td><td>'+rows.filter(e=>overdue(e.t)).length+'</td></tr>'}).join('')+'</tbody></table></div><p class="tr-sub">Таблица относится к списку ниже и его фильтрам. Недельные показатели выше — к выбранной неделе.</p>';}
 function eventText(p){return [p.fact,p.reason,p.next,p.next_date,p.decision,p.issue,p.from&&p.to?'Изменение результата проверки: '+p.from+' → '+p.to:'',...(p.targets||p.progress||[]).map(x=>x.sku+': план '+(x.target??x.qty??'—')+', факт '+(x.actual??'—'))].filter(Boolean).join(' · ')||'Изменение зарегистрировано';}
-function historyDetail(e){const t=e.t,events=S.events.get(t.id);return '<details'+(S.events.has(t.id)?' open':'')+'><summary>История и результат задачи</summary><p>Поставлена: '+esc(t.created_at?new Date(t.created_at).toLocaleString('ru-RU'):'дата не сохранена')+' · Срок: '+esc(t.due_date||'не задан')+'</p><p>'+esc(t.text||t.title||'')+'</p><p>'+esc(t.expected_result||'')+'</p><p>Основание: '+esc(t.basis||t.ai_reason||'не сохранено')+'</p><p>Результат: '+esc(t.fact_result||t.done_comment||'не записан')+'</p><p>Следующий шаг: '+esc(t.next_action||'не записан')+' '+esc(t.next_contact_date||'')+'</p>'+(t.done_at?'<p>Закрыта: '+esc(t.done_at)+' · '+esc(t.closed_by||'')+'</p>':'')+(!e.a?'<p>Сохранённая история до обновления. Подтверждение 1С задним числом не назначено.</p>':'')+button('Показать журнал изменений','load-events')+(events?events.map(v=>'<p>'+esc(new Date(v.created_at).toLocaleString('ru-RU'))+' · '+esc(({enrolled:'План утверждён',manager_report:'Отчёт менеджера',verification:'Проверка отгрузки',meeting_decision:'Решение руководителя',potential_stage_completed:'Результат по потенциальному клиенту',profile_confirmed:'Карточка проверена'})[v.kind]||v.kind)+'<br>'+esc(eventText(v.payload||{}))+'</p>').join('')||'<p>Отдельных событий не сохранено. Доступные сведения показаны выше.</p>':'')+'</details>';}
+function taskEventContent(event){
+ const p=event.payload||{};
+ if(event.kind!=='visit_sku_results')return esc(eventText(p));
+ const fields=w.crmVisitSkuFields;
+ return '<b>'+esc(p.visit_date||'')+' · '+esc(p.manager_name||'')+'</b><ul>'
+  +(p.items||[]).map(item=>'<li><b>'+esc(item.sku)+' · '+esc(item.product)+'</b> · '+esc(fields?.label(item.result)||item.result)
+   +(item.reason?' · '+esc(item.reason):'')+(item.next_date?' · '+esc(item.next_date):'')
+   +(item.comment?'<br>'+esc(item.comment):'')+'</li>').join('')+'</ul>';
+}
+function historyDetail(e){const t=e.t,events=S.events.get(t.id);return '<details'+(S.events.has(t.id)?' open':'')+'><summary>История и результат задачи</summary><p>Поставлена: '+esc(t.created_at?new Date(t.created_at).toLocaleString('ru-RU'):'дата не сохранена')+' · Срок: '+esc(t.due_date||'не задан')+'</p><p>'+esc(t.text||t.title||'')+'</p><p>'+esc(t.expected_result||'')+'</p><p>Основание: '+esc(t.basis||t.ai_reason||'не сохранено')+'</p><p>Результат: '+esc(t.fact_result||t.done_comment||'не записан')+'</p><p>Следующий шаг: '+esc(t.next_action||'не записан')+' '+esc(t.next_contact_date||'')+'</p>'+(t.done_at?'<p>Закрыта: '+esc(t.done_at)+' · '+esc(t.closed_by||'')+'</p>':'')+(!e.a?'<p>Сохранённая история до обновления. Подтверждение 1С задним числом не назначено.</p>':'') +button(contract(t)?'Показать итоги визитов и журнал':'Показать журнал изменений','load-events')+(events?events.map(v=>'<div class="tr-note">'+esc(new Date(v.created_at).toLocaleString('ru-RU'))+' · '+esc(({enrolled:'План утверждён',manager_report:'Отчёт менеджера',verification:'Проверка отгрузки',meeting_decision:'Решение руководителя',potential_stage_completed:'Результат по потенциальному клиенту',profile_confirmed:'Карточка проверена',baseline_recovered:'Исходный срез 1С восстановлен',visit_sku_results:'Итог визита по артикулам'})[v.kind]||v.kind)+'<br>'+taskEventContent(v)+'</div>').join('')||'<p>Отдельных событий не сохранено. Доступные сведения показаны выше.</p>':'')+'</details>';}
 
 function selected(){const rows=entries();return rows.find(x=>x.key===S.selected)||rows[0]||null}
 function draft(e){const key=(e?.c?.id||'')+'|'+(e?.r?.id||e?.t?.id||'');if(!S.drafts.has(key)){
@@ -275,16 +295,24 @@ if(typeof oldApprove==='function')w.approveAIWeekTask=async function(idx,mgr,dat
 };
 // Preserve task history on load without changing shared core behavior for other audiences.
 for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks']){const prev=w[name];if(typeof prev==='function')w[name]=function(){return allowed()?Promise.resolve(0):prev.apply(this,arguments);};}
+const visitForms=new WeakMap();
+const visitResult=id=>document.getElementById(id==='qv-open-tasks'?'qv-result-val':'v-result')?.value||'';
 const oldVisitRenderer=w.renderOpenTasksBlock;
 if(typeof oldVisitRenderer==='function')w.renderOpenTasksBlock=function(clientId,containerId,prefix,decisions){
  oldVisitRenderer.call(this,clientId,containerId,prefix,decisions);
+ visitForms.delete(decisions);
  const container=document.getElementById(containerId);
  if(!container)return;
+ const fields=w.crmVisitSkuFields;
+ const date=prefix==='qv'&&typeof qvVisitDate!=='undefined'?qvVisitDate:(typeof TODAY!=='undefined'?TODAY:day());
+ const tasks=values('tasks').filter(t=>String(t.client_id)===String(clientId));
+ const plans=fields?tasks.map(t=>visitSkuPlan(t,date)).filter(Boolean):[];
+ const plannedIds=new Set(plans.map(p=>p.taskId));
  let managed=false;
  for(const row of container.querySelectorAll('[data-task-id]')){
-  const task=values('tasks').find(t=>String(t.id)===row.dataset.taskId);
-  const kind=visitTaskKind(task);
+  const kind=visitTaskKind(tasks.find(t=>String(t.id)===row.dataset.taskId));
   if(!kind||!row.firstElementChild)continue;
+  if(plannedIds.has(row.dataset.taskId)){row.remove();managed=true;continue;}
   const hint=document.createElement('div');
   hint.style.cssText='font-size:11px;color:var(--sub)';
   hint.textContent=kind==='work'
@@ -295,6 +323,56 @@ if(typeof oldVisitRenderer==='function')w.renderOpenTasksBlock=function(clientId
   managed=true;
  }
  if(managed&&container.firstElementChild)container.firstElementChild.textContent='Открытые задачи по клиенту';
+ if(!plans.length)return;
+ const controls=plans.map(plan=>{
+  const form=fields.create(plan.items,date);
+  form.updateFacts(plan.progress);
+  container.append(form.element);
+  return {plan,form};
+ });
+ visitForms.set(decisions,{container,controls});
+ container.style.display='block';
+ // Recheck the fact on opening the visit. Do not erase the manager's inputs while it loads.
+ Promise.resolve().then(()=>db.from('crm_task_contracts_v4').select('task_id,progress,baseline_ready,check_issue').in('task_id',[...plannedIds]))
+  .then(({data,error})=>{
+   if(error||visitForms.get(decisions)?.controls!==controls)return;
+   for(const {plan,form} of controls){
+    const current=(data||[]).find(row=>String(row.task_id)===plan.taskId);
+    if(current)form.updateFacts(current.baseline_ready&&!current.check_issue?current.progress||[]:[]);
+   }
+  }).catch(()=>{});
+};
+const oldVisitValidator=w.validateOpenTasksBlock;
+if(typeof oldVisitValidator==='function')w.validateOpenTasksBlock=function(containerId,decisions){
+ const error=oldVisitValidator.call(this,containerId,decisions);
+ if(error)return error;
+ const activeForm=visitForms.get(decisions);
+ if(!activeForm||activeForm.container.style.display==='none')return null;
+ return activeForm.controls.map(({form})=>form.validate(visitResult(containerId))).find(Boolean)||null;
+};
+const oldVisitPayload=w.v2264TaskPayload;
+if(typeof oldVisitPayload==='function')w.v2264TaskPayload=function(decisions){
+ const payload=oldVisitPayload.call(this,decisions);
+ const activeForm=visitForms.get(decisions);
+ if(!activeForm||activeForm.container.style.display==='none')return payload;
+ for(const {plan,form} of activeForm.controls){
+  const sku_outcomes=form.values();
+  if(sku_outcomes.length)payload.push({task_id:plan.taskId,sku_outcomes});
+ }
+ return payload;
+};
+const oldSaveVisit=w.saveVisit;
+if(typeof oldSaveVisit==='function')w.saveVisit=async function(){
+ const container=document.getElementById('v-client-tasks');
+ const note=document.getElementById('v-text');
+ const result=visitResult('v-client-tasks');
+ if(container?.style.display==='none'||!container?.querySelector('.visit-sku-panel')||!note||note.value.trim()||!result){
+  return oldSaveVisit.apply(this,arguments);
+ }
+ // Like quick visits, use the selected outcome as the visit description when no note was typed.
+ note.value=result;
+ try{return await oldSaveVisit.apply(this,arguments);}
+ finally{if(note.value===result)note.value='';}
 };
 const oldVisitDecisions=w.applyOpenTasksDecisions;
 if(typeof oldVisitDecisions==='function')w.applyOpenTasksDecisions=async function(containerId,decisions){const filtered={...decisions};for(const [id,d]of Object.entries(filtered)){const t=values('tasks').find(x=>x.id===id);if(d?.done&&(contract(t)||work(t)))delete filtered[id];}return oldVisitDecisions.call(this,containerId,filtered);};
@@ -322,6 +400,6 @@ async function openAgentRoute(data){
  // Preparation has no writes; explicit approval uses the same reviewed batch UI.
  void batchAction('batch-day',data.date).catch(e=>{S.error=errorText(e);paint();});paint();
 }
-w.RESANTA_TASKS_ROUTE_V4=Object.freeze({version:'6.3',openAgentRoute,preserveHistory:allowed,paint,refresh,ensure,ready:()=>S.loaded&&S.uid===currentProfile?.id,revision:()=>S.revision,overview:()=>allowed()&&S.uid===currentProfile?.id?scopedTasks():[],overdue,openOverdue:()=>{ensure();S.view='control';S.range='all';S.status='overdue';S.kind='';S.manager=boss()?'':currentProfile.name;S.search='';S.selected='';S.limit=50;w.goPage?.('tasks','Задачи');paint();},stopRecording,snapshot:()=>({week:S.week,view:S.view,contractCount:S.contracts.length,feed:S.feed}),commercial,prepareAgentTask:text=>{const e=selected();return e?.c&&document.getElementById('page-tasks')?.classList.contains('active')&&(recordCommand(text)||boss()&&e.r)?routeAgent('prepare_route_task',{transcript:text}):null;},commitAgentTask:payload=>routeAgent('commit_route_task',payload),recording:()=>S.recording||S.recordBusy,context:()=>{if(!document.getElementById('page-tasks')?.classList.contains('active')||!allowed())return null;const e=selected();return e?.c?{client_id:e.c.id,task_id:e.t?.id||null,route_id:e.r?.id||null}:null;}});
+w.RESANTA_TASKS_ROUTE_V4=Object.freeze({version:'6.4',visitSkuPlan,visitTaskKind,openAgentRoute,preserveHistory:allowed,paint,refresh,ensure,ready:()=>S.loaded&&S.uid===currentProfile?.id,revision:()=>S.revision,overview:()=>allowed()&&S.uid===currentProfile?.id?scopedTasks():[],overdue,openOverdue:()=>{ensure();S.view='control';S.range='all';S.status='overdue';S.kind='';S.manager=boss()?'':currentProfile.name;S.search='';S.selected='';S.limit=50;w.goPage?.('tasks','Задачи');paint();},stopRecording,snapshot:()=>({week:S.week,view:S.view,contractCount:S.contracts.length,feed:S.feed}),commercial,prepareAgentTask:text=>{const e=selected();return e?.c&&document.getElementById('page-tasks')?.classList.contains('active')&&(recordCommand(text)||boss()&&e.r)?routeAgent('prepare_route_task',{transcript:text}):null;},commitAgentTask:payload=>routeAgent('commit_route_task',payload),recording:()=>S.recording||S.recordBusy,context:()=>{if(!document.getElementById('page-tasks')?.classList.contains('active')||!allowed())return null;const e=selected();return e?.c?{client_id:e.c.id,task_id:e.t?.id||null,route_id:e.r?.id||null}:null;}});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
 })(window);

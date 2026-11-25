@@ -2,10 +2,11 @@
 
 // Only the public offline renderer is cached. CRM login, API requests,
 // authenticated pages and the other installed tools keep their network behavior.
-const cacheName = 'resanta-crm-navigation-offline-v3';
+const cacheName = 'resanta-crm-navigation-offline-v4';
 const offlineUrl = '/assets/offline/index.html';
 const shell = [offlineUrl, '/assets/offline/crm-offline-store-v1.js',
-  '/assets/offline/crm-offline-screen-v1.js', '/assets/offline/crm-offline-v1.css'];
+  '/assets/offline/crm-offline-screen-v1.js', '/assets/offline/crm-offline-v1.css',
+  '/assets/offline/crm-visit-sku-fields-v1.js', '/assets/offline/crm-visit-sku-fields-v1.css'];
 
 self.addEventListener('install', event => event.waitUntil((async () => {
   await (await caches.open(cacheName)).addAll(shell);

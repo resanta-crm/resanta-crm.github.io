@@ -1,0 +1,36 @@
+.visit-sku-panel {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 12px;
+  color: var(--text, #182238);
+  background: #edf5fc;
+  border: 1px solid #c8dcf0;
+  border-radius: 10px;
+}
+.visit-sku-panel :is(h4, p) { margin: 0; }
+.visit-sku-panel p { color: var(--sub, #52657b); font-size: 13px; }
+.visit-sku-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #d9e3ed;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.visit-sku-row label { display: grid; gap: 3px; margin: 0; font-size: 13px; }
+.visit-sku-row label[hidden] { display: none; }
+.visit-sku-row :is(select, input) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: inherit;
+  background: #fff;
+  border: 1px solid #c8d6e5;
+  border-radius: 6px;
+  font: inherit;
+}

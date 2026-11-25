@@ -51,7 +51,16 @@
     next();
   }
   const client = id => data.clients.find(row => row.id === id);
-  const activeTasks = id => data.tasks.filter(task => task.clientId === id && task.active);
+  const activeTasks = id => data.tasks.filter(task => task.clientId === id && task.active && !task.managedKind);
+  function visitSkuForms(id, date) {
+    const week = new Date(date + 'T12:00:00Z');
+    week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
+    return data.tasks.filter(task => task.clientId === id && task.skuPlan?.week === week.toISOString().slice(0,10)).map(task => {
+      const form = window.crmVisitSkuFields.create(task.skuPlan.items, date);
+      form.updateFacts(task.skuPlan.progress);
+      return {task, form};
+    });
+  }
   const localTime = value => new Intl.DateTimeFormat('ru-RU',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Minsk'}).format(value);
 
   function taskFields(task) {
@@ -88,13 +97,14 @@
     result.append(new Option('Выберите итог',''));
     for (const outcome of outcomes) result.append(new Option(outcome,outcome));
     const note = node('textarea');
-    note.required = true;
     note.maxLength = 4000;
     const message = node('p');
     message.setAttribute('role','status');
     const send = node('button','Сохранить на телефоне');
     send.type = 'submit';
     const tasks = activeTasks(point.id).map(taskFields);
+    const skuForms = visitSkuForms(point.id, route.date);
+    note.required = !skuForms.length;
     let gps;
     const geo = button('Сохранить координаты',() => {
       if (!navigator.geolocation) {message.textContent = 'Геолокация недоступна.'; return;}
@@ -109,20 +119,29 @@
       }, {enableHighAccuracy:true, timeout:8000, maximumAge:0});
     });
     panel.append(node('h2',point.name),node('p',[route.address,route.date].filter(Boolean).join(' · ')),
-      labelled('Результат визита',result),labelled('Что обсуждали / что сделали',note),
-      ...tasks.map(task => task.element),geo,message,send);
+      labelled('Результат визита',result),labelled(skuForms.length ? 'Заметка по желанию' : 'Что обсуждали / что сделали',note),
+      ...tasks.map(task => task.element),...skuForms.map(({form}) => form.element),geo,message,send);
     panel.addEventListener('submit',async event => {
       event.preventDefault();
       if (send.disabled) return;
-      if (!note.value.trim()) {message.textContent = 'Напишите итог визита.'; return;}
+      const visitNote = note.value.trim();
+      if (!visitNote && !skuForms.length) {message.textContent = 'Напишите итог визита.'; return;}
+      for (const {form} of skuForms) {
+        const error = form.validate(result.value);
+        if (error) {message.textContent = error; return;}
+      }
       const decisions = tasks.map(task => task.decision());
       if (decisions.some(task => !task.done && (!task.reason || !task.new_date))) {
         message.textContent = 'Укажите причину и дату по каждой невыполненной задаче.';
         return;
       }
+      for (const {task, form} of skuForms) {
+        const sku_outcomes = form.values();
+        if (sku_outcomes.length) decisions.push({task_id:task.id,sku_outcomes});
+      }
       send.disabled = true;
       try {
-        await store.enqueue(owner,{client_id:point.id,route_plan_id:route.id,date:route.date,result:result.value,text:note.value.trim(),...gps},decisions,route.demo);
+        await store.enqueue(owner,{client_id:point.id,route_plan_id:route.id,date:route.date,result:result.value,text:visitNote||result.value,...gps},decisions,route.demo);
         await open('queue');
         status.textContent = route.demo ? 'Пробный визит сохранён на телефоне.' : 'Визит сохранён на телефоне и ожидает отправки.';
         reconnect();
