@@ -4527,7 +4527,8 @@ const QV_RESULT_BTN_BY_VALUE={'✅ Заказ':'qvr-order','🤝 Перегов�
 
 // ===== ОТКРЫТЫЕ ЗАДАЧИ КЛИЕНТА В ФОРМЕ ВИЗИТА (универсально для обеих форм) =====
 // По регламенту ("Главная логика сайта"): после каждого визита менеджер обязан
-// Задачи со сверкой 1С и этапы потенциальных клиентов показываются без ручной отметки.
+// отметить выполнение задачи или указать причину невыполнения — просто
+// записать визит и молча оставить задачу висеть нельзя.
 let qvTaskDecisions={};
 let vTaskDecisions={};
 function renderOpenTasksBlock(clientId,containerId,prefix,decisions){
@@ -4538,18 +4539,9 @@ function renderOpenTasksBlock(clientId,containerId,prefix,decisions){
   if(!tasks.length){el.style.display='none';el.innerHTML='';return;}
   el.style.display='block';
   const defaultNewDate=addLocalDays(TODAY,3);
-  el.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;margin-bottom:8px">Открытые задачи по клиенту</div>'
+  el.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;margin-bottom:8px">✅ Открытые задачи по клиенту — отметьте результат</div>'
     +tasks.map(t=>{
       const tid=t.id;
-      const taskKind=window.RESANTA_TASKS_ROUTE_V4?.visitTaskKind?.(t);
-      if(taskKind){
-        const hint=taskKind==='work'
-          ?'Что предложить на визите указано в плане задачи. Отгрузку подтвердит 1С.'
-          :'Заполните результат и следующий шаг в разделе «Задачи».';
-        return '<div style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:8px">'
-          +'<div style="font-size:12px;color:var(--text);white-space:pre-line">'+esc(routeTaskDisplayText(t))+'</div>'
-          +'<div style="font-size:11px;color:var(--sub);margin-top:6px">'+hint+'</div></div>';
-      }
       return '<div class="'+prefix+'-task-item" data-task-id="'+tid+'" style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:8px">'
         +'<div style="font-size:12px;color:var(--text);margin-bottom:8px;white-space:pre-line">'+esc(routeTaskDisplayText(t))+'</div>'
         +'<div style="display:flex;gap:6px">'

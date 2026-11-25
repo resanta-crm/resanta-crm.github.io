@@ -275,6 +275,27 @@ if(typeof oldApprove==='function')w.approveAIWeekTask=async function(idx,mgr,dat
 };
 // Preserve task history on load without changing shared core behavior for other audiences.
 for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks']){const prev=w[name];if(typeof prev==='function')w[name]=function(){return allowed()?Promise.resolve(0):prev.apply(this,arguments);};}
+const oldVisitRenderer=w.renderOpenTasksBlock;
+if(typeof oldVisitRenderer==='function')w.renderOpenTasksBlock=function(clientId,containerId,prefix,decisions){
+ oldVisitRenderer.call(this,clientId,containerId,prefix,decisions);
+ const container=document.getElementById(containerId);
+ if(!container)return;
+ let managed=false;
+ for(const row of container.querySelectorAll('[data-task-id]')){
+  const task=values('tasks').find(t=>String(t.id)===row.dataset.taskId);
+  const kind=visitTaskKind(task);
+  if(!kind||!row.firstElementChild)continue;
+  const hint=document.createElement('div');
+  hint.style.cssText='font-size:11px;color:var(--sub)';
+  hint.textContent=kind==='work'
+   ?'Предложите позиции из плана. Отгрузку подтвердит 1С.'
+   :'Заполните результат и следующий шаг в разделе «Задачи».';
+  row.removeAttribute('data-task-id');
+  row.replaceChildren(row.firstElementChild,hint);
+  managed=true;
+ }
+ if(managed&&container.firstElementChild)container.firstElementChild.textContent='Открытые задачи по клиенту';
+};
 const oldVisitDecisions=w.applyOpenTasksDecisions;
 if(typeof oldVisitDecisions==='function')w.applyOpenTasksDecisions=async function(containerId,decisions){const filtered={...decisions};for(const [id,d]of Object.entries(filtered)){const t=values('tasks').find(x=>x.id===id);if(d?.done&&(contract(t)||work(t)))delete filtered[id];}return oldVisitDecisions.call(this,containerId,filtered);};
 let scheduled=false;function schedule(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;if(document.getElementById('page-tasks')?.classList.contains('active'))paint();},70);}
@@ -301,6 +322,6 @@ async function openAgentRoute(data){
  // Preparation has no writes; explicit approval uses the same reviewed batch UI.
  void batchAction('batch-day',data.date).catch(e=>{S.error=errorText(e);paint();});paint();
 }
-w.RESANTA_TASKS_ROUTE_V4=Object.freeze({version:'6.3',visitTaskKind,openAgentRoute,preserveHistory:allowed,paint,refresh,ensure,ready:()=>S.loaded&&S.uid===currentProfile?.id,revision:()=>S.revision,overview:()=>allowed()&&S.uid===currentProfile?.id?scopedTasks():[],overdue,openOverdue:()=>{ensure();S.view='control';S.range='all';S.status='overdue';S.kind='';S.manager=boss()?'':currentProfile.name;S.search='';S.selected='';S.limit=50;w.goPage?.('tasks','Задачи');paint();},stopRecording,snapshot:()=>({week:S.week,view:S.view,contractCount:S.contracts.length,feed:S.feed}),commercial,prepareAgentTask:text=>{const e=selected();return e?.c&&document.getElementById('page-tasks')?.classList.contains('active')&&(recordCommand(text)||boss()&&e.r)?routeAgent('prepare_route_task',{transcript:text}):null;},commitAgentTask:payload=>routeAgent('commit_route_task',payload),recording:()=>S.recording||S.recordBusy,context:()=>{if(!document.getElementById('page-tasks')?.classList.contains('active')||!allowed())return null;const e=selected();return e?.c?{client_id:e.c.id,task_id:e.t?.id||null,route_id:e.r?.id||null}:null;}});
+w.RESANTA_TASKS_ROUTE_V4=Object.freeze({version:'6.3',openAgentRoute,preserveHistory:allowed,paint,refresh,ensure,ready:()=>S.loaded&&S.uid===currentProfile?.id,revision:()=>S.revision,overview:()=>allowed()&&S.uid===currentProfile?.id?scopedTasks():[],overdue,openOverdue:()=>{ensure();S.view='control';S.range='all';S.status='overdue';S.kind='';S.manager=boss()?'':currentProfile.name;S.search='';S.selected='';S.limit=50;w.goPage?.('tasks','Задачи');paint();},stopRecording,snapshot:()=>({week:S.week,view:S.view,contractCount:S.contracts.length,feed:S.feed}),commercial,prepareAgentTask:text=>{const e=selected();return e?.c&&document.getElementById('page-tasks')?.classList.contains('active')&&(recordCommand(text)||boss()&&e.r)?routeAgent('prepare_route_task',{transcript:text}):null;},commitAgentTask:payload=>routeAgent('commit_route_task',payload),recording:()=>S.recording||S.recordBusy,context:()=>{if(!document.getElementById('page-tasks')?.classList.contains('active')||!allowed())return null;const e=selected();return e?.c?{client_id:e.c.id,task_id:e.t?.id||null,route_id:e.r?.id||null}:null;}});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
 })(window);
