@@ -1,9 +1,10 @@
 'use strict';
 
-const cacheName = 'resanta-crm-scoped-offline-v1';
+const cacheName = 'resanta-crm-scoped-offline-v2';
 const scope = new URL(self.registration.scope);
 const shell = [
   'index.html','crm-offline-store-v1.js','crm-offline-screen-v1.js','crm-offline-v1.css',
+  'crm-visit-sku-fields-v1.js','crm-visit-sku-fields-v1.css',
 ].map(path => new URL(path,scope).href);
 
 self.addEventListener('install',event => event.waitUntil((async () => {

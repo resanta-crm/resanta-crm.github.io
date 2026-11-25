@@ -2,6 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 const modulePath=process.env.CRM_DOM_MODULE||'linkedom';
 const {parseHTML}=await import(modulePath);
 const source=fs.readFileSync(new URL('../assets/287-tasks-route-v4.js',import.meta.url),'utf8');
+const skuFieldsSource=fs.readFileSync(new URL('../assets/offline/crm-visit-sku-fields-v1.js',import.meta.url),'utf8');
 const cid='11111111-1111-4111-8111-111111111111',rid='22222222-2222-4222-8222-222222222222',tid='33333333-3333-4333-8333-333333333333';
 function harness(role='boss',extra={}){
  const {window:domWindow,document}=parseHTML('<html><body><div id="page-tasks" class="active"><div>Legacy</div></div><div id="aiweek-result"></div></body></html>');
@@ -15,7 +16,7 @@ function harness(role='boss',extra={}){
  const db={from(name){let offset=0,end=499;const b={select(){return b},range(a,z){offset=a;end=z;return b},in(){return b},gte(){return b},lte(){return b},eq(){return b},order(k){if(name==='crm_task_contracts_v4')assert.ok(['approved_at','task_id'].includes(k));return b},limit(){return b},then(resolve){return Promise.resolve({data:(data[name]||[]).slice(offset,end+1),error:null}).then(resolve)}};return b;},async rpc(name,args){calls.push({name,args});return {data:name==='crm_task_route_coverage_v1'?(data.route_plans||[]).filter(r=>r.manager_name===args.p_manager&&!r.removed&&!r.is_network_point&&r.visit_date>=args.p_week&&r.visit_date<=new Date(Date.parse(args.p_week+'T12:00:00Z')+6*86400000).toISOString().slice(0,10)).flatMap(r=>[...new Set([r.client_id,...(r.linked_client_ids||[])].filter(Boolean))].map(client_id=>{const a=(data.crm_task_assignments_v5||[]).find(x=>x.route_id===r.id&&x.client_id===client_id&&!x.cancelled);return {route_id:r.id,client_id,legal_key:'client:'+client_id,existing:a?{reason:'route_assignment',task_id:a.task_id,route_id:r.id,route_day:r.visit_date}:null,draft_ref:null}})):name==='crm_tasks_feed_status_v4'?{report_day:'2026-11-15',source_message_at:'2026-11-15T11:51:06Z',row_count:0}:{saved:true},error:null}},functions:{async invoke(name,args){calls.push({name,args});return {data:{items:[{sku:'75/6/1',product:'Шлифмашина',shelf_qty:2,reserve_qty:null}],answer:'Подтверждено 1 из 2; осталось отгрузить 1.'},error:null}}}};
  const store=new Map();const storage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)};
  const ctx={window,document,console,Map,Set,Date:FixedDate,Intl,Promise,JSON,Math,String,Number,Array,Error,RegExp,URL,performance:{now:()=>0},sessionStorage:storage,navigator:{},setTimeout:fn=>{timers.push(fn);return timers.length},clearTimeout(){},setInterval(){},db,currentProfile:{id:role==='boss'?'boss':'manager',role,region:'Витебск',name:role==='boss'?'Александр Паюшин':'Руднев'},allTasks:tasks,allClients:[{id:cid,name:'Тест Клиент',client_status:'Рабочий',manager_name:'Руднев'}],allRoutePlans:routes,openAddTask(){calls.push('legacy-add')},openAIWeekPlan(){calls.push('generate')},alert(){},prompt(){return null}};
- Object.assign(ctx,extra);for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks','renderOpenTasksBlock'])if(extra[name])window[name]=extra[name];vm.runInNewContext(source,ctx);while(timers.length)timers.shift()();
+ Object.assign(ctx,extra);for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks','renderOpenTasksBlock','validateOpenTasksBlock','v2264TaskPayload'])if(extra[name])window[name]=extra[name];vm.runInNewContext(skuFieldsSource,ctx);vm.runInNewContext(source,ctx);while(timers.length)timers.shift()();
  const settle=async()=>{for(let i=0;i<40;i++)await Promise.resolve()};
  const click=async(action,value)=>{const selector='[data-tr="'+action+'"]'+(value?'[data-value="'+value+'"]':'');const b=document.querySelector(selector);assert.ok(b,selector);b.dispatchEvent(new window.Event('click',{bubbles:true}));await settle();};
  const input=(field,value)=>{const el=document.querySelector('[data-tr-field="'+field+'"]');assert.ok(el,field);el.value=value;el.dispatchEvent(new window.Event('input',{bubbles:true}));};
@@ -49,10 +50,45 @@ test('a visit shows the managed sales plan and keeps manual controls for other t
  host.id='visit-test';
  h.document.body.append(host);
  h.window.renderOpenTasksBlock(cid,host.id,'qv',{});
- assert.match(host.textContent,/75\/6\/1 Шлифмашина — 2 шт./);
- assert.match(host.textContent,/Отгрузку подтвердит 1С/);
+ assert.match(host.textContent,/75\/6\/1 · Шлифмашина/);
+ assert.match(host.textContent,/План 2 шт. · Факт 1С 1 шт./);
  assert.equal(host.querySelector('[data-task-id="'+tid+'"]'),null);
  assert.ok(host.querySelector('[data-task-id="other-task"] button'));
+});
+test('a sales visit submits each SKU outcome with the same task payload and leaves legacy validation intact',async()=>{
+ const h=harness('manager',{
+  qvVisitDate:'2026-11-18',
+  renderOpenTasksBlock(){},
+  validateOpenTasksBlock(){return null;},
+  v2264TaskPayload(){return [{task_id:'legacy',done:true}];},
+ });
+ await h.settle();
+ const host=h.document.createElement('div');
+ const result=h.document.createElement('input');
+ host.id='qv-open-tasks';
+ result.id='qv-result-val';
+ h.document.body.append(host,result);
+ const decisions={};
+ h.window.renderOpenTasksBlock(cid,host.id,'qv',decisions);
+ assert.match(host.textContent,/План 2 шт. · Факт 1С 1 шт./);
+ result.value='❌ Не застал';
+ assert.equal(h.window.validateOpenTasksBlock(host.id,decisions),null);
+ assert.equal(h.window.v2264TaskPayload(decisions).length,1);
+ result.value='🤝 Переговоры';
+ assert.match(h.window.validateOpenTasksBlock(host.id,decisions),/Выберите итог по артикулу/);
+ const select=host.querySelector('select'), [reason,date,note]=host.querySelectorAll('input');
+ select.querySelector('[value="follow_up"]').selected=true;
+ assert.match(h.window.validateOpenTasksBlock(host.id,decisions),/дату следующего контакта/);
+ select.querySelector('[value="refused"]').selected=true;
+ assert.match(h.window.validateOpenTasksBlock(host.id,decisions),/причину отказа/);
+ reason.value='Есть запас';
+ assert.equal(h.window.validateOpenTasksBlock(host.id,decisions),null);
+ assert.deepEqual(JSON.parse(JSON.stringify(h.window.v2264TaskPayload(decisions))),[
+  {task_id:'legacy',done:true},
+  {task_id:tid,sku_outcomes:[{sku:'75/6/1',result:'refused',reason:'Есть запас',next_date:null,comment:null}]},
+ ]);
+ h.window.renderOpenTasksBlock('another-client',host.id,'qv',decisions);
+ assert.equal(h.window.v2264TaskPayload(decisions).length,1);
 });
 test('ordinary Lera context is scoped to selected client',async()=>{const h=harness();await h.settle();assert.equal(h.api.context().client_id,cid);assert.equal(h.api.context().route_id,rid);h.document.getElementById('page-tasks').classList.remove('active');assert.equal(h.api.context(),null);});
 test('draft survives switching between shelf and task',async()=>{const h=harness();await h.settle();await h.click('shelf');h.input('transcript','75/6/1 две штуки');await h.click('shipment');await h.click('shelf');assert.equal(h.document.querySelector('[data-tr-field="transcript"]').value,'75/6/1 две штуки');});

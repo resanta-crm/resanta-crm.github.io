@@ -42,6 +42,7 @@
     const routes = [...routeSections].some(key => menu[key]) ? ownRows(allRoutePlans) : [];
     const visits = menu.visits ? ownRows(allVisits) : [];
     const active = new Set(typeof canonicalActiveTasks === 'function' ? canonicalActiveTasks(tasks).map(row => row.id) : []);
+    const taskWorkspace=window.RESANTA_TASKS_ROUTE_V4;
     const data = {owner:account.id, role:account.role, accessScope:account.scope};
     return {
       ...data, profileKey:account.key, menu, savedAt:Date.now(),
@@ -51,7 +52,8 @@
         own:store.canRecord(account.id,data) && clean(row.manager_name,240) === clean(currentProfile?.name,240)
       })).sort((a,b) => String(b.date).localeCompare(String(a.date))),
       tasks:tasks.slice(-1200).map(row => ({id:String(row.id),clientId:String(row.client_id??''),dueDate:row.due_date,
-        done:row.done===true,reviewStatus:row.review_status,active:active.has(row.id),title:clean(row.title||row.text||'Задача',420)})),
+        done:row.done===true,reviewStatus:row.review_status,active:active.has(row.id),title:clean(row.title||row.text||'Задача',420),
+        managedKind:taskWorkspace?.visitTaskKind?.(row)||'',skuPlan:taskWorkspace?.visitSkuPlan?.(row)||null})),
       visits:visits.filter(row=>!row.is_duplicate).slice(-700).map(row=>({date:row.date,clientId:String(row.client_id??''),result:clean(row.result,150)})),
       clients:clients.slice(0,3500).map(row=>({id:String(row.id),name:clean(row.name,240),address:clean([row.city,row.address].filter(Boolean).join(', '),280)}))
     };
@@ -83,6 +85,7 @@
     if(!Object.keys(menu).length)return;
     const scope=JSON.stringify(menu);
     const sources=[allClients,allTasks,allRoutePlans,allVisits].flatMap(rows=>[rows,rows.length]);
+    sources.push(window.RESANTA_TASKS_ROUTE_V4?.revision?.()||0);
     if(scope!==menuKey||Date.now()-savedAt>60000||sources.some((value,index)=>cachedSources[index]!==value)){
       await store.writeSnapshot(snapshot(account,menu));
       menuKey=scope;
