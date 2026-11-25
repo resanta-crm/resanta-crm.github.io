@@ -5,7 +5,7 @@
 if(root.crmAI360NavigateV1)return;
 const route=[
  // Calendar navigation reuses existing voice engine; the page itself checks owner identity.
- [/календар|планировщик|совещан/i,'meeting-planner','Календарь и совещания'],
+ [/календар|планировщик|совещан/i,'meeting-planner','Календарь'],
  [/уценк/i,'markdown','Уценка'],
  [/падающ|падени[ея]\s+клиент/i,'clients','Клиенты'],
  [/триовист|тривист|21\s*век|21vek/i,'vip','ВИП'],

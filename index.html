@@ -39,14 +39,14 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 </script>
 <title>Ресанта CRM</title>
 <link rel="preload" href="./assets/01-crm-core.js?v=20261106-gps360-geoonce1&fix=manager-feedback-gps360-safe1&meetingRelease=20261115&networkRelease=20261116-4&routeNamesRelease=20261117-1&negotiationsRelease=20261124-live1&supportFix=20261125-1" as="script">
-<link rel="preload" href="./assets/03-triovist-routes.js?v=20261116-route-atomic-2&supportFix=20261125-1" as="script">
+<link rel="preload" href="./assets/03-triovist-routes.js?v=20261116-route-atomic-2&supportFix=20261125-1&calendarUi=20261125" as="script">
 <script defer src="./assets/00-native-auth-deadline-v1.js?v=20261116-1"></script>
 <script defer src="./assets/00-air3-control-http-v1.js?v=20261117-1"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="./assets/301-access360-admin-v1.js?v=20261112-access360-v1"></script>
 <script defer src="./assets/302-company-viewer-v1.js?v=20261112-company-portal-v1"></script>
 <link id="promo360-css" rel="stylesheet" href="./assets/211-promotions360-uniai-v1.css?v=20261112-sales-chart3">
-<link rel="stylesheet" href="./assets/271-calendar-meetings-pilot-v1.css?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2">
+<link rel="stylesheet" href="./assets/271-calendar-meetings-pilot-v1.css?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2&calendarUi=20261125">
 <link rel="stylesheet" href="./assets/273-gps-first-tt-lateness-v1.css?v=20261113-evidence1">
 <script defer src="./assets/210-promotions360-uniai-v1.js?v=20261112-sales-chart3"></script>
 <script id="crm-native-bootstrap-ready-gate-v1">
@@ -93,7 +93,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <script defer src="./assets/129-gps-director-reminders-v236443.js?v=23.6.445"></script>
 <script defer src="./assets/128-gps-meeting-ai-v236441.js?v=23.7.9"></script>
 <script defer src="./assets/184-client-route-catalog-v3.js?v=20261106-1"></script>
-<script defer src="./assets/03-triovist-routes.js?v=20261116-route-atomic-2&supportFix=20261125-1"></script>
+<script defer src="./assets/03-triovist-routes.js?v=20261116-route-atomic-2&supportFix=20261125-1&calendarUi=20261125"></script>
 <script defer src="./assets/61-triovist-task-month-safe-v23651.js?v=20261123-task-focus1"></script>
 <!-- Summary 360: presentation only; Commerce and Work navigation continue in the existing Triovist router. -->
 <script defer src="./assets/168-triovist-summary-360-v1.js?v=20261123-parser-link1"></script>
@@ -112,7 +112,7 @@ const APP_VERSION = '2026-11-13-lera-approved-rollout-v4-lpr-birthdays-20261114-
 <script defer src="./assets/06-root-fixes.js?signalsMerge=20261113-v1&v=23.0.0"></script>
 <script defer src="./assets/09-manager-kpi-save-fix.js?v=23.6.68"></script>
 <script defer src="./assets/66-performance-root-v23657.js?v=20261106-manager-feedback&abcOrder=20261109-2&meetingRelease=20261115&lifecycleRelease=20261117-1&groups=20261123-single-router"></script>
-<script defer src="./assets/75-service-manager-markdown-only-v23690.js?v=23.6.90&meetingRelease=20261115"></script>
+<script defer src="./assets/75-service-manager-markdown-only-v23690.js?v=23.6.90&meetingRelease=20261115&calendarUi=20261125"></script>
 <script defer src="./assets/68-vip-actions-nav-v23659.js?v=23.6.131"></script>
 <script defer src="./assets/88-promotions-effectiveness-v236368.js?v=23.6.368"></script>
 <script defer src="./assets/89-promotions-boss-dashboard-v236133.js?v=23.6.360"></script>
@@ -522,7 +522,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <div class="nav-section">Работа</div>
       <button class="nav-item" id="nav-clients" onclick="goPage('clients','Клиенты')"><span class="icon">🏢</span> Клиенты</button>
       <button class="nav-item" id="nav-connect" onclick="window.crmConnectOpen126&&window.crmConnectOpen126()"><span class="icon">💬</span> Чаты</button>
-      <button class="nav-item" id="nav-meeting-planner" style="display:none" onclick="goPage('meeting-planner','Календарь и совещания')"><span class="icon">📅</span> Календарь и совещания</button>
+      <button class="nav-item" id="nav-meeting-planner" style="display:none" onclick="goPage('meeting-planner','Календарь')"><span class="icon">📅</span> Календарь</button>
       <button class="nav-item" id="nav-tasks" onclick="goPage('tasks','Задачи')"><span class="icon">✅</span> Задачи <span class="alert-dot" id="tasks-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-markdown" onclick="goPage('markdown','Уценка')"><span class="icon">🏷️</span> Уценка <span class="alert-dot" id="markdown-alert-dot" style="display:none"></span></button>
       <button class="nav-item" id="nav-visits" onclick="goPage('visits','История визитов')"><span class="icon">📝</span> Визиты</button>
@@ -1914,11 +1914,11 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <!-- Personal 30-day Lera history: no requests until the user opens its panel. -->
 <script defer src="./assets/217-lera360-history-ui-v1.js?v=1"></script>
 <!-- One existing Lera, signed two-phase task/CONNECT actions; no login requests. -->
-<script defer src="./assets/219-lera360-agent-actions-v1.js?v=20261113b&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&meetingRelease=20261115&liveTest=20261115-v1&calendarInvites=20261115-v1&tasksAgent=20261115-v5"></script>
+<script defer src="./assets/219-lera360-agent-actions-v1.js?v=20261113b&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&meetingRelease=20261115&liveTest=20261115-v1&calendarInvites=20261115-v1&tasksAgent=20261115-v5&calendarUi=20261125"></script>
 <script defer src="./assets/220-lera360-turn-taking-v1.js?v=20261113a&leraRelease=20261113-stable-dialog2&videoRelease=20261113-v3"></script>
-<script defer src="./assets/221-lera360-voice-navigation-v1.js?signalsMerge=20261113-v1&v=20261113-calendar-nav-pilot1&dialogueRelease=20261113-v2&controlRelease=20261113-v2"></script>
-<script defer src="./assets/273-calendar-invitations-v3.js?v=20261115-v1"></script>
-<script defer src="./assets/270-calendar-meetings-pilot-v1.js?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2"></script>
+<script defer src="./assets/221-lera360-voice-navigation-v1.js?signalsMerge=20261113-v1&v=20261113-calendar-nav-pilot1&dialogueRelease=20261113-v2&controlRelease=20261113-v2&calendarUi=20261125"></script>
+<script defer src="./assets/273-calendar-invitations-v3.js?v=20261115-v1&calendarUi=20261125"></script>
+<script defer src="./assets/270-calendar-meetings-pilot-v1.js?v=meetings-v2-20261115&coverage=results-v3&invites=20261115-v2&calendarUi=20261125"></script>
 <script defer src="./assets/137-resanta-ai360-lazy-launch-v1.js?v=40&lera=20261113-turntaking&release=continuous-gps-1&leraRelease=20261113-stable-dialog2&dialogueRelease=20261113-v2&videoRelease=20261113-v3&rolloutRelease=20261113-v4&controlRelease=20261113-v2&meetingRelease=20261115&tasksRelease=20261115-v2&tasksRelease=20261116-3&networkRelease=20261116-5&sourceRelease=20261117-1&rollbackRelease=20261117-morning1"></script>
 <!-- Isolated branch-director pilot: no login requests, no Android and no director AI changes. -->
 <!-- Shared staff role UI; each AI service rechecks the permissions on server. -->
@@ -1980,7 +1980,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <link rel="stylesheet" href="./assets/290-crm-desktop-nav-v1.css?v=20261124-1">
 <link rel="stylesheet" href="./assets/291-sales-pilot-screens.css?v=20261124-3">
 <link rel="stylesheet" href="./assets/299-client-workspace-v1.css?v=20261125-2">
-<script defer src="./assets/299-client-workspace-v1.js?v=20261125-2"></script>
+<script defer src="./assets/299-client-workspace-v1.js?v=20261125-2&calendarUi=20261125"></script>
 <link rel="stylesheet" href="./assets/298-crm-negotiations-v1.css?v=20261125-mic2">
 <dialog id="neg-training-dialog" aria-label="Записать разговор"></dialog>
 <script defer src="./assets/298-crm-negotiations-v1.js?v=20261125-mic2"></script>

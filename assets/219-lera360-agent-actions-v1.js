@@ -73,7 +73,8 @@ async function prepare(text,ui){
  status(ui,'Лера готовит безопасное действие…');
  try{
   const calendar=root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{});
-  const routeRequest=/(?:задач|поручен|запиши|сохрани|обнови|внеси)/iu.test(text)?root.RESANTA_TASKS_ROUTE_V4?.prepareAgentTask?.(text):null;
+  const calendarAction=calendar&&CALENDAR_ACTION.test(normalize(text));
+  const routeRequest=!calendarAction&&/(?:задач|поручен|запиши|сохрани|обнови|внеси)/iu.test(text)?root.RESANTA_TASKS_ROUTE_V4?.prepareAgentTask?.(text):null;
   const data=await (routeRequest||invoke('prepare',{question:text.slice(0,2400),calendar_capabilities_v2:true,calendar_capabilities_v3:true,meeting_context:calendar?.meeting_context||null}));
   if(run!==seq||user!==currentId()||!allowed())return;
   if(data.mode==='needs_details'){
@@ -130,7 +131,7 @@ async function commit(ui){
   }else if(data.mode==='created_chat'&&data.created===1){
    say(ui,'Чат CONNECT создан и проверен. Открой раздел «Чаты», чтобы начать разговор.');
   }else if(data.mode==='created_reminder'&&data.created===1){
-   say(ui,String(data.note||'Личное напоминание сохранено.')+' '+String(data.due_date||'')+' в '+String(data.due_time||'')+'.');
+   say(ui,String(data.note||'Личное напоминание сохранено.')+' '+String(data.due_date||'')+' в '+String(data.due_time||'')+' по Минску. Оно также появится в открытой CRM и в уведомлениях подключённого Android-приложения.');
   }else if(data.mode==='cancelled_reminder'&&data.cancelled===1){
    reminders=[];say(ui,'Напоминание отменено.');
   }else if(data.mode==='already_exists'){
@@ -146,7 +147,9 @@ async function commit(ui){
  }finally{if(run===seq)setBusy(false);}
 }
 const AGENDA=/(?:какие|покажи|назови|список|расписание|что\s+у\s+меня).{0,110}(?:встреч|совещан|календар|расписани)|^(?:мой|мои)\s+(?:встречи|календарь|расписание)$/i;
-const REMINDER=/^(?:напомни|напоминай|напоминание)(?=$|[\s,.!?])/i;
+const LEAD='(?:(?:лера|пожалуйста|можешь|можно|давай|прошу)\\s+){0,4}';
+const REMINDER=new RegExp('^'+LEAD+'(?:напомни|напомнить|напоминай|напоминание)(?:$|\\s)|^'+LEAD+'(?:поставь|поставить|создай|создать|добавь|добавить|запланируй|запланировать)\\s+.{0,45}напоминани','iu');
+const CALENDAR_ACTION=new RegExp('^'+LEAD+'(?:создай|создать|назначь|назначить|запланируй|запланировать|добавь|добавить|поставь|поставить|перенеси|перенести|отмени|отменить|удали|удалить|сохрани|сохранить|запиши|записать)\\s.{0,180}(?:встреч|совещан|повестк|итог)','iu');
 function calendarRange(question){
  const q=String(question).toLowerCase(),day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const move=(d,n)=>new Date(Date.parse(d+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
@@ -204,6 +207,9 @@ function handle(q,ui){
  if(ownerId&&ownerId!==actor)reset();
  const text=String(q||'').trim().slice(0,2400),n=normalize(text);
  if(!n)return false;
+ const isCalendarAction=CALENDAR_ACTION.test(n)&&!!root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{});
+ const isReminder=REMINDER.test(n);
+ const isNewAction=ACTION.test(n)||isCalendarAction||isReminder;
  if(working){say(ui,'Я ещё проверяю предыдущую команду.');return true;}
  if(proposal){
   if(NO.test(n)){clearProposal();say(ui,'Хорошо, ничего не создаю.');return true;}
@@ -219,12 +225,12 @@ function handle(q,ui){
    }
   // A different question cancels the draft, avoiding accidental future "yes".
   clearProposal();
-  if(!ACTION.test(n))return false;
+  if(!isNewAction)return false;
  }
  if(missing){
   const old=missing;missing=null;
   if(NO.test(n)){say(ui,'Хорошо, отменяю создание.');return true;}
-  if(!ACTION.test(n)){void prepare(old+'. Уточнение пользователя: '+text,ui);return true;}
+  if(!isNewAction){void prepare(old+'. Уточнение пользователя: '+text,ui);return true;}
  }
  if(/^(?:покажи|какие|список|мои).{0,45}напоминан/.test(n)||/^мои напоминания$/.test(n)){void reminderCommand(ui,null);return true;}
  const cancelReminder=/^(?:отмени|удали)\s+напоминание(?:\s+(?:номер\s+)?(\d+))?$/.exec(n);
@@ -234,9 +240,8 @@ function handle(q,ui){
   else void reminderCommand(ui,index);
   return true;
  }
- if(root.crmMeetingPlannerPilotV1?.prepareAgentRequest?.(text,{})&&/^(?:(?:лера|пожалуйста|можешь|можно|давай|прошу)\s+){0,3}(?:перенеси|перенести|отмени|отменить|сохрани|сохранить|запиши).{0,180}(?:встреч|совещан|повестк|итог)/iu.test(text)){void prepare(text,ui);return true;}
+ if(isReminder||isCalendarAction){void prepare(text,ui);return true;}
  if(!ACTION.test(n)){
-  if(REMINDER.test(n)){void prepare(text,ui);return true;}
   if(AGENDA.test(n)){
    const range=calendarRange(text);
    if(range.error){say(ui,range.error);return true;}
