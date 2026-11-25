@@ -11,7 +11,7 @@
     ] },
     { label: 'Разделы рабочего дня', sections: [
       ['connect', 'Чаты'],
-      ['meeting-planner', 'Календарь и совещания'],
+      ['meeting-planner', 'Календарь'],
       ['tasks', 'Задачи'],
       ['visits', 'Визиты'],
       ['gps-control', 'GPS-контроль'],

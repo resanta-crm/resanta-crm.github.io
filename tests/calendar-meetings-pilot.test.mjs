@@ -24,7 +24,7 @@ test('all active accounts have calendar access except Nesterov; analytical scope
  assert.deepEqual(field.managers,['Руднев']);assert.throws(()=>allowedManagers(field,'Шкуран'));
 });
 test('Nesterov cannot trigger even calendar reads',async()=>{const h=harness(EXCLUDED);await h.render();assert.match(h.root.textContent,/Нет доступа/);assert.equal(h.calls.length,0);});
-test('ordinary employee reads only own scheduled meetings; initial import is inert',async()=>{const h=harness('office');assert.equal(h.calls.length,0);await h.render();assert.match(h.root.innerHTML,/Календарь и совещания/);assert.ok(h.calls.find(x=>x.filters?.some(([k,v])=>k==='owner_id'&&v==='office')));assert.equal(h.calls.some(x=>x.insert),false);});
+test('ordinary employee reads only own scheduled meetings; initial import is inert',async()=>{const h=harness('office');assert.equal(h.calls.length,0);await h.render();assert.match(h.root.innerHTML,/<h2>Календарь<\/h2>/);assert.ok(h.calls.find(x=>x.filters?.some(([k,v])=>k==='owner_id'&&v==='office')));assert.equal(h.calls.some(x=>x.insert),false);});
 test('selected date reaches preparation and Lera; changing date invalidates the old snapshot',async()=>{const h=harness();await h.render();await h.click('cmp-date','2026-10-20');await h.click('cmp-brief');const ctx=h.win.crmMeetingPlannerPilotV1.prepareAgentRequest('Почему?',{});assert.equal(ctx.memory.month,'2026-10');assert.equal(ctx.meeting_context.focus,'2026-10-20');assert.ok(ctx.meeting_context.preparation_id);assert.equal(h.calls.find(x=>x.name==='crm-meeting-prepare-v2').body.context.month,'2026-10');await h.click('cmp-date','2026-11-20');assert.equal(h.win.crmMeetingPlannerPilotV1.prepareAgentRequest('Почему?',{}).meeting_context.preparation_id,null);});
 test('create, save agenda, restore, save minutes and cancel affect the selected personal meeting',async()=>{const h=harness();await h.render();await h.click('cmp-new');Object.assign(h.inputs,{'cmp-title':{value:'Рабочее совещание'},'cmp-purpose':{value:'Обсудить рабочие вопросы'},'cmp-date-input':{value:'2026-11-20'},'cmp-time-input':{value:'10:00'},'cmp-duration':{value:'60'}});await h.click('cmp-save-meeting');assert.equal(h.rows.length,1);assert.equal(h.rows[0].owner_id,OWNER);await h.click('cmp-brief');await h.click('cmp-save-agenda');assert.equal(h.rows[0].agenda.topics.length,1);await h.win.crmMeetingPlannerPilotV1.refresh();assert.match(h.root.innerHTML,/Сохранённая повестка/);h.inputs['cmp-minutes']={value:'Решения сохранены'};await h.click('cmp-save-minutes');assert.equal(h.rows[0].minutes,'Решения сохранены');await h.click('cmp-cancel','new-id');assert.equal(h.rows[0].status,'cancelled');});
 test('current-month 99 percent is not high, stale tasks do not count as confirmed overdue, labels follow actual month',()=>{
@@ -68,19 +68,17 @@ test('hung preparation stops loading and exposes an explicit timeout',async()=>{
  const h=harness(OWNER,code.replace('),45000);','),1);'));await h.render();h.client.functions.invoke=()=>new Promise(()=>{});await h.click('cmp-brief');await new Promise(r=>setTimeout(r,10));assert.match(h.root.innerHTML,/Источник не ответил вовремя/);assert.doesNotMatch(h.root.innerHTML,/Подготавливаю…/);
 });
 
-async function coverageHarness(entries){const h=harness();h.client.functions.invoke=async()=>({data:{preparation_id:'9d3f5760-64a8-4cfa-aeaa-7c77c2b7fede',briefing:{mode:'readonly',month:new Date().toISOString().slice(0,7),cards:[]},coverage:{entries,generated_at:'2026-11-15T08:27:00Z'}}});await h.render();await h.click('cmp-brief');return h;}
-test('coverage separates transport failures from actual control counts and uses Russian names',async()=>{
- const h=await coverageHarness([{id:'sales',label:'sales',status:'profiled'},{id:'client_schedule',label:'client_schedule',status:'partial'},{id:'card_issues',label:'Ошибки карточек 21vek',status:'aggregated',metrics:{rows:4018,risk_count:1150},check_label:'Открытые критические проблемы',period_mode:'current_state'}]);
- const html=h.root.innerHTML;assert.match(html,/Найдено: 1(?:\s|&nbsp;)*150/ );assert.match(html,/Записей в расчёте: 4(?:\s|&nbsp;)*018/);assert.match(html,/сбоев загрузки/);assert.doesNotMatch(html,/>sales<|>client_schedule<|0 ошибок/);assert.match(html,/Продажи и KPI/);assert.match(html,/Поручения и маршруты клиента/);assert.match(html,/cmp-coverage-card warning/);
-});
-test('empty sources, unknown controls, unavailable and restricted sources never become green',async()=>{
- const h=await coverageHarness([{id:'infographics',status:'aggregated',metrics:{rows:0,risk_count:0},period_mode:'selected_month'},{id:'stock',status:'aggregated',metrics:{rows:1609,risk_count:null},period_mode:'latest_report_in_or_before_month',as_of:'2026-11-10'},{id:'chats',status:'restricted',reason:'Личные переписки не анализируются автоматически.'},{id:'clients',status:'unavailable'}]);
- const html=h.root.innerHTML;assert.doesNotMatch(html,/cmp-coverage-card ok/);assert.match(html,/Нет записей в указанной области/);assert.match(html,/Отдельная проверка отклонений не рассчитана/);assert.match(html,/cmp-coverage-card error/);assert.match(html,/Ограничено доступом/);assert.match(html,/Отчёт на \d+ дн. раньше даты совещания/);assert.doesNotMatch(html,/не подтверждена/);
-});
-test('zero control results are scoped, dates use Minsk, labels are escaped and links use existing navigation',async()=>{
- const h=await coverageHarness([{id:'cards_21vek',label:'Карточки <img src=x>',status:'aggregated',metrics:{rows:1724,risk_count:0},period_mode:'current_state'}]);
- assert.match(h.root.innerHTML,/cmp-coverage-card ok/);assert.match(h.root.innerHTML,/только к указанному признаку/);assert.match(h.root.innerHTML,/15.11.2026, 11:27/);assert.match(h.root.innerHTML,/&lt;img src=x&gt;/);assert.doesNotMatch(h.root.innerHTML,/<img src=x>/);
- let opened=0;h.inputs['nav-triovist']={style:{display:''},click(){opened++}};await h.win.crmMeetingPlannerPilotV1.render();assert.match(h.root.innerHTML,/data-cmp-open="cards_21vek"/);await h.click('cmp-open','cards_21vek');assert.equal(opened,1);h.inputs['nav-triovist'].style.display='none';await h.click('cmp-open','cards_21vek');assert.equal(opened,1);h.inputs['nav-payments']={style:{display:''},click(){opened++}};await h.click('cmp-open','cash');assert.equal(opened,2);
+test('calendar always renders a full month without the removed explanatory sections',async()=>{
+ const h=harness();await h.render();
+ await h.click('cmp-date','2026-11-25');
+ assert.equal((h.root.innerHTML.match(/data-cmp-date=/g)||[]).length,42);
+ assert.doesNotMatch(h.root.innerHTML,/data-cmp-mode|Охват CRM|Личный календарь ·|Аналитика продаж:|Встреч на выбранный день нет|Видеозвонок начинается|Для сохранения повестки/);
+ assert.match(h.root.innerHTML,/Напомнить через Леру/);
+ await h.click('cmp-shift','1');
+ assert.equal(h.win.crmMeetingPlannerPilotV1.prepareAgentRequest('Мои встречи',{}).meeting_context.focus,'2026-12-25');
+ await h.click('cmp-brief');
+ assert.doesNotMatch(h.root.innerHTML,/Охват CRM|cmp-coverage/);
+ assert.match(h.root.innerHTML,/Факт/);
 });
 test('Lera receives server-owned coverage counts and distinguishes loading from business problems',async()=>{
  const prep={context:{focus:'2026-11-15',month:'2026-11',meeting_id:null},created_at:new Date().toISOString(),briefing:{cards:[]},coverage:{entries:[{id:'card_issues',label:'Ошибки карточек 21vek',status:'aggregated',metrics:{rows:4018,risk_count:1150},check_label:'Открытые критические проблемы',as_of:null},{id:'stock',status:'aggregated',metrics:{rows:1609,risk_count:null}},{id:'client_detail',label:'client_detail',status:'partial'}]}};

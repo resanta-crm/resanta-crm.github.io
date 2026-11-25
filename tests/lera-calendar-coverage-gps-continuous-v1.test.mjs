@@ -69,7 +69,7 @@ test('CRM breadth audit comes from 34-domain catalog and keeps samples PARTIAL',
  assert.match(coverage,/scope:'limited_sample'/);
  assert.match(calendar,/ENDPOINT='crm-meeting-prepare-v2'/);
  assert.match(calendar,/d\.coverage\?\.entries/);
- assert.match(calendar,/Это не полная проверка всех правил CRM/);
+ assert.doesNotMatch(calendar,/Охват CRM и качество данных/);
  assert.match(calendar,/Ограничения и свежесть данных/);
  assert.doesNotMatch(coverage,/\binsert\(|\bupdate\(|\bupsert\(|\bdelete\(/);
 });

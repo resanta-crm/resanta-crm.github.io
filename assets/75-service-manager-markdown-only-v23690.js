@@ -64,7 +64,7 @@ function lockMenus(){
     el.style.display=el.id==='bn-markdown'?'flex':'none';
   });
   const t=document.querySelector('.topbar-title');
-  if(t)t.textContent=document.getElementById('page-meeting-planner')?.classList.contains('active')?'Календарь и совещания':'Уценка';
+  if(t)t.textContent=document.getElementById('page-meeting-planner')?.classList.contains('active')?'Календарь':'Уценка';
   return true;
 }
 function enterMarkdown(){
