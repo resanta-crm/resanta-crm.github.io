@@ -15,7 +15,7 @@ function harness(role='boss',extra={}){
  const db={from(name){let offset=0,end=499;const b={select(){return b},range(a,z){offset=a;end=z;return b},in(){return b},gte(){return b},lte(){return b},eq(){return b},order(k){if(name==='crm_task_contracts_v4')assert.ok(['approved_at','task_id'].includes(k));return b},limit(){return b},then(resolve){return Promise.resolve({data:(data[name]||[]).slice(offset,end+1),error:null}).then(resolve)}};return b;},async rpc(name,args){calls.push({name,args});return {data:name==='crm_task_route_coverage_v1'?(data.route_plans||[]).filter(r=>r.manager_name===args.p_manager&&!r.removed&&!r.is_network_point&&r.visit_date>=args.p_week&&r.visit_date<=new Date(Date.parse(args.p_week+'T12:00:00Z')+6*86400000).toISOString().slice(0,10)).flatMap(r=>[...new Set([r.client_id,...(r.linked_client_ids||[])].filter(Boolean))].map(client_id=>{const a=(data.crm_task_assignments_v5||[]).find(x=>x.route_id===r.id&&x.client_id===client_id&&!x.cancelled);return {route_id:r.id,client_id,legal_key:'client:'+client_id,existing:a?{reason:'route_assignment',task_id:a.task_id,route_id:r.id,route_day:r.visit_date}:null,draft_ref:null}})):name==='crm_tasks_feed_status_v4'?{report_day:'2026-11-15',source_message_at:'2026-11-15T11:51:06Z',row_count:0}:{saved:true},error:null}},functions:{async invoke(name,args){calls.push({name,args});return {data:{items:[{sku:'75/6/1',product:'Шлифмашина',shelf_qty:2,reserve_qty:null}],answer:'Подтверждено 1 из 2; осталось отгрузить 1.'},error:null}}}};
  const store=new Map();const storage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)};
  const ctx={window,document,console,Map,Set,Date:FixedDate,Intl,Promise,JSON,Math,String,Number,Array,Error,RegExp,URL,performance:{now:()=>0},sessionStorage:storage,navigator:{},setTimeout:fn=>{timers.push(fn);return timers.length},clearTimeout(){},setInterval(){},db,currentProfile:{id:role==='boss'?'boss':'manager',role,region:'Витебск',name:role==='boss'?'Александр Паюшин':'Руднев'},allTasks:tasks,allClients:[{id:cid,name:'Тест Клиент',client_status:'Рабочий',manager_name:'Руднев'}],allRoutePlans:routes,openAddTask(){calls.push('legacy-add')},openAIWeekPlan(){calls.push('generate')},alert(){},prompt(){return null}};
- Object.assign(ctx,extra);for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks'])if(extra[name])window[name]=extra[name];vm.runInNewContext(source,ctx);while(timers.length)timers.shift()();
+ Object.assign(ctx,extra);for(const name of ['cleanupDuplicateOpenTasks','cleanupLegacyTaskBacklog','repairReportedTasks','cleanupPendingAutoTasks','renderOpenTasksBlock'])if(extra[name])window[name]=extra[name];vm.runInNewContext(source,ctx);while(timers.length)timers.shift()();
  const settle=async()=>{for(let i=0;i<40;i++)await Promise.resolve()};
  const click=async(action,value)=>{const selector='[data-tr="'+action+'"]'+(value?'[data-value="'+value+'"]':'');const b=document.querySelector(selector);assert.ok(b,selector);b.dispatchEvent(new window.Event('click',{bubbles:true}));await settle();};
  const input=(field,value)=>{const el=document.querySelector('[data-tr-field="'+field+'"]');assert.ok(el,field);el.value=value;el.dispatchEvent(new window.Event('input',{bubbles:true}));};
@@ -25,6 +25,35 @@ test('route client shows explicit SKU plan/fact and has no manual fulfillment',a
 test('assigned manager sees own route, not another manager',async()=>{const h=harness('manager');await h.settle();assert.doesNotMatch(h.document.getElementById('tasks-route-v4').textContent,/ЧУЖОЙ КЛИЕНТ/);});
 test('voice transcript is reviewed before shelf is saved with route and client',async()=>{const h=harness();await h.settle();await h.click('shelf');h.input('transcript','75/6/1 две штуки');await h.click('parse-shelf');assert.equal(h.calls.filter(c=>c.name==='crm_shelf_save_v4').length,0);await h.click('save-shelf');const call=h.calls.find(c=>c.name==='crm_shelf_save_v4');assert.equal(call.args.p_client,cid);assert.equal(call.args.p_route,rid);assert.equal(call.args.p_items[0].reserve_qty,null);});
 test('manager report keeps next action/date and never closes shipment',async()=>{const h=harness('manager');await h.settle();await h.click('report');h.input('fact','Закупщик согласовал часть заказа');h.input('next','Уточнить вторую позицию');h.input('nextDate','2026-11-19');await h.click('save-report');const c=h.calls.find(c=>c.name==='crm_task_report_v4');assert.equal(c.args.p_next,'Уточнить вторую позицию');assert.equal(c.args.p_next_date,'2026-11-19');assert.ok(!Object.hasOwn(c.args,'done'));});
+test('a legacy visit mark leaves the prospect completion available until the stage is recorded',async()=>{
+ const h=harness('manager');
+ h.data.crm_task_contracts_v4.length=0;
+ const assignment=h.data.crm_task_assignments_v5[0];
+ assignment.kind='potential';
+ h.ctx.allClients[0].client_status='Потенциальный';
+ h.data.tasks[0].done=true;
+ await h.settle();
+ await h.api.refresh();
+ await h.click('report');
+ assert.ok(h.document.querySelector('[data-tr="complete-potential"]'));
+ assignment.completed_at='2026-11-15T12:00:00Z';
+ await h.api.refresh();
+ assert.equal(h.document.querySelector('[data-tr="complete-potential"]'),null);
+});
+test('a visit shows the managed sales plan and keeps manual controls for other tasks',async()=>{
+ const h=harness('manager',{renderOpenTasksBlock(_client,containerId){
+  h.document.getElementById(containerId).innerHTML='<div>Результат</div><div data-task-id="'+tid+'"><div>75/6/1 Шлифмашина — 2 шт.</div><button>Выполнено</button></div><div data-task-id="other-task"><div>Обновить контакт</div><button>Выполнено</button></div>';
+ }});
+ await h.settle();
+ const host=h.document.createElement('div');
+ host.id='visit-test';
+ h.document.body.append(host);
+ h.window.renderOpenTasksBlock(cid,host.id,'qv',{});
+ assert.match(host.textContent,/75\/6\/1 Шлифмашина — 2 шт./);
+ assert.match(host.textContent,/Отгрузку подтвердит 1С/);
+ assert.equal(host.querySelector('[data-task-id="'+tid+'"]'),null);
+ assert.ok(host.querySelector('[data-task-id="other-task"] button'));
+});
 test('ordinary Lera context is scoped to selected client',async()=>{const h=harness();await h.settle();assert.equal(h.api.context().client_id,cid);assert.equal(h.api.context().route_id,rid);h.document.getElementById('page-tasks').classList.remove('active');assert.equal(h.api.context(),null);});
 test('draft survives switching between shelf and task',async()=>{const h=harness();await h.settle();await h.click('shelf');h.input('transcript','75/6/1 две штуки');await h.click('shipment');await h.click('shelf');assert.equal(h.document.querySelector('[data-tr-field="transcript"]').value,'75/6/1 две штуки');});
 test('before Friday deadline outstanding work is not called failure',async()=>{const h=harness();await h.settle();await h.click('view','control');assert.doesNotMatch(h.document.querySelector('.tr-list').textContent,/Не выполнено|Просрочено/);assert.match(h.document.body.textContent,/Контроль выполнения/);});
