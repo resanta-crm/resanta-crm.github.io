@@ -398,9 +398,9 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 .v2273214-technical{font-size:10px;color:var(--sub)}
 </style>
 
-<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=3&connectRelease=20261114-v2">
+<link rel="stylesheet" href="./assets/151-resanta-connect-v1.css?v=3&connectRelease=20261114-v2&connectUi=20261125">
 <link rel="stylesheet" href="./assets/154-resanta-connect-video-v1.css?v=2&connectRelease=20261114-v2">
-<link rel="stylesheet" href="./assets/155-resanta-connect-permissions-v1.css?v=1">
+<link rel="stylesheet" href="./assets/155-resanta-connect-permissions-v1.css?v=1&connectUi=20261125">
 </head>
 <body>
 <!-- CRM release: v22.2.6-ui-payments-fix -->
@@ -564,10 +564,10 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
       <div class="page" id="page-connect">
         <div class="c126">
           <div class="c126-top">
-            <div><div class="page-title" style="margin-bottom:0">💬 РЕСАНТА CONNECT 360°</div><p>Корпоративные чаты · Витебск</p></div>
+            <h1 class="page-title" style="margin:0">ГК Ресанта</h1>
             <button type="button" class="c126-btn" id="c126-refresh">↻ Обновить</button>
           </div>
-          <div class="c126-status" id="c126-status">Выберите чат или создайте новый.</div>
+          <div class="c126-status" id="c126-status" role="status">Выберите чат или создайте новый.</div>
           <div class="c126-grid">
             <aside class="c126-left">
               <div class="c126-controls">
@@ -593,7 +593,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
         </div>
         <div id="c126-overlay" class="c126-overlay" hidden>
           <div class="c126-dialog" role="dialog" aria-modal="true" aria-labelledby="c126-dialog-title">
-            <div class="c126-dialog-header"><strong id="c126-dialog-title">Новый чат</strong><button id="c126-close" class="c126-btn" type="button">✕</button></div>
+            <div class="c126-dialog-header"><strong id="c126-dialog-title">Новый чат</strong><button id="c126-close" class="c126-btn" type="button" aria-label="Закрыть">✕</button></div>
             <form id="c126-room-form">
               <label id="c126-kind-label">Тип чата<select id="c126-kind">
                 <option value="direct">Личный чат</option><option value="group">Групповой чат</option><option value="channel">Официальный канал</option>
@@ -601,6 +601,7 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
               <label id="c126-title-label">Название группы<input id="c126-title" maxlength="100" placeholder="Например, Склад Витебск"></label>
               <div style="font-size:12px;font-weight:600;margin-bottom:5px">Участники</div>
               <div class="c126-people" id="c126-people"></div>
+              <p class="c126-dialog-error" id="c126-dialog-error" role="alert" hidden></p>
               <div class="c126-buttons"><button type="submit" id="c126-save" class="c126-btn primary">Создать</button>
                 <button type="button" id="c126-cancel" class="c126-btn">Отмена</button></div>
             </form>
@@ -1934,11 +1935,11 @@ html.native-app .modal-bg{padding-top:max(20px,var(--safe-top));padding-right:ma
 <script defer src="./assets/191-sales360-recovery-lera-v1.js?v=20261110-1"></script>
 <!-- PDZ360 voice shares daily snapshot with the debt page; no automatic reads. -->
 <script defer src="./assets/194-pdz360-lera-v1.js?v=20261110-1"></script>
-<script defer src="./assets/151-resanta-connect-v1.js?v=8&connectRelease=20261114-v2"></script>
-<script defer src="./assets/152-resanta-connect-media-v1.js?v=3&connectRelease=20261114-v2"></script>
-<script defer src="./assets/153-resanta-connect-notify-v1.js?v=3&connectRelease=20261114-v2"></script>
-<script defer src="./assets/154-resanta-connect-video-v1.js?v=7&connectRelease=20261114-v2"></script>
-<script defer src="./assets/155-resanta-connect-permissions-v1.js?v=1"></script>
+<script defer src="./assets/151-resanta-connect-v1.js?v=8&connectRelease=20261114-v2&connectUi=20261125"></script>
+<script defer src="./assets/152-resanta-connect-media-v1.js?v=3&connectRelease=20261114-v2&connectUi=20261125"></script>
+<script defer src="./assets/153-resanta-connect-notify-v1.js?v=3&connectRelease=20261114-v2&connectUi=20261125"></script>
+<script defer src="./assets/154-resanta-connect-video-v1.js?v=7&connectRelease=20261114-v2&connectUi=20261125"></script>
+<script defer src="./assets/155-resanta-connect-permissions-v1.js?v=1&connectUi=20261125"></script>
 <script defer src="./assets/156-resanta-connect-android-push-v1.js?v=2&connectRelease=20261114-v2"></script>
 <script defer src="./assets/287-connect-delivery-v2.js?v=20261114-connect-v2"></script>
 <!-- Safe staff-only Android Lera: mic and AI loaded only by explicit tap. -->

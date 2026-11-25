@@ -2,8 +2,8 @@
 #page-connect [hidden]{display:none!important}
 #page-connect .c126{max-width:1200px;margin:auto;color:#1b3048}
 #page-connect .c126-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
-#page-connect .c126-top p{font-size:12px;color:#64748b;margin:4px 0 0}
 #page-connect .c126-status{font-size:12px;color:#64748b;min-height:24px}
+#page-connect .c126-status:empty{display:none}
 #page-connect .c126-status.error{color:#b42318}
 #page-connect .c126-grid{height:min(70vh,710px);min-height:410px;display:grid;grid-template-columns:minmax(190px,300px) minmax(0,1fr);background:white;border:1px solid #dce6f2;border-radius:14px;overflow:hidden}
 #page-connect .c126-left{border-right:1px solid #e2e8f0;display:flex;flex-direction:column;min-height:0}
@@ -94,4 +94,7 @@
 @media(max-width:710px){#page-connect .c126-grid{display:block;height:calc(100dvh - 220px);min-height:360px}#page-connect .c126-left,#page-connect .c126-chat{height:100%}#page-connect .c126-left{border-right:0}#page-connect .c126-chat{display:none}#page-connect .c126-grid.c216-room-open .c126-left{display:none}#page-connect .c126-grid.c216-room-open .c126-chat{display:flex}#page-connect .c216-back{display:block}#page-connect .c126-room b{font-size:14px}#page-connect .c126-room{padding:12px}#page-connect textarea,#page-connect input{font-size:16px}#page-connect .c126-bubble{font-size:14px;max-width:94%}#page-connect .c126-top{flex-wrap:wrap}#page-connect .c126-compose{flex-wrap:wrap}#page-connect .c126-status{min-height:0}}
 #page-connect .c216-receipt{display:block;text-align:right;color:#62748a;font-size:12px;margin-top:3px}#page-connect #c216-mute{white-space:nowrap}
 
-#page-connect .c126-head{flex-wrap:wrap}#page-connect .c126-head>div{min-width:0}#page-connect #c216-mute{font-size:12px;padding:5px 8px;min-height:32px;margin-top:4px}
+#page-connect .c126-head{justify-content:flex-start;flex-wrap:wrap}
+#page-connect .c126-head>div{flex:1 1 180px;min-width:0}
+#page-connect #c216-mute{display:block;font-size:12px;padding:5px 8px;min-height:32px;margin-top:4px}
+#page-connect .c126-dialog-error{color:#a32d2d;background:#fcebee;border-radius:8px;padding:9px 11px;margin:10px 0 0;font-size:13px}

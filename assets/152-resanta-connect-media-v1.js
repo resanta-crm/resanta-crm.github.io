@@ -18,7 +18,7 @@
    'audio/webm':'webm','audio/mp4':'mp4','audio/mpeg':'mp3','audio/ogg':'ogg'
  };
  const OPTIONS={};
- let ready=false, sending=false, recorder=null, recStream=null, recParts=[],recTimer=null,recWatch=null,recRoom=null;
+ let ready=false,sending=false,askingMic=false,recorder=null,recStream=null,recParts=[],recTimer=null,recWatch=null,recRoom=null;
  let attachmentCache=new Map();
  function say(s,error){OPTIONS.notify?.(s,!!error);}
  function client(){return OPTIONS.client?.();}
@@ -150,22 +150,24 @@
  }
  async function toggleRecording(){
   if(recorder){stopRecording(false);return;}
-  if(!active()||!room())return;
+  if(askingMic||!active()||!room()||!actor())return;
   if(!window.MediaRecorder||!navigator.mediaDevices?.getUserMedia){
    say('Запись микрофона недоступна в этом браузере. Попробуйте открыть CRM в Chrome или Safari.',true);return;
   }
   const chosen=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t));
   if(!chosen){say('Браузер не поддерживает запись голосовых сообщений.',true);return;}
+  const targetRoom=room(),targetActor=actor();
+  askingMic=true;
   try{
    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-   if(!active()||!room()){stream.getTracks().forEach(t=>t.stop());return;}
-   recStream=stream;recRoom=room();recParts=[];
+   if(!active()||room()!==targetRoom||actor()!==targetActor||document.hidden){stream.getTracks().forEach(t=>t.stop());return;}
+   recStream=stream;recRoom=targetRoom;recParts=[];
    recorder=new MediaRecorder(stream,{mimeType:chosen});
    const current=recorder;
    current.addEventListener('dataavailable',e=>{if(e.data?.size)recParts.push(e.data);});
    current.addEventListener('error',()=>{clearRecording();say('Ошибка микрофона. Проверьте разрешения.',true);});
    current.addEventListener('stop',()=>{
-    const discarded=!!current.__discard||!active()||room()!==recRoom;
+    const discarded=!!current.__discard||!active()||room()!==targetRoom||actor()!==targetActor;
     const mime=current.mimeType?.split(';')[0]||chosen.split(';')[0];
     const parts=recParts.slice();
     clearRecording();
@@ -180,7 +182,8 @@
    say('Идёт запись. Нажмите ⏹, чтобы остановить и отправить (до 90 секунд).');
    recTimer=setTimeout(()=>stopRecording(false),MAX_VOICE_MS);
    recWatch=setInterval(()=>discardIfNeeded(),400);
-  }catch(e){clearRecording();say('Доступ к микрофону не получен: '+errorMsg(e),true);}
+  }catch(e){clearRecording();if(active()&&room()===targetRoom&&actor()===targetActor)say('Доступ к микрофону не получен: '+errorMsg(e),true);}
+  finally{askingMic=false;}
  }
  function discardIfNeeded(){if(recorder&&(!active()||room()!==recRoom))stopRecording(true);}
  function init(hooks){
