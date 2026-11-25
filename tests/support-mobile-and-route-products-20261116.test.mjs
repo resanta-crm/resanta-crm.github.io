@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const {parseHTML}=await import(process.env.CRM_DOM_MODULE||'linkedom');
 const core=fs.readFileSync('assets/01-crm-core.js','utf8');
-const routeSource=core.slice(core.indexOf('function routeTaskHtml('),core.indexOf('function toggleRouteTaskBlock('));
+const routeSource=core.slice(core.indexOf('function routeTaskDisplayText('),core.indexOf('function toggleRouteTaskBlock('));
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function route(tasks,prices=[]){const ctx={esc,allPrice:prices};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(routeSource,ctx);vm.runInContext(fs.readFileSync('assets/289-route-task-products-v1.js','utf8'),ctx);return ctx.routeTaskHtml(tasks,'test-route-task');}
 test('ticket 7: base route renderer shows approved names even without optional module',()=>{
@@ -22,6 +22,20 @@ test('route cards show approved SKU, product and quantity without mutating tasks
   assert.match(document.querySelector('.route-task-box').textContent,/67\/1\/2 · Конвектор Ресанта ОК-2000 — 3 шт\./);
   assert.deepEqual(tasks,original);
   assert.equal(document.querySelectorAll('.route-task-item').length,1);
+});
+test('ticket 7: opening the visit shows the same named products as the route',()=>{
+ const task={id:'kept',client_id:'point',text:'Отгрузка 72/14/52 — 2 шт.',ai_stock_items:[{sku:'72/14/52',product:'Дрель Eurolux',qty:2}]};
+ const original=structuredClone(task);
+ const {document}=parseHTML('<div id="qv-open-tasks"></div><div id="v-client-tasks"></div>');
+ const ctx={esc,document,allTasks:[task],allPrice:[],isActiveTask:()=>true,addLocalDays:()=> '2026-11-28',TODAY:'2026-11-25'};
+ vm.createContext(ctx);
+ vm.runInContext(routeSource,ctx);
+ vm.runInContext(core.slice(core.indexOf('function renderOpenTasksBlock('),core.indexOf('function setTaskDecision(')),ctx);
+ for(const [id,prefix] of [['qv-open-tasks','qv'],['v-client-tasks','v']]){
+  ctx.renderOpenTasksBlock('point',id,prefix,{});
+  assert.match(document.getElementById(id).textContent,/72\/14\/52 · Дрель Eurolux — 2 шт\./);
+ }
+ assert.deepEqual(task,original);
 });
 test('older SKU snapshots use only an unambiguous already-loaded catalog name',()=>{
   const tasks=[{text:'Отгрузить товары',ai_stock_items:[{sku:'1/2',qty:2}]}];

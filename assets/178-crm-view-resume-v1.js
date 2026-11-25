@@ -39,7 +39,7 @@
   if(s.page==='triovist'){
    if(!(p.role==='boss'&&TRI_LEADERS.has(p.email))&&!(p.role==='manager'&&p.scope==='triovist'))return false;
   }else{
-   if(p.scope==='triovist')return false;
+   if(p.scope==='triovist' && !(s.page==='lpr-birthdays'&&w.crmLprV2?.role()==='triovist'))return false;
    if(p.role==='auditor'||p.role==='auditor_pending')return s.page==='warehouse-control';
    if(p.role!=='boss'&&['control','managers','users','routes-boss'].includes(s.page))return false;
   }
@@ -58,7 +58,8 @@
    if(current!==s.page){
     if(typeof w.goPage!=='function')return false;
     // Use the existing router so role checks, loaders and lazy rendering remain intact.
-    w.goPage(s.page,s.title||(s.page==='triovist'?'Триовист / 21vek.by':'РЕСАНТА CRM'));
+    if(s.page==='lpr-birthdays'&&w.crmLprV2?.role())void w.crmLprV2.open();
+    else w.goPage(s.page,s.title||(s.page==='triovist'?'Триовист / 21vek.by':'РЕСАНТА CRM'));
    }
    if(s.page==='triovist'&&TABS.has(s.tab)&&page()==='triovist'){
     const active=openTab();
