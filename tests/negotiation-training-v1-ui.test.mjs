@@ -123,6 +123,78 @@ test('New client sends audio with consent and can link to an existing card witho
   assert.match(reviewText, /Подсказка ИИ.*Назначить следующее время визита/);
 });
 
+test('Visit recorder can recover from Android microphone denial and an encoder failure',async () => {
+  const {document,window} = parseHTML(readFileSync('index.html','utf8'));
+  const source = readFileSync('assets/298-crm-negotiations-v1.js','utf8');
+  const dialog = document.getElementById('neg-training-dialog');
+  dialog.showModal = () => {dialog.open = true;};
+  dialog.close = () => {dialog.open = false; dialog.dispatchEvent(new window.Event('close'));};
+  const actor = {id:'owner',role:'manager',access_scope:'standard',region:'Витебск'};
+  const clientId = '11111111-1111-4111-a111-111111111111';
+  document.getElementById('qv-client-id').value = clientId;
+  const requests = [];
+  const formats = [];
+  let microphoneRequests = 0;
+  let trackStops = 0;
+  const navigator = {mediaDevices:{getUserMedia: async () => {
+    if (++microphoneRequests === 1) throw new DOMException('Blocked','NotAllowedError');
+    return {getTracks: () => [{stop: () => trackStops++}]};
+  }}};
+  window.Capacitor = {getPlatform: () => 'android'};
+  window.MediaRecorder = class {
+    static isTypeSupported(type) {return ['audio/webm;codecs=opus','audio/mp4'].includes(type);}
+    constructor(stream,{mimeType}) {this.mimeType = mimeType;}
+    start() {
+      formats.push(this.mimeType);
+      if (this.mimeType.includes('webm')) throw new DOMException('Encoder unavailable','NotSupportedError');
+      this.state = 'recording';
+    }
+    stop() {
+      this.state = 'inactive';
+      this.ondataavailable({data:new Blob(['audio'],{type:this.mimeType})});
+      this.onstop();
+    }
+  };
+  runInNewContext(source,{
+    window,document,navigator,currentUser:actor,currentProfile:actor,qvRoutePlanId:null,
+    crypto,Blob,AbortSignal,URLSearchParams,Intl,MutationObserver:window.MutationObserver,
+    setTimeout,clearTimeout,db:{auth:{getSession:async () => ({data:{session:{user:actor,access_token:'fixture'}}})}},
+    SUPABASE_URL:'https://fixture.invalid',SUPABASE_KEY:'fixture',
+    fetch:async (url,options) => {
+      const isPart = new URL(url).searchParams.has('part');
+      requests.push(isPart ? {action:'part',size:options.body.size} : JSON.parse(options.body));
+      return Response.json({partSize:16});
+    },
+  });
+  const click = text => {
+    const target = [...dialog.querySelectorAll('button')].find(el => el.textContent === text);
+    assert(target, text);
+    target.click();
+  };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  window.crmNegotiations.recordVisit('quick');
+  click('Начать запись');
+  assert.equal(microphoneRequests,0);
+  dialog.querySelector('input[type="checkbox"]').checked = true;
+  click('Начать запись');
+  await settle();
+  assert.match(dialog.textContent,/Разрешите микрофон в настройках Android/);
+  assert.equal(requests.length,0);
+  click('Начать запись');
+  await settle();
+  assert.match(dialog.textContent,/Идёт запись/);
+  assert.deepEqual(formats,['audio/webm;codecs=opus','audio/mp4']);
+  click('Остановить и отправить');
+  await settle();
+  await settle();
+  assert.equal(dialog.open,false);
+  assert.equal(trackStops,1);
+  assert.deepEqual(requests.map(request => request.action),['create','start','part','complete']);
+  assert.equal(requests[0].client_id,clientId);
+  assert.equal(requests[1].type,'audio/mp4');
+  assert.equal(requests[2].size,5);
+});
+
 test('Production navigation and point reminder are scoped to field staff',async () => {
   const html = readFileSync('index.html','utf8');
   const source = readFileSync('assets/298-crm-negotiations-v1.js','utf8');

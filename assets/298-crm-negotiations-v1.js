@@ -622,6 +622,44 @@
     }
   }
 
+  function microphoneError(error) {
+    switch (error.name) {
+      case 'NotAllowedError':
+      case 'PermissionDeniedError':
+      case 'SecurityError':
+        return window.Capacitor?.getPlatform?.() === 'android'
+          ? 'Разрешите микрофон в настройках Android: Приложения → Ресанта CRM → Разрешения → Микрофон. Затем нажмите «Начать запись» ещё раз.'
+          : 'Разрешите микрофон для этого сайта в настройках браузера. Если доступ отключён на устройстве, разрешите его и для браузера. Затем нажмите «Начать запись» ещё раз.';
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        return 'Устройство не видит микрофон. Проверьте, что он включён или подключён.';
+      case 'NotReadableError':
+      case 'TrackStartError':
+      case 'AbortError':
+        return 'Не удалось включить микрофон. Завершите звонок или запись в другом приложении, проверьте доступ к микрофону и повторите.';
+      default:
+        return 'Не удалось включить микрофон. Попробуйте ещё раз или выберите готовый аудиофайл.';
+    }
+  }
+
+  function startRecorder(stream, ondata, onerror, onstop) {
+    const Recorder = window.MediaRecorder;
+    const formats = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+    for (const mimeType of [...formats.filter(type => Recorder.isTypeSupported?.(type)), '']) {
+      try {
+        const recorder = new Recorder(stream, mimeType ? {mimeType} : undefined);
+        recorder.ondataavailable = ondata;
+        recorder.onerror = onerror;
+        recorder.onstop = () => onstop(recorder, mimeType);
+        recorder.start();
+        return recorder;
+      } catch {
+        // A WebView can advertise a format whose encoder fails to start.
+      }
+    }
+    return null;
+  }
+
   function begin(context) {
     if (!permitted() || capture) return;
     const state = {owner:currentUser.id, context, file:null, busy:false};
@@ -632,41 +670,68 @@
     const message = status();
     const record = button('Начать запись',async () => {
       if (state.recorder?.state === 'recording') {
+        record.disabled = true;
         state.sendOnStop = true;
         state.recorder.stop();
         return;
       }
       if (!consent.checked) {message.textContent = 'Подтвердите согласие участников.'; return;}
+      if (window.isSecureContext === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        message.textContent = 'Запись здесь недоступна. Откройте рабочую CRM по HTTPS в Chrome или Safari либо выберите готовый аудиофайл.';
+        return;
+      }
+      let stream;
+      record.disabled = true;
+      file.disabled = true;
+      consent.disabled = true;
+      send.disabled = true;
+      message.textContent = 'Подключаем микрофон. Если появится запрос, разрешите доступ.';
       try {
-        record.disabled = true;
-        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-        if (capture !== state) {stream.getTracks().forEach(track => track.stop());return;}
+        stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+        if (capture !== state || !dialog.open || state.suspended) return;
         state.stream = stream;
-        const recorder = new MediaRecorder(stream), chunks = [];
-        state.recorder = recorder;
-        recorder.ondataavailable = event => {if (event.data.size) chunks.push(event.data);};
-        recorder.onerror = () => {message.textContent = 'Запись прервана. Проверьте микрофон.';};
-        recorder.onstop = () => {
-          stream.getTracks().forEach(track => track.stop());
-          state.file = new Blob(chunks,{type:recorder.mimeType});
-          record.textContent = 'Записать заново';
-          message.textContent = state.file.size ? 'Запись готова к отправке.' : 'Микрофон не записал звук.';
-          send.disabled = !state.file.size;
-          file.disabled = false;
-          if (state.sendOnStop && capture === state && state.file.size) send.click();
-          state.sendOnStop = false;
-        };
-        recorder.start();
+        const chunks = [];
+        let interrupted = false;
+        state.recorder = startRecorder(stream,
+          event => {if (event.data?.size) chunks.push(event.data);},
+          () => {interrupted = true;},
+          (recorder, mimeType) => {
+            stream.getTracks().forEach(track => track.stop());
+            state.stream = null;
+            if (capture !== state) return;
+            const recording = new Blob(chunks,{type:recorder.mimeType || chunks[0]?.type || mimeType});
+            if (recording.size) state.file = recording;
+            record.textContent = 'Записать заново';
+            record.disabled = false;
+            message.textContent = interrupted
+              ? recording.size ? 'Запись прервана. Можно отправить записанный фрагмент или начать заново.'
+                : 'Запись прервана. Проверьте микрофон и повторите.'
+              : recording.size ? 'Запись готова к отправке.' : 'Микрофон не записал звук.';
+            send.disabled = !state.file?.size;
+            file.disabled = false;
+            consent.disabled = false;
+            if (state.sendOnStop && recording.size && !interrupted && !state.suspended) send.click();
+            state.sendOnStop = false;
+          });
+        if (!state.recorder) {
+          message.textContent = 'Микрофон подключён, но устройство не смогло начать запись. Откройте CRM в Chrome или Safari либо выберите готовый аудиофайл.';
+          return;
+        }
         record.textContent = 'Остановить и отправить';
-        file.disabled = true;
-        send.disabled = true;
         message.textContent = 'Идёт запись. Оставьте эту вкладку открытой.';
-      } catch {
-        state.stream?.getTracks().forEach(track => track.stop());
-        message.textContent = 'Микрофон недоступен. Можно выбрать аудиофайл.';
-      } finally {record.disabled = false;}
+      } catch (error) {
+        if (capture === state && !state.suspended) message.textContent = microphoneError(error);
+      } finally {
+        record.disabled = false;
+        if (state.recorder?.state !== 'recording') {
+          stream?.getTracks().forEach(track => track.stop());
+          state.stream = null;
+          file.disabled = false;
+          consent.disabled = false;
+          send.disabled = !state.file?.size;
+        }
+      }
     });
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) record.disabled = true;
     file.addEventListener('change',() => {
       state.file = file.files[0];
       send.disabled = !state.file?.size;
@@ -707,7 +772,7 @@
         }
       } finally {
         state.busy = false; file.disabled = false; close.disabled = false;
-        record.disabled = !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
+        record.disabled = false;
       }
     }),true);
     send.disabled = true;
@@ -720,12 +785,17 @@
   dialog.addEventListener('cancel',event => event.preventDefault());
   dialog.addEventListener('close',() => {
     const finished = capture;
+    capture = null;
     if (finished?.recorder?.state === 'recording') finished.recorder.stop();
     finished?.stream?.getTracks().forEach(track => track.stop());
-    capture = null;
   });
   window.addEventListener('pagehide',() => {
-    capture?.stream?.getTracks().forEach(track => track.stop());
+    if (!capture) return;
+    capture.suspended = true;
+    capture.stream?.getTracks().forEach(track => track.stop());
+  });
+  window.addEventListener('pageshow',() => {
+    if (capture) capture.suspended = false;
   });
 
   const visitContext = {
