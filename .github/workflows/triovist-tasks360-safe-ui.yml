@@ -41,4 +41,8 @@ jobs:
           if [ "${GITHUB_HEAD_REF:-}" = "release/triovist-pilot-20261124" ]; then
             node tests/triovist-production-rollout-scope-v1.mjs /tmp/ui-only-files
           fi
-          ! grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)\.js$|^supabase/|^\.github/workflows/triovist-21vek)' /tmp/ui-only-files
+          # Reviewed sales reporting RPC. Keep all other database paths protected.
+          if grep -qx 'supabase/migrations/20261125160553_crm_sales_month_breakdown_v1.sql' /tmp/ui-only-files; then
+            test "$(git hash-object supabase/migrations/20261125160553_crm_sales_month_breakdown_v1.sql)" = '543ee55d90458b6b94213e2af67716b73c6e3c1e'
+          fi
+          ! (grep -E '(^assets/(80-triovist-21vek-control-v236107|106-triovist-competitors-v236218)\.js$|^supabase/|^\.github/workflows/triovist-21vek)' /tmp/ui-only-files | grep -vxF 'supabase/migrations/20261125160553_crm_sales_month_breakdown_v1.sql')

@@ -93,6 +93,12 @@ function fixture(role='boss'){
     sales:sample.kpi.map(row=>({manager_name:row.manager_name,shipment_plan:row.plan,shipment:row.actual})),clients:[]},error:null};
   }
   calls.push({name,args});
+  if(name==='crm_sales_month_breakdown_v1'){
+   const items=args.p_view==='clients'?
+    [{item_key:'c1',label:'Клиент & Строй',quantity:3,revenue:150}]:
+    [{item_key:'sku:70/6/4',label:'Бензопила',sku:'70/6/4',quantity:3,revenue:150}];
+   return {data:{month:args.p_month.slice(0,7),items,revenue:150,has_rows:true,total:1,partial:false},error:null};
+  }
   if(name==='crm_sales360_product_drill_v3'){
    const rows=args.p_level==='subgroups'?
     [{item_key:'subgroup:Бензопилы',item_name:'Бензопилы',current_revenue:42000,previous_revenue:38000,current_qty:110,previous_qty:100},
@@ -126,6 +132,23 @@ function fixture(role='boss'){
  return{window,context,nodes,events,calls,recoveryCalls,navigation,classes};
 }
 const settle=()=>new Promise(resolve=>setTimeout(resolve,30));
+test('ticket 8: month report opens on demand and SKU drill retains month and client',async()=>{
+ const f=fixture('manager');await settle();
+ const calls=()=>f.calls.filter(x=>x.name==='crm_sales_month_breakdown_v1').map(x=>x.args);
+ assert.equal(calls().length,0);
+ f.nodes['s360-monthly']={innerHTML:''};f.nodes['s360-breakdown-results']={innerHTML:''};
+ const click=(action,index)=>f.events.click({target:{closest:sel=>sel==='button'?{dataset:{s360MonthAction:action,s360MonthIndex:index}}:null}});
+ click('open');await settle();
+ assert.equal(calls().at(-1).p_view,'clients');
+ assert.match(f.nodes['s360-breakdown-results'].innerHTML,/Клиент &amp; Строй/);
+ f.events.change({target:{closest:sel=>sel==='[data-s360-breakdown-month]'?{value:'2026-02'}:null}});await settle();
+ click('client','0');await settle();
+ assert.equal(calls().at(-1).p_month,'2026-02-01');
+ assert.equal(calls().at(-1).p_client_key,'c1');
+ assert.equal(calls().at(-1).p_manager,null);
+ assert.equal(calls().at(-1).p_view,'sku');
+ assert.match(f.nodes['s360-breakdown-results'].innerHTML,/Бензопила.*70\/6\/4/);
+});
 test('sales module stays isolated after original analytics and keeps core unchanged',()=>{
  assert.doesNotThrow(()=>new vm.Script(src));
  assert.ok(index.includes('assets/190-sales-director360-v1.js?v=20261110-sales360-6'));
