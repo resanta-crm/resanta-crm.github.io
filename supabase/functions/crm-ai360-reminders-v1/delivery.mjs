@@ -10,3 +10,18 @@ export async function deliverReminder(row,{binding,ownerAllowed,send,save}){
  const stored=await save(row.id,{status:'sent',telegram_message_id:result.message_id,delivered_at:new Date().toISOString(),error_reason:null});
  return stored?'sent':'delivery_unknown';
 }
+
+export async function deliverAndroidReminder(row,{tokens,credentials,send}){
+ const devices=[...new Set(tokens.map(row=>row.fcm_token).filter(Boolean))];
+ if(!devices.length)return {sent:0,unconfirmed:0};
+ let auth;
+ try{auth=await credentials();}catch{return {sent:0,unconfirmed:devices.length};}
+ const results=await Promise.allSettled(devices.map(token=>send(auth,{
+  token,
+  notification:{title:'Лера · напоминание',body:row.title},
+  data:{kind:'personal_reminder',account_id:String(row.owner_id),reminder_id:String(row.id)},
+  android:{priority:'HIGH',ttl:'3600s',notification:{channel_id:'resanta_connect',tag:'lera-reminder-'+row.id}}
+ })));
+ const sent=results.filter(result=>result.status==='fulfilled'&&result.value===true).length;
+ return {sent,unconfirmed:devices.length-sent};
+}
