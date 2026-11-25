@@ -29,6 +29,7 @@
   #page-negotiations .nt-actions .nt-field {max-width:100%}
 }
 [data-nt-entry][hidden] {display:none!important}
+#neg-training-dialog .nt-permission-settings[hidden] {display:none!important}
 
 #page-negotiations .nt-speaker-choices {border:0;margin:10px 0;padding:0;min-width:0}
 #page-negotiations .nt-speaker-choices legend {font-size:1rem;font-weight:700}
