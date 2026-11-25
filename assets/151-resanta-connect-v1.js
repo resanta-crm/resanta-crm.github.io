@@ -18,7 +18,14 @@
  const isOpen=()=>$('app')?.dataset?.activePage==='connect'&&$('app')?.style?.display!=='none'&&!!profile();
  const sameActor=id=>!!id&&actor===id&&profile()?.id===id&&$('app')?.style?.display!=='none';
  const chatGrid=()=>$('page-connect').querySelector('.c126-grid');
- const roomActivity=r=>Date.parse(previews.get(r.id)?.created_at||r.created_at)||0;
+ function recentRooms(list){
+  return list.slice().sort((a,b)=>{
+   const aLast=previews.get(a.id)?.created_at,bLast=previews.get(b.id)?.created_at;
+   return Number(!!bLast)-Number(!!aLast)||
+    Date.parse(bLast||b.created_at)-Date.parse(aLast||a.created_at)||
+    b.id.localeCompare(a.id);
+  });
+ }
  const staffName=id=>staff.find(x=>x.id===id)?.name||'Сотрудник';
  const ownMember=id=>members.find(x=>x.user_id===actor&&x.room_id===id);
  const roomLabel=r=>{
@@ -67,8 +74,7 @@
   const host=$('c126-rooms');
   const focused=host.contains(document.activeElement)?document.activeElement.dataset.roomId:null;
   const scroll=host.scrollTop;host.replaceChildren();
-  const visible=rooms.filter(r=>roomLabel(r).toLocaleLowerCase('ru-RU').includes(filterText))
-   .sort((a,b)=>roomActivity(b)-roomActivity(a));
+  const visible=recentRooms(rooms.filter(r=>roomLabel(r).toLocaleLowerCase('ru-RU').includes(filterText)));
   if(!visible.length){host.append(node('div','c126-empty',filterText?'Чаты не найдены':'Пока нет чатов'));return;}
   visible.forEach(r=>{
    const b=button('','c126-room'+(r.id===roomId?' active':''),()=>selectRoom(r.id).catch(e=>notice(textErr(e),true)));
@@ -96,7 +102,8 @@
   ]);
   if(!sameActor(expected))return;
   const nextRooms=ensure(results[0])||[],nextMembers=ensure(results[1])||[];
-  if(Array.isArray(results[2]?.data)&&!results[2].error){
+  const hasPreviews=Array.isArray(results[2]?.data)&&!results[2].error;
+  if(hasPreviews){
    for(const row of results[2].data)updatePreview(row);
    const ids=new Set(nextRooms.map(room=>room.id));
    for(const id of previews.keys())if(!ids.has(id))previews.delete(id);
@@ -105,6 +112,7 @@
   members=nextMembers;
   if(roomId&&!ownMember(roomId))resetRoom();
   renderRooms();
+  return hasPreviews;
  }
  function updatePreview(message){
   const previous=previews.get(message.room_id);
@@ -347,11 +355,11 @@
   })().finally(()=>{refreshing=null;});
   return refreshing;
  }
- function open(){
-  if(!opening)opening=openChat().finally(()=>{opening=null;});
+ function open(preferredRoom=null){
+  if(!opening)opening=openChat(preferredRoom).finally(()=>{opening=null;});
   return opening;
  }
- async function openChat(){
+ async function openChat(preferredRoom){
   if(typeof goPage!=='function'||!$('page-connect'))return;
   const expected=profile()?.id,navigation=window.__crmNavEpoch;
   let entered=false;
@@ -370,19 +378,25 @@
    entered=true;
    notice('Загружаем чаты…');
    if(actor!==response.data.user.id){
-    actor=response.data.user.id;rooms=[];members=[];staff=[];pendingRoom=null;drafts.clear();previews.clear();pendingMessages.clear();resetRoom();renderRooms();
+    actor=response.data.user.id;rooms=[];members=[];staff=[];pendingRoom=null;drafts.clear();previews.clear();pendingMessages.clear();
+   }else if(roomId){
+    drafts.set(actor+':'+roomId,$('c126-text').value);
    }
+   resetRoom();renderRooms();
    const [directory,loaded]=await Promise.allSettled([getDirectory(),getRooms()]);
    if(!sameActor(expected)||!isOpen())return false;
    if(loaded.status==='rejected')throw loaded.reason;
    renderRooms();
    notice(directory.status==='rejected'?'Список сотрудников пока недоступен. Его можно загрузить при создании чата.':'',directory.status==='rejected');
-   if(roomId&&ownMember(roomId))await selectRoom(roomId);
-   else if(rooms.length&&!window.matchMedia('(max-width:710px)').matches){
-    const latest=rooms.reduce((best,room)=>roomActivity(room)>roomActivity(best)?room:best);
-    await selectRoom(latest.id);
+   if(preferredRoom){
+    if(ownMember(preferredRoom))await selectRoom(preferredRoom);
+    else notice('Этот чат недоступен для вашей учётной записи.',true);
+   }else if(loaded.value){
+    const latest=recentRooms(rooms).find(room=>ownMember(room.id));
+    if(latest)await selectRoom(latest.id);
+   }else if(rooms.length&&directory.status!=='rejected'){
+    notice('Не удалось определить последнюю переписку. Выберите чат из списка или нажмите «Обновить».',true);
    }
-   else resetRoom();
    if(!ticker)ticker=window.setInterval(()=>{
     if(isOpen()&&sameActor(actor)&&document.visibilityState==='visible')refresh()?.catch(e=>notice(textErr(e),true));
    },25000);
@@ -401,10 +415,13 @@
  function init(){
   const host=$('page-connect');if(!host)return;
   const mute=button('Уведомления чата: вкл.','c126-btn',async()=>{if(!roomId)return;const value=!window.crmConnectDeliveryV2?.isMuted?.(roomId);const r=await dbClient().rpc('connect_set_mute_v2',{p_room_id:roomId,p_muted:value});if(r.error){notice(textErr(r.error),true);return;}window.crmConnectDeliveryV2?.setMuted?.(roomId,value);mute.textContent=value?'Уведомления чата: выкл.':'Уведомления чата: вкл.';});mute.id='c216-mute';$('c126-info').parentElement?.append(mute);
-  const back=button('← Все чаты','c126-btn c216-back',()=>{
+  const back=button('← Все чаты','c126-btn',()=>{
    if(roomId)drafts.set(actor+':'+roomId,$('c126-text').value);
    resetRoom();renderRooms();$('c126-new').focus();
-  });$('c126-name').parentElement?.prepend(back);
+  });
+  const mobileActions=node('div','c216-mobile-actions');
+  const newChat=button('+ Новый чат','c126-btn',event=>openDialog(false,event.currentTarget));
+  mobileActions.append(back,newChat);$('c126-name').parentElement?.prepend(mobileActions);
   const messages=$('c126-messages');const older=button('Загрузить предыдущие сообщения','c126-btn',getOlder);older.id='c216-older';older.hidden=true;messages.before(older);
   const next=button('Новые сообщения ↓','c126-btn',()=>{messages.scrollTop=messages.scrollHeight;next.hidden=true;window.crmConnectNotify128?.markRead(roomId);});next.id='c216-new-messages';next.hidden=true;messages.after(next);
   messages.addEventListener('scroll',()=>{if(messages.scrollHeight-messages.scrollTop-messages.clientHeight<80){next.hidden=true;window.crmConnectNotify128?.markRead(roomId);}});
@@ -461,8 +478,8 @@
  }
  // Notification "Open / Join" routes to the exact invited room, not the first recent chat.
  async function openInvitedRoom(id,joinVideo=false){
-  if(!await open()||!id||!sameActor(actor)||!ownMember(id))return false;
-  await selectRoom(id);
+  if(!id||!await open(id)||!sameActor(actor)||!ownMember(id)||!isOpen())return false;
+  if(roomId!==id)await selectRoom(id);
   if(joinVideo&&isOpen()&&roomId===id&&myPermissions?.video_enabled)await window.crmConnectVideo131?.join?.({incoming:true});
   return isOpen()&&roomId===id;
  }
