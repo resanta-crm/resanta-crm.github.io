@@ -11,3 +11,7 @@ export function resultFor(status){
  if(status>=400)return {status:'cancelled',error_code:'PROVIDER_'+status};
  return {status:'unknown',error_code:'TRANSPORT_UNCERTAIN'};
 }
+export function messagePreview(body){
+ const characters=Array.from(String(body??'').replace(/\s+/gu,' ').trim());
+ return characters.length>240?characters.slice(0,239).join('')+'…':characters.join('');
+}

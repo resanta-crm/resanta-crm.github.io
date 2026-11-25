@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2.95.0";
 import webpush from "npm:web-push@3.6.7";
 import {SignJWT,importPKCS8} from "npm:jose@6.1.0";
-import {validSubscription,resultFor} from './rules.mjs';
+import {validSubscription,resultFor,messagePreview} from './rules.mjs';
 const origins=new Set(['https://resanta-crm.by','https://www.resanta-crm.by','http://localhost','https://localhost','capacitor://localhost']);
 const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
 const idPattern=/^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -35,11 +35,27 @@ async function dispatch(){
     const ds=check(await db.from('connect_push_devices_v1').select('fcm_token').eq('user_id',task.recipient_id))||[];
     let device:any=null;for(const d of ds){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(d.fcm_token))),x=>x.toString(16).padStart(2,'0')).join('');if(hash===task.device_ref){device=d;break;}}
     if(device){
-     try{google=google||googleToken();const f=await google;
-      const r=await fetch('https://fcm.googleapis.com/v1/projects/'+f.project+'/messages:send',{method:'POST',headers:{Authorization:'Bearer '+f.token,'Content-Type':'application/json'},body:JSON.stringify({message:{token:device.fcm_token,notification:{title,body:payload.body},data:Object.fromEntries(Object.entries(payload).map(([k,v])=>[k,String(v??'')])),android:{priority:'HIGH',ttl:task.kind==='video_call'?'90s':'86400s',notification:{channel_id:'resanta_connect',tag:'connect-'+(task.message_id||task.id)}}}}),signal:AbortSignal.timeout(10000)});
+     try{
+      const notification={title,body:payload.body};
+      if(task.kind==='message'){
+       // Only resolve content for a claimed, currently authorized delivery and a verified device.
+       if(!task.message_id||!task.room_id)throw Error('MESSAGE_UNAVAILABLE');
+       const message=await db.from('connect_messages_v1').select('body').eq('id',task.message_id).eq('room_id',task.room_id).maybeSingle();
+       if(message.error)throw Error('MESSAGE_LOOKUP_FAILED');
+       if(!message.data)throw Error('MESSAGE_UNAVAILABLE');
+       notification.title='Сообщение · ГК Ресанта';
+       notification.body=messagePreview(message.data.body)||payload.body;
+      }
+      google=google||googleToken();const f=await google;
+      const data=Object.fromEntries(Object.entries({...payload,title:notification.title}).map(([k,v])=>[k,String(v??'')]));
+      const r=await fetch('https://fcm.googleapis.com/v1/projects/'+f.project+'/messages:send',{method:'POST',headers:{Authorization:'Bearer '+f.token,'Content-Type':'application/json'},body:JSON.stringify({message:{token:device.fcm_token,notification,data,android:{priority:'HIGH',ttl:task.kind==='video_call'?'90s':'86400s',notification:{channel_id:'resanta_connect',tag:'connect-'+(task.message_id||task.id)}}}}),signal:AbortSignal.timeout(10000)});
       outcome=r.ok?{status:'sent',error_code:null}:resultFor(r.status);
       if([404,410].includes(r.status))check(await db.from('connect_push_devices_v1').delete().eq('fcm_token',device.fcm_token).eq('user_id',task.recipient_id));
-     }catch(e:any){outcome=e.message==='FCM_UNCONFIGURED'||e.message==='FCM_AUTH'?{status:'failed',error_code:e.message}:resultFor(null);}
+     }catch(e:any){
+      if(e.message==='MESSAGE_UNAVAILABLE')outcome={status:'cancelled',error_code:e.message};
+      else if(['FCM_UNCONFIGURED','FCM_AUTH','MESSAGE_LOOKUP_FAILED'].includes(e.message))outcome={status:'failed',error_code:e.message};
+      else outcome=resultFor(null);
+     }
     }
    }
   }catch(_){outcome={status:'unknown',error_code:'TRANSPORT_UNCERTAIN'};}
