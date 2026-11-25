@@ -195,6 +195,72 @@ test('Visit recorder can recover from Android microphone denial and an encoder f
   assert.equal(requests[2].size,5);
 });
 
+test('Android recording requests consent, offers settings on denial, then sends M4A',async () => {
+  const {document,window} = parseHTML(readFileSync('index.html','utf8'));
+  const source = readFileSync('assets/298-crm-negotiations-v1.js','utf8');
+  const dialog = document.getElementById('neg-training-dialog');
+  dialog.showModal = () => {dialog.open = true;};
+  dialog.close = () => {dialog.open = false;dialog.dispatchEvent(new window.Event('close'));};
+  const actor = {id:'owner',role:'manager',access_scope:'standard',region:'Витебск'};
+  document.getElementById('qv-client-id').value = '11111111-1111-4111-a111-111111111111';
+  const events = [];
+  let session;
+  const native = {
+    async start(payload) {
+      events.push('native-start');
+      if (events.length === 1) throw {code:'microphone_denied'};
+      session = payload.session;
+    },
+    async stop(payload) {assert.equal(payload.session,session);return {path:'file:///app/audio.m4a'};},
+    async discardRecording() {events.push('discard');},
+    async openSettings() {events.push('settings');},
+  };
+  window.Capacitor = {
+    getPlatform:() => 'android',isPluginAvailable:name => name === 'NegotiationAudio',
+    Plugins:{NegotiationAudio:native},convertFileSrc:path => path.replace('file://','https://resanta-crm.by/_capacitor_file_'),
+  };
+  runInNewContext(source,{
+    window,document,navigator:{},currentUser:actor,currentProfile:actor,qvRoutePlanId:null,
+    crypto,Blob,AbortSignal,URLSearchParams,Intl,MutationObserver:window.MutationObserver,setTimeout,clearTimeout,
+    db:{auth:{getSession:async () => ({data:{session:{user:actor,access_token:'fixture'}}})}},
+    SUPABASE_URL:'https://fixture.invalid',SUPABASE_KEY:'fixture',
+    fetch:async (url,options) => {
+      if (url === 'https://resanta-crm.by/_capacitor_file_/app/audio.m4a') {
+        events.push('read-local-file');
+        return new Response('audio');
+      }
+      const isPart = new URL(url).searchParams.has('part');
+      const body = isPart ? {action:'part'} : JSON.parse(options.body);
+      events.push(body.action);
+      if (body.action === 'start') assert.equal(body.type,'audio/mp4');
+      return Response.json({partSize:16});
+    },
+  });
+  const press = label => {
+    const button = [...dialog.querySelectorAll('button')].find(el => el.textContent === label);
+    assert(button,label);
+    button.click();
+    return button;
+  };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  window.crmNegotiations.recordVisit('quick');
+  press('Начать запись');
+  assert.equal(events.length,0);
+  dialog.querySelector('input[type="checkbox"]').checked = true;
+  press('Начать запись');
+  await settle();
+  assert.match(dialog.textContent,/Android не разрешил запись/);
+  assert.equal(press('Открыть разрешения Android').hidden,false);
+  press('Начать запись');
+  await settle();
+  press('Остановить и отправить');
+  await settle();
+  await settle();
+  assert.equal(dialog.open,false);
+  assert(events.indexOf('read-local-file') < events.indexOf('create'));
+  assert.deepEqual(events.slice(-5),['discard','create','start','part','complete']);
+});
+
 test('Production navigation and point reminder are scoped to field staff',async () => {
   const html = readFileSync('index.html','utf8');
   const source = readFileSync('assets/298-crm-negotiations-v1.js','utf8');

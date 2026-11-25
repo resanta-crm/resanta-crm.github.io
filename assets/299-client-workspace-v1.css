@@ -1,0 +1,79 @@
+:is(#page-clients,#page-lpr-birthdays,#page-networks) {
+  --client-accent: var(--a,#185fa5);
+  --client-tint: var(--ab,#e6f1fb);
+  color: var(--text);
+}
+:is(#page-clients,#page-lpr-birthdays,#page-networks) .crm-client-tabs,
+#page-clients.uc-installed > .crm-client-tabs {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 16px;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.crm-client-tabs button {
+  min-height: 44px;
+  padding: 8px 13px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.crm-client-tabs button[aria-current="page"], .crm-client-tabs button:hover {
+  background: var(--client-tint);
+  color: var(--client-accent);
+  border-color: color-mix(in srgb,var(--client-accent) 28%,var(--border));
+}
+.crm-client-tabs button:focus-visible {
+  outline: 2px solid var(--client-accent);
+  outline-offset: 2px;
+}
+:is(#page-clients .page-title,#page-lpr-birthdays .page-title,#page-networks .page-header h1) {
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+}
+:is(#page-clients .client-card,#page-lpr-birthdays #lpr-view-v1 .card,#page-lpr-birthdays #lpr-view-v1 .lpr-stat,
+    #page-networks .net-card,#page-networks .net-kpi) {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: none;
+}
+:is(#page-lpr-birthdays #lpr-view-v1 .lpr-stat strong,#page-networks .net-kpi b) {
+  color: var(--client-accent);
+  font-variant-numeric: tabular-nums;
+}
+:is(#page-clients .chip.active,#page-lpr-birthdays #lpr-view-v1 [data-lpr-tab][aria-pressed="true"]) {
+  border-color: color-mix(in srgb,var(--client-accent) 38%,var(--border));
+  background: var(--client-tint);
+  color: var(--client-accent);
+  font-weight: 600;
+}
+:is(#page-networks .net-toolbar,#page-lpr-birthdays #lpr-view-v1 .lpr-controls) {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+#page-lpr-birthdays #lpr-view-v1 [data-lpr-action="new"] {
+  background: var(--client-accent);
+  border-color: var(--client-accent);
+  color: #fff;
+}
+:is(#page-clients,#page-networks,#page-lpr-birthdays) :is(.form-input,.search-input,.btn-primary,.btn-secondary) {
+  min-height: 44px;
+  max-width: 100%;
+  border-radius: 8px;
+}
+@media (max-width: 600px) {
+  .crm-client-tabs button { flex: 1 1 auto; }
+  #page-lpr-birthdays #lpr-view-v1 .lpr-controls label { min-width: min(100%, 140px); }
+}

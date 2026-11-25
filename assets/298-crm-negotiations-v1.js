@@ -660,15 +660,39 @@
     return null;
   }
 
+  function androidRecorder() {
+    const bridge = window.Capacitor;
+    return bridge?.getPlatform?.() === 'android' && bridge.isPluginAvailable?.('NegotiationAudio')
+      ? bridge.Plugins?.NegotiationAudio : null;
+  }
+
+  function discardAndroidRecording(state) {
+    const session = state?.androidSession;
+    if (!session) return;
+    state.androidSession = null;
+    return state.android.discardRecording({session}).catch(() => {});
+  }
+
   function begin(context) {
     if (!permitted() || capture) return;
-    const state = {owner:currentUser.id, context, file:null, busy:false};
+    const state = {owner:currentUser.id, context, file:null, busy:false, android:androidRecorder()};
     capture = state;
     dialog.replaceChildren(node('h3','Записать разговор'), node('p',context.prospect_name || 'Выбранная торговая точка'));
     const consent = input('checkbox');
     const file = input('file'); file.accept = 'audio/*,.m4a,.webm,.mp4';
     const message = status();
+    const settings = button('Открыть разрешения Android', async () => {
+      try { await state.android.openSettings(); }
+      catch { message.textContent = 'Откройте настройки «Ресанта CRM» и проверьте разрешение на микрофон.'; }
+    });
+    settings.classList.add('nt-permission-settings');
+    settings.hidden = true;
     const record = button('Начать запись',async () => {
+      if (state.android) {
+        if (!consent.checked) {message.textContent = 'Подтвердите согласие участников.'; return;}
+        await recordAndroid();
+        return;
+      }
       if (state.recorder?.state === 'recording') {
         record.disabled = true;
         state.sendOnStop = true;
@@ -732,13 +756,57 @@
         }
       }
     });
+    async function recordAndroid() {
+      settings.hidden = true;
+      record.disabled = file.disabled = consent.disabled = close.disabled = send.disabled = true;
+      let recordingReady = false;
+      try {
+        if (state.androidSession) {
+          message.textContent = 'Подготавливаем аудио…';
+          const {path} = await state.android.stop({session:state.androidSession});
+          const response = await fetch(window.Capacitor.convertFileSrc(path));
+          if (!response.ok) throw Error('Cannot read recording');
+          const audio = await response.blob();
+          if (!audio.size) throw Error('Empty recording');
+          if (capture !== state || state.suspended) return;
+          state.file = new Blob([audio],{type:'audio/mp4'});
+          recordingReady = true;
+        } else {
+          message.textContent = 'Подключаем микрофон. Если появится запрос Android, разрешите доступ.';
+          state.androidSession = crypto.randomUUID();
+          await state.android.start({session:state.androidSession});
+          if (capture === state && !state.suspended && state.androidSession) {
+            record.textContent = 'Остановить и отправить';
+            message.textContent = 'Идёт запись. Оставьте CRM открытой.';
+            return;
+          }
+        }
+      } catch (error) {
+        if (capture === state && !state.suspended) {
+          settings.hidden = error.code !== 'microphone_denied';
+          message.textContent = error.code === 'microphone_denied'
+            ? 'Android не разрешил запись для «Ресанта CRM». Откройте разрешения приложения или выберите готовый аудиофайл.'
+            : 'Android не смог записать звук. Завершите звонок или запись в другом приложении и повторите.';
+        }
+        await discardAndroidRecording(state);
+      } finally {
+        if (recordingReady || capture !== state || state.suspended) await discardAndroidRecording(state);
+        record.disabled = close.disabled = false;
+        if (!state.androidSession) {
+          record.textContent = state.file?.size ? 'Записать заново' : 'Начать запись';
+          file.disabled = consent.disabled = false;
+          send.disabled = !state.file?.size;
+        }
+      }
+      if (recordingReady && capture === state && !state.suspended) send.click();
+    }
     file.addEventListener('change',() => {
       state.file = file.files[0];
       send.disabled = !state.file?.size;
       message.textContent = state.file ? 'Аудиофайл выбран.' : '';
     });
     const close = button('Закрыть',() => {
-      if (state.busy || state.recorder?.state === 'recording') return;
+      if (state.busy || state.androidSession || state.recorder?.state === 'recording') return;
       if (state.file?.size && !state.sent && !confirm('Закрыть без отправки записи?')) return;
       dialog.close();
     });
@@ -779,19 +847,21 @@
     consent.classList.add('nt-check');
     const agreement = node('label',undefined,'nt-agreement');
     agreement.append(consent,node('span','Участники согласились на запись и её разбор'));
-    dialog.append(agreement,group(record),field('Или выберите аудиофайл',file),message,group(close,send));
+    dialog.append(agreement,group(record,settings),field('Или выберите аудиофайл',file),message,group(close,send));
     dialog.showModal();
   }
   dialog.addEventListener('cancel',event => event.preventDefault());
   dialog.addEventListener('close',() => {
     const finished = capture;
     capture = null;
+    void discardAndroidRecording(finished);
     if (finished?.recorder?.state === 'recording') finished.recorder.stop();
     finished?.stream?.getTracks().forEach(track => track.stop());
   });
   window.addEventListener('pagehide',() => {
     if (!capture) return;
     capture.suspended = true;
+    void discardAndroidRecording(capture);
     capture.stream?.getTracks().forEach(track => track.stop());
   });
   window.addEventListener('pageshow',() => {
