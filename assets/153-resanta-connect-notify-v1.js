@@ -13,13 +13,15 @@ const activeProfile=()=>typeof currentProfile!=='undefined'?currentProfile:null;
 const database=()=>typeof db!=='undefined'?db:null;
 const isSignedIn=()=>!!activeProfile()?.id&&$('app')?.style?.display!=='none';
 function clearState(){
- if(realtimeChannel&&database())database().removeChannel(realtimeChannel).catch?.(()=>{});
+ if(realtimeChannel&&database())database().removeChannel(realtimeChannel)?.catch?.(()=>{});
  realtimeChannel=null;realtimeReady=false;notificationAccount=null;seenMessageIds.clear();
  account=null;counts.clear();total=0;seenFirst=false;videoAllowed=false;
  for(const id of ['c128-nav-count','c128-bottom-count']){
   const span=$(id);if(span){span.textContent='';span.hidden=true;}
  }
  const hint=$('c128-allow');if(hint)hint.hidden=true;
+ const toast=$('c136-notification-toast');
+ if(toast){toast.hidden=true;delete toast.dataset.callId;toast.replaceChildren();}
 }
 function badge(id,hostId){
  const host=$(hostId);if(!host)return null;
@@ -59,6 +61,7 @@ async function checkAccount(){
  if(!isSignedIn()||!database())return null;
  const id=activeProfile().id;
  if(account===id)return id;
+ if(account)clearState();
  const info=await database().auth.getUser();
  if(info.error||info.data?.user?.id!==id){clearState();return null;}
  const rights=await database().from('connect_permissions_v1').select('chat_enabled,video_enabled')
@@ -93,7 +96,7 @@ async function refresh(){
   console.warn('CONNECT unread refresh:',String(e?.message||e));
  }finally{fetchBusy=false;}
 }
-function notificationToast(roomId,isVideo,callId){
+function notificationToast({room_id:roomId,call_id:callId,body},isVideo){
   if(!isSignedIn())return;
   let host=$('c136-notification-toast');
   if(!host){
@@ -101,22 +104,38 @@ function notificationToast(roomId,isVideo,callId){
    host.setAttribute('role','alert');$('app')?.append(host);
   }
   host.replaceChildren();
-  const message=document.createElement('strong');
-  message.textContent=isVideo?'📹 Входящий видеозвонок · РЕСАНТА CONNECT':'💬 Новое сообщение · РЕСАНТА CONNECT';
+  delete host.dataset.callId;
+  const title=document.createElement('strong');
+  title.textContent=isVideo?'📹 Входящий видеозвонок · ГК Ресанта':'💬 Новое сообщение · ГК Ресанта';
+  host.append(title);
+  const characters=[...String(body??'').trim()];
+  if(!isVideo&&characters.length){
+   const preview=document.createElement('p');
+   preview.className='c136-notification-preview';
+   preview.textContent=characters.slice(0,240).join('')+(characters.length>240?'…':'');
+   host.append(preview);
+  }
   const open=document.createElement('button');open.type='button';open.textContent=isVideo?'Присоединиться':'Открыть чат';
   open.addEventListener('click',async()=>{
    host.hidden=true;
-   try{await window.crmConnectOpenRoom136?.(roomId,false);if(isVideo){if(callId){const r=await database().rpc('connect_call_action_v2',{p_room_id:roomId,p_action:'get',p_call_id:callId});if(!r.data?.call||!['ringing','active'].includes(r.data.call.status))throw Error('Звонок уже завершён.');}await window.crmConnectVideo131?.join?.({incoming:true});}}catch(e){console.warn('CONNECT incoming action:',String(e?.message||e));}
+   try{
+    if(!await window.crmConnectOpenRoom136?.(roomId,false)||!isVideo)return;
+    if(callId){
+     const r=await database().rpc('connect_call_action_v2',{p_room_id:roomId,p_action:'get',p_call_id:callId});
+     if(!r.data?.call||!['ringing','active'].includes(r.data.call.status))throw Error('Звонок уже завершён.');
+    }
+    if(window.crmConnectRoomState216?.roomId()===roomId)await window.crmConnectVideo131?.join?.({incoming:true});
+   }catch(e){console.warn('CONNECT incoming action:',String(e?.message||e));}
   });
   const close=document.createElement('button');close.type='button';close.textContent='✕';
   close.setAttribute('aria-label','Скрыть уведомление');close.addEventListener('click',()=>{host.hidden=true;});
-  host.append(message,open);
+  host.append(open);
   if(isVideo&&callId){const decline=document.createElement('button');decline.type='button';decline.textContent='Отклонить';decline.addEventListener('click',async()=>{await database().rpc('connect_call_action_v2',{p_room_id:roomId,p_action:'decline',p_call_id:callId});host.hidden=true;});host.append(decline);}
   host.append(close);host.hidden=false;
   if(isVideo){window.crmConnectDeliveryV2?.playSound?.();setTimeout(()=>{if(host.dataset.callId===callId)host.hidden=true;},90000);host.dataset.callId=callId||'';}
 }
 function onRealtimeMessage(message){
- if(!message?.id||!account||message.sender_id===account||!message.room_id)return;
+ if(!message?.id||!account||account!==activeProfile()?.id||!isSignedIn()||message.sender_id===account||!message.room_id)return;
  if(window.crmConnectDeliveryV2?.isMuted?.(message.room_id)){void refresh();return;}
  if(seenMessageIds.has(message.id))return;
  seenMessageIds.add(message.id);
@@ -124,13 +143,14 @@ function onRealtimeMessage(message){
  // Chat-only staff must never see a button offering to join a forbidden video call.
  const isVideo=videoAllowed&&!!(message.call_id||message.kind==='video_call');
  // Do not display alert for a chat that the user is actively reading, except for calls.
+ const reading=window.crmConnectRoomState216;
  const alreadyReading=!document.hidden&&(document.hasFocus?.()??true)&&$('app')?.dataset?.activePage==='connect' &&
-  !!document.querySelector('#c126-rooms .c126-room.active[data-room-id="'+message.room_id+'"]');
+  reading?.roomId()===message.room_id&&reading?.atBottom();
  let noticeClaim=true;try{const key='connect-notice:'+account+':'+message.id;noticeClaim=!localStorage.getItem(key);if(noticeClaim)localStorage.setItem(key,String(Date.now()));}catch(_){}
- if(noticeClaim&&(!alreadyReading||isVideo))notificationToast(message.room_id,isVideo,message.call_id);
+ if(!document.hidden&&(!alreadyReading||isVideo))notificationToast(message,isVideo);
  if(noticeClaim&&typeof Notification!=='undefined'&&Notification.permission==='granted'&&(document.hidden||!(document.hasFocus?.()??true))&&!window.crmConnectDeliveryV2?.isSubscribed?.()){
   try{
-   const n=new Notification(isVideo?'📹 Видеозвонок РЕСАНТА CONNECT':'💬 Сообщение РЕСАНТА CONNECT',{
+   const n=new Notification(isVideo?'📹 Видеозвонок · ГК Ресанта':'💬 Сообщение · ГК Ресанта',{
     body:isVideo?'Приглашение от коллеги. Откройте чат для подключения.':'Новое сообщение от коллеги.',
     tag:'connect-'+message.id
    });
@@ -176,8 +196,8 @@ function init(){
  const root=$('app');
  if(root){
   observer=new MutationObserver(()=>{
-   if(!isSignedIn())clearState();
-   else refresh();
+   if(!isSignedIn()||(account&&activeProfile()?.id!==account))clearState();
+   if(isSignedIn())refresh();
   });
   observer.observe(root,{attributes:true,attributeFilter:['style']});
  }

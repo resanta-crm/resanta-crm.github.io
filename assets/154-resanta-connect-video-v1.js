@@ -279,7 +279,7 @@ function init(hooks){
  const overlay=el('div','c131-overlay');overlay.id='c131-overlay';overlay.hidden=true;
  overlay.innerHTML=[
   '<section class="c131-dialog" role="dialog" aria-modal="true" aria-label="Видеозвонок РЕСАНТА">',
-  '<div class="c131-head"><div><strong>📹 РЕСАНТА CONNECT · Видеозвонок</strong><small id="c131-count">Подключение…</small></div>',
+  '<div class="c131-head"><div><strong>📹 ГК Ресанта · Видеозвонок</strong><small id="c131-count">Подключение…</small></div>',
   '<div class="c131-header-actions"><button type="button" id="c131-minimize" class="c126-btn">▁ Свернуть</button>',
   '<button type="button" id="c131-close" class="c126-btn">✕ Завершить</button></div></div>',
   '<div id="c131-room" class="c131-status"></div><div id="c131-waiting" class="c131-status" hidden></div>',
@@ -299,7 +299,7 @@ function init(hooks){
  ].join('');
  $('app').append(overlay);
  const minibar=el('div','c131-mini');minibar.id='c131-mini';minibar.hidden=true;
- minibar.setAttribute('role','region');minibar.setAttribute('aria-label','Активный звонок РЕСАНТА CONNECT');
+ minibar.setAttribute('role','region');minibar.setAttribute('aria-label','Активный звонок ГК Ресанта');
  minibar.innerHTML=[
   '<strong>📹 Идёт видеозвонок</strong><small id="c131-mini-info">1 участник</small>',
   '<div class="c131-mini-actions">',

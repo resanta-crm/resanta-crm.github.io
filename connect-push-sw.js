@@ -12,7 +12,7 @@ self.addEventListener('push',e=>e.waitUntil((async()=>{
  // A focused CRM page owns the in-app banner; background notifications are owned here.
  let focused=false;for(const c of windows){if(new URL(c.url).origin!==self.location.origin)continue;c.postMessage({type:d.kind==='calendar'?'CALENDAR_PUSH':'CONNECT_PUSH',payload:d});if(c.focused&&c.visibilityState==='visible')focused=true;}
  if(focused&&d.kind!=='test')return;
- await self.registration.showNotification(d.title||'РЕСАНТА CONNECT',{body:d.body||'Новое событие',tag:'connect-'+(d.message_id||d.delivery_id),data:d,renotify:false,requireInteraction:d.kind==='video_call'});
+ await self.registration.showNotification(d.title||'ГК Ресанта',{body:d.body||'Новое событие',tag:'connect-'+(d.message_id||d.delivery_id),data:d,renotify:false,requireInteraction:d.kind==='video_call'});
 })()));
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil((async()=>{
  const d=e.notification.data||{},binding=await state();if(!binding?.account_id||binding.account_id!==d.account_id)return;

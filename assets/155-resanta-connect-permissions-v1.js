@@ -88,15 +88,15 @@
   if(started)return;started=true;
   const top=$('page-connect')?.querySelector('.c126-top');
   if(!top)return;
-  const button=create('button','c126-btn','⚙ Права CONNECT');
+  const button=create('button','c126-btn','⚙ Доступ к чатам');
   button.type='button';button.id='c136-open';button.hidden=true;
   button.addEventListener('click',open);top.append(button);
   const overlay=create('div','c136-overlay');overlay.id='c136-overlay';overlay.hidden=true;
   const dialog=create('div','c136-dialog');
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
-  dialog.setAttribute('aria-label','Права РЕСАНТА CONNECT');
+  dialog.setAttribute('aria-label','Доступ к чатам ГК Ресанта');
   const head=create('div','c136-header');
-  head.append(create('strong','','⚙ Управление доступом · CONNECT'));
+  head.append(create('strong','','⚙ Доступ к чатам ГК Ресанта'));
   const close=create('button','c126-btn','✕ Закрыть');close.type='button';
   close.addEventListener('click',()=>{overlay.hidden=true;});head.append(close);
   dialog.append(head,create('p','','Выбирай отдельно права на переписку и видеосвязь. Изменения сохраняются по каждому сотруднику.'));
