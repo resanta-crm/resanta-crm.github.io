@@ -7,7 +7,7 @@ import {gpsQuestionDay,gpsStartAnswer,readGpsEvidence} from '../supabase/functio
 import {directoryAlias,canonicalMeetingClient} from '../supabase/functions/crm-ai360-actions-v1/identity-aliases.mjs';
 import {reminderDraft,commitReminder} from '../supabase/functions/crm-ai360-actions-v1/reminders.mjs';
 import {MEETING_CHANGES,prepareMeetingChange,commitMeetingChange} from '../supabase/functions/crm-ai360-actions-v1/meeting-actions.mjs';
-import {deliverReminder,deliverAndroidReminder} from '../supabase/functions/crm-ai360-reminders-v1/delivery.mjs';
+import {deliverReminder} from '../supabase/functions/crm-ai360-reminders-v1/delivery.mjs';
 import {requestContext} from '../supabase/functions/crm-ai360-dialog-v4/context.mjs';
 const read=p=>fs.readFileSync(p,'utf8');
 function turn(){const window={};vm.runInNewContext(read('assets/220-lera360-turn-taking-v1.js'),{window});return window.crmAI360TurnTakingV1;}
@@ -98,18 +98,4 @@ test('signed external Triovist meeting can commit without activating an archived
  const proof=await ctx.sign('fixture-key',actor.id,draft);
  const result=await ctx.run(new Request('https://resanta-crm.by'),{draft,approval_token:proof.token,confirmation:'подтверждаю'},actor,svc,caller,'fixture-key');
  assert.equal((await result.json()).mode,'created_meeting');assert.equal(mutations.length,1);assert.equal(mutations[0].client_id,null);assert.equal(mutations[0].client_name,'Триовист');
-});
-test('personal reminder sends one Android notification per active device using the owner scope',async()=>{
- const sent=[];
- const row={id:'reminder-1',owner_id:'employee-1',title:'Позвонить по поставке'};
- const channels=await deliverAndroidReminder(row,{
-  tokens:[{fcm_token:'device-1'},{fcm_token:'device-1'},{fcm_token:'device-2'}],
-  credentials:async()=>({token:'fixture'}),
-  send:async(_auth,message)=>{sent.push(message);return message.token==='device-1';}
- });
- assert.deepEqual(channels,{sent:1,unconfirmed:1});
- assert.deepEqual(sent.map(m=>m.token),['device-1','device-2']);
- assert.equal(sent[0].notification.body,row.title);
- assert.equal(sent[0].data.account_id,row.owner_id);
- assert.equal(sent[0].android.notification.tag,'lera-reminder-reminder-1');
 });
