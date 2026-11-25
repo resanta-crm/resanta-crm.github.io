@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const {parseHTML}=await import(process.env.CRM_DOM_MODULE||'linkedom');
 const core=fs.readFileSync('assets/01-crm-core.js','utf8');
-const routeSource=core.slice(core.indexOf('function routeTaskDisplayText('),core.indexOf('function toggleRouteTaskBlock('));
+const routeSource=core.slice(core.indexOf('function routeTaskHtml('),core.indexOf('function toggleRouteTaskBlock('));
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function route(tasks,prices=[]){const ctx={esc,allPrice:prices};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(routeSource,ctx);vm.runInContext(fs.readFileSync('assets/289-route-task-products-v1.js','utf8'),ctx);return ctx.routeTaskHtml(tasks,'test-route-task');}
 test('ticket 7: base route renderer shows approved names even without optional module',()=>{

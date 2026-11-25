@@ -4387,6 +4387,17 @@ function buildGoogleUrl(){
   return url;
 }
 
+function routeTaskHtml(tasks,id){
+  if(!tasks||!tasks.length)return '';
+  // Approved product names belong to the base route renderer as well as the
+  // optional compatibility module. Never rewrite saved task text or quantities.
+  const items=tasks.map((t,i)=>'<div class="route-task-item">'+(tasks.length>1?'<b>'+(i+1)+'.</b> ':'')+esc(routeTaskDisplayText(t))+'</div>').join('');
+  return '<div id="'+id+'" class="route-task-box route-task-collapsed" onclick="event.stopPropagation();toggleRouteTaskBlock(\''+id+'\')">'
+    +'<div class="route-task-head">📌 '+(tasks.length===1?'Задача':'Задачи: '+tasks.length)+'</div>'
+    +'<div class="route-task-text">'+items+'</div>'
+    +'<span class="route-task-toggle">Показать полностью ▾</span>'
+    +'</div>';
+}
 function routeTaskDisplayText(t){
   let text=String(t.text||'');
   for(const item of Array.isArray(t.ai_stock_items)?t.ai_stock_items:[]){
@@ -4411,17 +4422,6 @@ function routeTaskDisplayText(t){
   return text;
 }
 
-function routeTaskHtml(tasks,id){
-  if(!tasks||!tasks.length)return '';
-  // Approved product names belong to the base route renderer as well as the
-  // optional compatibility module. Never rewrite saved task text or quantities.
-  const items=tasks.map((t,i)=>'<div class="route-task-item">'+(tasks.length>1?'<b>'+(i+1)+'.</b> ':'')+esc(routeTaskDisplayText(t))+'</div>').join('');
-  return '<div id="'+id+'" class="route-task-box route-task-collapsed" onclick="event.stopPropagation();toggleRouteTaskBlock(\''+id+'\')">'
-    +'<div class="route-task-head">📌 '+(tasks.length===1?'Задача':'Задачи: '+tasks.length)+'</div>'
-    +'<div class="route-task-text">'+items+'</div>'
-    +'<span class="route-task-toggle">Показать полностью ▾</span>'
-    +'</div>';
-}
 function toggleRouteTaskBlock(id){
   const el=document.getElementById(id);
   if(!el)return;

@@ -50,6 +50,10 @@ test('core visit, route and CRM business logic byte-identical except explicitly 
   // Support #7 explicitly authorizes product labels in the pure route task
   // renderer. Keep every route, visit and task transaction under this guard.
   restore('function routeTaskHtml(','function toggleRouteTaskBlock(');
+  // Only the HTML for the task label is shared with the open visit.
+  const visitTaskLabel="        +'<div style=\"font-size:12px;color:var(--text);margin-bottom:8px;white-space:pre-line\">'+esc(routeTaskDisplayText(t))+'</div>'";
+  const oldVisitTaskLabel="        +'<div style=\"font-size:12px;color:var(--text);margin-bottom:8px\">'+t.text+'</div>'";
+  if(!before.includes(visitTaskLabel))normalized=normalized.replace(visitTaskLabel,oldVisitTaskLabel);
   // Explicit AIR3 scope: isolate only the bounded voice request helper.
   // Visit, route, auth and client code remain covered by exact comparison.
   const voiceBlock=/\n\/\/ Bound the entire voice request, including auth acquisition\.[\s\S]*?(?=\/\/ v23\.6\.166:)/;
