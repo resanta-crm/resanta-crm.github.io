@@ -160,6 +160,57 @@ test('sales module stays isolated after original analytics and keeps core unchan
  assert.doesNotMatch(src,/\b(?:db|supabase)\.(?:from|insert|update|delete|upsert)\(/);
  assert.doesNotMatch(src,/\bfetch\s*\(/);
 });
+test('branch comparison keeps both sales channels and requires verified 1C ranges', async ()=>{
+ const branchFile='assets/305-branch-sales-periods-v1.js';
+ assert.ok(index.indexOf(branchFile)>0 && index.indexOf(branchFile)<index.indexOf('assets/190-sales-director360-v1.js'));
+ const inputs=Array.from({length:4},()=>({value:''}));
+ const names=['p_from','p_to','p_previous_from','p_previous_to'];
+ const actions={};
+ const preset={addEventListener:(event,fn)=>{actions.preset=fn}};
+ const closed={addEventListener:(event,fn)=>{actions.closed=fn}};
+ const form={
+  addEventListener:(event,fn)=>{actions[event]=fn},
+  querySelector(selector){
+   if(selector==='select')return preset;
+   if(selector==='[type="submit"]')return this.button;
+   return inputs[names.indexOf(selector.split('"')[1])];
+  },
+  button:{}
+ };
+ const status={}, results={}, calls=[];
+ const nodes={form,'[role="status"]':status,'[data-branch-results]':results,'[data-closed-month]':closed};
+ const host={querySelector:selector=>nodes[selector]};
+ const window={};
+ vm.runInNewContext(read(branchFile),{window});
+ const complete=(pos,month,end,field,triovist,full_months)=>({
+  pos,from_date:month+'-01',to_date:month+'-'+end,complete:true,field,triovist,total:field+triovist,
+  months:1,full_months,missing:[]
+ });
+ const november=complete(1,'2026-11','26',230359.94,861855.06,false);
+ const missing={pos:2,from_date:'2025-11-01',to_date:'2025-11-26',complete:false,
+  missing:[{from:'2025-11-01',to:'2025-11-26'}]};
+ const october=[complete(1,'2026-10','31',316927.84,798475.54,true),
+  complete(2,'2025-10','31',298849.17,522519.67,true)];
+ const db={async rpc(name,args){
+  calls.push([name,args]);
+  return {data:{periods:args.p_from?october:[november,missing],
+   today:'2026-11-26',include_triovist:true,source_message_at:'2026-11-26T08:00:08Z'}};
+ }};
+ window.RESANTA_BRANCH_SALES_PERIODS_V1.mount(host,{actor:'branch-boss',manager:null,db});
+ await settle();
+ assert.equal((host.innerHTML.match(/type="date"/g)||[]).length,4);
+ assert.match(results.innerHTML,/1\s092\s215,00 BYN/);
+ assert.match(results.innerHTML,/Нет полного среза 1С за 01\.11\.2025 — 26\.11\.2025/);
+ assert.doesNotMatch(results.innerHTML,/%/);
+ assert.equal(inputs[3].value,'2025-11-26');
+ actions.closed();
+ await settle();
+ assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))),['crm_branch_sales_periods_v1',{
+  p_manager:null,p_from:'2026-10-01',p_to:'2026-10-31',p_previous_from:'2025-10-01',p_previous_to:'2025-10-31'
+ }]);
+ assert.match(results.innerHTML,/\+294\s034,54 BYN/);
+ assert.match(results.innerHTML,/\+35,8\s%/);
+});
 test('annual comparison excludes incomplete November and future months',()=>{
  const a=fixture();
  const api=a.window.RESANTA_SALES360_V1;

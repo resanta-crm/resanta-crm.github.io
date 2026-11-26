@@ -175,9 +175,9 @@ function monthControls(d){
  '<select id="s360-month" data-s360-select="month">'+months.map(x=>'<option value="'+esc(x)+'"'+(selected===x?' selected':'')+'>'+esc(monthLabel(x))+'</option>').join('')+'</select>'+
  '<button type="button" class="s360-btn" data-s360-step="1"'+(index===months.length-1?' disabled':'')+' aria-label="Следующий месяц">→</button></div></div>';
 }
-function filtersHtml(d){
+function filtersHtml(d, includeManager=true){
  return '<div class="s360-panel s360-primary-filters"><div class="s360-filters">'+
- periodFiltersHtml(d)+showSelectorOptions(d)+
+ periodFiltersHtml(d)+(includeManager?showSelectorOptions(d):'')+
  '<button type="button" class="s360-btn" data-s360-refresh>Обновить</button></div></div>'+
  '<section id="s360-monthly" aria-label="Продажи за месяц">'+monthlyControls()+'</section>';
 }
@@ -1063,6 +1063,19 @@ function clientsPanel(d){
  '<div class="s360-client-list">'+(list||(state.clientData?'<div class="s360-muted">По запросу клиентов нет.</div>':''))+'</div>')+
  paginator+'</div></div>';
 }
+function renderSalesBody(root, body){
+ const branch=w.RESANTA_BRANCH_SALES_PERIODS_V1;
+ if(!branch){root.innerHTML=headerHtml(state.data)+body;return}
+ const existing=$('s360-branch-periods');
+ const open=$('s360-field-details')?.open;
+ root.innerHTML=headerHtml(state.data)+
+  '<div class="s360-panel"><div class="s360-filters">'+showSelectorOptions(state.data)+'</div>'+
+  '<div id="s360-branch-periods"></div></div>'+
+  '<details id="s360-field-details" class="s360-panel"'+(open?' open':'')+
+  '><summary>Детализация полевых продаж по месяцам</summary>'+body+'</details>';
+ if(existing)$('s360-branch-periods').replaceWith(existing);
+ branch.mount($('s360-branch-periods'),{actor:viewer(),manager:boss()&&state.manager!=='all'?state.manager:null,db:dbx()});
+}
 function render(){
  const root=mount();if(!root)return;
  if(state.legacy){
@@ -1072,9 +1085,9 @@ function render(){
   return;
  }
  if(!state.data){
-  root.innerHTML=headerHtml(null)+filtersHtml(null)+
+  renderSalesBody(root,filtersHtml(null,!w.RESANTA_BRANCH_SALES_PERIODS_V1)+
    (state.error?'<div class="s360-loading" role="alert">Годовая аналитика сейчас недоступна.<div style="margin-top:10px"><button type="button" class="s360-btn" data-s360-refresh>Повторить загрузку</button><button type="button" class="s360-btn" data-s360-legacy>Открыть исходный отчёт</button></div></div>':
-   '<div role="status" class="s360-loading">Загружаю продажи… <button type="button" class="s360-btn" data-s360-legacy>Открыть прежний отчёт</button></div><div class="s360-load-kpis" aria-hidden="true">'+Array.from({length:5},()=>'<div></div>').join('')+'</div>');
+   '<div role="status" class="s360-loading">Загружаю продажи… <button type="button" class="s360-btn" data-s360-legacy>Открыть прежний отчёт</button></div><div class="s360-load-kpis" aria-hidden="true">'+Array.from({length:5},()=>'<div></div>').join('')+'</div>'));
   return;
  }
  const focus=focusedMonth(state.data);if(focus)state.selectedMonth=focus.month;
@@ -1083,7 +1096,7 @@ function render(){
  const chosen=selectedComparison(d),kpi=periodKpis(chosen);
  const comparison=chosen.pct===null?'—':(chosen.pct>0?'+':'')+chosen.pct.toFixed(1).replace('.',',')+'%';
  const colors=chosen.pct===null?'':chosen.pct<0?'s360-negative':'s360-positive';
- root.innerHTML=headerHtml(d)+filtersHtml(d)+
+ renderSalesBody(root,filtersHtml(d,!w.RESANTA_BRANCH_SALES_PERIODS_V1)+
  '<div class="s360-kpis">'+
  kpiCard('Продажи',chosen.one?.complete?money(chosen.one.total):'—','Период 1')+
  kpiCard(chosen.pct===null?'Сравнение':chosen.pct>0?'Рост':chosen.pct<0?'Падение':'Без изменений',comparison,chosen.delta===null?'Нет сопоставимых периодов':(chosen.delta>0?'+':'')+money(chosen.delta),colors)+
@@ -1092,7 +1105,7 @@ function render(){
  selectedComparisonHtml(d)+
  selectedChartHtml(d)+
  (num(d.unallocated_client_revenue)>0?'<p class="s360-muted">Без точной ТТ: '+esc(money(d.unallocated_client_revenue))+' · включено в оборот с начала года.</p>':'')+
- clientsPanel(d);
+ clientsPanel(d));
  if(state.clientsOpen&&$('s360-client-left'))$('s360-client-left').scrollTop=state.clientListScroll;
 }
 function activatePeriod(key){
