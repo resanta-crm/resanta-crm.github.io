@@ -210,6 +210,7 @@
    const row=element.closest('[data-sku]');
    const {sku,product}=row.dataset;
    const item = {...state.draft.items[sku],sku,product};
+   delete item.fromDictation;
    const field=element.dataset.shelfLine;
    item[field]=element.value;
    if (field==='status') row.querySelector('.shelf-counts').hidden=!item.status;
@@ -241,8 +242,15 @@
      for (const row of data.items || []) { found.add(row.sku); decoded.set(row.sku,row); }
     }
     if (!current() || text.value.trim()!==transcript) return;
+    if (decoded.size) {
+     for (const [sku,item] of Object.entries(state.draft.items)) {
+      if (item.fromDictation) delete state.draft.items[sku];
+     }
+     state.draft.parsedTranscript=transcript;
+    }
     for (const [sku,item] of decoded) {
-     state.draft.items[sku]={...item,status:item.shelf_qty>0?'in_stock':'not_in_stock'};
+     if (state.draft.items[sku]) continue;
+     state.draft.items[sku]={...item,status:item.shelf_qty>0?'in_stock':'not_in_stock',fromDictation:true};
     }
     draftChanged(state);
     search.value='';
@@ -331,6 +339,9 @@
   function saveItems() {
    const selected=[];
    for (const item of Object.values(state.draft.items)) {
+    if (item.fromDictation && state.draft.parsedTranscript!==text.value.trim()) {
+     throw Error('Диктовка изменена. Разберите её заново или уточните количество вручную по артикулу '+item.sku+'.');
+    }
     const hasCount=value=>value!=null&&String(value).trim()!=='';
     if (!item.status) {
      if (hasCount(item.shelf_qty)||hasCount(item.reserve_qty)) throw Error('Выберите результат по артикулу '+item.sku+'.');

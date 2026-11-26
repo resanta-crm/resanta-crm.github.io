@@ -368,6 +368,13 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  assert.equal(visit.querySelector('[data-shelf-line="shelf_qty"]').value,'2');
  assert.match(visit.textContent,/Была под заказ для клиента/);
  assert.match(visit.textContent,/Заказали для отгрузки клиенту/);
+ const transcript=visit.querySelector('[data-shelf-text]');
+ transcript.value='67/2/21 — 3 штуки, запас 1';
+ transcript.dispatchEvent(new window.Event('input',{bubbles:true}));
+ await click('#qv-shelf-count [data-shelf-action="save"]');
+ assert.match(visit.querySelector('[data-shelf-save]').textContent,/Диктовка изменена/);
+ assert.equal(calls.filter(call=>call.name==='crm_shelf_visit_save_v6').length,0);
+ await click('#qv-shelf-count [data-shelf-action="parse"]');
  await click('#qv-shelf-count [data-shelf-action="save"]');
  assert.match(visit.querySelector('[data-shelf-save]').textContent,/Повторите/);
  await click('#qv-shelf-count [data-shelf-action="save"]');
@@ -375,7 +382,7 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  assert.equal(saves.length,2);
  assert.equal(saves[1].args.p_request,saves[0].args.p_request);
  assert.equal(saves[1].args.p_route,rid);
- assert.equal(saves[1].args.p_items[0].shelf_qty,2);
+ assert.equal(saves[1].args.p_items[0].shelf_qty,3);
  assert.equal(visit.querySelector('.crm-shelf-count').open,false);
  assert.match(visit.querySelector('[data-shelf-badge]').textContent,/Сохранена/);
 });
