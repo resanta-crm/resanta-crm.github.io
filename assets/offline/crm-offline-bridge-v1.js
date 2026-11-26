@@ -16,6 +16,7 @@
   let savedAt=0;
   let menuKey='';
   let cachedSources=[];
+  let lastReport;
 
   function profile() {
     const id = currentUser?.id;
@@ -26,9 +27,11 @@
   function pages() {
     const result = new Map();
     for (const element of app.querySelectorAll('.sidebar .nav-item[id],.bottom-nav .bn-item[id]')) {
+      const css = getComputedStyle(element);
       const key = element.id.replace(/^(nav|bn)-/,'');
       if (excluded.has(key) || element.hidden || element.disabled || element.getAttribute('aria-hidden') === 'true' ||
-          getComputedStyle(element).display === 'none' || !document.getElementById('page-'+key)) continue;
+          ['hidden','collapse'].includes(css.visibility) ||
+          css.display === 'none' || !document.getElementById('page-'+key)) continue;
       const title = element.textContent.trim().replace(/\s+/g,' ').slice(0,100);
       if (title && !result.has(key)) result.set(key,title);
     }
@@ -52,10 +55,11 @@
         own:store.canRecord(account.id,data) && clean(row.manager_name,240) === clean(currentProfile?.name,240)
       })).sort((a,b) => String(b.date).localeCompare(String(a.date))),
       tasks:tasks.slice(-1200).map(row => ({id:String(row.id),clientId:String(row.client_id??''),dueDate:row.due_date,
-        done:row.done===true,reviewStatus:row.review_status,active:active.has(row.id),title:clean(row.title||row.text||'Задача',420),
+        done:row.done===true,confirmed:row.closed_by==='Проверка 1С',reviewStatus:row.review_status,active:active.has(row.id),title:clean(row.title||row.text||'Задача',420),
         managedKind:taskWorkspace?.visitTaskKind?.(row)||'',skuPlan:taskWorkspace?.visitSkuPlan?.(row)||null})),
       visits:visits.filter(row=>!row.is_duplicate).slice(-700).map(row=>({date:row.date,clientId:String(row.client_id??''),result:clean(row.result,150)})),
-      clients:clients.slice(0,3500).map(row=>({id:String(row.id),name:clean(row.name,240),address:clean([row.city,row.address].filter(Boolean).join(', '),280)}))
+      clients:clients.slice(0,3500).map(row=>({id:String(row.id),name:clean(row.name,240),address:clean([row.city,row.address].filter(Boolean).join(', '),280),
+        code:clean(row.code||row.code_1c,40),status:clean(row.client_status,40),manager:clean(row.manager_name,120)}))
     };
   }
   function activePage() {
@@ -79,6 +83,7 @@
       if(error||data.user?.id!==account.id||profile()?.key!==account.key||profile()?.id!==account.id)return;
       if(authorized?.id&&authorized.id!==account.id)await store.removeSnapshot(authorized.id);
       authorized=account;
+      lastReport=null;
       savedAt=0;
     }
     const menu=pages();
@@ -99,8 +104,12 @@
     if(!title||!page?.classList.contains('active')||key==='tasks'||key==='clients'||key==='visits'||routeSections.has(key))return;
     if(page.querySelector('[aria-busy=true],.s360-loading,.v22722-page-loading'))return;
     const content=clean(page.innerText,60000);
-    if(content.length>title.length+15&&!/^(.*\n)?(?:Загружа|Не удалось загрузить)/u.test(content))
-      await store.saveReport(account.id,{key,title,text:content,savedAt:Date.now()});
+    if (content.length<=title.length+15 || /^(.*\n)?(?:Загружа|Не удалось загрузить)/u.test(content)) return;
+    const tree=window.crmOfflineReport?.capture(page);
+    const signature=JSON.stringify([key,content,tree]);
+    if (lastReport===signature) return;
+    await store.saveReport(account.id,{key,title,text:content,tree,savedAt:Date.now()},account.key);
+    lastReport=signature;
   }
   let writing=false,pending=false;
   function schedule(){

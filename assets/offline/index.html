@@ -4,22 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#185fa5">
-<title>Ресанта CRM · Офлайн</title>
+<title>Ресанта CRM</title>
 <link rel="stylesheet" href="/assets/offline/crm-offline-v1.css">
 <script defer src="/assets/offline/crm-offline-store-v1.js"></script>
 <link rel="stylesheet" href="/assets/offline/crm-visit-sku-fields-v1.css">
 <script defer src="/assets/offline/crm-visit-sku-fields-v1.js"></script>
+<script defer src="/assets/offline/crm-offline-report-v1.js"></script>
 <script defer src="/assets/offline/crm-offline-screen-v1.js"></script>
 </head>
 <body>
-<main class="offline-main">
-  <header>
-    <div><p class="offline-eyebrow">Ресанта CRM</p><h1>Работа без интернета</h1></div>
-    <a class="offline-button" href="/?crm-online=1">Открыть CRM онлайн</a>
-  </header>
-  <p id="offline-status" role="status">Открываем данные на телефоне…</p>
-  <nav id="offline-navigation" aria-label="Офлайн-разделы" hidden></nav>
-  <section id="offline-content"></section>
-</main>
+<header class="offline-topbar">
+  <span class="offline-brand"><b>R</b>есанта</span>
+  <strong id="offline-page-title"></strong>
+  <span class="offline-badge" id="offline-connection">Офлайн</span>
+  <a class="offline-button" id="offline-online" href="/?crm-online=1" hidden>Вернуться онлайн</a>
+</header>
+<div class="offline-layout">
+  <aside id="offline-menu" class="offline-sidebar" aria-labelledby="offline-menu-title" hidden>
+    <div class="offline-menu-head">
+      <h2 id="offline-menu-title">Разделы</h2>
+      <button id="offline-menu-close" class="offline-menu-close" type="button" aria-label="Закрыть разделы">×</button>
+    </div>
+    <nav id="offline-navigation" aria-label="Разделы CRM"></nav>
+  </aside>
+  <main class="offline-main">
+    <p id="offline-status" role="status">Загружаем данные на устройстве…</p>
+    <section id="offline-content" aria-label="Содержимое раздела"></section>
+  </main>
+</div>
+<nav id="offline-mobile-nav" class="offline-mobile-nav" aria-label="Быстрые разделы" hidden></nav>
 </body>
 </html>

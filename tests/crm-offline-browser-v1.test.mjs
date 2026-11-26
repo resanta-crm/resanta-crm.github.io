@@ -100,7 +100,9 @@ test('A visit survives restart and appears only to the signed-in owner',async ()
 test('Saved report survives refreshing the route snapshot and stays within the same account',async () => {
   const env = setup();
   const store = env.start();
-  const report = {key:'sales',title:'Продажи',savedAt:Date.now(),text:'Данные отчёта'};
+  const report = {key:'sales',title:'Продажи',savedAt:Date.now(),text:'Данные отчёта',tree:[
+    {tag:'section',kind:'card',children:[{tag:'h2',children:['Продажи']}]},
+  ]};
   await store.writeSnapshot(snapshot);
   await store.saveReport(owner,report);
   await store.writeSnapshot({...snapshot,tasks:[{id:'task'}]});
@@ -110,6 +112,17 @@ test('Saved report survives refreshing the route snapshot and stays within the s
   env.as(other);
   assert.equal(await store.readSnapshot(owner),null);
   await assert.rejects(store.saveReport(owner,report),/Откройте CRM/);
+});
+
+test('An in-flight report is dropped if the saved profile or section access changed',async () => {
+  const store = setup().start();
+  const report = {key:'sales',title:'Продажи',savedAt:Date.now(),text:'Ранее доступные данные'};
+  await store.writeSnapshot({...snapshot,profileKey:'manager',menu:{sales:'Продажи'}});
+  await store.saveReport(owner,report,'boss');
+  assert.equal(Object.keys((await store.readSnapshot(owner)).reports).length,0);
+  await store.writeSnapshot({...snapshot,profileKey:'manager',menu:{clients:'Клиенты'}});
+  await store.saveReport(owner,report,'manager');
+  assert.equal(Object.keys((await store.readSnapshot(owner)).reports).length,0);
 });
 
 test('A lost response preserves the same request; a successful retry confirms only once',async () => {
