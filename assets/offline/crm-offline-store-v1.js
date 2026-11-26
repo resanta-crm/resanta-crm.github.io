@@ -82,13 +82,16 @@
       return request;
     });
   }
-  async function saveReport(owner, report) {
+  async function saveReport(owner, report, expectedProfile) {
     if (!await readSnapshot(owner)) throw Error('Откройте CRM при наличии интернета.');
     return operation('snapshots','readwrite',store => {
       const request = store.get(owner);
       request.onsuccess = () => {
         const data = request.result;
-        if (data && identity() === owner) store.put({...data,reports:{...data.reports,[report.key]:report}});
+        if (data && identity() === owner && (!expectedProfile || data.profileKey === expectedProfile) &&
+            (!data.menu || Object.prototype.hasOwnProperty.call(data.menu,report.key))) {
+          store.put({...data,reports:{...data.reports,[report.key]:report}});
+        }
       };
       return request;
     });

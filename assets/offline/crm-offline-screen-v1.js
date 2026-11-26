@@ -5,6 +5,21 @@
   const status = document.getElementById('offline-status');
   const content = document.getElementById('offline-content');
   const navigation = document.getElementById('offline-navigation');
+  const menu = document.getElementById('offline-menu');
+  const menuClose = document.getElementById('offline-menu-close');
+  const mobile = document.getElementById('offline-mobile-nav');
+  const pageTitle = document.getElementById('offline-page-title');
+  const connection = document.getElementById('offline-connection');
+  const online = document.getElementById('offline-online');
+  const groups = [
+    ['Главная',['dashboard','alerts']],
+    ['Продажи',['vip','sales','falling','abc','triovist','managers']],
+    ['Клиенты',['clients','lpr-birthdays','lpr','networks','client360']],
+    ['Рабочий день',['meeting-planner','tasks','visits','my-routes','routes','route','workday','control','gps-control','routes-boss','my-run','queue']],
+    ['Товары',['markdown','warehouse-control','receiving','orders','inventory','picking','warehouse-vitebsk360']],
+    ['Продвижение',['promotions','stands','vip-actions']],
+    ['Деньги',['budgets','debt','payments','payment-registry']],
+  ];
   const legacySections = [
     ['routes','Маршрут'],['tasks','Задачи'],['clients','Клиенты'],['visits','История визитов'],['queue','Очередь'],
     ['dashboard','Центр управления'],
@@ -13,6 +28,11 @@
   const owner = store.identity();
   let data;
   let active = '';
+  let activeGroup = '';
+  let sections = new Map();
+  let entries = [];
+  let mobileToggle;
+  let revision = 0;
   const routes = new Set(['routes','route','my-routes','routes-boss']);
   const node = (tag,text) => {
     const element = document.createElement(tag);
@@ -32,13 +52,15 @@
   }
   function card(title, detail) {
     const article = node('article');
+    article.className = 'offline-card';
     article.append(node('h3',title));
     if (detail) article.append(node('p',detail));
     return article;
   }
-  function list(items, format, empty) {
-    if (!items.length) content.append(node('p',empty));
+  function list(items, format, empty, host = content, grid = false) {
+    if (!items.length) {host.append(card(empty)); return;}
     const rows = node('div');
+    rows.className = 'offline-list' + (grid ? ' offline-grid' : '');
     let shown = 0;
     const more = button('Показать ещё', next);
     function next() {
@@ -47,7 +69,7 @@
       shown += page.length;
       more.hidden = shown >= items.length;
     }
-    content.append(rows,more);
+    host.append(rows,more);
     next();
   }
   const client = id => data.clients.find(row => row.id === id);
@@ -90,7 +112,9 @@
   function form(route) {
     const point = route.demo ? {id:'test-point',name:'Пробная торговая точка'} : client(route.clientId);
     if (!point || route.visited || !route.own) return;
+    const previous = active;
     active = 'form';
+    pageTitle.textContent = 'Визит';
     const panel = node('form');
     const result = node('select');
     result.required = true;
@@ -150,59 +174,166 @@
         send.disabled = false;
       }
     });
-    content.replaceChildren(button('К маршруту',() => open(active)),panel);
+    content.replaceChildren(button('К маршруту',() => open(previous).catch(showError)),panel);
     result.focus();
   }
 
+  function setMenu(open) {
+    menu.dataset.open = String(open);
+    mobileToggle?.setAttribute('aria-expanded',String(open));
+    if (open) menuClose.focus();
+  }
+
+  function drawNavigation() {
+    navigation.replaceChildren();
+    for (const [group, keys] of entries) {
+      const openGroup = group === activeGroup;
+      const groupButton = button(group, () => {
+        activeGroup = openGroup ? '' : group;
+        drawNavigation();
+        [...navigation.querySelectorAll('[data-group]')].find(el=>el.dataset.group===group)?.focus();
+      });
+      groupButton.dataset.group = group;
+      groupButton.setAttribute('aria-expanded',String(openGroup));
+      navigation.append(groupButton);
+      if (!openGroup) continue;
+      const links = node('div');
+      links.className = 'offline-section-links';
+      for (const key of keys) {
+        const tab = button(sections.get(key), () => {
+          setMenu(false);
+          void open(key).then(()=>content.focus()).catch(showError);
+        });
+        if (key === active) tab.setAttribute('aria-current','page');
+        links.append(tab);
+      }
+      navigation.append(links);
+    }
+    for (const tab of mobile.querySelectorAll('[data-section]')) {
+      if (tab.dataset.section === active) tab.setAttribute('aria-current','page');
+      else tab.removeAttribute('aria-current');
+    }
+  }
+
+  function connectionState() {
+    connection.textContent = navigator.onLine ? 'Локальные данные' : 'Офлайн';
+    online.hidden = !navigator.onLine;
+  }
+
+  function drawReport(report) {
+    if (!report) {
+      content.append(card('Данные раздела ещё не сохранены','Откройте этот раздел при подключении к интернету.'));
+      return;
+    }
+    const area = node('div');
+    area.className = 'offline-report';
+    if (report.tree?.length) area.append(window.crmOfflineReport.render(report.tree,document));
+    else {
+      for (const block of String(report.text || '').split(/\n\s*\n/u).map(part => part.trim()).filter(Boolean)) {
+        const lines = block.split(/\n/u);
+        const panel = card(lines.shift());
+        if (lines.length) {
+          const text = node('p',lines.join('\n'));
+          text.className = 'offline-report-fallback';
+          panel.append(text);
+        }
+        area.append(panel);
+      }
+    }
+    content.append(area);
+  }
+
   async function open(section) {
+    if (!sections.has(section)) return;
+    const opened = ++revision;
     active = section;
+    activeGroup = entries.find(([, keys]) => keys.includes(section))?.[0] || '';
+    pageTitle.textContent = sections.get(section).replace(/^\P{L}+/u,'');
+    document.title = pageTitle.textContent + ' · Ресанта CRM';
+    const url = new URL(location.href);
+    url.searchParams.set('section',section);
+    window.history.replaceState(null,'',url);
+    const report = data.reports?.[section];
+    status.textContent = 'Сохранено ' + localTime(report?.savedAt || data.savedAt);
     content.replaceChildren();
-    for (const tab of navigation.children) tab.setAttribute('aria-current',tab.dataset.section===section?'page':'false');
-    const records = await store.queue(owner);
-    if (active !== section) return;
+    drawNavigation();
+    const records = routes.has(section) || section === 'queue' ? await store.queue(owner) : [];
+    if (opened !== revision) return;
     if (owner !== store.identity()) {location.reload(); return;}
+    if (!report || !report.tree?.length) content.append(node('h2',pageTitle.textContent));
     if (routes.has(section)) {
       if (store.canRecord(owner,data) && !data.routes.some(route => route.own && !route.visited && client(route.clientId))) {
-        content.append(button('Записать пробный визит',() => form({
+        const demo = button('Записать пробный визит',() => form({
           id:'test-route',address:'Тестирование офлайн-режима',own:true,demo:true,
           date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Minsk'}).format(new Date()),
-        })));
+        }));
+        demo.className = 'offline-search';
+        content.append(demo);
       }
       list(data.routes,route => {
         const point = client(route.clientId);
         const entry = card(route.name || point?.name || 'Торговая точка',[route.date,route.address].filter(Boolean).join(' · '));
         const pending = records.find(row => row.visit.route_plan_id === route.id);
-        if (pending) entry.append(node('p', pending.state === 'sent' ? 'Сохранено в CRM' :
-          pending.state === 'conflict' ? 'Нужна проверка в очереди' : 'Ожидает отправки'));
-        else if (route.visited) entry.append(node('p','Посещена'));
+        if (pending) {
+          const message = pending.state === 'sent' ? 'Сохранено в CRM' :
+            pending.state === 'conflict' ? 'Нужна проверка в очереди' : 'Ожидает отправки';
+          entry.append(button(message,()=>open('queue').catch(showError)));
+        } else if (route.visited) entry.append(node('p','Посещена'));
         else if (point && route.own) entry.append(button('Записать визит',() => form(route)));
         else if (point && store.canRecord(owner,data)) entry.append(node('p','Маршрут другого сотрудника.'));
-        else entry.append(node('p','Карточка точки не загружена.'));
+        else if (!point) entry.append(node('p','Карточка точки не загружена.'));
         return entry;
-      },'На телефоне пока нет маршрута.');
+      },'На устройстве пока нет маршрута.',content,true);
     } else if (section === 'tasks') {
-      list(data.tasks,task => card(task.title,[client(task.clientId)?.name,task.dueDate,task.done?'Выполнена':task.reviewStatus==='pending'?'На согласовании':null].filter(Boolean).join(' · ')),
-        'На телефоне пока нет задач.');
+      list(data.tasks,task => {
+        const entry = card(task.title,[client(task.clientId)?.name,task.dueDate].filter(Boolean).join(' · '));
+        const state = node('span',task.confirmed ? 'Подтверждено 1С' : task.done ? 'Сохранён результат' :
+          task.reviewStatus==='pending' ? 'На согласовании' : 'Открыта');
+        state.className = 'offline-pill';
+        entry.append(state);
+        if (task.skuPlan?.items?.length) {
+          const positions = node('details');
+          positions.append(node('summary','План и факт отгрузки'));
+          for (const item of task.skuPlan.items) {
+            const actual = task.skuPlan.progress?.find(row=>row.sku===item.sku)?.actual;
+            positions.append(node('p',item.sku+' · '+(item.product||'')+' · план '+item.qty+' · факт '+(actual??'—')));
+          }
+          entry.append(positions);
+        }
+        return entry;
+      },'На устройстве пока нет задач.',content,true);
     } else if (section === 'clients') {
       const input = node('input');
       input.type = 'search';
-      input.placeholder = 'Название или адрес';
-      content.append(labelled('Поиск клиента',input));
+      input.placeholder = 'Название, код или адрес';
+      const search = labelled('Поиск клиента',input);
+      search.className = 'offline-search';
+      content.append(search);
       const results = node('div');
       content.append(results);
       const render = () => {
         const query = input.value.trim().toLowerCase();
-        results.replaceChildren(...data.clients.filter(row => (row.name+' '+row.address).toLowerCase().includes(query))
-          .map(row => card(row.name,row.address)));
+        const matching = data.clients.filter(row => [row.name,row.address,row.code].some(value => String(value||'').toLowerCase().includes(query)));
+        results.replaceChildren();
+        list(matching,row => {
+          const entry = card(row.name,row.address);
+          const meta = [row.code,row.status,row.manager].filter(Boolean).join(' · ');
+          if (meta) {
+            const chip = node('span',meta);
+            chip.className = 'offline-pill';
+            entry.append(chip);
+          }
+          return entry;
+        },'Клиенты не найдены.',results,true);
       };
       input.addEventListener('input',render);
       render();
     } else if (section === 'visits') {
-      list(data.visits,row => card(row.result || 'Визит',[row.date,client(row.clientId)?.name].filter(Boolean).join(' · ')),
-        'На телефоне пока нет истории визитов.');
+      list(data.visits,row => card(client(row.clientId)?.name || 'Торговая точка',[row.date,row.result].filter(Boolean).join(' · ')),
+        'На устройстве пока нет истории визитов.',content,true);
     } else if (section === 'queue') {
       list(records,record => {
-        const summary = record.state==='demo'?'Тест · хранится на телефоне':record.state==='sent'?'Сохранено в CRM':record.state==='conflict'?
+        const summary = record.state==='demo'?'Тест · хранится на устройстве':record.state==='sent'?'Сохранено в CRM':record.state==='conflict'?
           'Нужна проверка · '+record.reason:'Ожидает отправки';
         const entry = card(record.state==='demo'?'Пробный визит':client(record.visit.client_id)?.name || 'Запись визита',
           [record.visit.date,record.visit.result,summary].join(' · '));
@@ -212,19 +343,8 @@
         return entry;
       }, 'Очередь пуста.');
       if (records.some(row => row.state === 'pending')) content.append(node('p',
-        'CRM отправит записи при восстановлении связи. Если сессия истекла, откройте CRM онлайн и войдите снова.'));
-    } else {
-      const report = data.reports?.[section];
-      if (!report) {
-        content.append(node('p','Данные этого раздела ещё не успели загрузиться на устройство.'));
-        return;
-      }
-      const entry = card(report.title,'Данные от '+localTime(report.savedAt));
-      const text = node('pre',report.text);
-      text.className = 'offline-report';
-      entry.append(text);
-      content.append(entry);
-    }
+        'CRM отправит записи при восстановлении связи. Если сессия истекла, войдите снова.'));
+    } else drawReport(report);
   }
   async function init() {
     try {
@@ -233,18 +353,34 @@
         status.textContent = 'Данные на этом устройстве пока недоступны. Откройте CRM при наличии интернета.';
         return;
       }
-      status.textContent = 'Данные на устройстве от ' + localTime(data.savedAt) + '.';
-      navigation.hidden = false;
-      const sections = Object.entries(data.menu || Object.fromEntries(legacySections));
-      if (store.canRecord(owner,data) && !sections.some(([key]) => key === 'queue')) sections.push(['queue','Очередь']);
-      for (const [key,title] of sections) {
-        const tab = button(title,() => open(key).catch(showError));
-        tab.dataset.section = key;
-        navigation.append(tab);
+      sections = new Map(Object.entries(data.menu || Object.fromEntries(legacySections)));
+      if (store.canRecord(owner,data)) sections.set('queue','Очередь визитов');
+      else sections.delete('queue');
+      entries = groups.map(([group,keys])=>[group,keys.filter(key=>sections.has(key))]).filter(([,keys])=>keys.length);
+      const groupedKeys = new Set(entries.flatMap(([,keys])=>keys));
+      const extra = [...sections.keys()].filter(key=>!groupedKeys.has(key));
+      if (extra.length) entries.push(['Прямые входы',extra]);
+      if (!sections.size) {
+        status.textContent = 'Откройте CRM при наличии интернета, чтобы сохранить разделы.';
+        return;
       }
+      mobileToggle = button('Разделы',()=>setMenu(menu.dataset.open!=='true'));
+      mobileToggle.setAttribute('aria-controls','offline-menu');
+      mobileToggle.setAttribute('aria-expanded','false');
+      mobile.append(mobileToggle);
+      const quick = [
+        ['dashboard','Главная'],['clients','Клиенты'],
+        [[...routes].find(key=>sections.has(key)),'Маршрут'],['tasks','Задачи'],
+      ];
+      for (const [key,title] of quick.filter(([key])=>sections.has(key))) {
+        const item = button(title,() => { setMenu(false); void open(key).catch(showError); });
+        item.dataset.section = key;
+        mobile.append(item);
+      }
+      menu.hidden = false;
+      mobile.hidden = false;
       const requested = new URLSearchParams(location.search).get('section');
-      const initial = sections.some(([key]) => key===requested) ? requested : sections[0]?.[0];
-      if (initial) await open(initial);
+      await open(sections.has(requested) ? requested : sections.keys().next().value);
       reconnect();
     } catch (error) { showError(error); }
   }
@@ -256,9 +392,16 @@
       if (active === 'queue') return open('queue');
     }).catch(showError);
   }
-  window.addEventListener('online',reconnect);
+  content.tabIndex = -1;
+  menuClose.addEventListener('click',()=>{setMenu(false);mobileToggle?.focus();});
+  document.addEventListener('keydown',event=>{
+    if (event.key==='Escape' && menu.dataset.open==='true') {setMenu(false);mobileToggle?.focus();}
+  });
+  window.addEventListener('online',()=>{connectionState();reconnect();});
+  window.addEventListener('offline',connectionState);
+  connectionState();
   window.addEventListener('storage',() => {
-    if (owner !== store.identity()) {content.replaceChildren(); navigation.hidden = true; location.reload();}
+    if (owner !== store.identity()) {content.replaceChildren(); menu.hidden = true; mobile.hidden = true; status.textContent = ''; pageTitle.textContent = ''; location.reload();}
   });
   init();
 })();
