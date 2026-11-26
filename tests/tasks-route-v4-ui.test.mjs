@@ -302,7 +302,9 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  const smallRoute={id:rid,client_id:cid,manager_name:'Руднев',approved:true,address:'Два адреса',visit_date:'2026-11-26'};
  const largeRoute={...smallRoute,id:'large-route',client_id:otherClient.id};
  const products=[{sku:'67/2/21',product:'Тепловентилятор',last_month:'2026-11-01'},
-  {sku:'75/6/1',product:'Шлифмашина',last_month:'2026-10-01'}];
+  {sku:'75/6/1',product:'Шлифмашина',last_month:'2026-10-01'},
+  {sku:'63/6/1',product:'Стабилизатор',last_month:'2026-11-01'},
+  {sku:'63/6/63',product:'Стабилизатор',last_month:'2026-11-01'}];
  let now=0,releaseCount=0, saveAttempts=0;
  class Recorder {
   static isTypeSupported(){return true;}
@@ -368,7 +370,7 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  const visit=document.getElementById('qv-shelf-count');
  assert.equal(visit.querySelector('[data-shelf-line="shelf_qty"]').value,'2');
  assert.deepEqual(Array.from(visit.querySelector('select').options,option=>option.textContent),
-  ['Выберите итог','Есть на ТТ','Брали под заказ','Неликвид','Отгрузили']);
+  ['Выберите итог','Есть на ТТ','Брали под заказ','Неликвид','Отгрузили','Нет на складе','Нет в ТТ']);
  const transcript=visit.querySelector('[data-shelf-text]');
  transcript.value='67/2/21 — 3 штуки, запас 1';
  transcript.dispatchEvent(new window.Event('input',{bubbles:true}));
@@ -382,6 +384,13 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  const otherResult=visit.querySelector('[data-sku="75/6/1"] select');
  otherResult.querySelector('option[value="slow_moving"]').selected=true;
  otherResult.dispatchEvent(new window.Event('change',{bubbles:true}));
+ search.value='';
+ search.dispatchEvent(new window.Event('input',{bubbles:true}));
+ for(const [sku,status] of [['63/6/1','not_in_warehouse'],['63/6/63','not_in_stock']]){
+  const select=visit.querySelector('[data-sku="'+sku+'"] select');
+  select.querySelector('option[value="'+status+'"]').selected=true;
+  select.dispatchEvent(new window.Event('change',{bubbles:true}));
+ }
  await click('#qv-shelf-count [data-shelf-action="save"]');
  assert.match(visit.querySelector('[data-shelf-save]').textContent,/Повторите/);
  await click('#qv-shelf-count [data-shelf-action="save"]');
@@ -392,6 +401,10 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  assert.equal(saves[1].args.p_items[0].shelf_qty,3);
  assert.equal(saves[1].args.p_items[1].status,'slow_moving');
  assert.equal(saves[1].args.p_items[1].shelf_qty,null);
+ assert.equal(saves[1].args.p_items[2].status,'not_in_warehouse');
+ assert.equal(saves[1].args.p_items[2].shelf_qty,null);
+ assert.equal(saves[1].args.p_items[3].status,'not_in_stock');
+ assert.equal(saves[1].args.p_items[3].shelf_qty,0);
  assert.equal(visit.querySelector('.crm-shelf-count').open,false);
  assert.match(visit.querySelector('[data-shelf-badge]').textContent,/Сохранена/);
 });
