@@ -34,25 +34,3 @@
   border-radius: 6px;
   font: inherit;
 }
-.crm-shelf-count > summary { cursor: pointer; padding: 4px 0; }
-.crm-shelf-count [data-shelf-badge] { color: #226532; font-size: 13px; }
-.crm-shelf-count [data-shelf-body],
-.crm-shelf-count [data-shelf-rows] { display: grid; gap: 10px; }
-.crm-shelf-count .shelf-field { display: grid; gap: 4px; margin: 8px 0; }
-.crm-shelf-count .shelf-field :is(input, textarea) {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 8px;
-  color: inherit;
-  background: #fff;
-  border: 1px solid #c8d6e5;
-  border-radius: 6px;
-  font: inherit;
-}
-.crm-shelf-count .shelf-counts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
-.crm-shelf-count [hidden] { display: none !important; }
-.crm-shelf-count .shelf-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.crm-shelf-count [role="status"]:not(:empty) { padding: 6px 0; overflow-wrap: anywhere; }
-@media (max-width: 540px) {
-  .crm-shelf-count .shelf-buttons button { flex: 1 1 100%; }
-}
