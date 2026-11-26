@@ -4,9 +4,11 @@
   in_stock:'Есть на ТТ',
   previous_special_order:'Брали под заказ',
   slow_moving:'Неликвид',
-  shipped_reported:'Отгрузили'
+  shipped_reported:'Отгрузили',
+  not_in_warehouse:'Нет на складе',
+  not_in_stock:'Нет в ТТ'
  };
- const legacyOutcomes={not_in_stock:'Нет в ТТ',ordered_for_delivery:'Заказали для отгрузки клиенту'};
+ const legacyOutcomes={ordered_for_delivery:'Заказали для отгрузки клиенту'};
  const emptyTranscript = 'Подтверждаю: наших товаров на полке нет';
  const sessions = new Map();
  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch =>
@@ -172,7 +174,7 @@
      (saved?'<p>Сохранено · '+esc(statusLabel(saved))+(saved.shelf_qty==null?'':' · '+esc(saved.shelf_qty)+' шт.')+'</p>':'')+
      '<label>Итог по артикулу '+esc(item.sku)+'<select data-shelf-line="status"><option value="">Выберите итог</option>'+
      Object.entries(outcomes).map(([code,label])=>'<option value="'+code+'"'+(value?.status===code?' selected':'')+'>'+label+'</option>').join('')+
-     '</select></label><div class="shelf-counts"'+(value?.status?'':' hidden')+'><label>На полке<input type="number" inputmode="numeric" min="0" max="100000" step="1" data-shelf-line="shelf_qty" value="'+esc(value?.shelf_qty)+'" placeholder="Шт., по желанию"></label>'+
+     '</select></label><div class="shelf-counts"'+(value?.status?'':' hidden')+'><label>На полке<input type="number" inputmode="numeric" min="0" max="100000" step="1" data-shelf-line="shelf_qty" value="'+esc(value?.shelf_qty)+'" placeholder="Шт., по желанию"'+(value?.status==='not_in_stock'?' disabled':'')+'></label>'+
      '<label>В запасе<input type="number" inputmode="numeric" min="0" max="100000" step="1" data-shelf-line="reserve_qty" value="'+esc(value?.reserve_qty)+'" placeholder="шт."></label></div></div>';
    }).join('') || (state.context ? '<p>'+(query?'По запросу ничего не найдено.':'В истории отгрузок нет подходящих товаров.')+'</p>' : '');
    const more=button('more');
@@ -221,7 +223,15 @@
    delete item.fromDictation;
    const field=element.dataset.shelfLine;
    item[field]=element.value;
-   if (field==='status') row.querySelector('.shelf-counts').hidden=!item.status;
+   if (field==='status') {
+    row.querySelector('.shelf-counts').hidden=!item.status;
+    const shelf=row.querySelector('[data-shelf-line="shelf_qty"]');
+    const missingInPoint=item.status==='not_in_stock';
+    if (missingInPoint) item.shelf_qty='0';
+    else if (state.draft.items[sku]?.status==='not_in_stock') item.shelf_qty='';
+    shelf.value=item.shelf_qty??'';
+    shelf.disabled=missingInPoint;
+   }
    if (field==='status' && !item.status) {
     delete state.draft.items[sku];
     row.querySelectorAll('input').forEach(input=>{input.value='';});
