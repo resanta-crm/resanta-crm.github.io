@@ -292,3 +292,90 @@ test('saved report review expires when control passes or the business day change
  const h=harness('manager',{Date:ClockDate});await h.settle();let reviews=0;h.db.functions.invoke=async()=>({data:{answer:'Оценка '+(++reviews)}});await h.click('report');h.input('fact','Отгрузка ещё не подтверждена');h.input('next','Дождаться сверки 1С');h.input('nextDate','2026-11-20');await h.click('save-report');await h.click('save-report');assert.equal(reviews,1);
  now=Date.parse('2026-11-20T12:01:00Z');await h.click('save-report');assert.equal(reviews,2);now=Date.parse('2026-11-21T09:00:00Z');await h.click('save-report');assert.equal(reviews,3);
 });
+
+test('manager reuses shelf count from Tasks and route Visit, parses voice and saves once',async()=>{
+ const {window:domWindow,document}=parseHTML('<html><body><div id="page-tasks" class="active"></div>'+
+  '<div id="modal-quick-visit"><input id="qv-client-id"><div id="qv-sku-block"></div></div></body></html>');
+ const calls=[], cache=new Map(), listeners=new Map();
+ const mockClient={id:cid,name:'Рабочий клиент',role_type:'А',client_status:'Рабочий',manager_name:'Руднев'};
+ const otherClient={id:'large',name:'Руд Буд ЧТУП',role_type:'AAA',client_status:'Рабочий',manager_name:'Руднев'};
+ const smallRoute={id:rid,client_id:cid,manager_name:'Руднев',approved:true,address:'Два адреса',visit_date:'2026-11-26'};
+ const largeRoute={...smallRoute,id:'large-route',client_id:otherClient.id};
+ const products=[{sku:'67/2/21',product:'Тепловентилятор',last_month:'2026-11-01'},
+  {sku:'75/6/1',product:'Шлифмашина',last_month:'2026-10-01'}];
+ let now=0,releaseCount=0, saveAttempts=0;
+ class Recorder {
+  static isTypeSupported(){return true;}
+  constructor(){this.mimeType='audio/webm';}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';this.ondataavailable({data:new Blob(['clip'])});void this.onstop();}
+ }
+ const window={
+  document,Event:domWindow.Event,navigator:{onLine:true,mediaDevices:{async getUserMedia(){return {getTracks:()=>[{stop(){releaseCount++;}}]}}}},
+  MediaRecorder:Recorder,crypto:{randomUUID:()=> '5ff2aeb9-8bbc-42a0-966c-943def5dfb83'},
+  addEventListener(name,fn){listeners.set(name,fn);},dispatchEvent(event){listeners.get(event.type)?.(event);},
+  openQuickVisit(client){
+   document.getElementById('qv-client-id').value=client;
+   document.getElementById('modal-quick-visit').classList.add('open');
+  }
+ };
+ const listData={route_plans:[smallRoute,largeRoute],clients:[mockClient,otherClient],users:[{name:'Руднев'}]};
+ const db={
+  from(table){
+   const query={};
+   for(const key of ['select','eq','gte','lte','range','in','order'])query[key]=()=>query;
+   query.then=resolve=>Promise.resolve({data:listData[table]||[]}).then(resolve);
+   return query;
+  },
+  async rpc(name,args){
+   calls.push({name,args});
+   if(name==='crm_shelf_visit_context_v6')return {data:{eligible:true,address:'Пионерская, 35',items:products}};
+   if(name==='crm_shelf_visit_save_v6' && ++saveAttempts===1)return {error:{message:'timeout'}};
+   if(name==='crm_shelf_visit_save_v6')return {data:{saved:true,at:'2026-11-26T11:00:00Z',items:args.p_items}};
+   return {data:null};
+  },
+  functions:{async invoke(name){assert.equal(name,'crm-voice-transcribe-v1');return {data:{text:'67/2/21 — 2 штуки, запас 1'}};}}
+ };
+ class FixedDate extends Date{constructor(...args){super(...(args.length?args:['2026-11-26T12:00:00Z']))}}
+ const ctx=vm.createContext({window,document,Date:FixedDate,Intl,db,console,Blob,FormData,performance:{now:()=>now},
+  currentProfile:{id:'manager',role:'manager',region:'Витебск',name:'Руднев'},allTasks:[],allClients:[mockClient,otherClient],
+  allRoutePlans:[smallRoute,largeRoute],routeClients:[],
+  sessionStorage:{getItem:key=>cache.get(key),setItem:(key,value)=>cache.set(key,value)},
+  setTimeout:()=>1,clearTimeout(){},setInterval(){}
+ });
+ const shelfSource=fs.readFileSync(new URL('../assets/306-shelf-route-count-v1.js',import.meta.url),'utf8');
+ vm.runInContext(shelfSource,ctx);
+ vm.runInContext(source,ctx);
+ const wait=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
+ const click=async selector=>{const b=document.querySelector(selector);assert.ok(b,selector);b.click();await wait();};
+ window.RESANTA_TASKS_ROUTE_V4.paint();
+ await wait();
+ await click('[data-tr="view"][data-value="shelf"]');
+ assert.match(document.querySelector('#tasks-route-v4').textContent,/Пионерская, 35/);
+ assert.doesNotMatch(document.querySelector('[data-tr-shelf-route]').textContent,/Руд Буд/);
+ await click('#tasks-route-v4 [data-shelf-action="record"]');
+ now=1200;
+ await click('#tasks-route-v4 [data-shelf-action="record"]');
+ assert.equal(releaseCount,1);
+ assert.equal(document.querySelector('#tasks-route-v4 [data-shelf-text]').value,'67/2/21 — 2 штуки, запас 1');
+ await click('#tasks-route-v4 [data-shelf-action="parse"]');
+ const row=document.querySelector('#tasks-route-v4 [data-sku="67/2/21"]');
+ assert.equal(row.querySelector('select').value,'in_stock');
+ assert.equal(row.querySelector('[data-shelf-line="reserve_qty"]').value,'1');
+ window.openQuickVisit(cid,smallRoute.visit_date,rid);
+ await wait();
+ const visit=document.getElementById('qv-shelf-count');
+ assert.equal(visit.querySelector('[data-shelf-line="shelf_qty"]').value,'2');
+ assert.match(visit.textContent,/Была под заказ для клиента/);
+ assert.match(visit.textContent,/Заказали для отгрузки клиенту/);
+ await click('#qv-shelf-count [data-shelf-action="save"]');
+ assert.match(visit.querySelector('[data-shelf-save]').textContent,/Повторите/);
+ await click('#qv-shelf-count [data-shelf-action="save"]');
+ const saves=calls.filter(call=>call.name==='crm_shelf_visit_save_v6');
+ assert.equal(saves.length,2);
+ assert.equal(saves[1].args.p_request,saves[0].args.p_request);
+ assert.equal(saves[1].args.p_route,rid);
+ assert.equal(saves[1].args.p_items[0].shelf_qty,2);
+ assert.equal(visit.querySelector('.crm-shelf-count').open,false);
+ assert.match(visit.querySelector('[data-shelf-badge]').textContent,/Сохранена/);
+});
