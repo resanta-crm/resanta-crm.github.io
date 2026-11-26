@@ -1,11 +1,12 @@
 (function (w, document) {
  'use strict';
  const outcomes = {
-  in_stock:'Есть в ТТ',
-  not_in_stock:'Нет в ТТ',
-  previous_special_order:'Была под заказ для клиента',
-  ordered_for_delivery:'Заказали для отгрузки клиенту'
+  in_stock:'Есть на ТТ',
+  previous_special_order:'Брали под заказ',
+  slow_moving:'Неликвид',
+  shipped_reported:'Отгрузили'
  };
+ const legacyOutcomes={not_in_stock:'Нет в ТТ',ordered_for_delivery:'Заказали для отгрузки клиенту'};
  const emptyTranscript = 'Подтверждаю: наших товаров на полке нет';
  const sessions = new Map();
  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch =>
@@ -37,6 +38,7 @@
   persist(state);
  }
  const statusOf = row => row.status || (row.shelf_qty > 0 ? 'in_stock' : 'not_in_stock');
+ const statusLabel = row => outcomes[statusOf(row)] || legacyOutcomes[statusOf(row)] || '—';
  function reviewMessage(error) {
   return ({
    SHELF_SCOPE:'Откройте своего клиента из утверждённого маршрута.',
@@ -122,7 +124,7 @@
   panel.className='visit-sku-panel crm-shelf-count';
   panel.open=!state.context?.saved?.at || Object.keys(state.draft.items).length>0;
   panel.innerHTML='<summary><strong>Сверка полки · SKU</strong><span data-shelf-badge></span></summary>'+
-   '<div data-shelf-body><p>История отгрузок 1С по клиенту. Укажите фактический остаток для этой торговой точки.</p>'+
+   '<div data-shelf-body><p data-shelf-source>История отгрузок из 1С.</p>'+
    '<p data-shelf-address></p><p data-shelf-load role="status"></p>'+
    '<label class="shelf-field">Найти артикул или товар<input type="search" data-shelf-search autocomplete="off"></label>'+
    '<details class="shelf-dictation"><summary>Диктовка артикулов</summary><div class="shelf-buttons">'+
@@ -134,6 +136,7 @@
    '<button type="button" class="btn-secondary" data-shelf-action="record-note">Продиктовать замечания</button><p data-shelf-note-voice role="status"></p>'+
    '<label class="shelf-field">Фото по желанию<input type="file" accept="image/jpeg,image/png,image/webp" data-shelf-photos multiple></label><p data-shelf-photo-status></p></details>'+
    '<details data-shelf-previous hidden><summary>Предыдущая сверка этой точки</summary><div data-shelf-history></div></details>'+
+   '<p>«Отгрузили» сохраняется как отметка менеджера. Факт продажи подтверждает 1С.</p>'+
    '<p data-shelf-save role="status"></p><div class="shelf-buttons"><button type="button" class="btn-primary" data-shelf-action="save">Подтвердить и сохранить сверку</button>'+
    '<button type="button" class="btn-secondary" data-shelf-action="empty">Наших товаров на полке нет</button></div></div>';
   host.replaceChildren(panel);
@@ -166,25 +169,30 @@
     return '<div class="visit-sku-row" data-sku="'+esc(item.sku)+'" data-product="'+esc(item.product)+'"><strong>'+esc(item.sku)+' · '+esc(item.product||'')+'</strong>'+
      (item.last_month?'<p>Последняя отгрузка · '+esc(labelMonth(item.last_month))+'</p>':'')+
      (previous?.shelf_qty==null?'':'<p>На полке при прошлой сверке · '+esc(previous.shelf_qty)+' шт.</p>')+
-     (saved?'<p>Сохранено · '+esc(outcomes[statusOf(saved)])+(saved.shelf_qty==null?'':' · '+esc(saved.shelf_qty)+' шт.')+'</p>':'')+
-     '<label>Результат по артикулу<select data-shelf-line="status"><option value="">Выберите результат</option>'+
+     (saved?'<p>Сохранено · '+esc(statusLabel(saved))+(saved.shelf_qty==null?'':' · '+esc(saved.shelf_qty)+' шт.')+'</p>':'')+
+     '<label>Итог по артикулу '+esc(item.sku)+'<select data-shelf-line="status"><option value="">Выберите итог</option>'+
      Object.entries(outcomes).map(([code,label])=>'<option value="'+code+'"'+(value?.status===code?' selected':'')+'>'+label+'</option>').join('')+
-     '</select></label><div class="shelf-counts"'+(value?.status?'':' hidden')+'><label>На полке<input type="number" inputmode="numeric" min="0" max="100000" step="1" data-shelf-line="shelf_qty" value="'+esc(value?.shelf_qty)+'" placeholder="шт."></label>'+
+     '</select></label><div class="shelf-counts"'+(value?.status?'':' hidden')+'><label>На полке<input type="number" inputmode="numeric" min="0" max="100000" step="1" data-shelf-line="shelf_qty" value="'+esc(value?.shelf_qty)+'" placeholder="Шт., по желанию"></label>'+
      '<label>В запасе<input type="number" inputmode="numeric" min="0" max="100000" step="1" data-shelf-line="reserve_qty" value="'+esc(value?.reserve_qty)+'" placeholder="шт."></label></div></div>';
    }).join('') || (state.context ? '<p>'+(query?'По запросу ничего не найдено.':'В истории отгрузок нет подходящих товаров.')+'</p>' : '');
-   button('more').hidden=source.length<=limit;
+   const more=button('more');
+   more.hidden=source.length<=limit;
+   more.textContent='Показать ещё · '+Math.max(0,source.length-limit);
   }
   function showContext() {
    if (!current()) return;
    if (state.context?.eligible===false) {host.hidden=true;return;}
    host.hidden=false;
    const data=state.context;
+   get('source').textContent=data?.legal_history
+    ?'Отгрузки 1С по юрлицу. Отметки сохраняются для этой торговой точки.'
+    :'История отгрузок из 1С. Отметки сохраняются для этой торговой точки.';
    get('address').textContent=data?.address||route.address||client.address||'';
    if (data?.saved?.at) get('badge').textContent=' · Сохранена ' + labelDate(data.saved.at);
    get('previous').hidden=!data?.previous?.items?.length;
    if (data?.previous?.items?.length) {
     get('history').innerHTML='<p>'+esc(labelDate(data.previous.at))+'</p>'+data.previous.items.map(item=>
-     '<p>'+esc(item.sku)+' · '+esc(outcomes[statusOf(item)])+(item.shelf_qty==null?'':' · '+esc(item.shelf_qty)+' шт.')+'</p>').join('');
+     '<p>'+esc(item.sku)+' · '+esc(statusLabel(item))+(item.shelf_qty==null?'':' · '+esc(item.shelf_qty)+' шт.')+'</p>').join('');
    }
    get('photo-status').textContent=state.draft.photos.length?'Фото прикреплено · '+state.draft.photos.length:'';
    showRows();
@@ -220,10 +228,6 @@
     draftChanged(state);
     return;
    }
-   if (field==='status' && item.status==='not_in_stock') {
-    item.shelf_qty='0';
-    row.querySelector('[data-shelf-line="shelf_qty"]').value='0';
-   }
    state.draft.items[sku]=item;
    draftChanged(state);
   }
@@ -250,7 +254,7 @@
     }
     for (const [sku,item] of decoded) {
      if (state.draft.items[sku]) continue;
-     state.draft.items[sku]={...item,status:item.shelf_qty>0?'in_stock':'not_in_stock',fromDictation:true};
+     state.draft.items[sku]={...item,status:item.shelf_qty>0?'in_stock':'',fromDictation:true};
     }
     draftChanged(state);
     search.value='';
@@ -343,8 +347,8 @@
      throw Error('Диктовка изменена. Разберите её заново или уточните количество вручную по артикулу '+item.sku+'.');
     }
     const hasCount=value=>value!=null&&String(value).trim()!=='';
-    if (!item.status) {
-     if (hasCount(item.shelf_qty)||hasCount(item.reserve_qty)) throw Error('Выберите результат по артикулу '+item.sku+'.');
+    if (!Object.hasOwn(outcomes,item.status)) {
+     if (item.status||hasCount(item.shelf_qty)||hasCount(item.reserve_qty)) throw Error('Выберите итог по артикулу '+item.sku+'.');
      continue;
     }
     const number=value=>{
@@ -354,8 +358,7 @@
      return count;
     };
     const qty=number(item.shelf_qty);
-    if (item.status==='in_stock' && !(qty>0)) throw Error('Укажите количество на полке по артикулу '+item.sku+'.');
-    if (item.status==='not_in_stock' && qty!==0) throw Error('Для «Нет в ТТ» укажите 0 по артикулу '+item.sku+'.');
+    if (item.status==='in_stock' && qty===0) throw Error('Укажите положительное количество на полке по артикулу '+item.sku+' или оставьте поле пустым.');
     selected.push({sku:item.sku,status:item.status,shelf_qty:qty,reserve_qty:number(item.reserve_qty)});
    }
    if (!selected.length) throw Error('Отметьте хотя бы один артикул.');

@@ -329,7 +329,7 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
   },
   async rpc(name,args){
    calls.push({name,args});
-   if(name==='crm_shelf_visit_context_v6')return {data:{eligible:true,address:'Пионерская, 35',items:products}};
+   if(name==='crm_shelf_visit_context_v6')return {data:{eligible:true,address:'Пионерская, 35',legal_history:true,items:products}};
    if(name==='crm_shelf_visit_save_v6' && ++saveAttempts===1)return {error:{message:'timeout'}};
    if(name==='crm_shelf_visit_save_v6')return {data:{saved:true,at:'2026-11-26T11:00:00Z',items:args.p_items}};
    return {data:null};
@@ -352,6 +352,7 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  await wait();
  await click('[data-tr="view"][data-value="shelf"]');
  assert.match(document.querySelector('#tasks-route-v4').textContent,/Пионерская, 35/);
+ assert.match(document.querySelector('#tasks-route-v4').textContent,/Отгрузки 1С по юрлицу/);
  assert.doesNotMatch(document.querySelector('[data-tr-shelf-route]').textContent,/Руд Буд/);
  await click('#tasks-route-v4 [data-shelf-action="record"]');
  now=1200;
@@ -366,8 +367,8 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  await wait();
  const visit=document.getElementById('qv-shelf-count');
  assert.equal(visit.querySelector('[data-shelf-line="shelf_qty"]').value,'2');
- assert.match(visit.textContent,/Была под заказ для клиента/);
- assert.match(visit.textContent,/Заказали для отгрузки клиенту/);
+ assert.deepEqual(Array.from(visit.querySelector('select').options,option=>option.textContent),
+  ['Выберите итог','Есть на ТТ','Брали под заказ','Неликвид','Отгрузили']);
  const transcript=visit.querySelector('[data-shelf-text]');
  transcript.value='67/2/21 — 3 штуки, запас 1';
  transcript.dispatchEvent(new window.Event('input',{bubbles:true}));
@@ -375,6 +376,12 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  assert.match(visit.querySelector('[data-shelf-save]').textContent,/Диктовка изменена/);
  assert.equal(calls.filter(call=>call.name==='crm_shelf_visit_save_v6').length,0);
  await click('#qv-shelf-count [data-shelf-action="parse"]');
+ const search=visit.querySelector('[data-shelf-search]');
+ search.value='75/6/1';
+ search.dispatchEvent(new window.Event('input',{bubbles:true}));
+ const otherResult=visit.querySelector('[data-sku="75/6/1"] select');
+ otherResult.querySelector('option[value="slow_moving"]').selected=true;
+ otherResult.dispatchEvent(new window.Event('change',{bubbles:true}));
  await click('#qv-shelf-count [data-shelf-action="save"]');
  assert.match(visit.querySelector('[data-shelf-save]').textContent,/Повторите/);
  await click('#qv-shelf-count [data-shelf-action="save"]');
@@ -383,6 +390,8 @@ test('manager reuses shelf count from Tasks and route Visit, parses voice and sa
  assert.equal(saves[1].args.p_request,saves[0].args.p_request);
  assert.equal(saves[1].args.p_route,rid);
  assert.equal(saves[1].args.p_items[0].shelf_qty,3);
+ assert.equal(saves[1].args.p_items[1].status,'slow_moving');
+ assert.equal(saves[1].args.p_items[1].shelf_qty,null);
  assert.equal(visit.querySelector('.crm-shelf-count').open,false);
  assert.match(visit.querySelector('[data-shelf-badge]').textContent,/Сохранена/);
 });
